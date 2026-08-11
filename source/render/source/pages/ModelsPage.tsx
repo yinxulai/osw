@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Plug, Trash2, Plus } from 'lucide-react'
+import { Pencil, Plug, Trash2 } from 'lucide-react'
 
 export default function ModelsPage() {
   const [selectedModel, setSelectedModel] = useState('model_001')

@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
+import tailwindcss from '@tailwindcss/vite'
 
 const previewOnly = process.env.VITE_PREVIEW_ONLY === 'true'
 const projectRoot = fileURLToPath(new URL('./', import.meta.url))
@@ -12,6 +13,7 @@ const commonAlias = {
 }
 
 const renderAlias = {
+  '@': fileURLToPath(new URL('./source/render/source', import.meta.url)),
   '@common': fileURLToPath(new URL('./source/common', import.meta.url)),
   '@render': fileURLToPath(new URL('./source/render', import.meta.url)),
 }
@@ -20,6 +22,7 @@ const renderAlias = {
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     ...(previewOnly
       ? []
       : [

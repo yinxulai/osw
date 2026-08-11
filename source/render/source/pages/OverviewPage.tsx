@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { BarChart3, CheckCircle2, Zap, Coins } from 'lucide-react'
+import { BarChart3, CheckCircle2, Zap, Coins, TrendingUp, TrendingDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export default function OverviewPage() {
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d'>('7d')
@@ -23,11 +27,11 @@ export default function OverviewPage() {
   const maxRequests = Math.max(...requestTrend.map(d => d.requests))
 
   const providerUsage = [
-    { name: 'OpenAI', requests: 8420, percent: 34, color: '#10a37f' },
-    { name: 'Anthropic', requests: 6150, percent: 25, color: '#d97757' },
-    { name: 'DeepSeek', requests: 4920, percent: 20, color: '#4d6bfe' },
-    { name: 'Gemini', requests: 2460, percent: 10, color: '#4285f4' },
-    { name: 'Ollama', requests: 2630, percent: 11, color: '#202225' },
+    { name: 'OpenAI', requests: 8420, percent: 34, color: 'bg-emerald-500' },
+    { name: 'Anthropic', requests: 6150, percent: 25, color: 'bg-orange-500' },
+    { name: 'DeepSeek', requests: 4920, percent: 20, color: 'bg-indigo-500' },
+    { name: 'Gemini', requests: 2460, percent: 10, color: 'bg-blue-500' },
+    { name: 'Ollama', requests: 2630, percent: 11, color: 'bg-zinc-700' },
   ]
 
   const modelRanking = [
@@ -55,210 +59,189 @@ export default function OverviewPage() {
   ]
 
   return (
-    <div>
-      <div className="page-header">
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2>统计分析</h2>
-          <p>请求量、成功率、延迟等核心指标统计</p>
+          <h1 className="text-2xl font-bold tracking-tight">统计分析</h1>
+          <p className="text-sm text-muted-foreground mt-1">请求量、成功率、延迟等核心指标统计</p>
         </div>
-        <div className="flex gap-2">
-          {(['today', '7d', '30d'] as const).map(range => (
-            <button
-              key={range}
-              className={`btn btn-sm ${timeRange === range ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setTimeRange(range)}
-            >
-              {range === 'today' ? '今日' : range === '7d' ? '近 7 天' : '近 30 天'}
-            </button>
-          ))}
-        </div>
+        <Tabs value={timeRange} onValueChange={v => setTimeRange(v as typeof timeRange)}>
+          <TabsList className="h-8">
+            <TabsTrigger value="today" className="h-7 px-3 text-xs">今日</TabsTrigger>
+            <TabsTrigger value="7d" className="h-7 px-3 text-xs">近 7 天</TabsTrigger>
+            <TabsTrigger value="30d" className="h-7 px-3 text-xs">近 30 天</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* 统计卡片 */}
-      <div className="stat-grid">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
-          <div key={s.label} className="stat-card">
-            <div className="stat-label">
-              <s.Icon size={16} />
-              {s.label}
-            </div>
-            <div className="stat-value">{s.value}</div>
-            <div className={`stat-trend ${s.trendUp ? 'up' : 'down'}`}>
-              {s.trend} 较上周
-            </div>
-          </div>
+          <Card key={s.label}>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                <s.Icon size={16} />
+                {s.label}
+              </div>
+              <div className="text-2xl font-bold">{s.value}</div>
+              <div className={cn(
+                'flex items-center gap-1 text-xs mt-1.5',
+                s.trendUp ? 'text-success' : 'text-destructive'
+              )}>
+                {s.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                {s.trend} 较上周
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* 请求趋势 + Provider 分布 */}
-      <div className="chart-row-2-1">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         {/* 请求量趋势 */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">请求量趋势</div>
-              <div className="card-desc">每日请求数</div>
-            </div>
-          </div>
-          <div style={{ height: 220, display: 'flex', alignItems: 'flex-end', gap: 12, padding: '16px 8px 0' }}>
-            {requestTrend.map(d => (
-              <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column-reverse', height: 170, gap: 2 }}>
-                  <div
-                    style={{
-                      height: `${(d.requests / maxRequests) * 100}%`,
-                      background: 'linear-gradient(to top, var(--primary), var(--primary-light))',
-                      borderRadius: '4px 4px 0 0',
-                      minHeight: 4,
-                    }}
-                  />
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">请求量趋势</CardTitle>
+            <CardDescription>每日请求数</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-56 flex items-end gap-3 pt-4">
+              {requestTrend.map(d => (
+                <div key={d.day} className="flex-1 flex flex-col items-center gap-2">
+                  <div className="w-full flex flex-col-reverse h-44 gap-1">
+                    <div
+                      className="w-full bg-gradient-to-t from-primary to-primary/60 rounded-t-md transition-all"
+                      style={{ height: `${(d.requests / maxRequests) * 100}%`, minHeight: 4 }}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground">{d.day}</div>
                 </div>
-                <div className="text-sm text-muted">{d.day}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Provider 使用分布 */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">Provider 分布</div>
-              <div className="card-desc">按请求量占比</div>
-            </div>
-          </div>
-          <div style={{ padding: '8px 0' }}>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Provider 分布</CardTitle>
+            <CardDescription>按请求量占比</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-2">
             {providerUsage.map(p => (
-              <div key={p.name} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span className="text-sm">{p.name}</span>
-                  <span className="text-sm text-muted">{p.percent}% · {p.requests.toLocaleString()}</span>
+              <div key={p.name}>
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-muted-foreground">
+                    {p.percent}% · {p.requests.toLocaleString()}
+                  </span>
                 </div>
-                <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ width: `${p.percent}%`, height: '100%', background: p.color, borderRadius: 4 }} />
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full', p.color)} style={{ width: `${p.percent}%` }} />
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 模型排行 + 延迟分布 */}
-      <div className="chart-row-3-2 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
         {/* 模型使用排行 */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">模型使用排行</div>
-              <div className="card-desc">按请求数排序</div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">模型使用排行</CardTitle>
+            <CardDescription>按请求数排序</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-xs">
+                    <th className="text-left font-medium py-2.5 w-10">#</th>
+                    <th className="text-left font-medium py-2.5">模型</th>
+                    <th className="text-left font-medium py-2.5">Provider</th>
+                    <th className="text-right font-medium py-2.5">请求数</th>
+                    <th className="text-right font-medium py-2.5">平均延迟</th>
+                    <th className="text-right font-medium py-2.5">成功率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelRanking.map((m, idx) => (
+                    <tr key={m.model} className="border-b last:border-0">
+                      <td className="py-3">
+                        <span className={cn(
+                          'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
+                          idx < 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                        )}>
+                          {idx + 1}
+                        </span>
+                      </td>
+                      <td className="py-3 font-medium">{m.model}</td>
+                      <td className="py-3 text-muted-foreground">{m.provider}</td>
+                      <td className="py-3 text-right">{m.requests.toLocaleString()}</td>
+                      <td className="py-3 text-right">{m.avgLatency}</td>
+                      <td className="py-3 text-right">
+                        <Badge variant="success" className="font-normal">{m.successRate}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>#</th>
-                <th>模型</th>
-                <th>Provider</th>
-                <th>请求数</th>
-                <th>平均延迟</th>
-                <th>成功率</th>
-              </tr>
-            </thead>
-            <tbody>
-              {modelRanking.map((m, idx) => (
-                <tr key={m.model}>
-                  <td>
-                    <span style={{
-                      display: 'inline-flex',
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      background: idx < 3 ? 'var(--primary)' : 'var(--bg-secondary)',
-                      color: idx < 3 ? 'white' : 'var(--text-muted)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      {idx + 1}
-                    </span>
-                  </td>
-                  <td className="text-bold">{m.model}</td>
-                  <td className="text-muted text-sm">{m.provider}</td>
-                  <td>{m.requests.toLocaleString()}</td>
-                  <td>{m.avgLatency}</td>
-                  <td>
-                    <span className="badge badge-success">{m.successRate}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* 延迟分布 */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">延迟分布</div>
-              <div className="card-desc">响应时间区间占比</div>
-            </div>
-          </div>
-          <div style={{ padding: '8px 0' }}>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">延迟分布</CardTitle>
+            <CardDescription>响应时间区间占比</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-2">
             {latencyDistribution.map(l => (
-              <div key={l.range} style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 50, fontSize: 13, color: 'var(--text-muted)' }}>{l.range}</div>
-                <div style={{ flex: 1, height: 24, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
-                  <div style={{
-                    width: `${l.percent}%`,
-                    height: '100%',
-                    background: l.percent > 30 ? 'var(--success)' : l.percent > 10 ? 'var(--warning)' : 'var(--error)',
-                    borderRadius: 4,
-                    opacity: 0.7,
-                  }} />
-                  <span style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: 12,
-                    fontWeight: 500,
-                  }}>
+              <div key={l.range} className="flex items-center gap-3">
+                <div className="w-12 text-xs text-muted-foreground shrink-0">{l.range}</div>
+                <div className="flex-1 relative h-7 bg-muted rounded-md overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-md opacity-80',
+                      l.percent > 30 ? 'bg-success' : l.percent > 10 ? 'bg-warning' : 'bg-destructive'
+                    )}
+                    style={{ width: `${l.percent}%` }}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium">
                     {l.percent}%
                   </span>
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 失败原因分析 */}
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">失败原因分析</div>
-            <div className="card-desc">共 286 次失败请求 · 失败率 1.16%</div>
-          </div>
-        </div>
-        <div className="failure-grid">
-          {failureReasons.map(f => (
-            <div key={f.reason} style={{
-              padding: 16,
-              background: 'var(--bg-secondary)',
-              borderRadius: 8,
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--error)', marginBottom: 4 }}>{f.count}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{f.reason}</div>
-              <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ width: `${f.percent}%`, height: '100%', background: 'var(--error)', borderRadius: 2 }} />
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">失败原因分析</CardTitle>
+          <CardDescription>共 286 次失败请求 · 失败率 1.16%</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {failureReasons.map(f => (
+              <div key={f.reason} className="rounded-lg border bg-muted/30 p-4 text-center">
+                <div className="text-2xl font-bold text-destructive mb-1">{f.count}</div>
+                <div className="text-sm text-muted-foreground mb-2">{f.reason}</div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-destructive rounded-full" style={{ width: `${f.percent}%` }} />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1.5">{f.percent}%</div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{f.percent}%</div>
-            </div>
-          ))}
-        </div>
-      </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

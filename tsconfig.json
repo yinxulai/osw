@@ -17,6 +17,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
+      "@/*": ["source/render/source/*"],
       "@common/*": ["source/common/*"],
       "@server/*": ["source/server/*"],
       "@render/*": ["source/render/*"]
