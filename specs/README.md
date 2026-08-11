@@ -14,6 +14,7 @@
 | [architecture.md](./architecture.md) | 系统架构、核心概念、零协议转换原则 |
 | [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
 | [provider-model.md](./provider-model.md) | Provider、Logical Model、Model Binding 配置模型 |
+| [data-model.md](./data-model.md) | 完整数据模型：数据库表设计、Zod Schema、索引、关系 |
 | [desktop.md](./desktop.md) | 桌面端形态、菜单栏、控制台页面、用户流程 |
 | [security-privacy.md](./security-privacy.md) | 安全边界、密钥存储、隐私策略 |
 | [observability.md](./observability.md) | 日志、用量统计、健康状态、冷却 |

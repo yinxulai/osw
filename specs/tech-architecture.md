@@ -35,6 +35,16 @@
 - **生态兼容**：OpenAPI 生成的类型可以和 Zod 配合使用，或通过 zod 生成 OpenAPI
 - **零依赖膨胀**：Zod 体积小，不引入额外运行时
 
+### 为什么用统一 POST 风格 API
+
+管理 API 全部使用 POST 方法，路径格式为 `/api/资源/动作`，不依赖 HTTP 方法和状态码语义：
+
+- **简单一致**：前端调用统一用 POST，不需要区分 GET/POST/PUT/DELETE，不需要处理不同状态码
+- **结构化错误**：错误通过 body 中的 `success`、`errorCode`、`errorMessage` 表达，类型安全，前端可统一处理
+- **便于调试**：所有请求都有 body，日志和抓包一目了然
+- **避免歧义**：HTTP 状态码只表示网络层是否成功，业务结果完全由 body 决定
+- **与代理服务兼容**：代理服务本身也用同一个 HTTP 服务器，POST 风格避免和代理路径产生方法语义冲突
+
 ### 为什么用 OpenAPI 定义管理接口
 
 - **接口契约**：前后端通过 OpenAPI 文档对齐，避免手写类型不一致
@@ -163,7 +173,7 @@ one-switch/
 **`proxy/transport.ts`** — 上游透传
 - 封装 `http.request` / `https.request`
 - 根据协议默认认证方式注入认证头
-- 超时控制（连接超时 + 响应头超时）
+- 超时控制：连接超时 + 空闲超时（两次数据到达的最大间隔，流式持续返回不超时）
 - 错误分类：network / timeout / 4xx / 5xx
 - 返回 `Attempt` 结果
 
@@ -178,36 +188,68 @@ one-switch/
 - 成功/失败回调更新状态
 - 提供 `isAvailable(providerId): boolean`
 
+**`proxy/current-binding.ts`** — 当前绑定状态（手动切换）
+- 维护当前用户手动指定的绑定 ID（运行时状态，不持久化）
+- 提供设置/获取当前绑定的接口
+- 新请求从当前绑定开始尝试，当前绑定失败后仍按队列顺序自动切换
+- 进行中的请求持有自己的绑定引用，不受外部切换影响
+
 **`proxy/models-api.ts`** — `/v1/models` 本地接口
 
 ### 2. 管理 API（`source/server/api/`）
 
-RESTful API，挂载到 `/api` 前缀。React UI 通过 TanStack Query 调用。
+统一 POST 风格 API，挂载到 `/api` 前缀。React UI 通过 TanStack Query 调用。
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 服务健康状态 |
-| GET | `/api/settings` | 获取服务设置 |
-| PUT | `/api/settings` | 更新服务设置 |
-| GET | `/api/providers` | Provider 列表 |
-| POST | `/api/providers` | 新增 Provider |
-| GET | `/api/providers/:id` | Provider 详情 |
-| PUT | `/api/providers/:id` | 更新 Provider |
-| DELETE | `/api/providers/:id` | 删除 Provider |
-| POST | `/api/providers/:id/test` | 测试连接 |
-| GET | `/api/providers/:id/health` | Provider 健康状态 |
-| GET | `/api/models` | 逻辑模型列表（含绑定） |
-| POST | `/api/models` | 新增逻辑模型 |
-| PUT | `/api/models/:id` | 更新逻辑模型 |
-| DELETE | `/api/models/:id` | 删除逻辑模型 |
-| POST | `/api/models/:id/bindings` | 新增模型绑定 |
-| PUT | `/api/models/:modelId/bindings/:bindingId` | 更新模型绑定 |
-| DELETE | `/api/models/:modelId/bindings/:bindingId` | 删除模型绑定 |
-| PATCH | `/api/models/:modelId/bindings/order` | 调整绑定优先级 |
-| GET | `/api/logs` | 请求日志列表（分页、筛选） |
-| GET | `/api/logs/:id` | 请求日志详情（含所有 attempt） |
-| POST | `/api/config/export` | 导出配置（脱敏） |
-| POST | `/api/config/import` | 导入配置 |
+**设计原则：**
+- 所有接口统一使用 `POST` 方法，不依赖 HTTP 方法语义
+- 路径格式：`/api/资源/动作`，如 `/api/provider/list`、`/api/provider/create`
+- 所有响应通过结构化 body 返回，HTTP 状态码始终为 200（除非网络层错误）
+- 错误信息通过响应体中的 `success`、`errorCode`、`errorMessage` 字段表达
+
+**统一响应格式：**
+
+```ts
+// 成功响应
+{
+  success: true,
+  data: { ... }
+}
+
+// 失败响应
+{
+  success: false,
+  errorCode: "PROVIDER_NOT_FOUND",
+  errorMessage: "供应商不存在"
+}
+```
+
+**接口列表：**
+
+| 路径 | 说明 | 请求体 | 响应 data |
+|------|------|--------|-----------|
+| `/api/health/get` | 服务健康状态 | - | 服务状态、端口、运行时长 |
+| `/api/settings/get` | 获取服务设置 | - | 设置对象 |
+| `/api/settings/update` | 更新服务设置 | 部分设置字段 | 更新后的设置对象 |
+| `/api/provider/list` | Provider 列表 | 分页/筛选参数 | 列表 + 总数 |
+| `/api/provider/create` | 新增 Provider | name, apiKey, timeoutMilliseconds | 新建的 Provider |
+| `/api/provider/get` | Provider 详情 | id | Provider 详情 |
+| `/api/provider/update` | 更新 Provider | id, 更新字段 | 更新后的 Provider |
+| `/api/provider/delete` | 删除 Provider | id | - |
+| `/api/provider/test` | 测试连接 | id | 测试结果（成功/失败+原因） |
+| `/api/provider/health/get` | Provider 健康状态 | id | 健康状态对象 |
+| `/api/binding/list` | 绑定列表（自动切换队列） | logicalModelId(可选) | 绑定列表（按优先级排序） |
+| `/api/binding/create` | 新增绑定 | protocol, upstreamUrl, upstreamModelId, providerId, priority | 新建的绑定 |
+| `/api/binding/update` | 更新绑定 | id, 更新字段 | 更新后的绑定 |
+| `/api/binding/delete` | 删除绑定 | id | - |
+| `/api/binding/reorder` | 调整绑定优先级 | id, newPriority | 更新后的队列 |
+| `/api/current-binding/get` | 获取当前绑定 | - | 当前绑定 ID |
+| `/api/current-binding/set` | 手动切换当前绑定 | bindingId | 新的当前绑定 |
+| `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
+| `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
+| `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
+| `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
+
+> MVP 只有一个逻辑模型（default），`/api/binding/list` 默认返回该模型的所有绑定，即自动切换队列。
 
 ### 3. 数据存储（`source/server/db/`）
 

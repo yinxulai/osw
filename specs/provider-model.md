@@ -13,10 +13,10 @@
 | id | string | 唯一标识 |
 | name | string | 显示名称 |
 | apiKey | string | API Key（存储在系统密钥环中，配置文件仅存引用） |
-| timeoutMilliseconds | number | 请求超时时间（毫秒） |
+| timeoutMilliseconds | number | 空闲超时时间（毫秒）：两次数据到达之间的最大间隔，流式持续返回数据不会超时 |
 | enabled | boolean | 是否启用 |
-| createdAt | number | 创建时间 |
-| updatedAt | number | 更新时间 |
+| createdTime | number | 创建时间 |
+| updatedTime | number | 更新时间 |
 
 ### 协议默认认证方式
 
@@ -33,9 +33,9 @@
 |------|------|------|
 | providerId | string | 关联 Provider |
 | consecutiveFailures | number | 连续失败次数 |
-| cooldownUntil | number \| null | 冷却截止时间戳 |
-| lastSuccessAt | number \| null | 最近成功时间 |
-| lastFailureAt | number \| null | 最近失败时间 |
+| cooldownUntilTime | number \| null | 冷却截止时间戳 |
+| lastSuccessTime | number \| null | 最近成功时间 |
+| lastFailureTime | number \| null | 最近失败时间 |
 
 > Provider 不持有统一 Base URL，完整目标地址由每个 Model Binding 各自配置。
 
@@ -51,8 +51,8 @@
 | name | string | 模型名（客户端通过此字段引用） |
 | description | string | 描述 |
 | enabled | boolean | 是否启用 |
-| createdAt | number | 创建时间 |
-| updatedAt | number | 更新时间 |
+| createdTime | number | 创建时间 |
+| updatedTime | number | 更新时间 |
 
 ## Model Binding
 
@@ -71,8 +71,8 @@
 | priority | number | 优先级，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
 | customAuthHeader | string \| null | Custom 协议下的认证头名称（其他协议忽略） |
-| createdAt | number | 创建时间 |
-| updatedAt | number | 更新时间 |
+| createdTime | number | 创建时间 |
+| updatedTime | number | 更新时间 |
 
 ### 约束
 
@@ -81,7 +81,7 @@
 - 绑定的协议决定了它只会在该协议的请求中被选用
 - 转发请求时，请求体中的 `model` 字段会被替换为 `upstreamModelId` 的值（MVP 单模型模式下始终替换）
 
-## 配置示例
+## 配置示例（MVP 单模型队列）
 
 ```json
 {
@@ -97,35 +97,45 @@
       "name": "Anthropic",
       "timeoutMilliseconds": 30000,
       "enabled": true
+    },
+    {
+      "id": "prov-deepseek",
+      "name": "DeepSeek",
+      "timeoutMilliseconds": 30000,
+      "enabled": true
     }
   ],
   "logicalModels": [
     {
-      "id": "model-gpt4o",
-      "name": "gpt-4o",
+      "id": "model-default",
+      "name": "default",
       "enabled": true,
       "bindings": [
         {
-          "id": "bind-gpt4o-openai",
+          "id": "bind-001",
           "protocol": "openai",
           "upstreamUrl": "https://api.openai.com/v1/chat/completions",
+          "upstreamModelId": "gpt-4o",
           "providerId": "prov-openai",
           "priority": 1,
           "enabled": true
-        }
-      ]
-    },
-    {
-      "id": "model-claude",
-      "name": "claude-sonnet",
-      "enabled": true,
-      "bindings": [
+        },
         {
-          "id": "bind-claude-anthropic",
+          "id": "bind-002",
+          "protocol": "openai",
+          "upstreamUrl": "https://api.deepseek.com/v1/chat/completions",
+          "upstreamModelId": "deepseek-chat",
+          "providerId": "prov-deepseek",
+          "priority": 2,
+          "enabled": true
+        },
+        {
+          "id": "bind-003",
           "protocol": "anthropic",
           "upstreamUrl": "https://api.anthropic.com/v1/messages",
+          "upstreamModelId": "claude-sonnet-4-20240229",
           "providerId": "prov-anthropic",
-          "priority": 1,
+          "priority": 3,
           "enabled": true
         }
       ]
@@ -133,3 +143,5 @@
   ]
 }
 ```
+
+> MVP 只有一个 `default` 逻辑模型，bindings 构成一个自动切换队列。请求来时按 priority 排序，先过滤协议匹配的项，再依次尝试，失败自动切换到下一个。
