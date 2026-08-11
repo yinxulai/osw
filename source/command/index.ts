@@ -1,6 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // The built directory structure
 //

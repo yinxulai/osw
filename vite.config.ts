@@ -1,50 +1,64 @@
 import { defineConfig } from 'vite'
-import path from 'node:path'
+import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
-import electron from 'vite-plugin-electron/simple'
+import electron from 'vite-plugin-electron'
+
+const previewOnly = process.env.VITE_PREVIEW_ONLY === 'true'
+const projectRoot = fileURLToPath(new URL('./', import.meta.url))
+
+const commonAlias = {
+  '@common': fileURLToPath(new URL('./source/common', import.meta.url)),
+  '@server': fileURLToPath(new URL('./source/server', import.meta.url)),
+}
+
+const renderAlias = {
+  '@common': fileURLToPath(new URL('./source/common', import.meta.url)),
+  '@render': fileURLToPath(new URL('./source/render', import.meta.url)),
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    electron({
-      main: {
-        entry: 'source/command/index.ts',
-        vite: {
-          build: {
-            outDir: 'dist/command',
-            rollupOptions: {
-              external: ['better-sqlite3', 'electron'],
+    ...(previewOnly
+      ? []
+      : [
+          electron([
+            // Main process
+            {
+              entry: fileURLToPath(new URL('./source/command/index.ts', import.meta.url)),
+              vite: {
+                build: {
+                  outDir: fileURLToPath(new URL('./dist/command', import.meta.url)),
+                  rolldownOptions: {
+                    external: ['better-sqlite3', 'electron'],
+                  },
+                },
+                resolve: { alias: commonAlias },
+              },
+              onstart({ startup }) {
+                startup([projectRoot, '--no-sandbox'])
+              },
             },
-          },
-          resolve: {
-            alias: {
-              '@common': path.resolve(__dirname, 'source/common'),
-              '@server': path.resolve(__dirname, 'source/server'),
+            // Preload
+            {
+              entry: fileURLToPath(new URL('./source/command/preload.ts', import.meta.url)),
+              vite: {
+                build: {
+                  outDir: fileURLToPath(new URL('./dist/command', import.meta.url)),
+                },
+              },
+              onstart({ reload }) {
+                reload()
+              },
             },
-          },
-        },
-      },
-      preload: {
-        input: path.join(__dirname, 'source/command/preload.ts'),
-        vite: {
-          build: {
-            outDir: 'dist/command',
-          },
-        },
-      },
-      renderer: process.env.NODE_ENV === 'test' ? undefined : {},
-    }),
+          ]),
+        ]),
   ],
-  resolve: {
-    alias: {
-      '@common': path.resolve(__dirname, 'source/common'),
-      '@render': path.resolve(__dirname, 'source/render'),
-    },
-  },
+  resolve: { alias: renderAlias },
   root: 'source/render',
   build: {
-    outDir: path.resolve(__dirname, 'dist/render'),
+    outDir: fileURLToPath(new URL('./dist/render', import.meta.url)),
     emptyOutDir: true,
   },
 })
