@@ -1,0 +1,20 @@
+# One Switch 产品规格文档
+
+本地大模型代理自动切换工具。在本机运行一个 HTTP 代理服务，各类 AI 工具只需配置一个本地 Base URL 和统一虚拟模型名；代理按优先级把请求透传到多个供应商，在网络错误、超时、429/5xx、鉴权失败或模型不可用时自动切换到下一个渠道。
+
+## 核心原则
+
+**零协议转换。** 代理不解析、不修改、不转换任何协议的报文结构。每个模型绑定直接配置某协议下的完整上游地址；代理根据请求 path 自动识别协议类型，只在配置了该协议的模型绑定中选择；若该逻辑模型没有配置该协议的任何绑定，则自动绕过该模型。
+
+## 文档索引
+
+| 文档 | 内容 |
+|------|------|
+| [product.md](./product.md) | 产品定位、目标用户、核心价值、非目标 |
+| [architecture.md](./architecture.md) | 系统架构、核心概念、零协议转换原则 |
+| [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
+| [provider-model.md](./provider-model.md) | Provider、Logical Model、Model Binding 配置模型 |
+| [desktop.md](./desktop.md) | 桌面端形态、菜单栏、控制台页面、用户流程 |
+| [security-privacy.md](./security-privacy.md) | 安全边界、密钥存储、隐私策略 |
+| [observability.md](./observability.md) | 日志、用量统计、健康状态、冷却 |
+| [roadmap.md](./roadmap.md) | MVP / P1 / P2 版本规划与验收标准 |
