@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Pencil, Plug, Trash2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function ModelsPage() {
   const [selectedModel, setSelectedModel] = useState('model_001')
@@ -161,7 +162,7 @@ export default function ModelsPage() {
               <div className="flex gap-2">
                 <button className="btn btn-sm">编辑模型</button>
                 <button className="btn btn-sm btn-primary" onClick={() => setShowBindingModal(true)}>
-                  + 添加绑定
+                  + 添加模型
                 </button>
               </div>
             </div>
@@ -209,7 +210,7 @@ export default function ModelsPage() {
                 <div className="empty-state-title">暂无绑定</div>
                 <div className="empty-state-desc">添加上游绑定以启用自动切换</div>
                 <button className="btn btn-primary" onClick={() => setShowBindingModal(true)}>
-                  添加第一个绑定
+                  添加第一个模型
                 </button>
               </div>
             )}
@@ -248,12 +249,12 @@ export default function ModelsPage() {
         </div>
       </div>
 
-      {/* 添加绑定弹窗 */}
+      {/* 添加模型弹窗 */}
       {showBindingModal && (
         <div className="modal-overlay" onClick={() => setShowBindingModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">添加模型绑定</div>
+              <div className="modal-title">添加模型</div>
               <button className="modal-close" onClick={() => setShowBindingModal(false)}>
                 ×
               </button>
@@ -263,13 +264,17 @@ export default function ModelsPage() {
                 <label className="form-label">
                   Provider <span className="required">*</span>
                 </label>
-                <select className="form-select">
-                  <option>选择 Provider...</option>
-                  <option>OpenAI</option>
-                  <option>Anthropic</option>
-                  <option>DeepSeek</option>
-                  <option>Ollama (本地)</option>
-                </select>
+                <Select>
+                  <SelectTrigger className="form-select">
+                    <SelectValue placeholder="选择 Provider..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                    <SelectItem value="deepseek">DeepSeek</SelectItem>
+                    <SelectItem value="ollama">Ollama (本地)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="form-row">
@@ -277,10 +282,15 @@ export default function ModelsPage() {
                   <label className="form-label">
                     协议 <span className="required">*</span>
                   </label>
-                  <select className="form-select">
-                    <option value="openai">OpenAI 兼容</option>
-                    <option value="anthropic">Anthropic 原生</option>
-                  </select>
+                  <Select defaultValue="openai">
+                    <SelectTrigger className="form-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI 兼容</SelectItem>
+                      <SelectItem value="anthropic">Anthropic 原生</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">优先级</label>
@@ -326,7 +336,7 @@ export default function ModelsPage() {
               <button className="btn" onClick={() => setShowBindingModal(false)}>
                 取消
               </button>
-              <button className="btn btn-primary">添加绑定</button>
+              <button className="btn btn-primary">添加模型</button>
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 export default function OverviewPage() {
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d'>('7d')
@@ -59,21 +60,21 @@ export default function OverviewPage() {
   ]
 
   return (
-    <div className="space-y-5">
-      {/* 页面标题 */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">统计分析</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">请求量、成功率、延迟等核心指标统计</p>
-        </div>
-        <Tabs value={timeRange} onValueChange={v => setTimeRange(v as typeof timeRange)}>
-          <TabsList className="h-7">
-            <TabsTrigger value="today" className="h-6 px-2.5 text-xs">今日</TabsTrigger>
-            <TabsTrigger value="7d" className="h-6 px-2.5 text-xs">近 7 天</TabsTrigger>
-            <TabsTrigger value="30d" className="h-6 px-2.5 text-xs">近 30 天</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="统计分析"
+        description="请求量、成功率、延迟等核心指标统计"
+        actions={(
+          <Tabs value={timeRange} onValueChange={v => setTimeRange(v as typeof timeRange)}>
+            <TabsList className="h-7">
+              <TabsTrigger value="today" className="h-6 px-2.5 text-xs">今日</TabsTrigger>
+              <TabsTrigger value="7d" className="h-6 px-2.5 text-xs">近 7 天</TabsTrigger>
+              <TabsTrigger value="30d" className="h-6 px-2.5 text-xs">近 30 天</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+      />
+      <PageContent>
 
       {/* 统计指标 - 线条分隔风格 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 rounded-md border">
@@ -254,6 +255,7 @@ export default function OverviewPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </PageContent>
+    </PageLayout>
   )
 }

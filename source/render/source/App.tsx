@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { AppLayout } from '@/components/layout'
 import QueuePage from './pages/QueuePage'
 import ProvidersPage from './pages/ProvidersPage'
 import OverviewPage from './pages/OverviewPage'
@@ -31,7 +32,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { key: 'queue', label: '模型队列', icon: Layers, section: '主要' },
-  { key: 'providers', label: '供应商', icon: Plug, section: '主要' },
+  { key: 'providers', label: '模型管理', icon: Plug, section: '主要' },
   { key: 'overview', label: '统计分析', icon: BarChart3, section: '数据' },
   { key: 'settings', label: '设置', icon: Settings, section: '系统' },
 ]
@@ -73,9 +74,9 @@ function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen w-full bg-background text-foreground">
-        {/* 侧边栏 */}
-        <aside
+      <AppLayout
+        sidebar={(
+          <aside
           className={cn(
             'relative flex flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300',
             collapsed ? 'w-12' : 'w-48'
@@ -180,18 +181,14 @@ function App() {
           >
             {collapsed ? <PanelLeftOpen size={11} /> : <PanelLeftClose size={11} />}
           </button>
-        </aside>
-
-        {/* 主内容区 */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl p-4 md:p-5">
-            {activePage === 'queue' && <QueuePage />}
-            {activePage === 'providers' && <ProvidersPage />}
-            {activePage === 'overview' && <OverviewPage />}
-            {activePage === 'settings' && <SettingsPage />}
-          </div>
-        </main>
-      </div>
+          </aside>
+        )}
+      >
+        {activePage === 'queue' && <QueuePage />}
+        {activePage === 'providers' && <ProvidersPage />}
+        {activePage === 'overview' && <OverviewPage />}
+        {activePage === 'settings' && <SettingsPage />}
+      </AppLayout>
     </TooltipProvider>
   )
 }

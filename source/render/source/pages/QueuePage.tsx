@@ -1,4 +1,22 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   BarChart3,
   CheckCircle2,
@@ -13,8 +31,6 @@ import {
   Server,
   KeyRound,
   GripVertical,
-  ChevronUp,
-  ChevronDown,
   CircleDot,
   Circle,
   ChevronDown as ChevronDownIcon,
@@ -33,8 +49,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 type Protocol = 'openai' | 'anthropic' | 'gemini'
+
+const PROXY_BASE_URL = 'http://127.0.0.1:9300'
 
 const PROTOCOLS: { key: Protocol; label: string; path: string }[] = [
   { key: 'openai', label: 'OpenAI', path: '/v1' },
@@ -57,7 +86,7 @@ interface Binding {
   cooldownRemain?: string
 }
 
-const bindings: Binding[] = [
+const initialBindings: Binding[] = [
   {
     id: 'bind_001',
     provider: 'OpenAI',
@@ -138,19 +167,56 @@ const statusLabel: Record<BindingStatus, string> = {
   disabled: '已禁用',
 }
 
+const providerOptions = [
+  { name: 'OpenAI', protocol: 'OpenAI', upstream: 'https://api.openai.com/v1' },
+  { name: 'Anthropic', protocol: 'Anthropic', upstream: 'https://api.anthropic.com/v1' },
+  { name: 'DeepSeek', protocol: 'OpenAI', upstream: 'https://api.deepseek.com/v1' },
+  { name: 'Gemini', protocol: 'Gemini', upstream: 'https://generativelanguage.googleapis.com/v1beta' },
+  { name: 'Ollama (本地)', protocol: 'OpenAI', upstream: 'http://localhost:11434/v1' },
+]
+
+interface SortableBindingProps {
+  id: string
+  children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
+}
+
+function SortableBinding({ id, children }: SortableBindingProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn('relative bg-card', isDragging && 'z-10 shadow-md')}
+    >
+      {children({ ...attributes, ...listeners }, isDragging)}
+    </div>
+  )
+}
+
 export default function QueuePage() {
+  const [bindingItems, setBindingItems] = useState(initialBindings)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [manualBinding, setManualBinding] = useState<string>('')
   const [protocol, setProtocol] = useState<Protocol>('openai')
   const [copied, setCopied] = useState(false)
+  const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
+  const [bindingProvider, setBindingProvider] = useState(providerOptions[0].name)
+  const [bindingProtocol, setBindingProtocol] = useState(providerOptions[0].protocol)
+  const [bindingModel, setBindingModel] = useState('')
+  const [bindingUpstream, setBindingUpstream] = useState(providerOptions[0].upstream)
+  const [bindingEnabled, setBindingEnabled] = useState(true)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   const queueModelName = 'default'
   const isDefaultQueue = queueModelName === 'default'
 
   const currentProtocol = PROTOCOLS.find(p => p.key === protocol)!
   const availableCount = protocolModelCounts[protocol]
-  const proxyBase = 'http://127.0.0.1:9300'
-  const fullProxyUrl = `${proxyBase}${currentProtocol.path}`
+  const fullProxyUrl = `${PROXY_BASE_URL}${currentProtocol.path}`
 
   const copyEndpoint = () => {
     if (availableCount <= 0) return
@@ -164,18 +230,57 @@ export default function QueuePage() {
   }
 
   const handleSwitchToManual = () => {
-    const active = bindings.find(b => b.status === 'active')
+    const active = bindingItems.find(b => b.status === 'active')
     if (active) setManualBinding(active.id)
     setMode('manual')
   }
 
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    setBindingItems(current => {
+      const oldIndex = current.findIndex(binding => binding.id === active.id)
+      const newIndex = current.findIndex(binding => binding.id === over.id)
+      return arrayMove(current, oldIndex, newIndex).map((binding, index) => ({ ...binding, priority: index + 1 }))
+    })
+  }
+
+  const handleProviderChange = (providerName: string) => {
+    const provider = providerOptions.find(option => option.name === providerName)!
+    setBindingProvider(provider.name)
+    setBindingProtocol(provider.protocol)
+    setBindingUpstream(provider.upstream)
+  }
+
+  const openBindingDialog = () => {
+    handleProviderChange(providerOptions[0].name)
+    setBindingModel('')
+    setBindingEnabled(true)
+    setBindingDialogOpen(true)
+  }
+
+  const addBinding = () => {
+    if (!bindingModel.trim() || !bindingUpstream.trim()) return
+    setBindingItems(current => [
+      ...current,
+      {
+        id: `bind_${Date.now()}`,
+        provider: bindingProvider,
+        model: bindingModel.trim(),
+        protocol: bindingProtocol,
+        upstream: bindingUpstream.trim(),
+        priority: current.length + 1,
+        status: bindingEnabled ? 'standby' : 'disabled',
+        latency: '-',
+        successRate: '-',
+      },
+    ])
+    setBindingDialogOpen(false)
+  }
+
   return (
-    <div className="space-y-5">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">模型队列</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">管理请求优先级和故障转移策略</p>
-      </div>
+    <PageLayout>
+      <PageHeader title="模型队列" description="管理请求优先级和故障转移策略" />
+      <PageContent>
 
       {/* 服务接入配置 */}
       <Card>
@@ -227,21 +332,25 @@ export default function QueuePage() {
                         <ChevronDownIcon size={11} className="opacity-60" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuContent align="end" className="w-80">
                       {PROTOCOLS.map(p => {
                         const count = protocolModelCounts[p.key]
                         const disabled = count <= 0
+                        const protocolUrl = `${PROXY_BASE_URL}${p.path}`
                         return (
                           <DropdownMenuItem
                             key={p.key}
                             disabled={disabled}
                             onClick={() => !disabled && setProtocol(p.key)}
-                            className="flex items-center justify-between text-xs"
+                            className="flex items-start justify-between gap-3 py-2 text-xs"
                           >
-                            <span>{p.label}</span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {count} 个模型
+                            <span className="min-w-0">
+                              <span className="block font-medium">{p.label}</span>
+                              <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                                {protocolUrl}
+                              </span>
                             </span>
+                            <span className="shrink-0 text-[11px] text-muted-foreground">{count} 个模型</span>
                           </DropdownMenuItem>
                         )
                       })}
@@ -354,8 +463,8 @@ export default function QueuePage() {
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                <Plus size={13} /> 添加绑定
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={openBindingDialog}>
+                <Plus size={13} /> 添加模型
               </Button>
               <Button size="sm" className="h-7 px-2 text-xs">
                 <Activity size={13} /> 测试全部
@@ -364,24 +473,33 @@ export default function QueuePage() {
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="divide-y -mx-4">
-            {bindings.map((b, idx) => (
-              <div
-                key={b.id}
-                onClick={() => {
-                  if (mode === 'manual' && b.status !== 'cooling') {
-                    setManualBinding(manualBinding === b.id ? '' : b.id)
-                  }
-                }}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2 transition-colors border-l-2',
-                  b.status === 'active' && 'border-l-primary bg-primary/5',
-                  b.status !== 'active' && 'border-l-transparent',
-                  b.status === 'cooling' && 'opacity-60',
-                  mode === 'manual' && b.status !== 'cooling' && 'cursor-pointer hover:bg-muted/50',
-                  mode === 'manual' && manualBinding === b.id && 'border-l-primary bg-primary/5'
-                )}
-              >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={bindingItems.map(binding => binding.id)} strategy={verticalListSortingStrategy}>
+              <div className="-mx-4 divide-y">
+                {bindingItems.map((b, idx) => (
+                  <SortableBinding key={b.id} id={b.id}>
+                    {(handleProps, dragging) => (
+                      <div
+                        onClick={() => {
+                          if (mode === 'manual' && b.status !== 'cooling') {
+                            setManualBinding(manualBinding === b.id ? '' : b.id)
+                          }
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 border-l-2 px-4 py-2 transition-colors',
+                          b.status === 'active' && 'border-l-primary bg-primary/5',
+                          b.status !== 'active' && 'border-l-transparent',
+                          b.status === 'cooling' && 'opacity-60',
+                          mode === 'manual' && b.status !== 'cooling' && 'cursor-pointer hover:bg-muted/50',
+                          mode === 'manual' && manualBinding === b.id && 'border-l-primary bg-primary/5',
+                          dragging && 'bg-muted/60',
+                        )}
+                      >
                 {/* 选择/拖拽 */}
                 {mode === 'manual' ? (
                   <div className="shrink-0">
@@ -392,9 +510,14 @@ export default function QueuePage() {
                     )}
                   </div>
                 ) : (
-                  <div className="shrink-0 text-muted-foreground/40 cursor-grab">
+                  <button
+                    type="button"
+                    aria-label={`拖动 ${b.provider} 调整优先级`}
+                    className="shrink-0 cursor-grab touch-none rounded-sm p-0.5 text-muted-foreground/50 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                    {...handleProps}
+                  >
                     <GripVertical size={14} />
-                  </div>
+                  </button>
                 )}
 
                 {/* 序号 */}
@@ -439,12 +562,6 @@ export default function QueuePage() {
 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-0 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" title="上移">
-                    <ChevronUp size={13} />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" title="下移">
-                    <ChevronDown size={13} />
-                  </Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7" title="编辑">
                     <Pencil size={13} />
                   </Button>
@@ -452,9 +569,13 @@ export default function QueuePage() {
                     <Plug size={13} />
                   </Button>
                 </div>
+                      </div>
+                    )}
+                  </SortableBinding>
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         </CardContent>
       </Card>
 
@@ -502,6 +623,85 @@ export default function QueuePage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </PageContent>
+
+      <Dialog open={bindingDialogOpen} onOpenChange={setBindingDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>添加模型</DialogTitle>
+            <DialogDescription>选择供应商和上游模型，将其加入当前优先级队列。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="binding-provider">供应商</Label>
+                <Select
+                  value={bindingProvider}
+                  onValueChange={handleProviderChange}
+                >
+                  <SelectTrigger id="binding-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providerOptions.map(provider => (
+                      <SelectItem key={provider.name} value={provider.name}>{provider.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="binding-protocol">请求协议</Label>
+                <Select
+                  value={bindingProtocol}
+                  onValueChange={setBindingProtocol}
+                >
+                  <SelectTrigger id="binding-protocol">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OpenAI">OpenAI</SelectItem>
+                    <SelectItem value="Anthropic">Anthropic</SelectItem>
+                    <SelectItem value="Gemini">Gemini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="binding-model">上游模型 ID</Label>
+              <Input
+                id="binding-model"
+                value={bindingModel}
+                onChange={event => setBindingModel(event.target.value)}
+                placeholder="例如：gpt-4o"
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="binding-upstream">完整接口地址</Label>
+              <Input
+                id="binding-upstream"
+                type="url"
+                value={bindingUpstream}
+                onChange={event => setBindingUpstream(event.target.value)}
+                placeholder="https://api.example.com/v1/chat/completions"
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">请求会直接发送到该地址，可覆盖供应商的默认地址。</p>
+            </div>
+            <div className="flex items-center justify-between rounded-sm border bg-muted/20 px-3 py-2.5">
+              <div>
+                <Label htmlFor="binding-enabled">立即启用</Label>
+                <p className="mt-1 text-[11px] text-muted-foreground">启用后作为队列最后一个备用绑定。</p>
+              </div>
+              <Switch id="binding-enabled" checked={bindingEnabled} onCheckedChange={setBindingEnabled} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBindingDialogOpen(false)}>取消</Button>
+            <Button disabled={!bindingModel.trim() || !bindingUpstream.trim()} onClick={addBinding}>添加模型</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageLayout>
   )
 }

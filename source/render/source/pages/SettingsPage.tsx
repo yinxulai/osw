@@ -6,14 +6,14 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">设置</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">配置代理服务和系统参数</p>
-      </div>
+    <PageLayout>
+      <PageHeader title="设置" description="配置代理服务和系统参数" />
+      <PageContent>
 
       <Tabs defaultValue="proxy" className="space-y-4">
         <TabsList className="h-8">
@@ -105,10 +105,15 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">代理类型</Label>
-                  <select className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50" disabled>
-                    <option>HTTP</option>
-                    <option>SOCKS5</option>
-                  </select>
+                  <Select defaultValue="http" disabled>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="http">HTTP</SelectItem>
+                      <SelectItem value="socks5">SOCKS5</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -207,11 +212,16 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="log-level" className="text-xs">日志级别</Label>
-                  <select id="log-level" className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs">
-                    <option>全部</option>
-                    <option>仅失败</option>
-                    <option>关闭</option>
-                  </select>
+                  <Select defaultValue="all">
+                    <SelectTrigger id="log-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部</SelectItem>
+                      <SelectItem value="failed">仅失败</SelectItem>
+                      <SelectItem value="off">关闭</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <Separator />
@@ -305,6 +315,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </PageContent>
+    </PageLayout>
   )
 }
