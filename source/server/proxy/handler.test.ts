@@ -2,7 +2,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BindingWithProvider } from './router'
-import { configureSecretStore } from '../secrets'
+import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 
 const mocks = vi.hoisted(() => ({
   bindings: [] as BindingWithProvider[],
@@ -18,12 +18,12 @@ vi.mock('./router', async importOriginal => {
   }
 })
 
-vi.mock('../health', () => ({
+vi.mock('./health', () => ({
   markProviderFailure: mocks.markProviderFailure,
   markProviderSuccess: mocks.markProviderSuccess,
 }))
 
-vi.mock('../db/store', () => ({
+vi.mock('../database/store', () => ({
   getSettings: () => ({ idleTimeoutMilliseconds: 1_000 }),
 }))
 

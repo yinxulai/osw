@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { handleApiRequest } from '../api/handlers'
+import { handleApiRequest } from './router'
 import type { Server } from 'node:http'
 
 export interface ManagementServerOptions {

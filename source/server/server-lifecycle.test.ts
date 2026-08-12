@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { initDatabase } from './db'
-import { updateSettings } from './db/store'
+import { updateSettings } from './database/store'
 import { startServer, stopServer } from './index'
 import type { KeychainApi } from '@common/keychain'
 

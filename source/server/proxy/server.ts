@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { getSettings, listLogicalModels } from '../db/store'
+import { getSettings, listLogicalModels } from '../database/store'
 import { handleProxyRequest } from './handler'
 import type { Server } from 'node:http'
 

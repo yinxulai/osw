@@ -1,5 +1,5 @@
-import { listBindingsByModel, getProvider } from '../db/store'
-import { isProviderAvailable } from '../health'
+import { listBindingsByModel, getProvider } from '../database/store'
+import { isProviderAvailable } from './health'
 import type { ModelBinding, Provider, Protocol } from '@common/schemas'
 
 export interface BindingWithProvider {

@@ -1,7 +1,4 @@
-import { closeDatabase, initDatabase } from './db'
-import { configureSecretStore } from './secrets'
-import { startManagementServer, stopManagementServer } from './management/server'
-import { startProxyServer, stopProxyServer } from './proxy/server'
+import { ServerRuntime } from './runtime/server-runtime'
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 
@@ -12,36 +9,20 @@ export interface StartServerOptions {
   managementPort?: number
 }
 
-let applicationStarted = false
+let runtime: ServerRuntime | null = null
 
 export async function startServer(options: StartServerOptions): Promise<Server> {
-  if (applicationStarted) return startManagementServer()
-
-  configureSecretStore(options.secretStore)
-  initDatabase(options.dataDir)
-
-  try {
-    const managementServer = await startManagementServer({
-      host: options.managementHost,
-      port: options.managementPort,
-    })
-    await startProxyServer()
-    applicationStarted = true
-    return managementServer
-  } catch (error) {
-    await Promise.allSettled([stopProxyServer(), stopManagementServer()])
-    closeDatabase()
-    throw error
-  }
+  if (!runtime) runtime = new ServerRuntime(options)
+  return runtime.start()
 }
 
 export async function stopServer(): Promise<void> {
-  applicationStarted = false
-  const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
-  closeDatabase()
-
-  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-  if (failure) throw failure.reason
+  if (!runtime) return
+  try {
+    await runtime.stop()
+  } finally {
+    runtime = null
+  }
 }
 
 export {
