@@ -18,9 +18,9 @@ export const bindingRoutes: Record<string, ManagementHandler> = {
 }
 
 const ListBindingsSchema = z.object({ logicalModelId: z.string() })
-function handleListBindings(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleListBindings(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { logicalModelId } = ListBindingsSchema.parse(body)
-  sendSuccess(res, listBindingsByModel(logicalModelId))
+  sendSuccess(res, await listBindingsByModel(logicalModelId))
 }
 
 const CreateBindingSchema = ModelBindingSchema.pick({
@@ -34,9 +34,9 @@ const CreateBindingSchema = ModelBindingSchema.pick({
   customAuthHeader: true,
 }).partial({ enabled: true, customAuthHeader: true })
 
-function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateBindingSchema.parse(body)
-  sendSuccess(res, createBinding({
+  sendSuccess(res, await createBinding({
     logicalModelId: input.logicalModelId,
     providerId: input.providerId,
     protocol: input.protocol,
@@ -49,14 +49,14 @@ function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, body: u
 }
 
 const UpdateBindingSchema = ModelBindingSchema.partial().required({ id: true })
-function handleUpdateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleUpdateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id, ...updates } = UpdateBindingSchema.parse(body)
-  sendSuccess(res, updateBinding(id, updates))
+  sendSuccess(res, await updateBinding(id, updates))
 }
 
 const DeleteBindingSchema = z.object({ id: z.string() })
-function handleDeleteBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleDeleteBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = DeleteBindingSchema.parse(body)
-  deleteBinding(id)
+  await deleteBinding(id)
   sendSuccess(res, { id })
 }

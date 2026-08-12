@@ -7,20 +7,20 @@ import {
   getSettings,
 } from '../database/store'
 
-export function isProviderAvailable(providerId: string): boolean {
-  const health = getProviderHealth(providerId)
+export async function isProviderAvailable(providerId: string): Promise<boolean> {
+  const health = await getProviderHealth(providerId)
   if (!health) return true
   if (health.cooldownUntilTime === null) return true
   return Date.now() >= health.cooldownUntilTime
 }
 
-export function markProviderSuccess(providerId: string): void {
-  recordHealthSuccess(providerId)
+export async function markProviderSuccess(providerId: string): Promise<void> {
+  await recordHealthSuccess(providerId)
 }
 
-export function markProviderFailure(providerId: string): void {
-  const settings = getSettings()
-  const health = getProviderHealth(providerId)
+export async function markProviderFailure(providerId: string): Promise<void> {
+  const settings = await getSettings()
+  const health = await getProviderHealth(providerId)
   const consecutiveFailures = (health?.consecutiveFailures ?? 0) + 1
 
   let cooldownUntilTime: number | null = null
@@ -33,13 +33,13 @@ export function markProviderFailure(providerId: string): void {
     cooldownUntilTime = Date.now() + seconds * 1000
   }
 
-  recordHealthFailure(providerId, cooldownUntilTime)
+  await recordHealthFailure(providerId, cooldownUntilTime)
 }
 
-export function getAllHealth() {
+export async function getAllHealth() {
   return listProviderHealth()
 }
 
-export function resetHealth(providerId: string): void {
-  resetProviderHealth(providerId)
+export async function resetHealth(providerId: string): Promise<void> {
+  await resetProviderHealth(providerId)
 }

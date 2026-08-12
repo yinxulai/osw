@@ -13,20 +13,20 @@ let proxyServer: Server | null = null
 let proxyStartupPromise: Promise<Server> | null = null
 let lifecyclePromise: Promise<void> = Promise.resolve()
 
-export function startProxyServer(): Promise<Server> {
+export async function startProxyServer(): Promise<Server> {
   if (proxyServer?.listening) return Promise.resolve(proxyServer)
   if (proxyStartupPromise) return proxyStartupPromise
 
-  const settings = getSettings()
+  const settings = await getSettings()
   const candidate = http.createServer(async (req, res) => {
     const url = new URL(req.url!, 'http://localhost')
 
     if (url.pathname === '/v1/models') {
-      writeModelsResponse(res)
+      await writeModelsResponse(res)
       return
     }
 
-    const models = listLogicalModels()
+    const models = await listLogicalModels()
     if (models.length === 0) {
       writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置逻辑模型')
       return
@@ -71,8 +71,8 @@ export function restartProxyServer(): Promise<Server> {
   }).then(() => restartedServer!)
 }
 
-export function getProxyServerStatus(): ProxyServerStatus {
-  const settings = getSettings()
+export async function getProxyServerStatus(): Promise<ProxyServerStatus> {
+  const settings = await getSettings()
   return {
     running: proxyServer?.listening ?? false,
     host: settings.listenHost,
@@ -117,12 +117,7 @@ function writeModelsResponse(res: http.ServerResponse): void {
   }))
 }
 
-function writeJsonError(
-  res: http.ServerResponse,
-  statusCode: number,
-  errorCode: string,
-  errorMessage: string,
-): void {
+function writeJsonError(res: http.ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ success: false, errorCode, errorMessage }))

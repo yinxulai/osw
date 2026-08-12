@@ -32,25 +32,25 @@ function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unk
   sendSuccess(res, { bindingId })
 }
 
-function handleListHealth(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, listProviderHealth())
+async function handleListHealth(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  sendSuccess(res, await listProviderHealth())
 }
 
-function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, getProxyServerStatus())
+async function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  sendSuccess(res, await getProxyServerStatus())
 }
 
 async function handleProxyStart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   await startProxyServer()
-  sendSuccess(res, getProxyServerStatus())
+  sendSuccess(res, await getProxyServerStatus())
 }
 
 async function handleProxyStop(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   await stopProxyServer()
-  sendSuccess(res, getProxyServerStatus())
+  sendSuccess(res, await getProxyServerStatus())
 }
 
 async function handleProxyRestart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   await restartProxyServer()
-  sendSuccess(res, getProxyServerStatus())
+  sendSuccess(res, await getProxyServerStatus())
 }

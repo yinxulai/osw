@@ -35,7 +35,8 @@ interface SortableBindingProps {
   children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
 }
 
-function SortableBinding({ id, children }: SortableBindingProps) {
+function SortableBinding(props: SortableBindingProps) {
+  const { id, children } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn('relative bg-card', isDragging && 'z-10 shadow-md')}>
@@ -197,7 +198,7 @@ export default function QueueControlPage() {
                   <div className="space-y-1.5"><Label className="text-[11px] text-muted-foreground"><Plug size={11} className="mr-1 inline" />代理地址</Label><div className="flex gap-2"><Input readOnly value={proxyBaseUrl} className="h-8 font-mono text-xs" /><Button variant="secondary" size="sm" className="h-8 text-xs" disabled={!proxyStatus?.running} onClick={() => void copyEndpoint()}><Copy size={13} /> {copied ? '已复制' : '复制'}</Button></div></div>
                   <div className="space-y-1.5"><Label className="text-[11px] text-muted-foreground"><KeyRound size={11} className="mr-1 inline" />服务状态</Label><div className="flex h-8 items-center rounded-md border px-3"><span className={cn('mr-2 h-1.5 w-1.5 rounded-full', proxyStatus?.running ? 'bg-success' : 'bg-muted-foreground')} /><span className="text-xs">{proxyStatus?.running ? '运行中' : '已暂停'}</span></div></div>
                 </div>
-                <div className="flex flex-wrap gap-2">{(['openai', 'anthropic', 'gemini'] as const).map(protocol => <Badge key={protocol} variant="secondary">{protocol.toUpperCase()} · {bindings.filter(binding => binding.protocol === protocol && binding.enabled).length}</Badge>)}</div>
+                <div className="flex flex-wrap gap-2">{(['openai-completions', 'openai-responses', 'anthropic-messages'] as const).map(protocol => <Badge key={protocol} variant="secondary">{protocol.toUpperCase()} · {bindings.filter(binding => binding.protocol === protocol && binding.enabled).length}</Badge>)}</div>
               </CardContent>
             </Card>
 

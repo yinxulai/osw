@@ -17,11 +17,7 @@ const CLIENT_AUTH_HEADERS = new Set([
   'x-goog-api-key',
 ])
 
-export function createUpstreamHeaders(
-  source: IncomingHttpHeaders,
-  authHeaders: Record<string, string>,
-  contentLength: number,
-): Record<string, string | string[]> {
+export function createUpstreamHeaders(source: IncomingHttpHeaders, authHeaders: Record<string, string>, contentLength: number): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
   const connectionHeaders = parseConnectionHeaders(source.connection)
   const replacementAuthHeaders = new Set(Object.keys(authHeaders).map(name => name.toLowerCase()))

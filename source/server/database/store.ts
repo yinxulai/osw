@@ -10,337 +10,355 @@ import type {
   RequestStatus,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
-import { mapBindingRow, mapLogicalModelRow, mapProviderRow } from './mappers'
+
+type ProviderRow = Awaited<ReturnType<ReturnType<typeof getDb>['provider']['findUnique']>>
+type LogicalModelRow = Awaited<ReturnType<ReturnType<typeof getDb>['logicalModel']['findUnique']>>
+type BindingRow = Awaited<ReturnType<ReturnType<typeof getDb>['modelBinding']['findUnique']>>
+type HealthRow = Awaited<ReturnType<ReturnType<typeof getDb>['providerHealth']['findUnique']>>
+type SettingsRow = Awaited<ReturnType<ReturnType<typeof getDb>['settings']['findUnique']>>
+type RequestLogRow = Awaited<ReturnType<ReturnType<typeof getDb>['requestLog']['findUnique']>>
+type RequestAttemptRow = Awaited<ReturnType<ReturnType<typeof getDb>['requestAttempt']['findUnique']>>
+
+function mapProvider(row: NonNullable<ProviderRow>): Provider {
+  return {
+    ...row,
+    createdTime: Number(row.createdTime),
+    updatedTime: Number(row.updatedTime),
+    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function mapLogicalModel(row: NonNullable<LogicalModelRow>): LogicalModel {
+  return {
+    ...row,
+    createdTime: Number(row.createdTime),
+    updatedTime: Number(row.updatedTime),
+    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function mapBinding(row: NonNullable<BindingRow>): ModelBinding {
+  return {
+    ...row,
+    protocol: row.protocol as ModelBinding['protocol'],
+    createdTime: Number(row.createdTime),
+    updatedTime: Number(row.updatedTime),
+    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function mapHealth(row: NonNullable<HealthRow>): ProviderHealth {
+  return {
+    ...row,
+    cooldownUntilTime: row.cooldownUntilTime === null ? null : Number(row.cooldownUntilTime),
+    lastSuccessTime: row.lastSuccessTime === null ? null : Number(row.lastSuccessTime),
+    lastFailureTime: row.lastFailureTime === null ? null : Number(row.lastFailureTime),
+    updatedTime: Number(row.updatedTime),
+  }
+}
+
+function mapSettings(row: NonNullable<SettingsRow>): Settings {
+  return { ...row, id: 'singleton', updatedTime: Number(row.updatedTime) }
+}
+
+function mapRequestLog(row: NonNullable<RequestLogRow>): RequestLog {
+  return {
+    ...row,
+    protocol: row.protocol as RequestLog['protocol'],
+    status: row.status as RequestStatus,
+    createdTime: Number(row.createdTime),
+  }
+}
+
+function mapRequestAttempt(row: NonNullable<RequestAttemptRow>): RequestAttempt {
+  return {
+    ...row,
+    status: row.status as RequestStatus,
+    createdTime: Number(row.createdTime),
+  }
+}
 
 // ========== Provider ==========
 
-export function listProviders(includeDeleted = false): Provider[] {
-  const db = getDb()
-  const sql = includeDeleted
-    ? 'SELECT * FROM providers ORDER BY createdTime DESC'
-    : 'SELECT * FROM providers WHERE deletedTime IS NULL ORDER BY createdTime DESC'
-  return db.prepare(sql).all().map(mapProviderRow)
+export async function listProviders(includeDeleted = false): Promise<Provider[]> {
+  const rows = await getDb().provider.findMany({
+    where: includeDeleted ? undefined : { deletedTime: null },
+    orderBy: { createdTime: 'desc' },
+  })
+  return rows.map(mapProvider)
 }
 
-export function getProvider(id: string): Provider | undefined {
-  const db = getDb()
-  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id)
-  return row ? mapProviderRow(row) : undefined
+export async function getProvider(id: string): Promise<Provider | undefined> {
+  const row = await getDb().provider.findUnique({ where: { id } })
+  return row ? mapProvider(row) : undefined
 }
 
-export function createProvider(input: Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Provider {
-  const db = getDb()
+export async function createProvider(
+  input: Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
+): Promise<Provider> {
   const id = generateId('prov_')
   const time = now()
-  const provider: Provider = { ...input, id, createdTime: time, updatedTime: time, deletedTime: null }
-  db.transaction(() => {
-    db.prepare(`
-      INSERT INTO providers (id, name, apiKeyReference, timeoutMilliseconds, enabled, createdTime, updatedTime, deletedTime)
-      VALUES (@id, @name, @apiKeyReference, @timeoutMilliseconds, @enabled, @createdTime, @updatedTime, @deletedTime)
-    `).run({ ...provider, enabled: Number(provider.enabled) })
-    db.prepare(`
-      INSERT INTO provider_health (providerId, consecutiveFailures, cooldownUntilTime, lastSuccessTime, lastFailureTime, updatedTime)
-      VALUES (?, 0, NULL, NULL, NULL, ?)
-    `).run(id, time)
-  })()
-  return provider
-}
-
-export function updateProvider(id: string, updates: Partial<Omit<Provider, 'id' | 'createdTime'>>): Provider {
-  const db = getDb()
-  const current = getProvider(id)
-  if (!current) throw new Error(`Provider ${id} not found`)
-  const updated = { ...current, ...updates, updatedTime: now() }
-  const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
-  const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE providers SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
-    ...updated,
-    enabled: Number(updated.enabled),
-    id,
-  })
-  return updated
-}
-
-export function deleteProvider(id: string): void {
-  const db = getDb()
-  const time = now()
-  db.transaction(() => {
-    db.prepare('UPDATE providers SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL').run(
-      time,
-      time,
+  const row = await getDb().provider.create({
+    data: {
+      ...input,
       id,
-    )
-    db.prepare('UPDATE model_bindings SET enabled = 0, updatedTime = ? WHERE providerId = ? AND deletedTime IS NULL')
-      .run(time, id)
-  })()
+      createdTime: BigInt(time),
+      updatedTime: BigInt(time),
+      health: { create: { updatedTime: BigInt(time) } },
+    },
+  })
+  return mapProvider(row)
+}
+
+export async function updateProvider(id: string, updates: Partial<Omit<Provider, 'id' | 'createdTime'>>): Promise<Provider> {
+  const row = await getDb().provider.update({
+    where: { id },
+    data: {
+      ...updates,
+      updatedTime: BigInt(now()),
+      deletedTime: updates.deletedTime === undefined ? undefined : toNullableBigInt(updates.deletedTime),
+    },
+  })
+  return mapProvider(row)
+}
+
+export async function deleteProvider(id: string): Promise<void> {
+  const time = BigInt(now())
+  await getDb().$transaction([
+    getDb().provider.updateMany({
+      where: { id, deletedTime: null },
+      data: { deletedTime: time, updatedTime: time },
+    }),
+    getDb().modelBinding.updateMany({
+      where: { providerId: id, deletedTime: null },
+      data: { enabled: false, updatedTime: time },
+    }),
+  ])
 }
 
 // ========== Logical Model ==========
 
-export function listLogicalModels(includeDeleted = false): LogicalModel[] {
-  const db = getDb()
-  const sql = includeDeleted
-    ? 'SELECT * FROM logical_models ORDER BY createdTime DESC'
-    : 'SELECT * FROM logical_models WHERE deletedTime IS NULL ORDER BY createdTime DESC'
-  return db.prepare(sql).all().map(mapLogicalModelRow)
-}
-
-export function getLogicalModel(id: string): LogicalModel | undefined {
-  const db = getDb()
-  const row = db.prepare('SELECT * FROM logical_models WHERE id = ?').get(id)
-  return row ? mapLogicalModelRow(row) : undefined
-}
-
-export function createLogicalModel(
-  input: Omit<LogicalModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): LogicalModel {
-  const db = getDb()
-  const id = generateId('model_')
-  const time = now()
-  const model: LogicalModel = { ...input, id, createdTime: time, updatedTime: time, deletedTime: null }
-  db.prepare(`
-    INSERT INTO logical_models (id, name, description, enabled, createdTime, updatedTime, deletedTime)
-    VALUES (@id, @name, @description, @enabled, @createdTime, @updatedTime, @deletedTime)
-  `).run({ ...model, enabled: Number(model.enabled) })
-  return model
-}
-
-export function updateLogicalModel(
-  id: string,
-  updates: Partial<Omit<LogicalModel, 'id' | 'createdTime'>>,
-): LogicalModel {
-  const db = getDb()
-  const current = getLogicalModel(id)
-  if (!current) throw new Error(`LogicalModel ${id} not found`)
-  const updated = { ...current, ...updates, updatedTime: now() }
-  const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
-  const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE logical_models SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
-    ...updated,
-    enabled: Number(updated.enabled),
-    id,
+export async function listLogicalModels(includeDeleted = false): Promise<LogicalModel[]> {
+  const rows = await getDb().logicalModel.findMany({
+    where: includeDeleted ? undefined : { deletedTime: null },
+    orderBy: { createdTime: 'desc' },
   })
-  return updated
+  return rows.map(mapLogicalModel)
 }
 
-export function deleteLogicalModel(id: string): void {
-  const db = getDb()
+export async function getLogicalModel(id: string): Promise<LogicalModel | undefined> {
+  const row = await getDb().logicalModel.findUnique({ where: { id } })
+  return row ? mapLogicalModel(row) : undefined
+}
+
+export async function createLogicalModel(input: Omit<LogicalModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Promise<LogicalModel> {
   const time = now()
-  db.transaction(() => {
-    db.prepare(
-      'UPDATE logical_models SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL',
-    ).run(time, time, id)
-    db.prepare(
-      'UPDATE model_bindings SET deletedTime = ?, updatedTime = ? WHERE logicalModelId = ? AND deletedTime IS NULL',
-    ).run(time, time, id)
-  })()
+  const row = await getDb().logicalModel.create({
+    data: {
+      ...input,
+      id: generateId('model_'),
+      createdTime: BigInt(time),
+      updatedTime: BigInt(time),
+    },
+  })
+  return mapLogicalModel(row)
+}
+
+export async function updateLogicalModel(id: string, updates: Partial<Omit<LogicalModel, 'id' | 'createdTime'>>): Promise<LogicalModel> {
+  const row = await getDb().logicalModel.update({
+    where: { id },
+    data: {
+      ...updates,
+      updatedTime: BigInt(now()),
+      deletedTime: updates.deletedTime === undefined ? undefined : toNullableBigInt(updates.deletedTime),
+    },
+  })
+  return mapLogicalModel(row)
+}
+
+export async function deleteLogicalModel(id: string): Promise<void> {
+  const time = BigInt(now())
+  await getDb().$transaction([
+    getDb().logicalModel.updateMany({
+      where: { id, deletedTime: null },
+      data: { deletedTime: time, updatedTime: time },
+    }),
+    getDb().modelBinding.updateMany({
+      where: { logicalModelId: id, deletedTime: null },
+      data: { deletedTime: time, updatedTime: time },
+    }),
+  ])
 }
 
 // ========== Model Binding ==========
 
-export function listBindingsByModel(logicalModelId: string, includeDeleted = false): ModelBinding[] {
-  const db = getDb()
-  const sql = includeDeleted
-    ? 'SELECT * FROM model_bindings WHERE logicalModelId = ? ORDER BY priority ASC'
-    : 'SELECT * FROM model_bindings WHERE logicalModelId = ? AND deletedTime IS NULL ORDER BY priority ASC'
-  return db.prepare(sql).all(logicalModelId).map(mapBindingRow)
-}
-
-export function listBindingsByProvider(providerId: string, includeDeleted = false): ModelBinding[] {
-  const db = getDb()
-  const sql = includeDeleted
-    ? 'SELECT * FROM model_bindings WHERE providerId = ? ORDER BY priority ASC'
-    : 'SELECT * FROM model_bindings WHERE providerId = ? AND deletedTime IS NULL ORDER BY priority ASC'
-  return db.prepare(sql).all(providerId).map(mapBindingRow)
-}
-
-export function getBinding(id: string): ModelBinding | undefined {
-  const db = getDb()
-  const row = db.prepare('SELECT * FROM model_bindings WHERE id = ?').get(id)
-  return row ? mapBindingRow(row) : undefined
-}
-
-export function createBinding(
-  input: Omit<ModelBinding, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): ModelBinding {
-  const db = getDb()
-  const id = generateId('bind_')
-  const time = now()
-  const binding: ModelBinding = { ...input, id, createdTime: time, updatedTime: time, deletedTime: null }
-  db.prepare(`
-    INSERT INTO model_bindings (id, logicalModelId, providerId, protocol, upstreamUrl, upstreamModelId, priority, enabled, customAuthHeader, createdTime, updatedTime, deletedTime)
-    VALUES (@id, @logicalModelId, @providerId, @protocol, @upstreamUrl, @upstreamModelId, @priority, @enabled, @customAuthHeader, @createdTime, @updatedTime, @deletedTime)
-  `).run({ ...binding, enabled: Number(binding.enabled) })
-  return binding
-}
-
-export function updateBinding(
-  id: string,
-  updates: Partial<Omit<ModelBinding, 'id' | 'createdTime'>>,
-): ModelBinding {
-  const db = getDb()
-  const current = getBinding(id)
-  if (!current) throw new Error(`Binding ${id} not found`)
-  const updated = { ...current, ...updates, updatedTime: now() }
-  const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
-  const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE model_bindings SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
-    ...updated,
-    enabled: Number(updated.enabled),
-    id,
+export async function listBindingsByModel(logicalModelId: string, includeDeleted = false): Promise<ModelBinding[]> {
+  const rows = await getDb().modelBinding.findMany({
+    where: { logicalModelId, ...(includeDeleted ? {} : { deletedTime: null }) },
+    orderBy: { priority: 'asc' },
   })
-  return updated
+  return rows.map(mapBinding)
 }
 
-export function deleteBinding(id: string): void {
-  const db = getDb()
-  db.prepare('UPDATE model_bindings SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL').run(
-    now(),
-    now(),
-    id,
-  )
+export async function listBindingsByProvider(providerId: string, includeDeleted = false): Promise<ModelBinding[]> {
+  const rows = await getDb().modelBinding.findMany({
+    where: { providerId, ...(includeDeleted ? {} : { deletedTime: null }) },
+    orderBy: { priority: 'asc' },
+  })
+  return rows.map(mapBinding)
+}
+
+export async function getBinding(id: string): Promise<ModelBinding | undefined> {
+  const row = await getDb().modelBinding.findUnique({ where: { id } })
+  return row ? mapBinding(row) : undefined
+}
+
+export async function createBinding(input: Omit<ModelBinding, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Promise<ModelBinding> {
+  const time = now()
+  const row = await getDb().modelBinding.create({
+    data: {
+      ...input,
+      id: generateId('bind_'),
+      createdTime: BigInt(time),
+      updatedTime: BigInt(time),
+    },
+  })
+  return mapBinding(row)
+}
+
+export async function updateBinding(id: string, updates: Partial<Omit<ModelBinding, 'id' | 'createdTime'>>): Promise<ModelBinding> {
+  const row = await getDb().modelBinding.update({
+    where: { id },
+    data: {
+      ...updates,
+      updatedTime: BigInt(now()),
+      deletedTime: updates.deletedTime === undefined ? undefined : toNullableBigInt(updates.deletedTime),
+    },
+  })
+  return mapBinding(row)
+}
+
+export async function deleteBinding(id: string): Promise<void> {
+  const time = BigInt(now())
+  await getDb().modelBinding.updateMany({
+    where: { id, deletedTime: null },
+    data: { deletedTime: time, updatedTime: time },
+  })
 }
 
 // ========== Provider Health ==========
 
-export function getProviderHealth(providerId: string): ProviderHealth | undefined {
-  const db = getDb()
-  return db.prepare('SELECT * FROM provider_health WHERE providerId = ?').get(providerId) as
-    | ProviderHealth
-    | undefined
+export async function getProviderHealth(providerId: string): Promise<ProviderHealth | undefined> {
+  const row = await getDb().providerHealth.findUnique({ where: { providerId } })
+  return row ? mapHealth(row) : undefined
 }
 
-export function listProviderHealth(): ProviderHealth[] {
-  const db = getDb()
-  return db.prepare('SELECT * FROM provider_health').all() as ProviderHealth[]
+export async function listProviderHealth(): Promise<ProviderHealth[]> {
+  return (await getDb().providerHealth.findMany()).map(mapHealth)
 }
 
-export function recordHealthSuccess(providerId: string): void {
-  const db = getDb()
-  const time = now()
-  db.prepare(`
-    UPDATE provider_health
-    SET consecutiveFailures = 0, cooldownUntilTime = NULL, lastSuccessTime = ?, updatedTime = ?
-    WHERE providerId = ?
-  `).run(time, time, providerId)
+export async function recordHealthSuccess(providerId: string): Promise<void> {
+  const time = BigInt(now())
+  await getDb().providerHealth.updateMany({
+    where: { providerId },
+    data: {
+      consecutiveFailures: 0,
+      cooldownUntilTime: null,
+      lastSuccessTime: time,
+      updatedTime: time,
+    },
+  })
 }
 
-export function recordHealthFailure(providerId: string, cooldownUntil: number | null): void {
-  const db = getDb()
-  const time = now()
-  db.prepare(`
-    UPDATE provider_health
-    SET consecutiveFailures = consecutiveFailures + 1,
-        cooldownUntilTime = ?,
-        lastFailureTime = ?,
-        updatedTime = ?
-    WHERE providerId = ?
-  `).run(cooldownUntil, time, time, providerId)
+export async function recordHealthFailure(providerId: string, cooldownUntil: number | null): Promise<void> {
+  const time = BigInt(now())
+  await getDb().providerHealth.updateMany({
+    where: { providerId },
+    data: {
+      consecutiveFailures: { increment: 1 },
+      cooldownUntilTime: toNullableBigInt(cooldownUntil),
+      lastFailureTime: time,
+      updatedTime: time,
+    },
+  })
 }
 
-export function resetProviderHealth(providerId: string): void {
-  const db = getDb()
-  db.prepare(`
-    UPDATE provider_health
-    SET consecutiveFailures = 0, cooldownUntilTime = NULL, lastSuccessTime = NULL, lastFailureTime = NULL, updatedTime = ?
-    WHERE providerId = ?
-  `).run(now(), providerId)
+export async function resetProviderHealth(providerId: string): Promise<void> {
+  await getDb().providerHealth.updateMany({
+    where: { providerId },
+    data: {
+      consecutiveFailures: 0,
+      cooldownUntilTime: null,
+      lastSuccessTime: null,
+      lastFailureTime: null,
+      updatedTime: BigInt(now()),
+    },
+  })
 }
 
 // ========== Settings ==========
 
 const SETTINGS_ID = 'singleton'
 
-export function getSettings(): Settings {
-  const db = getDb()
-  let settings = db.prepare('SELECT * FROM settings WHERE id = ?').get(SETTINGS_ID) as Settings | undefined
-  if (!settings) {
-    const time = now()
-    settings = {
-      id: SETTINGS_ID,
-      listenHost: '127.0.0.1',
-      listenPort: 9300,
-      accessTokenReference: null,
-      logRetentionCount: 1000,
-      cooldownBaseSeconds: 30,
-      cooldownMaxSeconds: 300,
-      consecutiveFailureThreshold: 3,
-      idleTimeoutMilliseconds: 30000,
-      updatedTime: time,
-    }
-    db.prepare(`
-      INSERT INTO settings (id, listenHost, listenPort, accessTokenReference, logRetentionCount,
-        cooldownBaseSeconds, cooldownMaxSeconds, consecutiveFailureThreshold, idleTimeoutMilliseconds, updatedTime)
-      VALUES (@id, @listenHost, @listenPort, @accessTokenReference, @logRetentionCount,
-        @cooldownBaseSeconds, @cooldownMaxSeconds, @consecutiveFailureThreshold, @idleTimeoutMilliseconds, @updatedTime)
-    `).run(settings)
-  }
-  return settings
+export async function getSettings(): Promise<Settings> {
+  const row = await getDb().settings.upsert({
+    where: { id: SETTINGS_ID },
+    update: {},
+    create: { id: SETTINGS_ID, updatedTime: BigInt(now()) },
+  })
+  return mapSettings(row)
 }
 
-export function updateSettings(updates: Partial<Omit<Settings, 'id' | 'updatedTime'>>): Settings {
-  const db = getDb()
-  const current = getSettings()
-  const updated = { ...current, ...updates, updatedTime: now() }
-  const fields = Object.keys(updates).filter(k => k !== 'id')
-  const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE settings SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
-    ...updated,
-    id: SETTINGS_ID,
+export async function updateSettings(updates: Partial<Omit<Settings, 'id' | 'updatedTime'>>): Promise<Settings> {
+  await getSettings()
+  const row = await getDb().settings.update({
+    where: { id: SETTINGS_ID },
+    data: { ...updates, updatedTime: BigInt(now()) },
   })
-  return updated
+  return mapSettings(row)
 }
 
 // ========== Request Log ==========
 
-export function createRequestLog(
-  input: Omit<RequestLog, 'id' | 'createdTime'>,
-): RequestLog {
-  const db = getDb()
-  const id = generateId('req_')
-  const time = now()
-  const log: RequestLog = { ...input, id, createdTime: time }
-  db.prepare(`
-    INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, totalTokens, createdTime)
-    VALUES (@id, @logicalModelId, @protocol, @status, @totalDurationMilliseconds, @totalTokens, @createdTime)
-  `).run(log)
-  return log
+export async function createRequestLog(input: Omit<RequestLog, 'id' | 'createdTime'>): Promise<RequestLog> {
+  const row = await getDb().requestLog.create({
+    data: { ...input, id: generateId('req_'), createdTime: BigInt(now()) },
+  })
+  return mapRequestLog(row)
 }
 
-export function updateRequestLogStatus(
-  id: string,
-  status: RequestStatus,
-  totalDurationMilliseconds: number,
-  totalTokens: number | null = null,
-): void {
-  const db = getDb()
-  db.prepare(`
-    UPDATE request_logs
-    SET status = ?, totalDurationMilliseconds = ?, totalTokens = ?
-    WHERE id = ?
-  `).run(status, totalDurationMilliseconds, totalTokens, id)
+export async function updateRequestLogStatus(id: string, status: RequestStatus, totalDurationMilliseconds: number, totalTokens: number | null = null): Promise<void> {
+  await getDb().requestLog.updateMany({
+    where: { id },
+    data: { status, totalDurationMilliseconds, totalTokens },
+  })
 }
 
-export function listRequestLogs(limit = 50): RequestLog[] {
-  const db = getDb()
-  return db.prepare('SELECT * FROM request_logs ORDER BY createdTime DESC LIMIT ?').all(limit) as RequestLog[]
+export async function listRequestLogs(limit = 50): Promise<RequestLog[]> {
+  const rows = await getDb().requestLog.findMany({
+    orderBy: { createdTime: 'desc' },
+    take: limit,
+  })
+  return rows.map(mapRequestLog)
 }
 
-export function createRequestAttempt(
+export async function createRequestAttempt(
   input: Omit<RequestAttempt, 'id' | 'createdTime'>,
-): RequestAttempt {
-  const db = getDb()
-  const id = generateId('att_')
-  const time = now()
-  const attempt: RequestAttempt = { ...input, id, createdTime: time }
-  db.prepare(`
-    INSERT INTO request_attempts (id, requestId, providerId, bindingId, upstreamModelId, attemptIndex, status, errorCode, errorMessage, durationMilliseconds, createdTime)
-    VALUES (@id, @requestId, @providerId, @bindingId, @upstreamModelId, @attemptIndex, @status, @errorCode, @errorMessage, @durationMilliseconds, @createdTime)
-  `).run(attempt)
-  return attempt
+): Promise<RequestAttempt> {
+  const row = await getDb().requestAttempt.create({
+    data: { ...input, id: generateId('att_'), createdTime: BigInt(now()) },
+  })
+  return mapRequestAttempt(row)
 }
 
-export function listAttemptsByRequest(requestId: string): RequestAttempt[] {
-  const db = getDb()
-  return db.prepare('SELECT * FROM request_attempts WHERE requestId = ? ORDER BY attemptIndex ASC').all(requestId) as RequestAttempt[]
+export async function listAttemptsByRequest(requestId: string): Promise<RequestAttempt[]> {
+  const rows = await getDb().requestAttempt.findMany({
+    where: { requestId },
+    orderBy: { attemptIndex: 'asc' },
+  })
+  return rows.map(mapRequestAttempt)
+}
+
+function toNullableBigInt(value: number | null): bigint | null {
+  return value === null ? null : BigInt(value)
 }

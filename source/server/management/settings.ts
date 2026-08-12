@@ -9,11 +9,11 @@ export const settingsRoutes: Record<string, ManagementHandler> = {
   '/api/settings/update': handleUpdateSettings,
 }
 
-function handleGetSettings(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, getSettings())
+async function handleGetSettings(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  sendSuccess(res, await getSettings())
 }
 
 const UpdateSettingsSchema = SettingsSchema.partial().omit({ id: true })
-function handleUpdateSettings(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
-  sendSuccess(res, updateSettings(UpdateSettingsSchema.parse(body)))
+async function handleUpdateSettings(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  sendSuccess(res, await updateSettings(UpdateSettingsSchema.parse(body)))
 }

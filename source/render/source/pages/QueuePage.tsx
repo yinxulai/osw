@@ -61,14 +61,14 @@ import {
 } from '@/components/ui/dialog'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
-type Protocol = 'openai' | 'anthropic' | 'gemini'
+type Protocol = 'openai-completions' | 'openai-responses' | 'anthropic-messages'
 
 const PROXY_BASE_URL = 'http://127.0.0.1:9300'
 
 const PROTOCOLS: { key: Protocol; label: string; path: string }[] = [
-  { key: 'openai', label: 'OpenAI', path: '/v1' },
-  { key: 'anthropic', label: 'Anthropic', path: '/v1/anthropic' },
-  { key: 'gemini', label: 'Gemini', path: '/v1/gemini' },
+  { key: 'openai-completions', label: 'OpenAI Completions', path: '/v1/completions' },
+  { key: 'openai-responses', label: 'OpenAI Responses', path: '/v1/responses' },
+  { key: 'anthropic-messages', label: 'Anthropic Messages', path: '/v1/messages' },
 ]
 
 type BindingStatus = 'active' | 'standby' | 'warning' | 'cooling' | 'disabled'
@@ -91,7 +91,7 @@ const initialBindings: Binding[] = [
     id: 'bind_001',
     provider: 'OpenAI',
     model: 'gpt-4o',
-    protocol: 'OpenAI',
+    protocol: 'openai-responses',
     upstream: 'https://api.openai.com/v1',
     priority: 1,
     status: 'active',
@@ -102,7 +102,7 @@ const initialBindings: Binding[] = [
     id: 'bind_002',
     provider: 'Anthropic',
     model: 'claude-3-5-sonnet-20240620',
-    protocol: 'OpenAI',
+    protocol: 'anthropic-messages',
     upstream: 'https://api.anthropic.com/v1',
     priority: 2,
     status: 'standby',
@@ -113,7 +113,7 @@ const initialBindings: Binding[] = [
     id: 'bind_003',
     provider: 'DeepSeek',
     model: 'deepseek-chat',
-    protocol: 'OpenAI',
+    protocol: 'openai-completions',
     upstream: 'https://api.deepseek.com/v1',
     priority: 3,
     status: 'warning',
@@ -122,23 +122,11 @@ const initialBindings: Binding[] = [
   },
   {
     id: 'bind_004',
-    provider: 'Gemini',
-    model: 'gemini-1.5-pro-002',
-    protocol: 'OpenAI',
-    upstream: 'https://generativelanguage.googleapis.com/v1beta',
-    priority: 4,
-    status: 'cooling',
-    latency: '-',
-    successRate: '-',
-    cooldownRemain: '2分30秒',
-  },
-  {
-    id: 'bind_005',
     provider: 'Ollama (本地)',
     model: 'qwen2.5:72b',
-    protocol: 'OpenAI',
+    protocol: 'openai-completions',
     upstream: 'http://localhost:11434/v1',
-    priority: 5,
+    priority: 4,
     status: 'standby',
     latency: '3.5s',
     successRate: '99.9%',
@@ -146,9 +134,9 @@ const initialBindings: Binding[] = [
 ]
 
 const protocolModelCounts: Record<Protocol, number> = {
-  openai: 5,
-  anthropic: 3,
-  gemini: 2,
+  'openai-completions': 5,
+  'openai-responses': 4,
+  'anthropic-messages': 3,
 }
 
 const statusBadgeVariant: Record<BindingStatus, 'info' | 'success' | 'warning' | 'destructive' | 'muted'> = {
@@ -168,11 +156,11 @@ const statusLabel: Record<BindingStatus, string> = {
 }
 
 const providerOptions = [
-  { name: 'OpenAI', protocol: 'OpenAI', upstream: 'https://api.openai.com/v1' },
-  { name: 'Anthropic', protocol: 'Anthropic', upstream: 'https://api.anthropic.com/v1' },
-  { name: 'DeepSeek', protocol: 'OpenAI', upstream: 'https://api.deepseek.com/v1' },
-  { name: 'Gemini', protocol: 'Gemini', upstream: 'https://generativelanguage.googleapis.com/v1beta' },
-  { name: 'Ollama (本地)', protocol: 'OpenAI', upstream: 'http://localhost:11434/v1' },
+  { name: 'OpenAI Completions', protocol: 'openai-completions', upstream: 'https://api.openai.com/v1' },
+  { name: 'OpenAI Responses', protocol: 'openai-responses', upstream: 'https://api.openai.com/v1' },
+  { name: 'Anthropic Messages', protocol: 'anthropic-messages', upstream: 'https://api.anthropic.com/v1' },
+  { name: 'DeepSeek', protocol: 'openai-completions', upstream: 'https://api.deepseek.com/v1' },
+  { name: 'Ollama (本地)', protocol: 'openai-completions', upstream: 'http://localhost:11434/v1' },
 ]
 
 interface SortableBindingProps {
@@ -180,7 +168,8 @@ interface SortableBindingProps {
   children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
 }
 
-function SortableBinding({ id, children }: SortableBindingProps) {
+function SortableBinding(props: SortableBindingProps) {
+  const { id, children } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
   return (
@@ -198,7 +187,7 @@ export default function QueuePage() {
   const [bindingItems, setBindingItems] = useState(initialBindings)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [manualBinding, setManualBinding] = useState<string>('')
-  const [protocol, setProtocol] = useState<Protocol>('openai')
+  const [protocol, setProtocol] = useState<Protocol>('openai-responses')
   const [copied, setCopied] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [bindingProvider, setBindingProvider] = useState(providerOptions[0].name)
@@ -659,9 +648,9 @@ export default function QueuePage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="OpenAI">OpenAI</SelectItem>
-                    <SelectItem value="Anthropic">Anthropic</SelectItem>
-                    <SelectItem value="Gemini">Gemini</SelectItem>
+                    <SelectItem value="openai-completions">OpenAI Completions</SelectItem>
+                    <SelectItem value="openai-responses">OpenAI Responses</SelectItem>
+                    <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

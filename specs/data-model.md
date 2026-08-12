@@ -2,7 +2,7 @@
 
 ## 概述
 
-使用 SQLite（better-sqlite3）作为本地存储，Zod 作为运行时 Schema 校验。所有配置数据、请求日志、健康状态都存在数据库中，API Key 等敏感信息存储在系统密钥环，数据库仅存引用 ID。
+使用 SQLite（Prisma ORM）作为本地存储，Zod 作为 API 边界的运行时 Schema 校验。所有配置数据、请求日志、健康状态都存在数据库中，API Key 等敏感信息存储在系统密钥环，数据库仅存引用 ID。
 
 ### 设计原则
 

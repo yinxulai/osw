@@ -74,12 +74,7 @@ function setCorsHeaders(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
 }
 
-function writeJsonError(
-  res: http.ServerResponse,
-  statusCode: number,
-  errorCode: string,
-  errorMessage: string,
-): void {
+function writeJsonError(res: http.ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ success: false, errorCode, errorMessage }))

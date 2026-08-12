@@ -11,7 +11,7 @@
 | Schema 定义 | Zod | 运行时类型校验、配置声明、API 请求/响应验证 |
 | API 规范 | OpenAPI 3.1 | 管理接口正式定义，作为前后端契约 |
 | 代码生成 | openapi-typescript + @tanstack/react-query 生成 | 从 OpenAPI 生成类型和 API 调用端代码 |
-| 本地存储 | SQLite（better-sqlite3）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
+| 本地存储 | SQLite（Prisma ORM）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
 | 数据库迁移 | 手写 SQL + 版本号管理 | 轻量迁移，不引入 ORM |
 | 渲染进程 | React 18 + TypeScript | 控制台 UI |
 | UI 组件 | shadcn/ui + Tailwind CSS | 现代、可定制、体积小 |
@@ -59,7 +59,7 @@
 - **事务一致性**：配置变更（如删除 Provider 级联删除绑定）用事务保证原子性
 - **迁移可控**：数据库版本号 + 迁移脚本，比 JSON 配置版本迁移更规范
 - **单文件部署**：SQLite 是单个文件，和 JSON 一样便携，备份/导入导出都方便
-- **better-sqlite3**：同步 API，性能好，和 Electron 主进程配合简单
+- **Prisma ORM**：提供类型安全的异步数据访问，SQLite 查询集中在 database store 边界
 
 ## 项目结构
 
@@ -262,7 +262,7 @@ one-switch/
 
 ### 3. 数据存储（`source/server/db/`）
 
-使用 SQLite（better-sqlite3），配置和日志都存在本地数据库文件中。
+使用 SQLite（Prisma ORM），配置和日志都存在本地数据库文件中。
 
 **`index.ts`** — 数据库连接
 - 初始化数据库连接

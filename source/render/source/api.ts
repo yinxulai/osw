@@ -18,6 +18,34 @@ export interface ApiSuccess<T> {
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiError
 
+type CreateProviderInput = {
+  name: string
+  apiKey: string
+  timeoutMilliseconds?: number
+  enabled?: boolean
+}
+
+type UpdateProviderInput = Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> & {
+  apiKey?: string
+}
+
+type CreateLogicalModelInput = {
+  name: string
+  description?: string
+  enabled?: boolean
+}
+
+type CreateBindingInput = {
+  logicalModelId: string
+  providerId: string
+  protocol: string
+  upstreamUrl: string
+  upstreamModelId: string
+  priority: number
+  enabled?: boolean
+  customAuthHeader?: string | null
+}
+
 async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -61,9 +89,9 @@ import type { Provider, ProviderHealth, LogicalModel, ModelBinding, Settings } f
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
-  create: (data: { name: string; apiKey: string; timeoutMilliseconds?: number; enabled?: boolean }) =>
+  create: (data: CreateProviderInput) =>
     request<Provider>('/provider/create', data),
-  update: (id: string, updates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> & { apiKey?: string }) =>
+  update: (id: string, updates: UpdateProviderInput) =>
     request<Provider>('/provider/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string }>('/provider/delete', { id }),
   resetHealth: (providerId: string) =>
@@ -75,7 +103,7 @@ export const providerApi = {
 export const logicalModelApi = {
   list: () => request<LogicalModel[]>('/logical-model/list'),
   get: (id: string) => request<LogicalModel>('/logical-model/get', { id }),
-  create: (data: { name: string; description?: string; enabled?: boolean }) =>
+  create: (data: CreateLogicalModelInput) =>
     request<LogicalModel>('/logical-model/create', data),
   update: (id: string, updates: Partial<LogicalModel>) =>
     request<LogicalModel>('/logical-model/update', { id, ...updates }),
@@ -87,16 +115,7 @@ export const logicalModelApi = {
 export const bindingApi = {
   list: (logicalModelId: string) =>
     request<ModelBinding[]>('/binding/list', { logicalModelId }),
-  create: (data: {
-    logicalModelId: string
-    providerId: string
-    protocol: string
-    upstreamUrl: string
-    upstreamModelId: string
-    priority: number
-    enabled?: boolean
-    customAuthHeader?: string | null
-  }) => request<ModelBinding>('/binding/create', data),
+  create: (data: CreateBindingInput) => request<ModelBinding>('/binding/create', data),
   update: (id: string, updates: Partial<ModelBinding>) =>
     request<ModelBinding>('/binding/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string }>('/binding/delete', { id }),

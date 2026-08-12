@@ -1,7 +1,7 @@
 import type { Configuration } from 'electron-builder'
 
 export default {
-  appId: 'com.oneswitch.app',
+  appId: 'com.yinxulai.one-switch',
   productName: 'One Switch',
   directories: {
     output: 'release/${version}',
@@ -9,8 +9,11 @@ export default {
   files: [
     'dist',
     '!dist/**/*.map',
-    'node_modules/better-sqlite3/**',
+    'node_modules/bindings/**/*',
+    'node_modules/better-sqlite3/**/*',
+    'node_modules/file-uri-to-path/**/*',
   ],
+  asarUnpack: ['node_modules/better-sqlite3/**/*.node'],
   mac: {
     target: ['dmg'],
     category: 'public.app-category.developer-tools',
@@ -22,7 +25,4 @@ export default {
     target: ['AppImage'],
     category: 'Development',
   },
-  asarUnpack: [
-    'node_modules/better-sqlite3/**',
-  ],
 } satisfies Configuration

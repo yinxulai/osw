@@ -2,7 +2,11 @@ import { z } from 'zod'
 
 // ========== 枚举 ==========
 
-export const ProtocolSchema = z.enum(['openai', 'anthropic', 'gemini'])
+export const ProtocolSchema = z.enum([
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+])
 export type Protocol = z.infer<typeof ProtocolSchema>
 
 export const RequestStatusSchema = z.enum(['success', 'failed', 'cancelled'])

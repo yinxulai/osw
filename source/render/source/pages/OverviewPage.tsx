@@ -28,11 +28,10 @@ export default function OverviewPage() {
   const maxRequests = Math.max(...requestTrend.map(d => d.requests))
 
   const providerUsage = [
-    { name: 'OpenAI', requests: 8420, percent: 34, color: 'bg-emerald-500' },
-    { name: 'Anthropic', requests: 6150, percent: 25, color: 'bg-orange-500' },
-    { name: 'DeepSeek', requests: 4920, percent: 20, color: 'bg-indigo-500' },
-    { name: 'Gemini', requests: 2460, percent: 10, color: 'bg-blue-500' },
-    { name: 'Ollama', requests: 2630, percent: 11, color: 'bg-zinc-700' },
+    { name: 'OpenAI', requests: 8420, percent: 38, color: 'bg-emerald-500' },
+    { name: 'Anthropic', requests: 6150, percent: 28, color: 'bg-orange-500' },
+    { name: 'DeepSeek', requests: 4920, percent: 22, color: 'bg-indigo-500' },
+    { name: 'Ollama', requests: 2630, percent: 12, color: 'bg-zinc-700' },
   ]
 
   const modelRanking = [

@@ -12,7 +12,7 @@ export default function ModelsPage() {
       id: 'model_001',
       name: '默认模型',
       description: '通用对话场景，自动选择最优 Provider',
-      bindingCount: 5,
+      bindingCount: 4,
       enabled: true,
       createdTime: '2024-01-15',
     },
@@ -39,7 +39,7 @@ export default function ModelsPage() {
       id: 'bind_001',
       provider: 'OpenAI',
       upstreamModelId: 'gpt-4o',
-      protocol: 'OpenAI',
+      protocol: 'openai-responses',
       upstreamUrl: 'https://api.openai.com/v1',
       customAuthHeader: '',
       priority: 1,
@@ -50,7 +50,7 @@ export default function ModelsPage() {
       id: 'bind_002',
       provider: 'Anthropic',
       upstreamModelId: 'claude-3-5-sonnet-20240620',
-      protocol: 'OpenAI',
+      protocol: 'anthropic-messages',
       upstreamUrl: 'https://api.anthropic.com/v1',
       customAuthHeader: 'x-api-key',
       priority: 2,
@@ -61,7 +61,7 @@ export default function ModelsPage() {
       id: 'bind_003',
       provider: 'DeepSeek',
       upstreamModelId: 'deepseek-chat',
-      protocol: 'OpenAI',
+      protocol: 'openai-completions',
       upstreamUrl: 'https://api.deepseek.com/v1',
       customAuthHeader: '',
       priority: 3,
@@ -70,23 +70,12 @@ export default function ModelsPage() {
     },
     {
       id: 'bind_004',
-      provider: 'Gemini',
-      upstreamModelId: 'gemini-1.5-pro-002',
-      protocol: 'OpenAI',
-      upstreamUrl: 'https://generativelanguage.googleapis.com/v1beta',
-      customAuthHeader: 'x-goog-api-key',
-      priority: 4,
-      enabled: true,
-      status: 'cooling',
-    },
-    {
-      id: 'bind_005',
       provider: 'Ollama (本地)',
       upstreamModelId: 'qwen2.5:72b',
-      protocol: 'OpenAI',
+      protocol: 'openai-completions',
       upstreamUrl: 'http://localhost:11434/v1',
       customAuthHeader: '',
-      priority: 5,
+      priority: 4,
       enabled: true,
       status: 'standby',
     },
@@ -282,13 +271,14 @@ export default function ModelsPage() {
                   <label className="form-label">
                     协议 <span className="required">*</span>
                   </label>
-                  <Select defaultValue="openai">
+                  <Select defaultValue="openai-responses">
                     <SelectTrigger className="form-select">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="openai">OpenAI 兼容</SelectItem>
-                      <SelectItem value="anthropic">Anthropic 原生</SelectItem>
+                      <SelectItem value="openai-completions">OpenAI Completions</SelectItem>
+                      <SelectItem value="openai-responses">OpenAI Responses</SelectItem>
+                      <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

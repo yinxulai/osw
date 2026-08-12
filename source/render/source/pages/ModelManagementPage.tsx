@@ -35,7 +35,8 @@ interface SortableBindingProps {
   children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
 }
 
-function SortableBinding({ id, children }: SortableBindingProps) {
+function SortableBinding(props: SortableBindingProps) {
+  const { id, children } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   return (
     <div
@@ -73,7 +74,7 @@ export default function ModelManagementPage() {
   const [timeout, setTimeout] = useState('30000')
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [editingBindingId, setEditingBindingId] = useState<string | null>(null)
-  const [protocol, setProtocol] = useState<Protocol>('openai')
+  const [protocol, setProtocol] = useState<Protocol>('openai-responses')
   const [upstreamModelId, setUpstreamModelId] = useState('')
   const [upstreamUrl, setUpstreamUrl] = useState('')
   const sensors = useSensors(
@@ -171,7 +172,7 @@ export default function ModelManagementPage() {
 
   const openBindingDialog = (binding?: ModelBinding) => {
     setEditingBindingId(binding?.id ?? null)
-    setProtocol(binding?.protocol ?? 'openai')
+    setProtocol(binding?.protocol ?? 'openai-responses')
     setUpstreamModelId(binding?.upstreamModelId ?? '')
     setUpstreamUrl(binding?.upstreamUrl ?? '')
     setBindingDialogOpen(true)
@@ -334,7 +335,7 @@ export default function ModelManagementPage() {
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label htmlFor="binding-model">上游模型 ID</Label><Input id="binding-model" className="font-mono text-xs" value={upstreamModelId} onChange={event => setUpstreamModelId(event.target.value)} placeholder="gpt-4o" /></div>
-              <div className="space-y-1.5"><Label htmlFor="binding-protocol">请求协议</Label><Select value={protocol} onValueChange={value => setProtocol(value as Protocol)}><SelectTrigger id="binding-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem><SelectItem value="gemini">Gemini</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label htmlFor="binding-protocol">请求协议</Label><Select value={protocol} onValueChange={value => setProtocol(value as Protocol)}><SelectTrigger id="binding-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai-completions">OpenAI Completions</SelectItem><SelectItem value="openai-responses">OpenAI Responses</SelectItem><SelectItem value="anthropic-messages">Anthropic Messages</SelectItem></SelectContent></Select></div>
             </div>
             <div className="space-y-1.5"><Label htmlFor="binding-url">完整接口地址</Label><Input id="binding-url" type="url" className="font-mono text-xs" value={upstreamUrl} onChange={event => setUpstreamUrl(event.target.value)} placeholder="https://api.example.com/v1/chat/completions" /></div>
           </div>

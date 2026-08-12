@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
-import { closeDatabase, initDatabase } from '../db'
+import { closeDatabase, initDatabase } from '../database'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { startProxyServer, stopProxyServer } from '../proxy/server'
@@ -32,7 +32,7 @@ export class ServerRuntime {
 
     this.state = 'starting'
     configureSecretStore(this.options.secretStore)
-    initDatabase(this.options.dataDir)
+    await initDatabase(this.options.dataDir)
 
     try {
       this.managementServer = await startManagementServer({
@@ -64,7 +64,7 @@ export class ServerRuntime {
 
   private async stopResources(): Promise<void> {
     const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
-    closeDatabase()
+    await closeDatabase()
     this.managementServer = null
 
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')

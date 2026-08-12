@@ -19,14 +19,14 @@ export const modelRoutes: Record<string, ManagementHandler> = {
   '/api/logical-model/delete': handleDeleteLogicalModel,
 }
 
-function handleListLogicalModels(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, listLogicalModels())
+async function handleListLogicalModels(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  sendSuccess(res, await listLogicalModels())
 }
 
 const GetLogicalModelSchema = z.object({ id: z.string() })
-function handleGetLogicalModel(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleGetLogicalModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = GetLogicalModelSchema.parse(body)
-  const model = getLogicalModel(id)
+  const model = await getLogicalModel(id)
   if (!model) {
     sendError(res, 'NOT_FOUND', '逻辑模型不存在', 404)
     return
@@ -40,13 +40,9 @@ const CreateLogicalModelSchema = LogicalModelSchema.pick({
   enabled: true,
 }).partial({ description: true, enabled: true })
 
-function handleCreateLogicalModel(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  body: unknown,
-): void {
+async function handleCreateLogicalModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateLogicalModelSchema.parse(body)
-  sendSuccess(res, createLogicalModel({
+  sendSuccess(res, await createLogicalModel({
     name: input.name,
     description: input.description ?? '',
     enabled: input.enabled ?? true,
@@ -54,22 +50,14 @@ function handleCreateLogicalModel(
 }
 
 const UpdateLogicalModelSchema = LogicalModelSchema.partial().required({ id: true })
-function handleUpdateLogicalModel(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  body: unknown,
-): void {
+async function handleUpdateLogicalModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id, ...updates } = UpdateLogicalModelSchema.parse(body)
-  sendSuccess(res, updateLogicalModel(id, updates))
+  sendSuccess(res, await updateLogicalModel(id, updates))
 }
 
 const DeleteLogicalModelSchema = z.object({ id: z.string() })
-function handleDeleteLogicalModel(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  body: unknown,
-): void {
+async function handleDeleteLogicalModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = DeleteLogicalModelSchema.parse(body)
-  deleteLogicalModel(id)
+  await deleteLogicalModel(id)
   sendSuccess(res, { id })
 }

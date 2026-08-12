@@ -3,7 +3,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { initDatabase } from './db'
+import { closeDatabase, initDatabase } from './database'
 import { updateSettings } from './database/store'
 import { startServer, stopServer } from './index'
 import type { KeychainApi } from '@common/keychain'
@@ -28,8 +28,9 @@ afterEach(async () => {
 describe('server lifecycle', () => {
   it('keeps management available while the proxy is stopped and restarted', async () => {
     const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
-    initDatabase(temporaryDirectory)
-    updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
+    await initDatabase(temporaryDirectory)
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
+    await closeDatabase()
     await startServer({
       dataDir: temporaryDirectory,
       secretStore,

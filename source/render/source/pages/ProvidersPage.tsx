@@ -76,28 +76,24 @@ const providers: Provider[] = [
   { id: 'prov_001', name: 'OpenAI', apiKeyRef: 'key_openai_abc123', baseUrl: 'https://api.openai.com/v1', timeout: 30000, enabled: true, status: 'healthy', latency: '1.2s' },
   { id: 'prov_002', name: 'Anthropic', apiKeyRef: 'key_anthropic_def456', baseUrl: 'https://api.anthropic.com/v1', timeout: 30000, enabled: true, status: 'healthy', latency: '2.1s' },
   { id: 'prov_003', name: 'DeepSeek', apiKeyRef: 'key_deepseek_ghi789', baseUrl: 'https://api.deepseek.com/v1', timeout: 60000, enabled: true, status: 'warning', latency: '5.8s' },
-  { id: 'prov_004', name: 'Gemini', apiKeyRef: 'key_gemini_jkl012', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', timeout: 30000, enabled: true, status: 'cooling', latency: '-' },
-  { id: 'prov_005', name: 'Ollama (本地)', apiKeyRef: '', baseUrl: 'http://localhost:11434/v1', timeout: 120000, enabled: true, status: 'healthy', latency: '3.5s' },
+  { id: 'prov_004', name: 'Ollama (本地)', apiKeyRef: '', baseUrl: 'http://localhost:11434/v1', timeout: 120000, enabled: true, status: 'healthy', latency: '3.5s' },
 ]
 
 const initialProviderModels: Record<string, ProviderModel[]> = {
   prov_001: [
-    { id: 'm_001', name: '默认模型', upstreamModel: 'gpt-4o', protocol: 'OpenAI', priority: 1, status: 'active', latency: '1.2s', successRate: '99.8%' },
-    { id: 'm_002', name: '代码模型', upstreamModel: 'gpt-4o', protocol: 'OpenAI', priority: 2, status: 'standby', latency: '1.2s', successRate: '99.8%', endpointOverride: 'https://api.openai.com/v1/chat/completions' },
-    { id: 'm_003', name: '快速模型', upstreamModel: 'gpt-4o-mini', protocol: 'OpenAI', priority: 3, status: 'standby', latency: '0.6s', successRate: '99.9%' },
+    { id: 'm_001', name: '默认模型', upstreamModel: 'gpt-4o', protocol: 'openai-responses', priority: 1, status: 'active', latency: '1.2s', successRate: '99.8%' },
+    { id: 'm_002', name: '代码模型', upstreamModel: 'gpt-4o', protocol: 'openai-completions', priority: 2, status: 'standby', latency: '1.2s', successRate: '99.8%', endpointOverride: 'https://api.openai.com/v1/chat/completions' },
+    { id: 'm_003', name: '快速模型', upstreamModel: 'gpt-4o-mini', protocol: 'openai-completions', priority: 3, status: 'standby', latency: '0.6s', successRate: '99.9%' },
   ],
   prov_002: [
-    { id: 'm_004', name: '默认模型', upstreamModel: 'claude-3-5-sonnet-20240620', protocol: 'Anthropic', priority: 1, status: 'standby', latency: '2.1s', successRate: '99.5%' },
-    { id: 'm_005', name: '长文本模型', upstreamModel: 'claude-3-opus-20240229', protocol: 'Anthropic', priority: 2, status: 'standby', latency: '3.8s', successRate: '99.0%' },
+    { id: 'm_004', name: '默认模型', upstreamModel: 'claude-3-5-sonnet-20240620', protocol: 'anthropic-messages', priority: 1, status: 'standby', latency: '2.1s', successRate: '99.5%' },
+    { id: 'm_005', name: '长文本模型', upstreamModel: 'claude-3-opus-20240229', protocol: 'anthropic-messages', priority: 2, status: 'standby', latency: '3.8s', successRate: '99.0%' },
   ],
   prov_003: [
-    { id: 'm_006', name: '默认模型', upstreamModel: 'deepseek-chat', protocol: 'OpenAI', priority: 1, status: 'warning', latency: '5.8s', successRate: '97.2%' },
+    { id: 'm_006', name: '默认模型', upstreamModel: 'deepseek-chat', protocol: 'openai-completions', priority: 1, status: 'warning', latency: '5.8s', successRate: '97.2%' },
   ],
   prov_004: [
-    { id: 'm_007', name: '图像模型', upstreamModel: 'gemini-1.5-pro-002', protocol: 'Gemini', priority: 1, status: 'cooling', latency: '-', successRate: '-' },
-  ],
-  prov_005: [
-    { id: 'm_008', name: '本地模型', upstreamModel: 'qwen2.5:72b', protocol: 'OpenAI', priority: 1, status: 'standby', latency: '3.5s', successRate: '99.9%' },
+    { id: 'm_007', name: '本地模型', upstreamModel: 'qwen2.5:72b', protocol: 'openai-completions', priority: 1, status: 'standby', latency: '3.5s', successRate: '99.9%' },
   ],
 }
 
@@ -121,7 +117,8 @@ interface SortableModelProps {
   children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
 }
 
-function SortableModel({ id, children }: SortableModelProps) {
+function SortableModel(props: SortableModelProps) {
+  const { id, children } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
   return (
@@ -188,7 +185,7 @@ export default function ProvidersPage() {
         id: `m_${Date.now()}`,
         name: modelName.trim(),
         upstreamModel: upstreamModel.trim(),
-        protocol: 'OpenAI',
+        protocol: 'openai-completions',
         priority: currentModels.length + 1,
         status: 'standby',
         latency: '-',

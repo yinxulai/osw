@@ -30,11 +30,7 @@ export function getManualBinding(): string | null {
  * 处理代理请求
  * 支持自动故障切换和手动切换
  */
-export async function handleProxyRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  logicalModelId: string,
-): Promise<void> {
+export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string): Promise<void> {
   const requestId = generateId('req_')
   let attemptIndex = 0
   let lastError: Error | null = null
@@ -46,7 +42,7 @@ export async function handleProxyRequest(
   }
 
   // 获取可用 bindings（按协议过滤）
-  let bindings = getAvailableBindings(logicalModelId).filter(b => b.binding.protocol === protocol)
+  let bindings = (await getAvailableBindings(logicalModelId)).filter(b => b.binding.protocol === protocol)
 
   // 如果有手动指定的 binding，把它排到最前面
   if (manualBindingId) {
@@ -68,16 +64,16 @@ export async function handleProxyRequest(
     try {
       const result = await attemptRequest(req, res, target, requestBody, requestId, attemptIndex)
       if (result === 'success') {
-        markProviderSuccess(target.provider.id)
+        await markProviderSuccess(target.provider.id)
         return
       }
       if (result === 'terminal') return
 
-      markProviderFailure(target.provider.id)
+      await markProviderFailure(target.provider.id)
       attemptIndex++
     } catch (err) {
       lastError = err as Error
-      markProviderFailure(target.provider.id)
+      await markProviderFailure(target.provider.id)
       if (res.headersSent) {
         res.destroy(lastError)
         return
@@ -97,25 +93,13 @@ export async function handleProxyRequest(
   }
 }
 
-async function attemptRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  target: BindingWithProvider,
-  requestBody: Buffer,
-  _requestId: string,
-  _attemptIndex: number,
-): Promise<AttemptResult> {
+async function attemptRequest(req: IncomingMessage, res: ServerResponse, target: BindingWithProvider, requestBody: Buffer, _requestId: string, _attemptIndex: number): Promise<AttemptResult> {
   const { binding, provider } = target
-  const settings = getSettings()
+  const settings = await getSettings()
 
-  const targetUrl = resolveUpstreamUrl(
-    req.url!,
-    binding.upstreamUrl,
-    binding.protocol,
-    binding.upstreamModelId,
-  )
+  const targetUrl = resolveUpstreamUrl(binding.upstreamUrl)
   const parsed = new URL(targetUrl)
-  const upstreamBody = rewriteRequestModel(requestBody, binding.upstreamModelId, binding.protocol)
+  const upstreamBody = rewriteRequestModel(requestBody, binding.upstreamModelId)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
   if (!apiKey) throw new Error(`API key is unavailable for provider ${provider.id}`)
 

@@ -39,7 +39,8 @@ export default defineConfig({
                 },
                 resolve: { alias: commonAlias },
               },
-              onstart({ startup }) {
+              onstart(context) {
+                const { startup } = context
                 startup([projectRoot, '--no-sandbox'])
               },
             },
@@ -51,7 +52,8 @@ export default defineConfig({
                   outDir: fileURLToPath(new URL('./dist/command', import.meta.url)),
                 },
               },
-              onstart({ reload }) {
+              onstart(context) {
+                const { reload } = context
                 reload()
               },
             },

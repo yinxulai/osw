@@ -23,7 +23,8 @@ interface AppLayoutProps {
   children: ReactNode
 }
 
-export function AppLayout({ sidebar, children }: AppLayoutProps) {
+export function AppLayout(props: AppLayoutProps) {
+  const { sidebar, children } = props
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
       {sidebar}
@@ -34,11 +35,13 @@ export function AppLayout({ sidebar, children }: AppLayoutProps) {
   )
 }
 
-export function PageLayout({ children, className }: PageLayoutProps) {
+export function PageLayout(props: PageLayoutProps) {
+  const { children, className } = props
   return <div className={cn('space-y-5', className)}>{children}</div>
 }
 
-export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
+export function PageHeader(props: PageHeaderProps) {
+  const { title, description, actions, className } = props
   return (
     <header
       className={cn(
@@ -55,6 +58,7 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   )
 }
 
-export function PageContent({ children, className }: PageContentProps) {
+export function PageContent(props: PageContentProps) {
+  const { children, className } = props
   return <section className={cn('space-y-4', className)}>{children}</section>
 }

@@ -14,7 +14,7 @@ vi.mock('./router', async importOriginal => {
   const original = await importOriginal<typeof import('./router')>()
   return {
     ...original,
-    getAvailableBindings: () => mocks.bindings,
+    getAvailableBindings: async () => mocks.bindings,
   }
 })
 
@@ -24,7 +24,7 @@ vi.mock('./health', () => ({
 }))
 
 vi.mock('../database/store', () => ({
-  getSettings: () => ({ idleTimeoutMilliseconds: 1_000 }),
+  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000 }),
 }))
 
 import { handleProxyRequest } from './handler'
@@ -45,13 +45,7 @@ async function listen(handler: http.RequestListener): Promise<{ server: http.Ser
   return { server, url: `http://127.0.0.1:${port}` }
 }
 
-function binding(
-  id: string,
-  providerId: string,
-  upstreamUrl: string,
-  upstreamModelId: string,
-  protocol: BindingWithProvider['binding']['protocol'] = 'openai',
-): BindingWithProvider {
+function binding(id: string, providerId: string, upstreamUrl: string, upstreamModelId: string, protocol: BindingWithProvider['binding']['protocol'] = 'openai-completions'): BindingWithProvider {
   const time = Date.now()
   return {
     binding: {
@@ -110,10 +104,10 @@ describe('handleProxyRequest', () => {
     const proxy = await listen((req, res) => {
       void handleProxyRequest(req, res, 'model_default')
     })
-    const response = await fetch(`${proxy.url}/v1/chat/completions?client=value`, {
+    const response = await fetch(`${proxy.url}/v1/completions?client=value`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [] }),
+      body: JSON.stringify({ model: 'client-model', prompt: 'Hello' }),
     })
 
     expect(response.status).toBe(200)
@@ -126,93 +120,4 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })
 
-  it.each([
-    {
-      name: 'non-streaming',
-      action: 'generateContent',
-      query: '',
-      contentType: 'application/json',
-      responseBody: JSON.stringify({ candidates: [{ finishReason: 'STOP' }] }),
-    },
-    {
-      name: 'streaming SSE',
-      action: 'streamGenerateContent',
-      query: '?alt=sse',
-      contentType: 'text/event-stream; charset=utf-8',
-      responseBody: 'data: {"candidates":[{"index":0}]}\n\ndata: {"candidates":[{"finishReason":"STOP"}]}\n\n',
-    },
-  ])('proxies Gemini $name requests with native payload and required headers', async scenario => {
-    configureSecretStore({
-      set: async () => undefined,
-      get: async () => 'provider-secret',
-      delete: async () => undefined,
-    })
-
-    let receivedRequest: {
-      url: string | undefined
-      headers: http.IncomingHttpHeaders
-      body: string
-    } | null = null
-    const upstream = await listen((req, res) => {
-      const chunks: Buffer[] = []
-      req.on('data', chunk => chunks.push(chunk))
-      req.on('end', () => {
-        receivedRequest = {
-          url: req.url,
-          headers: req.headers,
-          body: Buffer.concat(chunks).toString('utf8'),
-        }
-        res.writeHead(200, {
-          'content-type': scenario.contentType,
-          'cache-control': 'no-cache',
-          'x-goog-request-id': 'gemini-request',
-          connection: 'close',
-        })
-        res.end(scenario.responseBody)
-      })
-    })
-
-    mocks.bindings = [binding(
-      'bind_gemini',
-      'prov_gemini',
-      `${upstream.url}/v1beta/models/configured-model:generateContent?configured=true`,
-      'gemini-2.5-flash',
-      'gemini',
-    )]
-
-    const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
-    })
-    const requestBody = JSON.stringify({ contents: [{ parts: [{ text: 'hello' }] }] })
-    const response = await fetch(
-      `${proxy.url}/v1beta/models/client-model:${scenario.action}${scenario.query}`,
-      {
-        method: 'POST',
-        headers: {
-          accept: scenario.contentType,
-          'content-type': 'application/json',
-          'x-goog-api-client': 'genai-js/1.0',
-          'x-goog-api-key': 'client-secret',
-        },
-        body: requestBody,
-      },
-    )
-
-    expect(response.status).toBe(200)
-    expect(response.headers.get('content-type')).toBe(scenario.contentType)
-    expect(response.headers.get('cache-control')).toBe('no-cache')
-    expect(response.headers.get('x-goog-request-id')).toBe('gemini-request')
-    expect(await response.text()).toBe(scenario.responseBody)
-    expect(receivedRequest).toMatchObject({
-      url: `/v1beta/models/gemini-2.5-flash:${scenario.action}?configured=true${scenario.query ? '&alt=sse' : ''}`,
-      headers: {
-        accept: scenario.contentType,
-        'content-type': 'application/json',
-        'x-goog-api-client': 'genai-js/1.0',
-        'x-goog-api-key': 'provider-secret',
-      },
-      body: requestBody,
-    })
-    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_gemini')
-  })
 })
