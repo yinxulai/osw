@@ -1,4 +1,6 @@
-{
+import type { Configuration } from 'electron-builder'
+
+export default {
   appId: 'com.oneswitch.app',
   productName: 'One Switch',
   directories: {
@@ -23,4 +25,4 @@
   asarUnpack: [
     'node_modules/better-sqlite3/**',
   ],
-}
+} satisfies Configuration

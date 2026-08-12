@@ -3,7 +3,7 @@
  * 统一 POST 风格，路径格式 /api/resource/action
  */
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_MANAGEMENT_API_URL ?? 'http://127.0.0.1:9301/api'
 
 export interface ApiError {
   success: false
@@ -44,9 +44,9 @@ import type { Provider, ProviderHealth, LogicalModel, ModelBinding, Settings } f
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
-  create: (data: { name: string; apiKeyReference: string; timeoutMilliseconds?: number; enabled?: boolean }) =>
+  create: (data: { name: string; apiKey: string; timeoutMilliseconds?: number; enabled?: boolean }) =>
     request<Provider>('/provider/create', data),
-  update: (id: string, updates: Partial<Provider>) =>
+  update: (id: string, updates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> & { apiKey?: string }) =>
     request<Provider>('/provider/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string }>('/provider/delete', { id }),
   resetHealth: (providerId: string) =>
@@ -105,4 +105,19 @@ export const queueApi = {
 
 export const healthApi = {
   list: () => request<ProviderHealth[]>('/health/list'),
+}
+
+// ========== Proxy Lifecycle ==========
+
+export interface ProxyServerStatus {
+  running: boolean
+  host: string
+  port: number
+}
+
+export const proxyApi = {
+  status: () => request<ProxyServerStatus>('/proxy/status'),
+  start: () => request<ProxyServerStatus>('/proxy/start'),
+  stop: () => request<ProxyServerStatus>('/proxy/stop'),
+  restart: () => request<ProxyServerStatus>('/proxy/restart'),
 }

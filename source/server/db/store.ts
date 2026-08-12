@@ -10,6 +10,7 @@ import type {
   RequestStatus,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
+import { mapBindingRow, mapLogicalModelRow, mapProviderRow } from './mappers'
 
 // ========== Provider ==========
 
@@ -18,12 +19,13 @@ export function listProviders(includeDeleted = false): Provider[] {
   const sql = includeDeleted
     ? 'SELECT * FROM providers ORDER BY createdTime DESC'
     : 'SELECT * FROM providers WHERE deletedTime IS NULL ORDER BY createdTime DESC'
-  return db.prepare(sql).all() as Provider[]
+  return db.prepare(sql).all().map(mapProviderRow)
 }
 
 export function getProvider(id: string): Provider | undefined {
   const db = getDb()
-  return db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as Provider | undefined
+  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id)
+  return row ? mapProviderRow(row) : undefined
 }
 
 export function createProvider(input: Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Provider {
@@ -31,15 +33,16 @@ export function createProvider(input: Omit<Provider, 'id' | 'createdTime' | 'upd
   const id = generateId('prov_')
   const time = now()
   const provider: Provider = { ...input, id, createdTime: time, updatedTime: time, deletedTime: null }
-  db.prepare(`
-    INSERT INTO providers (id, name, apiKeyReference, timeoutMilliseconds, enabled, createdTime, updatedTime, deletedTime)
-    VALUES (@id, @name, @apiKeyReference, @timeoutMilliseconds, @enabled, @createdTime, @updatedTime, @deletedTime)
-  `).run(provider)
-  // 同步创建 health 记录
-  db.prepare(`
-    INSERT INTO provider_health (providerId, consecutiveFailures, cooldownUntilTime, lastSuccessTime, lastFailureTime, updatedTime)
-    VALUES (?, 0, NULL, NULL, NULL, ?)
-  `).run(id, time)
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO providers (id, name, apiKeyReference, timeoutMilliseconds, enabled, createdTime, updatedTime, deletedTime)
+      VALUES (@id, @name, @apiKeyReference, @timeoutMilliseconds, @enabled, @createdTime, @updatedTime, @deletedTime)
+    `).run({ ...provider, enabled: Number(provider.enabled) })
+    db.prepare(`
+      INSERT INTO provider_health (providerId, consecutiveFailures, cooldownUntilTime, lastSuccessTime, lastFailureTime, updatedTime)
+      VALUES (?, 0, NULL, NULL, NULL, ?)
+    `).run(id, time)
+  })()
   return provider
 }
 
@@ -50,17 +53,26 @@ export function updateProvider(id: string, updates: Partial<Omit<Provider, 'id' 
   const updated = { ...current, ...updates, updatedTime: now() }
   const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
   const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE providers SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({ ...updated, id })
+  db.prepare(`UPDATE providers SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
+    ...updated,
+    enabled: Number(updated.enabled),
+    id,
+  })
   return updated
 }
 
 export function deleteProvider(id: string): void {
   const db = getDb()
-  db.prepare('UPDATE providers SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL').run(
-    now(),
-    now(),
-    id,
-  )
+  const time = now()
+  db.transaction(() => {
+    db.prepare('UPDATE providers SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL').run(
+      time,
+      time,
+      id,
+    )
+    db.prepare('UPDATE model_bindings SET enabled = 0, updatedTime = ? WHERE providerId = ? AND deletedTime IS NULL')
+      .run(time, id)
+  })()
 }
 
 // ========== Logical Model ==========
@@ -70,12 +82,13 @@ export function listLogicalModels(includeDeleted = false): LogicalModel[] {
   const sql = includeDeleted
     ? 'SELECT * FROM logical_models ORDER BY createdTime DESC'
     : 'SELECT * FROM logical_models WHERE deletedTime IS NULL ORDER BY createdTime DESC'
-  return db.prepare(sql).all() as LogicalModel[]
+  return db.prepare(sql).all().map(mapLogicalModelRow)
 }
 
 export function getLogicalModel(id: string): LogicalModel | undefined {
   const db = getDb()
-  return db.prepare('SELECT * FROM logical_models WHERE id = ?').get(id) as LogicalModel | undefined
+  const row = db.prepare('SELECT * FROM logical_models WHERE id = ?').get(id)
+  return row ? mapLogicalModelRow(row) : undefined
 }
 
 export function createLogicalModel(
@@ -88,7 +101,7 @@ export function createLogicalModel(
   db.prepare(`
     INSERT INTO logical_models (id, name, description, enabled, createdTime, updatedTime, deletedTime)
     VALUES (@id, @name, @description, @enabled, @createdTime, @updatedTime, @deletedTime)
-  `).run(model)
+  `).run({ ...model, enabled: Number(model.enabled) })
   return model
 }
 
@@ -102,19 +115,25 @@ export function updateLogicalModel(
   const updated = { ...current, ...updates, updatedTime: now() }
   const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
   const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE logical_models SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({ ...updated, id })
+  db.prepare(`UPDATE logical_models SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
+    ...updated,
+    enabled: Number(updated.enabled),
+    id,
+  })
   return updated
 }
 
 export function deleteLogicalModel(id: string): void {
   const db = getDb()
-  db.prepare(
-    'UPDATE logical_models SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL',
-  ).run(now(), now(), id)
-  // 同步软删除关联的 bindings
-  db.prepare(
-    'UPDATE model_bindings SET deletedTime = ?, updatedTime = ? WHERE logicalModelId = ? AND deletedTime IS NULL',
-  ).run(now(), now(), id)
+  const time = now()
+  db.transaction(() => {
+    db.prepare(
+      'UPDATE logical_models SET deletedTime = ?, updatedTime = ? WHERE id = ? AND deletedTime IS NULL',
+    ).run(time, time, id)
+    db.prepare(
+      'UPDATE model_bindings SET deletedTime = ?, updatedTime = ? WHERE logicalModelId = ? AND deletedTime IS NULL',
+    ).run(time, time, id)
+  })()
 }
 
 // ========== Model Binding ==========
@@ -124,7 +143,7 @@ export function listBindingsByModel(logicalModelId: string, includeDeleted = fal
   const sql = includeDeleted
     ? 'SELECT * FROM model_bindings WHERE logicalModelId = ? ORDER BY priority ASC'
     : 'SELECT * FROM model_bindings WHERE logicalModelId = ? AND deletedTime IS NULL ORDER BY priority ASC'
-  return db.prepare(sql).all(logicalModelId) as ModelBinding[]
+  return db.prepare(sql).all(logicalModelId).map(mapBindingRow)
 }
 
 export function listBindingsByProvider(providerId: string, includeDeleted = false): ModelBinding[] {
@@ -132,12 +151,13 @@ export function listBindingsByProvider(providerId: string, includeDeleted = fals
   const sql = includeDeleted
     ? 'SELECT * FROM model_bindings WHERE providerId = ? ORDER BY priority ASC'
     : 'SELECT * FROM model_bindings WHERE providerId = ? AND deletedTime IS NULL ORDER BY priority ASC'
-  return db.prepare(sql).all(providerId) as ModelBinding[]
+  return db.prepare(sql).all(providerId).map(mapBindingRow)
 }
 
 export function getBinding(id: string): ModelBinding | undefined {
   const db = getDb()
-  return db.prepare('SELECT * FROM model_bindings WHERE id = ?').get(id) as ModelBinding | undefined
+  const row = db.prepare('SELECT * FROM model_bindings WHERE id = ?').get(id)
+  return row ? mapBindingRow(row) : undefined
 }
 
 export function createBinding(
@@ -150,7 +170,7 @@ export function createBinding(
   db.prepare(`
     INSERT INTO model_bindings (id, logicalModelId, providerId, protocol, upstreamUrl, upstreamModelId, priority, enabled, customAuthHeader, createdTime, updatedTime, deletedTime)
     VALUES (@id, @logicalModelId, @providerId, @protocol, @upstreamUrl, @upstreamModelId, @priority, @enabled, @customAuthHeader, @createdTime, @updatedTime, @deletedTime)
-  `).run(binding)
+  `).run({ ...binding, enabled: Number(binding.enabled) })
   return binding
 }
 
@@ -164,7 +184,11 @@ export function updateBinding(
   const updated = { ...current, ...updates, updatedTime: now() }
   const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'createdTime')
   const setClause = fields.map(k => `${k} = @${k}`).join(', ')
-  db.prepare(`UPDATE model_bindings SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({ ...updated, id })
+  db.prepare(`UPDATE model_bindings SET ${setClause}, updatedTime = @updatedTime WHERE id = @id`).run({
+    ...updated,
+    enabled: Number(updated.enabled),
+    id,
+  })
   return updated
 }
 

@@ -7,6 +7,13 @@ import { markProviderSuccess, markProviderFailure } from '../health'
 import { getSettings } from '../db/store'
 import { generateId } from '@common/utils'
 import type { BindingWithProvider } from './router'
+import { resolveUpstreamUrl, rewriteRequestModel } from './request'
+import { classifyUpstreamStatus } from './response'
+import { createAuthHeaders } from './auth'
+import { getSecretStore } from '../secrets'
+import { createDownstreamHeaders, createUpstreamHeaders } from './headers'
+
+type AttemptResult = 'success' | 'retry' | 'terminal'
 
 // 手动切换状态：当前指定的 binding ID
 let manualBindingId: string | null = null
@@ -32,8 +39,11 @@ export async function handleProxyRequest(
   let attemptIndex = 0
   let lastError: Error | null = null
 
-  // 检测协议类型
-  const protocol = detectProtocolFromPath(req.url!) || 'openai'
+  const protocol = detectProtocolFromPath(req.url!)
+  if (!protocol) {
+    writeJsonError(res, 404, 'UNKNOWN_API_PATH', '无法识别的 API 路径')
+    return
+  }
 
   // 获取可用 bindings（按协议过滤）
   let bindings = getAvailableBindings(logicalModelId).filter(b => b.binding.protocol === protocol)
@@ -56,16 +66,23 @@ export async function handleProxyRequest(
 
   for (const target of bindings) {
     try {
-      const success = await attemptRequest(req, res, target, requestBody, requestId, attemptIndex)
-      if (success) {
+      const result = await attemptRequest(req, res, target, requestBody, requestId, attemptIndex)
+      if (result === 'success') {
         markProviderSuccess(target.provider.id)
         return
       }
+      if (result === 'terminal') return
+
+      markProviderFailure(target.provider.id)
+      attemptIndex++
     } catch (err) {
       lastError = err as Error
       markProviderFailure(target.provider.id)
+      if (res.headersSent) {
+        res.destroy(lastError)
+        return
+      }
       attemptIndex++
-      continue // 尝试下一个
     }
   }
 
@@ -87,29 +104,29 @@ async function attemptRequest(
   requestBody: Buffer,
   _requestId: string,
   _attemptIndex: number,
-): Promise<boolean> {
+): Promise<AttemptResult> {
   const { binding, provider } = target
   const settings = getSettings()
 
-  // 构建目标 URL（用 binding 上的 upstreamUrl）
-  const targetUrl = buildTargetUrl(req.url!, binding.upstreamUrl, binding.upstreamModelId)
+  const targetUrl = resolveUpstreamUrl(
+    req.url!,
+    binding.upstreamUrl,
+    binding.protocol,
+    binding.upstreamModelId,
+  )
   const parsed = new URL(targetUrl)
+  const upstreamBody = rewriteRequestModel(requestBody, binding.upstreamModelId, binding.protocol)
+  const apiKey = await getSecretStore().get(provider.apiKeyReference)
+  if (!apiKey) throw new Error(`API key is unavailable for provider ${provider.id}`)
 
   const isHttps = parsed.protocol === 'https:'
   const transport = isHttps ? https : http
 
-  const headers: Record<string, string> = {}
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (key.toLowerCase() === 'host') continue
-    if (key.toLowerCase() === 'content-length') continue
-    if (value !== undefined) {
-      headers[key] = Array.isArray(value) ? value.join(', ') : value
-    }
-  }
-
-  // 替换 Authorization
-  // TODO: 从 keychain 获取真实 API key
-  headers['authorization'] = `Bearer ${provider.apiKeyReference}`
+  const headers = createUpstreamHeaders(
+    req.headers,
+    createAuthHeaders(binding.protocol, apiKey, binding.customAuthHeader),
+    upstreamBody.length,
+  )
 
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
@@ -122,6 +139,9 @@ async function attemptRequest(
 
   return new Promise((resolve, reject) => {
     const upstreamReq = transport.request(options, upstreamRes => {
+      const statusCode = upstreamRes.statusCode ?? 502
+      const disposition = classifyUpstreamStatus(statusCode)
+
       // 空闲超时检测
       let idleTimer: NodeJS.Timeout | null = null
       const resetIdleTimer = () => {
@@ -133,9 +153,23 @@ async function attemptRequest(
 
       resetIdleTimer()
 
+      if (disposition === 'retry') {
+        upstreamRes.on('data', resetIdleTimer)
+        upstreamRes.on('end', () => {
+          if (idleTimer) clearTimeout(idleTimer)
+          resolve('retry')
+        })
+        upstreamRes.on('error', err => {
+          if (idleTimer) clearTimeout(idleTimer)
+          reject(err)
+        })
+        upstreamRes.resume()
+        return
+      }
+
       // 转发响应头
       if (!res.headersSent) {
-        res.writeHead(upstreamRes.statusCode!, upstreamRes.headers)
+        res.writeHead(statusCode, createDownstreamHeaders(upstreamRes.headers))
       }
 
       upstreamRes.on('data', chunk => {
@@ -150,8 +184,7 @@ async function attemptRequest(
         if (!res.writableEnded) {
           res.end()
         }
-        const statusCode = upstreamRes.statusCode ?? 0
-        resolve(statusCode >= 200 && statusCode < 400)
+        resolve(disposition)
       })
 
       upstreamRes.on('error', err => {
@@ -169,8 +202,8 @@ async function attemptRequest(
     })
 
     // 发送请求体
-    if (requestBody.length > 0) {
-      upstreamReq.write(requestBody)
+    if (upstreamBody.length > 0) {
+      upstreamReq.write(upstreamBody)
     }
     upstreamReq.end()
   })
@@ -183,19 +216,6 @@ function readRequestBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
-}
-
-function buildTargetUrl(originalUrl: string, baseUrl: string, _upstreamModelId: string): string {
-  const url = new URL(originalUrl, 'http://localhost')
-  const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const pathname = url.pathname
-
-  // 简单的路径拼接，不做协议转换
-  let targetPath = pathname
-
-  // 对于 OpenAI 风格的请求，替换 model 字段在 body 里的处理在 proxy 层不做
-  // 这里只处理路径转发
-  return `${base}${targetPath}${url.search}`
 }
 
 function writeJsonError(res: ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {

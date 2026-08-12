@@ -6,7 +6,7 @@
 |------|----------|------|
 | 桌面壳 | Electron | 跨平台桌面应用 |
 | 构建工具 | electron-vite | 主进程 / 预加载 / 渲染进程统一构建 |
-| 主进程 | TypeScript + 原生 Node `http` | 代理服务 + 管理 API，不引入 HTTP 框架 |
+| 主进程 | TypeScript + 原生 Node `http` | 独立的代理服务与管理服务，不引入 HTTP 框架 |
 | 代理透传 | 原生 `http.request` + 手动 pipe | 流式可控、依赖最少 |
 | Schema 定义 | Zod | 运行时类型校验、配置声明、API 请求/响应验证 |
 | API 规范 | OpenAPI 3.1 | 管理接口正式定义，作为前后端契约 |
@@ -21,10 +21,11 @@
 
 ### 为什么不用 HTTP 框架
 
-代理服务和管理 API 共用同一个原生 `http.createServer` 实例，不引入 Hono/Fastify/Express：
+代理服务和管理服务各自使用一个原生 `http.createServer` 实例，不引入 Hono/Fastify/Express：
 
 - 管理 API 端点不多（配置 CRUD、日志、健康状态，约十几个接口），原生路由足够
 - 代理透传层需要完全掌控请求/响应流，框架反而增加抽象成本
+- 两个监听器共享应用级数据库和密钥存储，但生命周期独立；停止或重启代理不会中断管理 API
 - 减少依赖，降低打包体积和安全面
 - 代理服务是纯 Node 模块，Electron 只是宿主，未来可抽 CLI / 无头模式
 
@@ -43,7 +44,7 @@
 - **结构化错误**：错误通过 body 中的 `success`、`errorCode`、`errorMessage` 表达，类型安全，前端可统一处理
 - **便于调试**：所有请求都有 body，日志和抓包一目了然
 - **避免歧义**：HTTP 状态码只表示网络层是否成功，业务结果完全由 body 决定
-- **与代理服务兼容**：代理服务本身也用同一个 HTTP 服务器，POST 风格避免和代理路径产生方法语义冲突
+- **控制动作明确**：启动、停止、重启代理等管理操作可直接表达为 `/api/proxy/动作`
 
 ### 为什么用 OpenAPI 定义管理接口
 
@@ -71,8 +72,8 @@ one-switch/
 ├── postcss.config.js
 ├── specs/                          # 产品规格文档
 ├── source/
-│   ├── server/                     # 核心主体：Electron 主进程 + 代理服务 + 管理 API + 存储
-│   │   ├── index.ts                # 主入口：Electron 应用生命周期 + 启动代理服务
+│   ├── server/                     # 核心主体：管理服务 + 代理服务 + 存储
+│   │   ├── index.ts                # 应用服务编排：共享资源及两项服务生命周期
 │   │   ├── electron/               # Electron 宿主相关
 │   │   │   ├── tray.ts             # 菜单栏/托盘管理
 │   │   │   ├── window.ts           # 控制台窗口管理
@@ -81,6 +82,7 @@ one-switch/
 │   │   ├── preload/                # 预加载脚本
 │   │   │   └── index.ts            # 暴露最小化 API 给渲染进程（如窗口控制）
 │   │   ├── proxy/                  # 代理透传层
+│   │   │   ├── server.ts           # 代理 HTTP 监听与独立启停/重启
 │   │   │   ├── protocol.ts         # 协议识别规则（path → protocol）
 │   │   │   ├── router.ts           # 路由引擎：模型匹配、绑定选择、切换逻辑
 │   │   │   ├── transport.ts        # 上游透传：http.request、pipe、超时、错误分类
@@ -94,6 +96,8 @@ one-switch/
 │   │   │   ├── logs.ts             # 请求日志查询
 │   │   │   ├── health.ts           # 健康状态查询
 │   │   │   └── settings.ts         # 服务设置
+│   │   ├── management/             # 管理服务监听层
+│   │   │   └── server.ts           # 管理 HTTP 监听（默认 127.0.0.1:9301）
 │   │   └── db/                     # SQLite 数据存储
 │   │       ├── index.ts            # 数据库连接初始化
 │   │       ├── schema.ts           # Zod schema 定义（配置模型、API 类型）
@@ -139,13 +143,12 @@ one-switch/
 
 ### 1. 核心服务（`source/server/`）
 
-核心主体，包含 Electron 主进程和代理服务。代理核心逻辑（proxy/api/store）不依赖 Electron，可被 CLI 入口直接引用。
+核心主体包含共享运行时、管理服务和代理服务。核心逻辑（proxy/api/store）不依赖 Electron，可被 CLI 入口直接引用。
 
-**`index.ts`** — 主入口（Electron 主进程）
-- 应用生命周期管理
-- 创建托盘、窗口
-- 启动代理服务
-- 统一错误处理
+**`index.ts`** — 应用服务编排
+- 初始化共享的 SQLite 与密钥存储
+- 启动和关闭管理服务、代理服务
+- 应用退出时统一释放资源
 
 **`electron/`** — Electron 宿主
 - `tray.ts`：菜单栏/托盘管理
@@ -158,9 +161,14 @@ one-switch/
 
 **`proxy/`** — 代理透传层（纯 Node，无 Electron 依赖）
 
+**`proxy/server.ts`** — 代理服务生命周期
+- 按设置中的 `listenHost`、`listenPort` 独立监听
+- 提供幂等的启动、停止、重启和状态查询
+- 重启时重新读取监听配置，不影响管理服务
+
 **`proxy/protocol.ts`** — 协议识别
 - 内置规则表：path pattern → protocol
-- 每个协议有默认的认证方式（OpenAI 用 Bearer、Anthropic 用 `x-api-key` header、Gemini 用 query 参数）
+- 每个协议有默认的认证方式（OpenAI 用 Bearer、Anthropic 用 `x-api-key` header、Gemini 用 `x-goog-api-key` header）
 - 支持 custom 协议的用户自定义规则
 - 提供 `detectProtocol(path): Protocol | null`
 
@@ -198,11 +206,12 @@ one-switch/
 
 ### 2. 管理 API（`source/server/api/`）
 
-统一 POST 风格 API，挂载到 `/api` 前缀。React UI 通过 TanStack Query 调用。
+统一 POST 风格 API，挂载到独立管理服务的 `/api` 前缀。管理服务默认监听 `127.0.0.1:9301`，React UI 通过 HTTP client 调用。
 
 **设计原则：**
 - 所有接口统一使用 `POST` 方法，不依赖 HTTP 方法语义
 - 路径格式：`/api/资源/动作`，如 `/api/provider/list`、`/api/provider/create`
+- 代理生命周期：`/api/proxy/status`、`/api/proxy/start`、`/api/proxy/stop`、`/api/proxy/restart`
 - 所有响应通过结构化 body 返回，HTTP 状态码始终为 200（除非网络层错误）
 - 错误信息通过响应体中的 `success`、`errorCode`、`errorMessage` 字段表达
 

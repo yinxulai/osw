@@ -1,78 +1,52 @@
-import http from 'node:http'
-import { handleApiRequest } from './api/handlers'
-import { handleProxyRequest } from './proxy/handler'
-import { initDatabase, getDb } from './db'
-import { getSettings } from './db/store'
+import { closeDatabase, initDatabase } from './db'
+import { configureSecretStore } from './secrets'
+import { startManagementServer, stopManagementServer } from './management/server'
+import { startProxyServer, stopProxyServer } from './proxy/server'
 import type { Server } from 'node:http'
-
-let server: Server | null = null
+import type { KeychainApi } from '@common/keychain'
 
 export interface StartServerOptions {
   dataDir: string
+  secretStore: KeychainApi
+  managementHost?: string
+  managementPort?: number
 }
 
-export function startServer(options: StartServerOptions): Server {
-  if (server) return server
+let applicationStarted = false
 
+export async function startServer(options: StartServerOptions): Promise<Server> {
+  if (applicationStarted) return startManagementServer()
+
+  configureSecretStore(options.secretStore)
   initDatabase(options.dataDir)
 
-  const settings = getSettings()
-
-  server = http.createServer(async (req, res) => {
-    const url = new URL(req.url!, 'http://localhost')
-    const pathname = url.pathname
-
-    // 管理 API
-    if (pathname.startsWith('/api/')) {
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ success: false, errorCode: 'METHOD_NOT_ALLOWED', errorMessage: '只支持 POST 请求' }))
-        return
-      }
-      await handleApiRequest(req, res)
-      return
-    }
-
-    // 代理请求
-    await handleProxy(req, res)
-  })
-
-  server.listen(settings.listenPort, settings.listenHost, () => {
-    console.log(`[one-switch] server listening on ${settings.listenHost}:${settings.listenPort}`)
-  })
-
-  return server
-}
-
-export function stopServer(): void {
-  if (server) {
-    server.close()
-    server = null
+  try {
+    const managementServer = await startManagementServer({
+      host: options.managementHost,
+      port: options.managementPort,
+    })
+    await startProxyServer()
+    applicationStarted = true
+    return managementServer
+  } catch (error) {
+    await Promise.allSettled([stopProxyServer(), stopManagementServer()])
+    closeDatabase()
+    throw error
   }
-  const db = getDb()
-  db.close()
 }
 
-async function handleProxy(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-  // MVP: 默认使用第一个逻辑模型
-  // 后续可以从 header 或路径中解析模型
-  const { listLogicalModels } = await import('./db/store')
-  const models = listLogicalModels()
+export async function stopServer(): Promise<void> {
+  applicationStarted = false
+  const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
+  closeDatabase()
 
-  if (models.length === 0) {
-    res.statusCode = 503
-    res.setHeader('Content-Type', 'application/json')
-    res.end(
-      JSON.stringify({
-        success: false,
-        errorCode: 'NO_MODEL_CONFIGURED',
-        errorMessage: '还没有配置逻辑模型',
-      }),
-    )
-    return
-  }
-
-  // MVP: 单队列，用第一个模型
-  await handleProxyRequest(req, res, models[0].id)
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failure) throw failure.reason
 }
+
+export {
+  getProxyServerStatus,
+  restartProxyServer,
+  startProxyServer,
+  stopProxyServer,
+} from './proxy/server'

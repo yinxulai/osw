@@ -28,6 +28,12 @@ export function getDb(): Database.Database {
   return db
 }
 
+export function closeDatabase(): void {
+  if (!db) return
+  db.close()
+  db = null
+}
+
 function migrate(db: Database.Database) {
   const row = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")

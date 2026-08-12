@@ -1,0 +1,218 @@
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { BindingWithProvider } from './router'
+import { configureSecretStore } from '../secrets'
+
+const mocks = vi.hoisted(() => ({
+  bindings: [] as BindingWithProvider[],
+  markProviderFailure: vi.fn(),
+  markProviderSuccess: vi.fn(),
+}))
+
+vi.mock('./router', async importOriginal => {
+  const original = await importOriginal<typeof import('./router')>()
+  return {
+    ...original,
+    getAvailableBindings: () => mocks.bindings,
+  }
+})
+
+vi.mock('../health', () => ({
+  markProviderFailure: mocks.markProviderFailure,
+  markProviderSuccess: mocks.markProviderSuccess,
+}))
+
+vi.mock('../db/store', () => ({
+  getSettings: () => ({ idleTimeoutMilliseconds: 1_000 }),
+}))
+
+import { handleProxyRequest } from './handler'
+
+const servers: http.Server[] = []
+
+afterEach(async () => {
+  mocks.bindings = []
+  vi.clearAllMocks()
+  await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
+})
+
+async function listen(handler: http.RequestListener): Promise<{ server: http.Server; url: string }> {
+  const server = http.createServer(handler)
+  servers.push(server)
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  return { server, url: `http://127.0.0.1:${port}` }
+}
+
+function binding(
+  id: string,
+  providerId: string,
+  upstreamUrl: string,
+  upstreamModelId: string,
+  protocol: BindingWithProvider['binding']['protocol'] = 'openai',
+): BindingWithProvider {
+  const time = Date.now()
+  return {
+    binding: {
+      id,
+      logicalModelId: 'model_default',
+      providerId,
+      protocol,
+      upstreamUrl,
+      upstreamModelId,
+      priority: 1,
+      enabled: true,
+      customAuthHeader: null,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    },
+    provider: {
+      id: providerId,
+      name: providerId,
+      apiKeyReference: `${providerId}_key`,
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    },
+  }
+}
+
+describe('handleProxyRequest', () => {
+  it('discards a retryable response before forwarding the next successful response', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async reference => reference.replace('_key', '_secret'),
+      delete: async () => undefined,
+    })
+    const first = await listen((_req, res) => {
+      res.writeHead(503, { 'content-type': 'text/plain', 'x-upstream': 'first' })
+      res.end('first provider failed')
+    })
+    const second = await listen((req, res) => {
+      const chunks: Buffer[] = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        res.writeHead(200, { 'content-type': 'application/json', 'x-upstream': 'second' })
+        res.end(JSON.stringify({ path: req.url, model: body.model }))
+      })
+    })
+
+    mocks.bindings = [
+      binding('bind_first', 'prov_first', `${first.url}/configured/first`, 'first-model'),
+      binding('bind_second', 'prov_second', `${second.url}/configured/second?version=1`, 'second-model'),
+    ]
+
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+    const response = await fetch(`${proxy.url}/v1/chat/completions?client=value`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [] }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-upstream')).toBe('second')
+    expect(await response.json()).toEqual({
+      path: '/configured/second?version=1',
+      model: 'second-model',
+    })
+    expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_first')
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
+  })
+
+  it.each([
+    {
+      name: 'non-streaming',
+      action: 'generateContent',
+      query: '',
+      contentType: 'application/json',
+      responseBody: JSON.stringify({ candidates: [{ finishReason: 'STOP' }] }),
+    },
+    {
+      name: 'streaming SSE',
+      action: 'streamGenerateContent',
+      query: '?alt=sse',
+      contentType: 'text/event-stream; charset=utf-8',
+      responseBody: 'data: {"candidates":[{"index":0}]}\n\ndata: {"candidates":[{"finishReason":"STOP"}]}\n\n',
+    },
+  ])('proxies Gemini $name requests with native payload and required headers', async scenario => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'provider-secret',
+      delete: async () => undefined,
+    })
+
+    let receivedRequest: {
+      url: string | undefined
+      headers: http.IncomingHttpHeaders
+      body: string
+    } | null = null
+    const upstream = await listen((req, res) => {
+      const chunks: Buffer[] = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        receivedRequest = {
+          url: req.url,
+          headers: req.headers,
+          body: Buffer.concat(chunks).toString('utf8'),
+        }
+        res.writeHead(200, {
+          'content-type': scenario.contentType,
+          'cache-control': 'no-cache',
+          'x-goog-request-id': 'gemini-request',
+          connection: 'close',
+        })
+        res.end(scenario.responseBody)
+      })
+    })
+
+    mocks.bindings = [binding(
+      'bind_gemini',
+      'prov_gemini',
+      `${upstream.url}/v1beta/models/configured-model:generateContent?configured=true`,
+      'gemini-2.5-flash',
+      'gemini',
+    )]
+
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+    const requestBody = JSON.stringify({ contents: [{ parts: [{ text: 'hello' }] }] })
+    const response = await fetch(
+      `${proxy.url}/v1beta/models/client-model:${scenario.action}${scenario.query}`,
+      {
+        method: 'POST',
+        headers: {
+          accept: scenario.contentType,
+          'content-type': 'application/json',
+          'x-goog-api-client': 'genai-js/1.0',
+          'x-goog-api-key': 'client-secret',
+        },
+        body: requestBody,
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe(scenario.contentType)
+    expect(response.headers.get('cache-control')).toBe('no-cache')
+    expect(response.headers.get('x-goog-request-id')).toBe('gemini-request')
+    expect(await response.text()).toBe(scenario.responseBody)
+    expect(receivedRequest).toMatchObject({
+      url: `/v1beta/models/gemini-2.5-flash:${scenario.action}?configured=true${scenario.query ? '&alt=sse' : ''}`,
+      headers: {
+        accept: scenario.contentType,
+        'content-type': 'application/json',
+        'x-goog-api-client': 'genai-js/1.0',
+        'x-goog-api-key': 'provider-secret',
+      },
+      body: requestBody,
+    })
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_gemini')
+  })
+})

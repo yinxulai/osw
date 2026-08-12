@@ -117,7 +117,9 @@
 
 ## 透传规则
 
-- 代理透传时保留客户端请求的原始方法、请求头、请求体
-- 转发目标地址以绑定配置的完整上游 URL 为准，不拼接客户端 path
-- 注入 Provider 配置的认证头
-- 响应原样返回，包括状态码、响应头、响应体
+- 保留客户端的原始方法和端到端请求头；移除 `connection`、`transfer-encoding` 等逐跳 header
+- 移除客户端认证信息，注入 Provider 配置的认证头；`content-length` 按最终请求体重新计算
+- OpenAI / Anthropic 使用绑定配置的完整上游 URL，并将请求体 `model` 改写为绑定模型 ID
+- Gemini 保留原生请求体，通过 URL 替换模型 ID，并按客户端请求选择 `generateContent` 或 `streamGenerateContent`
+- Gemini 会保留绑定 URL 的查询参数，同时合并客户端的 `alt=sse` 等查询参数
+- 响应状态码、端到端响应头和响应体逐块返回；逐跳响应 header 不向客户端转发

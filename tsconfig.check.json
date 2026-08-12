@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true
+  },
+  "include": [
+    "source/common/**/*.ts",
+    "source/server/**/*.ts",
+    "source/render/source/**/*.ts",
+    "source/render/source/**/*.tsx",
+    "source/command/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "electron-builder.config.ts"
+  ],
+  "references": []
+}

@@ -24,7 +24,7 @@
 |------|----------|------|
 | OpenAI | Bearer Token | `Authorization: Bearer <apiKey>` |
 | Anthropic | Header | `x-api-key: <apiKey>` |
-| Gemini | Query Parameter | `?key=<apiKey>` |
+| Gemini | Header | `x-goog-api-key: <apiKey>` |
 | Custom | 可配置 | 用户自定义认证头名称或参数名 |
 
 ### 健康状态（运行时）

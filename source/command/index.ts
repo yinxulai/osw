@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
+import { ElectronSecretStore } from './secret-store'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -46,10 +47,18 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  // 启动代理服务器
+app.whenReady().then(async () => {
   const userDataDir = app.getPath('userData')
-  startServer({ dataDir: userDataDir })
+  try {
+    await startServer({
+      dataDir: userDataDir,
+      secretStore: new ElectronSecretStore(path.join(userDataDir, 'secrets.json')),
+    })
+  } catch (error) {
+    console.error('[one-switch] failed to start server', error)
+    app.quit()
+    return
+  }
 
   createWindow()
 
@@ -59,6 +68,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  stopServer()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  void stopServer()
 })

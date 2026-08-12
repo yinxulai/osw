@@ -21,7 +21,15 @@ import {
   resetProviderHealth,
 } from '../db/store'
 import { ProviderSchema, LogicalModelSchema, ModelBindingSchema, SettingsSchema } from '@common/schemas'
+import { generateKeyReference } from '@common/keychain'
 import { setManualBinding, getManualBinding } from '../proxy/handler'
+import {
+  getProxyServerStatus,
+  restartProxyServer,
+  startProxyServer,
+  stopProxyServer,
+} from '../proxy/server'
+import { getSecretStore } from '../secrets'
 
 type Handler = (req: IncomingMessage, res: ServerResponse, body: unknown) => Promise<void> | void
 
@@ -57,6 +65,12 @@ const routes: Record<string, Handler> = {
 
   // Health
   '/api/health/list': handleListHealth,
+
+  // Proxy lifecycle
+  '/api/proxy/status': handleProxyStatus,
+  '/api/proxy/start': handleProxyStart,
+  '/api/proxy/stop': handleProxyStop,
+  '/api/proxy/restart': handleProxyRestart,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -132,32 +146,52 @@ function handleGetProvider(_req: IncomingMessage, res: ServerResponse, body: unk
 
 const CreateProviderSchema = ProviderSchema.pick({
   name: true,
-  apiKeyReference: true,
   timeoutMilliseconds: true,
   enabled: true,
-}).partial({ timeoutMilliseconds: true, enabled: true })
-function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+}).extend({ apiKey: z.string().min(1) }).partial({ timeoutMilliseconds: true, enabled: true })
+async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderSchema.parse(body)
-  const provider = createProvider({
-    name: input.name,
-    apiKeyReference: input.apiKeyReference,
-    timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
-    enabled: input.enabled ?? true,
-  })
-  sendSuccess(res, provider)
+  const apiKeyReference = generateKeyReference()
+  const secretStore = getSecretStore()
+  await secretStore.set(apiKeyReference, input.apiKey)
+  try {
+    const provider = createProvider({
+      name: input.name,
+      apiKeyReference,
+      timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
+      enabled: input.enabled ?? true,
+    })
+    sendSuccess(res, provider)
+  } catch (error) {
+    await secretStore.delete(apiKeyReference)
+    throw error
+  }
 }
 
-const UpdateProviderSchema = ProviderSchema.partial().required({ id: true })
-function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
-  const { id, ...updates } = UpdateProviderSchema.parse(body)
+const UpdateProviderSchema = ProviderSchema.pick({
+  id: true,
+  name: true,
+  timeoutMilliseconds: true,
+  enabled: true,
+}).partial().required({ id: true }).extend({ apiKey: z.string().min(1).optional() })
+async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id, apiKey, ...updates } = UpdateProviderSchema.parse(body)
+  const current = getProvider(id)
+  if (!current) {
+    sendError(res, 'NOT_FOUND', 'Provider 不存在', 404)
+    return
+  }
+  if (apiKey) await getSecretStore().set(current.apiKeyReference, apiKey)
   const provider = updateProvider(id, updates)
   sendSuccess(res, provider)
 }
 
 const DeleteProviderSchema = z.object({ id: z.string() })
-function handleDeleteProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleDeleteProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = DeleteProviderSchema.parse(body)
+  const provider = getProvider(id)
   deleteProvider(id)
+  if (provider) await getSecretStore().delete(provider.apiKeyReference)
   sendSuccess(res, { id })
 }
 
@@ -297,4 +331,25 @@ function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unk
 function handleListHealth(_req: IncomingMessage, res: ServerResponse): void {
   const healthList = listProviderHealth()
   sendSuccess(res, healthList)
+}
+
+// ========== Proxy Lifecycle Handlers ==========
+
+function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): void {
+  sendSuccess(res, getProxyServerStatus())
+}
+
+async function handleProxyStart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  await startProxyServer()
+  sendSuccess(res, getProxyServerStatus())
+}
+
+async function handleProxyStop(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  await stopProxyServer()
+  sendSuccess(res, getProxyServerStatus())
+}
+
+async function handleProxyRestart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  await restartProxyServer()
+  sendSuccess(res, getProxyServerStatus())
 }
