@@ -50,12 +50,18 @@ importers:
       better-sqlite3:
         specifier: ^11.3.0
         version: 11.10.0
+      bindings:
+        specifier: 1.5.0
+        version: 1.5.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      file-uri-to-path:
+        specifier: 1.0.0
+        version: 1.0.0
       lucide-react:
         specifier: ^1.31.0
         version: 1.31.0(react@18.3.1)

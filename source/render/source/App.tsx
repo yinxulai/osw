@@ -15,10 +15,11 @@ import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { AppLayout } from '@/components/layout'
-import QueuePage from './pages/QueuePage'
-import ProvidersPage from './pages/ProvidersPage'
+import QueueControlPage from './pages/QueueControlPage'
+import ModelManagementPage from './pages/ModelManagementPage'
 import OverviewPage from './pages/OverviewPage'
-import SettingsPage from './pages/SettingsPage'
+import RuntimeSettingsPage from './pages/RuntimeSettingsPage'
+import { proxyApi, type ProxyServerStatus } from './api'
 
 type PageKey = 'queue' | 'providers' | 'overview' | 'settings'
 type Theme = 'light' | 'dark'
@@ -46,6 +47,7 @@ function App() {
     if (saved) return saved
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
+  const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
 
   useEffect(() => {
     const root = document.documentElement
@@ -56,6 +58,20 @@ function App() {
     }
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshStatus = async () => {
+      const result = await proxyApi.status()
+      if (!cancelled && result.success) setProxyStatus(result.data)
+    }
+    void refreshStatus()
+    const timer = window.setInterval(() => void refreshStatus(), 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activePage])
 
   useEffect(() => {
     const checkWidth = () => {
@@ -168,8 +184,8 @@ function App() {
                 collapsed && 'justify-center'
               )}
             >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse" />
-              {!collapsed && <span>服务运行中 · 9300</span>}
+              <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', proxyStatus?.running ? 'bg-success animate-pulse' : 'bg-muted-foreground/50')} />
+              {!collapsed && <span>{proxyStatus?.running ? `服务运行中 · ${proxyStatus.port}` : '服务已停止'}</span>}
             </div>
           </div>
 
@@ -184,10 +200,10 @@ function App() {
           </aside>
         )}
       >
-        {activePage === 'queue' && <QueuePage />}
-        {activePage === 'providers' && <ProvidersPage />}
+        {activePage === 'queue' && <QueueControlPage />}
+        {activePage === 'providers' && <ModelManagementPage />}
         {activePage === 'overview' && <OverviewPage />}
-        {activePage === 'settings' && <SettingsPage />}
+        {activePage === 'settings' && <RuntimeSettingsPage />}
       </AppLayout>
     </TooltipProvider>
   )

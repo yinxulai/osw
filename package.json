@@ -6,7 +6,7 @@
   "main": "dist/command/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && electron-builder",
+    "build": "pnpm typecheck && vite build && electron-builder --config electron-builder.config.ts",
     "preview": "vite preview",
     "test:server": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.check.json"
@@ -26,8 +26,10 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tailwindcss/vite": "^4.3.3",
     "better-sqlite3": "^11.3.0",
+    "bindings": "1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "file-uri-to-path": "1.0.0",
     "lucide-react": "^1.31.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",

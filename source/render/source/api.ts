@@ -27,7 +27,24 @@ async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse
       },
       body: JSON.stringify(body),
     })
-    return (await res.json()) as ApiResponse<T>
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      return {
+        success: false,
+        errorCode: 'INVALID_RESPONSE',
+        errorMessage: `管理服务返回了无法识别的响应（HTTP ${res.status}）`,
+      }
+    }
+
+    const response = (await res.json()) as ApiResponse<T>
+    if (!res.ok && response.success) {
+      return {
+        success: false,
+        errorCode: 'HTTP_ERROR',
+        errorMessage: `管理服务请求失败（HTTP ${res.status}）`,
+      }
+    }
+    return response
   } catch (err) {
     return {
       success: false,
