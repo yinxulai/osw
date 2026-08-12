@@ -184,7 +184,7 @@ function App() {
 
         {/* 主内容区 */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl p-6 md:p-8">
+          <div className="mx-auto max-w-6xl p-4 md:p-5">
             {activePage === 'queue' && <QueuePage />}
             {activePage === 'providers' && <ProvidersPage />}
             {activePage === 'overview' && <OverviewPage />}

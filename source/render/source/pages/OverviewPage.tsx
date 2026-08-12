@@ -59,41 +59,46 @@ export default function OverviewPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* 页面标题 */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">统计分析</h1>
-          <p className="text-sm text-muted-foreground mt-1">请求量、成功率、延迟等核心指标统计</p>
+          <h1 className="text-lg font-semibold tracking-tight">统计分析</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">请求量、成功率、延迟等核心指标统计</p>
         </div>
         <Tabs value={timeRange} onValueChange={v => setTimeRange(v as typeof timeRange)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="today" className="h-7 px-3 text-xs">今日</TabsTrigger>
-            <TabsTrigger value="7d" className="h-7 px-3 text-xs">近 7 天</TabsTrigger>
-            <TabsTrigger value="30d" className="h-7 px-3 text-xs">近 30 天</TabsTrigger>
+          <TabsList className="h-7">
+            <TabsTrigger value="today" className="h-6 px-2.5 text-xs">今日</TabsTrigger>
+            <TabsTrigger value="7d" className="h-6 px-2.5 text-xs">近 7 天</TabsTrigger>
+            <TabsTrigger value="30d" className="h-6 px-2.5 text-xs">近 30 天</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map(s => (
-          <Card key={s.label}>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                <s.Icon size={16} />
-                {s.label}
-              </div>
-              <div className="text-2xl font-bold">{s.value}</div>
-              <div className={cn(
-                'flex items-center gap-1 text-xs mt-1.5',
-                s.trendUp ? 'text-success' : 'text-destructive'
-              )}>
-                {s.trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {s.trend} 较上周
-              </div>
-            </CardContent>
-          </Card>
+      {/* 统计指标 - 线条分隔风格 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 rounded-md border">
+        {stats.map((s, idx) => (
+          <div
+            key={s.label}
+            className={cn(
+              'p-3',
+              idx < stats.length - 1 && 'border-r',
+              idx >= 2 && 'border-t sm:border-t-0'
+            )}
+          >
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+              <s.Icon size={13} />
+              {s.label}
+            </div>
+            <div className="text-xl font-semibold tabular-nums">{s.value}</div>
+            <div className={cn(
+              'flex items-center gap-0.5 text-[11px] mt-0.5',
+              s.trendUp ? 'text-success' : 'text-destructive'
+            )}>
+              {s.trendUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {s.trend}
+            </div>
+          </div>
         ))}
       </div>
 
@@ -101,21 +106,21 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         {/* 请求量趋势 */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">请求量趋势</CardTitle>
+          <CardHeader className="pb-1.5">
+            <CardTitle>请求量趋势</CardTitle>
             <CardDescription>每日请求数</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-56 flex items-end gap-3 pt-4">
+            <div className="h-40 flex items-end gap-2 pt-2">
               {requestTrend.map(d => (
-                <div key={d.day} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full flex flex-col-reverse h-44 gap-1">
+                <div key={d.day} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div className="w-full flex flex-col-reverse h-32 gap-0.5">
                     <div
-                      className="w-full bg-gradient-to-t from-primary to-primary/60 rounded-t-md transition-all"
-                      style={{ height: `${(d.requests / maxRequests) * 100}%`, minHeight: 4 }}
+                      className="w-full bg-primary/80 rounded-t-sm transition-all"
+                      style={{ height: `${(d.requests / maxRequests) * 100}%`, minHeight: 3 }}
                     />
                   </div>
-                  <div className="text-xs text-muted-foreground">{d.day}</div>
+                  <div className="text-[11px] text-muted-foreground">{d.day}</div>
                 </div>
               ))}
             </div>
@@ -124,20 +129,20 @@ export default function OverviewPage() {
 
         {/* Provider 使用分布 */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Provider 分布</CardTitle>
+          <CardHeader className="pb-1.5">
+            <CardTitle>Provider 分布</CardTitle>
             <CardDescription>按请求量占比</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 pt-2">
+          <CardContent className="space-y-2.5 pt-1">
             {providerUsage.map(p => (
               <div key={p.name}>
-                <div className="flex justify-between text-sm mb-1.5">
+                <div className="flex justify-between text-xs mb-1">
                   <span className="font-medium">{p.name}</span>
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-foreground tabular-nums">
                     {p.percent}% · {p.requests.toLocaleString()}
                   </span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div className={cn('h-full rounded-full', p.color)} style={{ width: `${p.percent}%` }} />
                 </div>
               </div>
@@ -150,40 +155,40 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
         {/* 模型使用排行 */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">模型使用排行</CardTitle>
+          <CardHeader className="pb-1.5">
+            <CardTitle>模型使用排行</CardTitle>
             <CardDescription>按请求数排序</CardDescription>
           </CardHeader>
-          <CardContent className="pt-2">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+          <CardContent className="pt-1">
+            <div className="overflow-x-auto -mx-4">
+              <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-muted-foreground text-xs">
-                    <th className="text-left font-medium py-2.5 w-10">#</th>
-                    <th className="text-left font-medium py-2.5">模型</th>
-                    <th className="text-left font-medium py-2.5">Provider</th>
-                    <th className="text-right font-medium py-2.5">请求数</th>
-                    <th className="text-right font-medium py-2.5">平均延迟</th>
-                    <th className="text-right font-medium py-2.5">成功率</th>
+                  <tr className="border-y text-muted-foreground">
+                    <th className="text-left font-medium py-2 px-4 w-8">#</th>
+                    <th className="text-left font-medium py-2">模型</th>
+                    <th className="text-left font-medium py-2">Provider</th>
+                    <th className="text-right font-medium py-2 pr-4">请求数</th>
+                    <th className="text-right font-medium py-2">平均延迟</th>
+                    <th className="text-right font-medium py-2 pr-4">成功率</th>
                   </tr>
                 </thead>
                 <tbody>
                   {modelRanking.map((m, idx) => (
                     <tr key={m.model} className="border-b last:border-0">
-                      <td className="py-3">
+                      <td className="py-2 px-4">
                         <span className={cn(
-                          'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
+                          'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold',
                           idx < 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                         )}>
                           {idx + 1}
                         </span>
                       </td>
-                      <td className="py-3 font-medium">{m.model}</td>
-                      <td className="py-3 text-muted-foreground">{m.provider}</td>
-                      <td className="py-3 text-right">{m.requests.toLocaleString()}</td>
-                      <td className="py-3 text-right">{m.avgLatency}</td>
-                      <td className="py-3 text-right">
-                        <Badge variant="success" className="font-normal">{m.successRate}</Badge>
+                      <td className="py-2 font-medium">{m.model}</td>
+                      <td className="py-2 text-muted-foreground">{m.provider}</td>
+                      <td className="py-2 text-right pr-4 tabular-nums">{m.requests.toLocaleString()}</td>
+                      <td className="py-2 text-right tabular-nums">{m.avgLatency}</td>
+                      <td className="py-2 text-right pr-4">
+                        <Badge variant="success" className="font-normal h-5 px-1.5 text-[11px]">{m.successRate}</Badge>
                       </td>
                     </tr>
                   ))}
@@ -195,23 +200,23 @@ export default function OverviewPage() {
 
         {/* 延迟分布 */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">延迟分布</CardTitle>
+          <CardHeader className="pb-1.5">
+            <CardTitle>延迟分布</CardTitle>
             <CardDescription>响应时间区间占比</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 pt-2">
+          <CardContent className="space-y-2 pt-1">
             {latencyDistribution.map(l => (
-              <div key={l.range} className="flex items-center gap-3">
-                <div className="w-12 text-xs text-muted-foreground shrink-0">{l.range}</div>
-                <div className="flex-1 relative h-7 bg-muted rounded-md overflow-hidden">
+              <div key={l.range} className="flex items-center gap-2">
+                <div className="w-10 text-[11px] text-muted-foreground shrink-0">{l.range}</div>
+                <div className="flex-1 relative h-5 bg-muted rounded-sm overflow-hidden">
                   <div
                     className={cn(
-                      'h-full rounded-md opacity-80',
+                      'h-full rounded-sm',
                       l.percent > 30 ? 'bg-success' : l.percent > 10 ? 'bg-warning' : 'bg-destructive'
                     )}
                     style={{ width: `${l.percent}%` }}
                   />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium">
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium tabular-nums">
                     {l.percent}%
                   </span>
                 </div>
@@ -223,20 +228,27 @@ export default function OverviewPage() {
 
       {/* 失败原因分析 */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">失败原因分析</CardTitle>
+        <CardHeader className="pb-1.5">
+          <CardTitle>失败原因分析</CardTitle>
           <CardDescription>共 286 次失败请求 · 失败率 1.16%</CardDescription>
         </CardHeader>
-        <CardContent className="pt-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {failureReasons.map(f => (
-              <div key={f.reason} className="rounded-lg border bg-muted/30 p-4 text-center">
-                <div className="text-2xl font-bold text-destructive mb-1">{f.count}</div>
-                <div className="text-sm text-muted-foreground mb-2">{f.reason}</div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <CardContent className="pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-0 -mx-4">
+            {failureReasons.map((f, idx) => (
+              <div
+                key={f.reason}
+                className={cn(
+                  'px-3 py-2.5 text-center',
+                  idx < failureReasons.length - 1 && 'border-r',
+                  idx >= 2 && 'border-t sm:border-t-0 md:border-t-0'
+                )}
+              >
+                <div className="text-lg font-semibold text-destructive tabular-nums">{f.count}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{f.reason}</div>
+                <div className="h-1 bg-muted rounded-full overflow-hidden mt-2">
                   <div className="h-full bg-destructive rounded-full" style={{ width: `${f.percent}%` }} />
                 </div>
-                <div className="text-xs text-muted-foreground mt-1.5">{f.percent}%</div>
+                <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">{f.percent}%</div>
               </div>
             ))}
           </div>

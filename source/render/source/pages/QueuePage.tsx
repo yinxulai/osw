@@ -170,40 +170,40 @@ export default function QueuePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">模型队列</h1>
-        <p className="text-sm text-muted-foreground mt-1">管理请求优先级和故障转移策略</p>
+        <h1 className="text-lg font-semibold tracking-tight">模型队列</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">管理请求优先级和故障转移策略</p>
       </div>
 
       {/* 服务接入配置 */}
       <Card>
-        <CardHeader className="pb-4">
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Server size={20} />
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Server size={16} />
               </div>
               <div>
-                <CardTitle className="text-base">服务接入配置</CardTitle>
-                <CardDescription className="mt-1">
-                  将你的应用请求地址指向下方代理地址即可使用
+                <CardTitle>服务接入配置</CardTitle>
+                <CardDescription className="mt-0.5">
+                  将应用请求地址指向下方代理地址即可使用
                 </CardDescription>
               </div>
             </div>
-            <Badge variant="success" className="gap-1.5">
+            <Badge variant="success" className="gap-1 h-5 px-1.5 text-[11px]">
               <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
               运行中
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* 代理地址 */}
-            <div className="md:col-span-2 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">
-                <Plug size={12} className="inline mr-1 -mt-0.5" />
+            <div className="md:col-span-2 space-y-1.5">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                <Plug size={11} className="inline mr-1 -mt-0.5" />
                 代理地址
               </Label>
               <div className="flex items-stretch gap-2">
@@ -212,7 +212,7 @@ export default function QueuePage() {
                     readOnly
                     value={fullProxyUrl}
                     className={cn(
-                      'pr-24 font-mono text-sm h-10',
+                      'pr-20 font-mono text-xs h-8',
                       availableCount <= 0 && 'opacity-50 bg-muted'
                     )}
                   />
@@ -221,13 +221,13 @@ export default function QueuePage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 gap-1 px-2 text-xs font-medium"
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 gap-0.5 px-1.5 text-[11px] font-medium"
                       >
                         {currentProtocol.label}
-                        <ChevronDownIcon size={12} className="opacity-60" />
+                        <ChevronDownIcon size={11} className="opacity-60" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent align="end" className="w-44">
                       {PROTOCOLS.map(p => {
                         const count = protocolModelCounts[p.key]
                         const disabled = count <= 0
@@ -236,11 +236,11 @@ export default function QueuePage() {
                             key={p.key}
                             disabled={disabled}
                             onClick={() => !disabled && setProtocol(p.key)}
-                            className="flex items-center justify-between"
+                            className="flex items-center justify-between text-xs"
                           >
                             <span>{p.label}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {count} 个模型可用
+                            <span className="text-[11px] text-muted-foreground">
+                              {count} 个模型
                             </span>
                           </DropdownMenuItem>
                         )
@@ -253,123 +253,118 @@ export default function QueuePage() {
                   size="sm"
                   onClick={copyEndpoint}
                   disabled={availableCount <= 0}
-                  className="shrink-0"
+                  className="shrink-0 h-8 px-2.5 text-xs"
                 >
-                  <Copy size={14} />
+                  <Copy size={13} />
                   {copied ? '已复制' : '复制'}
                 </Button>
               </div>
             </div>
 
             {/* API Key */}
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">
-                <KeyRound size={12} className="inline mr-1 -mt-0.5" />
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-medium text-muted-foreground">
+                <KeyRound size={11} className="inline mr-1 -mt-0.5" />
                 API Key
               </Label>
               <div className="flex items-center gap-2">
                 <Input
                   readOnly
                   value="无需配置，本地服务"
-                  className="font-mono text-sm h-10 bg-muted"
+                  className="font-mono text-xs h-8 bg-muted flex-1"
                 />
-                <Badge variant="success" className="shrink-0">免认证</Badge>
+                <Badge variant="success" className="shrink-0 h-5 px-1.5 text-[11px]">免认证</Badge>
               </div>
             </div>
           </div>
 
           {/* 使用提示 */}
-          <div className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-            <Lightbulb size={16} className="shrink-0 mt-0.5 text-warning" />
+          <div className="flex items-start gap-2 rounded-sm border border-l-2 border-l-warning bg-muted/30 p-2.5 text-xs text-muted-foreground">
+            <Lightbulb size={14} className="shrink-0 mt-0.5 text-warning" />
             <span>
-              使用方式：将客户端的 <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">baseURL</code> 设置为上方代理地址，
-              模型名称填写下方队列的逻辑模型名即可。
-              所有请求会自动按优先级队列进行故障转移。
+              使用方式：将客户端的 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">baseURL</code> 设置为上方代理地址，
+              模型名称填写下方队列的逻辑模型名即可。所有请求会自动按优先级队列进行故障转移。
             </span>
           </div>
         </CardContent>
       </Card>
 
-      {/* 状态卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-              <BarChart3 size={16} />
-              今日请求
-            </div>
-            <div className="text-2xl font-bold">1,284</div>
-            <div className="text-xs text-success mt-1">+12.5% 较昨日</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-              <CheckCircle2 size={16} />
-              成功率
-            </div>
-            <div className="text-2xl font-bold">99.2%</div>
-            <div className="text-xs text-success mt-1">+0.3% 较昨日</div>
-          </CardContent>
-        </Card>
+      {/* 状态指标 - 线条分隔 */}
+      <div className="grid grid-cols-2 gap-0 rounded-md border">
+        <div className="p-3 border-r">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <BarChart3 size={13} />
+            今日请求
+          </div>
+          <div className="text-xl font-semibold tabular-nums">1,284</div>
+          <div className="text-[11px] text-success mt-0.5">+12.5% 较昨日</div>
+        </div>
+        <div className="p-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <CheckCircle2 size={13} />
+            成功率
+          </div>
+          <div className="text-xl font-semibold tabular-nums">99.2%</div>
+          <div className="text-[11px] text-success mt-0.5">+0.3% 较昨日</div>
+        </div>
       </div>
 
       {/* 优先级队列 */}
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <CardHeader className="pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <div className="flex items-center gap-3">
-                <CardTitle className="text-base">优先级队列</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>优先级队列</CardTitle>
                 {isDefaultQueue ? (
-                  <Badge variant="secondary" className="font-normal">
+                  <Badge variant="secondary" className="font-normal h-5 px-1.5 text-[11px]">
                     默认队列 · 任意模型
                   </Badge>
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <code className="px-2 py-0.5 rounded bg-muted font-mono text-sm">
+                  <div className="flex items-center gap-1">
+                    <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">
                       {queueModelName}
                     </code>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6"
+                      className="h-5 w-5"
                       onClick={copyModelName}
                       title="复制模型名"
                     >
-                      <Copy size={12} />
+                      <Copy size={11} />
                     </Button>
                   </div>
                 )}
               </div>
-              <CardDescription className="mt-1.5">
+              <CardDescription className="mt-0.5">
                 拖拽调整优先级顺序，数字越小优先级越高
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Tabs value={mode} onValueChange={v => v === 'auto' ? setMode('auto') : handleSwitchToManual()}>
-                <TabsList className="h-8">
-                  <TabsTrigger value="auto" className="h-7 px-3 text-xs gap-1.5">
-                    <RefreshCw size={13} />
+                <TabsList className="h-7">
+                  <TabsTrigger value="auto" className="h-6 px-2.5 text-[11px] gap-1">
+                    <RefreshCw size={12} />
                     自动转移
                   </TabsTrigger>
-                  <TabsTrigger value="manual" className="h-7 px-3 text-xs gap-1.5">
-                    <Target size={13} />
+                  <TabsTrigger value="manual" className="h-6 px-2.5 text-[11px] gap-1">
+                    <Target size={12} />
                     手动指定
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              <Button variant="outline" size="sm">
-                <Plus size={14} /> 添加绑定
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                <Plus size={13} /> 添加绑定
               </Button>
-              <Button size="sm">
-                <Activity size={14} /> 测试全部
+              <Button size="sm" className="h-7 px-2 text-xs">
+                <Activity size={13} /> 测试全部
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
+        <CardContent className="pt-0">
+          <div className="divide-y -mx-4">
             {bindings.map((b, idx) => (
               <div
                 key={b.id}
@@ -379,32 +374,33 @@ export default function QueuePage() {
                   }
                 }}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg border p-3 transition-all',
-                  b.status === 'active' && 'border-primary bg-primary/5 shadow-[0_0_0_3px_rgba(37,99,235,0.08)]',
+                  'flex items-center gap-2 px-4 py-2 transition-colors border-l-2',
+                  b.status === 'active' && 'border-l-primary bg-primary/5',
+                  b.status !== 'active' && 'border-l-transparent',
                   b.status === 'cooling' && 'opacity-60',
-                  mode === 'manual' && b.status !== 'cooling' && 'cursor-pointer hover:border-primary/50',
-                  mode === 'manual' && manualBinding === b.id && 'border-primary bg-primary/5'
+                  mode === 'manual' && b.status !== 'cooling' && 'cursor-pointer hover:bg-muted/50',
+                  mode === 'manual' && manualBinding === b.id && 'border-l-primary bg-primary/5'
                 )}
               >
                 {/* 选择/拖拽 */}
                 {mode === 'manual' ? (
                   <div className="shrink-0">
                     {manualBinding === b.id ? (
-                      <CircleDot size={18} className="text-primary" />
+                      <CircleDot size={16} className="text-primary" />
                     ) : (
-                      <Circle size={18} className="text-muted-foreground/40" />
+                      <Circle size={16} className="text-muted-foreground/40" />
                     )}
                   </div>
                 ) : (
                   <div className="shrink-0 text-muted-foreground/40 cursor-grab">
-                    <GripVertical size={16} />
+                    <GripVertical size={14} />
                   </div>
                 )}
 
                 {/* 序号 */}
                 <div
                   className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold',
+                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[11px] font-semibold',
                     b.status === 'active'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground'
@@ -417,43 +413,43 @@ export default function QueuePage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={cn(
-                      'font-medium text-sm truncate',
+                      'font-medium text-xs truncate',
                       b.status === 'active' && 'text-primary font-semibold'
                     )}>
                       {b.provider}
                     </span>
-                    <span className="text-xs text-muted-foreground truncate font-mono">
+                    <span className="text-[11px] text-muted-foreground truncate font-mono">
                       {b.model}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
                     <span>协议: {b.protocol}</span>
                     <span>延迟: {b.latency}</span>
                     <span>成功率: {b.successRate}</span>
                     {b.status === 'cooling' && b.cooldownRemain && (
-                      <span className="text-destructive">冷却剩余: {b.cooldownRemain}</span>
+                      <span className="text-destructive">冷却: {b.cooldownRemain}</span>
                     )}
                   </div>
                 </div>
 
                 {/* 状态徽章 */}
-                <Badge variant={statusBadgeVariant[b.status]} className="shrink-0">
+                <Badge variant={statusBadgeVariant[b.status]} className="shrink-0 h-5 px-1.5 text-[11px]">
                   {statusLabel[b.status]}
                 </Badge>
 
                 {/* 操作按钮 */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="上移">
-                    <ChevronUp size={15} />
+                <div className="flex items-center gap-0 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="上移">
+                    <ChevronUp size={13} />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="下移">
-                    <ChevronDown size={15} />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="下移">
+                    <ChevronDown size={13} />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="编辑">
-                    <Pencil size={15} />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="编辑">
+                    <Pencil size={13} />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" title="测试连接">
-                    <Plug size={15} />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="测试连接">
+                    <Plug size={13} />
                   </Button>
                 </div>
               </div>
@@ -464,45 +460,45 @@ export default function QueuePage() {
 
       {/* 转移策略 */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">转移策略</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>转移策略</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fail-threshold">连续失败阈值</Label>
-              <Input id="fail-threshold" defaultValue={3} type="number" />
-              <p className="text-xs text-muted-foreground">达到此次数后进入冷却</p>
+        <CardContent className="space-y-4 pt-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="fail-threshold" className="text-xs">连续失败阈值</Label>
+              <Input id="fail-threshold" defaultValue={3} type="number" className="h-8 text-xs" />
+              <p className="text-[11px] text-muted-foreground">达到此次数后进入冷却</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cooldown-base">冷却基础时间</Label>
-              <Input id="cooldown-base" defaultValue={30} type="number" />
-              <p className="text-xs text-muted-foreground">初始冷却时间（秒）</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="cooldown-base" className="text-xs">冷却基础时间</Label>
+              <Input id="cooldown-base" defaultValue={30} type="number" className="h-8 text-xs" />
+              <p className="text-[11px] text-muted-foreground">初始冷却时间（秒）</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cooldown-max">冷却最大时间</Label>
-              <Input id="cooldown-max" defaultValue={300} type="number" />
-              <p className="text-xs text-muted-foreground">冷却时间上限（秒）</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="idle-timeout">空闲超时</Label>
-              <Input id="idle-timeout" defaultValue={30000} type="number" />
-              <p className="text-xs text-muted-foreground">服务端连续无数据返回的超时时间（毫秒）</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="conn-timeout">连接超时</Label>
-              <Input id="conn-timeout" defaultValue={10000} type="number" />
-              <p className="text-xs text-muted-foreground">建立连接的超时时间（毫秒）</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="cooldown-max" className="text-xs">冷却最大时间</Label>
+              <Input id="cooldown-max" defaultValue={300} type="number" className="h-8 text-xs" />
+              <p className="text-[11px] text-muted-foreground">冷却时间上限（秒）</p>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <AlertTriangle size={16} className="text-warning" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="idle-timeout" className="text-xs">空闲超时</Label>
+              <Input id="idle-timeout" defaultValue={30000} type="number" className="h-8 text-xs" />
+              <p className="text-[11px] text-muted-foreground">服务端连续无数据返回的超时时间（毫秒）</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="conn-timeout" className="text-xs">连接超时</Label>
+              <Input id="conn-timeout" defaultValue={10000} type="number" className="h-8 text-xs" />
+              <p className="text-[11px] text-muted-foreground">建立连接的超时时间（毫秒）</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <AlertTriangle size={13} className="text-warning" />
               <span>修改转移策略会立即生效，当前进行中的请求不受影响</span>
             </div>
-            <Button>保存设置</Button>
+            <Button className="h-8 px-3 text-xs">保存设置</Button>
           </div>
         </CardContent>
       </Card>

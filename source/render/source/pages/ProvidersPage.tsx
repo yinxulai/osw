@@ -132,115 +132,109 @@ export default function ProvidersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">供应商</h1>
-        <p className="text-sm text-muted-foreground mt-1">管理上游服务供应商和模型配置</p>
+        <h1 className="text-lg font-semibold tracking-tight">供应商</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">管理上游服务供应商和模型配置</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
         {/* 左侧：供应商列表 */}
         <Card className="h-fit">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">供应商</CardTitle>
-              <Button size="sm" onClick={handleNew}>
-                <Plus size={14} /> 新建
+              <CardTitle>供应商</CardTitle>
+              <Button size="sm" onClick={handleNew} className="h-7 px-2 text-xs">
+                <Plus size={13} /> 新建
               </Button>
             </div>
             <div className="relative mt-2">
-              <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="搜索供应商..."
+                placeholder="搜索..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 text-sm"
+                className="pl-8 h-8 text-xs"
               />
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-1">
+            <div className="space-y-0.5 -mx-2">
               {filtered.map(p => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id)}
                   className={cn(
-                    'w-full flex items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors',
+                    'w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors border-l-2',
                     selectedId === p.id
-                      ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-muted'
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-transparent hover:bg-muted'
                   )}
                 >
-                  <div className={cn(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                    selectedId === p.id ? 'bg-primary/20' : 'bg-muted'
-                  )}>
-                    <Plug size={15} />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {modelsOf(p.id)} 个模型 · {p.latency}
+                    <div className="text-xs font-medium truncate">{p.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {modelsOf(p.id)} 模型 · {p.latency}
                     </div>
                   </div>
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', statusDotColor[p.status])} />
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', statusDotColor[p.status])} />
                 </button>
               ))}
             </div>
             {filtered.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Plug size={28} className="text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">没有找到匹配的供应商</p>
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Plug size={24} className="text-muted-foreground/40 mb-1.5" />
+                <p className="text-xs text-muted-foreground">没有找到匹配的供应商</p>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* 右侧：详情 */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {selected ? (
             <>
               {/* 供应商信息 */}
               <Card>
-                <CardHeader className="pb-4">
+                <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Server size={20} />
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Server size={16} />
                       </div>
                       <div>
-                        <CardTitle className="text-base">{selected.name}</CardTitle>
-                        <CardDescription className="mt-1">供应商配置信息</CardDescription>
+                        <CardTitle>{selected.name}</CardTitle>
+                        <CardDescription className="mt-0.5">供应商配置信息</CardDescription>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={providerStatusBadge[selected.status].variant}>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={providerStatusBadge[selected.status].variant} className="h-5 px-1.5 text-[11px]">
                         {providerStatusBadge[selected.status].label}
                       </Badge>
-                      <Button variant="ghost" size="sm">
-                        <Activity size={14} /> 测试
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                        <Activity size={13} /> 测试
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(selected.id)}>
-                        <Pencil size={14} /> 编辑
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(selected.id)} className="h-7 px-2 text-xs">
+                        <Pencil size={13} /> 编辑
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Plug size={12} /> 基础地址
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Plug size={11} /> 基础地址
                       </Label>
-                      <div className="font-mono text-sm bg-muted rounded-md px-3 py-2 break-all">
+                      <div className="font-mono text-xs bg-muted rounded-sm px-2.5 py-1.5 break-all">
                         {selected.baseUrl}
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Key size={12} /> API Key
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Key size={11} /> API Key
                       </Label>
-                      <div className="text-sm h-9 flex items-center">
+                      <div className="text-xs h-7 flex items-center">
                         {selected.apiKeyRef ? (
                           <span>已配置 · 钥匙串存储</span>
                         ) : (
@@ -248,19 +242,19 @@ export default function ProvidersPage() {
                         )}
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Clock size={12} /> 请求超时
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Clock size={11} /> 请求超时
                       </Label>
-                      <div className="text-sm h-9 flex items-center">
+                      <div className="text-xs h-7 flex items-center">
                         {selected.timeout / 1000} 秒
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Activity size={12} /> 状态
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Activity size={11} /> 状态
                       </Label>
-                      <div className="text-sm h-9 flex items-center">
+                      <div className="text-xs h-7 flex items-center">
                         {selected.enabled ? '已启用' : '已禁用'} · 延迟 {selected.latency}
                       </div>
                     </div>
@@ -270,81 +264,81 @@ export default function ProvidersPage() {
 
               {/* 模型列表 */}
               <Card>
-                <CardHeader className="pb-4">
+                <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Link2 size={16} className="text-primary" />
+                      <CardTitle className="flex items-center gap-1.5">
+                        <Link2 size={14} className="text-primary" />
                         已配置模型
                       </CardTitle>
-                      <CardDescription className="mt-1">
-                        该供应商下的上游模型绑定，共 {models.length} 个
+                      <CardDescription className="mt-0.5">
+                        共 {models.length} 个上游模型绑定
                       </CardDescription>
                     </div>
-                    <Button variant="outline" size="sm">
-                      <Plus size={14} /> 添加模型
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                      <Plus size={13} /> 添加模型
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                   {models.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="divide-y -mx-4">
                       {models.map((m, idx) => (
                         <div
                           key={m.id}
                           className={cn(
-                            'flex items-center gap-3 rounded-lg border p-3',
+                            'flex items-center gap-2 px-4 py-2',
                             m.status === 'cooling' && 'opacity-60'
                           )}
                         >
                           <div className="text-muted-foreground/40 cursor-grab shrink-0">
-                            <GripVertical size={16} />
+                            <GripVertical size={14} />
                           </div>
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground text-xs font-semibold">
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-muted text-muted-foreground text-[11px] font-semibold">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium">
+                            <div className="text-xs font-medium">
                               {m.name}
-                              <span className="text-muted-foreground font-normal ml-2 font-mono text-xs">
+                              <span className="text-muted-foreground font-normal ml-1.5 font-mono text-[11px]">
                                 → {m.upstreamModel}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
                               <span>协议: {m.protocol}</span>
                               <span>延迟: {m.latency}</span>
                               <span>成功率: {m.successRate}</span>
                             </div>
                           </div>
-                          <Badge variant={modelStatusBadge[m.status].variant} className="shrink-0">
+                          <Badge variant={modelStatusBadge[m.status].variant} className="shrink-0 h-5 px-1.5 text-[11px]">
                             {modelStatusBadge[m.status].label}
                           </Badge>
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="上移">
-                              <ChevronUp size={15} />
+                          <div className="flex items-center gap-0 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="上移">
+                              <ChevronUp size={13} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="下移">
-                              <ChevronDown size={15} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="下移">
+                              <ChevronDown size={13} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="编辑">
-                              <Pencil size={15} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="编辑">
+                              <Pencil size={13} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="测试">
-                              <Activity size={15} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="测试">
+                              <Activity size={13} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="删除">
-                              <Trash2 size={15} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="删除">
+                              <Trash2 size={13} />
                             </Button>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <Link2 size={28} className="text-muted-foreground/40 mb-2" />
-                      <p className="text-sm text-muted-foreground mb-3">该供应商暂无配置模型</p>
-                      <Button size="sm">
-                        <Plus size={14} /> 添加第一个模型
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Link2 size={24} className="text-muted-foreground/40 mb-1.5" />
+                      <p className="text-xs text-muted-foreground mb-2.5">该供应商暂无配置模型</p>
+                      <Button size="sm" className="h-7 px-2.5 text-xs">
+                        <Plus size={13} /> 添加第一个模型
                       </Button>
                     </div>
                   )}
@@ -352,10 +346,10 @@ export default function ProvidersPage() {
               </Card>
             </>
           ) : (
-            <Card className="flex items-center justify-center py-20">
+            <Card className="flex items-center justify-center py-16">
               <div className="text-center">
-                <Plug size={36} className="text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">选择一个供应商查看详情</p>
+                <Plug size={32} className="text-muted-foreground/40 mx-auto mb-1.5" />
+                <p className="text-xs text-muted-foreground">选择一个供应商查看详情</p>
               </div>
             </Card>
           )}
