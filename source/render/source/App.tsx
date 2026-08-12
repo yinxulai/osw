@@ -78,32 +78,32 @@ function App() {
         <aside
           className={cn(
             'relative flex flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300',
-            collapsed ? 'w-16' : 'w-60'
+            collapsed ? 'w-12' : 'w-48'
           )}
         >
           {/* Logo */}
-          <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <CircleDot size={20} />
+          <div className="flex items-center gap-2.5 px-3 py-3 border-b border-sidebar-border">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+              <CircleDot size={15} />
             </div>
             {!collapsed && (
               <div className="flex flex-col overflow-hidden">
-                <h1 className="text-base font-semibold leading-tight">One Switch</h1>
-                <p className="text-xs text-muted-foreground">本地大模型代理切换</p>
+                <h1 className="text-sm font-semibold leading-tight">One Switch</h1>
+                <p className="text-[11px] text-muted-foreground">本地大模型代理切换</p>
               </div>
             )}
           </div>
 
           {/* 导航 */}
-          <nav className="flex-1 overflow-y-auto p-2 space-y-4">
+          <nav className="flex-1 overflow-y-auto p-1.5 space-y-3">
             {sections.map(section => (
               <div key={section}>
                 {!collapsed && (
-                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                  <div className="px-2.5 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     {section}
                   </div>
                 )}
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {navItems
                     .filter(i => i.section === section)
                     .map(item => {
@@ -113,14 +113,14 @@ function App() {
                           key={item.key}
                           onClick={() => setActivePage(item.key)}
                           className={cn(
-                            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                            'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors',
                             activePage === item.key
                               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                               : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
                             collapsed && 'justify-center px-0'
                           )}
                         >
-                          <ItemIcon size={18} className="shrink-0" />
+                          <ItemIcon size={15} className="shrink-0" />
                           {!collapsed && <span>{item.label}</span>}
                         </button>
                       )
@@ -139,7 +139,7 @@ function App() {
           </nav>
 
           {/* 底部 */}
-          <div className="border-t border-sidebar-border p-2 space-y-1">
+          <div className="border-t border-sidebar-border p-1.5 space-y-0.5">
             {/* 主题切换 */}
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
@@ -147,9 +147,9 @@ function App() {
                   variant="ghost"
                   size="sm"
                   onClick={toggleTheme}
-                  className={cn('w-full justify-start', collapsed && 'justify-center px-0')}
+                  className={cn('w-full justify-start h-7 text-xs', collapsed && 'justify-center px-0')}
                 >
-                  {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                  {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
                   {!collapsed && <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>}
                 </Button>
               </TooltipTrigger>
@@ -163,11 +163,11 @@ function App() {
             {/* 服务状态 */}
             <div
               className={cn(
-                'flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground',
+                'flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground',
                 collapsed && 'justify-center'
               )}
             >
-              <span className="h-2 w-2 shrink-0 rounded-full bg-success animate-pulse" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse" />
               {!collapsed && <span>服务运行中 · 9300</span>}
             </div>
           </div>
@@ -175,10 +175,10 @@ function App() {
           {/* 折叠按钮 */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="absolute -right-3 top-6 flex h-6 w-6 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm hover:text-foreground transition-colors"
+            className="absolute -right-2.5 top-5 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground transition-colors"
             title={collapsed ? '展开侧边栏' : '收起侧边栏'}
           >
-            {collapsed ? <PanelLeftOpen size={12} /> : <PanelLeftClose size={12} />}
+            {collapsed ? <PanelLeftOpen size={11} /> : <PanelLeftClose size={11} />}
           </button>
         </aside>
 
