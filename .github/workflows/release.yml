@@ -1,25 +1,38 @@
 name: Release
-
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (for example, 0.1.0 or v0.1.0)
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub release as a prerelease
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify release
+  prepare:
+    name: Prepare release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.commit.outputs.commit }}
     steps:
-      - name: Check out release tag
+      - name: Check out main
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: main
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -32,45 +45,77 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Verify tag matches package version
+      - name: Validate version
+        id: version
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          if [[ "$RELEASE_TAG" != "v$PACKAGE_VERSION" && "$RELEASE_TAG" != "$PACKAGE_VERSION" ]]; then
-            echo "Release tag '$RELEASE_TAG' does not match package version '$PACKAGE_VERSION'."
+          VERSION="${INPUT_VERSION#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $INPUT_VERSION"
             exit 1
           fi
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update package version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test:server
+      - name: Run release checks
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test:server
+
+      - name: Commit version
+        id: commit
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): $VERSION"
+            git push origin HEAD:main
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
-    needs: verify
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: macOS
             os: macos-latest
+            artifact: macos
             asset: release/**/*.dmg
           - name: Windows
             os: windows-latest
+            artifact: windows
             asset: release/**/*.exe
           - name: Linux
             os: ubuntu-latest
+            artifact: linux
             asset: release/**/*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.prepare.outputs.commit }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -89,9 +134,45 @@ jobs:
       - name: Build installer
         run: pnpm build
 
-      - name: Upload installer to release
+      - name: Collect installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Create release tag
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          files: ${{ matrix.asset }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: One Switch ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
+          files: artifacts/**/*
