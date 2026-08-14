@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 interface BindingEntry {
@@ -486,32 +487,60 @@ export default function ModelManagementPage() {
       </PageContent>
 
       <Dialog open={providerDialogOpen} onOpenChange={setProviderDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle><DialogDescription>供应商负责保存 API Key 和请求超时。</DialogDescription></DialogHeader>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle><DialogDescription>供应商保存各自的 API Key 与请求参数，供上游模型共用。</DialogDescription></DialogHeader>
           <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
-            <div className="space-y-1.5"><Label htmlFor="provider-name">供应商名称</Label><Input id="provider-name" value={providerName} onChange={event => setProviderName(event.target.value)} placeholder="例如：OpenAI" /><p className="text-[11px] text-muted-foreground">用于在列表中区分不同的服务渠道，例如 OpenAI、Anthropic、DeepSeek。</p></div>
-            <div className="space-y-1.5"><Label htmlFor="provider-key">API Key</Label><div className="relative"><KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input id="provider-key" type="password" className="pl-8" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={editingProviderId ? '留空表示不修改' : 'sk-...'} /></div><p className="text-[11px] text-muted-foreground">密钥仅保存在本机，用于调用该供应商的上游接口。协议不同认证方式不同（OpenAI 用 Bearer，Anthropic 用 x-api-key）。</p></div>
-            <div className="space-y-1.5"><Label htmlFor="provider-timeout">请求超时（毫秒）</Label><Input id="provider-timeout" type="number" min={1} value={timeout} onChange={event => setTimeout(event.target.value)} placeholder="例如：30000" /><p className="text-[11px] text-muted-foreground">单个上游请求的等待上限，超时后自动切换到下一个候选绑定。默认 30000（30 秒）。</p></div>
-
+            {/* 基础信息 */}
             <div className="space-y-3">
-              <div className="space-y-1">
-                <Label>协议默认接口地址</Label>
-                <p className="text-[11px] text-muted-foreground">按需添加协议，为每个协议配置该供应商的默认完整接口地址。添加模型时如不单独填写地址，将自动沿用这里的默认地址。</p>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="provider-name">供应商名称</Label>
+                  <Input id="provider-name" value={providerName} onChange={event => setProviderName(event.target.value)} placeholder="例如：OpenAI / DeepSeek" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="provider-key">API Key</Label>
+                  <div className="relative">
+                    <KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input id="provider-key" type="password" className="pl-8" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={editingProviderId ? '留空表示不修改' : 'sk-...'} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">仅保存在本机，用于调用该供应商的上游接口。</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="provider-timeout">请求超时（毫秒）</Label>
+                  <Input id="provider-timeout" type="number" min={1} value={timeout} onChange={event => setTimeout(event.target.value)} placeholder="例如：30000" />
+                  <p className="text-[11px] text-muted-foreground">超时后自动切换下一个候选模型，默认 30 秒（30000 毫秒）。</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* 协议默认地址 */}
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm">协议默认接口地址</Label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">按需添加协议并填入默认地址；添加模型时不填地址则沿用这里的默认值。</p>
               </div>
               {providerEndpointEntries.map((entry, index) => (
-                <div key={index} className="space-y-3">
+                <div key={index} className="space-y-3 rounded-md border p-3">
                   <div className="flex items-center justify-between">
-                    <Label className="text-[11px] font-medium text-muted-foreground">接口 {index + 1}</Label>
+                    <span className="text-xs font-semibold text-muted-foreground">协议 {index + 1}</span>
                     {providerEndpointEntries.length > 1 && (
                       <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="移除该接口" onClick={() => removeProviderEndpointEntry(index)}><Trash2 size={13} /></Button>
                     )}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>请求协议</Label>
-                    <Select value={entry.protocol} onValueChange={value => updateProviderEndpointEntry(index, { protocol: value as Protocol })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={providerEndpointEntries.some(other => other.protocol === option.value)}>{option.label}</SelectItem>)}</SelectContent></Select>
-                    <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
+                  <div className="grid grid-cols-[140px_1fr] gap-3">
+                    <div className="space-y-1.5">
+                      <Label>请求协议</Label>
+                      <Select value={entry.protocol} onValueChange={value => updateProviderEndpointEntry(index, { protocol: value as Protocol })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={providerEndpointEntries.some(other => other.protocol === option.value)}>{option.label}</SelectItem>)}</SelectContent></Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`provider-endpoint-url-${index}`}>完整接口地址</Label>
+                      <Input id={`provider-endpoint-url-${index}`} type="url" className="font-mono text-xs" value={entry.url} onChange={event => updateProviderEndpointEntry(index, { url: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} />
+                    </div>
                   </div>
-                  <div className="space-y-1.5"><Label htmlFor={`provider-endpoint-url-${index}`}>完整接口地址</Label><Input id={`provider-endpoint-url-${index}`} type="url" className="font-mono text-xs" value={entry.url} onChange={event => updateProviderEndpointEntry(index, { url: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} /><p className="text-[11px] text-muted-foreground">该协议下所有模型的默认请求地址。留空表示该协议暂未配置默认地址。</p></div>
+                  <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
+                  <ProtocolUrlHint protocol={entry.protocol} />
                 </div>
               ))}
               <Button variant="outline" size="sm" className="h-8 w-full text-xs" onClick={addProviderEndpointEntry}><Plus size={13} /> 添加协议</Button>
@@ -522,8 +551,8 @@ export default function ModelManagementPage() {
       </Dialog>
 
       <Dialog open={bindingDialogOpen} onOpenChange={setBindingDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader><DialogTitle>{editingBindingId ? '编辑上游模型' : '添加上游模型'}</DialogTitle><DialogDescription>一个模型可配置多个协议。接口地址可选，留空将使用该供应商在此协议下的默认地址。</DialogDescription></DialogHeader>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>{editingBindingId ? '编辑上游模型' : '添加上游模型'}</DialogTitle><DialogDescription>一个模型可配置多个协议，接口地址留空则沿用供应商默认地址。</DialogDescription></DialogHeader>
           <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
             {bindingEntries.map((entry, index) => (
               <div key={index} className="space-y-3 rounded-md border p-3">
@@ -534,10 +563,10 @@ export default function ModelManagementPage() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5"><Label htmlFor={`binding-model-${index}`}>上游模型 ID</Label><Input id={`binding-model-${index}`} className="font-mono text-xs" value={entry.upstreamModelId} onChange={event => updateBindingEntry(index, { upstreamModelId: event.target.value })} placeholder="gpt-4o" /><p className="text-[11px] text-muted-foreground">该供应商上的实际模型名，发起请求时代理会自动替换。</p></div>
-                  <div className="space-y-1.5"><Label>请求协议</Label><Select value={entry.protocol} onValueChange={value => updateBindingEntryProtocol(index, value as Protocol)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={usedProtocols.includes(option.value)}>{option.label}</SelectItem>)}</SelectContent></Select><p className="text-[11px] text-muted-foreground">每个协议仅能配置一个，已选中的协议在其它条目不显示。</p></div>
+                  <div className="space-y-1.5"><Label htmlFor={`binding-model-${index}`}>上游模型 ID</Label><Input id={`binding-model-${index}`} className="font-mono text-xs" value={entry.upstreamModelId} onChange={event => updateBindingEntry(index, { upstreamModelId: event.target.value })} placeholder="gpt-4o" /></div>
+                  <div className="space-y-1.5"><Label>请求协议</Label><Select value={entry.protocol} onValueChange={value => updateBindingEntryProtocol(index, value as Protocol)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={usedProtocols.includes(option.value)}>{option.label}</SelectItem>)}</SelectContent></Select></div>
                 </div>
-                <div className="space-y-1.5"><Label htmlFor={`binding-url-${index}`}>完整接口地址（可选）</Label><Input id={`binding-url-${index}`} type="url" className="font-mono text-xs" value={entry.upstreamUrl} onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} /><p className="text-[11px] text-muted-foreground">留空则使用供应商在该协议下的默认接口地址。如需覆盖供应商默认地址，可在此填写完整地址。</p></div>
+                <div className="space-y-1.5"><Label htmlFor={`binding-url-${index}`}>完整接口地址（可选）</Label><Input id={`binding-url-${index}`} type="url" className="font-mono text-xs" value={entry.upstreamUrl} onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} /><p className="text-[11px] text-muted-foreground">留空使用供应商默认地址，填写则覆盖默认值直接访问该地址。</p></div>
                 <ProtocolUrlHint protocol={entry.protocol} />
               </div>
             ))}
