@@ -27,18 +27,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 interface BindingEntry {
   protocol: Protocol
+  enabled: boolean
+  overrideUrl: boolean
   upstreamUrl: string
-  upstreamModelId: string
 }
 
 interface ProviderEndpointEntry {
   protocol: Protocol
+  enabled: boolean
   url: string
 }
 
@@ -162,7 +164,8 @@ export default function ModelManagementPage() {
   const [timeout, setTimeout] = useState('30000')
   const [providerEndpointEntries, setProviderEndpointEntries] = useState<ProviderEndpointEntry[]>([])
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
-  const [editingBindingId, setEditingBindingId] = useState<string | null>(null)
+  const [editingBindings, setEditingBindings] = useState<ModelBinding[]>([])
+  const [bindingModelId, setBindingModelId] = useState('')
   const [bindingEntries, setBindingEntries] = useState<BindingEntry[]>([])
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -220,6 +223,20 @@ export default function ModelManagementPage() {
 
   const selectedProvider = providers.find(provider => provider.id === selectedProviderId)
   const selectedBindings = bindings.filter(binding => binding.providerId === selectedProviderId)
+  // 按上游模型 ID 分组，一个模型可支持多个协议（多条 binding）
+  const groupedModels = Array.from(
+    selectedBindings.reduce((map, binding) => {
+      const entry = map.get(binding.upstreamModelId)
+      if (entry) entry.push(binding)
+      else map.set(binding.upstreamModelId, [binding])
+      return map
+    }, new Map<string, ModelBinding[]>()),
+  ).map(([upstreamModelId, modelBindings]) => ({
+    upstreamModelId,
+    bindings: modelBindings.sort((a, b) => a.priority - b.priority),
+    minPriority: Math.min(...modelBindings.map(b => b.priority)),
+  }))
+  groupedModels.sort((a, b) => a.minPriority - b.minPriority)
 
   const openProviderDialog = (provider?: Provider) => {
     setEditingProviderId(provider?.id ?? null)
@@ -227,27 +244,16 @@ export default function ModelManagementPage() {
     setApiKey('')
     setTimeout(String(provider?.timeoutMilliseconds ?? 30000))
     setProviderEndpointEntries(
-      PROTOCOL_OPTIONS
-        .map(option => ({ protocol: option.value, url: parseProviderEndpoints(provider)[option.value] ?? '' }))
-        .filter(entry => entry.url),
+      PROTOCOL_OPTIONS.map(option => {
+        const url = parseProviderEndpoints(provider)[option.value] ?? ''
+        return { protocol: option.value, enabled: Boolean(url), url }
+      }),
     )
     setProviderDialogOpen(true)
   }
 
-  const addProviderEndpointEntry = () => {
-    setProviderEndpointEntries(current => {
-      const usedProtocols = new Set(current.map(entry => entry.protocol))
-      const nextProtocol = PROTOCOL_OPTIONS.find(option => !usedProtocols.has(option.value))?.value ?? 'openai-responses'
-      return [...current, { protocol: nextProtocol, url: '' }]
-    })
-  }
-
   const updateProviderEndpointEntry = (index: number, patch: Partial<ProviderEndpointEntry>) => {
     setProviderEndpointEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
-  }
-
-  const removeProviderEndpointEntry = (index: number) => {
-    setProviderEndpointEntries(current => current.filter((_, i) => i !== index))
   }
 
   const saveProvider = async () => {
@@ -255,6 +261,7 @@ export default function ModelManagementPage() {
     setSaving(true)
     const endpoints: Record<string, string> = Object.fromEntries(
       providerEndpointEntries
+        .filter(entry => entry.enabled)
         .map(entry => [entry.protocol, entry.url.trim()])
         .filter(([, value]) => value),
     )
@@ -285,11 +292,16 @@ export default function ModelManagementPage() {
     await loadData()
   }
 
-  const openBindingDialog = (binding?: ModelBinding) => {
-    setEditingBindingId(binding?.id ?? null)
-    setBindingEntries(binding
-      ? [{ protocol: binding.protocol, upstreamModelId: binding.upstreamModelId, upstreamUrl: binding.upstreamUrl }]
-      : [{ protocol: 'openai-responses', upstreamModelId: '', upstreamUrl: '' }])
+  const openBindingDialog = (bindingsForModel?: ModelBinding[]) => {
+    const existing = bindingsForModel ?? []
+    setEditingBindings(existing)
+    setBindingModelId(existing[0]?.upstreamModelId ?? '')
+    setBindingEntries(PROTOCOL_OPTIONS.map(option => {
+      const match = existing.find(binding => binding.protocol === option.value)
+      return match
+        ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.upstreamUrl.trim()), upstreamUrl: match.upstreamUrl }
+        : { protocol: option.value, enabled: false, overrideUrl: false, upstreamUrl: '' }
+    }))
     setBindingDialogOpen(true)
   }
 
@@ -297,67 +309,36 @@ export default function ModelManagementPage() {
     setBindingEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
   }
 
-  const addBindingEntry = () => {
-    setBindingEntries(current => {
-      const usedProtocols = new Set(current.map(entry => entry.protocol))
-      const nextProtocol = PROTOCOL_OPTIONS.find(option => !usedProtocols.has(option.value))?.value ?? 'openai-responses'
-      return [...current, { protocol: nextProtocol, upstreamModelId: '', upstreamUrl: '' }]
-    })
-  }
-
-  const removeBindingEntry = (index: number) => {
-    setBindingEntries(current => current.filter((_, i) => i !== index))
-  }
-
-  const usedProtocols = bindingEntries.map(entry => entry.protocol)
-
-  const updateBindingEntryProtocol = (index: number, protocol: Protocol) => {
-    setBindingEntries(current => {
-      const occupiedIndex = current.findIndex((entry, i) => i !== index && entry.protocol === protocol)
-      if (occupiedIndex < 0) {
-        return current.map((entry, i) => (i === index ? { ...entry, protocol } : entry))
-      }
-      // 目标协议已被其他条目占用：交换两者协议
-      return current.map((entry, i) => {
-        if (i === index) {
-          return { ...entry, protocol: current[occupiedIndex].protocol }
-        }
-        if (i === occupiedIndex) {
-          return { ...entry, protocol: current[index].protocol }
-        }
-        return entry
-      })
-    })
-  }
-
   const saveBinding = async () => {
     if (!logicalModel || !selectedProvider) return
-    const validEntries = bindingEntries.filter(entry => entry.upstreamModelId.trim())
-    if (validEntries.length === 0) return
+    if (!bindingModelId.trim()) return
+    const enabledEntries = bindingEntries.filter(entry => entry.enabled)
+    if (enabledEntries.length === 0) return
     setSaving(true)
 
-    if (editingBindingId) {
-      const entry = validEntries[0]
-      const result = await bindingApi.update(editingBindingId, {
-        protocol: entry.protocol,
-        upstreamModelId: entry.upstreamModelId.trim(),
-        upstreamUrl: entry.upstreamUrl.trim(),
-      })
-      setSaving(false)
-      if (!result.success) return setErrorMessage(result.errorMessage)
-      setBindingDialogOpen(false)
-      await loadData()
-      return
+    // 编辑模式：删除所有旧绑定后按新配置重建
+    if (editingBindings.length > 0) {
+      const removeResults = await Promise.all(editingBindings.map(binding => bindingApi.remove(binding.id)))
+      if (removeResults.some(result => !result.success)) {
+        setSaving(false)
+        setErrorMessage('更新模型失败，请重试')
+        return
+      }
     }
 
-    const results = await Promise.all(validEntries.map((entry, index) =>
+    const basePriority = editingBindings.length > 0
+      ? Math.min(...editingBindings.map(binding => binding.priority))
+      : bindings.length === 0
+        ? 1
+        : Math.max(...bindings.map(binding => binding.priority)) + 1
+    const results = await Promise.all(enabledEntries.map(entry =>
       bindingApi.create({
         logicalModelId: logicalModel.id,
         providerId: selectedProvider.id,
         protocol: entry.protocol,
-        upstreamModelId: entry.upstreamModelId.trim(),
-        upstreamUrl: entry.upstreamUrl.trim(),
-        priority: bindings.length + index + 1,
+        upstreamModelId: bindingModelId.trim(),
+        upstreamUrl: entry.overrideUrl ? entry.upstreamUrl.trim() : '',
+        priority: basePriority,
       }),
     ))
     setSaving(false)
@@ -371,25 +352,29 @@ export default function ModelManagementPage() {
   }
 
   const removeBinding = async (binding: ModelBinding) => {
-    if (!window.confirm(`删除上游模型“${binding.upstreamModelId}”？`)) return
-    const result = await bindingApi.remove(binding.id)
-    if (!result.success) return setErrorMessage(result.errorMessage)
+    if (!window.confirm(`删除模型“${binding.upstreamModelId}”？该模型关联的所有协议接口都会被移除。`)) return
+    const modelBindings = selectedBindings.filter(item => item.upstreamModelId === binding.upstreamModelId)
+    const results = await Promise.all(modelBindings.map(item => bindingApi.remove(item.id)))
+    if (results.some(result => !result.success)) return setErrorMessage(results.find(result => !result.success)!.errorMessage)
     await loadData()
   }
 
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
-    const oldIndex = selectedBindings.findIndex(binding => binding.id === active.id)
-    const newIndex = selectedBindings.findIndex(binding => binding.id === over.id)
-    const reordered = arrayMove(selectedBindings, oldIndex, newIndex)
-    const priorities = selectedBindings.map(binding => binding.priority).sort((left, right) => left - right)
+    const oldIndex = groupedModels.findIndex(group => group.upstreamModelId === active.id)
+    const newIndex = groupedModels.findIndex(group => group.upstreamModelId === over.id)
+    const reordered = arrayMove(groupedModels, oldIndex, newIndex)
+    const priorityValues = groupedModels.map(group => group.minPriority).sort((left, right) => left - right)
+    // 按模型组重排所有 binding 的优先级
+    const updates: { id: string; priority: number }[] = []
+    reordered.forEach((group, index) => {
+      group.bindings.forEach(binding => updates.push({ id: binding.id, priority: priorityValues[index] }))
+    })
     setBindings(current => current.map(binding => {
-      const index = reordered.findIndex(item => item.id === binding.id)
-      return index < 0 ? binding : { ...binding, priority: priorities[index] }
+      const update = updates.find(item => item.id === binding.id)
+      return update ? { ...binding, priority: update.priority } : binding
     }).sort((left, right) => left.priority - right.priority))
-    const results = await Promise.all(reordered.map((binding, index) =>
-      bindingApi.update(binding.id, { priority: priorities[index] }),
-    ))
+    const results = await Promise.all(updates.map(update => bindingApi.update(update.id, { priority: update.priority })))
     if (results.some(result => !result.success)) {
       setErrorMessage('模型顺序保存失败，已恢复服务端数据')
       await loadData()
@@ -426,7 +411,9 @@ export default function ModelManagementPage() {
                           className={cn('min-w-0 rounded-sm border px-3 py-2.5 text-left transition-colors', selectedProviderId === provider.id ? 'border-primary bg-primary/5 ring-1 ring-primary/10' : 'hover:bg-muted/50')}
                         >
                           <span className="flex items-center gap-2"><span className={cn('h-2 w-2 rounded-full', state.dot)} /><span className="truncate text-xs font-semibold">{provider.name}</span></span>
-                          <span className="mt-1.5 block text-[10px] text-muted-foreground">{bindings.filter(binding => binding.providerId === provider.id).length} 个模型</span>
+                          <span className="mt-1.5 block text-[10px] text-muted-foreground">
+                            {new Set(bindings.filter(binding => binding.providerId === provider.id).map(binding => binding.upstreamModelId)).size} 个模型
+                          </span>
                         </button>
                       )
                     })}
@@ -455,22 +442,34 @@ export default function ModelManagementPage() {
                     <div><div className="text-xs font-semibold">上游模型</div><div className="mt-0.5 text-[11px] text-muted-foreground">拖拽调整全局队列中的相对优先级</div></div>
                     <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openBindingDialog()}><Plus size={13} /> 添加模型</Button>
                   </div>
-                  {selectedBindings.length ? (
+                  {groupedModels.length ? (
                     <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={event => void handleDragEnd(event)}>
-                      <SortableContext items={selectedBindings.map(binding => binding.id)} strategy={verticalListSortingStrategy}>
+                      <SortableContext items={groupedModels.map(group => group.upstreamModelId)} strategy={verticalListSortingStrategy}>
                         <div className="divide-y rounded-md border">
-                          {selectedBindings.map(binding => (
-                            <SortableBinding key={binding.id} id={binding.id}>
+                          {groupedModels.map(group => (
+                            <SortableBinding key={group.upstreamModelId} id={group.upstreamModelId}>
                               {(handleProps, dragging) => (
                                 <div className={cn('flex items-center gap-2 px-3 py-2.5', dragging && 'bg-muted/60')}>
-                                  <button aria-label={`拖动 ${binding.upstreamModelId}`} className="cursor-grab touch-none text-muted-foreground/50" {...handleProps}><GripVertical size={14} /></button>
-                                  <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">{binding.priority}</div>
+                                  <button aria-label={`拖动 ${group.upstreamModelId}`} className="cursor-grab touch-none text-muted-foreground/50" {...handleProps}><GripVertical size={14} /></button>
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">{group.minPriority}</div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2"><span className="truncate text-xs font-semibold">{binding.upstreamModelId}</span><Badge variant="secondary" className="h-5 px-1.5 text-[9px]">{binding.protocol.toUpperCase()}</Badge>{!binding.upstreamUrl.trim() && <Badge variant="outline" className="h-5 px-1.5 text-[9px]">沿用默认</Badge>}</div>
-                                    <div className="mt-1 flex items-center gap-1 truncate font-mono text-[10px] text-muted-foreground"><Link2 size={10} /> {getEffectiveBindingUrl(binding, selectedProvider) || '未配置地址'}</div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="truncate text-xs font-semibold">{group.upstreamModelId}</span>
+                                      <span className="flex flex-wrap gap-1">
+                                        {group.bindings.map(binding => (
+                                          <Badge key={binding.id} variant="secondary" className="h-5 px-1.5 text-[9px]">
+                                            {binding.protocol.toUpperCase()}
+                                            {!binding.upstreamUrl.trim() && <span className="ml-1 text-muted-foreground/70">默认</span>}
+                                          </Badge>
+                                        ))}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-1 truncate font-mono text-[10px] text-muted-foreground">
+                                      <Link2 size={10} /> {group.bindings.map(binding => getEffectiveBindingUrl(binding, selectedProvider)).filter(Boolean).join(' / ') || '未配置地址'}
+                                    </div>
                                   </div>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="编辑模型" onClick={() => openBindingDialog(binding)}><Pencil size={13} /></Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="删除模型" onClick={() => void removeBinding(binding)}><Trash2 size={13} /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="编辑模型" onClick={() => openBindingDialog(group.bindings)}><Pencil size={13} /></Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="删除模型" onClick={() => void removeBinding(group.bindings[0])}><Trash2 size={13} /></Button>
                                 </div>
                               )}
                             </SortableBinding>
@@ -489,7 +488,7 @@ export default function ModelManagementPage() {
       <Dialog open={providerDialogOpen} onOpenChange={setProviderDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle><DialogDescription>供应商保存各自的 API Key 与请求参数，供上游模型共用。</DialogDescription></DialogHeader>
-          <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
             {/* 基础信息 */}
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3">
@@ -518,32 +517,30 @@ export default function ModelManagementPage() {
             {/* 协议默认地址 */}
             <div className="space-y-3">
               <div>
-                <Label className="text-sm">协议默认接口地址</Label>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">按需添加协议并填入默认地址；添加模型时不填地址则沿用这里的默认值。</p>
+                <Label className="text-sm">支持的协议默认接口地址</Label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">开启某个协议并填入默认地址；添加模型选择该协议时如不覆盖则沿用此地址。</p>
               </div>
               {providerEndpointEntries.map((entry, index) => (
-                <div key={index} className="space-y-3 rounded-md border p-3">
+                <div key={entry.protocol} className={cn('space-y-3 rounded-md border p-3 transition-colors', !entry.enabled && 'opacity-60')}>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-muted-foreground">协议 {index + 1}</span>
-                    {providerEndpointEntries.length > 1 && (
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="移除该接口" onClick={() => removeProviderEndpointEntry(index)}><Trash2 size={13} /></Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-[140px_1fr] gap-3">
-                    <div className="space-y-1.5">
-                      <Label>请求协议</Label>
-                      <Select value={entry.protocol} onValueChange={value => updateProviderEndpointEntry(index, { protocol: value as Protocol })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={providerEndpointEntries.some(other => other.protocol === option.value)}>{option.label}</SelectItem>)}</SelectContent></Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`provider-endpoint-url-${index}`}>完整接口地址</Label>
-                      <Input id={`provider-endpoint-url-${index}`} type="url" className="font-mono text-xs" value={entry.url} onChange={event => updateProviderEndpointEntry(index, { url: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} />
+                    <span className="text-xs font-semibold">{PROTOCOL_OPTIONS.find(o => o.value === entry.protocol)?.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">{entry.enabled ? '已配置' : '未配置'}</span>
+                      <Switch checked={entry.enabled} onCheckedChange={checked => updateProviderEndpointEntry(index, { enabled: checked })} />
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
-                  <ProtocolUrlHint protocol={entry.protocol} />
+                  {entry.enabled && (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`provider-endpoint-url-${index}`}>完整接口地址</Label>
+                        <Input id={`provider-endpoint-url-${index}`} type="url" className="font-mono text-xs" value={entry.url} onChange={event => updateProviderEndpointEntry(index, { url: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
+                      <ProtocolUrlHint protocol={entry.protocol} />
+                    </div>
+                  )}
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="h-8 w-full text-xs" onClick={addProviderEndpointEntry}><Plus size={13} /> 添加协议</Button>
             </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setProviderDialogOpen(false)}>取消</Button><Button disabled={saving || !providerName.trim() || (!editingProviderId && !apiKey.trim())} onClick={() => void saveProvider()}>{saving ? '保存中...' : editingProviderId ? '保存修改' : '创建供应商'}</Button></DialogFooter>
@@ -552,29 +549,46 @@ export default function ModelManagementPage() {
 
       <Dialog open={bindingDialogOpen} onOpenChange={setBindingDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>{editingBindingId ? '编辑上游模型' : '添加上游模型'}</DialogTitle><DialogDescription>一个模型可配置多个协议，接口地址留空则沿用供应商默认地址。</DialogDescription></DialogHeader>
-          <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
-            {bindingEntries.map((entry, index) => (
-              <div key={index} className="space-y-3 rounded-md border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground">协议 {index + 1}</span>
-                  {bindingEntries.length > 1 && (
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="移除该协议" onClick={() => removeBindingEntry(index)}><Trash2 size={13} /></Button>
+          <DialogHeader><DialogTitle>{editingBindings.length ? '编辑上游模型' : '添加上游模型'}</DialogTitle><DialogDescription>填写上游模型 ID，并选择该模型支持的协议接口；不同协议可使用不同地址。</DialogDescription></DialogHeader>
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="binding-model-id">上游模型 ID</Label>
+              <Input id="binding-model-id" className="font-mono text-xs" value={bindingModelId} onChange={event => setBindingModelId(event.target.value)} placeholder="gpt-4o" />
+              <p className="text-[11px] text-muted-foreground">该供应商下的实际模型名，发起请求时代理会按此 ID 调用。</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm">支持的协议接口</Label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">开启表示该模型支持此协议；可单独覆盖供应商在该协议下的默认地址。</p>
+              </div>
+              {bindingEntries.map((entry, index) => (
+                <div key={entry.protocol} className={cn('space-y-3 rounded-md border p-3 transition-colors', !entry.enabled && 'opacity-60')}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold">{PROTOCOL_OPTIONS.find(o => o.value === entry.protocol)?.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">{entry.enabled ? '已启用' : '未启用'}</span>
+                      <Switch checked={entry.enabled} onCheckedChange={checked => updateBindingEntry(index, { enabled: checked })} />
+                    </div>
+                  </div>
+                  {entry.enabled && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={`binding-override-${index}`}>覆盖供应商默认地址</Label>
+                        <Switch checked={entry.overrideUrl} onCheckedChange={checked => updateBindingEntry(index, { overrideUrl: checked, upstreamUrl: checked ? entry.upstreamUrl : '' })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`binding-url-${index}`}>完整接口地址</Label>
+                        <Input id={`binding-url-${index}`} type="url" className="font-mono text-xs" value={entry.upstreamUrl} onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })} placeholder={entry.overrideUrl ? PROTOCOL_PLACEHOLDERS[entry.protocol] : '使用供应商默认地址'} disabled={!entry.overrideUrl} />
+                      </div>
+                      <ProtocolUrlHint protocol={entry.protocol} />
+                    </div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5"><Label htmlFor={`binding-model-${index}`}>上游模型 ID</Label><Input id={`binding-model-${index}`} className="font-mono text-xs" value={entry.upstreamModelId} onChange={event => updateBindingEntry(index, { upstreamModelId: event.target.value })} placeholder="gpt-4o" /></div>
-                  <div className="space-y-1.5"><Label>请求协议</Label><Select value={entry.protocol} onValueChange={value => updateBindingEntryProtocol(index, value as Protocol)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={usedProtocols.includes(option.value)}>{option.label}</SelectItem>)}</SelectContent></Select></div>
-                </div>
-                <div className="space-y-1.5"><Label htmlFor={`binding-url-${index}`}>完整接口地址（可选）</Label><Input id={`binding-url-${index}`} type="url" className="font-mono text-xs" value={entry.upstreamUrl} onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} /><p className="text-[11px] text-muted-foreground">留空使用供应商默认地址，填写则覆盖默认值直接访问该地址。</p></div>
-                <ProtocolUrlHint protocol={entry.protocol} />
-              </div>
-            ))}
-            {!editingBindingId && (
-              <Button variant="outline" size="sm" className="h-8 w-full text-xs" onClick={addBindingEntry}><Plus size={13} /> 添加协议</Button>
-            )}
+              ))}
+            </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setBindingDialogOpen(false)}>取消</Button><Button disabled={saving || bindingEntries.length === 0 || bindingEntries.some(entry => !entry.upstreamModelId.trim())} onClick={() => void saveBinding()}>{saving ? '保存中...' : editingBindingId ? '保存修改' : '添加模型'}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setBindingDialogOpen(false)}>取消</Button><Button disabled={saving || !bindingModelId.trim() || !bindingEntries.some(entry => entry.enabled)} onClick={() => void saveBinding()}>{saving ? '保存中...' : editingBindings.length ? '保存修改' : '添加模型'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </PageLayout>
