@@ -17,10 +17,7 @@ export async function initDatabase(dataDir: string): Promise<Database> {
 
   try {
     client.exec('PRAGMA journal_mode = WAL')
-    migrateLegacyIntegerTimestamps(client)
     ensureSchema(client)
-    migrateLegacyProtocols(client)
-    migrateProviderUpstreamUrls(client)
     database = drizzle({ client })
     return database
   } catch (error) {
@@ -43,54 +40,50 @@ export async function closeDatabase(): Promise<void> {
 }
 
 function ensureSchema(db: DatabaseSync): void {
+  migrateRequestAttemptsForeignKeys(db)
   for (const statement of INITIAL_SCHEMA) {
     db.exec(statement)
   }
 }
 
-function migrateLegacyProtocols(db: DatabaseSync): void {
-  db.exec(`UPDATE model_bindings SET protocol = 'openai-completions' WHERE protocol = 'openai'`)
-  db.exec(`UPDATE model_bindings SET protocol = 'anthropic-messages' WHERE protocol = 'anthropic'`)
-  db.exec(`UPDATE model_bindings SET enabled = 0 WHERE protocol = 'gemini'`)
-  db.exec(`UPDATE request_logs SET protocol = 'openai-completions' WHERE protocol = 'openai'`)
-  db.exec(`UPDATE request_logs SET protocol = 'anthropic-messages' WHERE protocol = 'anthropic'`)
-}
+/**
+ * 迁移：旧的 request_attempts 表带了对 upstream_models(id) 的外键约束，
+ * 但该列实际存储的是上游模型名（upstreamModelId 名称），并非主键 id，
+ * 导致 FK 插入失败。这里检测到旧外键时重建表，去掉该外键。
+ */
+function migrateRequestAttemptsForeignKeys(db: DatabaseSync): void {
+  const rows = db
+    .prepare(
+      `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'request_attempts'`,
+    )
+    .all() as Array<{ sql: string | null }>
+  const ddl = rows[0]?.sql ?? ''
+  if (!ddl.includes('REFERENCES upstream_models')) return
 
-interface TableColumnInfo {
-  name: string
-  type: string
-}
-
-function migrateProviderUpstreamUrls(db: DatabaseSync): void {
-  const columns = db
-    .prepare("PRAGMA table_info('providers')")
-    .all() as unknown as TableColumnInfo[]
-  const hasUpstreamUrls = columns.some(column => column.name === 'upstreamUrls')
-  if (hasUpstreamUrls) return
-
-  db.exec(`ALTER TABLE providers ADD COLUMN upstreamUrls TEXT NOT NULL DEFAULT '{}'`)
-}
-
-function migrateLegacyIntegerTimestamps(db: DatabaseSync): void {
-  const columns = db
-    .prepare("PRAGMA table_info('providers')")
-    .all() as unknown as TableColumnInfo[]
-  const createdTime = columns.find(column => column.name === 'createdTime')
-  if (!createdTime || createdTime.type.toUpperCase() === 'BIGINT') return
-
-  db.exec('PRAGMA foreign_keys = OFF')
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    for (const statement of LEGACY_TIMESTAMP_MIGRATION) {
-      db.exec(statement)
-    }
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  } finally {
-    db.exec('PRAGMA foreign_keys = ON')
-  }
+  db.exec(`
+    BEGIN;
+    CREATE TABLE request_attempts_new (
+      id TEXT PRIMARY KEY,
+      requestId TEXT NOT NULL,
+      providerId TEXT NOT NULL,
+      upstreamModelId TEXT NOT NULL,
+      attemptIndex INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      errorCode TEXT,
+      errorMessage TEXT,
+      durationMilliseconds INTEGER NOT NULL,
+      createdTime BIGINT NOT NULL,
+      FOREIGN KEY (requestId) REFERENCES request_logs(id),
+      FOREIGN KEY (providerId) REFERENCES providers(id)
+    );
+    INSERT INTO request_attempts_new SELECT id, requestId, providerId, upstreamModelId, attemptIndex, status, errorCode, errorMessage, durationMilliseconds, createdTime FROM request_attempts;
+    DROP TABLE request_attempts;
+    ALTER TABLE request_attempts_new RENAME TO request_attempts;
+    CREATE INDEX IF NOT EXISTS idx_attempts_request_id ON request_attempts(requestId);
+    CREATE INDEX IF NOT EXISTS idx_attempts_provider ON request_attempts(providerId);
+    CREATE INDEX IF NOT EXISTS idx_attempts_created_time ON request_attempts(createdTime);
+    COMMIT;
+  `)
 }
 
 const INITIAL_SCHEMA = [
@@ -117,26 +110,23 @@ const INITIAL_SCHEMA = [
   )`,
   'CREATE INDEX IF NOT EXISTS idx_logical_models_name ON logical_models(name)',
   'CREATE INDEX IF NOT EXISTS idx_logical_models_deleted_time ON logical_models(deletedTime)',
-  `CREATE TABLE IF NOT EXISTS model_bindings (
+  `CREATE TABLE IF NOT EXISTS upstream_models (
     id TEXT PRIMARY KEY,
     logicalModelId TEXT NOT NULL,
     providerId TEXT NOT NULL,
-    protocol TEXT NOT NULL,
-    upstreamUrl TEXT NOT NULL DEFAULT '',
     upstreamModelId TEXT NOT NULL,
+    endpoints TEXT NOT NULL DEFAULT '[]',
     priority INTEGER NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
-    customAuthHeader TEXT,
     createdTime BIGINT NOT NULL,
     updatedTime BIGINT NOT NULL,
     deletedTime BIGINT,
     FOREIGN KEY (logicalModelId) REFERENCES logical_models(id),
     FOREIGN KEY (providerId) REFERENCES providers(id)
   )`,
-  'CREATE INDEX IF NOT EXISTS idx_bindings_logical_model_priority ON model_bindings(logicalModelId, priority)',
-  'CREATE INDEX IF NOT EXISTS idx_bindings_provider ON model_bindings(providerId)',
-  'CREATE INDEX IF NOT EXISTS idx_bindings_protocol ON model_bindings(protocol)',
-  'CREATE INDEX IF NOT EXISTS idx_bindings_deleted_time ON model_bindings(deletedTime)',
+  'CREATE INDEX IF NOT EXISTS idx_upstream_models_logical_priority ON upstream_models(logicalModelId, priority)',
+  'CREATE INDEX IF NOT EXISTS idx_upstream_models_provider ON upstream_models(providerId)',
+  'CREATE INDEX IF NOT EXISTS idx_upstream_models_deleted_time ON upstream_models(deletedTime)',
   `CREATE TABLE IF NOT EXISTS provider_health (
     providerId TEXT PRIMARY KEY,
     consecutiveFailures INTEGER NOT NULL DEFAULT 0,
@@ -173,7 +163,6 @@ const INITIAL_SCHEMA = [
     id TEXT PRIMARY KEY,
     requestId TEXT NOT NULL,
     providerId TEXT NOT NULL,
-    bindingId TEXT NOT NULL,
     upstreamModelId TEXT NOT NULL,
     attemptIndex INTEGER NOT NULL,
     status TEXT NOT NULL,
@@ -182,63 +171,9 @@ const INITIAL_SCHEMA = [
     durationMilliseconds INTEGER NOT NULL,
     createdTime BIGINT NOT NULL,
     FOREIGN KEY (requestId) REFERENCES request_logs(id),
-    FOREIGN KEY (providerId) REFERENCES providers(id),
-    FOREIGN KEY (bindingId) REFERENCES model_bindings(id)
+    FOREIGN KEY (providerId) REFERENCES providers(id)
   )`,
   'CREATE INDEX IF NOT EXISTS idx_attempts_request_id ON request_attempts(requestId)',
   'CREATE INDEX IF NOT EXISTS idx_attempts_provider ON request_attempts(providerId)',
   'CREATE INDEX IF NOT EXISTS idx_attempts_created_time ON request_attempts(createdTime)',
-]
-
-const LEGACY_TIMESTAMP_MIGRATION = [
-  'DROP INDEX IF EXISTS idx_attempts_created_time',
-  'DROP INDEX IF EXISTS idx_attempts_provider',
-  'DROP INDEX IF EXISTS idx_attempts_request_id',
-  'DROP INDEX IF EXISTS idx_request_logs_status',
-  'DROP INDEX IF EXISTS idx_request_logs_created_time',
-  'DROP INDEX IF EXISTS idx_bindings_deleted_time',
-  'DROP INDEX IF EXISTS idx_bindings_protocol',
-  'DROP INDEX IF EXISTS idx_bindings_provider',
-  'DROP INDEX IF EXISTS idx_bindings_logical_model_priority',
-  'DROP INDEX IF EXISTS idx_logical_models_deleted_time',
-  'DROP INDEX IF EXISTS idx_logical_models_name',
-  'DROP INDEX IF EXISTS idx_providers_deleted_time',
-  'ALTER TABLE request_attempts RENAME TO request_attempts_legacy',
-  'ALTER TABLE request_logs RENAME TO request_logs_legacy',
-  'ALTER TABLE provider_health RENAME TO provider_health_legacy',
-  'ALTER TABLE model_bindings RENAME TO model_bindings_legacy',
-  'ALTER TABLE logical_models RENAME TO logical_models_legacy',
-  'ALTER TABLE providers RENAME TO providers_legacy',
-  'ALTER TABLE settings RENAME TO settings_legacy',
-  INITIAL_SCHEMA[0],
-  INITIAL_SCHEMA[2],
-  INITIAL_SCHEMA[5],
-  INITIAL_SCHEMA[10],
-  INITIAL_SCHEMA[11],
-  INITIAL_SCHEMA[12],
-  INITIAL_SCHEMA[15],
-  `INSERT INTO providers SELECT id, name, apiKeyReference, timeoutMilliseconds, enabled,
-    createdTime, updatedTime, deletedTime FROM providers_legacy`,
-  `INSERT INTO logical_models SELECT id, name, description, enabled,
-    createdTime, updatedTime, deletedTime FROM logical_models_legacy`,
-  `INSERT INTO model_bindings SELECT id, logicalModelId, providerId, protocol, upstreamUrl,
-    upstreamModelId, priority, enabled, customAuthHeader, createdTime, updatedTime, deletedTime
-    FROM model_bindings_legacy`,
-  `INSERT INTO provider_health SELECT providerId, consecutiveFailures, cooldownUntilTime,
-    lastSuccessTime, lastFailureTime, updatedTime FROM provider_health_legacy`,
-  `INSERT INTO settings SELECT id, listenHost, listenPort, accessTokenReference, logRetentionCount,
-    cooldownBaseSeconds, cooldownMaxSeconds, consecutiveFailureThreshold, idleTimeoutMilliseconds,
-    updatedTime FROM settings_legacy`,
-  `INSERT INTO request_logs SELECT id, logicalModelId, protocol, status,
-    totalDurationMilliseconds, totalTokens, createdTime FROM request_logs_legacy`,
-  `INSERT INTO request_attempts SELECT id, requestId, providerId, bindingId, upstreamModelId,
-    attemptIndex, status, errorCode, errorMessage, durationMilliseconds, createdTime
-    FROM request_attempts_legacy`,
-  'DROP TABLE request_attempts_legacy',
-  'DROP TABLE request_logs_legacy',
-  'DROP TABLE provider_health_legacy',
-  'DROP TABLE model_bindings_legacy',
-  'DROP TABLE logical_models_legacy',
-  'DROP TABLE providers_legacy',
-  'DROP TABLE settings_legacy',
 ]

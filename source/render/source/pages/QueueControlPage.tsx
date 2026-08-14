@@ -18,8 +18,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Circle, CircleDot, Copy, GripVertical, KeyRound, Plug, RefreshCw, Server, Target } from 'lucide-react'
-import type { LogicalModel, ModelBinding, Provider, ProviderHealth, Settings } from '@common/schemas'
-import { bindingApi, healthApi, logicalModelApi, providerApi, proxyApi, queueApi, settingsApi, type ProxyServerStatus } from '@/api'
+import type { LogicalModel, UpstreamModel, Provider, ProviderHealth, Settings } from '@common/schemas'
+import { upstreamModelApi, healthApi, logicalModelApi, providerApi, proxyApi, queueApi, settingsApi, type ProxyServerStatus } from '@/api'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,12 +47,12 @@ function SortableBinding(props: SortableBindingProps) {
 
 export default function QueueControlPage() {
   const [logicalModel, setLogicalModel] = useState<LogicalModel | null>(null)
-  const [bindings, setBindings] = useState<ModelBinding[]>([])
+  const [models, setModels] = useState<UpstreamModel[]>([])
   const [providers, setProviders] = useState<Record<string, Provider>>({})
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({})
   const [settings, setSettings] = useState<Settings | null>(null)
   const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
-  const [manualBindingId, setManualBindingId] = useState<string | null>(null)
+  const [manualModelId, setManualModelId] = useState<string | null>(null)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -82,20 +82,20 @@ export default function QueueControlPage() {
     }
     if (!modelResult.success || !providerResult.success || !healthResult.success || !settingsResult.success || !statusResult.success || !queueResult.success) return
     const currentModel = modelResult.data.find(model => model.enabled) ?? modelResult.data[0] ?? null
-    const bindingResult = currentModel ? await bindingApi.list(currentModel.id) : null
-    if (bindingResult && !bindingResult.success) {
-      setErrorMessage(bindingResult.errorMessage)
+    const modelListResult = currentModel ? await upstreamModelApi.list(currentModel.id) : null
+    if (modelListResult && !modelListResult.success) {
+      setErrorMessage(modelListResult.errorMessage)
       setLoading(false)
       return
     }
     setLogicalModel(currentModel)
-    setBindings(bindingResult?.success ? bindingResult.data : [])
+    setModels(modelListResult?.success ? modelListResult.data : [])
     setProviders(Object.fromEntries(providerResult.data.map(provider => [provider.id, provider])))
     setHealth(Object.fromEntries(healthResult.data.map(item => [item.providerId, item])))
     setSettings(settingsResult.data)
     setProxyStatus(statusResult.data)
-    setManualBindingId(queueResult.data.manualBindingId)
-    setMode(queueResult.data.manualBindingId ? 'manual' : 'auto')
+    setManualModelId(queueResult.data.manualModelId)
+    setMode(queueResult.data.manualModelId ? 'manual' : 'auto')
     setLoading(false)
   }
 
@@ -115,23 +115,23 @@ export default function QueueControlPage() {
     if (nextMode === 'auto') {
       const result = await queueApi.switch(null)
       if (!result.success) return setErrorMessage(result.errorMessage)
-      setManualBindingId(null)
+      setManualModelId(null)
       setMode('auto')
       return
     }
-    const initialBindingId = manualBindingId ?? bindings.find(binding => binding.enabled)?.id ?? null
-    if (!initialBindingId) return
-    const result = await queueApi.switch(initialBindingId)
+    const initialModelId = manualModelId ?? models.find(model => model.enabled)?.id ?? null
+    if (!initialModelId) return
+    const result = await queueApi.switch(initialModelId)
     if (!result.success) return setErrorMessage(result.errorMessage)
-    setManualBindingId(initialBindingId)
+    setManualModelId(initialModelId)
     setMode('manual')
   }
 
-  const selectManualBinding = async (binding: ModelBinding) => {
-    if (mode !== 'manual' || !binding.enabled || isCooling(binding.providerId)) return
-    const result = await queueApi.switch(binding.id)
+  const selectManualModel = async (model: UpstreamModel) => {
+    if (mode !== 'manual' || !model.enabled || isCooling(model.providerId)) return
+    const result = await queueApi.switch(model.id)
     if (!result.success) return setErrorMessage(result.errorMessage)
-    setManualBindingId(binding.id)
+    setManualModelId(model.id)
   }
 
   const isCooling = (providerId: string) => {
@@ -139,20 +139,20 @@ export default function QueueControlPage() {
     return Boolean(cooldownUntil && cooldownUntil > Date.now())
   }
 
-  const updateEnabled = async (binding: ModelBinding, enabled: boolean) => {
-    const result = await bindingApi.update(binding.id, { enabled })
+  const updateEnabled = async (model: UpstreamModel, enabled: boolean) => {
+    const result = await upstreamModelApi.update(model.id, { enabled })
     if (!result.success) return setErrorMessage(result.errorMessage)
-    setBindings(current => current.map(item => item.id === binding.id ? result.data : item))
-    if (!enabled && manualBindingId === binding.id) await changeMode('auto')
+    setModels(current => current.map(item => item.id === model.id ? result.data : item))
+    if (!enabled && manualModelId === model.id) await changeMode('auto')
   }
 
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
-    const oldIndex = bindings.findIndex(binding => binding.id === active.id)
-    const newIndex = bindings.findIndex(binding => binding.id === over.id)
-    const reordered = arrayMove(bindings, oldIndex, newIndex).map((binding, index) => ({ ...binding, priority: index + 1 }))
-    setBindings(reordered)
-    const results = await Promise.all(reordered.map(binding => bindingApi.update(binding.id, { priority: binding.priority })))
+    const oldIndex = models.findIndex(model => model.id === active.id)
+    const newIndex = models.findIndex(model => model.id === over.id)
+    const reordered = arrayMove(models, oldIndex, newIndex).map((model, index) => ({ ...model, priority: index + 1 }))
+    setModels(reordered)
+    const results = await Promise.all(reordered.map(model => upstreamModelApi.update(model.id, { priority: model.priority })))
     if (results.some(result => !result.success)) {
       setErrorMessage('队列顺序保存失败，已恢复服务端数据')
       await loadData()
@@ -198,7 +198,7 @@ export default function QueueControlPage() {
                   <div className="space-y-1.5"><Label className="text-[11px] text-muted-foreground"><Plug size={11} className="mr-1 inline" />代理地址</Label><div className="flex gap-2"><Input readOnly value={proxyBaseUrl} className="h-8 font-mono text-xs" /><Button variant="secondary" size="sm" className="h-8 text-xs" disabled={!proxyStatus?.running} onClick={() => void copyEndpoint()}><Copy size={13} /> {copied ? '已复制' : '复制'}</Button></div></div>
                   <div className="space-y-1.5"><Label className="text-[11px] text-muted-foreground"><KeyRound size={11} className="mr-1 inline" />服务状态</Label><div className="flex h-8 items-center rounded-md border px-3"><span className={cn('mr-2 h-1.5 w-1.5 rounded-full', proxyStatus?.running ? 'bg-success' : 'bg-muted-foreground')} /><span className="text-xs">{proxyStatus?.running ? '运行中' : '已暂停'}</span></div></div>
                 </div>
-                <div className="flex flex-wrap gap-2">{(['openai-completions', 'openai-responses', 'anthropic-messages'] as const).map(protocol => <Badge key={protocol} variant="secondary">{protocol.toUpperCase()} · {bindings.filter(binding => binding.protocol === protocol && binding.enabled).length}</Badge>)}</div>
+                <div className="flex flex-wrap gap-2">{(['openai-completions', 'openai-responses', 'anthropic-messages'] as const).map(protocol => <Badge key={protocol} variant="secondary">{protocol.toUpperCase()} · {models.filter(model => model.endpoints.some(endpoint => endpoint.protocol === protocol) && model.enabled).length}</Badge>)}</div>
               </CardContent>
             </Card>
 
@@ -208,23 +208,24 @@ export default function QueueControlPage() {
                 <Tabs value={mode} onValueChange={value => void changeMode(value)}><TabsList className="h-7"><TabsTrigger value="auto" className="h-6 px-2.5 text-[11px]"><RefreshCw size={12} /> 自动转移</TabsTrigger><TabsTrigger value="manual" className="h-6 px-2.5 text-[11px]"><Target size={12} /> 手动指定</TabsTrigger></TabsList></Tabs>
               </CardHeader>
               <CardContent className="pt-0">
-                {bindings.length ? (
+                {models.length ? (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={event => void handleDragEnd(event)}>
-                    <SortableContext items={bindings.map(binding => binding.id)} strategy={verticalListSortingStrategy}>
+                    <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
                       <div className="-mx-4 divide-y border-t">
-                        {bindings.map(binding => {
-                          const provider = providers[binding.providerId]
-                          const cooling = isCooling(binding.providerId)
-                          const selected = mode === 'manual' && manualBindingId === binding.id
+                        {models.map(model => {
+                          const provider = providers[model.providerId]
+                          const cooling = isCooling(model.providerId)
+                          const selected = mode === 'manual' && manualModelId === model.id
+                          const endpointUrls = model.endpoints.map(endpoint => endpoint.upstreamUrl.trim()).filter(Boolean)
                           return (
-                            <SortableBinding key={binding.id} id={binding.id}>
+                            <SortableBinding key={model.id} id={model.id}>
                               {(handleProps, dragging) => (
-                                <div onClick={() => void selectManualBinding(binding)} className={cn('flex items-center gap-2 border-l-2 border-l-transparent px-4 py-2.5', selected && 'border-l-primary bg-primary/5', mode === 'manual' && binding.enabled && !cooling && 'cursor-pointer hover:bg-muted/40', dragging && 'bg-muted/60')}>
-                                  {mode === 'manual' ? selected ? <CircleDot size={16} className="text-primary" /> : <Circle size={16} className="text-muted-foreground/40" /> : <button aria-label={`拖动 ${binding.upstreamModelId}`} className="cursor-grab touch-none text-muted-foreground/50" {...handleProps}><GripVertical size={14} /></button>}
-                                  <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">{binding.priority}</div>
-                                  <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="truncate text-xs font-semibold">{provider?.name ?? '未知供应商'}</span><span className="truncate font-mono text-[11px] text-muted-foreground">{binding.upstreamModelId}</span></div><div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{binding.upstreamUrl}</div></div>
-                                  <Badge variant={cooling ? 'destructive' : binding.enabled ? 'success' : 'muted'}>{cooling ? '冷却中' : binding.enabled ? selected ? '当前指定' : '待命' : '已禁用'}</Badge>
-                                  <Switch checked={binding.enabled} onCheckedChange={enabled => void updateEnabled(binding, enabled)} onClick={event => event.stopPropagation()} aria-label={`${binding.upstreamModelId} 启用状态`} />
+                                <div onClick={() => void selectManualModel(model)} className={cn('flex items-center gap-2 border-l-2 border-l-transparent px-4 py-2.5', selected && 'border-l-primary bg-primary/5', mode === 'manual' && model.enabled && !cooling && 'cursor-pointer hover:bg-muted/40', dragging && 'bg-muted/60')}>
+                                  {mode === 'manual' ? selected ? <CircleDot size={16} className="text-primary" /> : <Circle size={16} className="text-muted-foreground/40" /> : <button aria-label={`拖动 ${model.upstreamModelId}`} className="cursor-grab touch-none text-muted-foreground/50" {...handleProps}><GripVertical size={14} /></button>}
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">{model.priority}</div>
+                                  <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="truncate text-xs font-semibold">{provider?.name ?? '未知供应商'}</span><span className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</span></div><div className="mt-0.5 flex flex-wrap gap-1">{model.endpoints.map(endpoint => <Badge key={endpoint.protocol} variant="outline" className="h-4 px-1 text-[9px]">{endpoint.protocol.toUpperCase()}</Badge>)}<span className="truncate font-mono text-[10px] text-muted-foreground">{endpointUrls.join(' / ')}</span></div></div>
+                                  <Badge variant={cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>{cooling ? '冷却中' : model.enabled ? selected ? '当前指定' : '待命' : '已禁用'}</Badge>
+                                  <Switch checked={model.enabled} onCheckedChange={enabled => void updateEnabled(model, enabled)} onClick={event => event.stopPropagation()} aria-label={`${model.upstreamModelId} 启用状态`} />
                                 </div>
                               )}
                             </SortableBinding>

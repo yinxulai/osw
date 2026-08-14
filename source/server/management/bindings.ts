@@ -1,62 +1,58 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { ModelBindingSchema } from '@common/schemas'
+import { UpstreamModelSchema } from '@common/schemas'
 import {
-  createBinding,
-  deleteBinding,
-  listBindingsByModel,
-  updateBinding,
+  createUpstreamModel,
+  deleteUpstreamModel,
+  listUpstreamModelsByLogicalModel,
+  updateUpstreamModel,
 } from '../database/store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 
-export const bindingRoutes: Record<string, ManagementHandler> = {
-  '/api/binding/list': handleListBindings,
-  '/api/binding/create': handleCreateBinding,
-  '/api/binding/update': handleUpdateBinding,
-  '/api/binding/delete': handleDeleteBinding,
+export const upstreamModelRoutes: Record<string, ManagementHandler> = {
+  '/api/upstream-model/list': handleListUpstreamModels,
+  '/api/upstream-model/create': handleCreateUpstreamModel,
+  '/api/upstream-model/update': handleUpdateUpstreamModel,
+  '/api/upstream-model/delete': handleDeleteUpstreamModel,
 }
 
-const ListBindingsSchema = z.object({ logicalModelId: z.string() })
-async function handleListBindings(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { logicalModelId } = ListBindingsSchema.parse(body)
-  sendSuccess(res, await listBindingsByModel(logicalModelId))
+const ListUpstreamModelsSchema = z.object({ logicalModelId: z.string() })
+async function handleListUpstreamModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { logicalModelId } = ListUpstreamModelsSchema.parse(body)
+  sendSuccess(res, await listUpstreamModelsByLogicalModel(logicalModelId))
 }
 
-const CreateBindingSchema = ModelBindingSchema.pick({
+const CreateUpstreamModelSchema = UpstreamModelSchema.pick({
   logicalModelId: true,
   providerId: true,
-  protocol: true,
-  upstreamUrl: true,
   upstreamModelId: true,
+  endpoints: true,
   priority: true,
   enabled: true,
-  customAuthHeader: true,
-}).partial({ enabled: true, customAuthHeader: true, upstreamUrl: true })
+}).partial({ endpoints: true, enabled: true })
 
-async function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const input = CreateBindingSchema.parse(body)
-  sendSuccess(res, await createBinding({
+async function handleCreateUpstreamModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = CreateUpstreamModelSchema.parse(body)
+  sendSuccess(res, await createUpstreamModel({
     logicalModelId: input.logicalModelId,
     providerId: input.providerId,
-    protocol: input.protocol,
-    upstreamUrl: input.upstreamUrl ?? '',
     upstreamModelId: input.upstreamModelId,
+    endpoints: input.endpoints ?? [],
     priority: input.priority,
     enabled: input.enabled ?? true,
-    customAuthHeader: input.customAuthHeader ?? null,
   }))
 }
 
-const UpdateBindingSchema = ModelBindingSchema.partial().required({ id: true })
-async function handleUpdateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { id, ...updates } = UpdateBindingSchema.parse(body)
-  sendSuccess(res, await updateBinding(id, updates))
+const UpdateUpstreamModelSchema = UpstreamModelSchema.partial().required({ id: true })
+async function handleUpdateUpstreamModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id, ...updates } = UpdateUpstreamModelSchema.parse(body)
+  sendSuccess(res, await updateUpstreamModel(id, updates))
 }
 
-const DeleteBindingSchema = z.object({ id: z.string() })
-async function handleDeleteBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { id } = DeleteBindingSchema.parse(body)
-  await deleteBinding(id)
+const DeleteUpstreamModelSchema = z.object({ id: z.string() })
+async function handleDeleteUpstreamModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id } = DeleteUpstreamModelSchema.parse(body)
+  await deleteUpstreamModel(id)
   sendSuccess(res, { id })
 }

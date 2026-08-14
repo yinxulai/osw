@@ -2,6 +2,7 @@ import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
+import { installLogCapture } from '../management/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { startProxyServer, stopProxyServer } from '../proxy/server'
 
@@ -32,6 +33,7 @@ export class ServerRuntime {
 
     this.state = 'starting'
     configureSecretStore(this.options.secretStore)
+    installLogCapture()
     await initDatabase(this.options.dataDir)
 
     try {

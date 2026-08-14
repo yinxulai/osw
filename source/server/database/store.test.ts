@@ -4,13 +4,13 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, initDatabase } from './index'
 import {
-  createBinding,
+  createUpstreamModel,
   createLogicalModel,
   createProvider,
-  getBinding,
+  getUpstreamModel,
   getLogicalModel,
   getProvider,
-  listBindingsByModel,
+  listUpstreamModelsByLogicalModel,
   deleteProvider,
   listLogicalModels,
   listProviders,
@@ -38,26 +38,30 @@ describe('store row mapping', () => {
       upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
-    const binding = await createBinding({
+    const upstreamModel = await createUpstreamModel({
       logicalModelId: model.id,
       providerId: provider.id,
-      protocol: 'openai-completions',
-      upstreamUrl: 'https://api.example.com/v1/chat/completions',
       upstreamModelId: 'upstream-model',
+      endpoints: [
+        {
+          protocol: 'openai-completions',
+          upstreamUrl: 'https://api.example.com/v1/chat/completions',
+          customAuthHeader: null,
+        },
+      ],
       priority: 1,
       enabled: false,
-      customAuthHeader: null,
     })
 
     expect((await getProvider(provider.id))?.enabled).toBe(false)
     expect((await listProviders())[0].enabled).toBe(false)
     expect((await getLogicalModel(model.id))?.enabled).toBe(true)
     expect((await listLogicalModels())[0].enabled).toBe(true)
-    expect((await getBinding(binding.id))?.enabled).toBe(false)
-    expect((await listBindingsByModel(model.id))[0].enabled).toBe(false)
+    expect((await getUpstreamModel(upstreamModel.id))?.enabled).toBe(false)
+    expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
   })
 
-  it('disables active bindings when their provider is deleted', async () => {
+  it('disables active upstream models when their provider is deleted', async () => {
     const provider = await createProvider({
       name: 'Provider',
       apiKeyReference: 'key_reference',
@@ -66,19 +70,23 @@ describe('store row mapping', () => {
       upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
-    await createBinding({
+    await createUpstreamModel({
       logicalModelId: model.id,
       providerId: provider.id,
-      protocol: 'openai-completions',
-      upstreamUrl: 'https://api.example.com/v1/chat/completions',
       upstreamModelId: 'upstream-model',
+      endpoints: [
+        {
+          protocol: 'openai-completions',
+          upstreamUrl: 'https://api.example.com/v1/chat/completions',
+          customAuthHeader: null,
+        },
+      ],
       priority: 1,
       enabled: true,
-      customAuthHeader: null,
     })
 
     await deleteProvider(provider.id)
 
-    expect((await listBindingsByModel(model.id))[0].enabled).toBe(false)
+    expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
   })
 })

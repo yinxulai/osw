@@ -25,7 +25,7 @@ describe('resolveUpstreamUrl', () => {
 })
 
 describe('resolveEffectiveUpstreamUrl', () => {
-  it('prefers the binding-level URL when it is set', () => {
+  it('prefers the model endpoint URL when it is set', () => {
     expect(
       resolveEffectiveUpstreamUrl(
         'https://model.example.com/v1/chat/completions',
@@ -35,7 +35,7 @@ describe('resolveEffectiveUpstreamUrl', () => {
     ).toBe('https://model.example.com/v1/chat/completions')
   })
 
-  it('falls back to the provider-level URL for the protocol when binding URL is empty', () => {
+  it('falls back to the provider-level URL for the protocol when model endpoint URL is empty', () => {
     expect(
       resolveEffectiveUpstreamUrl(
         '',
@@ -55,7 +55,7 @@ describe('resolveEffectiveUpstreamUrl', () => {
     ).toBe('https://api.anthropic.com/v1/messages')
   })
 
-  it('throws when neither binding URL nor provider default exists for the protocol', () => {
+  it('throws when neither model endpoint URL nor provider default exists for the protocol', () => {
     expect(() =>
       resolveEffectiveUpstreamUrl('', '{}', 'openai-responses'),
     ).toThrow('未配置上游地址')

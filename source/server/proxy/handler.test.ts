@@ -1,11 +1,11 @@
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BindingWithProvider } from './router'
+import type { ModelWithProvider } from './router'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 
 const mocks = vi.hoisted(() => ({
-  bindings: [] as BindingWithProvider[],
+  models: [] as ModelWithProvider[],
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
 }))
@@ -14,7 +14,7 @@ vi.mock('./router', async importOriginal => {
   const original = await importOriginal<typeof import('./router')>()
   return {
     ...original,
-    getAvailableBindings: async () => mocks.bindings,
+    getAvailableModels: async () => mocks.models,
   }
 })
 
@@ -25,6 +25,9 @@ vi.mock('./health', () => ({
 
 vi.mock('../database/store', () => ({
   getSettings: async () => ({ idleTimeoutMilliseconds: 1_000 }),
+  createRequestLog: async (input: Record<string, unknown>) => ({ id: 'req_test', ...input }),
+  createRequestAttempt: async (input: Record<string, unknown>) => ({ id: 'att_test', ...input }),
+  updateRequestLogStatus: async () => undefined,
 }))
 
 import { handleProxyRequest } from './handler'
@@ -32,7 +35,7 @@ import { handleProxyRequest } from './handler'
 const servers: http.Server[] = []
 
 afterEach(async () => {
-  mocks.bindings = []
+  mocks.models = []
   vi.clearAllMocks()
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
 })
@@ -45,19 +48,17 @@ async function listen(handler: http.RequestListener): Promise<{ server: http.Ser
   return { server, url: `http://127.0.0.1:${port}` }
 }
 
-function binding(id: string, providerId: string, upstreamUrl: string, upstreamModelId: string, protocol: BindingWithProvider['binding']['protocol'] = 'openai-completions'): BindingWithProvider {
+function model(id: string, providerId: string, upstreamUrl: string, upstreamModelId: string, protocol: ModelWithProvider['model']['endpoints'][number]['protocol'] = 'openai-completions'): ModelWithProvider {
   const time = Date.now()
   return {
-    binding: {
+    model: {
       id,
       logicalModelId: 'model_default',
       providerId,
-      protocol,
-      upstreamUrl,
       upstreamModelId,
+      endpoints: [{ protocol, upstreamUrl, customAuthHeader: null }],
       priority: 1,
       enabled: true,
-      customAuthHeader: null,
       createdTime: time,
       updatedTime: time,
       deletedTime: null,
@@ -97,9 +98,9 @@ describe('handleProxyRequest', () => {
       })
     })
 
-    mocks.bindings = [
-      binding('bind_first', 'prov_first', `${first.url}/configured/first`, 'first-model'),
-      binding('bind_second', 'prov_second', `${second.url}/configured/second?version=1`, 'second-model'),
+    mocks.models = [
+      model('model_first', 'prov_first', `${first.url}/configured/first`, 'first-model'),
+      model('model_second', 'prov_second', `${second.url}/configured/second?version=1`, 'second-model'),
     ]
 
     const proxy = await listen((req, res) => {

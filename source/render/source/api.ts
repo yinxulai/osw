@@ -37,15 +37,13 @@ type CreateLogicalModelInput = {
   enabled?: boolean
 }
 
-type CreateBindingInput = {
+type CreateUpstreamModelInput = {
   logicalModelId: string
   providerId: string
-  protocol: string
-  upstreamUrl?: string
   upstreamModelId: string
+  endpoints?: ProtocolEndpoint[]
   priority: number
   enabled?: boolean
-  customAuthHeader?: string | null
 }
 
 async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse<T>> {
@@ -86,7 +84,7 @@ async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse
 
 // ========== Provider ==========
 
-import type { Provider, ProviderHealth, LogicalModel, ModelBinding, Settings } from '@common/schemas'
+import type { Provider, ProviderHealth, LogicalModel, UpstreamModel, ProtocolEndpoint, Settings } from '@common/schemas'
 
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
@@ -112,15 +110,16 @@ export const logicalModelApi = {
   remove: (id: string) => request<{ id: string }>('/logical-model/delete', { id }),
 }
 
-// ========== Model Binding ==========
+// ========== Upstream Model ==========
 
-export const bindingApi = {
+export const upstreamModelApi = {
   list: (logicalModelId: string) =>
-    request<ModelBinding[]>('/binding/list', { logicalModelId }),
-  create: (data: CreateBindingInput) => request<ModelBinding>('/binding/create', data),
-  update: (id: string, updates: Partial<ModelBinding>) =>
-    request<ModelBinding>('/binding/update', { id, ...updates }),
-  remove: (id: string) => request<{ id: string }>('/binding/delete', { id }),
+    request<UpstreamModel[]>('/upstream-model/list', { logicalModelId }),
+  create: (data: CreateUpstreamModelInput) =>
+    request<UpstreamModel>('/upstream-model/create', data),
+  update: (id: string, updates: Partial<UpstreamModel>) =>
+    request<UpstreamModel>('/upstream-model/update', { id, ...updates }),
+  remove: (id: string) => request<{ id: string }>('/upstream-model/delete', { id }),
 }
 
 // ========== Settings ==========
@@ -134,9 +133,9 @@ export const settingsApi = {
 // ========== Queue ==========
 
 export const queueApi = {
-  status: () => request<{ manualBindingId: string | null }>('/queue/status'),
-  switch: (bindingId: string | null) =>
-    request<{ bindingId: string | null }>('/queue/switch', { bindingId }),
+  status: () => request<{ manualModelId: string | null }>('/queue/status'),
+  switch: (modelId: string | null) =>
+    request<{ modelId: string | null }>('/queue/switch', { modelId }),
 }
 
 // ========== Health ==========
@@ -158,4 +157,47 @@ export const proxyApi = {
   start: () => request<ProxyServerStatus>('/proxy/start'),
   stop: () => request<ProxyServerStatus>('/proxy/stop'),
   restart: () => request<ProxyServerStatus>('/proxy/restart'),
+}
+
+// ========== Logs ==========
+
+export interface LogEntry {
+  id: number
+  level: 'info' | 'warn' | 'error' | 'debug'
+  timestamp: string
+  message: string
+}
+
+export const logsApi = {
+  list: (params: { after?: number; limit?: number } = {}) =>
+    request<{ logs: LogEntry[]; latestId: number }>('/logs/list', params),
+  export: () => request<{ content: string }>('/logs/export', {}),
+  clear: () => request<{ cleared: boolean }>('/logs/clear', {}),
+}
+
+// ========== Request Logs ==========
+
+export interface RequestLogEntry {
+  id: string
+  logicalModelId: string
+  protocol: string
+  status: string
+  totalDurationMilliseconds: number
+  totalTokens: number | null
+  createdTime: number
+  attempts: Array<{
+    attemptIndex: number
+    status: string
+    providerId: string
+    providerName: string
+    upstreamModelId: string
+    errorCode: string | null
+    errorMessage: string | null
+    durationMilliseconds: number
+    createdTime: number
+  }>
+}
+
+export const requestLogApi = {
+  list: (limit = 30) => request<{ logs: RequestLogEntry[] }>('/request-log/list', { limit }),
 }

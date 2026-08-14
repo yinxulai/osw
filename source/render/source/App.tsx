@@ -9,6 +9,8 @@ import {
   CircleDot,
   Moon,
   Sun,
+  SquareTerminal,
+  History,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -19,9 +21,11 @@ import QueueControlPage from './pages/QueueControlPage'
 import ModelManagementPage from './pages/ModelManagementPage'
 import OverviewPage from './pages/OverviewPage'
 import RuntimeSettingsPage from './pages/RuntimeSettingsPage'
+import LogsPage from './pages/LogsPage'
+import RequestLogsPage from './pages/RequestLogsPage'
 import { proxyApi, type ProxyServerStatus } from './api'
 
-type PageKey = 'queue' | 'providers' | 'overview' | 'settings'
+type PageKey = 'queue' | 'providers' | 'overview' | 'requests' | 'settings' | 'logs'
 type Theme = 'light' | 'dark'
 
 interface NavItem {
@@ -35,6 +39,8 @@ const navItems: NavItem[] = [
   { key: 'queue', label: '模型队列', icon: Layers, section: '主要' },
   { key: 'providers', label: '模型管理', icon: Plug, section: '主要' },
   { key: 'overview', label: '统计分析', icon: BarChart3, section: '数据' },
+  { key: 'requests', label: '请求记录', icon: History, section: '数据' },
+  { key: 'logs', label: '运行日志', icon: SquareTerminal, section: '系统' },
   { key: 'settings', label: '设置', icon: Settings, section: '系统' },
 ]
 
@@ -203,6 +209,8 @@ function App() {
         {activePage === 'queue' && <QueueControlPage />}
         {activePage === 'providers' && <ModelManagementPage />}
         {activePage === 'overview' && <OverviewPage />}
+        {activePage === 'requests' && <RequestLogsPage />}
+        {activePage === 'logs' && <LogsPage />}
         {activePage === 'settings' && <RuntimeSettingsPage />}
       </AppLayout>
     </TooltipProvider>

@@ -44,23 +44,39 @@ export const LogicalModelSchema = z.object({
 })
 export type LogicalModel = z.infer<typeof LogicalModelSchema>
 
-// ========== Model Binding ==========
+// ========== Upstream Model ==========
 
-export const ModelBindingSchema = z.object({
-  id: z.string().startsWith('bind_'),
+/**
+ * 单个上游协议端点配置。
+ * 同一上游模型可通过多个协议访问，每个协议是一个端点。
+ */
+export const ProtocolEndpointSchema = z.object({
+  protocol: ProtocolSchema,
+  /** 完整接口地址；留空则回退到供应商在该协议下的默认地址 */
+  upstreamUrl: z.string().default(''),
+  /** 自定义认证请求头名称；为空则按协议标准方式认证 */
+  customAuthHeader: z.string().nullable(),
+})
+export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
+
+/**
+ * 上游模型：一个 (供应商 × 上游模型名) 的实体，内部可挂多个协议端点。
+ * 一个模型只占队列中的一行，即使支持多个协议。
+ */
+export const UpstreamModelSchema = z.object({
+  id: z.string().startsWith('model_'),
   logicalModelId: z.string().startsWith('model_'),
   providerId: z.string().startsWith('prov_'),
-  protocol: ProtocolSchema,
-  upstreamUrl: z.string().default(''),
   upstreamModelId: z.string().min(1),
+  /** 协议端点列表，一个模型可支持多个协议 */
+  endpoints: z.array(ProtocolEndpointSchema).default([]),
   priority: z.number().int().positive(),
   enabled: z.boolean().default(true),
-  customAuthHeader: z.string().nullable(),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
   deletedTime: z.number().int().nullable(),
 })
-export type ModelBinding = z.infer<typeof ModelBindingSchema>
+export type UpstreamModel = z.infer<typeof UpstreamModelSchema>
 
 // ========== Provider Health ==========
 
@@ -109,7 +125,6 @@ export const RequestAttemptSchema = z.object({
   id: z.string().startsWith('att_'),
   requestId: z.string().startsWith('req_'),
   providerId: z.string().startsWith('prov_'),
-  bindingId: z.string().startsWith('bind_'),
   upstreamModelId: z.string(),
   attemptIndex: z.number().int().nonnegative(),
   status: RequestStatusSchema,

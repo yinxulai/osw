@@ -2,7 +2,8 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import type {
   Provider,
   LogicalModel,
-  ModelBinding,
+  UpstreamModel,
+  ProtocolEndpoint,
   ProviderHealth,
   Settings,
   RequestLog,
@@ -13,7 +14,7 @@ import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import {
   logicalModels,
-  modelBindings,
+  upstreamModels,
   providerHealth,
   providers,
   requestAttempts,
@@ -110,9 +111,9 @@ export async function deleteProvider(id: string): Promise<void> {
       .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
       .run()
     transaction
-      .update(modelBindings)
+      .update(upstreamModels)
       .set({ enabled: false, updatedTime: time })
-      .where(and(eq(modelBindings.providerId, id), isNull(modelBindings.deletedTime)))
+      .where(and(eq(upstreamModels.providerId, id), isNull(upstreamModels.deletedTime)))
       .run()
   })
 }
@@ -191,78 +192,82 @@ export async function deleteLogicalModel(id: string): Promise<void> {
       .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
       .run()
     transaction
-      .update(modelBindings)
+      .update(upstreamModels)
       .set({ deletedTime: time, updatedTime: time })
-      .where(and(eq(modelBindings.logicalModelId, id), isNull(modelBindings.deletedTime)))
+      .where(and(eq(upstreamModels.logicalModelId, id), isNull(upstreamModels.deletedTime)))
       .run()
   })
 }
 
-// ========== Model Binding ==========
+// ========== Upstream Model ==========
 
-export async function listBindingsByModel(logicalModelId: string, includeDeleted = false): Promise<ModelBinding[]> {
+export async function listUpstreamModelsByLogicalModel(
+  logicalModelId: string,
+  includeDeleted = false,
+): Promise<UpstreamModel[]> {
   const db = getDb()
   const rows = includeDeleted
     ? db
         .select()
-        .from(modelBindings)
-        .where(eq(modelBindings.logicalModelId, logicalModelId))
-        .orderBy(modelBindings.priority)
+        .from(upstreamModels)
+        .where(eq(upstreamModels.logicalModelId, logicalModelId))
+        .orderBy(upstreamModels.priority)
         .all()
     : db
         .select()
-        .from(modelBindings)
+        .from(upstreamModels)
         .where(
           and(
-            eq(modelBindings.logicalModelId, logicalModelId),
-            isNull(modelBindings.deletedTime),
+            eq(upstreamModels.logicalModelId, logicalModelId),
+            isNull(upstreamModels.deletedTime),
           ),
         )
-        .orderBy(modelBindings.priority)
+        .orderBy(upstreamModels.priority)
         .all()
-  return rows.map(mapBinding)
+  return rows.map(mapUpstreamModel)
 }
 
-export async function listBindingsByProvider(providerId: string, includeDeleted = false): Promise<ModelBinding[]> {
+export async function listUpstreamModelsByProvider(
+  providerId: string,
+  includeDeleted = false,
+): Promise<UpstreamModel[]> {
   const db = getDb()
   const rows = includeDeleted
     ? db
         .select()
-        .from(modelBindings)
-        .where(eq(modelBindings.providerId, providerId))
-        .orderBy(modelBindings.priority)
+        .from(upstreamModels)
+        .where(eq(upstreamModels.providerId, providerId))
+        .orderBy(upstreamModels.priority)
         .all()
     : db
         .select()
-        .from(modelBindings)
-        .where(and(eq(modelBindings.providerId, providerId), isNull(modelBindings.deletedTime)))
-        .orderBy(modelBindings.priority)
+        .from(upstreamModels)
+        .where(and(eq(upstreamModels.providerId, providerId), isNull(upstreamModels.deletedTime)))
+        .orderBy(upstreamModels.priority)
         .all()
-  return rows.map(mapBinding)
+  return rows.map(mapUpstreamModel)
 }
 
-export async function getBinding(id: string): Promise<ModelBinding | undefined> {
-  const row = getDb().select().from(modelBindings).where(eq(modelBindings.id, id)).get()
-  return row ? mapBinding(row) : undefined
+export async function getUpstreamModel(id: string): Promise<UpstreamModel | undefined> {
+  const row = getDb().select().from(upstreamModels).where(eq(upstreamModels.id, id)).get()
+  return row ? mapUpstreamModel(row) : undefined
 }
 
-export async function createBinding(
-  input: Omit<ModelBinding, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): Promise<ModelBinding> {
-  const id = generateId('bind_')
+export async function createUpstreamModel(
+  input: Omit<UpstreamModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
+): Promise<UpstreamModel> {
+  const id = generateId('model_')
   const time = now()
   getDb()
-    .insert(modelBindings)
+    .insert(upstreamModels)
     .values({
       id,
       logicalModelId: input.logicalModelId,
       providerId: input.providerId,
-      protocol: input.protocol,
-      upstreamUrl: input.upstreamUrl ?? '',
       upstreamModelId: input.upstreamModelId,
+      endpoints: JSON.stringify(input.endpoints ?? []),
       priority: input.priority,
       enabled: input.enabled ?? true,
-      customAuthHeader: input.customAuthHeader ?? null,
       createdTime: time,
       updatedTime: time,
     })
@@ -271,48 +276,49 @@ export async function createBinding(
     id,
     logicalModelId: input.logicalModelId,
     providerId: input.providerId,
-    protocol: input.protocol,
-    upstreamUrl: input.upstreamUrl ?? '',
     upstreamModelId: input.upstreamModelId,
+    endpoints: input.endpoints ?? [],
     priority: input.priority,
     enabled: input.enabled ?? true,
-    customAuthHeader: input.customAuthHeader ?? null,
     createdTime: time,
     updatedTime: time,
     deletedTime: null,
   }
 }
 
-export async function updateBinding(id: string, updates: Partial<Omit<ModelBinding, 'id' | 'createdTime'>>): Promise<ModelBinding> {
+export async function updateUpstreamModel(
+  id: string,
+  updates: Partial<Omit<UpstreamModel, 'id' | 'createdTime'>>,
+): Promise<UpstreamModel> {
   const db = getDb()
   const time = now()
-  db.update(modelBindings)
+  db.update(upstreamModels)
     .set({
       ...(updates.logicalModelId !== undefined ? { logicalModelId: updates.logicalModelId } : {}),
       ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
-      ...(updates.protocol !== undefined ? { protocol: updates.protocol } : {}),
-      ...(updates.upstreamUrl !== undefined ? { upstreamUrl: updates.upstreamUrl } : {}),
-      ...(updates.upstreamModelId !== undefined ? { upstreamModelId: updates.upstreamModelId } : {}),
+      ...(updates.upstreamModelId !== undefined
+        ? { upstreamModelId: updates.upstreamModelId }
+        : {}),
+      ...(updates.endpoints !== undefined
+        ? { endpoints: JSON.stringify(updates.endpoints) }
+        : {}),
       ...(updates.priority !== undefined ? { priority: updates.priority } : {}),
       ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
-      ...(updates.customAuthHeader !== undefined
-        ? { customAuthHeader: updates.customAuthHeader }
-        : {}),
       ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
       updatedTime: time,
     })
-    .where(and(eq(modelBindings.id, id), isNull(modelBindings.deletedTime)))
+    .where(and(eq(upstreamModels.id, id), isNull(upstreamModels.deletedTime)))
     .run()
-  const row = db.select().from(modelBindings).where(eq(modelBindings.id, id)).get()
-  return mapBinding(row!)
+  const row = db.select().from(upstreamModels).where(eq(upstreamModels.id, id)).get()
+  return mapUpstreamModel(row!)
 }
 
-export async function deleteBinding(id: string): Promise<void> {
+export async function deleteUpstreamModel(id: string): Promise<void> {
   const time = now()
   getDb()
-    .update(modelBindings)
+    .update(upstreamModels)
     .set({ deletedTime: time, updatedTime: time })
-    .where(and(eq(modelBindings.id, id), isNull(modelBindings.deletedTime)))
+    .where(and(eq(upstreamModels.id, id), isNull(upstreamModels.deletedTime)))
     .run()
 }
 
@@ -433,9 +439,9 @@ export async function updateSettings(
 // ========== Request Log ==========
 
 export async function createRequestLog(
-  input: Omit<RequestLog, 'id' | 'createdTime'>,
+  input: Omit<RequestLog, 'id' | 'createdTime'> & { id?: string },
 ): Promise<RequestLog> {
-  const id = generateId('req_')
+  const id = input.id ?? generateId('req_')
   const time = now()
   getDb()
     .insert(requestLogs)
@@ -493,7 +499,6 @@ export async function createRequestAttempt(
       id,
       requestId: input.requestId,
       providerId: input.providerId,
-      bindingId: input.bindingId,
       upstreamModelId: input.upstreamModelId,
       attemptIndex: input.attemptIndex,
       status: input.status,
@@ -507,7 +512,6 @@ export async function createRequestAttempt(
     id,
     requestId: input.requestId,
     providerId: input.providerId,
-    bindingId: input.bindingId,
     upstreamModelId: input.upstreamModelId,
     attemptIndex: input.attemptIndex,
     status: input.status,
@@ -556,20 +560,27 @@ function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
   }
 }
 
-function mapBinding(row: typeof modelBindings.$inferSelect): ModelBinding {
+function mapUpstreamModel(row: typeof upstreamModels.$inferSelect): UpstreamModel {
   return {
     id: row.id,
     logicalModelId: row.logicalModelId,
     providerId: row.providerId,
-    protocol: row.protocol as ModelBinding['protocol'],
-    upstreamUrl: row.upstreamUrl,
     upstreamModelId: row.upstreamModelId,
+    endpoints: parseEndpoints(row.endpoints),
     priority: row.priority,
     enabled: row.enabled,
-    customAuthHeader: row.customAuthHeader,
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function parseEndpoints(raw: string): ProtocolEndpoint[] {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as ProtocolEndpoint[]) : []
+  } catch {
+    return []
   }
 }
 
@@ -616,7 +627,6 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     id: row.id,
     requestId: row.requestId,
     providerId: row.providerId,
-    bindingId: row.bindingId,
     upstreamModelId: row.upstreamModelId,
     attemptIndex: row.attemptIndex,
     status: row.status as RequestStatus,

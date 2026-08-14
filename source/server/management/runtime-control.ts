@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { listProviderHealth } from '../database/store'
-import { getManualBinding, setManualBinding } from '../proxy/handler'
+import { getManualModel, setManualModel } from '../proxy/handler'
 import {
   getProxyServerStatus,
   restartProxyServer,
@@ -22,14 +22,14 @@ export const runtimeControlRoutes: Record<string, ManagementHandler> = {
 }
 
 function handleQueueStatus(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, { manualBindingId: getManualBinding() })
+  sendSuccess(res, { manualModelId: getManualModel() })
 }
 
-const SwitchQueueSchema = z.object({ bindingId: z.string().nullable() })
+const SwitchQueueSchema = z.object({ modelId: z.string().nullable() })
 function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
-  const { bindingId } = SwitchQueueSchema.parse(body)
-  setManualBinding(bindingId)
-  sendSuccess(res, { bindingId })
+  const { modelId } = SwitchQueueSchema.parse(body)
+  setManualModel(modelId)
+  sendSuccess(res, { modelId })
 }
 
 async function handleListHealth(_req: IncomingMessage, res: ServerResponse): Promise<void> {

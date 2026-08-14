@@ -41,7 +41,7 @@ describe('database lifecycle', () => {
     await expect(closeDatabase()).resolves.toBeUndefined()
   })
 
-  it('migrates legacy protocols without deleting unsupported history', async () => {
+  it('creates the upstream_models table with endpoints column', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client
     const time = Date.now()
@@ -50,49 +50,47 @@ describe('database lifecycle', () => {
       .prepare(
         'INSERT INTO providers (id, name, apiKeyReference, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)',
       )
-      .run('provider', 'Legacy', 'key', time, time)
+      .run('provider', 'Provider', 'key', time, time)
     client
       .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
-      .run('model', 'Legacy', time, time)
-    for (const protocol of ['openai', 'anthropic', 'gemini']) {
-      client
-        .prepare(
-          'INSERT INTO model_bindings (id, logicalModelId, providerId, protocol, upstreamUrl, upstreamModelId, priority, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        )
-        .run(
-          `binding-${protocol}`,
-          'model',
-          'provider',
-          protocol,
-          'https://example.com',
-          'legacy-model',
-          1,
-          time,
-          time,
-        )
-      client
-        .prepare(
-          'INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)',
-        )
-        .run(`request-${protocol}`, 'model', protocol, 'success', 1, time)
-    }
+      .run('model', 'Model', time, time)
+    client
+      .prepare(
+        'INSERT INTO upstream_models (id, logicalModelId, providerId, upstreamModelId, endpoints, priority, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        'model_upstream',
+        'model',
+        'provider',
+        'upstream-model',
+        JSON.stringify([
+          {
+            protocol: 'openai-completions',
+            upstreamUrl: 'https://api.example.com/v1/chat/completions',
+            customAuthHeader: null,
+          },
+        ]),
+        1,
+        1,
+        time,
+        time,
+      )
 
-    await closeDatabase()
-    const migrated = (await initDatabase(directory)).$client
-    const bindings = migrated
-      .prepare('SELECT protocol, enabled FROM model_bindings ORDER BY id ASC')
-      .all()
-    const logs = migrated.prepare('SELECT protocol FROM request_logs ORDER BY id ASC').all()
+    const rows = client
+      .prepare(
+        'SELECT upstreamModelId, endpoints, enabled FROM upstream_models WHERE id = ?',
+      )
+      .all('model_upstream')
 
-    expect(bindings).toEqual([
-      { protocol: 'anthropic-messages', enabled: 1 },
-      { protocol: 'gemini', enabled: 0 },
-      { protocol: 'openai-completions', enabled: 1 },
-    ])
-    expect(logs.map(log => log.protocol)).toEqual([
-      'anthropic-messages',
-      'gemini',
-      'openai-completions',
+    expect(rows).toHaveLength(1)
+    expect(rows[0].upstreamModelId).toBe('upstream-model')
+    expect(rows[0].enabled).toBe(1)
+    expect(JSON.parse(String(rows[0].endpoints))).toEqual([
+      {
+        protocol: 'openai-completions',
+        upstreamUrl: 'https://api.example.com/v1/chat/completions',
+        customAuthHeader: null,
+      },
     ])
   })
 })

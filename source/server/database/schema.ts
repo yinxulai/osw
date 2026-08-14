@@ -38,8 +38,8 @@ export const logicalModels = sqliteTable(
   ],
 )
 
-export const modelBindings = sqliteTable(
-  'model_bindings',
+export const upstreamModels = sqliteTable(
+  'upstream_models',
   {
     id: text('id').primaryKey(),
     logicalModelId: text('logicalModelId')
@@ -48,21 +48,19 @@ export const modelBindings = sqliteTable(
     providerId: text('providerId')
       .notNull()
       .references(() => providers.id),
-    protocol: text('protocol').notNull(),
-    upstreamUrl: text('upstreamUrl').notNull().default(''),
     upstreamModelId: text('upstreamModelId').notNull(),
+    /** JSON 序列化的协议端点列表，一个模型可支持多个协议 */
+    endpoints: text('endpoints').notNull().default('[]'),
     priority: integer('priority').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    customAuthHeader: text('customAuthHeader'),
     createdTime: integer('createdTime').notNull(),
     updatedTime: integer('updatedTime').notNull(),
     deletedTime: integer('deletedTime'),
   },
   table => [
-    index('idx_bindings_logical_model_priority').on(table.logicalModelId, table.priority),
-    index('idx_bindings_provider').on(table.providerId),
-    index('idx_bindings_protocol').on(table.protocol),
-    index('idx_bindings_deleted_time').on(table.deletedTime),
+    index('idx_upstream_models_logical_priority').on(table.logicalModelId, table.priority),
+    index('idx_upstream_models_provider').on(table.providerId),
+    index('idx_upstream_models_deleted_time').on(table.deletedTime),
   ],
 )
 
@@ -123,9 +121,6 @@ export const requestAttempts = sqliteTable(
     providerId: text('providerId')
       .notNull()
       .references(() => providers.id),
-    bindingId: text('bindingId')
-      .notNull()
-      .references(() => modelBindings.id),
     upstreamModelId: text('upstreamModelId').notNull(),
     attemptIndex: integer('attemptIndex').notNull(),
     status: text('status').notNull(),
@@ -143,7 +138,7 @@ export const requestAttempts = sqliteTable(
 
 export type ProviderRow = typeof providers.$inferSelect
 export type LogicalModelRow = typeof logicalModels.$inferSelect
-export type ModelBindingRow = typeof modelBindings.$inferSelect
+export type UpstreamModelRow = typeof upstreamModels.$inferSelect
 export type ProviderHealthRow = typeof providerHealth.$inferSelect
 export type SettingsRow = typeof settings.$inferSelect
 export type RequestLogRow = typeof requestLogs.$inferSelect

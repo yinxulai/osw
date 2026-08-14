@@ -1,32 +1,39 @@
-import { listBindingsByModel, getProvider } from '../database/store'
+import { listUpstreamModelsByLogicalModel, getProvider } from '../database/store'
 import { isProviderAvailable } from './health'
-import type { ModelBinding, Provider, Protocol } from '@common/schemas'
+import type { UpstreamModel, Provider, Protocol } from '@common/schemas'
 
-export interface BindingWithProvider {
-  binding: ModelBinding
+export interface ModelWithProvider {
+  model: UpstreamModel
   provider: Provider
 }
 
 /**
- * 获取指定逻辑模型的可用 binding 列表，按优先级排序，过滤掉冷却中的 provider
+ * 获取指定逻辑模型的可用 upstream model 列表，按优先级排序，过滤掉冷却中的 provider
  */
-export async function getAvailableBindings(logicalModelId: string): Promise<BindingWithProvider[]> {
-  const bindings = await listBindingsByModel(logicalModelId)
+export async function getAvailableModels(logicalModelId: string): Promise<ModelWithProvider[]> {
+  const models = await listUpstreamModelsByLogicalModel(logicalModelId)
 
-  const result: BindingWithProvider[] = []
+  const result: ModelWithProvider[] = []
 
-  for (const binding of bindings) {
-    if (!binding.enabled) continue
+  for (const model of models) {
+    if (!model.enabled) continue
 
-    const provider = await getProvider(binding.providerId)
+    const provider = await getProvider(model.providerId)
     if (!provider || !provider.enabled || provider.deletedTime !== null) continue
 
     if (!await isProviderAvailable(provider.id)) continue
 
-    result.push({ binding, provider })
+    result.push({ model, provider })
   }
 
   return result
+}
+
+/**
+ * 从模型端点列表中查找指定协议的端点
+ */
+export function findEndpoint(model: UpstreamModel, protocol: Protocol) {
+  return model.endpoints.find(endpoint => endpoint.protocol === protocol)
 }
 
 /**
@@ -35,7 +42,9 @@ export async function getAvailableBindings(logicalModelId: string): Promise<Bind
 export function detectProtocolFromPath(pathname: string): Protocol | null {
   const path = pathname.split('?', 1)[0]
 
+  if (path === '/v1/chat/completions') return 'openai-completions'
   if (path === '/v1/completions') return 'openai-completions'
+  if (path === '/v1/embeddings') return 'openai-completions'
   if (path === '/v1/responses') return 'openai-responses'
   if (path === '/v1/messages') return 'anthropic-messages'
 

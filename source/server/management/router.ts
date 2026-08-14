@@ -1,19 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { bindingRoutes } from './bindings'
 import { modelRoutes } from './models'
 import { providerRoutes } from './providers'
 import type { ManagementHandler } from './response'
 import { sendError } from './response'
 import { runtimeControlRoutes } from './runtime-control'
 import { settingsRoutes } from './settings'
+import { upstreamModelRoutes } from './bindings'
+import { logRoutes } from './logs'
+import { requestLogRoutes } from './request-logs'
 
 const routes: Record<string, ManagementHandler> = {
   ...providerRoutes,
   ...modelRoutes,
-  ...bindingRoutes,
+  ...upstreamModelRoutes,
   ...settingsRoutes,
   ...runtimeControlRoutes,
+  ...logRoutes,
+  ...requestLogRoutes,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
