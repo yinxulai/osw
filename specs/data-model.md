@@ -2,7 +2,7 @@
 
 ## 概述
 
-使用 SQLite（Prisma ORM）作为本地存储，Zod 作为 API 边界的运行时 Schema 校验。所有配置数据、请求日志、健康状态都存在数据库中，API Key 等敏感信息存储在系统密钥环，数据库仅存引用 ID。
+使用 SQLite（Node 22.5+ 内置 `node:sqlite`，Drizzle ORM）作为本地存储，Zod 作为 API 边界的运行时 Schema 校验。所有配置数据、请求日志、健康状态都存在数据库中，API Key 等敏感信息存储在系统密钥环，数据库仅存引用 ID。
 
 ### 设计原则
 
@@ -175,14 +175,18 @@
 
 ## 4. 系统表
 
-### 4.1 schema_version — 数据库版本
+### 4.1 数据库迁移管理
 
-| 字段 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| version | INTEGER | PRIMARY KEY | 当前 schema 版本号 |
-| appliedTime | INTEGER | NOT NULL | 迁移执行时间 |
+**运行时**：应用启动时通过 `ensureSchema`（`CREATE TABLE IF NOT EXISTS`，幂等）保证 schema 存在，并执行列级迁移（`migrateLegacyIntegerTimestamps`、`migrateLegacyProtocols`、`migrateProviderUpstreamUrls`）。该方式对全新数据库和已有数据库都安全，不会破坏既有数据。
 
-迁移脚本按序号命名存放在 `source/server/db/migrations/` 目录下，如 `001_init.sql`。启动时按顺序执行未应用的迁移。
+**开发期**：Drizzle ORM 的 `drizzle-kit` 负责 schema 演进与版本管理。
+
+- 表定义：`source/server/database/schema.ts`（Drizzle `sqliteTable`）
+- 迁移生成：`pnpm db:generate`（生成到 `drizzle/` 目录）
+- 迁移应用：`pnpm db:migrate`
+- 配置：`drizzle.config.ts`
+
+> 运行时幂等 schema 创建是权威来源；`drizzle-kit` 迁移用于跟踪 schema 变更记录，两者需保持一致。
 
 ---
 

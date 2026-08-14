@@ -22,15 +22,15 @@ function createTemporaryDirectory(): string {
 describe('database lifecycle', () => {
   it('clears the database reference on close and supports reinitialization', async () => {
     const first = await initDatabase(createTemporaryDirectory())
-    await expect(first.$queryRaw`SELECT 1`).resolves.toBeDefined()
+    expect(first.$client.prepare('SELECT 1 AS value').get()).toEqual({ value: 1 })
 
     await closeDatabase()
 
     expect(() => getDb()).toThrow('Database not initialized')
 
     const second = await initDatabase(createTemporaryDirectory())
-    await expect(second.$queryRaw`SELECT 1`).resolves.toBeDefined()
-    expect(second).not.toBe(first)
+    expect(second.$client.prepare('SELECT 1 AS value').get()).toEqual({ value: 1 })
+    expect(getDb()).toBe(second)
   })
 
   it('can be closed repeatedly', async () => {
@@ -43,50 +43,51 @@ describe('database lifecycle', () => {
 
   it('migrates legacy protocols without deleting unsupported history', async () => {
     const directory = createTemporaryDirectory()
-    const client = await initDatabase(directory)
-    const time = BigInt(Date.now())
+    const client = (await initDatabase(directory)).$client
+    const time = Date.now()
 
-    await client.provider.create({
-      data: { id: 'provider', name: 'Legacy', apiKeyReference: 'key', createdTime: time, updatedTime: time },
-    })
-    await client.logicalModel.create({
-      data: { id: 'model', name: 'Legacy', createdTime: time, updatedTime: time },
-    })
+    client
+      .prepare(
+        'INSERT INTO providers (id, name, apiKeyReference, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run('provider', 'Legacy', 'key', time, time)
+    client
+      .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
+      .run('model', 'Legacy', time, time)
     for (const protocol of ['openai', 'anthropic', 'gemini']) {
-      await client.modelBinding.create({
-        data: {
-          id: `binding-${protocol}`,
-          logicalModelId: 'model',
-          providerId: 'provider',
+      client
+        .prepare(
+          'INSERT INTO model_bindings (id, logicalModelId, providerId, protocol, upstreamUrl, upstreamModelId, priority, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          `binding-${protocol}`,
+          'model',
+          'provider',
           protocol,
-          upstreamUrl: 'https://example.com',
-          upstreamModelId: 'legacy-model',
-          priority: 1,
-          createdTime: time,
-          updatedTime: time,
-        },
-      })
-      await client.requestLog.create({
-        data: {
-          id: `request-${protocol}`,
-          logicalModelId: 'model',
-          protocol,
-          status: 'success',
-          totalDurationMilliseconds: 1,
-          createdTime: time,
-        },
-      })
+          'https://example.com',
+          'legacy-model',
+          1,
+          time,
+          time,
+        )
+      client
+        .prepare(
+          'INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(`request-${protocol}`, 'model', protocol, 'success', 1, time)
     }
 
     await closeDatabase()
-    const migrated = await initDatabase(directory)
-    const bindings = await migrated.modelBinding.findMany({ orderBy: { id: 'asc' } })
-    const logs = await migrated.requestLog.findMany({ orderBy: { id: 'asc' } })
+    const migrated = (await initDatabase(directory)).$client
+    const bindings = migrated
+      .prepare('SELECT protocol, enabled FROM model_bindings ORDER BY id ASC')
+      .all()
+    const logs = migrated.prepare('SELECT protocol FROM request_logs ORDER BY id ASC').all()
 
-    expect(bindings.map(binding => ({ protocol: binding.protocol, enabled: binding.enabled }))).toEqual([
-      { protocol: 'anthropic-messages', enabled: true },
-      { protocol: 'gemini', enabled: false },
-      { protocol: 'openai-completions', enabled: true },
+    expect(bindings).toEqual([
+      { protocol: 'anthropic-messages', enabled: 1 },
+      { protocol: 'gemini', enabled: 0 },
+      { protocol: 'openai-completions', enabled: 1 },
     ])
     expect(logs.map(log => log.protocol)).toEqual([
       'anthropic-messages',

@@ -9,11 +9,7 @@ export default {
   files: [
     'dist',
     '!dist/**/*.map',
-    'node_modules/bindings/**/*',
-    'node_modules/better-sqlite3/**/*',
-    'node_modules/file-uri-to-path/**/*',
   ],
-  asarUnpack: ['node_modules/better-sqlite3/**/*.node'],
   mac: {
     target: ['dmg'],
     category: 'public.app-category.developer-tools',

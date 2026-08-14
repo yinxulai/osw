@@ -11,8 +11,8 @@
 | Schema 定义 | Zod | 运行时类型校验、配置声明、API 请求/响应验证 |
 | API 规范 | OpenAPI 3.1 | 管理接口正式定义，作为前后端契约 |
 | 代码生成 | openapi-typescript + @tanstack/react-query 生成 | 从 OpenAPI 生成类型和 API 调用端代码 |
-| 本地存储 | SQLite（Prisma ORM）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
-| 数据库迁移 | 手写 SQL + 版本号管理 | 轻量迁移，不引入 ORM |
+| 本地存储 | SQLite（`node:sqlite` + Drizzle ORM）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
+| 数据库迁移 | Drizzle-kit 生成迁移 + 运行时幂等 schema 创建 | 类型化查询 + 版本管理，零原生依赖 |
 | 渲染进程 | React 18 + TypeScript | 控制台 UI |
 | UI 组件 | shadcn/ui + Tailwind CSS | 现代、可定制、体积小 |
 | 状态管理 | TanStack Query | 服务端状态，配合 HTTP API 模式 |
@@ -57,9 +57,9 @@
 
 - **查询能力**：日志筛选、分页、统计用 SQL 比遍历 JSONL 高效得多
 - **事务一致性**：配置变更（如删除 Provider 级联删除绑定）用事务保证原子性
-- **迁移可控**：数据库版本号 + 迁移脚本，比 JSON 配置版本迁移更规范
+- **迁移可控**：Drizzle-kit 迁移 + 运行时幂等 schema 创建，比 JSON 配置版本迁移更规范
 - **单文件部署**：SQLite 是单个文件，和 JSON 一样便携，备份/导入导出都方便
-- **Prisma ORM**：提供类型安全的异步数据访问，SQLite 查询集中在 database store 边界
+- **Drizzle ORM**：提供类型安全的同步数据访问，SQLite 查询集中在 database store 边界；基于 Node 22.5+ 内置 `node:sqlite`，零原生依赖、无 ABI 问题
 
 ## 项目结构
 
@@ -98,15 +98,11 @@ one-switch/
 │   │   │   └── settings.ts         # 服务设置
 │   │   ├── management/             # 管理服务监听层
 │   │   │   └── server.ts           # 管理 HTTP 监听（默认 127.0.0.1:9301）
-│   │   └── db/                     # SQLite 数据存储
-│   │       ├── index.ts            # 数据库连接初始化
-│   │       ├── schema.ts           # Zod schema 定义（配置模型、API 类型）
-│   │       ├── providers.ts        # Provider 数据访问
-│   │       ├── models.ts           # 逻辑模型与绑定数据访问
-│   │       ├── logs.ts             # 请求日志数据访问
-│   │       ├── settings.ts         # 服务设置数据访问
-│   │       └── migrations/         # 数据库迁移脚本
-│   │           └── 001_init.sql    # 初始建表
+│   │   └── database/               # SQLite 数据存储（node:sqlite + Drizzle）
+│   │       ├── index.ts            # 连接初始化、schema 幂等创建、列级迁移
+│   │       ├── schema.ts           # Drizzle 表定义（sqliteTable）
+│   │       ├── store.ts            # 数据访问层（Drizzle 查询）
+│   │       └── client/             # 数据库客户端类型
 │   │
 │   ├── command/                    # CLI 入口（与 render 平级，同为入口点）
 │   │   └── index.ts                # 命令行模式入口：无头启动代理服务
@@ -260,30 +256,28 @@ one-switch/
 
 > MVP 只有一个逻辑模型（default），`/api/binding/list` 默认返回该模型的所有绑定，即自动切换队列。
 
-### 3. 数据存储（`source/server/db/`）
+### 3. 数据存储（`source/server/database/`）
 
-使用 SQLite（Prisma ORM），配置和日志都存在本地数据库文件中。
+使用 SQLite（`node:sqlite` + Drizzle ORM），配置和日志都存在本地数据库文件中。
 
 **`index.ts`** — 数据库连接
-- 初始化数据库连接
-- 执行迁移
-- 提供数据库实例
+- 初始化数据库连接（`node:sqlite` `DatabaseSync` → Drizzle 实例）
+- `ensureSchema` 幂等建表 + 列级迁移
+- 提供数据库实例（`getDb`）
 
-**`schema.ts`** — Zod Schema
-- Provider、LogicalModel、ModelBinding、Settings、RequestLog、Attempt 等模型的 Zod 定义
-- API 请求/响应的 Zod schema（与 OpenAPI 定义保持一致）
-- 类型从 Zod schema 推导，不重复手写 interface
+**`schema.ts`** — Drizzle 表定义
+- 7 张表（providers、logical_models、model_bindings、provider_health、settings、request_logs、request_attempts）的 `sqliteTable` 定义
+- 从表定义推导行类型（`$inferSelect`）
 
-**数据访问层** — 按领域分文件
-- `providers.ts`：Provider CRUD、健康状态读写
-- `models.ts`：逻辑模型与绑定 CRUD、级联操作
-- `logs.ts`：请求日志写入、分页查询、筛选
-- `settings.ts`：服务设置读写
+**`store.ts`** — 数据访问层
+- Provider / LogicalModel / ModelBinding CRUD、级联操作
+- ProviderHealth 读写、Settings、RequestLog、RequestAttempt
+- 使用 Drizzle 类型化查询（`select`/`insert`/`update`），映射到领域模型
 
-**`migrations/`** — 数据库迁移
-- 纯 SQL 脚本，按序号命名（`001_init.sql`、`002_add_xxx.sql`）
-- `_schema_version` 表记录当前版本
-- 启动时自动执行未应用的迁移
+**`drizzle/`** — Drizzle-kit 迁移
+- `pnpm db:generate` 根据 schema.ts 生成迁移 SQL
+- `pnpm db:migrate` 应用迁移
+- 运行时由 `index.ts` 的幂等 `ensureSchema` 保证 schema，迁移记录用于演进追踪
 
 > API Key 等敏感信息仍存储在系统密钥环中，数据库仅存引用 ID。
 

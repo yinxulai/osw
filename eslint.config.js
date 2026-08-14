@@ -7,7 +7,6 @@ export default [
       'dist/**',
       'node_modules/**',
       'release/**',
-      'source/server/database/client/**',
     ],
   },
   ...peculiar.configs['flat/strict'],

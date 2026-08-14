@@ -35,6 +35,7 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: false,
+      upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
     const binding = await createBinding({
@@ -62,6 +63,7 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: true,
+      upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
     await createBinding({

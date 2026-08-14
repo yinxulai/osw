@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { ProviderSchema } from '@common/schemas'
+import { ProviderSchema, UpstreamUrlsSchema, type Provider } from '@common/schemas'
 import {
   createProvider,
   deleteProvider,
@@ -42,7 +42,9 @@ const CreateProviderSchema = ProviderSchema.pick({
   name: true,
   timeoutMilliseconds: true,
   enabled: true,
-}).extend({ apiKey: z.string().min(1) }).partial({ timeoutMilliseconds: true, enabled: true })
+})
+  .extend({ apiKey: z.string().min(1), endpoints: UpstreamUrlsSchema.optional() })
+  .partial({ timeoutMilliseconds: true, enabled: true })
 
 async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderSchema.parse(body)
@@ -55,6 +57,7 @@ async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, 
       apiKeyReference,
       timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
       enabled: input.enabled ?? true,
+      upstreamUrls: JSON.stringify(input.endpoints ?? {}),
     })
     sendSuccess(res, provider)
   } catch (error) {
@@ -68,17 +71,22 @@ const UpdateProviderSchema = ProviderSchema.pick({
   name: true,
   timeoutMilliseconds: true,
   enabled: true,
-}).partial().required({ id: true }).extend({ apiKey: z.string().min(1).optional() })
+})
+  .partial()
+  .required({ id: true })
+  .extend({ apiKey: z.string().min(1).optional(), endpoints: UpstreamUrlsSchema.optional() })
 
 async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { id, apiKey, ...updates } = UpdateProviderSchema.parse(body)
+  const { id, apiKey, endpoints, ...updates } = UpdateProviderSchema.parse(body)
   const current = await getProvider(id)
   if (!current) {
     sendError(res, 'NOT_FOUND', 'Provider 不存在', 404)
     return
   }
   if (apiKey) await getSecretStore().set(current.apiKeyReference, apiKey)
-  sendSuccess(res, await updateProvider(id, updates))
+  const mergedUpdates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled' | 'upstreamUrls'>> = { ...updates }
+  if (endpoints !== undefined) mergedUpdates.upstreamUrls = JSON.stringify(endpoints)
+  sendSuccess(res, await updateProvider(id, mergedUpdates))
 }
 
 const DeleteProviderSchema = z.object({ id: z.string() })

@@ -1,33 +1,36 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
-import { PrismaClient } from './client/client'
+import { DatabaseSync } from 'node:sqlite'
+import { drizzle } from 'drizzle-orm/node-sqlite'
 
-let database: PrismaClient | null = null
+export type Database = ReturnType<typeof drizzle>
 
-export async function initDatabase(dataDir: string): Promise<PrismaClient> {
+let database: Database | null = null
+
+export async function initDatabase(dataDir: string): Promise<Database> {
   if (database) return database
 
   fs.mkdirSync(dataDir, { recursive: true })
-  const adapter = new PrismaBetterSqlite3({ url: path.join(dataDir, 'one-switch.db') })
-  database = new PrismaClient({ adapter })
+  const client = new DatabaseSync(path.join(dataDir, 'one-switch.db'), {
+    enableForeignKeyConstraints: true,
+  })
 
   try {
-    await database.$connect()
-    await database.$queryRawUnsafe('PRAGMA journal_mode = WAL')
-    await database.$queryRawUnsafe('PRAGMA foreign_keys = ON')
-    await migrateLegacyIntegerTimestamps(database)
-    await ensureSchema(database)
-    await migrateLegacyProtocols(database)
+    client.exec('PRAGMA journal_mode = WAL')
+    migrateLegacyIntegerTimestamps(client)
+    ensureSchema(client)
+    migrateLegacyProtocols(client)
+    migrateProviderUpstreamUrls(client)
+    database = drizzle({ client })
     return database
   } catch (error) {
-    await database.$disconnect()
+    client.close()
     database = null
     throw error
   }
 }
 
-export function getDb(): PrismaClient {
+export function getDb(): Database {
   if (!database) throw new Error('Database not initialized')
   return database
 }
@@ -36,38 +39,21 @@ export async function closeDatabase(): Promise<void> {
   if (!database) return
   const activeDatabase = database
   database = null
-  await activeDatabase.$disconnect()
+  activeDatabase.$client.close()
 }
 
-async function ensureSchema(client: PrismaClient): Promise<void> {
+function ensureSchema(db: DatabaseSync): void {
   for (const statement of INITIAL_SCHEMA) {
-    await client.$executeRawUnsafe(statement)
+    db.exec(statement)
   }
 }
 
-async function migrateLegacyProtocols(client: PrismaClient): Promise<void> {
-  await client.$transaction([
-    client.modelBinding.updateMany({
-      where: { protocol: 'openai' },
-      data: { protocol: 'openai-completions' },
-    }),
-    client.modelBinding.updateMany({
-      where: { protocol: 'anthropic' },
-      data: { protocol: 'anthropic-messages' },
-    }),
-    client.modelBinding.updateMany({
-      where: { protocol: 'gemini' },
-      data: { enabled: false },
-    }),
-    client.requestLog.updateMany({
-      where: { protocol: 'openai' },
-      data: { protocol: 'openai-completions' },
-    }),
-    client.requestLog.updateMany({
-      where: { protocol: 'anthropic' },
-      data: { protocol: 'anthropic-messages' },
-    }),
-  ])
+function migrateLegacyProtocols(db: DatabaseSync): void {
+  db.exec(`UPDATE model_bindings SET protocol = 'openai-completions' WHERE protocol = 'openai'`)
+  db.exec(`UPDATE model_bindings SET protocol = 'anthropic-messages' WHERE protocol = 'anthropic'`)
+  db.exec(`UPDATE model_bindings SET enabled = 0 WHERE protocol = 'gemini'`)
+  db.exec(`UPDATE request_logs SET protocol = 'openai-completions' WHERE protocol = 'openai'`)
+  db.exec(`UPDATE request_logs SET protocol = 'anthropic-messages' WHERE protocol = 'anthropic'`)
 }
 
 interface TableColumnInfo {
@@ -75,23 +61,35 @@ interface TableColumnInfo {
   type: string
 }
 
-async function migrateLegacyIntegerTimestamps(client: PrismaClient): Promise<void> {
-  const columns = await client.$queryRawUnsafe<TableColumnInfo[]>("PRAGMA table_info('providers')")
+function migrateProviderUpstreamUrls(db: DatabaseSync): void {
+  const columns = db
+    .prepare("PRAGMA table_info('providers')")
+    .all() as unknown as TableColumnInfo[]
+  const hasUpstreamUrls = columns.some(column => column.name === 'upstreamUrls')
+  if (hasUpstreamUrls) return
+
+  db.exec(`ALTER TABLE providers ADD COLUMN upstreamUrls TEXT NOT NULL DEFAULT '{}'`)
+}
+
+function migrateLegacyIntegerTimestamps(db: DatabaseSync): void {
+  const columns = db
+    .prepare("PRAGMA table_info('providers')")
+    .all() as unknown as TableColumnInfo[]
   const createdTime = columns.find(column => column.name === 'createdTime')
   if (!createdTime || createdTime.type.toUpperCase() === 'BIGINT') return
 
-  await client.$queryRawUnsafe('PRAGMA foreign_keys = OFF')
+  db.exec('PRAGMA foreign_keys = OFF')
   try {
-    await client.$executeRawUnsafe('BEGIN IMMEDIATE')
+    db.exec('BEGIN IMMEDIATE')
     for (const statement of LEGACY_TIMESTAMP_MIGRATION) {
-      await client.$executeRawUnsafe(statement)
+      db.exec(statement)
     }
-    await client.$executeRawUnsafe('COMMIT')
+    db.exec('COMMIT')
   } catch (error) {
-    await client.$executeRawUnsafe('ROLLBACK').catch(() => undefined)
+    db.exec('ROLLBACK')
     throw error
   } finally {
-    await client.$queryRawUnsafe('PRAGMA foreign_keys = ON')
+    db.exec('PRAGMA foreign_keys = ON')
   }
 }
 
@@ -102,6 +100,7 @@ const INITIAL_SCHEMA = [
     apiKeyReference TEXT NOT NULL,
     timeoutMilliseconds INTEGER NOT NULL DEFAULT 30000,
     enabled INTEGER NOT NULL DEFAULT 1,
+    upstreamUrls TEXT NOT NULL DEFAULT '{}',
     createdTime BIGINT NOT NULL,
     updatedTime BIGINT NOT NULL,
     deletedTime BIGINT
@@ -123,7 +122,7 @@ const INITIAL_SCHEMA = [
     logicalModelId TEXT NOT NULL,
     providerId TEXT NOT NULL,
     protocol TEXT NOT NULL,
-    upstreamUrl TEXT NOT NULL,
+    upstreamUrl TEXT NOT NULL DEFAULT '',
     upstreamModelId TEXT NOT NULL,
     priority INTEGER NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,

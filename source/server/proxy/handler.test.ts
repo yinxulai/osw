@@ -68,6 +68,7 @@ function binding(id: string, providerId: string, upstreamUrl: string, upstreamMo
       apiKeyReference: `${providerId}_key`,
       timeoutMilliseconds: 1_000,
       enabled: true,
+      upstreamUrls: '{}',
       createdTime: time,
       updatedTime: time,
       deletedTime: null,

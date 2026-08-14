@@ -34,7 +34,7 @@ export default defineConfig({
                 build: {
                   outDir: fileURLToPath(new URL('./dist/command', import.meta.url)),
                   rolldownOptions: {
-                    external: ['better-sqlite3', 'electron'],
+                    external: ['electron'],
                   },
                 },
                 resolve: { alias: commonAlias },

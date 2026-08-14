@@ -51,9 +51,9 @@ source/server/
 │   └── headers.ts
 └── infrastructure/
     ├── database/
-    │   ├── database.ts              # SQLite 连接与迁移
-    │   ├── configuration-store.ts   # Provider、Model、Binding、Settings
-    │   └── request-log-store.ts
+    │   ├── index.ts                 # node:sqlite 连接、幂等建表与迁移
+    │   ├── schema.ts                # Drizzle 表定义
+    │   └── store.ts                 # 数据访问层（Drizzle 查询）
     └── secrets/
         └── secret-store.ts          # Keychain 适配
 ```

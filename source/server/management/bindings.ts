@@ -32,7 +32,7 @@ const CreateBindingSchema = ModelBindingSchema.pick({
   priority: true,
   enabled: true,
   customAuthHeader: true,
-}).partial({ enabled: true, customAuthHeader: true })
+}).partial({ enabled: true, customAuthHeader: true, upstreamUrl: true })
 
 async function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateBindingSchema.parse(body)
@@ -40,7 +40,7 @@ async function handleCreateBinding(_req: IncomingMessage, res: ServerResponse, b
     logicalModelId: input.logicalModelId,
     providerId: input.providerId,
     protocol: input.protocol,
-    upstreamUrl: input.upstreamUrl,
+    upstreamUrl: input.upstreamUrl ?? '',
     upstreamModelId: input.upstreamModelId,
     priority: input.priority,
     enabled: input.enabled ?? true,

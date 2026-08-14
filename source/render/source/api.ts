@@ -23,10 +23,12 @@ type CreateProviderInput = {
   apiKey: string
   timeoutMilliseconds?: number
   enabled?: boolean
+  endpoints?: Record<string, string>
 }
 
 type UpdateProviderInput = Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> & {
   apiKey?: string
+  endpoints?: Record<string, string>
 }
 
 type CreateLogicalModelInput = {
@@ -39,7 +41,7 @@ type CreateBindingInput = {
   logicalModelId: string
   providerId: string
   protocol: string
-  upstreamUrl: string
+  upstreamUrl?: string
   upstreamModelId: string
   priority: number
   enabled?: boolean

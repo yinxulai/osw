@@ -7,7 +7,7 @@ import { markProviderSuccess, markProviderFailure } from './health'
 import { getSettings } from '../database/store'
 import { generateId } from '@common/utils'
 import type { BindingWithProvider } from './router'
-import { resolveUpstreamUrl, rewriteRequestModel } from './request'
+import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl, rewriteRequestModel } from './request'
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
@@ -97,7 +97,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const { binding, provider } = target
   const settings = await getSettings()
 
-  const targetUrl = resolveUpstreamUrl(binding.upstreamUrl)
+  const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(binding.upstreamUrl, provider.upstreamUrls, binding.protocol))
   const parsed = new URL(targetUrl)
   const upstreamBody = rewriteRequestModel(requestBody, binding.upstreamModelId)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
