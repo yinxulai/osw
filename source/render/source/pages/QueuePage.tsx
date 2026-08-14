@@ -577,29 +577,29 @@ export default function QueuePage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="fail-threshold" className="text-xs">连续失败阈值</Label>
-              <Input id="fail-threshold" defaultValue={3} type="number" className="h-8 text-xs" />
+              <Input id="fail-threshold" defaultValue={3} type="number" className="h-8 text-xs" placeholder="例如：3" />
               <p className="text-[11px] text-muted-foreground">达到此次数后进入冷却</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cooldown-base" className="text-xs">冷却基础时间</Label>
-              <Input id="cooldown-base" defaultValue={30} type="number" className="h-8 text-xs" />
+              <Input id="cooldown-base" defaultValue={30} type="number" className="h-8 text-xs" placeholder="例如：30" />
               <p className="text-[11px] text-muted-foreground">初始冷却时间（秒）</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cooldown-max" className="text-xs">冷却最大时间</Label>
-              <Input id="cooldown-max" defaultValue={300} type="number" className="h-8 text-xs" />
+              <Input id="cooldown-max" defaultValue={300} type="number" className="h-8 text-xs" placeholder="例如：300" />
               <p className="text-[11px] text-muted-foreground">冷却时间上限（秒）</p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="idle-timeout" className="text-xs">空闲超时</Label>
-              <Input id="idle-timeout" defaultValue={30000} type="number" className="h-8 text-xs" />
+              <Input id="idle-timeout" defaultValue={30000} type="number" className="h-8 text-xs" placeholder="例如：30000" />
               <p className="text-[11px] text-muted-foreground">服务端连续无数据返回的超时时间（毫秒）</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="conn-timeout" className="text-xs">连接超时</Label>
-              <Input id="conn-timeout" defaultValue={10000} type="number" className="h-8 text-xs" />
+              <Input id="conn-timeout" defaultValue={10000} type="number" className="h-8 text-xs" placeholder="例如：10000" />
               <p className="text-[11px] text-muted-foreground">建立连接的超时时间（毫秒）</p>
             </div>
           </div>

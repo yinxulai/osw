@@ -491,7 +491,7 @@ export default function ModelManagementPage() {
           <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
             <div className="space-y-1.5"><Label htmlFor="provider-name">供应商名称</Label><Input id="provider-name" value={providerName} onChange={event => setProviderName(event.target.value)} placeholder="例如：OpenAI" /><p className="text-[11px] text-muted-foreground">用于在列表中区分不同的服务渠道，例如 OpenAI、Anthropic、DeepSeek。</p></div>
             <div className="space-y-1.5"><Label htmlFor="provider-key">API Key</Label><div className="relative"><KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input id="provider-key" type="password" className="pl-8" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={editingProviderId ? '留空表示不修改' : 'sk-...'} /></div><p className="text-[11px] text-muted-foreground">密钥仅保存在本机，用于调用该供应商的上游接口。协议不同认证方式不同（OpenAI 用 Bearer，Anthropic 用 x-api-key）。</p></div>
-            <div className="space-y-1.5"><Label htmlFor="provider-timeout">请求超时（毫秒）</Label><Input id="provider-timeout" type="number" min={1} value={timeout} onChange={event => setTimeout(event.target.value)} /><p className="text-[11px] text-muted-foreground">单个上游请求的等待上限，超时后自动切换到下一个候选绑定。默认 30000（30 秒）。</p></div>
+            <div className="space-y-1.5"><Label htmlFor="provider-timeout">请求超时（毫秒）</Label><Input id="provider-timeout" type="number" min={1} value={timeout} onChange={event => setTimeout(event.target.value)} placeholder="例如：30000" /><p className="text-[11px] text-muted-foreground">单个上游请求的等待上限，超时后自动切换到下一个候选绑定。默认 30000（30 秒）。</p></div>
 
             <div className="space-y-3">
               <div className="space-y-1">

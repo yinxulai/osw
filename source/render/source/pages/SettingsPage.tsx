@@ -42,12 +42,12 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="listen-addr" className="text-xs">监听地址</Label>
-                  <Input id="listen-addr" defaultValue="127.0.0.1" className="h-8 text-xs" />
+                  <Input id="listen-addr" defaultValue="127.0.0.1" className="h-8 text-xs" placeholder="例如：127.0.0.1" />
                   <p className="text-[11px] text-muted-foreground">建议使用 127.0.0.1 仅本地访问</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="listen-port" className="text-xs">监听端口</Label>
-                  <Input id="listen-port" type="number" defaultValue={9300} className="h-8 text-xs" />
+                  <Input id="listen-port" type="number" defaultValue={9300} className="h-8 text-xs" placeholder="例如：9300" />
                   <p className="text-[11px] text-muted-foreground">修改后需要重启服务</p>
                 </div>
               </div>
@@ -69,17 +69,17 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="conn-timeout" className="text-xs">连接超时</Label>
-                  <Input id="conn-timeout" type="number" defaultValue={10000} className="h-8 text-xs" />
+                  <Input id="conn-timeout" type="number" defaultValue={10000} className="h-8 text-xs" placeholder="例如：10000" />
                   <p className="text-[11px] text-muted-foreground">建立连接超时（毫秒）</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="idle-timeout" className="text-xs">空闲超时</Label>
-                  <Input id="idle-timeout" type="number" defaultValue={30000} className="h-8 text-xs" />
+                  <Input id="idle-timeout" type="number" defaultValue={30000} className="h-8 text-xs" placeholder="例如：30000" />
                   <p className="text-[11px] text-muted-foreground">服务端无数据返回超时（毫秒）</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="total-timeout" className="text-xs">总超时</Label>
-                  <Input id="total-timeout" type="number" defaultValue={300000} className="h-8 text-xs" />
+                  <Input id="total-timeout" type="number" defaultValue={300000} className="h-8 text-xs" placeholder="例如：300000" />
                   <p className="text-[11px] text-muted-foreground">请求总时长上限（毫秒）</p>
                 </div>
               </div>
@@ -135,17 +135,17 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="fail-threshold" className="text-xs">连续失败阈值</Label>
-                  <Input id="fail-threshold" type="number" defaultValue={3} className="h-8 text-xs" />
+                  <Input id="fail-threshold" type="number" defaultValue={3} className="h-8 text-xs" placeholder="例如：3" />
                   <p className="text-[11px] text-muted-foreground">达到此次数进入冷却</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="init-cooldown" className="text-xs">初始冷却时间</Label>
-                  <Input id="init-cooldown" type="number" defaultValue={30} className="h-8 text-xs" />
+                  <Input id="init-cooldown" type="number" defaultValue={30} className="h-8 text-xs" placeholder="例如：30" />
                   <p className="text-[11px] text-muted-foreground">秒</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="max-cooldown" className="text-xs">最大冷却时间</Label>
-                  <Input id="max-cooldown" type="number" defaultValue={300} className="h-8 text-xs" />
+                  <Input id="max-cooldown" type="number" defaultValue={300} className="h-8 text-xs" placeholder="例如：300" />
                   <p className="text-[11px] text-muted-foreground">秒，指数退避上限</p>
                 </div>
               </div>
@@ -207,7 +207,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="log-retention" className="text-xs">日志保留天数</Label>
-                  <Input id="log-retention" type="number" defaultValue={30} className="h-8 text-xs" />
+                  <Input id="log-retention" type="number" defaultValue={30} className="h-8 text-xs" placeholder="例如：30" />
                   <p className="text-[11px] text-muted-foreground">超过自动清理</p>
                 </div>
                 <div className="space-y-1.5">

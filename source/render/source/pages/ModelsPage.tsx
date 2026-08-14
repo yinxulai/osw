@@ -284,7 +284,7 @@ export default function ModelsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">优先级</label>
-                  <input className="form-input" type="number" defaultValue={1} />
+                  <input className="form-input" type="number" defaultValue={1} placeholder="例如：1" />
                   <div className="form-hint">数字越小优先级越高</div>
                 </div>
               </div>

@@ -472,7 +472,7 @@ export default function ProvidersPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="provider-timeout">请求超时（毫秒）</Label>
-              <Input id="provider-timeout" type="number" defaultValue={editingProviderId ? selected?.timeout : 30000} />
+              <Input id="provider-timeout" type="number" defaultValue={editingProviderId ? selected?.timeout : 30000} placeholder="例如：30000" />
             </div>
           </div>
           <DialogFooter>
