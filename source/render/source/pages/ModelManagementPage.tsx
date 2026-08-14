@@ -32,8 +32,13 @@ import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 
 interface BindingEntry {
   protocol: Protocol
-  upstreamModelId: string
   upstreamUrl: string
+  upstreamModelId: string
+}
+
+interface ProviderEndpointEntry {
+  protocol: Protocol
+  url: string
 }
 
 type ProviderEndpoints = Partial<Record<Protocol, string>>
@@ -63,6 +68,12 @@ const PROTOCOL_OPTIONS: { value: Protocol; label: string }[] = [
   { value: 'openai-responses', label: 'OpenAI Responses' },
   { value: 'anthropic-messages', label: 'Anthropic Messages' },
 ]
+
+const PROTOCOL_DESCRIPTIONS: Record<Protocol, string> = {
+  'openai-completions': 'OpenAI 兼容的 /chat/completions 接口，适用于 OpenAI、DeepSeek、Ollama 等。',
+  'openai-responses': 'OpenAI 新一代 /responses 接口，适用于 OpenAI 官方模型。',
+  'anthropic-messages': 'Anthropic Claude 的 /messages 接口。',
+}
 
 const PROTOCOL_PLACEHOLDERS: Record<Protocol, string> = {
   'openai-completions': 'https://api.openai.com/v1/chat/completions',
@@ -148,7 +159,7 @@ export default function ModelManagementPage() {
   const [providerName, setProviderName] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [timeout, setTimeout] = useState('30000')
-  const [providerEndpoints, setProviderEndpoints] = useState<ProviderEndpoints>({})
+  const [providerEndpointEntries, setProviderEndpointEntries] = useState<ProviderEndpointEntry[]>([])
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [editingBindingId, setEditingBindingId] = useState<string | null>(null)
   const [bindingEntries, setBindingEntries] = useState<BindingEntry[]>([])
@@ -214,16 +225,36 @@ export default function ModelManagementPage() {
     setProviderName(provider?.name ?? '')
     setApiKey('')
     setTimeout(String(provider?.timeoutMilliseconds ?? 30000))
-    setProviderEndpoints(parseProviderEndpoints(provider))
+    setProviderEndpointEntries(
+      PROTOCOL_OPTIONS
+        .map(option => ({ protocol: option.value, url: parseProviderEndpoints(provider)[option.value] ?? '' }))
+        .filter(entry => entry.url),
+    )
     setProviderDialogOpen(true)
+  }
+
+  const addProviderEndpointEntry = () => {
+    setProviderEndpointEntries(current => {
+      const usedProtocols = new Set(current.map(entry => entry.protocol))
+      const nextProtocol = PROTOCOL_OPTIONS.find(option => !usedProtocols.has(option.value))?.value ?? 'openai-responses'
+      return [...current, { protocol: nextProtocol, url: '' }]
+    })
+  }
+
+  const updateProviderEndpointEntry = (index: number, patch: Partial<ProviderEndpointEntry>) => {
+    setProviderEndpointEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+  }
+
+  const removeProviderEndpointEntry = (index: number) => {
+    setProviderEndpointEntries(current => current.filter((_, i) => i !== index))
   }
 
   const saveProvider = async () => {
     if (!providerName.trim() || (!editingProviderId && !apiKey.trim())) return
     setSaving(true)
     const endpoints: Record<string, string> = Object.fromEntries(
-      PROTOCOL_OPTIONS
-        .map(option => [option.value, (providerEndpoints[option.value] ?? '').trim()])
+      providerEndpointEntries
+        .map(entry => [entry.protocol, entry.url.trim()])
         .filter(([, value]) => value),
     )
     const result = editingProviderId
@@ -455,30 +486,35 @@ export default function ModelManagementPage() {
       </PageContent>
 
       <Dialog open={providerDialogOpen} onOpenChange={setProviderDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle><DialogDescription>供应商负责保存 API Key 和请求超时。</DialogDescription></DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
             <div className="space-y-1.5"><Label htmlFor="provider-name">供应商名称</Label><Input id="provider-name" value={providerName} onChange={event => setProviderName(event.target.value)} placeholder="例如：OpenAI" /><p className="text-[11px] text-muted-foreground">用于在列表中区分不同的服务渠道，例如 OpenAI、Anthropic、DeepSeek。</p></div>
             <div className="space-y-1.5"><Label htmlFor="provider-key">API Key</Label><div className="relative"><KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input id="provider-key" type="password" className="pl-8" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={editingProviderId ? '留空表示不修改' : 'sk-...'} /></div><p className="text-[11px] text-muted-foreground">密钥仅保存在本机，用于调用该供应商的上游接口。协议不同认证方式不同（OpenAI 用 Bearer，Anthropic 用 x-api-key）。</p></div>
             <div className="space-y-1.5"><Label htmlFor="provider-timeout">请求超时（毫秒）</Label><Input id="provider-timeout" type="number" min={1} value={timeout} onChange={event => setTimeout(event.target.value)} /><p className="text-[11px] text-muted-foreground">单个上游请求的等待上限，超时后自动切换到下一个候选绑定。默认 30000（30 秒）。</p></div>
-            <div className="space-y-2 rounded-md border p-3">
+
+            <div className="space-y-3">
               <div className="space-y-1">
                 <Label>协议默认接口地址</Label>
-                <p className="text-[11px] text-muted-foreground">为每个协议配置该供应商的默认完整接口地址。添加模型时如不单独填写地址，将自动沿用这里的默认地址。</p>
+                <p className="text-[11px] text-muted-foreground">按需添加协议，为每个协议配置该供应商的默认完整接口地址。添加模型时如不单独填写地址，将自动沿用这里的默认地址。</p>
               </div>
-              {PROTOCOL_OPTIONS.map(option => (
-                <div key={option.value} className="space-y-1.5">
-                  <Label className="text-[11px] font-medium text-muted-foreground">{option.label}</Label>
-                  <Input
-                    type="url"
-                    className="font-mono text-xs"
-                    value={providerEndpoints[option.value] ?? ''}
-                    onChange={event => setProviderEndpoints(current => ({ ...current, [option.value]: event.target.value }))}
-                    placeholder={PROTOCOL_PLACEHOLDERS[option.value]}
-                  />
+              {providerEndpointEntries.map((entry, index) => (
+                <div key={index} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-medium text-muted-foreground">接口 {index + 1}</Label>
+                    {providerEndpointEntries.length > 1 && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" title="移除该接口" onClick={() => removeProviderEndpointEntry(index)}><Trash2 size={13} /></Button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>请求协议</Label>
+                    <Select value={entry.protocol} onValueChange={value => updateProviderEndpointEntry(index, { protocol: value as Protocol })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROTOCOL_OPTIONS.map(option => <SelectItem key={option.value} value={option.value} disabled={providerEndpointEntries.some(other => other.protocol === option.value)}>{option.label}</SelectItem>)}</SelectContent></Select>
+                    <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
+                  </div>
+                  <div className="space-y-1.5"><Label htmlFor={`provider-endpoint-url-${index}`}>完整接口地址</Label><Input id={`provider-endpoint-url-${index}`} type="url" className="font-mono text-xs" value={entry.url} onChange={event => updateProviderEndpointEntry(index, { url: event.target.value })} placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]} /><p className="text-[11px] text-muted-foreground">该协议下所有模型的默认请求地址。留空表示该协议暂未配置默认地址。</p></div>
                 </div>
               ))}
-              <p className="text-[10px] text-muted-foreground">留空表示该协议暂未配置默认地址，对应模型的该协议必须单独填写地址。</p>
+              <Button variant="outline" size="sm" className="h-8 w-full text-xs" onClick={addProviderEndpointEntry}><Plus size={13} /> 添加协议</Button>
             </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setProviderDialogOpen(false)}>取消</Button><Button disabled={saving || !providerName.trim() || (!editingProviderId && !apiKey.trim())} onClick={() => void saveProvider()}>{saving ? '保存中...' : editingProviderId ? '保存修改' : '创建供应商'}</Button></DialogFooter>
@@ -488,7 +524,7 @@ export default function ModelManagementPage() {
       <Dialog open={bindingDialogOpen} onOpenChange={setBindingDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader><DialogTitle>{editingBindingId ? '编辑上游模型' : '添加上游模型'}</DialogTitle><DialogDescription>一个模型可配置多个协议。接口地址可选，留空将使用该供应商在此协议下的默认地址。</DialogDescription></DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 py-2">
             {bindingEntries.map((entry, index) => (
               <div key={index} className="space-y-3 rounded-md border p-3">
                 <div className="flex items-center justify-between">

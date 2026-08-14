@@ -10,7 +10,7 @@ const main = async () => {
       { command: 'pnpm', args: ['vite', 'build'], label: 'Bundling with Vite' },
       {
         command: 'pnpm',
-        args: ['electron-builder', '--config', 'electron-builder.config.ts'],
+        args: ['electron-builder', '--config', 'electron-builder.config.cjs'],
         label: 'Packaging with electron-builder',
       },
     ])

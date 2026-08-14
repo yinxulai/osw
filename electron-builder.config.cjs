@@ -1,6 +1,5 @@
-import type { Configuration } from 'electron-builder'
-
-export default {
+/** @type {import('electron-builder').Configuration} */
+module.exports = {
   appId: 'com.yinxulai.one-switch',
   productName: 'One Switch',
   directories: {
@@ -16,9 +15,10 @@ export default {
   },
   win: {
     target: ['nsis'],
+    signAndEditExecutable: false,
   },
   linux: {
     target: ['AppImage'],
     category: 'Development',
   },
-} satisfies Configuration
+}
