@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
-import { clearLogs, exportLogs, listLogs, type LogEntry } from './log-buffer'
+import type { LogEntry } from '@common/schemas'
+import { clearLogs, exportLogs, listLogs } from './log-buffer'
 
 export const logRoutes: Record<string, ManagementHandler> = {
   '/api/logs/list': handleListLogs,

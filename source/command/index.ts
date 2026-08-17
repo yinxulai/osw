@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
 import { ElectronSecretStore } from './secret-store'
+import { TrayManager } from './tray-manager'
+import { AutoLaunchManager } from './auto-launch'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -24,6 +26,8 @@ process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
   : path.join(process.env.DIST, 'render')
 
 let win: BrowserWindow | null = null
+let trayManager: TrayManager | null = null
+let autoLaunchManager: AutoLaunchManager | null = null
 
 function createWindow() {
   win = new BrowserWindow({
@@ -62,15 +66,31 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // 初始化系统托盘
+  trayManager = new TrayManager()
+  trayManager.init(win!)
+
+  // 初始化开机自启
+  autoLaunchManager = new AutoLaunchManager()
+  void autoLaunchManager.init()
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else if (win) {
+      win.show()
+      win.focus()
+    }
   })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // 不退出应用，保持在托盘运行
+  // if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('before-quit', () => {
+  if (trayManager) {
+    trayManager.prepareForQuit()
+  }
   void stopServer()
 })

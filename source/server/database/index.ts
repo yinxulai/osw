@@ -41,6 +41,7 @@ export async function closeDatabase(): Promise<void> {
 
 function ensureSchema(db: DatabaseSync): void {
   migrateRequestAttemptsForeignKeys(db)
+  migrateSettingsAutoLaunch(db)
   for (const statement of INITIAL_SCHEMA) {
     db.exec(statement)
   }
@@ -84,6 +85,22 @@ function migrateRequestAttemptsForeignKeys(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_attempts_created_time ON request_attempts(createdTime);
     COMMIT;
   `)
+}
+
+/**
+ * 迁移：settings 表添加 autoLaunch 列
+ * 检测到表存在但列不存在时添加。
+ */
+function migrateSettingsAutoLaunch(db: DatabaseSync): void {
+  const tableRows = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'`)
+    .all() as Array<{ name: string }>
+  if (tableRows.length === 0) return // 表不存在，INITIAL_SCHEMA 会创建带列的新表
+
+  const rows = db.prepare(`PRAGMA table_info(settings)`).all() as Array<{ name: string }>
+  const hasAutoLaunch = rows.some(r => r.name === 'autoLaunch')
+  if (hasAutoLaunch) return
+  db.exec(`ALTER TABLE settings ADD COLUMN autoLaunch INTEGER NOT NULL DEFAULT 0`)
 }
 
 const INITIAL_SCHEMA = [
@@ -146,6 +163,7 @@ const INITIAL_SCHEMA = [
     cooldownMaxSeconds INTEGER NOT NULL DEFAULT 300,
     consecutiveFailureThreshold INTEGER NOT NULL DEFAULT 3,
     idleTimeoutMilliseconds INTEGER NOT NULL DEFAULT 30000,
+    autoLaunch INTEGER NOT NULL DEFAULT 0,
     updatedTime BIGINT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS request_logs (

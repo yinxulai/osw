@@ -90,6 +90,7 @@ export const settings = sqliteTable(
     cooldownMaxSeconds: integer('cooldownMaxSeconds').notNull().default(300),
     consecutiveFailureThreshold: integer('consecutiveFailureThreshold').notNull().default(3),
     idleTimeoutMilliseconds: integer('idleTimeoutMilliseconds').notNull().default(30000),
+    autoLaunch: integer('autoLaunch', { mode: 'boolean' }).notNull().default(false),
     updatedTime: integer('updatedTime').notNull(),
   },
 )

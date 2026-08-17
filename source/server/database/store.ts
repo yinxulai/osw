@@ -22,6 +22,29 @@ import {
   settings,
 } from './schema'
 
+// ========== Settings Change Listeners ==========
+
+type SettingsChangeListener = (settings: Settings) => void
+const settingsChangeListeners: SettingsChangeListener[] = []
+
+export function onSettingsChanged(listener: SettingsChangeListener): () => void {
+  settingsChangeListeners.push(listener)
+  return () => {
+    const idx = settingsChangeListeners.indexOf(listener)
+    if (idx >= 0) settingsChangeListeners.splice(idx, 1)
+  }
+}
+
+function notifySettingsChanged(newSettings: Settings): void {
+  for (const listener of settingsChangeListeners) {
+    try {
+      listener(newSettings)
+    } catch (err) {
+      console.error('[store] settings change listener error', err)
+    }
+  }
+}
+
 // ========== Provider ==========
 
 export async function listProviders(includeDeleted = false): Promise<Provider[]> {
@@ -248,6 +271,14 @@ export async function listUpstreamModelsByProvider(
   return rows.map(mapUpstreamModel)
 }
 
+export async function listUpstreamModels(includeDeleted = false): Promise<UpstreamModel[]> {
+  const db = getDb()
+  const rows = includeDeleted
+    ? db.select().from(upstreamModels).orderBy(upstreamModels.priority).all()
+    : db.select().from(upstreamModels).where(isNull(upstreamModels.deletedTime)).orderBy(upstreamModels.priority).all()
+  return rows.map(mapUpstreamModel)
+}
+
 export async function getUpstreamModel(id: string): Promise<UpstreamModel | undefined> {
   const row = getDb().select().from(upstreamModels).where(eq(upstreamModels.id, id)).get()
   return row ? mapUpstreamModel(row) : undefined
@@ -428,12 +459,15 @@ export async function updateSettings(
       ...(updates.idleTimeoutMilliseconds !== undefined
         ? { idleTimeoutMilliseconds: updates.idleTimeoutMilliseconds }
         : {}),
+      ...(updates.autoLaunch !== undefined ? { autoLaunch: updates.autoLaunch } : {}),
       updatedTime: time,
     })
     .where(eq(settings.id, SETTINGS_ID))
     .run()
   const row = db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).get()
-  return mapSettings(row!)
+  const result = mapSettings(row!)
+  notifySettingsChanged(result)
+  return result
 }
 
 // ========== Request Log ==========
@@ -532,6 +566,235 @@ export async function listAttemptsByRequest(requestId: string): Promise<RequestA
   return rows.map(mapRequestAttempt)
 }
 
+// ========== Analytics / Statistics ==========
+
+export interface StatsSummary {
+  totalRequests: number
+  successCount: number
+  failedCount: number
+  successRate: number
+  avgLatencyMs: number
+  totalTokens: number
+}
+
+export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
+  const db = getDb()
+  const result = db
+    .select({
+      total: sql<number>`count(*)`.as('total'),
+      success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
+      failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
+      avgLatency: sql<number>`avg(${requestLogs.totalDurationMilliseconds})`.as('avgLatency'),
+      tokens: sql<number>`coalesce(sum(${requestLogs.totalTokens}), 0)`.as('tokens'),
+    })
+    .from(requestLogs)
+    .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
+    .get()
+  const total = result?.total ?? 0
+  const success = result?.success ?? 0
+  const failed = result?.failed ?? 0
+  return {
+    totalRequests: total,
+    successCount: success,
+    failedCount: failed,
+    successRate: total > 0 ? success / total : 0,
+    avgLatencyMs: result?.avgLatency ?? 0,
+    totalTokens: result?.tokens ?? 0,
+  }
+}
+
+export interface DailyTrendPoint {
+  day: string // YYYY-MM-DD
+  requests: number
+  success: number
+  failed: number
+}
+
+export async function getRequestTrend(sinceMs: number, days: number): Promise<DailyTrendPoint[]> {
+  const db = getDb()
+  const rows = db
+    .select({
+      day: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('day'),
+      requests: sql<number>`count(*)`.as('requests'),
+      success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
+      failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
+    })
+    .from(requestLogs)
+    .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
+    .groupBy(sql`day`)
+    .orderBy(sql`day`)
+    .all()
+
+  // 填充没有数据的天
+  const map = new Map(rows.map(r => [r.day, r]))
+  const result: DailyTrendPoint[] = []
+  const now = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const row = map.get(key)
+    result.push({
+      day: key,
+      requests: row?.requests ?? 0,
+      success: row?.success ?? 0,
+      failed: row?.failed ?? 0,
+    })
+  }
+  return result
+}
+
+export interface ProviderStat {
+  providerId: string
+  providerName: string
+  requests: number
+  success: number
+  failed: number
+  avgLatencyMs: number
+}
+
+export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]> {
+  const db = getDb()
+  // 用 request_attempts 的 attemptIndex=0 作为"归属 provider"统计（即首次尝试的 provider）
+  // 更准确的方式：按 request_logs 关联，但 request_logs 没有 providerId
+  // 用 attemptIndex=0 代表该请求最初分配给哪个 provider
+  const rows = db
+    .select({
+      providerId: requestAttempts.providerId,
+      providerName: providers.name,
+      requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
+      success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
+      failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' and ${requestAttempts.attemptIndex} = 0 then ${requestAttempts.requestId} end)`.as('failed'),
+      avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
+    })
+    .from(requestAttempts)
+    .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
+    .where(sql`${requestAttempts.createdTime} >= ${sinceMs}`)
+    .groupBy(requestAttempts.providerId)
+    .orderBy(sql`requests desc`)
+    .all()
+
+  return rows.map(r => ({
+    providerId: r.providerId,
+    providerName: r.providerName,
+    requests: r.requests ?? 0,
+    success: r.success ?? 0,
+    failed: r.failed ?? 0,
+    avgLatencyMs: r.avgLatency ?? 0,
+  }))
+}
+
+export interface ModelStat {
+  upstreamModelId: string
+  providerId: string
+  providerName: string
+  requests: number
+  success: number
+  avgLatencyMs: number
+}
+
+export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
+  const db = getDb()
+  const rows = db
+    .select({
+      upstreamModelId: requestAttempts.upstreamModelId,
+      providerId: requestAttempts.providerId,
+      providerName: providers.name,
+      requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
+      success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
+      avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
+    })
+    .from(requestAttempts)
+    .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
+    .where(sql`${requestAttempts.createdTime} >= ${sinceMs}`)
+    .groupBy(requestAttempts.upstreamModelId, requestAttempts.providerId)
+    .orderBy(sql`requests desc`)
+    .limit(limit)
+    .all()
+
+  return rows.map(r => ({
+    upstreamModelId: r.upstreamModelId,
+    providerId: r.providerId,
+    providerName: r.providerName,
+    requests: r.requests ?? 0,
+    success: r.success ?? 0,
+    avgLatencyMs: r.avgLatency ?? 0,
+  }))
+}
+
+export interface LatencyBucket {
+  range: string
+  count: number
+}
+
+export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBucket[]> {
+  const db = getDb()
+  const buckets = [
+    { range: '< 1s', min: 0, max: 1000 },
+    { range: '1-2s', min: 1000, max: 2000 },
+    { range: '2-3s', min: 2000, max: 3000 },
+    { range: '3-5s', min: 3000, max: 5000 },
+    { range: '> 5s', min: 5000, max: Number.MAX_SAFE_INTEGER },
+  ]
+  const result: LatencyBucket[] = []
+  for (const b of buckets) {
+    const row = db
+      .select({ count: sql<number>`count(*)`.as('count') })
+      .from(requestLogs)
+      .where(sql`${requestLogs.createdTime} >= ${sinceMs} and ${requestLogs.totalDurationMilliseconds} >= ${b.min} and ${requestLogs.totalDurationMilliseconds} < ${b.max}`)
+      .get()
+    result.push({ range: b.range, count: row?.count ?? 0 })
+  }
+  return result
+}
+
+export interface FailureReasonStat {
+  reason: string
+  count: number
+}
+
+export async function getFailureReasons(sinceMs: number): Promise<FailureReasonStat[]> {
+  const db = getDb()
+  // 按 errorCode 分类统计失败 attempt
+  const rows = db
+    .select({
+      errorCode: requestAttempts.errorCode,
+      count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count'),
+    })
+    .from(requestAttempts)
+    .where(sql`${requestAttempts.createdTime} >= ${sinceMs} and ${requestAttempts.status} = 'failed'`)
+    .groupBy(requestAttempts.errorCode)
+    .orderBy(sql`count desc`)
+    .all()
+
+  // 归类到友好名称
+  const categories: Record<string, number> = {
+    '超时': 0,
+    '限流 (429)': 0,
+    '服务错误 (5xx)': 0,
+    '认证失败': 0,
+    '其他': 0,
+  }
+  for (const row of rows) {
+    const code = row.errorCode ?? 'UNKNOWN'
+    if (code.includes('TIMEOUT') || code.includes('ECONNRESET') || code.includes('ETIMEDOUT')) {
+      categories['超时'] += row.count
+    } else if (code.includes('429') || code.includes('RATE_LIMIT')) {
+      categories['限流 (429)'] += row.count
+    } else if (/Status_5\d\d/.test(code) || code.includes('UPSTREAM_ERROR') || code.includes('SERVER_ERROR')) {
+      categories['服务错误 (5xx)'] += row.count
+    } else if (code.includes('401') || code.includes('403') || code.includes('AUTH')) {
+      categories['认证失败'] += row.count
+    } else {
+      categories['其他'] += row.count
+    }
+  }
+  return Object.entries(categories)
+    .map(([reason, count]) => ({ reason, count }))
+    .filter(r => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+}
+
 // ========== Row mappers ==========
 
 function mapProvider(row: typeof providers.$inferSelect): Provider {
@@ -606,6 +869,7 @@ function mapSettings(row: typeof settings.$inferSelect): Settings {
     cooldownMaxSeconds: row.cooldownMaxSeconds,
     consecutiveFailureThreshold: row.consecutiveFailureThreshold,
     idleTimeoutMilliseconds: row.idleTimeoutMilliseconds,
+    autoLaunch: Boolean(row.autoLaunch),
     updatedTime: Number(row.updatedTime),
   }
 }

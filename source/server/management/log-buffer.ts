@@ -4,14 +4,9 @@
  * 不落盘、不跨进程持久化。
  */
 
-export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
+import type { LogEntry } from '@common/schemas'
 
-export interface LogEntry {
-  id: number
-  level: LogLevel
-  timestamp: string
-  message: string
-}
+export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 
 const MAX_ENTRIES = 5000
 const entries: LogEntry[] = []
@@ -36,7 +31,7 @@ function push(level: LogLevel, args: unknown[]): void {
   entries.push({
     id: nextId++,
     level,
-    timestamp: new Date().toISOString(),
+    timestamp: Date.now(),
     message: formatArgs(args),
   })
   if (entries.length > MAX_ENTRIES) {
@@ -88,6 +83,6 @@ export function clearLogs(): void {
 
 export function exportLogs(): string {
   return entries
-    .map(entry => `[${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}`)
+    .map(entry => `[${new Date(entry.timestamp).toISOString()}] [${entry.level.toUpperCase()}] ${entry.message}`)
     .join('\n')
 }

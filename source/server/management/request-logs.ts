@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
+import type { RequestLogEntry } from '@common/schemas'
 import { listAttemptsByRequest, listProviders, listRequestLogs } from '../database/store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
@@ -9,27 +10,6 @@ export const requestLogRoutes: Record<string, ManagementHandler> = {
 }
 
 const ListRequestLogsSchema = z.object({ limit: z.number().int().positive().max(200).optional() })
-
-interface RequestLogEntry {
-  id: string
-  logicalModelId: string
-  protocol: string
-  status: string
-  totalDurationMilliseconds: number
-  totalTokens: number | null
-  createdTime: number
-  attempts: Array<{
-    attemptIndex: number
-    status: string
-    providerId: string
-    providerName: string
-    upstreamModelId: string
-    errorCode: string | null
-    errorMessage: string | null
-    durationMilliseconds: number
-    createdTime: number
-  }>
-}
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { limit } = ListRequestLogsSchema.parse(body ?? {})

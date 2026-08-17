@@ -102,6 +102,7 @@ export const SettingsSchema = z.object({
   cooldownMaxSeconds: z.number().int().positive().default(300),
   consecutiveFailureThreshold: z.number().int().positive().default(3),
   idleTimeoutMilliseconds: z.number().int().positive().default(30000),
+  autoLaunch: z.boolean().default(false),
   updatedTime: z.number().int(),
 })
 export type Settings = z.infer<typeof SettingsSchema>
@@ -155,3 +156,142 @@ export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
 export type ApiSuccess<T> = { success: true; data: T }
 export type ApiError = { success: false; errorCode: string; errorMessage: string }
 export type ApiResponse<T> = ApiSuccess<T> | ApiError
+
+// ========== API 错误码（统一枚举） ==========
+
+export const ApiErrorCodeSchema = z.enum([
+  // 通用
+  'NOT_FOUND',
+  'VALIDATION_ERROR',
+  'INTERNAL_ERROR',
+  'NETWORK_ERROR',
+  'INVALID_RESPONSE',
+  'HTTP_ERROR',
+  // 认证
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  // 资源
+  'RESOURCE_NOT_FOUND',
+  'DUPLICATE_RESOURCE',
+  // 代理
+  'UNKNOWN_API_PATH',
+  'UPSTREAM_ERROR',
+  'ALL_PROVIDERS_FAILED',
+  'PROXY_NOT_RUNNING',
+])
+export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
+
+// ========== 请求日志条目（含 attempt + providerName，用于列表展示） ==========
+
+export const RequestLogEntryAttemptSchema = z.object({
+  attemptIndex: z.number().int().nonnegative(),
+  status: RequestStatusSchema,
+  providerId: z.string(),
+  providerName: z.string(),
+  upstreamModelId: z.string(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  durationMilliseconds: z.number().int().nonnegative(),
+  createdTime: z.number().int(),
+})
+export type RequestLogEntryAttempt = z.infer<typeof RequestLogEntryAttemptSchema>
+
+export const RequestLogEntrySchema = z.object({
+  id: z.string().startsWith('req_'),
+  logicalModelId: z.string(),
+  protocol: ProtocolSchema,
+  status: RequestStatusSchema,
+  totalDurationMilliseconds: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative().nullable(),
+  createdTime: z.number().int(),
+  attempts: z.array(RequestLogEntryAttemptSchema),
+})
+export type RequestLogEntry = z.infer<typeof RequestLogEntrySchema>
+
+// ========== 运行日志条目 ==========
+
+export const LogEntrySchema = z.object({
+  id: z.number().int().positive(),
+  level: z.enum(['log', 'warn', 'error', 'info', 'debug']),
+  message: z.string(),
+  timestamp: z.number().int(),
+})
+export type LogEntry = z.infer<typeof LogEntrySchema>
+
+// ========== 代理服务状态 ==========
+
+export const ProxyServerStatusSchema = z.object({
+  running: z.boolean(),
+  host: z.string(),
+  port: z.number().int(),
+})
+export type ProxyServerStatus = z.infer<typeof ProxyServerStatusSchema>
+
+// ========== 统计分析 ==========
+
+export const AnalyticsRangeSchema = z.enum(['today', '7d', '30d'])
+export type AnalyticsRange = z.infer<typeof AnalyticsRangeSchema>
+
+export const StatsSummarySchema = z.object({
+  totalRequests: z.number().int().nonnegative(),
+  successCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+  successRate: z.number().min(0).max(1),
+  avgLatencyMs: z.number().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+})
+export type StatsSummary = z.infer<typeof StatsSummarySchema>
+
+export const DailyTrendPointSchema = z.object({
+  day: z.string(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+})
+export type DailyTrendPoint = z.infer<typeof DailyTrendPointSchema>
+
+export const ProviderStatSchema = z.object({
+  providerId: z.string(),
+  providerName: z.string(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  avgLatencyMs: z.number().nonnegative(),
+  percent: z.number().int().min(0).max(100),
+})
+export type ProviderStat = z.infer<typeof ProviderStatSchema>
+
+export const ModelStatSchema = z.object({
+  upstreamModelId: z.string(),
+  providerId: z.string(),
+  providerName: z.string(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  successRate: z.number().min(0).max(1),
+  avgLatencyMs: z.number().nonnegative(),
+})
+export type ModelStat = z.infer<typeof ModelStatSchema>
+
+export const LatencyBucketSchema = z.object({
+  range: z.string(),
+  count: z.number().int().nonnegative(),
+  percent: z.number().int().min(0).max(100),
+})
+export type LatencyBucket = z.infer<typeof LatencyBucketSchema>
+
+export const FailureReasonStatSchema = z.object({
+  reason: z.string(),
+  count: z.number().int().nonnegative(),
+  percent: z.number().int().min(0).max(100),
+})
+export type FailureReasonStat = z.infer<typeof FailureReasonStatSchema>
+
+export const AnalyticsSummarySchema = z.object({
+  summary: StatsSummarySchema,
+  trend: z.array(DailyTrendPointSchema),
+  providerStats: z.array(ProviderStatSchema),
+  modelStats: z.array(ModelStatSchema),
+  latencyDistribution: z.array(LatencyBucketSchema),
+  failureReasons: z.array(FailureReasonStatSchema),
+})
+export type AnalyticsSummary = z.infer<typeof AnalyticsSummarySchema>

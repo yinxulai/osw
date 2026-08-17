@@ -31,3 +31,6 @@ export {
   startProxyServer,
   stopProxyServer,
 } from './proxy/server'
+
+export { onSettingsChanged } from './database/store'
+export { getSettings } from './database/store'

@@ -3,20 +3,22 @@
  * 统一 POST 风格，路径格式 /api/resource/action
  */
 
+import type {
+  ApiResponse,
+  Provider,
+  ProviderHealth,
+  LogicalModel,
+  UpstreamModel,
+  ProtocolEndpoint,
+  Settings,
+  ProxyServerStatus,
+  LogEntry,
+  RequestLogEntry,
+  AnalyticsRange,
+  AnalyticsSummary,
+} from '@common/schemas'
+
 const API_BASE = import.meta.env.VITE_MANAGEMENT_API_URL ?? 'http://127.0.0.1:9301/api'
-
-export interface ApiError {
-  success: false
-  errorCode: string
-  errorMessage: string
-}
-
-export interface ApiSuccess<T> {
-  success: true
-  data: T
-}
-
-export type ApiResponse<T> = ApiSuccess<T> | ApiError
 
 type CreateProviderInput = {
   name: string
@@ -84,8 +86,6 @@ async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse
 
 // ========== Provider ==========
 
-import type { Provider, ProviderHealth, LogicalModel, UpstreamModel, ProtocolEndpoint, Settings } from '@common/schemas'
-
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
@@ -146,12 +146,6 @@ export const healthApi = {
 
 // ========== Proxy Lifecycle ==========
 
-export interface ProxyServerStatus {
-  running: boolean
-  host: string
-  port: number
-}
-
 export const proxyApi = {
   status: () => request<ProxyServerStatus>('/proxy/status'),
   start: () => request<ProxyServerStatus>('/proxy/start'),
@@ -160,13 +154,6 @@ export const proxyApi = {
 }
 
 // ========== Logs ==========
-
-export interface LogEntry {
-  id: number
-  level: 'info' | 'warn' | 'error' | 'debug'
-  timestamp: string
-  message: string
-}
 
 export const logsApi = {
   list: (params: { after?: number; limit?: number } = {}) =>
@@ -177,27 +164,56 @@ export const logsApi = {
 
 // ========== Request Logs ==========
 
-export interface RequestLogEntry {
-  id: string
-  logicalModelId: string
-  protocol: string
-  status: string
-  totalDurationMilliseconds: number
-  totalTokens: number | null
-  createdTime: number
-  attempts: Array<{
-    attemptIndex: number
-    status: string
-    providerId: string
-    providerName: string
+export const requestLogApi = {
+  list: (limit = 30) => request<{ logs: RequestLogEntry[] }>('/request-log/list', { limit }),
+}
+
+// ========== Analytics ==========
+
+export const analyticsApi = {
+  summary: (range: AnalyticsRange = '7d') =>
+    request<AnalyticsSummary>('/analytics/summary', { range }),
+}
+
+// ========== Config Import/Export ==========
+
+export interface ExportedConfig {
+  version: 1
+  exportedAt: number
+  settings: Partial<Settings>
+  providers: Array<{
+    id?: string
+    name: string
+    timeoutMilliseconds?: number
+    enabled?: boolean
+    apiKeyPlaceholder?: string
+    apiKey?: string
+    endpoints?: Record<string, string>
+  }>
+  logicalModels: Array<{
+    id?: string
+    name: string
+    description?: string
+    enabled?: boolean
+  }>
+  upstreamModels: Array<{
+    id?: string
+    logicalModelName?: string
+    providerName?: string
+    logicalModelId?: string
+    providerId?: string
     upstreamModelId: string
-    errorCode: string | null
-    errorMessage: string | null
-    durationMilliseconds: number
-    createdTime: number
+    endpoints?: ProtocolEndpoint[]
+    priority: number
+    enabled?: boolean
   }>
 }
 
-export const requestLogApi = {
-  list: (limit = 30) => request<{ logs: RequestLogEntry[] }>('/request-log/list', { limit }),
+export const configApi = {
+  export: () => request<{ config: ExportedConfig; content: string }>('/config/export', {}),
+  import: (config: ExportedConfig, mode: 'merge' | 'replace' = 'merge') =>
+    request<{ imported: { providers: number; logicalModels: number; upstreamModels: number } }>(
+      '/config/import',
+      { config, mode },
+    ),
 }
