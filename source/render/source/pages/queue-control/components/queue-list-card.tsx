@@ -9,20 +9,22 @@ import {
 } from '@dnd-kit/core'
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Circle, CircleDot, GripVertical, RefreshCw, Target } from 'lucide-react'
+import { Circle, CircleDot, GripVertical, RefreshCw, Target, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { SortableBinding } from './sortable-binding'
-import type { UpstreamModel, Provider } from '@common/schemas'
+import type { UpstreamModel, Provider, ProviderHealth } from '@common/schemas'
 
 export type ProviderMap = Record<string, Provider>
+export type HealthMap = Record<string, ProviderHealth>
 
 interface QueueListCardProps {
   models: UpstreamModel[]
   providers: ProviderMap
+  health: HealthMap
   logicalModelName?: string
   mode: 'auto' | 'manual'
   manualModelId: string
@@ -33,10 +35,20 @@ interface QueueListCardProps {
   onDragEnd: (event: DragEndEvent) => void
 }
 
+function formatRelativeTime(ts: number | null | undefined): string {
+  if (!ts) return '—'
+  const diff = Date.now() - ts
+  if (diff < 60_000) return `${Math.floor(diff / 1000)} 秒前`
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  return `${Math.floor(diff / 86_400_000)} 天前`
+}
+
 export function QueueListCard(props: QueueListCardProps) {
   const {
     models,
     providers,
+    health,
     logicalModelName,
     mode,
     manualModelId,
@@ -81,14 +93,14 @@ export function QueueListCard(props: QueueListCardProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="-mx-4 divide-y border-t">
+              <div className="-mx-4 -mb-4 divide-y border-t">
                 {models.map(model => {
                   const provider = providers[model.providerId]
+                  const providerHealth = health[model.providerId]
                   const cooling = isCooling(model.providerId)
                   const selected = mode === 'manual' && manualModelId === model.id
-                  const endpointUrls = model.endpoints
-                    .map(endpoint => endpoint.upstreamUrl.trim())
-                    .filter(Boolean)
+                  const consecutiveFailures = providerHealth?.consecutiveFailures ?? 0
+                  const lastSuccessTime = providerHealth?.lastSuccessTime
                   return (
                     <SortableBinding key={model.id} id={model.id}>
                       {(handleProps, dragging) => (
@@ -128,15 +140,30 @@ export function QueueListCard(props: QueueListCardProps) {
                                 {model.upstreamModelId}
                               </span>
                             </div>
-                            <div className="mt-0.5 flex flex-wrap gap-1">
-                              {model.endpoints.map(endpoint => (
-                                <Badge key={endpoint.protocol} variant="outline" className="h-4 px-1 text-[9px]">
-                                  {endpoint.protocol.toUpperCase()}
-                                </Badge>
-                              ))}
-                              <span className="truncate font-mono text-[10px] text-muted-foreground">
-                                {endpointUrls.join(' / ')}
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                {model.endpoints.map(endpoint => (
+                                  <Badge key={endpoint.protocol} variant="outline" className="h-4 px-1 text-[9px]">
+                                    {endpoint.protocol.toUpperCase()}
+                                  </Badge>
+                                ))}
                               </span>
+                              {consecutiveFailures > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                                  <AlertTriangle size={11} />
+                                  连续失败 {consecutiveFailures} 次
+                                </span>
+                              ) : lastSuccessTime ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
+                                  <CheckCircle2 size={11} />
+                                  最后成功 {formatRelativeTime(lastSuccessTime)}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock size={11} />
+                                  暂无请求记录
+                                </span>
+                              )}
                             </div>
                           </div>
                           <Badge variant={cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>
@@ -157,7 +184,7 @@ export function QueueListCard(props: QueueListCardProps) {
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="flex min-h-40 items-center justify-center border-t text-xs text-muted-foreground">
+          <div className="-mx-4 -mb-4 flex min-h-40 items-center justify-center border-t text-xs text-muted-foreground">
             请先在模型管理中添加上游模型。
           </div>
         )}

@@ -68,8 +68,8 @@ export function useQueueControlService() {
 
   const proxyBaseUrl = proxyStatus ? `http://${proxyStatus.host}:${proxyStatus.port}` : ''
 
-  const copyEndpoint = useCallback(async () => {
-    await navigator.clipboard.writeText(proxyBaseUrl)
+  const copyEndpoint = useCallback(async (url?: string) => {
+    await navigator.clipboard.writeText(url ?? proxyBaseUrl)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }, [proxyBaseUrl])

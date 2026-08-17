@@ -25,16 +25,18 @@ export function QueueControlPage() {
           <>
             <ProxyConfigCard
               proxyBaseUrl={service.proxyBaseUrl}
+              proxyPort={service.proxyStatus?.port ?? 0}
               proxyRunning={service.proxyStatus?.running ?? false}
               copied={service.copied}
               models={service.models}
               onToggleProxy={() => void service.toggleProxy()}
-              onCopyEndpoint={() => void service.copyEndpoint()}
+              onCopyEndpoint={url => void service.copyEndpoint(url)}
             />
 
             <QueueListCard
               models={service.models}
               providers={service.providers}
+              health={service.health}
               logicalModelName={service.logicalModel?.name}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}

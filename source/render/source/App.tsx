@@ -123,7 +123,7 @@ function App() {
             {sections.map(section => (
               <div key={section}>
                 {!collapsed && (
-                  <div className="px-2.5 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  <div className="px-2.5 py-1 text-[11px] font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
                     {section}
                   </div>
                 )}
@@ -140,7 +140,7 @@ function App() {
                             'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors',
                             activePage === item.key
                               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                              : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
                             collapsed && 'justify-center px-0'
                           )}
                         >
