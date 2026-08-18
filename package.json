@@ -8,6 +8,8 @@
     "dev": "node scripts/dev.mjs",
     "dev:preview": "node scripts/dev.mjs --preview",
     "build": "node scripts/build.mjs",
+    "release:mac": "node scripts/build.mjs --mac --arm64 --x64",
+    "release:win": "node scripts/build.mjs --win --arm64 --x64",
     "lint": "node scripts/lint.mjs",
     "db": "node scripts/db.mjs",
     "db:generate": "node scripts/db.mjs generate",

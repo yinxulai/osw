@@ -5,6 +5,7 @@ module.exports = {
   directories: {
     output: 'release/${version}',
   },
+  artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
   files: [
     'dist',
     '!dist/**/*.map',
