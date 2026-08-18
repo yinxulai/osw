@@ -20,6 +20,11 @@ export function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
+export function formatTTFT(ttftMs: number | null | undefined): string {
+  if (ttftMs == null) return '—'
+  return `${(ttftMs / 1000).toFixed(2)}s`
+}
+
 export function formatNumber(n: number | null | undefined): string {
   if (n == null) return '—'
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

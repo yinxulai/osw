@@ -68,13 +68,17 @@ export function LogsPage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
 
   const loadLogs = async (replace: boolean) => {
-    const after = replace || logs.length === 0 ? undefined : logs[logs.length - 1].id
+    const latestId = logs.reduce((maximum, log) => Math.max(maximum, log.id), 0)
+    const after = replace || latestId === 0 ? undefined : latestId
     const response = await logsApi.list({ after, limit: 500 })
     if (!response.success) {
       if (replace) toast.error(response.errorMessage ?? '运行日志加载失败')
       return
     }
-    setLogs(current => replace ? response.data.logs : [...current, ...response.data.logs].slice(-2000))
+    setLogs(current => {
+      const merged = replace ? response.data.logs : [...response.data.logs, ...current]
+      return merged.sort((left, right) => right.id - left.id).slice(0, 2000)
+    })
   }
 
   useEffect(() => {

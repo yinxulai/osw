@@ -10,12 +10,13 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useState } from 'react'
-import { Circle, CircleDot, GripVertical, RefreshCw, Target, Clock, AlertTriangle, CheckCircle2, Loader2, ChevronDown, CheckCircle, XCircle, Zap } from 'lucide-react'
+import { Circle, CircleDot, GripVertical, RefreshCw, Target, Clock, AlertTriangle, CheckCircle2, Loader2, CheckCircle, XCircle, FlaskConical, Timer, Activity } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { SortableBinding } from './sortable-binding'
 import { modelTestApi, type ModelTestResult } from '@/api'
@@ -70,10 +71,9 @@ export function QueueListCard(props: QueueListCardProps) {
     onDragEnd,
   } = props
 
-  const [testProtocol, setTestProtocol] = useState<Protocol>('openai-completions')
+  const [testProtocol, setTestProtocol] = useState<Protocol | 'all'>('all')
   const [testRunning, setTestRunning] = useState(false)
-  const [testResults, setTestResults] = useState<ModelTestResult[] | null>(null)
-  const [showProtocolMenu, setShowProtocolMenu] = useState(false)
+  const [testResults, setTestResults] = useState<Partial<Record<Protocol, ModelTestResult[]>> | null>(null)
 
   const availableProtocols = Array.from(
     new Set(models.flatMap(m => m.endpoints.map(e => e.protocol))),
@@ -84,17 +84,24 @@ export function QueueListCard(props: QueueListCardProps) {
     setTestRunning(true)
     setTestResults(null)
     try {
-      const result = await modelTestApi.run(logicalModelId, testProtocol)
-      if (result.success) {
-        setTestResults(result.data.results)
-      }
+      const protocols = testProtocol === 'all' ? availableProtocols : [testProtocol]
+      const responses = await Promise.all(protocols.map(protocol => modelTestApi.run(logicalModelId, protocol)))
+      const nextResults: Partial<Record<Protocol, ModelTestResult[]>> = {}
+      responses.forEach((response, index) => {
+        if (response.success) nextResults[protocols[index]] = response.data.results
+      })
+      setTestResults(nextResults)
     } finally {
       setTestRunning(false)
     }
   }
 
-  const getTestResult = (modelId: string) =>
-    testResults?.find(r => r.modelId === modelId)
+  const allTestResults = testResults
+    ? Object.entries(testResults).flatMap(([protocol, results]) =>
+        (results ?? []).map(result => ({ ...result, protocol: protocol as Protocol })),
+      )
+    : []
+  const getTestResults = (modelId: string) => allTestResults.filter(result => result.modelId === modelId)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -123,51 +130,27 @@ export function QueueListCard(props: QueueListCardProps) {
           </Tabs>
 
           {availableProtocols.length > 0 && (
-            <div className="relative">
+            <div className="flex items-center overflow-hidden rounded-md border bg-background shadow-sm">
+              <Select value={testProtocol} onValueChange={value => setTestProtocol(value as Protocol | 'all')}>
+                <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-muted/20 text-[11px] shadow-none focus:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部协议</SelectItem>
+                  {availableProtocols.map(protocol => (
+                    <SelectItem key={protocol} value={protocol}>{PROTOCOL_LABELS[protocol]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className="h-8 rounded-none px-3 text-[11px]"
                 onClick={() => void handleRunTest()}
                 disabled={testRunning || !logicalModelId}
               >
-                {testRunning ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Zap size={12} />
-                )}
-                测试
-                <div
-                  className="group relative"
-                  onClick={e => {
-                    e.stopPropagation()
-                    setShowProtocolMenu(v => !v)
-                  }}
-                >
-                  <ChevronDown size={12} className="opacity-60" />
-                  {showProtocolMenu && (
-                    <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] overflow-hidden rounded-md border bg-popover p-1 shadow-md">
-                      {availableProtocols.map(protocol => (
-                        <button
-                          key={protocol}
-                          className={cn(
-                            'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] hover:bg-accent',
-                            testProtocol === protocol && 'bg-accent/60',
-                          )}
-                          onClick={e => {
-                            e.stopPropagation()
-                            setTestProtocol(protocol)
-                            setShowProtocolMenu(false)
-                          }}
-                        >
-                          <span>{PROTOCOL_LABELS[protocol]}</span>
-                          {testProtocol === protocol && (
-                            <CheckCircle size={11} className="text-primary" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {testRunning ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}
+                {testRunning ? '探测中' : '运行探测'}
               </Button>
             </div>
           )}
@@ -175,26 +158,26 @@ export function QueueListCard(props: QueueListCardProps) {
       </CardHeader>
       <CardContent className="pt-0">
         {/* 测试结果汇总 */}
-        {testResults && testResults.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] dark:border-emerald-900/50 dark:bg-emerald-950/30">
-            <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
-              <Zap size={12} />
-              {PROTOCOL_LABELS[testProtocol]} 测试完成
-            </span>
-            <span className="text-emerald-600 dark:text-emerald-500">
-              <CheckCircle size={11} className="mr-1 inline" />
-              成功 {testResults.filter(r => r.success).length}
-            </span>
-            <span className="text-red-600 dark:text-red-500">
-              <XCircle size={11} className="mr-1 inline" />
-              失败 {testResults.filter(r => !r.success).length}
-            </span>
-            <button
-              className="ml-auto text-muted-foreground hover:text-foreground"
-              onClick={() => setTestResults(null)}
-            >
-              关闭
-            </button>
+        {testResults && (
+          <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-4 rounded-lg border bg-muted/20 px-3 py-2.5 text-[11px]">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 font-medium">
+                <Activity size={12} className="text-primary" />
+                队列连通性报告
+              </div>
+              <div className="mt-0.5 truncate text-muted-foreground">
+                已探测 {Object.keys(testResults).length} 个协议、{allTestResults.length} 个可用绑定
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">{allTestResults.filter(result => result.success).length}</div>
+              <div className="text-[9px] uppercase tracking-wide text-muted-foreground">成功</div>
+            </div>
+            <div className="text-center">
+              <div className="font-mono text-sm font-semibold text-red-600 dark:text-red-400">{allTestResults.filter(result => !result.success).length}</div>
+              <div className="text-[9px] uppercase tracking-wide text-muted-foreground">失败</div>
+            </div>
+            <button className="text-muted-foreground hover:text-foreground" onClick={() => setTestResults(null)}>关闭</button>
           </div>
         )}
 
@@ -261,24 +244,30 @@ export function QueueListCard(props: QueueListCardProps) {
                                   </Badge>
                                 ))}
                               </span>
-                              {(() => {
-                                const tr = getTestResult(model.id)
-                                if (tr) {
-                                  return tr.success ? (
-                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500" title={`测试成功 · ${tr.durationMilliseconds}ms${tr.inputTokens ? ` · 输入 ${tr.inputTokens}` : ''}${tr.outputTokens ? ` · 输出 ${tr.outputTokens}` : ''}`}>
-                                      <CheckCircle size={11} />
-                                      测试通过 · {tr.durationMilliseconds}ms
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-500" title={tr.errorMessage}>
-                                      <XCircle size={11} />
-                                      测试失败 · {tr.errorMessage ?? '未知错误'}
-                                    </span>
-                                  )
-                                }
-                                return null
-                              })()}
-                              {!testResults && (
+                              {testResults ? (
+                                getTestResults(model.id).map(result => (
+                                  <span
+                                    key={result.protocol}
+                                    className={cn(
+                                      'inline-flex items-center gap-1 rounded border px-1.5 py-0.5',
+                                      result.success
+                                        ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+                                        : 'border-red-500/25 bg-red-500/5 text-red-600 dark:text-red-400',
+                                    )}
+                                    title={result.errorMessage}
+                                  >
+                                    {result.success ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                    {PROTOCOL_LABELS[result.protocol]}
+                                    {result.statusCode && <span className="font-mono">HTTP {result.statusCode}</span>}
+                                    <Timer size={10} />
+                                    <span className="font-mono">{result.durationMilliseconds}ms</span>
+                                    {result.success && (result.inputTokens != null || result.outputTokens != null) && (
+                                      <span className="font-mono opacity-75">↑{result.inputTokens ?? '—'} ↓{result.outputTokens ?? '—'}</span>
+                                    )}
+                                    {!result.success && <span className="max-w-48 truncate">{result.errorMessage ?? '未知错误'}</span>}
+                                  </span>
+                                ))
+                              ) : (
                                 <>
                                   {consecutiveFailures > 0 ? (
                                     <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500">

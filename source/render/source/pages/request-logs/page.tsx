@@ -10,6 +10,11 @@ import {
   ArrowUpFromLine,
   Database,
   XCircle,
+  CheckCircle2,
+  Route,
+  Braces,
+  Gauge,
+  Copy,
 } from 'lucide-react'
 import type { RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { cn } from '@/lib/utils'
@@ -26,7 +31,7 @@ import {
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRequestLogsService } from './service'
-import { PROTOCOL_LABEL, STATUS_LABEL, formatTime, formatDuration, formatNumber, formatTPS } from './lib/format'
+import { PROTOCOL_LABEL, STATUS_LABEL, formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from './lib/format'
 
 type StatusFilter = 'all' | 'success' | 'failed' | 'cancelled'
 
@@ -41,6 +46,13 @@ interface AttemptBadgeProps {
 interface DetailRowProps {
   log: RequestLogEntry
   modelName: string
+}
+
+interface MetricCardProps {
+  label: string
+  value: string
+  hint?: string
+  accent?: boolean
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -64,120 +76,162 @@ function AttemptBadge(props: AttemptBadgeProps) {
 
   const ok = attempt.status === 'success'
   return (
-    <span
+    <Badge
+      variant="outline"
       className={cn(
-        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-mono',
+        'h-5 gap-1 px-1.5 font-mono text-[10px] font-medium',
         ok
           ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
           : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400',
       )}
-      title={attempt.errorMessage ?? undefined}
     >
-      <span className="font-medium">#{attempt.attemptIndex + 1}</span>
-      <span className="text-muted-foreground/70">·</span>
-      <span>{attempt.providerName}/{attempt.upstreamModelId}</span>
-      <span className="text-muted-foreground/70">·</span>
-      <span>{formatDuration(attempt.durationMilliseconds)}</span>
-    </span>
+      {ok ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
+      {ok ? '成功' : '失败'}
+    </Badge>
+  )
+}
+
+function MetricCard(props: MetricCardProps) {
+  return (
+    <div className="rounded-lg border bg-background/80 px-3 py-2.5 shadow-sm shadow-black/[0.02]">
+      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{props.label}</div>
+      <div className={cn('mt-1 font-mono text-base font-semibold tabular-nums', props.accent && 'text-emerald-600 dark:text-emerald-400')}>
+        {props.value}
+      </div>
+      {props.hint && <div className="mt-0.5 text-[10px] text-muted-foreground">{props.hint}</div>}
+    </div>
   )
 }
 
 function DetailRow(props: DetailRowProps) {
   const { log, modelName } = props
+  const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
+  const rawUsage = log.rawUsage ? JSON.stringify(log.rawUsage, null, 2) : null
 
-  const lastAttempt = log.attempts[log.attempts.length - 1]
   return (
-    <tr className="bg-muted/30">
-      <td colSpan={10} className="px-4 py-3">
-        <div className="space-y-3 pl-8">
-          <div className="grid grid-cols-2 gap-4 text-xs md:grid-cols-4 lg:grid-cols-6">
+    <tr className="bg-muted/20">
+      <td colSpan={10} className="border-b p-0">
+        <div className="border-l-2 border-l-primary/50 bg-gradient-to-r from-primary/[0.035] to-transparent px-5 py-4">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-muted-foreground">请求 ID</div>
-              <div className="font-mono">{log.id}</div>
+              <div className="flex items-center gap-2">
+                <Route size={14} className="text-primary" />
+                <span className="text-sm font-semibold">请求执行详情</span>
+                <StatusBadge status={log.status} />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                <span>{modelName}</span>
+                <span>·</span>
+                <span>{PROTOCOL_LABEL[log.protocol] ?? log.protocol}</span>
+                <span>·</span>
+                <span className="font-mono">{log.id}</span>
+              </div>
             </div>
-            <div>
-              <div className="text-muted-foreground">队列</div>
-              <div className="font-medium">{modelName}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">协议</div>
-              <div>{PROTOCOL_LABEL[log.protocol] ?? log.protocol}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">总耗时</div>
-              <div className="font-mono">{formatDuration(log.totalDurationMilliseconds)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">总 Token</div>
-              <div className="font-mono">{formatNumber(log.totalTokens)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">总输入 Token</div>
-              <div className="font-mono">{formatNumber(log.inputTokens)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">缓存读取 Token</div>
-              <div className="font-mono">{formatNumber(log.cachedInputTokens)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">缓存写入 Token</div>
-              <div className="font-mono">{formatNumber(log.cacheCreationInputTokens)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">Prompt Cache</div>
-              <div>
-                {log.promptCacheHit === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : log.promptCacheHit ? (
-                  <span className="text-emerald-600 dark:text-emerald-400">命中</span>
-                ) : (
-                  <span className="text-muted-foreground">未命中</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[11px] text-muted-foreground"
+              onClick={event => {
+                event.stopPropagation()
+                void navigator.clipboard.writeText(log.id)
+              }}
+            >
+              <Copy size={12} />
+              复制 ID
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+            <MetricCard label="总耗时" value={formatDuration(log.totalDurationMilliseconds)} />
+            <MetricCard label="首字延迟" value={formatTTFT(log.ttftMilliseconds)} />
+            <MetricCard label="输出速度" value={tps === '—' ? '—' : `${tps} t/s`} accent={tps !== '—'} />
+            <MetricCard label="输入 Token" value={formatNumber(log.inputTokens)} />
+            <MetricCard label="输出 Token" value={formatNumber(log.outputTokens)} />
+            <MetricCard
+              label="缓存读取"
+              value={formatNumber(log.cachedInputTokens)}
+              hint={log.promptCacheHit === null ? '未知' : log.promptCacheHit ? 'Prompt Cache 命中' : '未命中'}
+              accent={log.promptCacheHit === true}
+            />
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
+            <section className="overflow-hidden rounded-lg border bg-background/80">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <Route size={12} />
+                  上游路由
+                </div>
+                <span className="text-[10px] text-muted-foreground">{log.attempts.length} 次尝试</span>
+              </div>
+              <div className="divide-y">
+                {log.attempts.map((attempt, index) => (
+                  <div key={attempt.attemptIndex} className="grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-xs">
+                    <div className={cn(
+                      'flex size-6 items-center justify-center rounded-full border font-mono text-[10px]',
+                      attempt.status === 'success'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+                        : 'border-red-500/30 bg-red-500/10 text-red-600',
+                    )}>
+                      {index + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-medium">{attempt.providerName}</span>
+                        <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.upstreamModelId}</span>
+                        <AttemptBadge attempt={attempt} />
+                      </div>
+                      {attempt.errorMessage && (
+                        <div className="mt-1 flex items-start gap-1 text-[11px] text-red-600 dark:text-red-400">
+                          <XCircle size={11} className="mt-0.5 shrink-0" />
+                          <span className="break-all">{attempt.errorMessage}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {formatDuration(attempt.durationMilliseconds)}
+                    </div>
+                  </div>
+                ))}
+                {log.attempts.length === 0 && (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">没有生成上游尝试记录</div>
                 )}
               </div>
-            </div>
-          </div>
+            </section>
 
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
-              尝试记录（{log.attempts.length} 次）
-            </div>
-            <div className="space-y-1.5">
-              {log.attempts.map(attempt => (
-                <div
-                  key={attempt.attemptIndex}
-                  className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs"
-                >
-                  <AttemptBadge attempt={attempt} />
-                  {attempt.errorMessage && (
-                    <span className="flex items-center gap-1 text-red-500">
-                      <XCircle size={12} />
-                      {attempt.errorMessage}
-                    </span>
-                  )}
+            <section className="overflow-hidden rounded-lg border bg-background/80">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <Braces size={12} />
+                  原始 Usage
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">原始 Usage</div>
-            {log.rawUsage ? (
-              <pre className="max-h-64 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-relaxed">
-                {JSON.stringify(log.rawUsage, null, 2)}
-              </pre>
-            ) : (
-              <div className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-                上游响应不包含 usage 信息
+                {rawUsage && (
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={event => {
+                      event.stopPropagation()
+                      void navigator.clipboard.writeText(rawUsage)
+                    }}
+                  >
+                    复制 JSON
+                  </button>
+                )}
               </div>
-            )}
+              {rawUsage ? (
+                <pre className="max-h-56 overflow-auto p-3 font-mono text-[11px] leading-5 text-muted-foreground">
+                  {rawUsage}
+                </pre>
+              ) : (
+                <div className="flex min-h-28 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
+                  <Gauge size={18} className="opacity-50" />
+                  上游响应不包含 usage 信息
+                </div>
+              )}
+              <div className="border-t bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
+                缓存写入 {formatNumber(log.cacheCreationInputTokens)} · 总 Token {formatNumber(log.totalTokens)}
+              </div>
+            </section>
           </div>
-
-          {lastAttempt?.errorMessage && (
-            <div className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-              <div className="font-medium">最终错误</div>
-              <div className="font-mono mt-0.5">{lastAttempt.errorMessage}</div>
-            </div>
-          )}
         </div>
       </td>
     </tr>
@@ -347,7 +401,7 @@ export function RequestLogsPage() {
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
                             <span className={cn(log.ttftMilliseconds != null && 'text-foreground')}>
-                              {log.ttftMilliseconds != null ? `${log.ttftMilliseconds}ms` : '—'}
+                              {formatTTFT(log.ttftMilliseconds)}
                             </span>
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
