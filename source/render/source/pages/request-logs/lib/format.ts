@@ -1,6 +1,6 @@
 export const PROTOCOL_LABEL: Record<string, string> = {
-  'openai-completions': 'OpenAI Completions',
   'openai-responses': 'OpenAI Responses',
+  'openai-completions': 'OpenAI Completions',
   'anthropic-messages': 'Anthropic Messages',
 }
 

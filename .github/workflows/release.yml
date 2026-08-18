@@ -105,11 +105,11 @@ jobs:
           - name: Windows
             os: windows-latest
             artifact: windows
-            asset: release/**/*.exe
+            asset: release/**/One Switch-*.exe
           - name: Linux
             os: ubuntu-latest
             artifact: linux
-            asset: release/**/*.AppImage
+            asset: release/**/One Switch-*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out release tag
@@ -132,7 +132,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build installer
-        run: pnpm build
+        run: ${{ runner.os == 'macOS' && 'pnpm release:mac' || runner.os == 'Windows' && 'pnpm release:win' || 'pnpm release:linux' }}
 
       - name: Create macOS checksum
         if: runner.os == 'macOS'
