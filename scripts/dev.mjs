@@ -3,6 +3,11 @@ import { log } from './lib/log.mjs'
 
 const args = process.argv.slice(2)
 const previewOnly = args.includes('--preview')
+const experimentalWarningOption = '--disable-warning=ExperimentalWarning'
+
+const nodeOptions = [process.env.NODE_OPTIONS, experimentalWarningOption]
+  .filter(Boolean)
+  .join(' ')
 
 const main = async () => {
   if (previewOnly) {
@@ -15,6 +20,7 @@ const main = async () => {
     await run('pnpm', ['vite'], {
       env: {
         ...process.env,
+        NODE_OPTIONS: nodeOptions,
         ...(previewOnly ? { VITE_PREVIEW_ONLY: 'true' } : {}),
       },
     })

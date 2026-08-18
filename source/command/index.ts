@@ -86,9 +86,13 @@ app.whenReady().then(async () => {
   trayManager = new TrayManager()
   trayManager.init(win!)
 
-  // 初始化开机自启
-  autoLaunchManager = new AutoLaunchManager()
-  void autoLaunchManager.init()
+  // 开发环境不应修改系统登录项。
+  if (runtimeProfile.environment === 'production') {
+    autoLaunchManager = new AutoLaunchManager()
+    void autoLaunchManager.init()
+  } else {
+    console.log('[auto-launch] skipped in development')
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -49,6 +49,11 @@ type CreateUpstreamModelInput = {
   enabled?: boolean
 }
 
+export type ListLogsParams = {
+  after?: number
+  limit?: number
+}
+
 async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -157,7 +162,7 @@ export const proxyApi = {
 // ========== Logs ==========
 
 export const logsApi = {
-  list: (params: { after?: number; limit?: number } = {}) =>
+  list: (params: ListLogsParams = {}) =>
     request<{ logs: LogEntry[]; latestId: number }>('/logs/list', params),
   export: () => request<{ content: string }>('/logs/export', {}),
   clear: () => request<{ cleared: boolean }>('/logs/clear', {}),
