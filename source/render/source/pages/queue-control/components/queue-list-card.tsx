@@ -64,7 +64,7 @@ export function QueueListCard(props: QueueListCardProps) {
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+      <CardHeader className="gap-4 pb-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
           <div className="flex items-center gap-2">
             <CardTitle>优先级队列</CardTitle>
@@ -100,7 +100,7 @@ export function QueueListCard(props: QueueListCardProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="overflow-hidden rounded-b-lg divide-y border-t">
+              <div className="overflow-hidden rounded-b-lg border-t border-border/50">
                 {models.map(model => {
                   const cooling = isCooling(model.providerId)
                   const selected = mode === 'manual' && manualModelId === model.id

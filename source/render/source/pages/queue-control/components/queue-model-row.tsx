@@ -1,8 +1,7 @@
-import { AlertTriangle, BotMessageSquare, CheckCircle2, Circle, CircleDot, Clock, GripVertical, MessageSquareCode, Sparkles, Timer, Zap } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Circle, CircleDot, Clock, GripVertical, Timer, Zap } from 'lucide-react'
 import type { Protocol, Provider, ProviderHealth, UpstreamModel } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { QueueModelMetrics } from '../lib/model-metrics'
 
@@ -20,10 +19,10 @@ interface QueueModelRowProps {
   onToggleEnabled: (enabled: boolean) => void
 }
 
-const PROTOCOL_META: Record<Protocol, { label: string; icon: typeof MessageSquareCode }> = {
-  'openai-completions': { label: 'OpenAI Completions', icon: MessageSquareCode },
-  'openai-responses': { label: 'OpenAI Responses', icon: Sparkles },
-  'anthropic-messages': { label: 'Anthropic Messages', icon: BotMessageSquare },
+const PROTOCOL_LABELS: Record<Protocol, string> = {
+  'openai-completions': 'OpenAI Chat',
+  'openai-responses': 'OpenAI Responses',
+  'anthropic-messages': 'Anthropic',
 }
 
 function formatRelativeTime(timestamp: number | null | undefined): string {
@@ -80,7 +79,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
     <div
       onClick={props.onSelect}
       className={cn(
-        'flex items-center gap-2 overflow-hidden border-l-2 border-l-transparent px-4 py-2.5',
+        'flex items-center gap-2 overflow-hidden border-b border-border/50 border-l-2 border-l-transparent px-4 py-2.5 last:border-b-0',
         props.selected && 'rounded-md border-l-primary bg-primary/5',
         props.mode === 'manual' && model.enabled && !props.cooling && 'cursor-pointer hover:bg-muted/40',
         props.dragging && 'rounded-md bg-muted/60',
@@ -105,25 +104,15 @@ export function QueueModelRow(props: QueueModelRowProps) {
           <span className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</span>
           <span className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <TooltipProvider delayDuration={150}>
-            <span className="inline-flex items-center gap-1">
-              {model.endpoints.map(endpoint => {
-                const meta = PROTOCOL_META[endpoint.protocol]
-                const ProtocolIcon = meta.icon
-                return (
-                  <Tooltip key={endpoint.protocol}>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex size-5 items-center justify-center rounded border bg-background text-muted-foreground" aria-label={meta.label}>
-                        <ProtocolIcon size={11} />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>{meta.label}</TooltipContent>
-                  </Tooltip>
-                )
-              })}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          {model.endpoints.map(endpoint => (
+            <span
+              key={endpoint.protocol}
+              className="inline-flex items-center rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+            >
+              {PROTOCOL_LABELS[endpoint.protocol]}
             </span>
-          </TooltipProvider>
+          ))}
           <span className="inline-flex items-center gap-1" title={`最近 ${props.metrics?.sampleCount ?? 0} 个成功请求的平均输出速度`}>
             <Zap size={11} />
             TPS {formatAverageTps(props.metrics?.avgTps)}

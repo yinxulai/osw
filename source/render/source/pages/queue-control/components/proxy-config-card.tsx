@@ -36,7 +36,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
   const fullUrl = protocolInfo ? `${proxyBaseUrl}${protocolInfo.path}` : proxyBaseUrl
 
   return (
-    <Card className="border border-border/70 bg-linear-to-br from-card via-muted/25 to-background shadow-sm">
+    <Card className="border border-border/70 bg-linear-to-br from-card via-muted/25 to-background">
       <CardHeader className="gap-3 p-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div className="flex items-start gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">

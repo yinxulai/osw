@@ -105,7 +105,7 @@ export function ToastProvider(props: ToastProviderProps) {
               key={t.id}
               role={t.type === 'error' ? 'alert' : 'status'}
               className={cn(
-                'pointer-events-auto relative flex min-w-65 items-center gap-2.5 overflow-hidden rounded-lg border border-input bg-popover px-3.5 py-3 text-xs text-foreground shadow-lg before:absolute before:inset-y-0 before:left-0 before:w-0.5',
+                'pointer-events-auto relative flex min-w-65 items-center gap-2.5 overflow-hidden rounded-lg border border-input bg-popover px-3.5 py-3 text-xs text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5',
                 STYLES[t.type],
                 t.closing ? 'toast-out' : 'toast-in',
               )}
