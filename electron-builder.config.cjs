@@ -9,9 +9,12 @@ module.exports = {
     'dist',
     '!dist/**/*.map',
   ],
+  afterPack: 'scripts/macos-adhoc-sign.cjs',
   mac: {
     target: ['dmg'],
     category: 'public.app-category.developer-tools',
+    identity: null,
+    notarize: false,
   },
   win: {
     target: ['nsis'],

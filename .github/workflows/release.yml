@@ -134,11 +134,32 @@ jobs:
       - name: Build installer
         run: pnpm build
 
+      - name: Create macOS checksum
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          DMG_PATH=$(find release -name '*.dmg' -type f -print -quit)
+          DMG_DIR=$(dirname "$DMG_PATH")
+          DMG_NAME=$(basename "$DMG_PATH")
+          cd "$DMG_DIR"
+          shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+
       - name: Collect installer
+        if: runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+      - name: Collect macOS installer and checksum
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/**/*.dmg
+            release/**/*.dmg.sha256
           if-no-files-found: error
 
   publish:
@@ -172,6 +193,22 @@ jobs:
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: One Switch ${{ needs.prepare.outputs.tag }}
+          body: |
+            ## macOS 安装说明
+
+            macOS 版本使用 ad-hoc 代码签名，但没有 Apple Developer ID 证书，因此无法提交 Apple 公证。首次打开时，macOS 会提示无法验证开发者。
+
+            1. 将 One Switch 拖入“应用程序”。
+            2. 首次打开失败后，进入“系统设置” > “隐私与安全”。
+            3. 在安全性区域点击“仍要打开”，再次确认“打开”。
+
+            下载后可用同目录的 `.dmg.sha256` 文件校验安装包完整性：
+
+            ```shell
+            shasum -a 256 -c One\ Switch-*.dmg.sha256
+            ```
+
+            除非未来使用 Apple Developer Program 的 Developer ID 证书并完成公证，否则无法消除这一次系统确认。
           generate_release_notes: true
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
