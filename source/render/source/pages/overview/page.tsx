@@ -3,6 +3,7 @@ import type { AnalyticsRange } from '@common/schemas'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useOverviewService } from './service'
 import { StatsGrid } from './components/stats-grid'
@@ -77,11 +78,12 @@ export function OverviewPage() {
         )}
 
         {!loading && !hasData && (
-          <div className="text-center py-20 text-muted-foreground">
-            <BarChart3 size={40} className="mx-auto mb-3 opacity-30" />
-            <div className="text-sm">暂无统计数据</div>
-            <div className="text-xs mt-1">发送一些请求后这里会显示统计信息</div>
-          </div>
+          <EmptyState
+            icon={BarChart3}
+            title="暂无统计数据"
+            description="代理请求产生后，这里会显示请求量、成功率、延迟与模型分布。"
+            className="min-h-72"
+          />
         )}
 
         {!loading && hasData && data && (

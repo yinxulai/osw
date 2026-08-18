@@ -134,22 +134,6 @@ export function LogsPage() {
       <PageHeader
         title="运行日志"
         description="本次进程运行期间的服务日志，用于实时观察和故障排查"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setLive(value => !value)}>
-              {live ? <Pause size={14} className="mr-1.5" /> : <Play size={14} className="mr-1.5" />}
-              {live ? '暂停' : '继续'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void exportLogs()}>
-              <Download size={14} className="mr-1.5" />
-              导出
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={refreshing}>
-              <RefreshCw size={14} className={cn('mr-1.5', refreshing && 'animate-spin')} />
-              刷新
-            </Button>
-          </div>
-        }
       />
       <PageContent>
         <div className="flex flex-wrap items-center gap-2">
@@ -183,11 +167,20 @@ export function LogsPage() {
             </span>
             {live ? '实时更新' : '已暂停'}
           </span>
+          <Button variant="outline" size="sm" onClick={() => setLive(value => !value)}>
+            {live ? <Pause size={14} /> : <Play size={14} />}
+            {live ? '暂停' : '继续'}
+          </Button>
+          <Button variant="outline" size="icon-sm" title="刷新日志" onClick={() => void refresh()} disabled={refreshing}>
+            <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
+          </Button>
+          <Button variant="outline" size="icon-sm" title="导出日志" onClick={() => void exportLogs()}>
+            <Download size={14} />
+          </Button>
           <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" disabled={logs.length === 0}>
-                <Trash2 size={14} className="mr-1.5" />
-                清空
+              <Button variant="ghost" size="icon-sm" title="清空日志" disabled={logs.length === 0}>
+                <Trash2 size={14} />
               </Button>
             </DialogTrigger>
             <DialogContent>

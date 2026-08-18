@@ -9,6 +9,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Database,
+  ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/ui/empty-state'
 import { RequestLogDetailRow, RequestStatusBadge } from './components/request-log-detail-row'
 import { useRequestLogsService } from './service'
 import { formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from './lib/format'
@@ -101,8 +103,14 @@ export function RequestLogsPage() {
           </span>
         </div>
 
-        {/* 表格 */}
-        <div className="overflow-hidden rounded-lg border">
+        {!loading && logs.length === 0 ? (
+          <EmptyState
+            icon={ScrollText}
+            title="暂无请求记录"
+            description="通过本地代理发起请求后，这里会记录实际使用的模型、耗时、缓存与故障切换详情。"
+            className="min-h-64"
+          />
+        ) : <div className="overflow-hidden rounded-lg border">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -224,7 +232,7 @@ export function RequestLogsPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
       </PageContent>
     </PageLayout>
   )

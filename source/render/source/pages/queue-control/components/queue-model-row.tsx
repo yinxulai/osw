@@ -97,12 +97,12 @@ export function QueueModelRow(props: QueueModelRowProps) {
           <GripVertical size={14} />
         </button>
       )}
-      <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">
+      <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-medium text-muted-foreground">
         {model.priority}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-xs font-semibold">{props.provider?.name ?? '未知供应商'}</span>
+          <span className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</span>
           <span className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</span>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">

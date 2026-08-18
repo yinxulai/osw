@@ -39,7 +39,7 @@ export function ModelRanking(props: ModelRankingProps) {
                 <tr key={`${m.providerId}-${m.upstreamModelId}`} className="border-b last:border-0">
                   <td className="py-2 px-4">
                     <span className={cn(
-                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold',
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium',
                       idx < 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                     )}>
                       {idx + 1}

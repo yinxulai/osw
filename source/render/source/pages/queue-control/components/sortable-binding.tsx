@@ -15,7 +15,7 @@ export function SortableBinding(props: SortableBindingProps) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn('relative bg-card', isDragging && 'z-10 shadow-md')}
+      className={cn('relative bg-card', isDragging && 'z-10 outline outline-1 outline-primary/45 bg-primary/[0.03]')}
     >
       {children({ ...attributes, ...listeners }, isDragging)}
     </div>

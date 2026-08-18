@@ -83,7 +83,7 @@ export function ToastProvider(props: ToastProviderProps) {
               key={t.id}
               role={t.type === 'error' ? 'alert' : 'status'}
               className={cn(
-                'relative flex min-w-65 items-center gap-2.5 overflow-hidden rounded-lg border border-border bg-popover px-3.5 py-3 text-xs text-foreground shadow-[0_4px_12px_rgba(0,0,0,0.1)] backdrop-blur-sm before:absolute before:inset-y-0 before:left-0 before:w-0.5 animate-in slide-in-from-right',
+                'relative flex min-w-65 items-center gap-2.5 overflow-hidden rounded-lg border border-input bg-popover px-3.5 py-3 text-xs text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 animate-in slide-in-from-right',
                 STYLES[t.type],
               )}
               style={{ animation: 'toast-in 0.2s ease-out' }}
@@ -93,7 +93,7 @@ export function ToastProvider(props: ToastProviderProps) {
               <button
                 onClick={() => remove(t.id)}
                 aria-label="关闭通知"
-                className="ml-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
               >
                 <X size={13} />
               </button>

@@ -9,9 +9,10 @@ import {
 } from '@dnd-kit/core'
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { FlaskConical, RefreshCw, Target } from 'lucide-react'
+import { FlaskConical, ListTree, RefreshCw, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableBinding } from './sortable-binding'
 import { QueueModelRow } from './queue-model-row'
@@ -123,9 +124,12 @@ export function QueueListCard(props: QueueListCardProps) {
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="-mx-4 -mb-4 flex min-h-40 items-center justify-center border-t text-xs text-muted-foreground">
-            请先在模型管理中添加上游模型。
-          </div>
+          <EmptyState
+            icon={ListTree}
+            title="队列中还没有模型"
+            description="在模型管理中添加上游模型后，可在这里调整优先级和故障转移顺序。"
+            className="-mx-4 -mb-4 min-h-40 border-t py-7"
+          />
         )}
       </CardContent>
     </Card>

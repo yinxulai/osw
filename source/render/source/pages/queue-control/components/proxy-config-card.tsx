@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Check, Copy, KeyRound, Plug, Server } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,14 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import type { UpstreamModel } from '@common/schemas'
 
 interface ProxyConfigCardProps {
   proxyBaseUrl: string
   proxyPort: number
   proxyRunning: boolean
   copied: boolean
-  models: UpstreamModel[]
   onToggleProxy: () => void
   onCopyEndpoint: (url: string) => void
 }
@@ -32,7 +29,7 @@ const PROTOCOLS = [
 ] as const
 
 export function ProxyConfigCard(props: ProxyConfigCardProps) {
-  const { proxyBaseUrl, proxyPort, proxyRunning, copied, models, onToggleProxy, onCopyEndpoint } = props
+  const { proxyBaseUrl, proxyPort, proxyRunning, copied, onToggleProxy, onCopyEndpoint } = props
   const [selectedProtocol, setSelectedProtocol] = useState<string>('openai-completions')
 
   const protocolInfo = PROTOCOLS.find(p => p.key === selectedProtocol)
@@ -108,19 +105,6 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
               </span>
             </div>
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {PROTOCOLS.map(protocol => {
-            const count = models.filter(
-              model => model.endpoints.some(endpoint => endpoint.protocol === protocol.key) && model.enabled,
-            ).length
-            return (
-              <Badge key={protocol.key} variant="secondary">
-                {protocol.label} · {count}
-              </Badge>
-            )
-          })}
         </div>
 
         <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-muted/30 px-3.5 py-3">

@@ -45,7 +45,6 @@ export function QueueControlPage() {
               proxyPort={service.proxyStatus?.port ?? 0}
               proxyRunning={service.proxyStatus?.running ?? false}
               copied={service.copied}
-              models={service.models}
               onToggleProxy={() => void service.toggleProxy()}
               onCopyEndpoint={url => void service.copyEndpoint(url)}
             />

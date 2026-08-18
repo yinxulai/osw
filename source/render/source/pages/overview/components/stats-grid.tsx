@@ -24,7 +24,7 @@ export function StatsGrid(props: StatsGridProps) {
             <s.Icon size={13} />
             {s.label}
           </div>
-          <div className="text-xl font-semibold tabular-nums">{s.value}</div>
+          <div className="text-xl font-medium tabular-nums">{s.value}</div>
         </div>
       ))}
     </div>

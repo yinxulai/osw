@@ -68,9 +68,9 @@ function AttemptBadge(props: AttemptBadgeProps) {
 
 function MetricCard(props: MetricCardProps) {
   return (
-    <div className="rounded-lg border bg-background/80 px-3 py-2.5 shadow-sm shadow-black/[0.02]">
+    <div className="rounded-lg border bg-background/80 px-3 py-2.5">
       <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{props.label}</div>
-      <div className={cn('mt-1 font-mono text-base font-semibold tabular-nums', props.accent && 'text-emerald-600 dark:text-emerald-400')}>
+      <div className={cn('mt-1 font-mono text-base font-medium tabular-nums', props.accent && 'text-emerald-600 dark:text-emerald-400')}>
         {props.value}
       </div>
       {props.hint && <div className="mt-0.5 text-[10px] text-muted-foreground">{props.hint}</div>}
@@ -174,7 +174,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             <div>
               <div className="flex items-center gap-2">
                 <Route size={14} className="text-primary" />
-                <span className="text-sm font-semibold">请求执行详情</span>
+                <span className="text-sm font-medium">请求执行详情</span>
                 <RequestStatusBadge status={log.status} />
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">

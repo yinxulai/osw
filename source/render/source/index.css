@@ -47,7 +47,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
+    --background: 0 0% 97.5%;
     --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
@@ -55,16 +55,16 @@
     --popover-foreground: 0 0% 10%;
     --primary: 153 61% 38%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
+    --secondary: 0 0% 94.5%;
     --secondary-foreground: 0 0% 15%;
-    --muted: 0 0% 95%;
-    --muted-foreground: 0 0% 42%;
+    --muted: 0 0% 94.5%;
+    --muted-foreground: 0 0% 40%;
     --accent: 153 61% 38% / 0.10;
     --accent-foreground: 153 61% 27%;
     --destructive: 6 65% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 87%;
-    --input: 0 0% 80%;
+    --border: 0 0% 86%;
+    --input: 0 0% 78%;
     --ring: 153 61% 38%;
 
     --success: 153 61% 38%;
@@ -74,35 +74,35 @@
     --info: 210 70% 45%;
     --info-foreground: 0 0% 100%;
 
-    --sidebar-background: 0 0% 95%;
+    --sidebar-background: 0 0% 96%;
     --sidebar-foreground: 0 0% 32%;
     --sidebar-primary: 153 61% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 153 61% 38% / 0.10;
     --sidebar-accent-foreground: 153 61% 27%;
-    --sidebar-border: 0 0% 88%;
+    --sidebar-border: 0 0% 86%;
     --sidebar-ring: 153 61% 38%;
   }
 
   .dark {
     --background: 0 0% 9%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 10.5%;
+    --card: 0 0% 10%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 11%;
+    --popover: 0 0% 10.5%;
     --popover-foreground: 0 0% 98%;
     --primary: 153 61% 52%;
     --primary-foreground: 160 30% 7%;
-    --secondary: 0 0% 14%;
+    --secondary: 0 0% 13.5%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 54%;
+    --muted: 0 0% 13.5%;
+    --muted-foreground: 0 0% 56%;
     --accent: 153 61% 52% / 0.12;
     --accent-foreground: 153 61% 70%;
     --destructive: 6 65% 42%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 18%;
-    --input: 0 0% 22%;
+    --input: 0 0% 21%;
     --ring: 153 61% 52%;
 
     --success: 142.1 70.6% 45.3%;
@@ -140,6 +140,7 @@
   }
 
   button, input, textarea, select { font: inherit; }
+  button { box-shadow: none !important; }
   button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
     outline: 1px solid hsl(var(--ring));
     outline-offset: 2px;

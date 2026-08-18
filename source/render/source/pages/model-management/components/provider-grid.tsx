@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Server } from 'lucide-react'
 import type { Provider, UpstreamModel, ProviderHealth } from '@common/schemas'
 
 interface ProviderGridProps {
@@ -43,15 +45,15 @@ export function ProviderGrid(props: ProviderGridProps) {
                   key={provider.id}
                   onClick={() => onSelect(provider.id)}
                   className={cn(
-                    'min-w-0 rounded-sm border px-3 py-2.5 text-left transition-colors',
+                    'min-w-0 rounded-md border px-3 py-2.5 text-left transition-colors',
                     selectedProviderId === provider.id
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary/10'
+                      ? 'border-primary bg-primary/[0.06] outline outline-1 outline-primary/15'
                       : 'hover:bg-muted/50',
                   )}
                 >
                   <span className="flex items-center gap-2">
                     <span className={cn('h-2 w-2 rounded-full', state.dot)} />
-                    <span className="truncate text-xs font-semibold">{provider.name}</span>
+                    <span className="truncate text-xs font-medium">{provider.name}</span>
                   </span>
                   <span className="mt-1.5 block text-[10px] text-muted-foreground">
                     {modelCount} 个模型
@@ -61,9 +63,13 @@ export function ProviderGrid(props: ProviderGridProps) {
             })}
           </div>
         ) : (
-          <div className="py-10 text-center text-xs text-muted-foreground">
-            还没有供应商，请先创建一个。
-          </div>
+          <EmptyState
+            icon={Server}
+            title="还没有供应商"
+            description="创建供应商并配置凭据后，即可添加上游模型与协议地址。"
+            className="min-h-36 py-6"
+            embedded
+          />
         )}
       </CardContent>
     </Card>

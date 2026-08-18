@@ -33,9 +33,9 @@ export function QueueTestControls(props: QueueTestControlsProps) {
   if (props.protocols.length === 0) return null
 
   return (
-    <div className="flex items-center overflow-hidden rounded-md border bg-background shadow-sm">
+    <div className="flex items-center overflow-hidden rounded-md border bg-background">
       <Select value={props.selectedProtocol} onValueChange={value => props.onProtocolChange(value as Protocol | 'all')}>
-        <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-muted/20 text-[11px] shadow-none focus:ring-0">
+        <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-muted/20 text-[11px] focus:outline-none">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -75,11 +75,11 @@ export function QueueTestSummary(props: QueueTestSummaryProps) {
         </div>
       </div>
       <div className="text-center">
-        <div className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">{successCount}</div>
+        <div className="font-mono text-sm font-medium text-emerald-600 dark:text-emerald-400">{successCount}</div>
         <div className="text-[9px] uppercase tracking-wide text-muted-foreground">成功</div>
       </div>
       <div className="text-center">
-        <div className="font-mono text-sm font-semibold text-red-600 dark:text-red-400">{failureCount}</div>
+        <div className="font-mono text-sm font-medium text-red-600 dark:text-red-400">{failureCount}</div>
         <div className="text-[9px] uppercase tracking-wide text-muted-foreground">失败</div>
       </div>
       <button className="text-muted-foreground hover:text-foreground" onClick={props.onClose}>关闭</button>

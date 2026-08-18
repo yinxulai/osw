@@ -86,7 +86,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
       <CardContent className="pt-0">
         <div className="mb-2 flex items-center justify-between border-t pt-3">
           <div>
-            <div className="text-xs font-semibold">上游模型</div>
+            <div className="text-xs font-medium">上游模型</div>
             <div className="mt-0.5 text-[11px] text-muted-foreground">
               每个模型一行，可同时支持多个协议；拖拽调整全局队列中的相对优先级
             </div>
@@ -115,12 +115,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         >
                           <GripVertical size={14} />
                         </button>
-                        <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-semibold text-muted-foreground">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-medium text-muted-foreground">
                           {model.priority}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-xs font-semibold">{model.upstreamModelId}</span>
+                            <span className="truncate text-xs font-medium">{model.upstreamModelId}</span>
                             <span className="flex flex-wrap gap-1">
                               {model.endpoints.map(endpoint => (
                                 <Badge key={endpoint.protocol} variant="secondary" className="h-5 px-1.5 text-[9px]">

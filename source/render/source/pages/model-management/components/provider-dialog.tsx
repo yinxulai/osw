@@ -117,7 +117,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
                 className={cn('space-y-3 rounded-md border p-3 transition-colors', !entry.enabled && 'opacity-60')}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold">
+                  <span className="text-xs font-medium">
                     {PROTOCOL_OPTIONS.find(o => o.value === entry.protocol)?.label}
                   </span>
                   <div className="flex items-center gap-2">
