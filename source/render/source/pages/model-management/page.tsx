@@ -51,27 +51,29 @@ export function ModelManagementPage() {
           </div>
         ) : (
           <>
-            <ProviderGrid
-              providers={service.providers}
-              models={service.models}
-              health={service.health}
-              selectedProviderId={service.selectedProviderId}
-              onSelect={service.setSelectedProviderId}
-            />
-
-            {service.selectedProvider && (
-              <ProviderDetail
-                provider={service.selectedProvider}
-                models={service.selectedModels}
+            <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+              <ProviderGrid
+                providers={service.providers}
+                models={service.models}
                 health={service.health}
-                onEditProvider={() => service.openProviderDialog(service.selectedProvider)}
-                onRemoveProvider={() => service.removeProvider(service.selectedProvider!)}
-                onAddModel={() => service.openModelDialog()}
-                onEditModel={service.openModelDialog}
-                onRemoveModel={service.removeModel}
-                onDragEnd={service.handleDragEnd}
+                selectedProviderId={service.selectedProviderId}
+                onSelect={service.setSelectedProviderId}
               />
-            )}
+
+              {service.selectedProvider && (
+                <ProviderDetail
+                  provider={service.selectedProvider}
+                  models={service.selectedModels}
+                  health={service.health}
+                  onEditProvider={() => service.openProviderDialog(service.selectedProvider)}
+                  onRemoveProvider={() => service.removeProvider(service.selectedProvider!)}
+                  onAddModel={() => service.openModelDialog()}
+                  onEditModel={service.openModelDialog}
+                  onRemoveModel={service.removeModel}
+                  onDragEnd={service.handleDragEnd}
+                />
+              )}
+            </div>
           </>
         )}
 

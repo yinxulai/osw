@@ -51,7 +51,7 @@ export function PageHeader(props: PageHeaderProps) {
     >
       <div className="min-w-0">
         <h1 className="text-lg font-medium tracking-tight">{title}</h1>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="shrink-0">{actions}</div>}
     </header>

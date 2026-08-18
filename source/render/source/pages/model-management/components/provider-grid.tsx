@@ -25,38 +25,43 @@ export function ProviderGrid(props: ProviderGridProps) {
   const { providers, models, health, selectedProviderId, onSelect } = props
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="h-fit overflow-hidden">
+      <CardHeader className="border-b border-border/70 pb-3">
         <CardTitle>供应商</CardTitle>
         <CardDescription>
           密钥按供应商保存，可为每个协议配置默认接口地址，模型可单独覆盖。
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         {providers.length ? (
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+          <div className="divide-y">
             {providers.map(provider => {
               const state = getProviderState(provider, health[provider.id])
               const modelCount = new Set(
                 models.filter(model => model.providerId === provider.id).map(model => model.upstreamModelId),
               ).size
+              const active = selectedProviderId === provider.id
+
               return (
                 <button
                   key={provider.id}
                   onClick={() => onSelect(provider.id)}
                   className={cn(
-                    'min-w-0 rounded-md border px-3 py-2.5 text-left transition-colors',
-                    selectedProviderId === provider.id
-                      ? 'border-primary bg-primary/[0.06] outline outline-1 outline-primary/15'
-                      : 'hover:bg-muted/50',
+                    'flex w-full items-center justify-between gap-2 border-l-2 px-3 py-3 text-left transition-colors',
+                    active
+                      ? 'border-l-primary bg-primary/5 text-foreground'
+                      : 'border-l-transparent bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground',
                   )}
                 >
-                  <span className="flex items-center gap-2">
-                    <span className={cn('h-2 w-2 rounded-full', state.dot)} />
-                    <span className="truncate text-xs font-medium">{provider.name}</span>
-                  </span>
-                  <span className="mt-1.5 block text-[10px] text-muted-foreground">
-                    {modelCount} 个模型
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={cn('h-2 w-2 rounded-full', state.dot)} />
+                      <span className="truncate text-sm font-medium">{provider.name}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">{modelCount} 个模型</div>
+                  </div>
+                  <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium', active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+                    {provider.enabled ? '启用' : '停用'}
                   </span>
                 </button>
               )

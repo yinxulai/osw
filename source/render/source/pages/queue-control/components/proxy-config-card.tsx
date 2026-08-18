@@ -36,7 +36,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
   const fullUrl = protocolInfo ? `${proxyBaseUrl}${protocolInfo.path}` : proxyBaseUrl
 
   return (
-    <Card className="bg-muted/20">
+    <Card className="border border-border/70 bg-linear-to-br from-card via-muted/25 to-background shadow-sm">
       <CardHeader className="gap-3 p-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div className="flex items-start gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -90,7 +90,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
             <Label className="text-[11px] text-muted-foreground">
               <KeyRound size={11} className="mr-1 inline" />服务状态
             </Label>
-            <div className="flex h-8 items-center justify-between rounded-md border px-3">
+            <div className="flex h-8 items-center justify-between rounded-md border border-border/70 bg-muted/40 px-3">
               <div className="flex items-center">
                 <span
                   className={cn(
@@ -107,7 +107,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
           </div>
         </div>
 
-        <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-muted/30 px-3.5 py-3">
+        <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-muted/35 px-3.5 py-3">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
             <KeyRound size={14} />
           </div>

@@ -80,10 +80,10 @@ export function QueueModelRow(props: QueueModelRowProps) {
     <div
       onClick={props.onSelect}
       className={cn(
-        'flex items-center gap-2 border-l-2 border-l-transparent px-4 py-2.5',
-        props.selected && 'border-l-primary bg-primary/5',
+        'flex items-center gap-2 overflow-hidden border-l-2 border-l-transparent px-4 py-2.5',
+        props.selected && 'rounded-md border-l-primary bg-primary/5',
         props.mode === 'manual' && model.enabled && !props.cooling && 'cursor-pointer hover:bg-muted/40',
-        props.dragging && 'bg-muted/60',
+        props.dragging && 'rounded-md bg-muted/60',
       )}
     >
       {props.mode === 'manual' ? (

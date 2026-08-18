@@ -103,7 +103,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="divide-y rounded-md border">
+              <div className="overflow-hidden rounded-md border divide-y">
                 {models.map(model => (
                   <SortableBinding key={model.id} id={model.id}>
                     {(handleProps, dragging) => (

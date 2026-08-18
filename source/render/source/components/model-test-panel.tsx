@@ -52,74 +52,6 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
 
 const TEST_CONCURRENCY = 3
 
-interface ProtocolButtonProps {
-  selected: boolean
-  label: string
-  onClick: () => void
-}
-
-function ProtocolButton(props: ProtocolButtonProps) {
-  const { selected, label, onClick } = props
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      className={cn(
-        'inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-medium transition-all',
-        selected
-          ? 'border-primary/40 bg-primary text-primary-foreground shadow-sm'
-          : 'border-border/70 bg-muted/30 text-muted-foreground hover:border-border hover:bg-background hover:text-foreground',
-      )}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  )
-}
-
-interface ProviderButtonProps {
-  selected: boolean
-  name: string
-  modelCount: number
-  onClick: () => void
-}
-
-function ProviderButton(props: ProviderButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-pressed={props.selected}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-[11px] font-medium transition-all',
-        props.selected
-          ? 'border-primary/40 bg-primary/8 text-primary'
-          : 'border-border/60 bg-background text-muted-foreground hover:border-border hover:text-foreground',
-      )}
-      onClick={props.onClick}
-    >
-      <span
-        className={cn(
-          'flex size-3.5 items-center justify-center rounded-[3px] border transition-colors',
-          props.selected
-            ? 'border-primary bg-primary text-primary-foreground'
-            : 'border-input bg-background',
-        )}
-      >
-        {props.selected && <Check size={9} strokeWidth={3} />}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{props.name}</span>
-      <span
-        className={cn(
-          'font-mono text-[9px] tabular-nums',
-          props.selected ? 'text-primary/70' : 'text-muted-foreground/70',
-        )}
-      >
-        {props.modelCount}
-      </span>
-    </button>
-  )
-}
-
 interface TaskStatusProps {
   status: TestTaskStatus
 }
@@ -134,10 +66,6 @@ function TaskStatus(props: TaskStatusProps) {
 
 export function ModelTestPanel(props: ModelTestPanelProps) {
   const enabledModels = useMemo(() => props.models.filter(model => model.enabled), [props.models])
-  const availableProtocols = useMemo(
-    () => Array.from(new Set(enabledModels.flatMap(model => model.endpoints.map(endpoint => endpoint.protocol)))),
-    [enabledModels],
-  )
   const availableProviders = useMemo(
     () => props.providers.filter(provider => enabledModels.some(model => model.providerId === provider.id)),
     [enabledModels, props.providers],
@@ -298,25 +226,22 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                                 <div className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedCount}</div>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-1.5">
-                                {model.endpoints.map(endpoint => {
-                                  const Icon = PROTOCOL_ICONS[endpoint.protocol]
-                                  return (
-                                    <button
-                                      key={`${model.id}:${endpoint.protocol}`}
-                                      type="button"
-                                      aria-pressed={modelSelectedProtocols.has(endpoint.protocol)}
-                                      className={cn(
-                                        'inline-flex items-center rounded-md border px-1.5 py-1 text-[9px] font-medium transition-all',
-                                        modelSelectedProtocols.has(endpoint.protocol)
-                                          ? 'border-primary/40 bg-primary text-primary-foreground'
-                                          : 'border-border/70 bg-background text-muted-foreground hover:border-border hover:text-foreground',
-                                      )}
-                                      onClick={() => toggleModelProtocol(model.id, endpoint.protocol)}
-                                    >
-                                      {PROTOCOL_LABELS[endpoint.protocol]}
-                                    </button>
-                                  )
-                                })}
+                                {model.endpoints.map(endpoint => (
+                                  <button
+                                    key={`${model.id}:${endpoint.protocol}`}
+                                    type="button"
+                                    aria-pressed={modelSelectedProtocols.has(endpoint.protocol)}
+                                    className={cn(
+                                      'inline-flex items-center rounded-md border px-1.5 py-1 text-[10px] font-medium transition-all',
+                                      modelSelectedProtocols.has(endpoint.protocol)
+                                        ? 'border-primary/40 bg-primary text-primary-foreground'
+                                        : 'border-border/70 bg-background text-muted-foreground hover:border-border hover:text-foreground',
+                                    )}
+                                    onClick={() => toggleModelProtocol(model.id, endpoint.protocol)}
+                                  >
+                                    {PROTOCOL_LABELS[endpoint.protocol]}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                           )
