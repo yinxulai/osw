@@ -2,6 +2,7 @@
   "name": "one-switch",
   "private": true,
   "version": "0.1.3",
+  "author": "yinxulai <yinxulai@hotmail.com>",
   "type": "module",
   "main": "dist/command/index.js",
   "scripts": {

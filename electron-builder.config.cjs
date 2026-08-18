@@ -2,6 +2,7 @@
 module.exports = {
   appId: 'com.yinxulai.one-switch',
   productName: 'One Switch',
+  icon: 'build/icon.png',
   directories: {
     output: 'release/${version}',
   },
