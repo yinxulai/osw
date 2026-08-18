@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
@@ -53,9 +53,21 @@ function createWindow() {
   // 移除默认菜单栏
   win.setMenuBarVisibility(false)
   if (process.platform === 'darwin') {
-    // macOS 上也隐藏应用菜单
-    const { Menu } = require('electron')
-    Menu.setApplicationMenu(Menu.buildFromTemplate([]))
+    // 保留系统编辑菜单，否则 Cmd+V 等原生输入快捷键会失效。
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' },
+        ],
+      },
+    ]))
   }
 
   if (isDevelopment) {
