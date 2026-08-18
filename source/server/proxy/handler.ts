@@ -7,7 +7,7 @@ import { markProviderSuccess, markProviderFailure } from './health'
 import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
-import type { Protocol, RequestStatus } from '@common/schemas'
+import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
 import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl, rewriteRequestModel, injectUsageParams } from './request'
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
@@ -24,6 +24,7 @@ interface AttemptOutcome {
   ttftMilliseconds?: number
   inputTokens?: number | null
   outputTokens?: number | null
+  rawUsage?: RawUsage | null
   cacheHit?: boolean
 }
 
@@ -90,6 +91,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       totalTokens: null,
       inputTokens: null,
       outputTokens: null,
+      rawUsage: null,
       ttftMilliseconds: null,
       cacheHit: null,
     })
@@ -110,6 +112,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           ttftMilliseconds: outcome.ttftMilliseconds ?? null,
           inputTokens: outcome.inputTokens ?? null,
           outputTokens: outcome.outputTokens ?? null,
+          rawUsage: outcome.rawUsage ?? null,
           cacheHit: outcome.cacheHit ?? null,
         })
         return
@@ -176,6 +179,7 @@ interface RequestLogMetrics {
   ttftMilliseconds?: number | null
   inputTokens?: number | null
   outputTokens?: number | null
+  rawUsage?: RawUsage | null
   cacheHit?: boolean | null
 }
 
@@ -190,6 +194,7 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
       totalTokens,
       inputTokens: metrics?.inputTokens ?? null,
       outputTokens: metrics?.outputTokens ?? null,
+      rawUsage: metrics?.rawUsage ?? null,
       ttftMilliseconds: metrics?.ttftMilliseconds ?? null,
       cacheHit: metrics?.cacheHit ?? null,
     })
@@ -261,6 +266,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       let ttftMilliseconds: number | undefined
       let inputTokens: number | null = null
       let outputTokens: number | null = null
+      let rawUsage: RawUsage | null = null
       let responseBuffer = ''
       let isStreaming = false
 
@@ -319,11 +325,11 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
               const dataStr = trimmed.slice(5).trim()
               if (!dataStr || dataStr === '[DONE]') continue
               try {
-                const data = JSON.parse(dataStr)
-                extractTokenUsage(data, (inp, out) => {
-                  if (inp != null) inputTokens = inp
-                  if (out != null) outputTokens = out
-                })
+                const data = JSON.parse(dataStr) as Record<string, unknown>
+                const extracted = extractTokenUsage(data)
+                if (extracted.inputTokens != null) inputTokens = extracted.inputTokens
+                if (extracted.outputTokens != null) outputTokens = extracted.outputTokens
+                rawUsage = mergeRawUsage(rawUsage, extracted.rawUsage)
               } catch {
                 // 忽略解析失败的 chunk
               }
@@ -342,11 +348,11 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         // 非流式响应：从完整 body 解析 usage
         if (!isStreaming && disposition === 'success' && responseBuffer) {
           try {
-            const data = JSON.parse(responseBuffer)
-            extractTokenUsage(data, (inp, out) => {
-              if (inp != null) inputTokens = inp
-              if (out != null) outputTokens = out
-            })
+            const data = JSON.parse(responseBuffer) as Record<string, unknown>
+            const extracted = extractTokenUsage(data)
+            if (extracted.inputTokens != null) inputTokens = extracted.inputTokens
+            if (extracted.outputTokens != null) outputTokens = extracted.outputTokens
+            rawUsage = mergeRawUsage(rawUsage, extracted.rawUsage)
           } catch {
             // 忽略解析失败
           }
@@ -363,6 +369,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           ttftMilliseconds,
           inputTokens,
           outputTokens,
+          rawUsage,
           cacheHit,
         })
       })
@@ -410,71 +417,75 @@ function writeJsonError(res: ServerResponse, statusCode: number, errorCode: stri
   )
 }
 
-/**
- * 从 API 响应数据中提取 token 用量信息。
- * 支持多种格式：
- * - OpenAI Chat/Completions: data.usage.prompt_tokens / completion_tokens
- * - OpenAI Responses: data.usage.input_tokens / output_tokens
- * - Anthropic Messages (non-stream): data.usage.input_tokens / output_tokens
- * - Anthropic SSE message_start: data.message.usage.input_tokens
- * - Anthropic SSE message_delta: data.usage.output_tokens
- * - 通用格式: data.input_tokens / data.output_tokens / data.usage.total_tokens
- */
-function extractTokenUsage(data: Record<string, unknown>, callback: (inputTokens: number | null, outputTokens: number | null) => void): void {
-  let inp: number | null = null
-  let out: number | null = null
+interface ExtractedUsage {
+  inputTokens: number | null
+  outputTokens: number | null
+  rawUsage: RawUsage | null
+}
 
-  // 顶层 usage 对象（OpenAI / Anthropic 非流式）
-  const usage = data.usage
-  if (usage && typeof usage === 'object') {
-    const u = usage as Record<string, unknown>
-    // 输入 token
-    if (typeof u.prompt_tokens === 'number') inp = u.prompt_tokens
-    else if (typeof u.input_tokens === 'number') inp = u.input_tokens
+/** 提取供应商原始 usage，并兼容常见协议的标准化 token 字段。 */
+function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {
+  const usageCandidates: RawUsage[] = []
+  collectUsage(data.usage, usageCandidates)
 
-    // 输出 token
-    if (typeof u.completion_tokens === 'number') out = u.completion_tokens
-    else if (typeof u.output_tokens === 'number') out = u.output_tokens
+  const message = asRecord(data.message)
+  collectUsage(message?.usage, usageCandidates)
 
-    // 如果只有 total_tokens，且只有一个有值，用 total 推算
-    if (inp === null && out === null && typeof u.total_tokens === 'number') {
-      inp = u.total_tokens
-    }
-  }
+  const response = asRecord(data.response)
+  collectUsage(response?.usage, usageCandidates)
 
-  // Anthropic SSE: message_start
-  if (data.type === 'message_start') {
-    const msg = data.message as Record<string, unknown> | undefined
-    if (msg && msg.usage && typeof msg.usage === 'object') {
-      const u = msg.usage as Record<string, unknown>
-      if (typeof u.input_tokens === 'number') inp = u.input_tokens
-    }
-  }
-
-  // Anthropic SSE: message_delta
-  if (data.type === 'message_delta') {
-    const u = data.usage as Record<string, unknown> | undefined
-    if (u && typeof u.output_tokens === 'number') out = u.output_tokens
-  }
-
-  // OpenAI Responses 格式：output 数组中的 usage
   if (Array.isArray(data.output)) {
-    for (const item of data.output as Array<Record<string, unknown>>) {
-      if (item && typeof item === 'object' && item.usage && typeof item.usage === 'object') {
-        const u = item.usage as Record<string, unknown>
-        if (typeof u.input_tokens === 'number' && inp === null) inp = u.input_tokens
-        if (typeof u.output_tokens === 'number') out = u.output_tokens
-      }
-    }
+    for (const item of data.output) collectUsage(asRecord(item)?.usage, usageCandidates)
   }
 
-  // 顶层直接有 token 字段（某些兼容 API）
-  if (inp === null && typeof data.input_tokens === 'number') inp = data.input_tokens
-  if (inp === null && typeof data.prompt_tokens === 'number') inp = data.prompt_tokens
-  if (out === null && typeof data.output_tokens === 'number') out = data.output_tokens
-  if (out === null && typeof data.completion_tokens === 'number') out = data.completion_tokens
+  let rawUsage: RawUsage | null = null
+  for (const usage of usageCandidates) rawUsage = mergeRawUsage(rawUsage, usage)
 
-  if (inp !== null || out !== null) {
-    callback(inp, out)
+  const inputTokens = firstNumber(
+    rawUsage?.prompt_tokens,
+    rawUsage?.input_tokens,
+    data.input_tokens,
+    data.prompt_tokens,
+  )
+  const outputTokens = firstNumber(
+    rawUsage?.completion_tokens,
+    rawUsage?.output_tokens,
+    data.output_tokens,
+    data.completion_tokens,
+  )
+
+  return { inputTokens, outputTokens, rawUsage }
+}
+
+function collectUsage(value: unknown, target: RawUsage[]): void {
+  const usage = asRecord(value)
+  if (usage) target.push(usage)
+}
+
+function asRecord(value: unknown): RawUsage | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as RawUsage
+    : null
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
   }
+  return null
+}
+
+function mergeRawUsage(current: RawUsage | null, incoming: RawUsage | null): RawUsage | null {
+  if (!incoming) return current
+  if (!current) return { ...incoming }
+
+  const merged: RawUsage = { ...current }
+  for (const [key, value] of Object.entries(incoming)) {
+    const currentValue = asRecord(merged[key])
+    const incomingValue = asRecord(value)
+    merged[key] = currentValue && incomingValue
+      ? mergeRawUsage(currentValue, incomingValue)
+      : value
+  }
+  return merged
 }

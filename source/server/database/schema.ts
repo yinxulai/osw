@@ -109,6 +109,7 @@ export const requestLogs = sqliteTable(
     totalTokens: integer('totalTokens'),
     inputTokens: integer('inputTokens'),
     outputTokens: integer('outputTokens'),
+    rawUsage: text('rawUsage'),
     ttftMilliseconds: integer('ttftMilliseconds'),
     cacheHit: integer('cacheHit', { mode: 'boolean' }),
     createdTime: integer('createdTime').notNull(),

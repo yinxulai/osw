@@ -488,6 +488,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
       totalTokens: input.totalTokens ?? null,
       inputTokens: input.inputTokens ?? null,
       outputTokens: input.outputTokens ?? null,
+      rawUsage: serializeRawUsage(input.rawUsage),
       ttftMilliseconds: input.ttftMilliseconds ?? null,
       cacheHit: input.cacheHit ?? null,
       createdTime: time,
@@ -502,6 +503,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     totalTokens: input.totalTokens ?? null,
     inputTokens: input.inputTokens ?? null,
     outputTokens: input.outputTokens ?? null,
+    rawUsage: input.rawUsage ?? null,
     ttftMilliseconds: input.ttftMilliseconds ?? null,
     cacheHit: input.cacheHit ?? null,
     createdTime: time,
@@ -514,14 +516,19 @@ export interface RequestLogUpdate {
   totalTokens?: number | null
   inputTokens?: number | null
   outputTokens?: number | null
+  rawUsage?: RequestLog['rawUsage']
   ttftMilliseconds?: number | null
   cacheHit?: boolean | null
 }
 
 export async function updateRequestLogStatus(id: string, update: RequestLogUpdate): Promise<void> {
+  const { rawUsage, ...fields } = update
   getDb()
     .update(requestLogs)
-    .set(update)
+    .set({
+      ...fields,
+      ...(rawUsage !== undefined ? { rawUsage: serializeRawUsage(rawUsage) } : {}),
+    })
     .where(eq(requestLogs.id, id))
     .run()
 }
@@ -888,6 +895,22 @@ function mapSettings(row: typeof settings.$inferSelect): Settings {
   }
 }
 
+function serializeRawUsage(rawUsage: RequestLog['rawUsage'] | undefined): string | null {
+  return rawUsage == null ? null : JSON.stringify(rawUsage)
+}
+
+function parseRawUsage(rawUsage: string | null): RequestLog['rawUsage'] {
+  if (!rawUsage) return null
+  try {
+    const parsed = JSON.parse(rawUsage)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as RequestLog['rawUsage']
+      : null
+  } catch {
+    return null
+  }
+}
+
 function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
   return {
     id: row.id,
@@ -898,6 +921,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     totalTokens: row.totalTokens,
     inputTokens: row.inputTokens ?? null,
     outputTokens: row.outputTokens ?? null,
+    rawUsage: parseRawUsage(row.rawUsage),
     ttftMilliseconds: row.ttftMilliseconds ?? null,
     cacheHit: row.cacheHit ?? null,
     createdTime: Number(row.createdTime),

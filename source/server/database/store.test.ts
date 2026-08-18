@@ -13,6 +13,9 @@ import {
   getSettings,
   listUpstreamModelsByLogicalModel,
   deleteProvider,
+  createRequestLog,
+  updateRequestLogStatus,
+  listRequestLogs,
   listLogicalModels,
   listProviders,
 } from './store'
@@ -65,6 +68,41 @@ describe('store row mapping', () => {
     expect((await listLogicalModels())[0].enabled).toBe(true)
     expect((await getUpstreamModel(upstreamModel.id))?.enabled).toBe(false)
     expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
+  })
+
+  it('round-trips nested raw usage when request metrics are updated', async () => {
+    const log = await createRequestLog({
+      logicalModelId: 'model',
+      protocol: 'openai-responses',
+      status: 'failed',
+      totalDurationMilliseconds: 0,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+    const rawUsage = {
+      input_tokens: 1200,
+      input_tokens_details: { cached_tokens: 1024 },
+      output_tokens: 80,
+      output_tokens_details: { reasoning_tokens: 48 },
+    }
+
+    await updateRequestLogStatus(log.id, {
+      status: 'success',
+      totalDurationMilliseconds: 120,
+      totalTokens: 1280,
+      inputTokens: 1200,
+      outputTokens: 80,
+      rawUsage,
+    })
+
+    expect((await listRequestLogs())[0]).toMatchObject({
+      id: log.id,
+      rawUsage,
+    })
   })
 
   it('disables active upstream models when their provider is deleted', async () => {

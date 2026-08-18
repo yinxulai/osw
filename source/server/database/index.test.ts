@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, initDatabase } from './index'
 
@@ -94,6 +95,38 @@ describe('database lifecycle', () => {
     ])
   })
 
+  it('adds raw usage to an existing database without losing request logs', async () => {
+    const directory = createTemporaryDirectory()
+    const databasePath = path.join(directory, 'one-switch.db')
+    const legacyClient = new DatabaseSync(databasePath)
+    legacyClient.exec(`
+      CREATE TABLE request_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        logicalModelId TEXT NOT NULL,
+        protocol TEXT NOT NULL,
+        status TEXT NOT NULL,
+        totalDurationMilliseconds INTEGER NOT NULL,
+        totalTokens INTEGER,
+        inputTokens INTEGER,
+        outputTokens INTEGER,
+        ttftMilliseconds INTEGER,
+        cacheHit INTEGER,
+        createdTime BIGINT NOT NULL
+      );
+      INSERT INTO request_logs (
+        id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime
+      ) VALUES ('legacy-request', 'model', 'openai-responses', 'success', 25, 1);
+    `)
+    legacyClient.close()
+
+    const client = (await initDatabase(directory)).$client
+    const columns = client.prepare('PRAGMA table_info(request_logs)').all()
+    const row = client.prepare('SELECT id, rawUsage FROM request_logs WHERE id = ?').get('legacy-request')
+
+    expect(columns.map(column => (column as { name: string }).name)).toContain('rawUsage')
+    expect(row).toEqual({ id: 'legacy-request', rawUsage: null })
+  })
+
   it('creates the complete release baseline without migration artifacts', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
     const tables = client
@@ -114,7 +147,7 @@ describe('database lifecycle', () => {
       { name: 'upstream_models' },
     ])
     expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual(
-      expect.arrayContaining(['inputTokens', 'outputTokens', 'ttftMilliseconds', 'cacheHit']),
+      expect.arrayContaining(['inputTokens', 'outputTokens', 'rawUsage', 'ttftMilliseconds', 'cacheHit']),
     )
     expect(settingsColumns.map(column => (column as { name: string }).name)).toContain(
       'autoLaunch',

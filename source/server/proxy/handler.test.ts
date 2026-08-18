@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
+  updateRequestLogStatus: vi.fn(),
 }))
 
 vi.mock('./router', async importOriginal => {
@@ -27,7 +28,7 @@ vi.mock('../database/store', () => ({
   getSettings: async () => ({ idleTimeoutMilliseconds: 1_000 }),
   createRequestLog: async (input: Record<string, unknown>) => ({ id: 'req_test', ...input }),
   createRequestAttempt: async (input: Record<string, unknown>) => ({ id: 'att_test', ...input }),
-  updateRequestLogStatus: async () => undefined,
+  updateRequestLogStatus: mocks.updateRequestLogStatus,
 }))
 
 import { handleProxyRequest } from './handler'
@@ -122,4 +123,43 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })
 
+  it('records raw usage from an OpenAI Responses streaming completion event', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write('data: {"type":"response.created","response":{"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":0}}}}\n\n')
+      res.end('data: {"type":"response.completed","response":{"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1024},"output_tokens":80}}}\n\n')
+    })
+    mocks.models = [
+      model('model_responses', 'prov_responses', `${upstream.url}/v1/responses`, 'responses-model', 'openai-responses'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', input: 'Hello', stream: true }),
+    })
+    await response.text()
+
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        totalTokens: 1280,
+        inputTokens: 1200,
+        outputTokens: 80,
+        rawUsage: {
+          input_tokens: 1200,
+          input_tokens_details: { cached_tokens: 1024 },
+          output_tokens: 80,
+        },
+      }),
+    )
+  })
 })

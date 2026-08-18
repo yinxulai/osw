@@ -109,6 +109,9 @@ export type Settings = z.infer<typeof SettingsSchema>
 
 // ========== Request Log ==========
 
+export const RawUsageSchema = z.record(z.unknown())
+export type RawUsage = z.infer<typeof RawUsageSchema>
+
 export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string().startsWith('model_'),
@@ -118,6 +121,7 @@ export const RequestLogSchema = z.object({
   totalTokens: z.number().int().nonnegative().nullable(),
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
+  rawUsage: RawUsageSchema.nullable(),
   ttftMilliseconds: z.number().int().nonnegative().nullable(),
   cacheHit: z.boolean().nullable(),
   createdTime: z.number().int(),
@@ -209,6 +213,7 @@ export const RequestLogEntrySchema = z.object({
   totalTokens: z.number().int().nonnegative().nullable(),
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
+  rawUsage: RawUsageSchema.nullable(),
   ttftMilliseconds: z.number().int().nonnegative().nullable(),
   cacheHit: z.boolean().nullable(),
   createdTime: z.number().int(),

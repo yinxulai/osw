@@ -45,6 +45,14 @@ function ensureSchema(db: DatabaseSync): void {
   for (const statement of INITIAL_SCHEMA) {
     db.exec(statement)
   }
+  ensureColumn(db, 'request_logs', 'rawUsage', 'TEXT')
+}
+
+function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!columns.some(candidate => candidate.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
 }
 
 const INITIAL_SCHEMA = [
@@ -119,6 +127,7 @@ const INITIAL_SCHEMA = [
     totalTokens INTEGER,
     inputTokens INTEGER,
     outputTokens INTEGER,
+    rawUsage TEXT,
     ttftMilliseconds INTEGER,
     cacheHit INTEGER,
     createdTime BIGINT NOT NULL
