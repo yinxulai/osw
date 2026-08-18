@@ -1,7 +1,5 @@
-import { useState } from 'react'
-import { FlaskConical, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
-import { ModelTestPanel } from '@/components/model-test-panel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,7 +11,6 @@ import { ModelDialog } from './components/model-dialog'
 
 export function ModelManagementPage() {
   const service = useModelManagementService()
-  const [testPanelOpen, setTestPanelOpen] = useState(false)
 
   return (
     <PageLayout>
@@ -21,14 +18,9 @@ export function ModelManagementPage() {
         title="模型管理"
         description="集中管理供应商凭据与上游模型映射"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setTestPanelOpen(true)}>
-              <FlaskConical size={14} /> 全局测试
-            </Button>
-            <Button size="default" onClick={() => service.openProviderDialog()}>
-              <Plus size={14} /> 新建供应商
-            </Button>
-          </div>
+          <Button size="default" onClick={() => service.openProviderDialog()}>
+            <Plus size={14} /> 新建供应商
+          </Button>
         }
       />
       <PageContent>
@@ -36,7 +28,7 @@ export function ModelManagementPage() {
           <div className="space-y-4">
             <div className="flex gap-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Card key={i} className="min-w-[180px] p-3">
+                <Card key={i} className="min-w-45 p-3">
                   <Skeleton className="mb-2 h-4 w-20" />
                   <Skeleton className="h-3 w-16" />
                 </Card>
@@ -114,13 +106,6 @@ export function ModelManagementPage() {
           onSave={service.saveModel}
         />
       </PageContent>
-      <ModelTestPanel
-        open={testPanelOpen}
-        onOpenChange={setTestPanelOpen}
-        logicalModel={service.logicalModel}
-        models={service.models}
-        providers={service.providers}
-      />
     </PageLayout>
   )
 }

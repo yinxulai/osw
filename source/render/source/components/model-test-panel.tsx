@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Activity,
   Check,
   CheckCircle2,
   Circle,
   Cpu,
   FlaskConical,
   Loader2,
-  MessageSquare,
   Play,
   RotateCcw,
   XCircle,
-  Zap,
 } from 'lucide-react'
 import type { LogicalModel, Protocol, Provider, UpstreamModel } from '@common/schemas'
 import { modelTestApi, type ModelTestResult } from '@/api'
@@ -23,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 interface ModelTestPanelProps {
@@ -54,43 +50,30 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
   'anthropic-messages': 'Messages',
 }
 
-const PROTOCOL_ICONS: Record<Protocol, typeof MessageSquare> = {
-  'openai-completions': MessageSquare,
-  'openai-responses': Zap,
-  'anthropic-messages': Activity,
-}
-
 const TEST_CONCURRENCY = 3
 
 interface ProtocolButtonProps {
   selected: boolean
   label: string
-  icon: typeof MessageSquare
   onClick: () => void
 }
 
 function ProtocolButton(props: ProtocolButtonProps) {
-  const { selected, label, icon: Icon, onClick } = props
+  const { selected, label, onClick } = props
   return (
-    <Tooltip delayDuration={150}>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          aria-pressed={selected}
-          className={cn(
-            'inline-flex size-8 items-center justify-center rounded-md border transition-colors',
-            selected
-              ? 'border-primary/45 bg-primary/10 text-primary'
-              : 'border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground',
-          )}
-          onClick={onClick}
-        >
-          <Icon size={14} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <button
+      type="button"
+      aria-pressed={selected}
+      className={cn(
+        'inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-medium transition-all',
+        selected
+          ? 'border-primary/40 bg-primary text-primary-foreground shadow-sm'
+          : 'border-border/70 bg-muted/30 text-muted-foreground hover:border-border hover:bg-background hover:text-foreground',
+      )}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -107,18 +90,32 @@ function ProviderButton(props: ProviderButtonProps) {
       type="button"
       aria-pressed={props.selected}
       className={cn(
-        'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-[11px] font-medium transition-colors',
+        'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-[11px] font-medium transition-all',
         props.selected
-          ? 'border-primary/35 bg-background text-foreground'
-          : 'border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground',
+          ? 'border-primary/40 bg-primary/8 text-primary'
+          : 'border-border/60 bg-background text-muted-foreground hover:border-border hover:text-foreground',
       )}
       onClick={props.onClick}
     >
-      <span className={cn('flex size-3.5 items-center justify-center rounded-[3px] border', props.selected && 'border-primary bg-primary text-primary-foreground')}>
-        {props.selected && <Check size={9} />}
+      <span
+        className={cn(
+          'flex size-3.5 items-center justify-center rounded-[3px] border transition-colors',
+          props.selected
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-input bg-background',
+        )}
+      >
+        {props.selected && <Check size={9} strokeWidth={3} />}
       </span>
-      <span>{props.name}</span>
-      <span className="font-mono text-[9px] text-muted-foreground">{props.modelCount}</span>
+      <span className="min-w-0 flex-1 truncate">{props.name}</span>
+      <span
+        className={cn(
+          'font-mono text-[9px] tabular-nums',
+          props.selected ? 'text-primary/70' : 'text-muted-foreground/70',
+        )}
+      >
+        {props.modelCount}
+      </span>
     </button>
   )
 }
@@ -145,23 +142,27 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
     () => props.providers.filter(provider => enabledModels.some(model => model.providerId === provider.id)),
     [enabledModels, props.providers],
   )
-  const [selectedProtocols, setSelectedProtocols] = useState<Set<Protocol>>(new Set())
+  const [selectedModelProtocols, setSelectedModelProtocols] = useState<Record<string, Set<Protocol>>>({})
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set())
   const [tasks, setTasks] = useState<TestTask[]>([])
   const [running, setRunning] = useState(false)
 
   useEffect(() => {
     if (!props.open) return
-    setSelectedProtocols(new Set(availableProtocols))
+    const nextModelProtocols = Object.fromEntries(
+      enabledModels.map(model => [model.id, new Set(model.endpoints.map(endpoint => endpoint.protocol))]),
+    )
+    setSelectedModelProtocols(nextModelProtocols)
     setSelectedProviderIds(new Set(availableProviders.map(provider => provider.id)))
     setTasks([])
     setRunning(false)
-  }, [props.open, availableProtocols, availableProviders])
+  }, [props.open, enabledModels, availableProviders])
 
   const plannedTasks = useMemo<TestTask[]>(() => enabledModels.flatMap(model => {
     if (!selectedProviderIds.has(model.providerId)) return []
     const provider = props.providers.find(item => item.id === model.providerId)
     if (!provider) return []
+    const selectedProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
     return model.endpoints.filter(endpoint => selectedProtocols.has(endpoint.protocol)).map(endpoint => ({
       id: `${model.id}:${endpoint.protocol}`,
       modelId: model.id,
@@ -171,7 +172,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
       protocol: endpoint.protocol,
       status: 'queued' as const,
     }))
-  }), [enabledModels, props.providers, selectedProtocols, selectedProviderIds])
+  }), [enabledModels, props.providers, selectedModelProtocols, selectedProviderIds])
 
   const visibleTasks = tasks.length > 0 ? tasks : plannedTasks
   const completedCount = tasks.filter(task => task.status === 'success' || task.status === 'failed').length
@@ -180,12 +181,14 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100)
 
   const clearTasks = () => setTasks([])
-  const toggleProtocol = (protocol: Protocol) => {
+  const toggleModelProtocol = (modelId: string, protocol: Protocol) => {
     if (running) return
-    setSelectedProtocols(current => {
-      const next = new Set(current)
-      if (next.has(protocol)) next.delete(protocol)
-      else next.add(protocol)
+    setSelectedModelProtocols(current => {
+      const next = { ...current }
+      const selectedProtocols = new Set(current[modelId] ?? [])
+      if (selectedProtocols.has(protocol)) selectedProtocols.delete(protocol)
+      else selectedProtocols.add(protocol)
+      next[modelId] = selectedProtocols
       return next
     })
     clearTasks()
@@ -234,7 +237,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
 
   return (
     <Dialog open={props.open} onOpenChange={open => !running && props.onOpenChange(open)}>
-      <DialogContent className="flex max-h-[86vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[86vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/45 text-primary"><FlaskConical size={15} /></div>
@@ -248,60 +251,125 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
           </div>
         </DialogHeader>
 
-        <div className="border-b bg-muted/18 px-5 py-3">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground">协议</span>
-              <div className="flex items-center rounded-md border bg-muted/35 p-0.5">
-                {availableProtocols.map(protocol => {
-                  const Icon = PROTOCOL_ICONS[protocol]
-                  return <ProtocolButton key={protocol} selected={selectedProtocols.has(protocol)} label={PROTOCOL_LABELS[protocol]} icon={Icon} onClick={() => toggleProtocol(protocol)} />
-                })}
-                {availableProtocols.length === 0 && <span className="px-2 text-[10px] text-muted-foreground">无可用协议</span>}
-              </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="border-b bg-muted/10 p-3 lg:border-b-0 lg:border-r">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <div className="text-[11px] font-medium text-foreground">待测模型</div>
+              <div className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedProviderIds.size}/{availableProviders.length}</div>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground">渠道</span>
-              <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-                {availableProviders.map(provider => <ProviderButton key={provider.id} selected={selectedProviderIds.has(provider.id)} name={provider.name} modelCount={enabledModels.filter(model => model.providerId === provider.id).length} onClick={() => toggleProvider(provider.id)} />)}
-                {availableProviders.length === 0 && <span className="px-1 text-[10px] text-muted-foreground">无可用渠道</span>}
-              </div>
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <span className="font-mono text-[10px] text-muted-foreground">{plannedTasks.length} 项</span>
-              {tasks.length > 0 && !running && <Button variant="ghost" size="icon-sm" title="清除结果" onClick={clearTasks}><RotateCcw size={13} /></Button>}
-              <Button size="sm" disabled={!props.logicalModel || plannedTasks.length === 0 || running} onClick={() => void runTests()}>
-                {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                {running ? `${completedCount}/${tasks.length}` : '运行测试'}
-              </Button>
-            </div>
-          </div>
-        </div>
+            <div className="space-y-3">
+              {availableProviders.map(provider => {
+                const providerModels = enabledModels.filter(model => model.providerId === provider.id)
+                const providerSelectedCount = providerModels.filter(model => {
+                  const modelProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
+                  return modelProtocols.size > 0
+                }).length
 
-        {(running || tasks.length > 0) && (
-          <div className="border-b px-5 py-3">
-            <div className="flex items-center justify-between text-[10px]">
-              <div className="flex items-center gap-3">
-                <span className="font-medium">{running ? '测试进行中' : failureCount > 0 ? '测试完成，存在异常' : '全部测试通过'}</span>
-                <span className="text-emerald-600">通过 {successCount}</span>
-                <span className={failureCount > 0 ? 'text-red-600' : 'text-muted-foreground'}>失败 {failureCount}</span>
-              </div>
-              <span className="font-mono text-muted-foreground">{progress}%</span>
-            </div>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted"><div className={cn('h-full transition-all duration-300', failureCount > 0 && !running ? 'bg-red-500' : 'bg-primary')} style={{ width: `${progress}%` }} /></div>
-          </div>
-        )}
+                return (
+                  <div key={provider.id} className="rounded-lg border bg-background/60 p-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+                        selectedProviderIds.has(provider.id) ? 'bg-muted/60 text-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                      )}
+                      onClick={() => toggleProvider(provider.id)}
+                    >
+                      <span className={cn('flex size-3.5 items-center justify-center rounded-[3px] border', selectedProviderIds.has(provider.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background')}>
+                        {selectedProviderIds.has(provider.id) && <Check size={9} strokeWidth={3} />}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{provider.name}</span>
+                      <span className="font-mono text-[9px] text-muted-foreground">{providerSelectedCount}/{providerModels.length}</span>
+                    </button>
 
-        <main className="min-h-0 flex-1 overflow-auto p-5">
+                    {selectedProviderIds.has(provider.id) && (
+                      <div className="mt-2 space-y-2">
+                        {providerModels.map(model => {
+                          const modelSelectedProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
+                          const selectedCount = modelSelectedProtocols.size
+
+                          return (
+                            <div key={model.id} className="rounded-md border border-border/70 bg-background/80 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-[10px] font-medium text-foreground">{model.upstreamModelId}</div>
+                                  <div className="mt-0.5 text-[9px] text-muted-foreground">{selectedCount}/{model.endpoints.length} 协议</div>
+                                </div>
+                                <div className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedCount}</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {model.endpoints.map(endpoint => {
+                                  const Icon = PROTOCOL_ICONS[endpoint.protocol]
+                                  return (
+                                    <button
+                                      key={`${model.id}:${endpoint.protocol}`}
+                                      type="button"
+                                      aria-pressed={modelSelectedProtocols.has(endpoint.protocol)}
+                                      className={cn(
+                                        'inline-flex items-center rounded-md border px-1.5 py-1 text-[9px] font-medium transition-all',
+                                        modelSelectedProtocols.has(endpoint.protocol)
+                                          ? 'border-primary/40 bg-primary text-primary-foreground'
+                                          : 'border-border/70 bg-background text-muted-foreground hover:border-border hover:text-foreground',
+                                      )}
+                                      onClick={() => toggleModelProtocol(model.id, endpoint.protocol)}
+                                    >
+                                      {PROTOCOL_LABELS[endpoint.protocol]}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </aside>
+
+          <div className="flex min-h-0 flex-col">
+            <div className="border-b bg-muted/10 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-medium text-foreground">测试配置</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">{plannedTasks.length} 个目标协议任务 · {selectedProviderIds.size} 个渠道已选中</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-md bg-muted/60 px-2 py-1 font-mono text-[10px] tabular-nums text-muted-foreground">{plannedTasks.length} 项</span>
+                  {tasks.length > 0 && !running && <Button variant="ghost" size="icon-sm" title="清除结果" onClick={clearTasks}><RotateCcw size={13} /></Button>}
+                  <Button size="sm" disabled={!props.logicalModel || plannedTasks.length === 0 || running} onClick={() => void runTests()}>
+                    {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                    {running ? `${completedCount}/${tasks.length}` : '运行测试'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {(running || tasks.length > 0) && (
+              <div className="border-b px-4 py-3">
+                <div className="flex items-center justify-between text-[10px]">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{running ? '测试进行中' : failureCount > 0 ? '测试完成，存在异常' : '全部测试通过'}</span>
+                    <span className="text-emerald-600">通过 {successCount}</span>
+                    <span className={failureCount > 0 ? 'text-red-600' : 'text-muted-foreground'}>失败 {failureCount}</span>
+                  </div>
+                  <span className="font-mono text-muted-foreground">{progress}%</span>
+                </div>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted"><div className={cn('h-full transition-all duration-300', failureCount > 0 && !running ? 'bg-red-500' : 'bg-primary')} style={{ width: `${progress}%` }} /></div>
+              </div>
+            )}
+
+            <main className="min-h-0 flex-1 overflow-auto p-4">
               {visibleTasks.length > 0 ? (
                 <div className="overflow-hidden rounded-md border bg-background">
                   <div className="hidden grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] gap-3 border-b bg-muted/30 px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:grid"><span /><span>目标</span><span>协议</span><span>结果</span><span className="text-right">响应</span></div>
                   {visibleTasks.map(task => {
-                    const Icon = PROTOCOL_ICONS[task.protocol]
                     return <div key={task.id} className="grid gap-2 border-b px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
                       <TaskStatus status={task.status} />
                       <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.upstreamModelId}</span></div></div>
-                      <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground"><Icon size={13} className="shrink-0" /><span className="truncate">{PROTOCOL_LABELS[task.protocol]}</span></div>
+                      <div className="min-w-0 text-[11px] text-muted-foreground"><span className="truncate">{PROTOCOL_LABELS[task.protocol]}</span></div>
                       <div className={cn('text-[10px] font-medium', task.status === 'success' && 'text-emerald-600', task.status === 'failed' && 'text-red-600', task.status === 'running' && 'text-primary')}>{task.status === 'queued' ? '等待' : task.status === 'running' ? '请求中' : task.status === 'success' ? '通过' : '失败'}</div>
                       <div className="text-[10px] text-muted-foreground md:text-right">{task.result?.statusCode ? `HTTP ${task.result.statusCode} · ` : ''}{task.result ? `${task.result.durationMilliseconds}ms` : '—'}{task.result?.success && <span className="ml-1 font-mono">↓{task.result.outputTokens ?? '—'}</span>}</div>
                       {task.errorMessage && <div className="col-span-full ml-9 wrap-break-word rounded-md bg-red-500/[0.07] px-2.5 py-2 font-mono text-[10px] text-red-600 dark:text-red-400">{task.errorMessage}</div>}
@@ -313,11 +381,13 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                   <div className="mb-3 flex size-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground"><Cpu size={18} /></div>
                   <div className="text-xs font-medium">{enabledModels.length === 0 ? '没有可测试的模型绑定' : '当前范围没有测试任务'}</div>
                   <div className="mt-1.5 max-w-sm text-[11px] leading-5 text-muted-foreground">
-                    {enabledModels.length === 0 ? '请先在模型管理中添加并启用上游模型，然后返回这里验证协议与渠道。' : '选择至少一个可用协议和渠道，测试任务会在这里列出。'}
+                    {enabledModels.length === 0 ? '请先在模型管理中添加并启用上游模型，然后返回这里验证协议与渠道。' : '在左侧列表中勾选需要测试的渠道和协议，结果会在这里展示。'}
                   </div>
                 </div>
               )}
-        </main>
+            </main>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )

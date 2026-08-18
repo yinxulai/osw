@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { ArrowRight, FlaskConical, ListTree, RefreshCw, Target } from 'lucide-react'
+import { ArrowRight, ListTree, RefreshCw, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -35,7 +35,6 @@ interface QueueListCardProps {
   onSelectManualModel: (model: UpstreamModel) => void
   onToggleEnabled: (model: UpstreamModel, enabled: boolean) => void
   onDragEnd: (event: DragEndEvent) => void
-  onOpenTestPanel: () => void
   onNavigateToModels?: () => void
 }
 
@@ -53,7 +52,6 @@ export function QueueListCard(props: QueueListCardProps) {
     onSelectManualModel,
     onToggleEnabled,
     onDragEnd,
-    onOpenTestPanel,
     onNavigateToModels,
   } = props
 
@@ -91,9 +89,6 @@ export function QueueListCard(props: QueueListCardProps) {
             </TabsList>
           </Tabs>
 
-          <Button variant="outline" size="sm" onClick={onOpenTestPanel}>
-            <FlaskConical size={12} /> 全局测试
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -105,7 +100,7 @@ export function QueueListCard(props: QueueListCardProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="-mx-4 -mb-4 overflow-hidden rounded-b-lg divide-y border-t">
+              <div className="overflow-hidden rounded-b-lg divide-y border-t">
                 {models.map(model => {
                   const cooling = isCooling(model.providerId)
                   const selected = mode === 'manual' && manualModelId === model.id

@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
-import { ModelTestPanel } from '@/components/model-test-panel'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQueueControlService } from './service'
@@ -14,7 +12,6 @@ interface QueueControlPageProps {
 export function QueueControlPage(props: QueueControlPageProps) {
   const { onNavigateToModels } = props
   const service = useQueueControlService()
-  const [testPanelOpen, setTestPanelOpen] = useState(false)
 
   return (
     <PageLayout>
@@ -58,7 +55,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
               onSelectManualModel={service.selectManualModel}
               onToggleEnabled={service.updateEnabled}
               onDragEnd={service.handleDragEnd}
-              onOpenTestPanel={() => setTestPanelOpen(true)}
               onNavigateToModels={onNavigateToModels}
             />
 
@@ -73,13 +69,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
           </>
         )}
       </PageContent>
-      <ModelTestPanel
-        open={testPanelOpen}
-        onOpenChange={setTestPanelOpen}
-        logicalModel={service.logicalModel}
-        models={service.models}
-        providers={Object.values(service.providers)}
-      />
     </PageLayout>
   )
 }
