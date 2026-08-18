@@ -7,7 +7,12 @@ import { useQueueControlService } from './service'
 import { ProxyConfigCard } from './components/proxy-config-card'
 import { QueueListCard } from './components/queue-list-card'
 
-export function QueueControlPage() {
+interface QueueControlPageProps {
+  onNavigateToModels?: () => void
+}
+
+export function QueueControlPage(props: QueueControlPageProps) {
+  const { onNavigateToModels } = props
   const service = useQueueControlService()
   const [testPanelOpen, setTestPanelOpen] = useState(false)
 
@@ -40,15 +45,6 @@ export function QueueControlPage() {
           </div>
         ) : (
           <>
-            <ProxyConfigCard
-              proxyBaseUrl={service.proxyBaseUrl}
-              proxyPort={service.proxyStatus?.port ?? 0}
-              proxyRunning={service.proxyStatus?.running ?? false}
-              copied={service.copied}
-              onToggleProxy={() => void service.toggleProxy()}
-              onCopyEndpoint={url => void service.copyEndpoint(url)}
-            />
-
             <QueueListCard
               models={service.models}
               providers={service.providers}
@@ -63,6 +59,16 @@ export function QueueControlPage() {
               onToggleEnabled={service.updateEnabled}
               onDragEnd={service.handleDragEnd}
               onOpenTestPanel={() => setTestPanelOpen(true)}
+              onNavigateToModels={onNavigateToModels}
+            />
+
+            <ProxyConfigCard
+              proxyBaseUrl={service.proxyBaseUrl}
+              proxyPort={service.proxyStatus?.port ?? 0}
+              proxyRunning={service.proxyStatus?.running ?? false}
+              copied={service.copied}
+              onToggleProxy={() => void service.toggleProxy()}
+              onCopyEndpoint={url => void service.copyEndpoint(url)}
             />
           </>
         )}

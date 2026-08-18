@@ -36,8 +36,8 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
   const fullUrl = protocolInfo ? `${proxyBaseUrl}${protocolInfo.path}` : proxyBaseUrl
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+    <Card className="bg-muted/20">
+      <CardHeader className="gap-3 p-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div className="flex items-start gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Server size={16} />
@@ -56,7 +56,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
           {proxyRunning ? '暂停服务' : '启动服务'}
         </Button>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 p-4 pt-0">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr]">
           <div className="space-y-1.5">
             <Label className="text-[11px] text-muted-foreground">

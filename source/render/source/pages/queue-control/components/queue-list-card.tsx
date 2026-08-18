@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { FlaskConical, ListTree, RefreshCw, Target } from 'lucide-react'
+import { ArrowRight, FlaskConical, ListTree, RefreshCw, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -36,6 +36,7 @@ interface QueueListCardProps {
   onToggleEnabled: (model: UpstreamModel, enabled: boolean) => void
   onDragEnd: (event: DragEndEvent) => void
   onOpenTestPanel: () => void
+  onNavigateToModels?: () => void
 }
 
 export function QueueListCard(props: QueueListCardProps) {
@@ -53,20 +54,29 @@ export function QueueListCard(props: QueueListCardProps) {
     onToggleEnabled,
     onDragEnd,
     onOpenTestPanel,
+    onNavigateToModels,
   } = props
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+  const enabledCount = models.filter(model => model.enabled).length
+  const coolingCount = models.filter(model => isCooling(model.providerId)).length
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+    <Card className="overflow-hidden">
+      <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
-          <CardTitle>优先级队列</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>优先级队列</CardTitle>
+            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {logicalModelName ?? '未配置'}
+            </span>
+          </div>
           <CardDescription className="mt-1">
-            队列 {logicalModelName ?? '尚未配置'}，拖拽后立即生效
+            {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加上游模型后配置优先级和故障转移'}
+            {coolingCount > 0 && <span className="text-amber-600 dark:text-amber-500"> · {coolingCount} 个冷却中</span>}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
@@ -86,7 +96,7 @@ export function QueueListCard(props: QueueListCardProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="p-0">
         {models.length ? (
           <DndContext
             sensors={sensors}
@@ -127,8 +137,13 @@ export function QueueListCard(props: QueueListCardProps) {
           <EmptyState
             icon={ListTree}
             title="队列中还没有模型"
-            description="在模型管理中添加上游模型后，可在这里调整优先级和故障转移顺序。"
-            className="-mx-4 -mb-4 min-h-40 border-t py-7"
+            description="前往模型管理添加第一个上游模型，回来后即可调整优先级和故障转移顺序。"
+            action={onNavigateToModels && (
+              <Button variant="outline" size="sm" onClick={onNavigateToModels}>
+                添加上游模型 <ArrowRight size={13} />
+              </Button>
+            )}
+            className="min-h-48 border-0 py-10"
           />
         )}
       </CardContent>

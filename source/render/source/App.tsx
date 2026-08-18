@@ -163,7 +163,7 @@ function App() {
           </aside>
         )}
       >
-        {activePage === 'queue' && <QueueControlPage />}
+        {activePage === 'queue' && <QueueControlPage onNavigateToModels={() => setActivePage('providers')} />}
         {activePage === 'providers' && <ModelManagementPage />}
         {activePage === 'overview' && <OverviewPage />}
         {activePage === 'requests' && <RequestLogsPage />}
