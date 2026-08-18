@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
+import { getRuntimeProfile } from '@common/runtime-profile'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
 import { AutoLaunchManager } from './auto-launch'
@@ -20,10 +21,15 @@ const __dirname = path.dirname(__filename)
 // │ └─┬ render
 // │     ...
 
+const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL)
+const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'production')
+
 process.env.DIST = path.join(__dirname, '..')
-process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
+process.env.VITE_PUBLIC = isDevelopment
   ? path.join(process.cwd(), 'source/render/public')
   : path.join(process.env.DIST, 'render')
+
+app.setPath('userData', path.join(app.getPath('appData'), runtimeProfile.userDataDirectoryName))
 
 let win: BrowserWindow | null = null
 let trayManager: TrayManager | null = null
@@ -52,7 +58,7 @@ function createWindow() {
     Menu.setApplicationMenu(Menu.buildFromTemplate([]))
   }
 
-  if (process.env.VITE_DEV_SERVER_URL) {
+  if (isDevelopment) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL!)
     win.webContents.openDevTools()
   } else {
@@ -66,6 +72,7 @@ app.whenReady().then(async () => {
     await startServer({
       dataDir: userDataDir,
       secretStore: new ElectronSecretStore(path.join(userDataDir, 'secrets.json')),
+      runtimeProfile,
     })
   } catch (error) {
     console.error('[one-switch] failed to start server', error)

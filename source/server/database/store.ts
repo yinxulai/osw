@@ -416,7 +416,15 @@ export async function resetProviderHealth(providerId: string): Promise<void> {
 
 const SETTINGS_ID = 'singleton'
 
-export async function getSettings(): Promise<Settings> {
+export interface SettingsDefaults {
+  listenPort: number
+}
+
+const PRODUCTION_SETTINGS_DEFAULTS: SettingsDefaults = {
+  listenPort: 9300,
+}
+
+export async function getSettings(defaults = PRODUCTION_SETTINGS_DEFAULTS): Promise<Settings> {
   const db = getDb()
   const existing = db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).get()
   if (existing) return mapSettings(existing)
@@ -424,6 +432,7 @@ export async function getSettings(): Promise<Settings> {
   db.insert(settings)
     .values({
       id: SETTINGS_ID,
+      listenPort: defaults.listenPort,
       updatedTime: time,
     })
     .run()

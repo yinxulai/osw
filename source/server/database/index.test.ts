@@ -93,4 +93,42 @@ describe('database lifecycle', () => {
       },
     ])
   })
+
+  it('creates the complete release baseline without migration artifacts', async () => {
+    const client = (await initDatabase(createTemporaryDirectory())).$client
+    const tables = client
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+      .all()
+    const requestLogColumns = client.prepare('PRAGMA table_info(request_logs)').all()
+    const settingsColumns = client.prepare('PRAGMA table_info(settings)').all()
+    const attemptForeignKeys = client.prepare('PRAGMA foreign_key_list(request_attempts)').all()
+    const attemptIndexes = client.prepare('PRAGMA index_list(request_attempts)').all()
+
+    expect(tables).toEqual([
+      { name: 'logical_models' },
+      { name: 'provider_health' },
+      { name: 'providers' },
+      { name: 'request_attempts' },
+      { name: 'request_logs' },
+      { name: 'settings' },
+      { name: 'upstream_models' },
+    ])
+    expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual(
+      expect.arrayContaining(['inputTokens', 'outputTokens', 'ttftMilliseconds', 'cacheHit']),
+    )
+    expect(settingsColumns.map(column => (column as { name: string }).name)).toContain(
+      'autoLaunch',
+    )
+    expect(attemptForeignKeys.map(key => (key as { table: string }).table)).toEqual([
+      'providers',
+      'request_logs',
+    ])
+    expect(attemptIndexes.map(index => (index as { name: string }).name)).toContain(
+      'idx_attempts_request_order',
+    )
+    expect(() => client.prepare('INSERT INTO settings (id, updatedTime) VALUES (?, ?)').run(
+      'another-settings-row',
+      Date.now(),
+    )).toThrow()
+  })
 })

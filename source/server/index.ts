@@ -1,12 +1,13 @@
 import { ServerRuntime } from './runtime/server-runtime'
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
+import type { RuntimeProfile } from '@common/runtime-profile'
 
 export interface StartServerOptions {
   dataDir: string
   secretStore: KeychainApi
+  runtimeProfile: RuntimeProfile
   managementHost?: string
-  managementPort?: number
 }
 
 let runtime: ServerRuntime | null = null

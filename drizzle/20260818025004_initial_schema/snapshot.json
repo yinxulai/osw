@@ -1,17 +1,13 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "734c2356-2b6e-41fe-892c-fa5662acae7e",
+  "id": "43151e93-87c0-465b-a76f-13a6a903784d",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
     {
       "name": "logical_models",
-      "entityType": "tables"
-    },
-    {
-      "name": "model_bindings",
       "entityType": "tables"
     },
     {
@@ -32,6 +28,10 @@
     },
     {
       "name": "settings",
+      "entityType": "tables"
+    },
+    {
+      "name": "upstream_models",
       "entityType": "tables"
     },
     {
@@ -103,126 +103,6 @@
       "name": "deletedTime",
       "entityType": "columns",
       "table": "logical_models"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "logicalModelId",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "providerId",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "protocol",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "''",
-      "generated": null,
-      "name": "upstreamUrl",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "upstreamModelId",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "priority",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "true",
-      "generated": null,
-      "name": "enabled",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "customAuthHeader",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "createdTime",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "updatedTime",
-      "entityType": "columns",
-      "table": "model_bindings"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "deletedTime",
-      "entityType": "columns",
-      "table": "model_bindings"
     },
     {
       "type": "text",
@@ -410,16 +290,6 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "bindingId",
-      "entityType": "columns",
-      "table": "request_attempts"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
       "name": "upstreamModelId",
       "entityType": "columns",
       "table": "request_attempts"
@@ -546,6 +416,46 @@
     },
     {
       "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "inputTokens",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "outputTokens",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ttftMilliseconds",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cacheHit",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -648,6 +558,16 @@
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "autoLaunch",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "updatedTime",
@@ -655,34 +575,104 @@
       "table": "settings"
     },
     {
-      "columns": [
-        "logicalModelId"
-      ],
-      "tableTo": "logical_models",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "nameExplicit": false,
-      "name": "fk_model_bindings_logicalModelId_logical_models_id_fk",
-      "entityType": "fks",
-      "table": "model_bindings"
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "upstream_models"
     },
     {
-      "columns": [
-        "providerId"
-      ],
-      "tableTo": "providers",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "nameExplicit": false,
-      "name": "fk_model_bindings_providerId_providers_id_fk",
-      "entityType": "fks",
-      "table": "model_bindings"
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "logicalModelId",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamModelId",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'[]'",
+      "generated": null,
+      "name": "endpoints",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "upstream_models"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deletedTime",
+      "entityType": "columns",
+      "table": "upstream_models"
     },
     {
       "columns": [
@@ -731,18 +721,33 @@
     },
     {
       "columns": [
-        "bindingId"
+        "logicalModelId"
       ],
-      "tableTo": "model_bindings",
+      "tableTo": "logical_models",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_request_attempts_bindingId_model_bindings_id_fk",
+      "name": "fk_upstream_models_logicalModelId_logical_models_id_fk",
       "entityType": "fks",
-      "table": "request_attempts"
+      "table": "upstream_models"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "tableTo": "providers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_upstream_models_providerId_providers_id_fk",
+      "entityType": "fks",
+      "table": "upstream_models"
     },
     {
       "columns": [
@@ -751,15 +756,6 @@
       "nameExplicit": false,
       "name": "logical_models_pk",
       "table": "logical_models",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "model_bindings_pk",
-      "table": "model_bindings",
       "entityType": "pks"
     },
     {
@@ -809,6 +805,15 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "upstream_models_pk",
+      "table": "upstream_models",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         {
           "value": "name",
           "isExpression": false
@@ -838,66 +843,6 @@
     {
       "columns": [
         {
-          "value": "logicalModelId",
-          "isExpression": false
-        },
-        {
-          "value": "priority",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "idx_bindings_logical_model_priority",
-      "entityType": "indexes",
-      "table": "model_bindings"
-    },
-    {
-      "columns": [
-        {
-          "value": "providerId",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "idx_bindings_provider",
-      "entityType": "indexes",
-      "table": "model_bindings"
-    },
-    {
-      "columns": [
-        {
-          "value": "protocol",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "idx_bindings_protocol",
-      "entityType": "indexes",
-      "table": "model_bindings"
-    },
-    {
-      "columns": [
-        {
-          "value": "deletedTime",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "idx_bindings_deleted_time",
-      "entityType": "indexes",
-      "table": "model_bindings"
-    },
-    {
-      "columns": [
-        {
           "value": "deletedTime",
           "isExpression": false
         }
@@ -920,6 +865,24 @@
       "where": null,
       "origin": "manual",
       "name": "idx_attempts_request_id",
+      "entityType": "indexes",
+      "table": "request_attempts"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        },
+        {
+          "value": "attemptIndex",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_attempts_request_order",
       "entityType": "indexes",
       "table": "request_attempts"
     },
@@ -978,6 +941,58 @@
       "name": "idx_request_logs_status",
       "entityType": "indexes",
       "table": "request_logs"
+    },
+    {
+      "columns": [
+        {
+          "value": "logicalModelId",
+          "isExpression": false
+        },
+        {
+          "value": "priority",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_upstream_models_logical_priority",
+      "entityType": "indexes",
+      "table": "upstream_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_upstream_models_provider",
+      "entityType": "indexes",
+      "table": "upstream_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "deletedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_upstream_models_deleted_time",
+      "entityType": "indexes",
+      "table": "upstream_models"
+    },
+    {
+      "value": "\"id\" = 'singleton'",
+      "name": "settings_singleton_id",
+      "entityType": "checks",
+      "table": "settings"
     }
   ],
   "renames": []

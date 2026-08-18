@@ -10,6 +10,7 @@ import {
   getUpstreamModel,
   getLogicalModel,
   getProvider,
+  getSettings,
   listUpstreamModelsByLogicalModel,
   deleteProvider,
   listLogicalModels,
@@ -29,6 +30,11 @@ afterEach(async () => {
 })
 
 describe('store row mapping', () => {
+  it('uses an environment-specific port only when settings are first created', async () => {
+    expect((await getSettings({ listenPort: 19300 })).listenPort).toBe(19300)
+    expect((await getSettings()).listenPort).toBe(19300)
+  })
+
   it('maps SQLite integer flags to booleans', async () => {
     const provider = await createProvider({
       name: 'Provider',

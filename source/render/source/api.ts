@@ -17,8 +17,9 @@ import type {
   AnalyticsRange,
   AnalyticsSummary,
 } from '@common/schemas'
+import { getRuntimeProfile } from '@common/runtime-profile'
 
-const API_BASE = import.meta.env.VITE_MANAGEMENT_API_URL ?? 'http://127.0.0.1:9301/api'
+const API_BASE = getRuntimeProfile(import.meta.env.DEV ? 'development' : 'production').managementApiUrl
 
 type CreateProviderInput = {
   name: string

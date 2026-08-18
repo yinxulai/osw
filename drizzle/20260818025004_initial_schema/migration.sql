@@ -8,23 +8,6 @@ CREATE TABLE `logical_models` (
 	`deletedTime` integer
 );
 --> statement-breakpoint
-CREATE TABLE `model_bindings` (
-	`id` text PRIMARY KEY,
-	`logicalModelId` text NOT NULL,
-	`providerId` text NOT NULL,
-	`protocol` text NOT NULL,
-	`upstreamUrl` text DEFAULT '' NOT NULL,
-	`upstreamModelId` text NOT NULL,
-	`priority` integer NOT NULL,
-	`enabled` integer DEFAULT true NOT NULL,
-	`customAuthHeader` text,
-	`createdTime` integer NOT NULL,
-	`updatedTime` integer NOT NULL,
-	`deletedTime` integer,
-	CONSTRAINT `fk_model_bindings_logicalModelId_logical_models_id_fk` FOREIGN KEY (`logicalModelId`) REFERENCES `logical_models`(`id`),
-	CONSTRAINT `fk_model_bindings_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
-);
---> statement-breakpoint
 CREATE TABLE `provider_health` (
 	`providerId` text PRIMARY KEY,
 	`consecutiveFailures` integer DEFAULT 0 NOT NULL,
@@ -51,7 +34,6 @@ CREATE TABLE `request_attempts` (
 	`id` text PRIMARY KEY,
 	`requestId` text NOT NULL,
 	`providerId` text NOT NULL,
-	`bindingId` text NOT NULL,
 	`upstreamModelId` text NOT NULL,
 	`attemptIndex` integer NOT NULL,
 	`status` text NOT NULL,
@@ -60,8 +42,7 @@ CREATE TABLE `request_attempts` (
 	`durationMilliseconds` integer NOT NULL,
 	`createdTime` integer NOT NULL,
 	CONSTRAINT `fk_request_attempts_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`),
-	CONSTRAINT `fk_request_attempts_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`),
-	CONSTRAINT `fk_request_attempts_bindingId_model_bindings_id_fk` FOREIGN KEY (`bindingId`) REFERENCES `model_bindings`(`id`)
+	CONSTRAINT `fk_request_attempts_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
 );
 --> statement-breakpoint
 CREATE TABLE `request_logs` (
@@ -71,6 +52,10 @@ CREATE TABLE `request_logs` (
 	`status` text NOT NULL,
 	`totalDurationMilliseconds` integer NOT NULL,
 	`totalTokens` integer,
+	`inputTokens` integer,
+	`outputTokens` integer,
+	`ttftMilliseconds` integer,
+	`cacheHit` integer,
 	`createdTime` integer NOT NULL
 );
 --> statement-breakpoint
@@ -84,18 +69,35 @@ CREATE TABLE `settings` (
 	`cooldownMaxSeconds` integer DEFAULT 300 NOT NULL,
 	`consecutiveFailureThreshold` integer DEFAULT 3 NOT NULL,
 	`idleTimeoutMilliseconds` integer DEFAULT 30000 NOT NULL,
-	`updatedTime` integer NOT NULL
+	`autoLaunch` integer DEFAULT false NOT NULL,
+	`updatedTime` integer NOT NULL,
+	CONSTRAINT "settings_singleton_id" CHECK("id" = 'singleton')
+);
+--> statement-breakpoint
+CREATE TABLE `upstream_models` (
+	`id` text PRIMARY KEY,
+	`logicalModelId` text NOT NULL,
+	`providerId` text NOT NULL,
+	`upstreamModelId` text NOT NULL,
+	`endpoints` text DEFAULT '[]' NOT NULL,
+	`priority` integer NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
+	`createdTime` integer NOT NULL,
+	`updatedTime` integer NOT NULL,
+	`deletedTime` integer,
+	CONSTRAINT `fk_upstream_models_logicalModelId_logical_models_id_fk` FOREIGN KEY (`logicalModelId`) REFERENCES `logical_models`(`id`),
+	CONSTRAINT `fk_upstream_models_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
 );
 --> statement-breakpoint
 CREATE INDEX `idx_logical_models_name` ON `logical_models` (`name`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_deleted_time` ON `logical_models` (`deletedTime`);--> statement-breakpoint
-CREATE INDEX `idx_bindings_logical_model_priority` ON `model_bindings` (`logicalModelId`,`priority`);--> statement-breakpoint
-CREATE INDEX `idx_bindings_provider` ON `model_bindings` (`providerId`);--> statement-breakpoint
-CREATE INDEX `idx_bindings_protocol` ON `model_bindings` (`protocol`);--> statement-breakpoint
-CREATE INDEX `idx_bindings_deleted_time` ON `model_bindings` (`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_providers_deleted_time` ON `providers` (`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_attempts_request_id` ON `request_attempts` (`requestId`);--> statement-breakpoint
+CREATE INDEX `idx_attempts_request_order` ON `request_attempts` (`requestId`,`attemptIndex`);--> statement-breakpoint
 CREATE INDEX `idx_attempts_provider` ON `request_attempts` (`providerId`);--> statement-breakpoint
 CREATE INDEX `idx_attempts_created_time` ON `request_attempts` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_created_time` ON `request_logs` (`createdTime`);--> statement-breakpoint
-CREATE INDEX `idx_request_logs_status` ON `request_logs` (`status`);
+CREATE INDEX `idx_request_logs_status` ON `request_logs` (`status`);--> statement-breakpoint
+CREATE INDEX `idx_upstream_models_logical_priority` ON `upstream_models` (`logicalModelId`,`priority`);--> statement-breakpoint
+CREATE INDEX `idx_upstream_models_provider` ON `upstream_models` (`providerId`);--> statement-breakpoint
+CREATE INDEX `idx_upstream_models_deleted_time` ON `upstream_models` (`deletedTime`);

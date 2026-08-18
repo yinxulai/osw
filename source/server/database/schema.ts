@@ -1,9 +1,11 @@
 import {
+  check,
   index,
   integer,
   sqliteTable,
   text,
 } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
 
 export const providers = sqliteTable(
   'providers',
@@ -93,6 +95,7 @@ export const settings = sqliteTable(
     autoLaunch: integer('autoLaunch', { mode: 'boolean' }).notNull().default(false),
     updatedTime: integer('updatedTime').notNull(),
   },
+  table => [check('settings_singleton_id', sql`${table.id} = 'singleton'`)],
 )
 
 export const requestLogs = sqliteTable(
@@ -136,6 +139,7 @@ export const requestAttempts = sqliteTable(
   },
   table => [
     index('idx_attempts_request_id').on(table.requestId),
+    index('idx_attempts_request_order').on(table.requestId, table.attemptIndex),
     index('idx_attempts_provider').on(table.providerId),
     index('idx_attempts_created_time').on(table.createdTime),
   ],

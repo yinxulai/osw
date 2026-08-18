@@ -7,6 +7,7 @@ import { closeDatabase, initDatabase } from './database'
 import { updateSettings } from './database/store'
 import { startServer, stopServer } from './index'
 import type { KeychainApi } from '@common/keychain'
+import type { RuntimeProfile } from '@common/runtime-profile'
 
 const secretStore: KeychainApi = {
   set: async () => undefined,
@@ -34,7 +35,7 @@ describe('server lifecycle', () => {
     await startServer({
       dataDir: temporaryDirectory,
       secretStore,
-      managementPort,
+      runtimeProfile: createTestRuntimeProfile(proxyPort, managementPort),
     })
 
     const managementUrl = `http://127.0.0.1:${managementPort}/api/proxy`
@@ -63,6 +64,16 @@ describe('server lifecycle', () => {
     expect((await fetch(proxyUrl)).status).toBe(200)
   })
 })
+
+function createTestRuntimeProfile(proxyPort: number, managementPort: number): RuntimeProfile {
+  return {
+    environment: 'development',
+    userDataDirectoryName: 'One Switch Test',
+    proxyPort,
+    managementPort,
+    managementApiUrl: `http://127.0.0.1:${managementPort}/api`,
+  }
+}
 
 async function post(url: string): Promise<unknown> {
   const response = await fetch(url, {

@@ -1,6 +1,8 @@
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
+import type { RuntimeProfile } from '@common/runtime-profile'
 import { closeDatabase, initDatabase } from '../database'
+import { getSettings } from '../database/store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { installLogCapture } from '../management/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
@@ -9,8 +11,8 @@ import { startProxyServer, stopProxyServer } from '../proxy/server'
 export interface ServerRuntimeOptions {
   dataDir: string
   secretStore: KeychainApi
+  runtimeProfile: RuntimeProfile
   managementHost?: string
-  managementPort?: number
 }
 
 export class ServerRuntime {
@@ -32,14 +34,14 @@ export class ServerRuntime {
     if (this.state === 'stopping') throw new Error('Server runtime is stopping')
 
     this.state = 'starting'
-    configureSecretStore(this.options.secretStore)
-    installLogCapture()
-    await initDatabase(this.options.dataDir)
-
     try {
+      configureSecretStore(this.options.secretStore)
+      installLogCapture()
+      await initDatabase(this.options.dataDir)
+      await getSettings({ listenPort: this.options.runtimeProfile.proxyPort })
       this.managementServer = await startManagementServer({
         host: this.options.managementHost,
-        port: this.options.managementPort,
+        port: this.options.runtimeProfile.managementPort,
       })
       await startProxyServer()
       this.state = 'running'
