@@ -123,6 +123,40 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })
 
+  it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ path: req.url }))
+    })
+    mocks.models = [
+      model(
+        'model_anthropic',
+        'prov_anthropic',
+        `${upstream.url}/custom/v1/messages?fixed=true`,
+        'claude-model',
+        'anthropic-messages',
+      ),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/messages?beta=true`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ path: '/custom/v1/messages?fixed=true' })
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_anthropic')
+  })
+
   it('records standardized prompt cache usage from the final SSE event without a trailing newline', async () => {
     configureSecretStore({
       set: async () => undefined,

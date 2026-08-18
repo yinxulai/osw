@@ -32,16 +32,22 @@ describe('findEndpoint', () => {
 describe('detectProtocolFromPath', () => {
   it.each([
     ['/v1/chat/completions', 'openai-completions'],
+    ['/chat/completions', 'openai-completions'],
     ['/v1/completions', 'openai-completions'],
+    ['/completions/', 'openai-completions'],
     ['/v1/embeddings', 'openai-completions'],
+    ['/embeddings?encoding_format=float', 'openai-completions'],
     ['/v1/responses?stream=true', 'openai-responses'],
-    ['/v1/messages', 'anthropic-messages'],
+    ['/responses/', 'openai-responses'],
+    ['/v1/messages?beta=true', 'anthropic-messages'],
+    ['/messages/', 'anthropic-messages'],
   ] as const)('detects %s as %s', (path, expected) => {
     expect(detectProtocolFromPath(path)).toBe(expected)
   })
 
   it.each([
     '/v1/models',
+    '/models',
     '/v1/completions/extra',
     '/v1beta/models/gemini-2.5-pro:generateContent',
     '/v1/unknown',

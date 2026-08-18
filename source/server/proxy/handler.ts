@@ -60,7 +60,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   // 获取可用 models，并过滤出支持当前协议的模型
-  let models = (await getAvailableModels(logicalModelId)).filter(m => findEndpoint(m.model, protocol))
+  const availableModels = await getAvailableModels(logicalModelId)
+  let models = availableModels.filter(m => findEndpoint(m.model, protocol))
 
   // 如果有手动指定的 model，把它排到最前面
   if (manualModelId) {
@@ -71,10 +72,16 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   if (models.length === 0) {
+    const configuredProtocols = [...new Set(
+      availableModels.flatMap(candidate => candidate.model.endpoints.map(endpoint => endpoint.protocol)),
+    )]
+    const reason = availableModels.length === 0
+      ? '该队列没有已启用且健康的上游模型'
+      : `可用模型未绑定 ${protocol} 协议（当前绑定: ${configuredProtocols.join(', ') || '无'}）`
     console.warn(
-      `[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId})`,
+      `[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}, reason=${reason})`,
     )
-    writeJsonError(res, 503, 'NO_AVAILABLE_PROVIDER', '没有可用的上游 Provider')
+    writeJsonError(res, 503, 'NO_AVAILABLE_PROVIDER', `没有可用的上游 Provider：${reason}`)
     return
   }
 

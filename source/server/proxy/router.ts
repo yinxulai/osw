@@ -40,13 +40,16 @@ export function findEndpoint(model: UpstreamModel, protocol: Protocol) {
  * 从请求路径中检测协议类型
  */
 export function detectProtocolFromPath(pathname: string): Protocol | null {
-  const path = pathname.split('?', 1)[0]
+  const rawPath = pathname.split('?', 1)[0]
+  const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath
 
-  if (path === '/v1/chat/completions') return 'openai-completions'
-  if (path === '/v1/completions') return 'openai-completions'
-  if (path === '/v1/embeddings') return 'openai-completions'
-  if (path === '/v1/responses') return 'openai-responses'
-  if (path === '/v1/messages') return 'anthropic-messages'
+  if (path === '/v1/chat/completions' || path === '/chat/completions') {
+    return 'openai-completions'
+  }
+  if (path === '/v1/completions' || path === '/completions') return 'openai-completions'
+  if (path === '/v1/embeddings' || path === '/embeddings') return 'openai-completions'
+  if (path === '/v1/responses' || path === '/responses') return 'openai-responses'
+  if (path === '/v1/messages' || path === '/messages') return 'anthropic-messages'
 
   return null
 }
