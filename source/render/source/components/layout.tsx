@@ -26,9 +26,9 @@ interface AppLayoutProps {
 export function AppLayout(props: AppLayoutProps) {
   const { sidebar, children } = props
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div className="relative flex h-screen w-full overflow-hidden bg-background text-foreground">
       {sidebar}
-      <main className="min-w-0 flex-1 overflow-auto overscroll-contain">
+      <main className="ml-12 min-w-0 flex-1 overflow-auto overscroll-contain">
         <div className="mx-auto w-full min-w-180 max-w-6xl p-4 md:p-5">{children}</div>
       </main>
     </div>

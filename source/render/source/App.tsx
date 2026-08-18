@@ -3,8 +3,6 @@ import {
   Layers,
   Settings,
   BarChart3,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plug,
   CircleDot,
   Moon,
@@ -48,7 +46,7 @@ const navItems: NavItem[] = [
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>('queue')
-  const [collapsed, setCollapsed] = useState(false)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light'
     const saved = localStorage.getItem('theme') as Theme | null
@@ -56,6 +54,7 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
   const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
+  const collapsed = !sidebarHovered
 
   useEffect(() => {
     const root = document.documentElement
@@ -81,17 +80,6 @@ function App() {
     }
   }, [activePage])
 
-  useEffect(() => {
-    const checkWidth = () => {
-      if (window.innerWidth < 900) {
-        setCollapsed(true)
-      }
-    }
-    checkWidth()
-    window.addEventListener('resize', checkWidth)
-    return () => window.removeEventListener('resize', checkWidth)
-  }, [])
-
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
 
   const sections = Array.from(new Set(navItems.map(i => i.section || ''))).filter(Boolean)
@@ -102,9 +90,11 @@ function App() {
       <AppLayout
         sidebar={(
           <aside
+          onMouseEnter={() => setSidebarHovered(true)}
+          onMouseLeave={() => setSidebarHovered(false)}
           className={cn(
-            'relative flex flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300',
-            collapsed ? 'w-12' : 'w-48'
+            'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,box-shadow] duration-200 ease-out [&>*]:w-48',
+            collapsed ? 'w-12 shadow-none' : 'w-48 shadow-lg'
           )}
         >
           {/* Logo */}
@@ -112,33 +102,31 @@ function App() {
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
               <CircleDot size={15} />
             </div>
-            {!collapsed && (
-              <div className="flex flex-1 flex-col overflow-hidden">
-                <h1 className="text-sm font-semibold leading-tight">One Switch</h1>
-                <p className="text-[11px] text-muted-foreground">本地大模型代理切换</p>
-              </div>
-            )}
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className={cn(
-                'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
-                collapsed && 'mx-auto',
-              )}
-              title={collapsed ? '展开侧边栏' : '收起侧边栏'}
-            >
-              {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-            </button>
+            <div className={cn(
+              'flex flex-1 flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150',
+              collapsed ? 'opacity-0' : 'opacity-100 delay-75',
+            )}>
+              <h1 className="text-sm font-semibold leading-tight">One Switch</h1>
+              <p className="text-[11px] text-muted-foreground">本地大模型代理切换</p>
+            </div>
           </div>
 
           {/* 导航 */}
           <nav className="flex-1 overflow-y-auto p-1.5 space-y-3">
             {sections.map(section => (
               <div key={section}>
-                {!collapsed && (
-                  <div className="px-2.5 py-1 text-[11px] font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
+                <div className="relative h-6 text-sidebar-foreground/60">
+                  <span className={cn(
+                    'absolute left-2.5 top-1/2 h-px w-4 -translate-y-1/2 rounded-full bg-current transition-opacity duration-150',
+                    collapsed ? 'opacity-100 delay-75' : 'opacity-0',
+                  )} />
+                  <span className={cn(
+                    'absolute inset-x-0 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity duration-150',
+                    collapsed ? 'opacity-0' : 'opacity-100 delay-75',
+                  )}>
                     {section}
-                  </div>
-                )}
+                  </span>
+                </div>
                 <div className="space-y-0.5">
                   {navItems
                     .filter(i => i.section === section)
@@ -146,27 +134,28 @@ function App() {
                       const ItemIcon = item.icon
                       const btn = (
                         <button
-                          key={item.key}
                           onClick={() => setActivePage(item.key)}
                           className={cn(
                             'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors',
                             activePage === item.key
                               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                               : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
-                            collapsed && 'justify-center px-0'
                           )}
                         >
                           <ItemIcon size={15} className="shrink-0" />
-                          {!collapsed && <span>{item.label}</span>}
+                          <span className={cn(
+                            'whitespace-nowrap transition-opacity duration-150',
+                            collapsed ? 'opacity-0' : 'opacity-100 delay-75',
+                          )}>{item.label}</span>
                         </button>
                       )
-                      return collapsed ? (
-                        <Tooltip key={item.key} delayDuration={200}>
+                      return (
+                        <Tooltip key={item.key} delayDuration={200} disableHoverableContent={!collapsed}>
                           <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                          {collapsed && (
                           <TooltipContent side="right">{item.label}</TooltipContent>
+                          )}
                         </Tooltip>
-                      ) : (
-                        btn
                       )
                     })}
                 </div>
@@ -183,10 +172,13 @@ function App() {
                   variant="ghost"
                   size="sm"
                   onClick={toggleTheme}
-                  className={cn('w-full justify-start', collapsed && 'justify-center px-0')}
+                  className="w-full justify-start"
                 >
                   {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-                  {!collapsed && <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>}
+                  <span className={cn(
+                    'whitespace-nowrap transition-opacity duration-150',
+                    collapsed ? 'opacity-0' : 'opacity-100 delay-75',
+                  )}>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>
                 </Button>
               </TooltipTrigger>
               {collapsed && (
@@ -198,13 +190,13 @@ function App() {
 
             {/* 服务状态 */}
             <div
-              className={cn(
-                'flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground',
-                collapsed && 'justify-center'
-              )}
+              className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground"
             >
               <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', proxyStatus?.running ? 'bg-success animate-pulse' : 'bg-muted-foreground/50')} />
-              {!collapsed && <span>{proxyStatus?.running ? `服务运行中 · ${proxyStatus.port}` : '服务已停止'}</span>}
+              <span className={cn(
+                'whitespace-nowrap transition-opacity duration-150',
+                collapsed ? 'opacity-0' : 'opacity-100 delay-75',
+              )}>{proxyStatus?.running ? `服务运行中 · ${proxyStatus.port}` : '服务已停止'}</span>
             </div>
           </div>
           </aside>
