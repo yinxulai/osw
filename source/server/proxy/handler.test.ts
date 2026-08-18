@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
+  createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
   updateRequestLogStatus: vi.fn(),
 }))
 
@@ -26,7 +27,7 @@ vi.mock('./health', () => ({
 
 vi.mock('../database/store', () => ({
   getSettings: async () => ({ idleTimeoutMilliseconds: 1_000 }),
-  createRequestLog: async (input: Record<string, unknown>) => ({ id: 'req_test', ...input }),
+  createRequestLog: mocks.createRequestLog,
   createRequestAttempt: async (input: Record<string, unknown>) => ({ id: 'att_test', ...input }),
   updateRequestLogStatus: mocks.updateRequestLogStatus,
 }))
@@ -119,6 +120,7 @@ describe('handleProxyRequest', () => {
       path: '/configured/second?version=1',
       model: 'second-model',
     })
+    expect(mocks.createRequestLog).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending' }))
     expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_first')
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })

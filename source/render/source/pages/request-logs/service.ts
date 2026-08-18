@@ -32,6 +32,12 @@ export function useRequestLogsService() {
     void load(false)
   }, [load])
 
+  useEffect(() => {
+    if (!logs.some(log => log.status === 'pending')) return
+    const timer = window.setInterval(() => void load(true), 1_500)
+    return () => window.clearInterval(timer)
+  }, [load, logs])
+
   const refresh = useCallback(async () => {
     setRefreshing(true)
     await load(true)

@@ -196,9 +196,14 @@ export interface ModelTestResult {
   outputTokens?: number | null
 }
 
+export interface ModelTestFilters {
+  providerIds?: string[]
+  modelIds?: string[]
+}
+
 export const modelTestApi = {
-  run: (logicalModelId: string, protocol: string) =>
-    request<{ results: ModelTestResult[] }>('/model-test/run', { logicalModelId, protocol }),
+  run: (logicalModelId: string, protocol: string, filters: ModelTestFilters = {}) =>
+    request<{ results: ModelTestResult[] }>('/model-test/run', { logicalModelId, protocol, ...filters }),
 }
 
 // ========== Config Import/Export ==========

@@ -27,7 +27,7 @@ import { RequestLogDetailRow, RequestStatusBadge } from './components/request-lo
 import { useRequestLogsService } from './service'
 import { formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from './lib/format'
 
-type StatusFilter = 'all' | 'success' | 'failed' | 'cancelled'
+type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
 
 export function RequestLogsPage() {
   const { logs, loading, refreshing, getModelName, refresh } = useRequestLogsService()
@@ -90,6 +90,7 @@ export function RequestLogsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="pending">进行中</SelectItem>
               <SelectItem value="success">成功</SelectItem>
               <SelectItem value="failed">失败</SelectItem>
               <SelectItem value="cancelled">已取消</SelectItem>

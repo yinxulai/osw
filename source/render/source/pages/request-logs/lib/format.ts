@@ -5,6 +5,7 @@ export const PROTOCOL_LABEL: Record<string, string> = {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
+  pending: '进行中',
   success: '成功',
   failed: '失败',
   cancelled: '已取消',

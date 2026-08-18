@@ -13,7 +13,7 @@ export type Protocol = z.infer<typeof ProtocolSchema>
 export const UpstreamUrlsSchema = z.record(ProtocolSchema, z.string().url())
 export type UpstreamUrls = z.infer<typeof UpstreamUrlsSchema>
 
-export const RequestStatusSchema = z.enum(['success', 'failed', 'cancelled'])
+export const RequestStatusSchema = z.enum(['pending', 'success', 'failed', 'cancelled'])
 export type RequestStatus = z.infer<typeof RequestStatusSchema>
 
 // ========== Provider ==========

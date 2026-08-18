@@ -1,9 +1,8 @@
-import { AlertTriangle, CheckCircle, CheckCircle2, Circle, CircleDot, Clock, GripVertical, Timer, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Circle, CircleDot, Clock, GripVertical } from 'lucide-react'
 import type { Provider, ProviderHealth, UpstreamModel } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { PROTOCOL_LABELS, type ProtocolTestResult } from './queue-test-report'
 
 interface QueueModelRowProps {
   model: UpstreamModel
@@ -14,13 +13,8 @@ interface QueueModelRowProps {
   cooling: boolean
   dragging: boolean
   dragHandleProps: Record<string, unknown>
-  testResults: ProtocolTestResult[] | null
   onSelect: () => void
   onToggleEnabled: (enabled: boolean) => void
-}
-
-interface ModelTestResultsProps {
-  results: ProtocolTestResult[]
 }
 
 function formatRelativeTime(timestamp: number | null | undefined): string {
@@ -58,31 +52,6 @@ function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth'>) {
       暂无请求记录
     </span>
   )
-}
-
-function ModelTestResults(props: ModelTestResultsProps) {
-  return props.results.map(result => (
-    <span
-      key={result.protocol}
-      className={cn(
-        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5',
-        result.success
-          ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
-          : 'border-red-500/25 bg-red-500/5 text-red-600 dark:text-red-400',
-      )}
-      title={result.errorMessage}
-    >
-      {result.success ? <CheckCircle size={10} /> : <XCircle size={10} />}
-      {PROTOCOL_LABELS[result.protocol]}
-      {result.statusCode && <span className="font-mono">HTTP {result.statusCode}</span>}
-      <Timer size={10} />
-      <span className="font-mono">{result.durationMilliseconds}ms</span>
-      {result.success && (result.inputTokens != null || result.outputTokens != null) && (
-        <span className="font-mono opacity-75">↑{result.inputTokens ?? '—'} ↓{result.outputTokens ?? '—'}</span>
-      )}
-      {!result.success && <span className="max-w-48 truncate">{result.errorMessage ?? '未知错误'}</span>}
-    </span>
-  ))
 }
 
 export function QueueModelRow(props: QueueModelRowProps) {
@@ -125,7 +94,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
               </Badge>
             ))}
           </span>
-          {props.testResults ? <ModelTestResults results={props.testResults} /> : <ModelHealth providerHealth={props.providerHealth} />}
+          <ModelHealth providerHealth={props.providerHealth} />
         </div>
       </div>
       <Badge variant={props.cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>

@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { ModelTestPanel } from '@/components/model-test-panel'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useQueueControlService } from './service'
@@ -7,6 +9,7 @@ import { QueueListCard } from './components/queue-list-card'
 
 export function QueueControlPage() {
   const service = useQueueControlService()
+  const [testPanelOpen, setTestPanelOpen] = useState(false)
 
   return (
     <PageLayout>
@@ -51,7 +54,6 @@ export function QueueControlPage() {
               models={service.models}
               providers={service.providers}
               health={service.health}
-              logicalModelId={service.logicalModel?.id}
               logicalModelName={service.logicalModel?.name}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}
@@ -60,10 +62,18 @@ export function QueueControlPage() {
               onSelectManualModel={service.selectManualModel}
               onToggleEnabled={service.updateEnabled}
               onDragEnd={service.handleDragEnd}
+              onOpenTestPanel={() => setTestPanelOpen(true)}
             />
           </>
         )}
       </PageContent>
+      <ModelTestPanel
+        open={testPanelOpen}
+        onOpenChange={setTestPanelOpen}
+        logicalModel={service.logicalModel}
+        models={service.models}
+        providers={Object.values(service.providers)}
+      />
     </PageLayout>
   )
 }

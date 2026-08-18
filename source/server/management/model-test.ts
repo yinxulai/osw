@@ -15,6 +15,8 @@ import type { Protocol } from '@common/schemas'
 const TestModelsSchema = z.object({
   logicalModelId: z.string(),
   protocol: z.enum(['openai-completions', 'openai-responses', 'anthropic-messages']),
+  providerIds: z.array(z.string()).optional(),
+  modelIds: z.array(z.string()).optional(),
 })
 
 export interface ModelTestResult {
@@ -35,13 +37,20 @@ export const modelTestRoutes: Record<string, ManagementHandler> = {
 }
 
 async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { logicalModelId, protocol } = TestModelsSchema.parse(body)
+  const { logicalModelId, protocol, providerIds, modelIds } = TestModelsSchema.parse(body)
 
   const models = await listUpstreamModelsByLogicalModel(logicalModelId)
   const providers = await listProviders()
   const providerMap = new Map(providers.map(p => [p.id, p]))
+  const providerFilter = providerIds ? new Set(providerIds) : null
+  const modelFilter = modelIds ? new Set(modelIds) : null
 
-  const testableModels = models.filter(m => m.enabled && findEndpoint(m, protocol))
+  const testableModels = models.filter(model =>
+    model.enabled &&
+    findEndpoint(model, protocol) &&
+    (!providerFilter || providerFilter.has(model.providerId)) &&
+    (!modelFilter || modelFilter.has(model.id)),
+  )
 
   const results: ModelTestResult[] = []
 

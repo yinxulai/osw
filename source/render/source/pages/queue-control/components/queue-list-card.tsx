@@ -9,19 +9,13 @@ import {
 } from '@dnd-kit/core'
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { useState } from 'react'
-import { RefreshCw, Target } from 'lucide-react'
+import { FlaskConical, RefreshCw, Target } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableBinding } from './sortable-binding'
 import { QueueModelRow } from './queue-model-row'
-import {
-  QueueTestControls,
-  QueueTestSummary,
-  type ProtocolTestResult,
-} from './queue-test-report'
-import { modelTestApi, type ModelTestResult } from '@/api'
-import type { UpstreamModel, Provider, ProviderHealth, Protocol } from '@common/schemas'
+import type { UpstreamModel, Provider, ProviderHealth } from '@common/schemas'
 
 export type ProviderMap = Record<string, Provider>
 export type HealthMap = Record<string, ProviderHealth>
@@ -30,7 +24,6 @@ interface QueueListCardProps {
   models: UpstreamModel[]
   providers: ProviderMap
   health: HealthMap
-  logicalModelId?: string
   logicalModelName?: string
   mode: 'auto' | 'manual'
   manualModelId: string
@@ -39,6 +32,7 @@ interface QueueListCardProps {
   onSelectManualModel: (model: UpstreamModel) => void
   onToggleEnabled: (model: UpstreamModel, enabled: boolean) => void
   onDragEnd: (event: DragEndEvent) => void
+  onOpenTestPanel: () => void
 }
 
 export function QueueListCard(props: QueueListCardProps) {
@@ -46,7 +40,6 @@ export function QueueListCard(props: QueueListCardProps) {
     models,
     providers,
     health,
-    logicalModelId,
     logicalModelName,
     mode,
     manualModelId,
@@ -55,38 +48,8 @@ export function QueueListCard(props: QueueListCardProps) {
     onSelectManualModel,
     onToggleEnabled,
     onDragEnd,
+    onOpenTestPanel,
   } = props
-
-  const [testProtocol, setTestProtocol] = useState<Protocol | 'all'>('all')
-  const [testRunning, setTestRunning] = useState(false)
-  const [testResults, setTestResults] = useState<Partial<Record<Protocol, ModelTestResult[]>> | null>(null)
-
-  const availableProtocols = Array.from(
-    new Set(models.flatMap(m => m.endpoints.map(e => e.protocol))),
-  ) as Protocol[]
-
-  const handleRunTest = async () => {
-    if (!logicalModelId || testRunning) return
-    setTestRunning(true)
-    setTestResults(null)
-    try {
-      const protocols = testProtocol === 'all' ? availableProtocols : [testProtocol]
-      const responses = await Promise.all(protocols.map(protocol => modelTestApi.run(logicalModelId, protocol)))
-      const nextResults: Partial<Record<Protocol, ModelTestResult[]>> = {}
-      responses.forEach((response, index) => {
-        if (response.success) nextResults[protocols[index]] = response.data.results
-      })
-      setTestResults(nextResults)
-    } finally {
-      setTestRunning(false)
-    }
-  }
-
-  const allTestResults: ProtocolTestResult[] = testResults
-    ? Object.entries(testResults).flatMap(([protocol, results]) =>
-        (results ?? []).map(result => ({ ...result, protocol: protocol as Protocol })),
-      )
-    : []
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -114,25 +77,12 @@ export function QueueListCard(props: QueueListCardProps) {
             </TabsList>
           </Tabs>
 
-          <QueueTestControls
-            protocols={availableProtocols}
-            selectedProtocol={testProtocol}
-            running={testRunning}
-            disabled={!logicalModelId}
-            onProtocolChange={setTestProtocol}
-            onRun={() => void handleRunTest()}
-          />
+          <Button variant="outline" size="sm" onClick={onOpenTestPanel}>
+            <FlaskConical size={12} /> 全局测试
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        {testResults && (
-          <QueueTestSummary
-            protocolCount={Object.keys(testResults).length}
-            results={allTestResults}
-            onClose={() => setTestResults(null)}
-          />
-        )}
-
         {models.length ? (
           <DndContext
             sensors={sensors}
@@ -145,9 +95,6 @@ export function QueueListCard(props: QueueListCardProps) {
                 {models.map(model => {
                   const cooling = isCooling(model.providerId)
                   const selected = mode === 'manual' && manualModelId === model.id
-                  const modelTestResults = testResults
-                    ? allTestResults.filter(result => result.modelId === model.id)
-                    : null
 
                   return (
                     <SortableBinding key={model.id} id={model.id}>
@@ -161,7 +108,6 @@ export function QueueListCard(props: QueueListCardProps) {
                           cooling={cooling}
                           dragging={dragging}
                           dragHandleProps={handleProps}
-                          testResults={modelTestResults}
                           onSelect={() => void onSelectManualModel(model)}
                           onToggleEnabled={enabled => void onToggleEnabled(model, enabled)}
                         />
