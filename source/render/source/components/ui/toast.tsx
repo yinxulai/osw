@@ -31,10 +31,17 @@ const ICONS: Record<ToastType, typeof CheckCircle2> = {
 }
 
 const STYLES: Record<ToastType, string> = {
-  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  error: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
-  info: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400',
-  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  success: 'before:bg-success',
+  error: 'before:bg-destructive',
+  info: 'before:bg-info',
+  warning: 'before:bg-warning',
+}
+
+const ICON_STYLES: Record<ToastType, string> = {
+  success: 'text-success',
+  error: 'text-destructive',
+  info: 'text-info',
+  warning: 'text-warning',
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -63,23 +70,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+      <div className="fixed bottom-4 right-4 z-100 flex flex-col gap-2">
         {toasts.map(t => {
           const Icon = ICONS[t.type]
           return (
             <div
               key={t.id}
+              role={t.type === 'error' ? 'alert' : 'status'}
               className={cn(
-                'flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-xs font-medium shadow-lg backdrop-blur-sm animate-in slide-in-from-right',
+                'relative flex min-w-65 items-center gap-2.5 overflow-hidden rounded-lg border border-border bg-popover px-3.5 py-3 text-xs text-foreground shadow-[0_4px_12px_rgba(0,0,0,0.1)] backdrop-blur-sm before:absolute before:inset-y-0 before:left-0 before:w-0.5 animate-in slide-in-from-right',
                 STYLES[t.type],
               )}
               style={{ animation: 'toast-in 0.2s ease-out' }}
             >
-              <Icon size={15} className="shrink-0" />
-              <span className="max-w-[320px]">{t.message}</span>
+              <Icon size={15} className={cn('shrink-0', ICON_STYLES[t.type])} />
+              <span className="max-w-[320px] flex-1 leading-5">{t.message}</span>
               <button
                 onClick={() => remove(t.id)}
-                className="ml-1 shrink-0 opacity-50 hover:opacity-100"
+                aria-label="关闭通知"
+                className="ml-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <X size={13} />
               </button>

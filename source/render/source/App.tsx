@@ -48,10 +48,10 @@ function App() {
   const [activePage, setActivePage] = useState<PageKey>('queue')
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'light'
+    if (typeof window === 'undefined') return 'dark'
     const saved = localStorage.getItem('theme') as Theme | null
     if (saved) return saved
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    return 'dark'
   })
   const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
   const collapsed = !sidebarHovered
@@ -93,12 +93,12 @@ function App() {
           onMouseEnter={() => setSidebarHovered(true)}
           onMouseLeave={() => setSidebarHovered(false)}
           className={cn(
-            'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,box-shadow] duration-200 ease-out [&>*]:w-48',
-            collapsed ? 'w-12 shadow-none' : 'w-48 shadow-lg'
+            'absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out *:w-56',
+            collapsed ? 'w-12' : 'w-56'
           )}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2.5 px-3 py-3 border-b border-sidebar-border">
+          <div className="flex items-center gap-2.5 border-b border-sidebar-border px-3 py-3.5">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
               <CircleDot size={15} />
             </div>
@@ -106,8 +106,8 @@ function App() {
               'flex flex-1 flex-col overflow-hidden whitespace-nowrap transition-opacity duration-150',
               collapsed ? 'opacity-0' : 'opacity-100 delay-75',
             )}>
-              <h1 className="text-sm font-semibold leading-tight">One Switch</h1>
-              <p className="text-[11px] text-muted-foreground">本地大模型代理切换</p>
+              <h1 className="text-sm font-medium leading-tight tracking-tight">One Switch</h1>
+              <p className="font-mono text-[10px] uppercase tracking-[1.2px] text-muted-foreground">local ai gateway</p>
             </div>
           </div>
 
@@ -136,9 +136,9 @@ function App() {
                         <button
                           onClick={() => setActivePage(item.key)}
                           className={cn(
-                            'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors',
+                            'flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-xs font-medium transition-colors',
                             activePage === item.key
-                              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                              ? 'border-sidebar-primary/25 bg-sidebar-accent text-sidebar-accent-foreground'
                               : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
                           )}
                         >

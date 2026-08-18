@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Copy, Info, KeyRound, Plug, Server } from 'lucide-react'
+import { Check, Copy, KeyRound, Plug, Server } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -123,12 +123,19 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
           })}
         </div>
 
-        <div className="flex gap-2 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[11px]">
-          <Info size={13} className="mt-0.5 shrink-0 text-blue-500" />
-          <div>
-            <p className="font-medium text-blue-600 dark:text-blue-400">无需配置 API Key</p>
-            <p className="mt-0.5 text-muted-foreground">
-              代理服务本身不需要 API Key 鉴权，直接在本地端口监听。上游提供商的 API Key 在「模型管理」中为每个提供商单独配置。
+        <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-muted/30 px-3.5 py-3">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
+            <KeyRound size={14} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-xs font-medium text-foreground">本地服务无需 API Key</p>
+              <span className="inline-flex items-center gap-1 text-[10px] text-success">
+                <Check size={11} /> 已就绪
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              代理直接监听本地端口。请在「模型管理」中为各上游提供商单独配置 API Key。
             </p>
           </div>
         </div>
