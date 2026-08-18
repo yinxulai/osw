@@ -1,5 +1,16 @@
 import { Fragment, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, Search, XCircle } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Search,
+  Zap,
+  Clock,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Database,
+  XCircle,
+} from 'lucide-react'
 import type { RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -13,8 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useRequestLogsService } from './service'
-import { PROTOCOL_LABEL, STATUS_LABEL, formatTime, formatDuration } from './lib/format'
+import { PROTOCOL_LABEL, STATUS_LABEL, formatTime, formatDuration, formatNumber, formatTPS } from './lib/format'
 
 type StatusFilter = 'all' | 'success' | 'failed' | 'cancelled'
 
@@ -53,20 +65,20 @@ function AttemptBadge({ attempt }: { attempt: RequestLogEntryAttempt }) {
   )
 }
 
-function DetailRow({ log }: { log: RequestLogEntry }) {
+function DetailRow({ log, modelName }: { log: RequestLogEntry; modelName: string }) {
   const lastAttempt = log.attempts[log.attempts.length - 1]
   return (
     <tr className="bg-muted/30">
-      <td colSpan={8} className="px-4 py-3">
+      <td colSpan={10} className="px-4 py-3">
         <div className="space-y-3 pl-8">
-          <div className="grid grid-cols-2 gap-4 text-xs md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 text-xs md:grid-cols-4 lg:grid-cols-6">
             <div>
               <div className="text-muted-foreground">请求 ID</div>
               <div className="font-mono">{log.id}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">逻辑模型</div>
-              <div className="font-medium">{log.logicalModelId}</div>
+              <div className="text-muted-foreground">队列</div>
+              <div className="font-medium">{modelName}</div>
             </div>
             <div>
               <div className="text-muted-foreground">协议</div>
@@ -75,6 +87,22 @@ function DetailRow({ log }: { log: RequestLogEntry }) {
             <div>
               <div className="text-muted-foreground">总耗时</div>
               <div className="font-mono">{formatDuration(log.totalDurationMilliseconds)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">总 Token</div>
+              <div className="font-mono">{formatNumber(log.totalTokens)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">缓存命中</div>
+              <div>
+                {log.cacheHit === null ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : log.cacheHit ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">是</span>
+                ) : (
+                  <span className="text-muted-foreground">否</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -100,12 +128,6 @@ function DetailRow({ log }: { log: RequestLogEntry }) {
             </div>
           </div>
 
-          {log.totalTokens != null && (
-            <div className="text-xs text-muted-foreground">
-              总 Token：<span className="font-mono text-foreground">{log.totalTokens}</span>
-            </div>
-          )}
-
           {lastAttempt?.errorMessage && (
             <div className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-600 dark:text-red-400">
               <div className="font-medium">最终错误</div>
@@ -119,7 +141,7 @@ function DetailRow({ log }: { log: RequestLogEntry }) {
 }
 
 export function RequestLogsPage() {
-  const { logs, loading, refreshing, errorMessage, refresh } = useRequestLogsService()
+  const { logs, loading, refreshing, getModelName, refresh } = useRequestLogsService()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchText, setSearchText] = useState('')
@@ -131,7 +153,7 @@ export function RequestLogsPage() {
         const q = searchText.toLowerCase()
         const lastAttempt = log.attempts[log.attempts.length - 1]
         return (
-          log.logicalModelId.toLowerCase().includes(q) ||
+          getModelName(log.logicalModelId).toLowerCase().includes(q) ||
           log.id.toLowerCase().includes(q) ||
           log.attempts.some(
             a =>
@@ -143,7 +165,7 @@ export function RequestLogsPage() {
       }
       return true
     })
-  }, [logs, statusFilter, searchText])
+  }, [logs, statusFilter, searchText, getModelName])
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => (prev === id ? null : id))
@@ -153,7 +175,7 @@ export function RequestLogsPage() {
     <PageLayout>
       <PageHeader
         title="请求记录"
-        description="最近的上游请求，以及每次请求实际使用的模型与失败切换情况"
+        description="最近的代理请求，以及每次请求实际使用的上游模型与失败切换情况"
         actions={
           <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={refreshing}>
             <RefreshCw size={14} className={cn('mr-1.5', refreshing && 'animate-spin')} />
@@ -167,7 +189,7 @@ export function RequestLogsPage() {
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="搜索模型、提供商、错误..."
+              placeholder="搜索队列、提供商、上游模型、错误..."
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
               className="h-8 w-64 pl-8 text-xs"
@@ -195,42 +217,59 @@ export function RequestLogsPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-muted-foreground">
-                  <th className="w-8 px-3 py-2 font-medium" />
-                  <th className="px-3 py-2 font-medium">状态</th>
-                  <th className="px-3 py-2 font-medium">时间</th>
-                  <th className="px-3 py-2 font-medium">逻辑模型</th>
-                  <th className="px-3 py-2 font-medium">协议</th>
-                  <th className="px-3 py-2 font-medium">最终提供商/模型</th>
-                  <th className="px-3 py-2 font-medium text-center">尝试</th>
-                  <th className="px-3 py-2 font-medium text-right">耗时</th>
+                  <th className="w-8 px-2.5 py-2 font-medium" />
+                  <th className="px-2.5 py-2 font-medium">状态</th>
+                  <th className="px-2.5 py-2 font-medium">时间</th>
+                  <th className="px-2.5 py-2 font-medium">队列</th>
+                  <th className="px-2.5 py-2 font-medium text-center">
+                    <ArrowUpFromLine size={11} className="mr-0.5 inline" />
+                    输入
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-center">
+                    <ArrowDownToLine size={11} className="mr-0.5 inline" />
+                    输出
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-center">
+                    <Clock size={11} className="mr-0.5 inline" />
+                    TTFT
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-center">
+                    <Zap size={11} className="mr-0.5 inline" />
+                    TPS
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-center">
+                    <Database size={11} className="mr-0.5 inline" />
+                    缓存
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-right">耗时</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 size={16} className="animate-spin" />
-                        加载中…
-                      </div>
-                    </td>
-                  </tr>
-                ) : errorMessage ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-destructive">
-                      {errorMessage}
-                    </td>
-                  </tr>
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-2.5 py-2.5"><Skeleton className="h-3.5 w-3.5" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="h-5 w-12" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="h-3 w-20" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="h-3 w-16" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="ml-auto h-3 w-12" /></td>
+                    </tr>
+                  ))
                 ) : filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                       暂无匹配的请求记录
                     </td>
                   </tr>
                 ) : (
                   filteredLogs.map(log => {
-                    const lastAttempt = log.attempts[log.attempts.length - 1]
                     const expanded = expandedId === log.id
+                    const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
                     return (
                       <Fragment key={log.id}>
                         <tr
@@ -240,49 +279,54 @@ export function RequestLogsPage() {
                             expanded && 'bg-muted/20',
                           )}
                         >
-                          <td className="px-3 py-2.5 text-muted-foreground">
+                          <td className="px-2.5 py-2 text-muted-foreground">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-2.5 py-2">
                             <StatusBadge status={log.status} />
                           </td>
-                          <td className="px-3 py-2.5 font-mono text-muted-foreground">
+                          <td className="px-2.5 py-2 font-mono text-muted-foreground whitespace-nowrap">
                             {formatTime(log.createdTime)}
                           </td>
-                          <td className="px-3 py-2.5 font-medium">{log.logicalModelId}</td>
-                          <td className="px-3 py-2.5 text-muted-foreground">
-                            {PROTOCOL_LABEL[log.protocol] ?? log.protocol}
+                          <td className="px-2.5 py-2 font-medium truncate max-w-[140px]">
+                            {getModelName(log.logicalModelId)}
                           </td>
-                          <td className="px-3 py-2.5">
-                            {lastAttempt ? (
-                              <span className="font-mono">
-                                <span className="text-foreground">{lastAttempt.providerName}</span>
-                                <span className="text-muted-foreground"> / </span>
-                                <span className="text-muted-foreground">
-                                  {lastAttempt.upstreamModelId}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 text-center">
-                            <span
-                              className={cn(
-                                'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-medium',
-                                log.attempts.length > 1
-                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                                  : 'bg-muted text-muted-foreground',
-                              )}
-                            >
-                              {log.attempts.length}
+                          <td className="px-2.5 py-2 text-center font-mono">
+                            <span className={cn(log.inputTokens != null && 'text-foreground')}>
+                              {formatNumber(log.inputTokens)}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-right font-mono">
+                          <td className="px-2.5 py-2 text-center font-mono">
+                            <span className={cn(log.outputTokens != null && 'text-foreground')}>
+                              {formatNumber(log.outputTokens)}
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-2 text-center font-mono">
+                            <span className={cn(log.ttftMilliseconds != null && 'text-foreground')}>
+                              {log.ttftMilliseconds != null ? `${log.ttftMilliseconds}ms` : '—'}
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-2 text-center font-mono">
+                            <span className={cn(tps !== '—' && 'text-emerald-600 dark:text-emerald-400')}>
+                              {tps}
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-2 text-center">
+                            {log.cacheHit === null ? (
+                              <span className="text-muted-foreground/60">—</span>
+                            ) : log.cacheHit ? (
+                              <Badge variant="outline" className="h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                                HIT
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground/60">MISS</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono">
                             {formatDuration(log.totalDurationMilliseconds)}
                           </td>
                         </tr>
-                        {expanded && <DetailRow log={log} />}
+                        {expanded && <DetailRow log={log} modelName={getModelName(log.logicalModelId)} />}
                       </Fragment>
                     )
                   })

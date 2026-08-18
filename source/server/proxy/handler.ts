@@ -8,7 +8,7 @@ import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogSt
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RequestStatus } from '@common/schemas'
-import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl, rewriteRequestModel } from './request'
+import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl, rewriteRequestModel, injectUsageParams } from './request'
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
@@ -21,6 +21,10 @@ interface AttemptOutcome {
   durationMilliseconds: number
   errorCode?: string
   errorMessage?: string
+  ttftMilliseconds?: number
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cacheHit?: boolean
 }
 
 // 手动切换状态：当前指定的 upstream model ID
@@ -84,6 +88,10 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       status: 'failed',
       totalDurationMilliseconds: 0,
       totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
     })
   } catch (error) {
     console.error(`[proxy] 写入请求日志失败: ${(error as Error).message}`)
@@ -98,7 +106,12 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           `[proxy] 透传成功: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await markProviderSuccess(target.provider.id)
-        await finalizeRequestLog(requestId, 'success', startedAt)
+        await finalizeRequestLog(requestId, 'success', startedAt, {
+          ttftMilliseconds: outcome.ttftMilliseconds ?? null,
+          inputTokens: outcome.inputTokens ?? null,
+          outputTokens: outcome.outputTokens ?? null,
+          cacheHit: outcome.cacheHit ?? null,
+        })
         return
       }
       if (outcome.disposition === 'terminal') {
@@ -163,9 +176,21 @@ async function finalizeRequestLog(
   requestId: string,
   status: RequestStatus,
   startedAt: number,
+  metrics?: { ttftMilliseconds?: number | null; inputTokens?: number | null; outputTokens?: number | null; cacheHit?: boolean | null },
 ): Promise<void> {
   try {
-    await updateRequestLogStatus(requestId, status, Date.now() - startedAt)
+    const totalDuration = Date.now() - startedAt
+    const hasTokens = metrics?.inputTokens != null && metrics?.outputTokens != null
+    const totalTokens = hasTokens ? (metrics!.inputTokens! + metrics!.outputTokens!) : null
+    await updateRequestLogStatus(requestId, {
+      status,
+      totalDurationMilliseconds: totalDuration,
+      totalTokens,
+      inputTokens: metrics?.inputTokens ?? null,
+      outputTokens: metrics?.outputTokens ?? null,
+      ttftMilliseconds: metrics?.ttftMilliseconds ?? null,
+      cacheHit: metrics?.cacheHit ?? null,
+    })
   } catch (error) {
     console.error(`[proxy] 更新请求日志失败: ${(error as Error).message}`)
   }
@@ -180,7 +205,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
   const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, endpoint.protocol))
   const parsed = new URL(targetUrl)
-  const upstreamBody = rewriteRequestModel(requestBody, model.upstreamModelId)
+  const rewrittenBody = rewriteRequestModel(requestBody, model.upstreamModelId)
+  const upstreamBody = injectUsageParams(rewrittenBody, protocol)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
   if (!apiKey) throw new Error(`API key is unavailable for provider ${provider.id}`)
 
@@ -225,6 +251,20 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
+      // 检测缓存命中
+      const cacheHeader = upstreamRes.headers['x-cache'] ?? upstreamRes.headers['cf-cache-status']
+      const cacheHit = cacheHeader ? /^HIT/i.test(String(cacheHeader)) : undefined
+
+      // TTFT 与 token 采集
+      let ttftMilliseconds: number | undefined
+      let inputTokens: number | null = null
+      let outputTokens: number | null = null
+      let responseBuffer = ''
+      let isStreaming = false
+
+      const contentType = String(upstreamRes.headers['content-type'] ?? '')
+      isStreaming = contentType.includes('text/event-stream')
+
       // 空闲超时检测
       let idleTimer: NodeJS.Timeout | null = null
       const resetIdleTimer = () => {
@@ -258,6 +298,37 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
       upstreamRes.on('data', chunk => {
         resetIdleTimer()
+
+        // 记录 TTFT（第一个数据块到达时间）
+        if (ttftMilliseconds === undefined) {
+          ttftMilliseconds = Date.now() - attemptStartedAt
+        }
+
+        if (disposition === 'success') {
+          responseBuffer += chunk.toString('utf8')
+
+          if (isStreaming) {
+            // 流式响应：逐行解析 SSE 中的 usage 信息
+            const lines = responseBuffer.split('\n')
+            responseBuffer = lines.pop() ?? ''
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed.startsWith('data:')) continue
+              const dataStr = trimmed.slice(5).trim()
+              if (!dataStr || dataStr === '[DONE]') continue
+              try {
+                const data = JSON.parse(dataStr)
+                extractTokenUsage(data, (inp, out) => {
+                  if (inp != null) inputTokens = inp
+                  if (out != null) outputTokens = out
+                })
+              } catch {
+                // 忽略解析失败的 chunk
+              }
+            }
+          }
+        }
+
         if (!res.writableEnded) {
           res.write(chunk)
         }
@@ -265,11 +336,33 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
       upstreamRes.on('end', () => {
         if (idleTimer) clearTimeout(idleTimer)
+
+        // 非流式响应：从完整 body 解析 usage
+        if (!isStreaming && disposition === 'success' && responseBuffer) {
+          try {
+            const data = JSON.parse(responseBuffer)
+            extractTokenUsage(data, (inp, out) => {
+              if (inp != null) inputTokens = inp
+              if (out != null) outputTokens = out
+            })
+          } catch {
+            // 忽略解析失败
+          }
+        }
+
         if (!res.writableEnded) {
           res.end()
         }
         void recordAttempt(disposition === 'success' ? 'success' : 'failed')
-        resolve({ disposition, statusCode, durationMilliseconds: Date.now() - attemptStartedAt })
+        resolve({
+          disposition,
+          statusCode,
+          durationMilliseconds: Date.now() - attemptStartedAt,
+          ttftMilliseconds,
+          inputTokens,
+          outputTokens,
+          cacheHit,
+        })
       })
 
       upstreamRes.on('error', err => {
@@ -313,4 +406,76 @@ function writeJsonError(res: ServerResponse, statusCode: number, errorCode: stri
       errorMessage,
     }),
   )
+}
+
+/**
+ * 从 API 响应数据中提取 token 用量信息。
+ * 支持多种格式：
+ * - OpenAI Chat/Completions: data.usage.prompt_tokens / completion_tokens
+ * - OpenAI Responses: data.usage.input_tokens / output_tokens
+ * - Anthropic Messages (non-stream): data.usage.input_tokens / output_tokens
+ * - Anthropic SSE message_start: data.message.usage.input_tokens
+ * - Anthropic SSE message_delta: data.usage.output_tokens
+ * - 通用格式: data.input_tokens / data.output_tokens / data.usage.total_tokens
+ */
+function extractTokenUsage(
+  data: Record<string, unknown>,
+  callback: (inputTokens: number | null, outputTokens: number | null) => void,
+): void {
+  let inp: number | null = null
+  let out: number | null = null
+
+  // 顶层 usage 对象（OpenAI / Anthropic 非流式）
+  const usage = data.usage
+  if (usage && typeof usage === 'object') {
+    const u = usage as Record<string, unknown>
+    // 输入 token
+    if (typeof u.prompt_tokens === 'number') inp = u.prompt_tokens
+    else if (typeof u.input_tokens === 'number') inp = u.input_tokens
+
+    // 输出 token
+    if (typeof u.completion_tokens === 'number') out = u.completion_tokens
+    else if (typeof u.output_tokens === 'number') out = u.output_tokens
+
+    // 如果只有 total_tokens，且只有一个有值，用 total 推算
+    if (inp === null && out === null && typeof u.total_tokens === 'number') {
+      inp = u.total_tokens
+    }
+  }
+
+  // Anthropic SSE: message_start
+  if (data.type === 'message_start') {
+    const msg = data.message as Record<string, unknown> | undefined
+    if (msg && msg.usage && typeof msg.usage === 'object') {
+      const u = msg.usage as Record<string, unknown>
+      if (typeof u.input_tokens === 'number') inp = u.input_tokens
+    }
+  }
+
+  // Anthropic SSE: message_delta
+  if (data.type === 'message_delta') {
+    const u = data.usage as Record<string, unknown> | undefined
+    if (u && typeof u.output_tokens === 'number') out = u.output_tokens
+  }
+
+  // OpenAI Responses 格式：output 数组中的 usage
+  if (Array.isArray(data.output)) {
+    for (const item of data.output as Array<Record<string, unknown>>) {
+      if (item && typeof item === 'object' && item.usage && typeof item.usage === 'object') {
+        const u = item.usage as Record<string, unknown>
+        if (typeof u.input_tokens === 'number' && inp === null) inp = u.input_tokens
+        if (typeof u.output_tokens === 'number') out = u.output_tokens
+      }
+    }
+  }
+
+  // 顶层直接有 token 字段（某些兼容 API）
+  if (inp === null && typeof data.input_tokens === 'number') inp = data.input_tokens
+  if (inp === null && typeof data.prompt_tokens === 'number') inp = data.prompt_tokens
+  if (out === null && typeof data.output_tokens === 'number') out = data.output_tokens
+  if (out === null && typeof data.completion_tokens === 'number') out = data.completion_tokens
+
+  if (inp !== null || out !== null) {
+    callback(inp, out)
+  }
 }

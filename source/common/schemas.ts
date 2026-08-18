@@ -116,6 +116,10 @@ export const RequestLogSchema = z.object({
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+  ttftMilliseconds: z.number().int().nonnegative().nullable(),
+  cacheHit: z.boolean().nullable(),
   createdTime: z.number().int(),
 })
 export type RequestLog = z.infer<typeof RequestLogSchema>
@@ -203,6 +207,10 @@ export const RequestLogEntrySchema = z.object({
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+  ttftMilliseconds: z.number().int().nonnegative().nullable(),
+  cacheHit: z.boolean().nullable(),
   createdTime: z.number().int(),
   attempts: z.array(RequestLogEntryAttemptSchema),
 })

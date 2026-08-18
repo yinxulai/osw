@@ -11,6 +11,7 @@ import { logRoutes } from './logs'
 import { requestLogRoutes } from './request-logs'
 import { analyticsRoutes } from './analytics'
 import { configRoutes } from './config'
+import { modelTestRoutes } from './model-test'
 
 const routes: Record<string, ManagementHandler> = {
   ...providerRoutes,
@@ -22,6 +23,7 @@ const routes: Record<string, ManagementHandler> = {
   ...requestLogRoutes,
   ...analyticsRoutes,
   ...configRoutes,
+  ...modelTestRoutes,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {

@@ -1,25 +1,32 @@
 import { useCallback, useEffect, useState } from 'react'
-import { requestLogApi } from '@/api'
-import type { RequestLogEntry } from '@common/schemas'
+import { requestLogApi, logicalModelApi } from '@/api'
+import { useToast } from '@/components/ui/toast'
+import type { RequestLogEntry, LogicalModel } from '@common/schemas'
 
 export function useRequestLogsService() {
+  const toast = useToast()
   const [logs, setLogs] = useState<RequestLogEntry[]>([])
+  const [logicalModels, setLogicalModels] = useState<LogicalModel[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
-    setErrorMessage('')
-    const result = await requestLogApi.list(50)
+    const [result, modelsResult] = await Promise.all([
+      requestLogApi.list(50),
+      logicalModelApi.list(),
+    ])
     if (!result.success) {
-      setErrorMessage(result.errorMessage)
+      toast.error(result.errorMessage)
       setLoading(false)
       return
     }
+    if (modelsResult.success) {
+      setLogicalModels(modelsResult.data)
+    }
     setLogs(result.data.logs)
     setLoading(false)
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     void load(false)
@@ -31,11 +38,15 @@ export function useRequestLogsService() {
     setRefreshing(false)
   }, [load])
 
+  const getModelName = useCallback((id: string) => {
+    return logicalModels.find(m => m.id === id)?.name ?? id
+  }, [logicalModels])
+
   return {
     logs,
     loading,
     refreshing,
-    errorMessage,
+    getModelName,
     refresh,
   }
 }

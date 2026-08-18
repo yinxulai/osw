@@ -11,9 +11,9 @@ export function TrendChart({ trend, range }: TrendChartProps) {
   const maxRequests = Math.max(1, ...trend.map(d => d.requests))
 
   return (
-    <Card>
+    <Card className="min-w-[400px]">
       <CardHeader className="pb-1.5">
-        <CardTitle>请求量趋势</CardTitle>
+        <CardTitle className="text-sm">请求量趋势</CardTitle>
         <CardDescription>每日请求数</CardDescription>
       </CardHeader>
       <CardContent>

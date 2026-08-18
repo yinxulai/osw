@@ -9,9 +9,9 @@ interface ProviderDistributionProps {
 
 export function ProviderDistribution({ stats }: ProviderDistributionProps) {
   return (
-    <Card>
+    <Card className="min-w-[280px]">
       <CardHeader className="pb-1.5">
-        <CardTitle>Provider 分布</CardTitle>
+        <CardTitle className="text-sm">供应商分布</CardTitle>
         <CardDescription>按请求量占比</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2.5 pt-1">

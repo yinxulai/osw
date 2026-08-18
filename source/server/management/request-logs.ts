@@ -27,6 +27,10 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
         status: log.status,
         totalDurationMilliseconds: log.totalDurationMilliseconds,
         totalTokens: log.totalTokens,
+        inputTokens: log.inputTokens,
+        outputTokens: log.outputTokens,
+        ttftMilliseconds: log.ttftMilliseconds,
+        cacheHit: log.cacheHit,
         createdTime: log.createdTime,
         attempts: attempts
           .sort((a, b) => a.attemptIndex - b.attemptIndex)

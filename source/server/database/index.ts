@@ -42,6 +42,7 @@ export async function closeDatabase(): Promise<void> {
 function ensureSchema(db: DatabaseSync): void {
   migrateRequestAttemptsForeignKeys(db)
   migrateSettingsAutoLaunch(db)
+  migrateRequestLogMetrics(db)
   for (const statement of INITIAL_SCHEMA) {
     db.exec(statement)
   }
@@ -101,6 +102,32 @@ function migrateSettingsAutoLaunch(db: DatabaseSync): void {
   const hasAutoLaunch = rows.some(r => r.name === 'autoLaunch')
   if (hasAutoLaunch) return
   db.exec(`ALTER TABLE settings ADD COLUMN autoLaunch INTEGER NOT NULL DEFAULT 0`)
+}
+
+/**
+ * 迁移：为 request_logs 表添加性能指标列
+ * inputTokens, outputTokens, ttftMilliseconds, cacheHit
+ */
+function migrateRequestLogMetrics(db: DatabaseSync): void {
+  const tableRows = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'request_logs'`)
+    .all() as Array<{ name: string }>
+  if (tableRows.length === 0) return // 表不存在，INITIAL_SCHEMA 会创建带列的新表
+
+  const rows = db.prepare(`PRAGMA table_info(request_logs)`).all() as Array<{ name: string }>
+  const colNames = new Set(rows.map(r => r.name))
+  if (!colNames.has('inputTokens')) {
+    db.exec(`ALTER TABLE request_logs ADD COLUMN inputTokens INTEGER`)
+  }
+  if (!colNames.has('outputTokens')) {
+    db.exec(`ALTER TABLE request_logs ADD COLUMN outputTokens INTEGER`)
+  }
+  if (!colNames.has('ttftMilliseconds')) {
+    db.exec(`ALTER TABLE request_logs ADD COLUMN ttftMilliseconds INTEGER`)
+  }
+  if (!colNames.has('cacheHit')) {
+    db.exec(`ALTER TABLE request_logs ADD COLUMN cacheHit INTEGER`)
+  }
 }
 
 const INITIAL_SCHEMA = [
@@ -173,6 +200,10 @@ const INITIAL_SCHEMA = [
     status TEXT NOT NULL,
     totalDurationMilliseconds INTEGER NOT NULL,
     totalTokens INTEGER,
+    inputTokens INTEGER,
+    outputTokens INTEGER,
+    ttftMilliseconds INTEGER,
+    cacheHit INTEGER,
     createdTime BIGINT NOT NULL
   )`,
   'CREATE INDEX IF NOT EXISTS idx_request_logs_created_time ON request_logs(createdTime)',

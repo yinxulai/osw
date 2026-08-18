@@ -8,9 +8,9 @@ interface LatencyDistributionProps {
 
 export function LatencyDistribution({ buckets }: LatencyDistributionProps) {
   return (
-    <Card>
+    <Card className="min-w-[280px]">
       <CardHeader className="pb-1.5">
-        <CardTitle>延迟分布</CardTitle>
+        <CardTitle className="text-sm">延迟分布</CardTitle>
         <CardDescription>响应时间区间占比</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 pt-1">

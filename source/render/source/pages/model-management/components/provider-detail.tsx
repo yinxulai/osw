@@ -13,12 +13,11 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { GripVertical, Link2, Pencil, Plus, Server, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, Plus, Server, Trash2, Clock, CheckCircle2, AlertTriangle, Activity } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SortableBinding } from './sortable-binding'
-import { getEffectiveEndpointUrl } from '../service'
 import type { Provider, UpstreamModel, ProviderHealth } from '@common/schemas'
 
 interface ProviderDetailProps {
@@ -70,13 +69,13 @@ export function ProviderDetail(props: ProviderDetailProps) {
           </div>
         </div>
         <div className="flex gap-1">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onEditProvider}>
+          <Button variant="outline" onClick={onEditProvider}>
             <Pencil size={13} /> 编辑
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-destructive"
+            className="text-destructive"
             title="删除供应商"
             onClick={onRemoveProvider}
           >
@@ -92,7 +91,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
               每个模型一行，可同时支持多个协议；拖拽调整全局队列中的相对优先级
             </div>
           </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onAddModel}>
+          <Button variant="outline" onClick={onAddModel}>
             <Plus size={13} /> 添加模型
           </Button>
         </div>
@@ -126,25 +125,55 @@ export function ProviderDetail(props: ProviderDetailProps) {
                               {model.endpoints.map(endpoint => (
                                 <Badge key={endpoint.protocol} variant="secondary" className="h-5 px-1.5 text-[9px]">
                                   {endpoint.protocol.toUpperCase()}
-                                  {!endpoint.upstreamUrl.trim() && (
-                                    <span className="ml-1 text-muted-foreground/70">默认</span>
-                                  )}
                                 </Badge>
                               ))}
                             </span>
                           </div>
-                          <div className="mt-1 flex items-center gap-1 truncate font-mono text-[10px] text-muted-foreground">
-                            <Link2 size={10} />
-                            {model.endpoints
-                              .map(endpoint => getEffectiveEndpointUrl(endpoint, provider))
-                              .filter(Boolean)
-                              .join(' / ') || '未配置地址'}
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                            {(() => {
+                              const h = health[model.providerId]
+                              const cooling = h?.cooldownUntilTime && h.cooldownUntilTime > Date.now()
+                              if (cooling) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                                    <Clock size={10} />
+                                    冷却中
+                                  </span>
+                                )
+                              }
+                              if (h?.consecutiveFailures) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-500">
+                                    <AlertTriangle size={10} />
+                                    连续失败 {h.consecutiveFailures} 次
+                                  </span>
+                                )
+                              }
+                              if (h?.lastSuccessTime) {
+                                const diff = Date.now() - h.lastSuccessTime
+                                const ago = diff < 60_000 ? '刚刚'
+                                  : diff < 3_600_000 ? `${Math.floor(diff / 60_000)} 分钟前`
+                                  : diff < 86_400_000 ? `${Math.floor(diff / 3_600_000)} 小时前`
+                                  : `${Math.floor(diff / 86_400_000)} 天前`
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
+                                    <CheckCircle2 size={10} />
+                                    最近成功 {ago}
+                                  </span>
+                                )
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1">
+                                  <Activity size={10} />
+                                  暂无请求
+                                </span>
+                              )
+                            })()}
                           </div>
                         </div>
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
+                          size="icon-sm"
                           title="编辑模型"
                           onClick={() => onEditModel(model)}
                         >
@@ -152,8 +181,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         </Button>
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
+                          size="icon-sm"
+                          className="text-destructive"
                           title="删除模型"
                           onClick={() => onRemoveModel(model)}
                         >
@@ -168,7 +197,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
           </DndContext>
         ) : (
           <div className="flex min-h-36 flex-col items-center justify-center rounded-md border text-center">
-            <Link2 size={20} className="mb-2 text-muted-foreground/40" />
+            <Server size={20} className="mb-2 text-muted-foreground/40" />
             <p className="text-xs font-medium">还没有上游模型</p>
             <p className="mt-1 text-[11px] text-muted-foreground">添加后即可通过本地代理调用</p>
           </div>

@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useModelManagementService } from './service'
 import { ProviderGrid } from './components/provider-grid'
 import { ProviderDetail } from './components/provider-detail'
@@ -17,21 +18,37 @@ export function ModelManagementPage() {
         title="模型管理"
         description="集中管理供应商凭据与上游模型映射"
         actions={
-          <Button size="sm" className="h-8 text-xs" onClick={() => service.openProviderDialog()}>
+          <Button size="default" onClick={() => service.openProviderDialog()}>
             <Plus size={14} /> 新建供应商
           </Button>
         }
       />
       <PageContent>
-        {service.errorMessage && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-            {service.errorMessage}
-          </div>
-        )}
         {service.loading ? (
-          <Card className="flex min-h-48 items-center justify-center text-xs text-muted-foreground">
-            正在加载模型配置...
-          </Card>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i} className="min-w-[180px] p-3">
+                  <Skeleton className="mb-2 h-4 w-20" />
+                  <Skeleton className="h-3 w-16" />
+                </Card>
+              ))}
+            </div>
+            <Card className="p-4">
+              <Skeleton className="mb-4 h-5 w-32" />
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="h-5 w-5 rounded-sm" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3.5 w-1/3" />
+                      <Skeleton className="h-3 w-1/4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
         ) : (
           <>
             <ProviderGrid

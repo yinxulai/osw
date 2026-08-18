@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { upstreamModelApi, healthApi, logicalModelApi, providerApi } from '@/api'
+import { useToast } from '@/components/ui/toast'
 import type { LogicalModel, UpstreamModel, Protocol, ProtocolEndpoint, Provider, ProviderHealth } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from './lib/protocols'
 
@@ -41,6 +42,7 @@ export function getEffectiveEndpointUrl(endpoint: ProtocolEndpoint, provider?: P
 }
 
 export function useModelManagementService() {
+  const toast = useToast()
   const [providers, setProviders] = useState<Provider[]>([])
   const [logicalModel, setLogicalModel] = useState<LogicalModel | null>(null)
   const [models, setModels] = useState<UpstreamModel[]>([])
@@ -48,7 +50,6 @@ export function useModelManagementService() {
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
 
   // Provider dialog state
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
@@ -66,14 +67,13 @@ export function useModelManagementService() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    setErrorMessage('')
     const [providerResult, modelResult, healthResult] = await Promise.all([
       providerApi.list(),
       logicalModelApi.list(),
       healthApi.list(),
     ])
     if (!providerResult.success || !modelResult.success || !healthResult.success) {
-      setErrorMessage(
+      toast.error(
         !providerResult.success ? providerResult.errorMessage
           : !modelResult.success ? modelResult.errorMessage
             : !healthResult.success ? healthResult.errorMessage : '加载失败',
@@ -86,7 +86,7 @@ export function useModelManagementService() {
     if (!currentModel) {
       const result = await logicalModelApi.create({ name: 'default', description: '默认代理模型' })
       if (!result.success) {
-        setErrorMessage(result.errorMessage)
+        toast.error(result.errorMessage)
         setLoading(false)
         return
       }
@@ -95,7 +95,7 @@ export function useModelManagementService() {
 
     const modelListResult = await upstreamModelApi.list(currentModel.id)
     if (!modelListResult.success) {
-      setErrorMessage(modelListResult.errorMessage)
+      toast.error(modelListResult.errorMessage)
       setLoading(false)
       return
     }
@@ -172,16 +172,18 @@ export function useModelManagementService() {
           endpoints,
         })
     setSaving(false)
-    if (!result.success) return setErrorMessage(result.errorMessage)
+    if (!result.success) { toast.error(result.errorMessage); return }
     setProviderDialogOpen(false)
     setSelectedProviderId(result.data.id)
+    toast.success(editingProviderId ? '供应商已更新' : '供应商已添加')
     await loadData()
   }, [providerName, apiKey, timeout, editingProviderId, providerEndpointEntries, loadData])
 
   const removeProvider = useCallback(async (provider: Provider) => {
     if (!window.confirm(`删除供应商"${provider.name}"？关联模型将被禁用。`)) return
     const result = await providerApi.remove(provider.id)
-    if (!result.success) return setErrorMessage(result.errorMessage)
+    if (!result.success) { toast.error(result.errorMessage); return }
+    toast.success('供应商已删除')
     await loadData()
   }, [loadData])
 
@@ -241,18 +243,20 @@ export function useModelManagementService() {
 
     setSaving(false)
     if (!result.success) {
-      setErrorMessage(result.errorMessage)
+      toast.error(result.errorMessage)
       await loadData()
       return
     }
     setModelDialogOpen(false)
+    toast.success(editingModel ? '模型已更新' : '模型已添加')
     await loadData()
   }, [logicalModel, selectedProvider, modelId, bindingEntries, editingModel, models, loadData])
 
   const removeModel = useCallback(async (model: UpstreamModel) => {
     if (!window.confirm(`删除模型"${model.upstreamModelId}"？该模型关联的所有协议接口都会被移除。`)) return
     const result = await upstreamModelApi.remove(model.id)
-    if (!result.success) return setErrorMessage(result.errorMessage)
+    if (!result.success) { toast.error(result.errorMessage); return }
+    toast.success('模型已删除')
     await loadData()
   }, [loadData])
 
@@ -273,7 +277,7 @@ export function useModelManagementService() {
     }).sort((left, right) => left.priority - right.priority))
     const results = await Promise.all(updates.map(update => upstreamModelApi.update(update.id, { priority: update.priority })))
     if (results.some(result => !result.success)) {
-      setErrorMessage('模型顺序保存失败，已恢复服务端数据')
+      toast.error('模型顺序保存失败，已恢复服务端数据')
       await loadData()
     }
   }, [selectedModels, loadData])
@@ -289,7 +293,6 @@ export function useModelManagementService() {
     selectedModels,
     loading,
     saving,
-    errorMessage,
     // Provider dialog
     providerDialogOpen,
     setProviderDialogOpen,

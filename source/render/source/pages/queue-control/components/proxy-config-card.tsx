@@ -53,9 +53,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
           </div>
         </div>
         <Button
-          variant={proxyRunning ? 'outline' : 'default'}
-          size="sm"
-          className="h-8 text-xs"
+          variant={proxyRunning ? 'secondary' : 'default'}
           onClick={onToggleProxy}
         >
           {proxyRunning ? '暂停服务' : '启动服务'}
@@ -82,9 +80,8 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
               </Select>
               <Input readOnly value={fullUrl} className="h-8 flex-1 font-mono text-xs" />
               <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 shrink-0 text-xs"
+                variant="outline"
+                className="shrink-0"
                 disabled={!proxyRunning}
                 onClick={() => void onCopyEndpoint(fullUrl)}
               >

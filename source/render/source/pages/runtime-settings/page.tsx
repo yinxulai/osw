@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { useRuntimeSettingsService } from './service'
 import { ListenConfigCard } from './components/listen-config-card'
@@ -15,15 +16,16 @@ export function RuntimeSettingsPage() {
     <PageLayout>
       <PageHeader title="设置" description="配置代理监听地址、故障转移和本地日志容量" />
       <PageContent>
-        {service.errorMessage && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-            {service.errorMessage}
-          </div>
-        )}
         {service.loading || !service.settings ? (
-          <Card className="flex min-h-48 items-center justify-center text-xs text-muted-foreground">
-            正在加载设置...
-          </Card>
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-4">
+                <Skeleton className="mb-3 h-4 w-32" />
+                <Skeleton className="mb-2 h-3 w-48" />
+                <Skeleton className="h-8 w-40" />
+              </Card>
+            ))}
+          </div>
         ) : (
           <>
             <ListenConfigCard
@@ -50,16 +52,13 @@ export function RuntimeSettingsPage() {
             />
 
             <DataManagementCard
-              importMessage={service.importMessage}
-              importSuccess={service.importSuccess}
               onExport={() => void service.exportConfig()}
               onImport={file => void service.importConfig(file)}
             />
 
             <div className="flex justify-end">
               <Button
-                className="h-8 px-3 text-xs"
-                disabled={service.saving}
+                disabled={service.saving || service.saved}
                 onClick={() => void service.saveSettings()}
               >
                 {service.saving ? '保存并重启中...' : service.saved ? '已保存' : '保存并重启代理'}

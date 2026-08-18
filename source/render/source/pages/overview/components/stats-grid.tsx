@@ -1,6 +1,5 @@
 import { BarChart3, CheckCircle2, Zap, Coins } from 'lucide-react'
 import type { StatsSummary } from '@common/schemas'
-import { cn } from '@/lib/utils'
 import { formatLatency, formatTokens } from '../lib/format'
 
 interface StatsGridProps {
@@ -16,17 +15,10 @@ export function StatsGrid({ summary }: StatsGridProps) {
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 rounded-md border">
-      {stats.map((s, idx) => (
-        <div
-          key={s.label}
-          className={cn(
-            'p-3',
-            idx < stats.length - 1 && 'border-r',
-            idx >= 2 && 'border-t sm:border-t-0'
-          )}
-        >
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+      {stats.map((s) => (
+        <div key={s.label} className="min-w-[140px] bg-card p-3">
+          <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <s.Icon size={13} />
             {s.label}
           </div>

@@ -8,37 +8,64 @@ interface FailureReasonsProps {
   successRate: number
 }
 
+const ERROR_COLORS = [
+  'bg-red-500',
+  'bg-orange-500',
+  'bg-amber-500',
+  'bg-rose-500',
+  'bg-pink-500',
+  'bg-purple-500',
+  'bg-indigo-500',
+  'bg-sky-500',
+]
+
 export function FailureReasons({ reasons, failedCount, successRate }: FailureReasonsProps) {
+  const failureRate = ((1 - successRate) * 100).toFixed(2)
+
   return (
-    <Card>
-      <CardHeader className="pb-1.5">
-        <CardTitle>失败原因分析</CardTitle>
+    <Card className="min-w-[320px]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">错误分布</CardTitle>
         <CardDescription>
-          共 {failedCount.toLocaleString()} 次失败请求 · 失败率 {((1 - successRate) * 100).toFixed(2)}%
+          共 {failedCount.toLocaleString()} 次失败 · 失败率 {failureRate}%
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-1">
+      <CardContent className="pt-0">
         {reasons.length === 0 ? (
-          <div className="text-xs text-muted-foreground py-6 text-center">暂无失败记录</div>
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <div className="text-2xl">✓</div>
+            <div className="mt-1 text-xs">暂无错误记录</div>
+          </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-0 -mx-4">
-            {reasons.map((f, idx) => (
-              <div
-                key={f.reason}
-                className={cn(
-                  'px-3 py-2.5 text-center',
-                  idx < reasons.length - 1 && 'border-r',
-                  idx >= 2 && 'border-t sm:border-t-0 md:border-t-0'
-                )}
-              >
-                <div className="text-lg font-semibold text-destructive tabular-nums">{f.count}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{f.reason}</div>
-                <div className="h-1 bg-muted rounded-full overflow-hidden mt-2">
-                  <div className="h-full bg-destructive rounded-full" style={{ width: `${f.percent}%` }} />
+          <div className="space-y-3">
+            {/* 横向堆叠条 */}
+            <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              {reasons.map((r, idx) => (
+                <div
+                  key={r.reason}
+                  className={cn(ERROR_COLORS[idx % ERROR_COLORS.length], 'transition-all')}
+                  style={{ width: `${r.percent}%` }}
+                  title={`${r.reason}: ${r.count} 次 (${r.percent}%)`}
+                />
+              ))}
+            </div>
+            {/* 错误列表 */}
+            <div className="space-y-2">
+              {reasons.map((r, idx) => (
+                <div key={r.reason} className="flex items-center gap-2.5 text-xs">
+                  <span className={cn('h-2.5 w-2.5 shrink-0 rounded-sm', ERROR_COLORS[idx % ERROR_COLORS.length])} />
+                  <span className="min-w-0 flex-1 truncate text-foreground/80" title={r.reason}>
+                    {r.reason}
+                  </span>
+                  <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
+                    {r.count.toLocaleString()}
+                  </span>
+                  <span className="w-10 shrink-0 text-right font-mono text-muted-foreground tabular-nums">
+                    {r.percent}%
+                  </span>
                 </div>
-                <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">{f.percent}%</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </CardContent>

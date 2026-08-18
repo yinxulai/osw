@@ -36,12 +36,21 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   })
+
+  // 移除默认菜单栏
+  win.setMenuBarVisibility(false)
+  if (process.platform === 'darwin') {
+    // macOS 上也隐藏应用菜单
+    const { Menu } = require('electron')
+    Menu.setApplicationMenu(Menu.buildFromTemplate([]))
+  }
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL!)

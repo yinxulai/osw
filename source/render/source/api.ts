@@ -175,6 +175,26 @@ export const analyticsApi = {
     request<AnalyticsSummary>('/analytics/summary', { range }),
 }
 
+// ========== Model Test ==========
+
+export interface ModelTestResult {
+  modelId: string
+  upstreamModelId: string
+  providerId: string
+  providerName: string
+  success: boolean
+  statusCode?: number
+  durationMilliseconds: number
+  errorMessage?: string
+  inputTokens?: number | null
+  outputTokens?: number | null
+}
+
+export const modelTestApi = {
+  run: (logicalModelId: string, protocol: string) =>
+    request<{ results: ModelTestResult[] }>('/model-test/run', { logicalModelId, protocol }),
+}
+
 // ========== Config Import/Export ==========
 
 export interface ExportedConfig {

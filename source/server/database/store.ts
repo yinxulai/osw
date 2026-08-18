@@ -486,6 +486,10 @@ export async function createRequestLog(
       status: input.status,
       totalDurationMilliseconds: input.totalDurationMilliseconds,
       totalTokens: input.totalTokens ?? null,
+      inputTokens: input.inputTokens ?? null,
+      outputTokens: input.outputTokens ?? null,
+      ttftMilliseconds: input.ttftMilliseconds ?? null,
+      cacheHit: input.cacheHit ?? null,
       createdTime: time,
     })
     .run()
@@ -496,18 +500,28 @@ export async function createRequestLog(
     status: input.status,
     totalDurationMilliseconds: input.totalDurationMilliseconds,
     totalTokens: input.totalTokens ?? null,
+    inputTokens: input.inputTokens ?? null,
+    outputTokens: input.outputTokens ?? null,
+    ttftMilliseconds: input.ttftMilliseconds ?? null,
+    cacheHit: input.cacheHit ?? null,
     createdTime: time,
   }
 }
 
-export async function updateRequestLogStatus(id: string, status: RequestStatus, totalDurationMilliseconds: number, totalTokens: number | null = null): Promise<void> {
+export interface RequestLogUpdate {
+  status?: RequestStatus
+  totalDurationMilliseconds?: number
+  totalTokens?: number | null
+  inputTokens?: number | null
+  outputTokens?: number | null
+  ttftMilliseconds?: number | null
+  cacheHit?: boolean | null
+}
+
+export async function updateRequestLogStatus(id: string, update: RequestLogUpdate): Promise<void> {
   getDb()
     .update(requestLogs)
-    .set({
-      status,
-      totalDurationMilliseconds,
-      totalTokens,
-    })
+    .set(update)
     .where(eq(requestLogs.id, id))
     .run()
 }
@@ -882,6 +896,10 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     status: row.status as RequestStatus,
     totalDurationMilliseconds: row.totalDurationMilliseconds,
     totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens ?? null,
+    outputTokens: row.outputTokens ?? null,
+    ttftMilliseconds: row.ttftMilliseconds ?? null,
+    cacheHit: row.cacheHit ?? null,
     createdTime: Number(row.createdTime),
   }
 }

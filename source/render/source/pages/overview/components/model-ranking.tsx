@@ -10,9 +10,9 @@ interface ModelRankingProps {
 
 export function ModelRanking({ stats }: ModelRankingProps) {
   return (
-    <Card>
+    <Card className="min-w-[400px]">
       <CardHeader className="pb-1.5">
-        <CardTitle>模型使用排行</CardTitle>
+        <CardTitle className="text-sm">模型使用排行</CardTitle>
         <CardDescription>按请求数排序</CardDescription>
       </CardHeader>
       <CardContent className="pt-1">

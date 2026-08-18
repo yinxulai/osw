@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { ToastProvider } from '@/components/ui/toast'
 import { AppLayout } from '@/components/layout'
 import { QueueControlPage } from './pages/queue-control/page'
 import { ModelManagementPage } from './pages/model-management/page'
@@ -96,6 +97,7 @@ function App() {
   const sections = Array.from(new Set(navItems.map(i => i.section || ''))).filter(Boolean)
 
   return (
+    <ToastProvider>
     <TooltipProvider>
       <AppLayout
         sidebar={(
@@ -111,11 +113,21 @@ function App() {
               <CircleDot size={15} />
             </div>
             {!collapsed && (
-              <div className="flex flex-col overflow-hidden">
+              <div className="flex flex-1 flex-col overflow-hidden">
                 <h1 className="text-sm font-semibold leading-tight">One Switch</h1>
                 <p className="text-[11px] text-muted-foreground">本地大模型代理切换</p>
               </div>
             )}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className={cn(
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
+                collapsed && 'mx-auto',
+              )}
+              title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+            >
+              {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+            </button>
           </div>
 
           {/* 导航 */}
@@ -171,7 +183,7 @@ function App() {
                   variant="ghost"
                   size="sm"
                   onClick={toggleTheme}
-                  className={cn('w-full justify-start h-7 text-xs', collapsed && 'justify-center px-0')}
+                  className={cn('w-full justify-start', collapsed && 'justify-center px-0')}
                 >
                   {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
                   {!collapsed && <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>}
@@ -195,15 +207,6 @@ function App() {
               {!collapsed && <span>{proxyStatus?.running ? `服务运行中 · ${proxyStatus.port}` : '服务已停止'}</span>}
             </div>
           </div>
-
-          {/* 折叠按钮 */}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="absolute -right-2.5 top-5 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            title={collapsed ? '展开侧边栏' : '收起侧边栏'}
-          >
-            {collapsed ? <PanelLeftOpen size={11} /> : <PanelLeftClose size={11} />}
-          </button>
           </aside>
         )}
       >
@@ -215,6 +218,7 @@ function App() {
         {activePage === 'settings' && <RuntimeSettingsPage />}
       </AppLayout>
     </TooltipProvider>
+    </ToastProvider>
   )
 }
 

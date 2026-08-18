@@ -1,7 +1,9 @@
-import { BarChart3, Loader2 } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 import type { AnalyticsRange } from '@common/schemas'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useOverviewService } from './service'
 import { StatsGrid } from './components/stats-grid'
 import { TrendChart } from './components/trend-chart'
@@ -30,9 +32,47 @@ export function OverviewPage() {
       />
       <PageContent>
         {loading && (
-          <div className="flex items-center justify-center py-20 text-muted-foreground">
-            <Loader2 className="animate-spin mr-2" size={18} />
-            加载中...
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-card p-3">
+                  <Skeleton className="mb-2 h-3 w-16" />
+                  <Skeleton className="h-6 w-20" />
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
+              <Card className="p-4">
+                <Skeleton className="mb-4 h-4 w-24" />
+                <Skeleton className="h-40 w-full" />
+              </Card>
+              <Card className="p-4">
+                <Skeleton className="mb-4 h-4 w-24" />
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Skeleton className="h-3 w-3 rounded-full" />
+                      <Skeleton className="h-3 flex-1" />
+                      <Skeleton className="h-3 w-10" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+              <Card className="p-4">
+                <Skeleton className="mb-4 h-4 w-24" />
+                <div className="space-y-3">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 w-full" />
+                  ))}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <Skeleton className="mb-4 h-4 w-24" />
+                <Skeleton className="h-32 w-full" />
+              </Card>
+            </div>
           </div>
         )}
 

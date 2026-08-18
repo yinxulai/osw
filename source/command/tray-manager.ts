@@ -5,6 +5,7 @@ import {
   startProxyServer,
   stopProxyServer,
 } from '@server/index'
+import { listLogicalModels, listUpstreamModelsByLogicalModel } from '@server/database/store'
 import type { ProxyServerStatus } from '@common/schemas'
 
 export class TrayManager {
@@ -87,24 +88,58 @@ export class TrayManager {
     const isRunning = proxyStatus?.running ?? false
     const port = proxyStatus?.port ?? 0
 
+    // 获取默认队列状态
+    let queueStatus: { name: string; total: number; active: number } | null = null
+    try {
+      const models = await listLogicalModels(false)
+      if (models.length > 0) {
+        const defaultModel = models[0]
+        const upstreamModels = await listUpstreamModelsByLogicalModel(defaultModel.id)
+        queueStatus = {
+          name: defaultModel.name,
+          total: upstreamModels.length,
+          active: upstreamModels.filter(m => m.enabled).length,
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: 'One Switch',
         enabled: false,
-        visible: true,
       },
       {
-        label: isRunning ? `代理运行中 · 端口 ${port}` : '代理已停止',
+        label: isRunning ? `服务运行中 · 端口 ${port}` : '服务已停止',
         enabled: false,
       },
       { type: 'separator' },
       {
-        label: isRunning ? '停止代理' : '启动代理',
-        click: () => { 
+        label: isRunning ? '停止服务' : '启动服务',
+        click: () => {
           void this.toggleProxy()
         },
       },
       { type: 'separator' },
+    ]
+
+    // 默认队列状态
+    if (queueStatus) {
+      template.push(
+        {
+          label: `队列：${queueStatus.name}`,
+          enabled: false,
+        },
+        {
+          label: `上游模型：${queueStatus.active}/${queueStatus.total} 待命`,
+          enabled: false,
+        },
+        { type: 'separator' },
+      )
+    }
+
+    template.push(
       {
         label: '打开控制台',
         click: () => {
@@ -118,7 +153,7 @@ export class TrayManager {
           this.quitApp()
         },
       },
-    ]
+    )
 
     const menu = Menu.buildFromTemplate(template)
     this.tray.setContextMenu(menu)
