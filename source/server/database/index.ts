@@ -46,6 +46,9 @@ function ensureSchema(db: DatabaseSync): void {
     db.exec(statement)
   }
   ensureColumn(db, 'request_logs', 'rawUsage', 'TEXT')
+  ensureColumn(db, 'request_logs', 'cachedInputTokens', 'INTEGER')
+  ensureColumn(db, 'request_logs', 'cacheCreationInputTokens', 'INTEGER')
+  ensureColumn(db, 'request_logs', 'promptCacheHit', 'INTEGER')
 }
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {
@@ -127,6 +130,9 @@ const INITIAL_SCHEMA = [
     totalTokens INTEGER,
     inputTokens INTEGER,
     outputTokens INTEGER,
+    cachedInputTokens INTEGER,
+    cacheCreationInputTokens INTEGER,
+    promptCacheHit INTEGER,
     rawUsage TEXT,
     ttftMilliseconds INTEGER,
     cacheHit INTEGER,

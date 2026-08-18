@@ -488,6 +488,9 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
       totalTokens: input.totalTokens ?? null,
       inputTokens: input.inputTokens ?? null,
       outputTokens: input.outputTokens ?? null,
+      cachedInputTokens: input.cachedInputTokens ?? null,
+      cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
+      promptCacheHit: input.promptCacheHit ?? null,
       rawUsage: serializeRawUsage(input.rawUsage),
       ttftMilliseconds: input.ttftMilliseconds ?? null,
       cacheHit: input.cacheHit ?? null,
@@ -503,6 +506,9 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     totalTokens: input.totalTokens ?? null,
     inputTokens: input.inputTokens ?? null,
     outputTokens: input.outputTokens ?? null,
+    cachedInputTokens: input.cachedInputTokens ?? null,
+    cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
+    promptCacheHit: input.promptCacheHit ?? null,
     rawUsage: input.rawUsage ?? null,
     ttftMilliseconds: input.ttftMilliseconds ?? null,
     cacheHit: input.cacheHit ?? null,
@@ -516,6 +522,9 @@ export interface RequestLogUpdate {
   totalTokens?: number | null
   inputTokens?: number | null
   outputTokens?: number | null
+  cachedInputTokens?: number | null
+  cacheCreationInputTokens?: number | null
+  promptCacheHit?: boolean | null
   rawUsage?: RequestLog['rawUsage']
   ttftMilliseconds?: number | null
   cacheHit?: boolean | null
@@ -921,6 +930,9 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     totalTokens: row.totalTokens,
     inputTokens: row.inputTokens ?? null,
     outputTokens: row.outputTokens ?? null,
+    cachedInputTokens: row.cachedInputTokens ?? null,
+    cacheCreationInputTokens: row.cacheCreationInputTokens ?? null,
+    promptCacheHit: row.promptCacheHit ?? null,
     rawUsage: parseRawUsage(row.rawUsage),
     ttftMilliseconds: row.ttftMilliseconds ?? null,
     cacheHit: row.cacheHit ?? null,

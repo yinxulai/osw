@@ -112,14 +112,26 @@ function DetailRow(props: DetailRowProps) {
               <div className="font-mono">{formatNumber(log.totalTokens)}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">缓存命中</div>
+              <div className="text-muted-foreground">总输入 Token</div>
+              <div className="font-mono">{formatNumber(log.inputTokens)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">缓存读取 Token</div>
+              <div className="font-mono">{formatNumber(log.cachedInputTokens)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">缓存写入 Token</div>
+              <div className="font-mono">{formatNumber(log.cacheCreationInputTokens)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Prompt Cache</div>
               <div>
-                {log.cacheHit === null ? (
+                {log.promptCacheHit === null ? (
                   <span className="text-muted-foreground">—</span>
-                ) : log.cacheHit ? (
-                  <span className="text-emerald-600 dark:text-emerald-400">是</span>
+                ) : log.promptCacheHit ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">命中</span>
                 ) : (
-                  <span className="text-muted-foreground">否</span>
+                  <span className="text-muted-foreground">未命中</span>
                 )}
               </div>
             </div>
@@ -320,7 +332,7 @@ export function RequestLogsPage() {
                           <td className="px-2.5 py-2 font-mono text-muted-foreground whitespace-nowrap">
                             {formatTime(log.createdTime)}
                           </td>
-                          <td className="px-2.5 py-2 font-medium truncate max-w-[140px]">
+                          <td className="px-2.5 py-2 max-w-35 truncate font-medium">
                             {getModelName(log.logicalModelId)}
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
@@ -344,11 +356,11 @@ export function RequestLogsPage() {
                             </span>
                           </td>
                           <td className="px-2.5 py-2 text-center">
-                            {log.cacheHit === null ? (
+                            {log.cachedInputTokens === null ? (
                               <span className="text-muted-foreground/60">—</span>
-                            ) : log.cacheHit ? (
+                            ) : log.cachedInputTokens > 0 ? (
                               <Badge variant="outline" className="h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                                HIT
+                                HIT · {formatNumber(log.cachedInputTokens)}
                               </Badge>
                             ) : (
                               <span className="text-muted-foreground/60">MISS</span>

@@ -123,7 +123,7 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })
 
-  it('records raw usage from an OpenAI Responses streaming completion event', async () => {
+  it('records standardized prompt cache usage from the final SSE event without a trailing newline', async () => {
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
@@ -132,7 +132,7 @@ describe('handleProxyRequest', () => {
     const upstream = await listen((_req, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       res.write('data: {"type":"response.created","response":{"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":0}}}}\n\n')
-      res.end('data: {"type":"response.completed","response":{"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1024},"output_tokens":80}}}\n\n')
+      res.end('data: {"type":"response.completed","response":{"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1024},"output_tokens":80}}}')
     })
     mocks.models = [
       model('model_responses', 'prov_responses', `${upstream.url}/v1/responses`, 'responses-model', 'openai-responses'),
@@ -154,6 +154,9 @@ describe('handleProxyRequest', () => {
         totalTokens: 1280,
         inputTokens: 1200,
         outputTokens: 80,
+        cachedInputTokens: 1024,
+        cacheCreationInputTokens: null,
+        promptCacheHit: true,
         rawUsage: {
           input_tokens: 1200,
           input_tokens_details: { cached_tokens: 1024 },

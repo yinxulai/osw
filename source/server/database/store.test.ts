@@ -79,6 +79,9 @@ describe('store row mapping', () => {
       totalTokens: null,
       inputTokens: null,
       outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
       rawUsage: null,
       ttftMilliseconds: null,
       cacheHit: null,
@@ -96,11 +99,17 @@ describe('store row mapping', () => {
       totalTokens: 1280,
       inputTokens: 1200,
       outputTokens: 80,
+      cachedInputTokens: 1024,
+      cacheCreationInputTokens: 0,
+      promptCacheHit: true,
       rawUsage,
     })
 
     expect((await listRequestLogs())[0]).toMatchObject({
       id: log.id,
+      cachedInputTokens: 1024,
+      cacheCreationInputTokens: 0,
+      promptCacheHit: true,
       rawUsage,
     })
   })

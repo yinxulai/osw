@@ -123,7 +123,9 @@ describe('database lifecycle', () => {
     const columns = client.prepare('PRAGMA table_info(request_logs)').all()
     const row = client.prepare('SELECT id, rawUsage FROM request_logs WHERE id = ?').get('legacy-request')
 
-    expect(columns.map(column => (column as { name: string }).name)).toContain('rawUsage')
+    expect(columns.map(column => (column as { name: string }).name)).toEqual(
+      expect.arrayContaining(['rawUsage', 'cachedInputTokens', 'cacheCreationInputTokens', 'promptCacheHit']),
+    )
     expect(row).toEqual({ id: 'legacy-request', rawUsage: null })
   })
 
@@ -147,7 +149,16 @@ describe('database lifecycle', () => {
       { name: 'upstream_models' },
     ])
     expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual(
-      expect.arrayContaining(['inputTokens', 'outputTokens', 'rawUsage', 'ttftMilliseconds', 'cacheHit']),
+      expect.arrayContaining([
+        'inputTokens',
+        'outputTokens',
+        'cachedInputTokens',
+        'cacheCreationInputTokens',
+        'promptCacheHit',
+        'rawUsage',
+        'ttftMilliseconds',
+        'cacheHit',
+      ]),
     )
     expect(settingsColumns.map(column => (column as { name: string }).name)).toContain(
       'autoLaunch',
