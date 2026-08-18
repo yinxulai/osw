@@ -134,14 +134,7 @@ interface TestRequestResult {
   outputTokens?: number | null
 }
 
-function sendTestRequest(
-  targetUrl: string,
-  protocol: Protocol,
-  apiKey: string,
-  customAuthHeader: string | null,
-  body: string,
-  timeout: number,
-): Promise<TestRequestResult> {
+function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, customAuthHeader: string | null, body: string, timeout: number): Promise<TestRequestResult> {
   return new Promise(resolve => {
     const parsed = new URL(targetUrl)
     const isHttps = parsed.protocol === 'https:'

@@ -30,13 +30,28 @@ import { PROTOCOL_LABEL, STATUS_LABEL, formatTime, formatDuration, formatNumber,
 
 type StatusFilter = 'all' | 'success' | 'failed' | 'cancelled'
 
+interface StatusBadgeProps {
+  status: string
+}
+
+interface AttemptBadgeProps {
+  attempt: RequestLogEntryAttempt
+}
+
+interface DetailRowProps {
+  log: RequestLogEntry
+  modelName: string
+}
+
 const STATUS_BADGE: Record<string, string> = {
   success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
   failed: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30',
   cancelled: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge(props: StatusBadgeProps) {
+  const { status } = props
+
   return (
     <Badge variant="outline" className={cn('font-normal', STATUS_BADGE[status] ?? '')}>
       {STATUS_LABEL[status] ?? status}
@@ -44,7 +59,9 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function AttemptBadge({ attempt }: { attempt: RequestLogEntryAttempt }) {
+function AttemptBadge(props: AttemptBadgeProps) {
+  const { attempt } = props
+
   const ok = attempt.status === 'success'
   return (
     <span
@@ -65,7 +82,9 @@ function AttemptBadge({ attempt }: { attempt: RequestLogEntryAttempt }) {
   )
 }
 
-function DetailRow({ log, modelName }: { log: RequestLogEntry; modelName: string }) {
+function DetailRow(props: DetailRowProps) {
+  const { log, modelName } = props
+
   const lastAttempt = log.attempts[log.attempts.length - 1]
   return (
     <tr className="bg-muted/30">

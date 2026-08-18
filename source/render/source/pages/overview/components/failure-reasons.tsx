@@ -19,7 +19,8 @@ const ERROR_COLORS = [
   'bg-sky-500',
 ]
 
-export function FailureReasons({ reasons, failedCount, successRate }: FailureReasonsProps) {
+export function FailureReasons(props: FailureReasonsProps) {
+  const { reasons, failedCount, successRate } = props
   const failureRate = ((1 - successRate) * 100).toFixed(2)
 
   return (

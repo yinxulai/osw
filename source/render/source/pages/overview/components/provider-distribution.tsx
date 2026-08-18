@@ -7,7 +7,9 @@ interface ProviderDistributionProps {
   stats: ProviderStat[]
 }
 
-export function ProviderDistribution({ stats }: ProviderDistributionProps) {
+export function ProviderDistribution(props: ProviderDistributionProps) {
+  const { stats } = props
+
   return (
     <Card className="min-w-[280px]">
       <CardHeader className="pb-1.5">

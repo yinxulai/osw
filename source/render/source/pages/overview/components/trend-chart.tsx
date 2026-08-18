@@ -7,7 +7,9 @@ interface TrendChartProps {
   range: AnalyticsRange
 }
 
-export function TrendChart({ trend, range }: TrendChartProps) {
+export function TrendChart(props: TrendChartProps) {
+  const { trend, range } = props
+
   const maxRequests = Math.max(1, ...trend.map(d => d.requests))
 
   return (

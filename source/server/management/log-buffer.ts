@@ -70,7 +70,12 @@ export function installLogCapture(): void {
   }
 }
 
-export function listLogs(options?: { after?: number; limit?: number }): LogEntry[] {
+interface ListLogsOptions {
+  after?: number
+  limit?: number
+}
+
+export function listLogs(options?: ListLogsOptions): LogEntry[] {
   const after = options?.after ?? 0
   const limit = options?.limit ?? 500
   const filtered = after > 0 ? entries.filter(entry => entry.id > after) : entries

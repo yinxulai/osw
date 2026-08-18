@@ -6,7 +6,9 @@ interface LatencyDistributionProps {
   buckets: LatencyBucket[]
 }
 
-export function LatencyDistribution({ buckets }: LatencyDistributionProps) {
+export function LatencyDistribution(props: LatencyDistributionProps) {
+  const { buckets } = props
+
   return (
     <Card className="min-w-[280px]">
       <CardHeader className="pb-1.5">

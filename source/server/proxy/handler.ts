@@ -172,12 +172,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   await finalizeRequestLog(requestId, 'failed', startedAt)
 }
 
-async function finalizeRequestLog(
-  requestId: string,
-  status: RequestStatus,
-  startedAt: number,
-  metrics?: { ttftMilliseconds?: number | null; inputTokens?: number | null; outputTokens?: number | null; cacheHit?: boolean | null },
-): Promise<void> {
+interface RequestLogMetrics {
+  ttftMilliseconds?: number | null
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cacheHit?: boolean | null
+}
+
+async function finalizeRequestLog(requestId: string, status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void> {
   try {
     const totalDuration = Date.now() - startedAt
     const hasTokens = metrics?.inputTokens != null && metrics?.outputTokens != null
@@ -418,10 +420,7 @@ function writeJsonError(res: ServerResponse, statusCode: number, errorCode: stri
  * - Anthropic SSE message_delta: data.usage.output_tokens
  * - 通用格式: data.input_tokens / data.output_tokens / data.usage.total_tokens
  */
-function extractTokenUsage(
-  data: Record<string, unknown>,
-  callback: (inputTokens: number | null, outputTokens: number | null) => void,
-): void {
+function extractTokenUsage(data: Record<string, unknown>, callback: (inputTokens: number | null, outputTokens: number | null) => void): void {
   let inp: number | null = null
   let out: number | null = null
 

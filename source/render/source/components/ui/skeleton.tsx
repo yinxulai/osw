@@ -4,7 +4,9 @@ interface SkeletonProps {
   className?: string
 }
 
-export function Skeleton({ className }: SkeletonProps) {
+export function Skeleton(props: SkeletonProps) {
+  const { className } = props
+
   return (
     <div
       className={cn(
@@ -25,7 +27,14 @@ export function CardSkeleton() {
   )
 }
 
-export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+interface TableSkeletonProps {
+  rows?: number
+  cols?: number
+}
+
+export function TableSkeleton(props: TableSkeletonProps) {
+  const { rows = 5, cols = 4 } = props
+
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
@@ -52,7 +61,13 @@ export function StatsSkeleton() {
   )
 }
 
-export function ListSkeleton({ items = 4 }: { items?: number }) {
+interface ListSkeletonProps {
+  items?: number
+}
+
+export function ListSkeleton(props: ListSkeletonProps) {
+  const { items = 4 } = props
+
   return (
     <div className="divide-y rounded-lg border">
       {Array.from({ length: items }).map((_, i) => (

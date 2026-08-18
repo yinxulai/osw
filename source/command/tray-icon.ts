@@ -111,15 +111,7 @@ function hexToRgba(hex: string): { r: number; g: number; b: number } {
     : { r: 0, g: 0, b: 0 }
 }
 
-function isInRoundedRect(
-  x: number,
-  y: number,
-  rx: number,
-  ry: number,
-  rw: number,
-  rh: number,
-  radius: number,
-): boolean {
+function isInRoundedRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number, radius: number): boolean {
   // 检查是否在矩形主体内
   if (x < rx || x >= rx + rw || y < ry || y >= ry + rh) return false
 

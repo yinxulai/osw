@@ -224,10 +224,7 @@ export async function deleteLogicalModel(id: string): Promise<void> {
 
 // ========== Upstream Model ==========
 
-export async function listUpstreamModelsByLogicalModel(
-  logicalModelId: string,
-  includeDeleted = false,
-): Promise<UpstreamModel[]> {
+export async function listUpstreamModelsByLogicalModel(logicalModelId: string, includeDeleted = false): Promise<UpstreamModel[]> {
   const db = getDb()
   const rows = includeDeleted
     ? db
@@ -250,10 +247,7 @@ export async function listUpstreamModelsByLogicalModel(
   return rows.map(mapUpstreamModel)
 }
 
-export async function listUpstreamModelsByProvider(
-  providerId: string,
-  includeDeleted = false,
-): Promise<UpstreamModel[]> {
+export async function listUpstreamModelsByProvider(providerId: string, includeDeleted = false): Promise<UpstreamModel[]> {
   const db = getDb()
   const rows = includeDeleted
     ? db
@@ -317,10 +311,7 @@ export async function createUpstreamModel(
   }
 }
 
-export async function updateUpstreamModel(
-  id: string,
-  updates: Partial<Omit<UpstreamModel, 'id' | 'createdTime'>>,
-): Promise<UpstreamModel> {
+export async function updateUpstreamModel(id: string, updates: Partial<Omit<UpstreamModel, 'id' | 'createdTime'>>): Promise<UpstreamModel> {
   const db = getDb()
   const time = now()
   db.update(upstreamModels)
@@ -481,9 +472,9 @@ export async function updateSettings(
 
 // ========== Request Log ==========
 
-export async function createRequestLog(
-  input: Omit<RequestLog, 'id' | 'createdTime'> & { id?: string },
-): Promise<RequestLog> {
+type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
+
+export async function createRequestLog(input: CreateRequestLogInput): Promise<RequestLog> {
   const id = input.id ?? generateId('req_')
   const time = now()
   getDb()

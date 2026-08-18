@@ -7,7 +7,9 @@ interface LogRetentionCardProps {
   onChange: (value: number) => void
 }
 
-export function LogRetentionCard({ retentionCount, onChange }: LogRetentionCardProps) {
+export function LogRetentionCard(props: LogRetentionCardProps) {
+  const { retentionCount, onChange } = props
+
   return (
     <Card>
       <CardHeader className="pb-2">

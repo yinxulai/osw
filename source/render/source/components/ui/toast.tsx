@@ -19,6 +19,10 @@ interface ToastContextValue {
   warning: (message: string) => void
 }
 
+interface ToastProviderProps {
+  children: ReactNode
+}
+
 const ToastContext = createContext<ToastContextValue | null>(null)
 
 let nextId = 0
@@ -44,7 +48,8 @@ const ICON_STYLES: Record<ToastType, string> = {
   warning: 'text-warning',
 }
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider(props: ToastProviderProps) {
+  const { children } = props
   const [toasts, setToasts] = useState<Toast[]>([])
 
   const remove = useCallback((id: number) => {

@@ -8,7 +8,9 @@ interface ModelRankingProps {
   stats: ModelStat[]
 }
 
-export function ModelRanking({ stats }: ModelRankingProps) {
+export function ModelRanking(props: ModelRankingProps) {
+  const { stats } = props
+
   return (
     <Card className="min-w-[400px]">
       <CardHeader className="pb-1.5">

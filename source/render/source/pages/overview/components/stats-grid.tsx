@@ -6,7 +6,9 @@ interface StatsGridProps {
   summary: StatsSummary
 }
 
-export function StatsGrid({ summary }: StatsGridProps) {
+export function StatsGrid(props: StatsGridProps) {
+  const { summary } = props
+
   const stats = [
     { label: '总请求数', value: summary.totalRequests.toLocaleString(), Icon: BarChart3 },
     { label: '成功率', value: `${(summary.successRate * 100).toFixed(1)}%`, Icon: CheckCircle2 },

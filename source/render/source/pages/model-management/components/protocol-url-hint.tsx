@@ -5,7 +5,8 @@ interface ProtocolUrlHintProps {
   protocol: Protocol
 }
 
-export function ProtocolUrlHint({ protocol }: ProtocolUrlHintProps) {
+export function ProtocolUrlHint(props: ProtocolUrlHintProps) {
+  const { protocol } = props
   const examples = PROTOCOL_EXAMPLES[protocol]
   return (
     <div className="rounded-md border border-dashed bg-muted/40 px-3 py-2">

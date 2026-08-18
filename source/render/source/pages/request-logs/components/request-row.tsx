@@ -8,7 +8,9 @@ interface RequestRowProps {
   log: RequestLogEntry
 }
 
-export function RequestRow({ log }: RequestRowProps) {
+export function RequestRow(props: RequestRowProps) {
+  const { log } = props
+
   const succeeded = log.status === 'success'
   const lastAttempt = log.attempts[log.attempts.length - 1]
 

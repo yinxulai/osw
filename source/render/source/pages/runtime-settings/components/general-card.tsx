@@ -7,7 +7,9 @@ interface GeneralCardProps {
   onAutoLaunchChange: (enabled: boolean) => void
 }
 
-export function GeneralCard({ autoLaunch, onAutoLaunchChange }: GeneralCardProps) {
+export function GeneralCard(props: GeneralCardProps) {
+  const { autoLaunch, onAutoLaunchChange } = props
+
   return (
     <Card>
       <CardHeader className="pb-2">
