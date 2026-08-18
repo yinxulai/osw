@@ -157,6 +157,112 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_anthropic')
   })
 
+  it('normalizes OpenAI chat usage without counting cached tokens twice', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        id: 'chatcmpl_test',
+        usage: {
+          prompt_tokens: 1500,
+          prompt_tokens_details: { cached_tokens: 900 },
+          completion_tokens: 120,
+        },
+      }))
+    })
+    mocks.models = [
+      model('model_chat', 'prov_chat', `${upstream.url}/v1/chat/completions`, 'chat-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [] }),
+    })
+    await response.json()
+
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        totalTokens: 1620,
+        inputTokens: 1500,
+        outputTokens: 120,
+        cachedInputTokens: 900,
+        cacheCreationInputTokens: null,
+        promptCacheHit: true,
+        rawUsage: {
+          prompt_tokens: 1500,
+          prompt_tokens_details: { cached_tokens: 900 },
+          completion_tokens: 120,
+        },
+      }),
+    )
+  })
+
+  it('normalizes Anthropic cache read and cache creation usage', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        id: 'msg_test',
+        usage: {
+          input_tokens: 1800,
+          output_tokens: 75,
+          cache_read_input_tokens: 1000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 200,
+            ephemeral_1h_input_tokens: 300,
+          },
+        },
+      }))
+    })
+    mocks.models = [
+      model('model_anthropic_usage', 'prov_anthropic_usage', `${upstream.url}/v1/messages`, 'claude-model', 'anthropic-messages'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+    })
+    await response.json()
+
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        totalTokens: 1875,
+        inputTokens: 1800,
+        outputTokens: 75,
+        cachedInputTokens: 1000,
+        cacheCreationInputTokens: 500,
+        promptCacheHit: true,
+        rawUsage: {
+          input_tokens: 1800,
+          output_tokens: 75,
+          cache_read_input_tokens: 1000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 200,
+            ephemeral_1h_input_tokens: 300,
+          },
+        },
+      }),
+    )
+  })
+
   it('records standardized prompt cache usage from the final SSE event without a trailing newline', async () => {
     configureSecretStore({
       set: async () => undefined,
