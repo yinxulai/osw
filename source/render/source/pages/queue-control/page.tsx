@@ -54,6 +54,7 @@ export function QueueControlPage() {
               models={service.models}
               providers={service.providers}
               health={service.health}
+              modelMetrics={service.modelMetrics}
               logicalModelName={service.logicalModel?.name}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}

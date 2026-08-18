@@ -8,9 +8,11 @@ import {
   providerApi,
   proxyApi,
   queueApi,
+  requestLogApi,
 } from '@/api'
 import { useToast } from '@/components/ui/toast'
 import type { LogicalModel, UpstreamModel, Provider, ProviderHealth, ProxyServerStatus } from '@common/schemas'
+import { calculateQueueModelMetrics, type QueueModelMetrics } from './lib/model-metrics'
 
 export function useQueueControlService() {
   const toast = useToast()
@@ -18,6 +20,7 @@ export function useQueueControlService() {
   const [models, setModels] = useState<UpstreamModel[]>([])
   const [providers, setProviders] = useState<Record<string, Provider>>({})
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({})
+  const [modelMetrics, setModelMetrics] = useState<Record<string, QueueModelMetrics>>({})
   const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
   const [manualModelId, setManualModelId] = useState<string | null>(null)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
@@ -26,20 +29,21 @@ export function useQueueControlService() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [modelResult, providerResult, healthResult, statusResult, queueResult] = await Promise.all([
+    const [modelResult, providerResult, healthResult, statusResult, queueResult, logResult] = await Promise.all([
       logicalModelApi.list(),
       providerApi.list(),
       healthApi.list(),
       proxyApi.status(),
       queueApi.status(),
+      requestLogApi.list(100),
     ])
-    const failed = [modelResult, providerResult, healthResult, statusResult, queueResult].find(result => !result.success)
+    const failed = [modelResult, providerResult, healthResult, statusResult, queueResult, logResult].find(result => !result.success)
     if (failed && !failed.success) {
       toast.error(failed.errorMessage)
       setLoading(false)
       return
     }
-    if (!modelResult.success || !providerResult.success || !healthResult.success || !statusResult.success || !queueResult.success) return
+    if (!modelResult.success || !providerResult.success || !healthResult.success || !statusResult.success || !queueResult.success || !logResult.success) return
     const currentModel = modelResult.data.find(model => model.enabled) ?? modelResult.data[0] ?? null
     const modelListResult = currentModel ? await upstreamModelApi.list(currentModel.id) : null
     if (modelListResult && !modelListResult.success) {
@@ -51,6 +55,7 @@ export function useQueueControlService() {
     setModels(modelListResult?.success ? modelListResult.data : [])
     setProviders(Object.fromEntries(providerResult.data.map(provider => [provider.id, provider])))
     setHealth(Object.fromEntries(healthResult.data.map(item => [item.providerId, item])))
+    setModelMetrics(calculateQueueModelMetrics(logResult.data.logs))
     setProxyStatus(statusResult.data)
     setManualModelId(queueResult.data.manualModelId)
     setMode(queueResult.data.manualModelId ? 'manual' : 'auto')
@@ -130,6 +135,7 @@ export function useQueueControlService() {
     models,
     providers,
     health,
+    modelMetrics,
     proxyStatus,
     manualModelId,
     mode,

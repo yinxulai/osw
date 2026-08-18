@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableBinding } from './sortable-binding'
 import { QueueModelRow } from './queue-model-row'
+import { queueModelMetricKey, type QueueModelMetrics } from '../lib/model-metrics'
 import type { UpstreamModel, Provider, ProviderHealth } from '@common/schemas'
 
 export type ProviderMap = Record<string, Provider>
@@ -24,6 +25,7 @@ interface QueueListCardProps {
   models: UpstreamModel[]
   providers: ProviderMap
   health: HealthMap
+  modelMetrics: Record<string, QueueModelMetrics>
   logicalModelName?: string
   mode: 'auto' | 'manual'
   manualModelId: string
@@ -40,6 +42,7 @@ export function QueueListCard(props: QueueListCardProps) {
     models,
     providers,
     health,
+    modelMetrics,
     logicalModelName,
     mode,
     manualModelId,
@@ -103,6 +106,7 @@ export function QueueListCard(props: QueueListCardProps) {
                           model={model}
                           provider={providers[model.providerId]}
                           providerHealth={health[model.providerId]}
+                          metrics={modelMetrics[queueModelMetricKey(model.providerId, model.upstreamModelId)]}
                           mode={mode}
                           selected={selected}
                           cooling={cooling}

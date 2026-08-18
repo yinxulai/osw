@@ -1,13 +1,16 @@
-import { AlertTriangle, CheckCircle2, Circle, CircleDot, Clock, GripVertical } from 'lucide-react'
-import type { Provider, ProviderHealth, UpstreamModel } from '@common/schemas'
+import { AlertTriangle, BotMessageSquare, CheckCircle2, Circle, CircleDot, Clock, GripVertical, MessageSquareCode, Sparkles, Timer, Zap } from 'lucide-react'
+import type { Protocol, Provider, ProviderHealth, UpstreamModel } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import type { QueueModelMetrics } from '../lib/model-metrics'
 
 interface QueueModelRowProps {
   model: UpstreamModel
   provider?: Provider
   providerHealth?: ProviderHealth
+  metrics?: QueueModelMetrics
   mode: 'auto' | 'manual'
   selected: boolean
   cooling: boolean
@@ -17,6 +20,12 @@ interface QueueModelRowProps {
   onToggleEnabled: (enabled: boolean) => void
 }
 
+const PROTOCOL_META: Record<Protocol, { label: string; icon: typeof MessageSquareCode }> = {
+  'openai-completions': { label: 'OpenAI Completions', icon: MessageSquareCode },
+  'openai-responses': { label: 'OpenAI Responses', icon: Sparkles },
+  'anthropic-messages': { label: 'Anthropic Messages', icon: BotMessageSquare },
+}
+
 function formatRelativeTime(timestamp: number | null | undefined): string {
   if (!timestamp) return '—'
   const difference = Date.now() - timestamp
@@ -24,6 +33,16 @@ function formatRelativeTime(timestamp: number | null | undefined): string {
   if (difference < 3_600_000) return `${Math.floor(difference / 60_000)} 分钟前`
   if (difference < 86_400_000) return `${Math.floor(difference / 3_600_000)} 小时前`
   return `${Math.floor(difference / 86_400_000)} 天前`
+}
+
+function formatAverageTps(tps: number | null | undefined): string {
+  if (tps == null) return '—'
+  return tps >= 10 ? String(Math.round(tps)) : tps.toFixed(1)
+}
+
+function formatAverageTtft(milliseconds: number | null | undefined): string {
+  if (milliseconds == null) return '—'
+  return `${(milliseconds / 1000).toFixed(2)}s`
 }
 
 function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth'>) {
@@ -86,14 +105,34 @@ export function QueueModelRow(props: QueueModelRowProps) {
           <span className="truncate text-xs font-semibold">{props.provider?.name ?? '未知供应商'}</span>
           <span className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</span>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            {model.endpoints.map(endpoint => (
-              <Badge key={endpoint.protocol} variant="outline" className="h-4 px-1 text-[9px]">
-                {endpoint.protocol.toUpperCase()}
-              </Badge>
-            ))}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <TooltipProvider delayDuration={150}>
+            <span className="inline-flex items-center gap-1">
+              {model.endpoints.map(endpoint => {
+                const meta = PROTOCOL_META[endpoint.protocol]
+                const ProtocolIcon = meta.icon
+                return (
+                  <Tooltip key={endpoint.protocol}>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex size-5 items-center justify-center rounded border bg-background text-muted-foreground" aria-label={meta.label}>
+                        <ProtocolIcon size={11} />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{meta.label}</TooltipContent>
+                  </Tooltip>
+                )
+              })}
+            </span>
+          </TooltipProvider>
+          <span className="inline-flex items-center gap-1" title={`最近 ${props.metrics?.sampleCount ?? 0} 个成功请求的平均输出速度`}>
+            <Zap size={11} />
+            TPS {formatAverageTps(props.metrics?.avgTps)}
           </span>
+          <span className="inline-flex items-center gap-1" title={`最近 ${props.metrics?.sampleCount ?? 0} 个成功请求的平均首 Token 时间`}>
+            <Timer size={11} />
+            TTFT {formatAverageTtft(props.metrics?.avgTtftMilliseconds)}
+          </span>
+          {props.metrics && <span className="text-[10px] text-muted-foreground/70">近 {props.metrics.sampleCount} 次</span>}
           <ModelHealth providerHealth={props.providerHealth} />
         </div>
       </div>
