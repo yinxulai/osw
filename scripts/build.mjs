@@ -21,15 +21,16 @@ const main = async () => {
 
   const architectures = builderArguments.filter(argument => architectureArguments.has(argument))
   const sharedArguments = builderArguments.filter(argument => !architectureArguments.has(argument))
+  const publishArguments = ['--publish', 'never']
   const packagingSteps = architectures.length > 1
     ? architectures.map(architecture => ({
         command: 'pnpm',
-        args: ['electron-builder', '--config', 'electron-builder.config.cjs', ...sharedArguments, architecture],
+        args: ['electron-builder', '--config', 'electron-builder.config.cjs', ...sharedArguments, ...publishArguments, architecture],
         label: `Packaging ${architecture.slice(2)}`,
       }))
     : [{
         command: 'pnpm',
-        args: ['electron-builder', '--config', 'electron-builder.config.cjs', ...builderArguments],
+        args: ['electron-builder', '--config', 'electron-builder.config.cjs', ...builderArguments, ...publishArguments],
         label: 'Packaging with electron-builder',
       }]
 
