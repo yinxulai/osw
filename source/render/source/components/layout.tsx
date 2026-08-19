@@ -31,7 +31,7 @@ export function AppLayout(props: AppLayoutProps) {
         {sidebar}
       </aside>
       <main className="min-w-0 overflow-auto overscroll-contain">
-        <div className="mx-auto min-h-full w-full max-w-7xl px-5 py-6 md:px-8 md:py-8">{children}</div>
+        <div className="mx-auto min-h-full w-full max-w-7xl px-6 py-5">{children}</div>
       </main>
     </div>
   )
@@ -39,7 +39,7 @@ export function AppLayout(props: AppLayoutProps) {
 
 export function PageLayout(props: PageLayoutProps) {
   const { children, className } = props
-  return <div className={cn('space-y-7', className)}>{children}</div>
+  return <div className={cn('space-y-5', className)}>{children}</div>
 }
 
 export function PageHeader(props: PageHeaderProps) {
@@ -47,13 +47,13 @@ export function PageHeader(props: PageHeaderProps) {
   return (
     <header
       className={cn(
-        'flex flex-col gap-4 border-b border-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between',
+        'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
         className
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        <h1 className="text-[15px] font-semibold leading-none">{title}</h1>
+        {description && <p className="mt-1 text-xs text-muted-foreground/80">{description}</p>}
       </div>
       {actions && <div className="shrink-0">{actions}</div>}
     </header>
