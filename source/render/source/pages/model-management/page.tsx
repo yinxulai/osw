@@ -113,6 +113,7 @@ export function ModelManagementPage() {
           updateEndpointEntry={service.updateProviderEndpointEntry}
           onCancel={service.closeProviderDialog}
           onSave={service.saveProvider}
+          onApplyPreset={service.applyPreset}
         />
 
         <ModelDialog

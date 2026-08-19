@@ -18,6 +18,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SortableBinding } from './sortable-binding'
+import { ProviderIcon } from './provider-icon'
+import { findPresetByName } from '../lib/provider-presets'
 import type { Provider, UpstreamModel, ProviderHealth } from '@common/schemas'
 
 interface ProviderDetailProps {
@@ -50,13 +52,21 @@ export function ProviderDetail(props: ProviderDetailProps) {
   )
 
   const state = getProviderState(provider, health[provider.id])
+  const preset = findPresetByName(provider.name)
+  const iconColor = preset?.color
 
   return (
     <Card>
       <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Server size={17} />
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-md"
+            style={{
+              color: iconColor ?? 'var(--primary)',
+              backgroundColor: iconColor ? `${iconColor}14` : 'color-mix(in srgb, var(--primary) 10%, transparent)',
+            }}
+          >
+            <ProviderIcon name={provider.name} size={17} />
           </div>
           <div>
             <div className="flex items-center gap-2">

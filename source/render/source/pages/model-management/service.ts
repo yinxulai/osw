@@ -14,6 +14,7 @@ import {
 } from '@/services/app-hooks'
 import type { UpstreamModel, Protocol, ProtocolEndpoint, Provider } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from './lib/protocols'
+import type { ProviderPreset } from './lib/provider-presets'
 
 export interface BindingEntry {
   protocol: Protocol
@@ -161,6 +162,16 @@ export function useModelManagementService() {
 
   const closeProviderDialog = useCallback(() => {
     setProviderDialogOpen(false)
+  }, [])
+
+  const applyPreset = useCallback((preset: ProviderPreset) => {
+    setProviderName(preset.name)
+    setProviderEndpointEntries(
+      PROTOCOL_OPTIONS.map(option => {
+        const url = preset.endpoints[option.value] ?? ''
+        return { protocol: option.value, enabled: Boolean(url), url }
+      }),
+    )
   }, [])
 
   const updateProviderEndpointEntry = useCallback((index: number, patch: Partial<ProviderEndpointEntry>) => {
@@ -325,6 +336,7 @@ export function useModelManagementService() {
     updateProviderEndpointEntry,
     openProviderDialog,
     closeProviderDialog,
+    applyPreset,
     saveProvider,
     removeProvider,
     // Model dialog

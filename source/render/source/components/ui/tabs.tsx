@@ -78,7 +78,7 @@ const TabsList = React.forwardRef<
       <span
         ref={indicatorRef}
         aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 rounded-sm border border-border bg-background opacity-0 transition-[transform,width,height,opacity] duration-200 ease-out motion-reduce:transition-none"
+        className="pointer-events-none absolute left-0 top-0 rounded-sm border border-border bg-card opacity-0 shadow-sm transition-[transform,width,height,opacity] duration-200 ease-out motion-reduce:transition-none dark:shadow-black/20"
       />
       {children}
     </TabsPrimitive.List>

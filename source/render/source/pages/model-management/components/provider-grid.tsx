@@ -2,6 +2,8 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Server } from 'lucide-react'
+import { ProviderIcon } from './provider-icon'
+import { findPresetByName } from '../lib/provider-presets'
 import type { Provider, UpstreamModel, ProviderHealth } from '@common/schemas'
 
 interface ProviderGridProps {
@@ -41,6 +43,8 @@ export function ProviderGrid(props: ProviderGridProps) {
                 models.filter(model => model.providerId === provider.id).map(model => model.upstreamModelId),
               ).size
               const active = selectedProviderId === provider.id
+              const preset = findPresetByName(provider.name)
+              const iconColor = preset?.color
 
               return (
                 <button
@@ -53,12 +57,23 @@ export function ProviderGrid(props: ProviderGridProps) {
                       : 'border-l-transparent bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground',
                   )}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={cn('h-2 w-2 rounded-full', state.dot)} />
-                      <span className="truncate text-sm font-medium">{provider.name}</span>
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                      style={{
+                        color: iconColor ?? 'var(--primary)',
+                        backgroundColor: iconColor ? `${iconColor}14` : 'color-mix(in srgb, var(--primary) 10%, transparent)',
+                      }}
+                    >
+                      <ProviderIcon name={provider.name} size={13} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cn('h-2 w-2 rounded-full', state.dot)} />
+                        <span className="truncate text-sm font-medium">{provider.name}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">{modelCount} 个模型</div>
                     </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">{modelCount} 个模型</div>
                   </div>
                   <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium', active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
                     {provider.enabled ? '启用' : '停用'}

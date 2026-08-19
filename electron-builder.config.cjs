@@ -30,9 +30,12 @@ module.exports = {
   win: {
     icon: 'build/icon.ico',
     target: ['nsis'],
-    signAndEditExecutable: false,
+    // signAndEditExecutable 必须保持启用（默认值），否则 rcedit 不会将 icon.ico
+    // 嵌入到 One Switch.exe 中，导致 Windows 任务栏/窗口显示 Electron 默认图标。
+    // 未配置代码签名证书时，electron-builder 会自动跳过签名步骤（仅输出警告）。
   },
   linux: {
+    icon: 'build/icon.png',
     target: ['AppImage'],
     category: 'Development',
   },

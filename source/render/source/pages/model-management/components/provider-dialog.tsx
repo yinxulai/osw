@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
+import { ProviderIcon } from './provider-icon'
+import { PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
 import { PROTOCOL_DESCRIPTIONS, PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
 import type { ProviderEndpointEntry } from '../service'
 
@@ -25,6 +27,7 @@ interface ProviderDialogProps {
   updateEndpointEntry: (index: number, patch: Partial<ProviderEndpointEntry>) => void
   onCancel: () => void
   onSave: () => void
+  onApplyPreset: (preset: ProviderPreset) => void
 }
 
 export function ProviderDialog(props: ProviderDialogProps) {
@@ -43,6 +46,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
     updateEndpointEntry,
     onCancel,
     onSave,
+    onApplyPreset,
   } = props
 
   const canSave = providerName.trim() && (editingProviderId || apiKey.trim())
@@ -56,6 +60,32 @@ export function ProviderDialog(props: ProviderDialogProps) {
         </DialogHeader>
 
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
+          {/* 快速选择预设 */}
+          {!editingProviderId && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">快速选择</Label>
+              <div className="flex flex-wrap gap-2">
+                {PROVIDER_PRESETS.map(preset => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => onApplyPreset(preset)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      'hover:bg-muted hover:border-primary/30',
+                      providerName === preset.name && 'border-primary/50 bg-primary/5 text-primary',
+                    )}
+                  >
+                    <span style={{ color: preset.color }}>
+                      <ProviderIcon name={preset.name} size={14} />
+                    </span>
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 基础信息 */}
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3">
