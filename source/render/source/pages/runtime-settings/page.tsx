@@ -23,6 +23,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
     <PageLayout>
       <PageHeader title="设置" description="配置代理监听地址、故障转移和本地日志容量" />
       <PageContent>
+        <UpdateCard />
+
         {service.loading || !service.settings ? (
           <div className="space-y-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -59,8 +61,6 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
               themeMode={props.themeMode}
               onThemeModeChange={props.onThemeModeChange}
             />
-
-            <UpdateCard />
 
             <DataManagementCard
               onExport={() => void service.exportConfig()}

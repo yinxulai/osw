@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain } from 'electron'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { startServer, stopServer } from '@server/index'
+import { startServer, stopServer, installLogCapture } from '@server/index'
 import { getRuntimeProfile } from '@common/runtime-profile'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
@@ -66,6 +67,55 @@ function registerUpdaterIpc() {
 
 registerUpdaterIpc()
 
+function formatUptime(): string {
+  const seconds = Math.floor(process.uptime())
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return minutes > 0 ? `${minutes}m ${remainingSeconds}s` : `${remainingSeconds}s`
+}
+
+function logStartupBanner() {
+  const versions = process.versions
+  const platformMap: Record<string, string> = {
+    win32: 'Windows',
+    darwin: 'macOS',
+    linux: 'Linux',
+  }
+  const archMap: Record<string, string> = {
+    x64: 'x64 (64-bit)',
+    ia32: 'ia32 (32-bit)',
+    arm64: 'arm64 (64-bit)',
+    arm: 'arm (32-bit)',
+  }
+
+  const lines = [
+    '',
+    '  ╔══════════════════════════════════════════════════╗',
+    '  ║              One Switch is starting...           ║',
+    '  ╚══════════════════════════════════════════════════╝',
+    '',
+    `  Application :  ${app.getName()} v${app.getVersion()}`,
+    `  Environment :  ${runtimeProfile.environment}`,
+    `  Electron    :  v${versions.electron}`,
+    `  Node.js     :  ${versions.node}`,
+    `  Chromium    :  ${versions.chrome}`,
+    `  V8          :  ${versions.v8}`,
+    `  Platform    :  ${platformMap[process.platform] ?? process.platform} (${archMap[process.arch] ?? process.arch})`,
+    `  OS Release  :  ${os.type()} ${os.release()}`,
+    `  Hostname    :  ${os.hostname()}`,
+    `  CPU Cores   :  ${os.cpus().length} (${os.cpus()[0]?.model ?? 'unknown'})`,
+    `  Memory      :  ${Math.round(os.totalmem() / 1024 / 1024)} MB total`,
+    `  User Data   :  ${app.getPath('userData')}`,
+    `  Proxy Port  :  ${runtimeProfile.proxyPort}`,
+    `  Admin Port  :  ${runtimeProfile.managementPort}`,
+    `  PID         :  ${process.pid}`,
+    `  Uptime      :  ${formatUptime()}`,
+    '',
+  ]
+
+  console.log(lines.join('\n'))
+}
+
 function resolveWindowIcon() {
   // Vite 把 ?url 解析为 data URL，开发/打包后均可直接使用，
   // 避免生产环境下 build/ 目录未被复制到 dist 的路径问题。
@@ -118,6 +168,11 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // 在输出任何启动日志前安装拦截，确保横幅等信息也能进入运行日志页面。
+  // installLogCapture 是幂等的，startServer 内部的重复调用会自动跳过。
+  installLogCapture()
+  logStartupBanner()
+
   const userDataDir = app.getPath('userData')
   try {
     await startServer({
@@ -125,6 +180,7 @@ app.whenReady().then(async () => {
       secretStore: new ElectronSecretStore(path.join(userDataDir, 'secrets.json')),
       runtimeProfile,
     })
+    console.log('[one-switch] server started successfully')
   } catch (error) {
     console.error('[one-switch] failed to start server', error)
     app.quit()
@@ -157,6 +213,8 @@ app.whenReady().then(async () => {
       void updaterManager!.checkForUpdates()
     }, 10_000)
   }
+
+  console.log(`[one-switch] ready (startup took ${formatUptime()})`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

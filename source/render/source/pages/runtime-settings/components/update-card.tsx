@@ -133,7 +133,18 @@ export function UpdateCard() {
               基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
             </CardDescription>
           </div>
-          <StatusBadge status={status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={status} />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCheck}
+              disabled={isChecking}
+            >
+              <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+              {isChecking ? '检查中…' : '检查更新'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
@@ -190,18 +201,6 @@ export function UpdateCard() {
         )}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {status === 'idle' || status === 'up-to-date' || status === 'error' ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCheck}
-              disabled={isChecking}
-            >
-              <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-              {isChecking ? '检查中…' : '检查更新'}
-            </Button>
-          ) : null}
-
           {hasUpdate && info?.preferredAsset && (
             <>
               {status === 'update-available' && (
