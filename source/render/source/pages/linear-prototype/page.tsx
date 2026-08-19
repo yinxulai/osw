@@ -1,115 +1,116 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  Boxes,
+  BotMessageSquare,
   Check,
   ChevronDown,
   ChevronRight,
-  Circle,
-  Clock3,
-  Command,
+  CircleDot,
   Copy,
-  Database,
-  Gauge,
+  FlaskConical,
+  GripVertical,
   History,
   Layers3,
+  MessageSquareCode,
   MoreHorizontal,
-  Play,
-  Plus,
-  Search,
+  Pause,
+  Plug,
+  RefreshCw,
   Settings2,
-  SlidersHorizontal,
   Sparkles,
   TerminalSquare,
+  Timer,
   Waypoints,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
 import './prototype.css'
 
-type ViewKey = 'overview' | 'routes' | 'providers' | 'requests'
+type ViewKey = 'queue' | 'providers' | 'requests' | 'analytics'
+type ProtocolKey = 'completions' | 'responses' | 'messages'
+type QueueMode = 'auto' | 'manual'
 
 interface NavigationItem {
   key: ViewKey
   label: string
   icon: LucideIcon
-  count?: number
+}
+
+interface QueueItem {
+  id: string
+  priority: number
+  provider: string
+  model: string
+  protocols: ProtocolKey[]
+  tps: string
+  ttft: string
+  samples: number
+  health: string
+  state: 'ready' | 'cooling' | 'disabled'
+  enabled: boolean
 }
 
 const navigation: NavigationItem[] = [
-  { key: 'overview', label: 'Overview', icon: Gauge },
-  { key: 'routes', label: 'Model routes', icon: Waypoints, count: 4 },
-  { key: 'providers', label: 'Providers', icon: Boxes, count: 6 },
-  { key: 'requests', label: 'Requests', icon: History },
+  { key: 'queue', label: '模型队列', icon: Waypoints },
+  { key: 'providers', label: '模型管理', icon: Plug },
+  { key: 'analytics', label: '统计分析', icon: Activity },
+  { key: 'requests', label: '请求记录', icon: History },
 ]
 
-const routes = [
-  { model: 'claude-3.7-sonnet', provider: 'Anthropic', fallback: 'OpenRouter', latency: '684 ms', health: 99.98 },
-  { model: 'gpt-4.1', provider: 'OpenAI', fallback: 'Azure OpenAI', latency: '521 ms', health: 99.96 },
-  { model: 'gemini-2.5-pro', provider: 'Google AI', fallback: 'OpenRouter', latency: '798 ms', health: 99.91 },
-  { model: 'deepseek-v3', provider: 'DeepSeek', fallback: 'Volcengine', latency: '432 ms', health: 99.87 },
+const protocolMeta: Record<ProtocolKey, { label: string; path: string; icon: LucideIcon }> = {
+  completions: { label: 'OpenAI Completions', path: '/v1/chat/completions', icon: MessageSquareCode },
+  responses: { label: 'OpenAI Responses', path: '/v1/responses', icon: Sparkles },
+  messages: { label: 'Anthropic Messages', path: '/v1/messages', icon: BotMessageSquare },
+}
+
+const initialQueue: QueueItem[] = [
+  { id: 'anthropic', priority: 1, provider: 'Anthropic', model: 'claude-sonnet-4-20250514', protocols: ['messages'], tps: '46.2', ttft: '0.58s', samples: 20, health: '最后成功 18 秒前', state: 'ready', enabled: true },
+  { id: 'openrouter', priority: 2, provider: 'OpenRouter', model: 'anthropic/claude-sonnet-4', protocols: ['completions'], tps: '38.7', ttft: '0.81s', samples: 20, health: '最后成功 6 分钟前', state: 'ready', enabled: true },
+  { id: 'volcengine', priority: 3, provider: 'Volcengine', model: 'doubao-seed-1-6-250615', protocols: ['completions', 'responses'], tps: '52.4', ttft: '0.42s', samples: 14, health: '冷却至 14:38', state: 'cooling', enabled: true },
+  { id: 'deepseek', priority: 4, provider: 'DeepSeek', model: 'deepseek-chat', protocols: ['completions'], tps: '31.8', ttft: '0.67s', samples: 18, health: '已手动禁用', state: 'disabled', enabled: false },
 ]
 
-const requests = [
-  { time: '14:32:08', model: 'claude-3.7-sonnet', provider: 'Anthropic', tokens: '2,841', latency: '648 ms', status: 200 },
-  { time: '14:31:52', model: 'gpt-4.1', provider: 'OpenAI', tokens: '1,204', latency: '493 ms', status: 200 },
-  { time: '14:31:41', model: 'gemini-2.5-pro', provider: 'Google AI', tokens: '8,192', latency: '1.24 s', status: 200 },
-  { time: '14:30:57', model: 'claude-3.7-sonnet', provider: 'OpenRouter', tokens: '3,067', latency: '932 ms', status: 200 },
-  { time: '14:30:18', model: 'deepseek-v3', provider: 'DeepSeek', tokens: '986', latency: '418 ms', status: 200 },
+const recentRequests = [
+  { id: 'req_8fa21c', time: '14:32:08', protocol: 'Anthropic Messages', route: ['Anthropic'], result: '成功', attempts: 1, duration: '1.84s' },
+  { id: 'req_8fa18d', time: '14:29:41', protocol: 'OpenAI Completions', route: ['Volcengine', 'OpenRouter'], result: '切换成功', attempts: 2, duration: '2.31s' },
+  { id: 'req_8fa102', time: '14:27:16', protocol: 'OpenAI Responses', route: ['Volcengine', 'Anthropic'], result: '切换成功', attempts: 2, duration: '3.08s' },
+  { id: 'req_8f9fcd', time: '14:22:53', protocol: 'Anthropic Messages', route: ['Anthropic'], result: '成功', attempts: 1, duration: '1.42s' },
 ]
 
-const chartValues = [34, 43, 39, 54, 49, 61, 57, 67, 73, 66, 79, 76, 84, 77, 89, 93, 86, 98, 94, 103, 96, 112, 108, 118]
+interface ProtocolIconsProps {
+  protocols: ProtocolKey[]
+}
 
-function MiniChart() {
-  const width = 640
-  const height = 136
-  const points = chartValues.map((value, index) => {
-    const x = (index / (chartValues.length - 1)) * width
-    const y = height - ((value - 25) / 100) * height
-    return `${x},${y}`
-  }).join(' ')
-
-  return (
-    <div className="lp-chart" aria-label="Request volume over the last 24 hours">
-      <div className="lp-chart-grid" />
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img">
-        <defs>
-          <linearGradient id="requestArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#a1a1a6" stopOpacity="0.16" />
-            <stop offset="100%" stopColor="#a1a1a6" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polygon points={`0,${height} ${points} ${width},${height}`} fill="url(#requestArea)" />
-        <polyline points={points} fill="none" stroke="#a1a1a6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-      </svg>
-      <div className="lp-chart-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>Now</span></div>
-    </div>
-  )
+function ProtocolIcons(props: ProtocolIconsProps) {
+  const { protocols } = props
+  return <span className="lp-protocol-icons">{protocols.map(protocol => {
+    const Icon = protocolMeta[protocol].icon
+    return <span key={protocol} title={protocolMeta[protocol].label}><Icon size={11} /></span>
+  })}</span>
 }
 
 function LinearPrototypePage() {
-  const [activeView, setActiveView] = useState<ViewKey>('overview')
+  const [activeView, setActiveView] = useState<ViewKey>('queue')
+  const [selectedProtocol, setSelectedProtocol] = useState<ProtocolKey>('completions')
+  const [mode, setMode] = useState<QueueMode>('auto')
+  const [manualModelId, setManualModelId] = useState('anthropic')
+  const [queue, setQueue] = useState(initialQueue)
   const [copied, setCopied] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
 
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setCommandOpen(true)
-      }
-      if (event.key === 'Escape') setCommandOpen(false)
-    }
-    window.addEventListener('keydown', handleShortcut)
-    return () => window.removeEventListener('keydown', handleShortcut)
-  }, [])
+  const endpoint = `http://127.0.0.1:9300${protocolMeta[selectedProtocol].path}`
+  const enabledCount = queue.filter(item => item.enabled).length
+  const coolingCount = queue.filter(item => item.state === 'cooling').length
 
-  const copyUrl = async () => {
-    await navigator.clipboard?.writeText('http://127.0.0.1:3000/v1')
+  const copyEndpoint = async () => {
+    await navigator.clipboard?.writeText(endpoint)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  const toggleQueueItem = (id: string) => {
+    setQueue(items => items.map(item => item.id === id
+      ? { ...item, enabled: !item.enabled, state: item.enabled ? 'disabled' : 'ready', health: item.enabled ? '已手动禁用' : '等待首次请求' }
+      : item))
   }
 
   return (
@@ -122,137 +123,94 @@ function LinearPrototypePage() {
           <ChevronDown size={13} />
         </button>
 
-        <button className="lp-search" type="button" onClick={() => setCommandOpen(true)}>
-          <Search size={13} /><span>Search</span><kbd>⌘ K</kbd>
-        </button>
-
-        <nav className="lp-nav" aria-label="Primary navigation">
-          <p>Workspace</p>
+        <nav className="lp-nav" aria-label="主导航">
+          <p>控制台</p>
           {navigation.map(item => {
             const Icon = item.icon
-            return (
-              <button
-                className={activeView === item.key ? 'is-active' : ''}
-                key={item.key}
-                type="button"
-                onClick={() => setActiveView(item.key)}
-              >
-                <Icon size={14} /><span>{item.label}</span>{item.count && <em>{item.count}</em>}
-              </button>
-            )
+            return <button className={activeView === item.key ? 'is-active' : ''} key={item.key} type="button" onClick={() => setActiveView(item.key)}><Icon size={14} /><span>{item.label}</span></button>
           })}
-          <p>System</p>
-          <button type="button"><TerminalSquare size={14} /><span>Runtime logs</span></button>
-          <button type="button"><Settings2 size={14} /><span>Settings</span></button>
+          <p>系统</p>
+          <button type="button"><TerminalSquare size={14} /><span>运行日志</span></button>
+          <button type="button"><Settings2 size={14} /><span>设置</span></button>
         </nav>
 
         <div className="lp-sidebar-footer">
-          <div className="lp-service-state">
-            <span className="lp-pulse"><i /></span>
-            <div><strong>Gateway online</strong><small>127.0.0.1:3000</small></div>
-            <MoreHorizontal size={15} />
-          </div>
-          <div className="lp-profile"><span>YL</span><div><strong>Local workspace</strong><small>Version 0.1.3</small></div></div>
+          <div className="lp-service-state"><span className="lp-pulse"><i /></span><div><strong>服务运行中</strong><small>127.0.0.1:9300</small></div><MoreHorizontal size={15} /></div>
+          <div className="lp-local-note"><span>本地</span><p>配置、密钥和日志仅保存在此设备</p></div>
         </div>
       </aside>
 
       <main className="lp-main">
         <header className="lp-topbar">
-          <div><span>Workspace</span><ChevronRight size={13} /><strong>{navigation.find(item => item.key === activeView)?.label}</strong></div>
+          <div><span>控制台</span><ChevronRight size={13} /><strong>{navigation.find(item => item.key === activeView)?.label}</strong></div>
           <div className="lp-top-actions">
-            <button type="button"><Activity size={14} /> Live</button>
-            <button className="lp-primary-button" type="button"><Plus size={14} /> New route</button>
+            <button type="button"><FlaskConical size={14} /> 全局测试</button>
+            <button className="lp-primary-button" type="button"><Plug size={14} /> 模型管理</button>
           </div>
         </header>
 
-        <div className="lp-content">
-          <section className="lp-heading">
-            <div>
-              <p className="lp-eyebrow"><Sparkles size={12} /> Local AI gateway</p>
-              <h1>{activeView === 'overview' ? 'Good afternoon.' : navigation.find(item => item.key === activeView)?.label}</h1>
-              <p>{activeView === 'overview' ? 'Your models are healthy and traffic is flowing normally.' : 'Inspect and control your local gateway configuration.'}</p>
+        <div className="lp-content lp-product-content">
+          <section className="lp-product-heading">
+            <div><h1>模型队列</h1><p>管理上游模型的优先级、可用状态和故障转移顺序。</p></div>
+            <button type="button" className="lp-pause-button"><Pause size={13} /> 暂停服务</button>
+          </section>
+
+          <section className="lp-service-panel">
+            <div className="lp-service-summary">
+              <span className="lp-service-icon"><Zap size={15} /></span>
+              <div><div className="lp-running"><i /> 本地代理服务运行中</div><p>所有请求仅在本机处理，上游 API Key 在模型管理中独立配置。</p></div>
+              <code>127.0.0.1:9300</code>
             </div>
-            <div className="lp-period"><button className="is-active" type="button">24h</button><button type="button">7d</button><button type="button">30d</button></div>
-          </section>
-
-          <section className="lp-endpoint">
-            <div className="lp-endpoint-icon"><Zap size={16} /></div>
-            <div><span>OpenAI-compatible endpoint</span><code>http://127.0.0.1:3000/v1</code></div>
-            <button type="button" onClick={copyUrl}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}</button>
-          </section>
-
-          <section className="lp-metrics">
-            <article><div><span>Requests today</span><Activity size={14} /></div><strong>12,482</strong><small className="is-up"><ArrowUpRight size={12} /> 8.2% <i>from yesterday</i></small></article>
-            <article><div><span>Success rate</span><Circle size={14} /></div><strong>99.97%</strong><small className="is-up"><ArrowUpRight size={12} /> 0.06% <i>from yesterday</i></small></article>
-            <article><div><span>Median latency</span><Clock3 size={14} /></div><strong>612 <em>ms</em></strong><small className="is-down"><ArrowDownRight size={12} /> 42 ms <i>faster</i></small></article>
-            <article><div><span>Tokens routed</span><Database size={14} /></div><strong>8.4 <em>M</em></strong><small className="is-up"><ArrowUpRight size={12} /> 12.4% <i>this period</i></small></article>
-          </section>
-
-          <section className="lp-dashboard-grid">
-            <article className="lp-panel lp-traffic">
-              <header><div><h2>Request volume</h2><p>Requests routed through your gateway</p></div><span><i /> Live</span></header>
-              <div className="lp-chart-total"><strong>12,482</strong><span>requests</span></div>
-              <MiniChart />
-            </article>
-
-            <article className="lp-panel lp-health">
-              <header><div><h2>Provider health</h2><p>Last checked seconds ago</p></div><button type="button"><MoreHorizontal size={15} /></button></header>
-              <div className="lp-provider-list">
-                {[
-                  ['Anthropic', 'Operational', '99.99%'],
-                  ['OpenAI', 'Operational', '99.97%'],
-                  ['Google AI', 'Operational', '99.95%'],
-                  ['OpenRouter', 'Degraded', '98.42%'],
-                ].map(([name, state, uptime]) => (
-                  <div key={name}><span className="lp-provider-mark">{name.slice(0, 1)}</span><div><strong>{name}</strong><small className={state === 'Degraded' ? 'is-warning' : ''}><i /> {state}</small></div><em>{uptime}</em></div>
-                ))}
+            <div className="lp-endpoint-row">
+              <div className="lp-protocol-select">
+                {Object.entries(protocolMeta).map(([key, meta]) => {
+                  const Icon = meta.icon
+                  return <button className={selectedProtocol === key ? 'is-active' : ''} key={key} type="button" onClick={() => setSelectedProtocol(key as ProtocolKey)}><Icon size={12} /><span>{meta.label}</span></button>
+                })}
               </div>
-              <button className="lp-view-all" type="button" onClick={() => setActiveView('providers')}>View all providers <ChevronRight size={13} /></button>
-            </article>
-          </section>
-
-          <section className="lp-panel lp-routes">
-            <header><div><h2>Active model routes</h2><p>Primary providers and automatic fallbacks</p></div><button type="button"><SlidersHorizontal size={14} /> Filter</button></header>
-            <div className="lp-table-scroll">
-              <table>
-                <thead><tr><th>Model</th><th>Primary provider</th><th>Fallback</th><th>Latency</th><th>Health</th><th /></tr></thead>
-                <tbody>
-                  {routes.map(route => (
-                    <tr key={route.model}>
-                      <td><span className="lp-model-icon"><Layers3 size={12} /></span><code>{route.model}</code></td>
-                      <td><i className="lp-status-dot" />{route.provider}</td>
-                      <td>{route.fallback}</td><td><code>{route.latency}</code></td><td><span className="lp-health-bar"><i style={{ width: `${route.health}%` }} /></span>{route.health}%</td>
-                      <td><button type="button"><MoreHorizontal size={15} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <code className="lp-endpoint-value">{endpoint}</code>
+              <button className="lp-copy-button" type="button" onClick={copyEndpoint}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? '已复制' : '复制地址'}</button>
             </div>
           </section>
 
-          <section className="lp-panel lp-recent">
-            <header><div><h2>Recent requests</h2><p>Latest traffic across all configured models</p></div><button type="button" onClick={() => setActiveView('requests')}>View requests <ChevronRight size={13} /></button></header>
-            <div className="lp-table-scroll">
-              <table>
-                <thead><tr><th>Time</th><th>Model</th><th>Provider</th><th>Tokens</th><th>Latency</th><th>Status</th></tr></thead>
-                <tbody>{requests.map(request => <tr key={`${request.time}-${request.model}`}><td><code>{request.time}</code></td><td><code>{request.model}</code></td><td>{request.provider}</td><td>{request.tokens}</td><td>{request.latency}</td><td><span className="lp-status"><i /> {request.status}</span></td></tr>)}</tbody>
-              </table>
+          <section className="lp-queue-panel">
+            <header>
+              <div><div className="lp-title-line"><h2>优先级队列</h2><code>default</code></div><p>{queue.length} 个模型 · {enabledCount} 个已启用{coolingCount > 0 && <span> · {coolingCount} 个冷却中</span>}</p></div>
+              <div className="lp-queue-actions">
+                <div className="lp-mode-switch"><button className={mode === 'auto' ? 'is-active' : ''} type="button" onClick={() => setMode('auto')}><RefreshCw size={11} /> 自动转移</button><button className={mode === 'manual' ? 'is-active' : ''} type="button" onClick={() => setMode('manual')}><CircleDot size={11} /> 手动指定</button></div>
+                <button type="button"><FlaskConical size={12} /> 全局测试</button>
+              </div>
+            </header>
+
+            <div className="lp-queue-columns"><span>顺序</span><span>供应商与上游模型</span><span>协议</span><span>性能</span><span>健康状态</span><span>状态</span></div>
+            <div className="lp-queue-list">
+              {queue.map(item => {
+                const selected = mode === 'manual' && manualModelId === item.id
+                return (
+                  <button className={`lp-queue-item ${selected ? 'is-selected' : ''}`} key={item.id} type="button" onClick={() => mode === 'manual' && item.enabled && item.state !== 'cooling' && setManualModelId(item.id)}>
+                    <span className="lp-priority">{mode === 'auto' ? <GripVertical size={13} /> : <CircleDot size={13} />}<i>{item.priority}</i></span>
+                    <span className="lp-model-cell"><strong>{item.provider}</strong><code>{item.model}</code></span>
+                    <ProtocolIcons protocols={item.protocols} />
+                    <span className="lp-performance"><span><Zap size={10} /> TPS {item.tps}</span><span><Timer size={10} /> TTFT {item.ttft}</span><small>近 {item.samples} 次</small></span>
+                    <span className={`lp-health-state is-${item.state}`}><i />{item.health}</span>
+                    <span className="lp-item-controls"><em className={`is-${item.state}`}>{selected ? '当前指定' : item.state === 'ready' ? '待命' : item.state === 'cooling' ? '冷却中' : '已禁用'}</em><span className={`lp-toggle ${item.enabled ? 'is-on' : ''}`} role="switch" aria-checked={item.enabled} onClick={event => { event.stopPropagation(); toggleQueueItem(item.id) }}><i /></span></span>
+                  </button>
+                )
+              })}
+            </div>
+            <footer><p>{mode === 'auto' ? '请求失败时按队列顺序自动尝试下一个可用模型。' : '手动指定仅影响新请求，正在进行的请求不会中断。'}</p><button type="button">管理上游模型 <ChevronRight size={12} /></button></footer>
+          </section>
+
+          <section className="lp-failover-panel">
+            <header><div><h2>近期请求与故障切换</h2><p>查看每次请求实际经过的供应商和最终结果。</p></div><button type="button" onClick={() => setActiveView('requests')}>查看全部请求 <ChevronRight size={12} /></button></header>
+            <div className="lp-request-list">
+              {recentRequests.map(request => <div className="lp-request-row" key={request.id}>
+                <code>{request.time}</code><span className="lp-request-protocol">{request.protocol}</span><span className="lp-route-path">{request.route.map((provider, index) => <span key={provider}><strong className={index < request.route.length - 1 ? 'is-failed' : ''}>{provider}</strong>{index < request.route.length - 1 && <ChevronRight size={11} />}</span>)}</span><span className={request.attempts > 1 ? 'lp-switched' : 'lp-succeeded'}>{request.result} · {request.attempts} 次尝试</span><code>{request.duration}</code>
+              </div>)}
             </div>
           </section>
         </div>
       </main>
-
-      {commandOpen && (
-        <div className="lp-command-backdrop" role="presentation" onMouseDown={() => setCommandOpen(false)}>
-          <div className="lp-command" role="dialog" aria-modal="true" aria-label="Command menu" onMouseDown={event => event.stopPropagation()}>
-            <div><Search size={16} /><input autoFocus placeholder="Search or jump to..." onKeyDown={event => event.key === 'Escape' && setCommandOpen(false)} /><kbd>ESC</kbd></div>
-            <p>Quick actions</p>
-            <button type="button"><Play size={14} /><span>Test a model route</span><kbd>↵</kbd></button>
-            <button type="button"><Plus size={14} /><span>Create new route</span></button>
-            <button type="button"><Command size={14} /><span>Open command settings</span></button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
