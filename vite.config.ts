@@ -50,6 +50,16 @@ export default defineConfig({
               vite: {
                 build: {
                   outDir: fileURLToPath(new URL('./dist/command', import.meta.url)),
+                  // Electron preload 脚本必须是 CommonJS，不支持 ESM。
+                  // 项目 package.json 是 "type": "module"，需显式指定 cjs 格式。
+                  lib: {
+                    entry: fileURLToPath(new URL('./source/command/preload.ts', import.meta.url)),
+                    formats: ['cjs'],
+                    fileName: () => 'preload.js',
+                  },
+                  rollupOptions: {
+                    external: ['electron'],
+                  },
                 },
               },
               onstart(context) {

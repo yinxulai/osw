@@ -54,7 +54,14 @@ type Listener = (state: UpdateState) => void
 export class UpdaterManager {
   private state: UpdateState = {
     status: 'idle',
-    info: null,
+    info: {
+      currentVersion: app.getVersion(),
+      latestVersion: app.getVersion(),
+      releaseNotes: '',
+      releaseDate: '',
+      releaseUrl: GITHUB_RELEASES_PAGE,
+      assets: [],
+    },
     errorMessage: null,
     downloadProgress: null,
     downloadedFile: null,

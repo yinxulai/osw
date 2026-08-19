@@ -1,7 +1,8 @@
-import { Plus } from 'lucide-react'
+import { Plus, MousePointerClick } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useModelManagementService } from './service'
 import { ProviderGrid } from './components/provider-grid'
@@ -60,7 +61,7 @@ export function ModelManagementPage() {
                 onSelect={service.setSelectedProviderId}
               />
 
-              {service.selectedProvider && (
+              {service.selectedProvider ? (
                 <ProviderDetail
                   provider={service.selectedProvider}
                   models={service.selectedModels}
@@ -72,6 +73,26 @@ export function ModelManagementPage() {
                   onRemoveModel={service.removeModel}
                   onDragEnd={service.handleDragEnd}
                 />
+              ) : (
+                <Card>
+                  <EmptyState
+                    icon={MousePointerClick}
+                    title={service.providers.length > 0 ? '选择一个供应商查看详情' : '还没有供应商'}
+                    description={
+                      service.providers.length > 0
+                        ? '从左侧列表中选择一个供应商，即可查看和管理其上游模型、协议地址与健康状态。'
+                        : '创建供应商并配置凭据后，即可添加上游模型与协议地址。'
+                    }
+                    action={
+                      service.providers.length === 0 ? (
+                        <Button size="default" onClick={() => service.openProviderDialog()}>
+                          <Plus size={14} /> 新建供应商
+                        </Button>
+                      ) : undefined
+                    }
+                    className="min-h-64"
+                  />
+                </Card>
               )}
             </div>
           </>
