@@ -48,8 +48,6 @@
 
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
-  --color-card-border: hsl(var(--card-border));
-  --shadow-card: var(--card-shadow);
 }
 
 @layer base {
@@ -58,8 +56,6 @@
     --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
-    --card-border: 0 0% 95%;
-    --card-shadow: 0 0 0 20px hsl(var(--card-border) / 0.1);
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
     --primary: 153 61% 38%;
@@ -98,8 +94,6 @@
     --foreground: 0 0% 98%;
     --card: 0 0% 10%;
     --card-foreground: 0 0% 98%;
-    --card-border: 0 0% 16%;
-    --card-shadow: none;
     --popover: 0 0% 10.5%;
     --popover-foreground: 0 0% 98%;
     --primary: 153 61% 52%;
@@ -135,9 +129,6 @@
 }
 
 @layer base {
-  * {
-    border-color: hsl(var(--border));
-  }
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));

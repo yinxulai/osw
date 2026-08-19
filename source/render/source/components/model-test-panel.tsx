@@ -166,7 +166,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   return (
     <Dialog open={props.open} onOpenChange={open => !running && props.onOpenChange(open)}>
       <DialogContent className="flex max-h-[86vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b px-5 py-4 pr-14">
+        <DialogHeader className="border-b border-border px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-primary"><FlaskConical size={15} /></div>
             <div className="min-w-0">
@@ -180,7 +180,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="border-b bg-muted/10 p-3 lg:border-b-0 lg:border-r">
+          <aside className="border-b border-border bg-muted/10 p-3 lg:border-b-0 lg:border-r">
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="text-[11px] font-medium text-foreground">待测模型</div>
               <div className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedProviderIds.size}/{availableProviders.length}</div>
@@ -255,7 +255,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
           </aside>
 
           <div className="flex min-h-0 flex-col">
-            <div className="border-b bg-muted/10 px-4 py-3">
+            <div className="border-b border-border bg-muted/10 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium text-foreground">测试配置</div>
@@ -273,7 +273,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
             </div>
 
             {(running || tasks.length > 0) && (
-              <div className="border-b px-4 py-3">
+              <div className="border-b border-border px-4 py-3">
                 <div className="flex items-center justify-between text-[10px]">
                   <div className="flex items-center gap-3">
                     <span className="font-medium">{running ? '测试进行中' : failureCount > 0 ? '测试完成，存在异常' : '全部测试通过'}</span>
@@ -289,9 +289,9 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
             <main className="min-h-0 flex-1 overflow-auto p-4">
               {visibleTasks.length > 0 ? (
                 <div className="overflow-hidden rounded-md bg-card">
-                  <div className="hidden grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] gap-3 border-b bg-muted/30 px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:grid"><span /><span>目标</span><span>协议</span><span>结果</span><span className="text-right">响应</span></div>
+                  <div className="hidden grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] gap-3 border-b border-border bg-muted/30 px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:grid"><span /><span>目标</span><span>协议</span><span>结果</span><span className="text-right">响应</span></div>
                   {visibleTasks.map(task => {
-                    return <div key={task.id} className="grid gap-2 border-b px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
+                    return <div key={task.id} className="grid gap-2 border-b border-border px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
                       <TaskStatus status={task.status} />
                       <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.upstreamModelId}</span></div></div>
                       <div className="min-w-0 text-[11px] text-muted-foreground"><span className="truncate">{PROTOCOL_LABELS[task.protocol]}</span></div>

@@ -81,14 +81,14 @@ function MetricCard(props: MetricCardProps) {
 function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
-      <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Route size={12} />
           上游路由
         </div>
         <span className="text-[10px] text-muted-foreground">{props.attempts.length} 次尝试</span>
       </div>
-      <div className="divide-y">
+      <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
           <div key={attempt.attemptIndex} className="grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-xs">
             <div className={cn(
@@ -130,7 +130,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
 
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
-      <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Braces size={12} />
           原始 Usage
@@ -155,7 +155,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
           上游响应不包含 usage 信息
         </div>
       )}
-      <div className="border-t bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
+      <div className="border-t border-border bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
         缓存写入 {formatNumber(props.cacheCreationInputTokens)} · 总 Token {formatNumber(props.totalTokens)}
       </div>
     </section>
@@ -168,7 +168,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
 
   return (
     <tr className="bg-muted/20">
-      <td colSpan={10} className="border-b p-0">
+      <td colSpan={10} className="border-b border-border p-0">
         <div className="border-l-2 border-l-primary/50 bg-gradient-to-r from-primary/[0.035] to-transparent px-5 py-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>

@@ -53,7 +53,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
           <code className="rounded bg-muted px-1">apiKey</code> 字段。
         </p>
         {import.meta.env.DEV && (
-          <div className="mt-4 border-t pt-3">
+          <div className="mt-4 border-t border-border pt-3">
             <p className="mb-2 text-xs font-medium">开发功能</p>
             <Button variant="outline" onClick={onSeedDevelopment}>
               <Database className="mr-1 h-3.5 w-3.5" />

@@ -80,7 +80,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="border-t pt-3">
+        <div className="border-t border-border pt-3">
           <div className="mb-2 flex items-center justify-between">
             <div>
               <div className="text-xs font-medium">上游模型</div>
@@ -101,7 +101,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="overflow-hidden rounded-lg bg-card divide-y">
+              <div className="overflow-hidden rounded-lg bg-card divide-y divide-border">
                 {models.map(model => (
                   <SortableBinding key={model.id} id={model.id}>
                     {(handleProps, dragging) => (

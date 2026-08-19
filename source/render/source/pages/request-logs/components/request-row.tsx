@@ -15,7 +15,7 @@ export function RequestRow(props: RequestRowProps) {
   const lastAttempt = log.attempts[log.attempts.length - 1]
 
   return (
-    <div className="flex items-start gap-3 border-b px-4 py-3 last:border-b-0">
+    <div className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
       <div className="mt-0.5 shrink-0">
         {succeeded
           ? <CheckCircle2 size={16} className="text-emerald-500" />

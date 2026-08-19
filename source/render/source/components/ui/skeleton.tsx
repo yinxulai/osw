@@ -69,7 +69,7 @@ export function ListSkeleton(props: ListSkeletonProps) {
   const { items = 4 } = props
 
   return (
-    <div className="divide-y rounded-lg bg-card">
+    <div className="divide-y divide-border rounded-lg bg-card">
       {Array.from({ length: items }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 p-3">
           <Skeleton className="h-8 w-8 rounded" />

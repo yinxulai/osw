@@ -114,7 +114,7 @@ export function RequestLogsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+                <tr className="border-b border-border bg-muted/40 text-left text-muted-foreground">
                   <th className="w-8 px-2.5 py-2 font-medium" />
                   <th className="px-2.5 py-2 font-medium">状态</th>
                   <th className="px-2.5 py-2 font-medium">时间</th>
@@ -173,7 +173,7 @@ export function RequestLogsPage() {
                         <tr
                           onClick={() => toggleExpand(log.id)}
                           className={cn(
-                            'cursor-pointer border-b last:border-b-0 transition-colors hover:bg-muted/30',
+                            'cursor-pointer border-b border-border last:border-b-0 transition-colors hover:bg-muted/30',
                             expanded && 'bg-muted/20',
                           )}
                         >

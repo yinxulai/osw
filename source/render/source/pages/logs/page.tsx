@@ -200,7 +200,7 @@ export function LogsPage() {
           <div className="max-h-[calc(100vh-190px)] overflow-auto">
             <table className="w-full table-fixed text-xs">
               <thead className="sticky top-0 z-10 bg-muted/95 text-left text-muted-foreground backdrop-blur-sm">
-                <tr className="border-b">
+                <tr className="border-b border-border">
                   <th className="w-40 px-3 py-2 font-medium">时间</th>
                   <th className="w-20 px-3 py-2 font-medium">级别</th>
                   <th className="px-3 py-2 font-medium">消息</th>
@@ -209,7 +209,7 @@ export function LogsPage() {
               <tbody>
                 {loading ? (
                   Array.from({ length: 10 }).map((_, index) => (
-                    <tr key={index} className="border-b last:border-0">
+                    <tr key={index} className="border-b border-border last:border-0">
                       <td className="px-3 py-2.5"><Skeleton className="h-3 w-28" /></td>
                       <td className="px-3 py-2.5"><Skeleton className="h-5 w-14" /></td>
                       <td className="px-3 py-2.5"><Skeleton className="h-3 w-4/5" /></td>
@@ -218,7 +218,7 @@ export function LogsPage() {
                 ) : filteredLogs.length === 0 ? (
                   <tr><td colSpan={3} className="px-4 py-16 text-center text-muted-foreground">暂无匹配的运行日志</td></tr>
                 ) : filteredLogs.map(log => (
-                  <tr key={log.id} className="border-b align-top last:border-0 hover:bg-muted/25">
+                  <tr key={log.id} className="border-b border-border align-top last:border-0 hover:bg-muted/25">
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-muted-foreground">{formatTimestamp(log.timestamp)}</td>
                     <td className="px-3 py-2">
                       <Badge variant="outline" className={cn('h-5 px-1.5 font-mono text-[10px]', LEVEL_STYLE[log.level])}>
