@@ -92,13 +92,13 @@ export function QueueModelRow(props: QueueModelRowProps) {
     <div
       onClick={props.onSelect}
       className={cn(
-        'grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 overflow-hidden border-b border-border/50 border-l-2 border-l-transparent px-4 py-2.5 last:border-b-0 lg:grid-cols-[4rem_minmax(12rem,1.4fr)_5.5rem_minmax(10rem,1fr)_minmax(8rem,.9fr)_7.5rem] lg:gap-x-0',
+        'grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_auto_auto_auto] items-center gap-x-3 gap-y-1 overflow-hidden border-b border-border/50 border-l-2 border-l-transparent px-4 py-3 last:border-b-0 sm:px-4 lg:min-h-14 lg:grid-cols-[4rem_minmax(12rem,1.4fr)_5.5rem_minmax(10rem,1fr)_minmax(8rem,.9fr)_7.5rem] lg:grid-rows-none lg:gap-x-0 lg:gap-y-0 lg:py-2.5',
         props.selected && 'rounded-md border-l-primary bg-primary/5',
         props.mode === 'manual' && model.enabled && !props.cooling && 'cursor-pointer hover:bg-muted/40',
         props.dragging && 'rounded-md bg-muted/60',
       )}
     >
-      <div className="row-span-2 flex items-center gap-2 lg:row-auto">
+      <div className="row-span-4 flex items-center gap-2 lg:row-span-1">
         {props.mode === 'manual' ? (
           props.selected ? <CircleDot size={16} className="text-primary" /> : <Circle size={16} className="text-muted-foreground/40" />
         ) : (
@@ -114,12 +114,12 @@ export function QueueModelRow(props: QueueModelRowProps) {
           {model.priority}
         </div>
       </div>
-      <div className="min-w-0">
+      <div className="col-start-2 row-start-1 min-w-0 lg:col-auto lg:row-auto">
         <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
         <div className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</div>
       </div>
       <TooltipProvider delayDuration={150}>
-        <div className="flex items-center gap-1">
+        <div className="col-start-2 row-start-2 flex items-center gap-1 pt-0.5 lg:col-auto lg:row-auto lg:pt-0">
           {model.endpoints.map(endpoint => {
             const meta = PROTOCOL_META[endpoint.protocol]
             const ProtocolIcon = meta.icon
@@ -136,7 +136,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
           })}
         </div>
       </TooltipProvider>
-      <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground lg:col-span-1">
+      <div className="col-start-2 row-start-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground lg:col-span-1 lg:col-start-auto lg:row-start-auto">
         <span className="inline-flex items-center gap-1" title={`最近 ${props.metrics?.sampleCount ?? 0} 个成功请求的平均输出速度`}>
           <Zap size={11} />
           TPS {formatAverageTps(props.metrics?.avgTps)}
@@ -147,10 +147,10 @@ export function QueueModelRow(props: QueueModelRowProps) {
         </span>
         {props.metrics && <span className="text-[10px] text-muted-foreground/70">近 {props.metrics.sampleCount} 次</span>}
       </div>
-      <div className="col-span-2 text-[11px] text-muted-foreground lg:col-span-1">
+      <div className="col-start-2 row-start-4 text-[11px] text-muted-foreground lg:col-span-1 lg:col-start-auto lg:row-start-auto">
         <ModelHealth providerHealth={props.providerHealth} />
       </div>
-      <div className="row-span-2 flex items-center justify-end gap-2 lg:row-auto">
+      <div className="col-start-3 row-span-2 row-start-1 flex items-start justify-end gap-2 pt-0.5 lg:col-auto lg:row-span-1 lg:row-start-auto lg:items-center lg:pt-0">
         <Badge variant={props.cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>
           {props.cooling ? '冷却中' : model.enabled ? (props.selected ? '当前指定' : '待命') : '已禁用'}
         </Badge>
