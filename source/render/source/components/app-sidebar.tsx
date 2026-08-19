@@ -45,21 +45,21 @@ export function AppSidebar(props: AppSidebarProps) {
   const sections = [...new Set(navItems.map(item => item.section))]
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4">
+    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56">
+      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-3">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
           <CircleDot size={15} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">
           <h1 className="truncate text-sm font-medium leading-tight tracking-tight">One Switch</h1>
           <p className="font-mono text-[10px] uppercase tracking-[1.2px] text-muted-foreground">local ai gateway</p>
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
+      <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-1.5">
         {sections.map(section => (
           <section key={section}>
-            <h2 className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50">{section}</h2>
+            <h2 className="mb-1 h-5 truncate px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{section}</h2>
             <div className="space-y-0.5">
               {navItems.filter(item => item.section === section).map(item => {
                 const ItemIcon = item.icon
@@ -77,7 +77,7 @@ export function AppSidebar(props: AppSidebarProps) {
                     )}
                   >
                     <ItemIcon size={15} className="shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{item.label}</span>
                   </button>
                 )
               })}
@@ -86,7 +86,7 @@ export function AppSidebar(props: AppSidebarProps) {
         ))}
       </nav>
 
-      <div className="shrink-0 space-y-1 border-t border-sidebar-border p-3">
+      <div className="shrink-0 space-y-1 border-t border-sidebar-border p-1.5">
         <Button
           variant="ghost"
           size="sm"
@@ -95,11 +95,11 @@ export function AppSidebar(props: AppSidebarProps) {
           aria-label={props.theme === 'dark' ? '切换到浅色' : '切换到深色'}
         >
           {props.theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          {props.theme === 'dark' ? '浅色模式' : '深色模式'}
+          <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{props.theme === 'dark' ? '浅色模式' : '深色模式'}</span>
         </Button>
         <div className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground">
           <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', props.proxyRunning ? 'animate-pulse bg-success' : 'bg-muted-foreground/50')} />
-          <span className="truncate">{props.proxyRunning ? `服务运行中 · ${props.proxyPort ?? 0}` : '服务已停止'}</span>
+          <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{props.proxyRunning ? `服务运行中 · ${props.proxyPort ?? 0}` : '服务已停止'}</span>
         </div>
       </div>
     </div>
