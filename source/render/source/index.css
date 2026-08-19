@@ -12,6 +12,8 @@
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+  --shadow-card: var(--card-shadow);
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
   --color-primary: hsl(var(--primary));
@@ -51,6 +53,8 @@
     --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
+    --card-border: 0 0% 90%;
+    --card-shadow: none;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
     --primary: 153 61% 38%;
@@ -85,10 +89,12 @@
   }
 
   .dark {
-    --background: 0 0% 9%;
+    --background: 0 0% 8%;
     --foreground: 0 0% 98%;
     --card: 0 0% 10%;
     --card-foreground: 0 0% 98%;
+    --card-border: 0 0% 16%;
+    --card-shadow: none;
     --popover: 0 0% 10.5%;
     --popover-foreground: 0 0% 98%;
     --primary: 153 61% 52%;
