@@ -107,21 +107,23 @@ export function ModelDialog(props: ModelDialogProps) {
                     </div>
 
                     {entry.overrideUrl && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`model-endpoint-url-${index}`}>完整接口地址</Label>
-                        <Input
-                          id={`model-endpoint-url-${index}`}
-                          type="url"
-                          className="font-mono text-xs"
-                          value={entry.upstreamUrl}
-                          onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })}
-                          placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]}
-                        />
-                      </div>
+                      <>
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`model-endpoint-url-${index}`}>完整接口地址</Label>
+                          <Input
+                            id={`model-endpoint-url-${index}`}
+                            type="url"
+                            className="font-mono text-xs"
+                            value={entry.upstreamUrl}
+                            onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })}
+                            placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]}
+                          />
+                        </div>
+                        <ProtocolUrlHint protocol={entry.protocol} />
+                      </>
                     )}
 
                     <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
-                    <ProtocolUrlHint protocol={entry.protocol} />
                   </div>
                 )}
               </div>

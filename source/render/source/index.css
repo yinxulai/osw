@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Circular", "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: "Source Code Pro", "SF Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans:
+    "Circular", "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "Source Code Pro", "SF Mono", "Fira Code", ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, monospace;
 
   --radius-lg: 0.375rem;
   --radius-md: calc(var(--radius-lg) - 1px);
@@ -10,10 +13,7 @@
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-card-border: hsl(var(--card-border));
-  --shadow-card: var(--card-shadow);
+
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
   --color-primary: hsl(var(--primary));
@@ -45,6 +45,11 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+  --shadow-card: var(--card-shadow);
 }
 
 @layer base {
@@ -54,7 +59,7 @@
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
     --card-border: 0 0% 90%;
-    --card-shadow: none;
+    --card-shadow: 0 0 0 20px hsl(var(--card-border) / 0.1);
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
     --primary: 153 61% 38%;
@@ -63,7 +68,7 @@
     --secondary-foreground: 0 0% 15%;
     --muted: 0 0% 94.5%;
     --muted-foreground: 0 0% 40%;
-    --accent: 153 61% 38% / 0.10;
+    --accent: 153 61% 38% / 0.1;
     --accent-foreground: 153 61% 27%;
     --destructive: 6 65% 48%;
     --destructive-foreground: 0 0% 100%;
@@ -82,7 +87,7 @@
     --sidebar-foreground: 0 0% 32%;
     --sidebar-primary: 153 61% 38%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 153 61% 38% / 0.10;
+    --sidebar-accent: 153 61% 38% / 0.1;
     --sidebar-accent-foreground: 153 61% 27%;
     --sidebar-border: 0 0% 86%;
     --sidebar-ring: 153 61% 38%;
@@ -144,15 +149,39 @@
     letter-spacing: 0;
   }
 
-  button, input, textarea, select { font: inherit; }
-  button { box-shadow: none !important; }
-  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button {
+    box-shadow: none !important;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
     outline: 1px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border: 2px solid hsl(var(--background)); border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.7); }
-  ::selection { background: hsl(var(--primary) / 0.28); color: hsl(var(--foreground)); }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 2px solid hsl(var(--background));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.7);
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
 }
