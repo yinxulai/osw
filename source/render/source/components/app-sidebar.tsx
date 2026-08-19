@@ -1,6 +1,5 @@
 import {
   ChartColumnIncreasing,
-  CircleDot,
   ClipboardList,
   Cog,
   Database,
@@ -47,9 +46,7 @@ export function AppSidebar(props: AppSidebarProps) {
   return (
     <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56">
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <CircleDot size={15} />
-        </div>
+        <img src="/icon.svg" alt="" className="h-7 w-7 shrink-0" />
         <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">
           <h1 className="truncate text-sm font-medium leading-tight tracking-tight">One Switch</h1>
           <p className="font-mono text-[10px] uppercase tracking-[1.2px] text-muted-foreground">local ai gateway</p>
