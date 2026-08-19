@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Copy, KeyRound, Pause, Play, Plug, Server } from 'lucide-react'
+import { Check, Copy, KeyRound, Plug, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -18,7 +18,6 @@ interface ProxyConfigCardProps {
   proxyPort: number
   proxyRunning: boolean
   copied: boolean
-  onToggleProxy: () => void
   onCopyEndpoint: (url: string) => void
 }
 
@@ -29,7 +28,7 @@ const PROTOCOLS = [
 ] as const
 
 export function ProxyConfigCard(props: ProxyConfigCardProps) {
-  const { proxyBaseUrl, proxyPort, proxyRunning, copied, onToggleProxy, onCopyEndpoint } = props
+  const { proxyBaseUrl, proxyPort, proxyRunning, copied, onCopyEndpoint } = props
   const [selectedProtocol, setSelectedProtocol] = useState<string>('openai-completions')
 
   const protocolInfo = PROTOCOLS.find(p => p.key === selectedProtocol)
@@ -49,13 +48,6 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
             </CardDescription>
           </div>
         </div>
-        <Button
-          variant={proxyRunning ? 'secondary' : 'default'}
-          onClick={onToggleProxy}
-        >
-          {proxyRunning ? <Pause size={13} /> : <Play size={13} />}
-          {proxyRunning ? '暂停服务' : '启动服务'}
-        </Button>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_1fr]">

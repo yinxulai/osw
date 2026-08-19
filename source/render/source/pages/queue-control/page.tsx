@@ -1,6 +1,8 @@
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Pause, Play } from 'lucide-react'
 import { useQueueControlService } from './service'
 import { ProxyConfigCard } from './components/proxy-config-card'
 import { QueueListCard } from './components/queue-list-card'
@@ -12,10 +14,23 @@ interface QueueControlPageProps {
 export function QueueControlPage(props: QueueControlPageProps) {
   const { onNavigateToModels } = props
   const service = useQueueControlService()
+  const proxyRunning = service.proxyStatus?.running ?? false
 
   return (
     <PageLayout>
-      <PageHeader title="模型队列" description="管理请求优先级、切换模式和模型启停" />
+      <PageHeader
+        title="模型队列"
+        description="管理请求优先级、切换模式和模型启停"
+        actions={
+          <Button
+            variant={proxyRunning ? 'secondary' : 'default'}
+            onClick={() => void service.toggleProxy()}
+          >
+            {proxyRunning ? <Pause size={13} /> : <Play size={13} />}
+            {proxyRunning ? '暂停服务' : '启动服务'}
+          </Button>
+        }
+      />
       <PageContent>
         {service.loading ? (
           <div className="space-y-4">
@@ -47,7 +62,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
               proxyPort={service.proxyStatus?.port ?? 0}
               proxyRunning={service.proxyStatus?.running ?? false}
               copied={service.copied}
-              onToggleProxy={() => void service.toggleProxy()}
               onCopyEndpoint={url => void service.copyEndpoint(url)}
             />
 
