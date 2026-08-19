@@ -45,8 +45,8 @@ export function AppSidebar(props: AppSidebarProps) {
   const sections = [...new Set(navItems.map(item => item.section))]
 
   return (
-    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-3">
+    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
+      <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
         <img src="icon.svg" alt="" className="h-7 w-7 shrink-0" />
         <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">
           <h1 className="truncate text-sm font-medium leading-tight tracking-tight">One Switch</h1>
@@ -57,9 +57,8 @@ export function AppSidebar(props: AppSidebarProps) {
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-1.5">
         {sections.map(section => (
           <section key={section}>
-            <h2 className="relative mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5 motion-reduce:transition-none">
-              <span className="absolute inset-x-2 border-t border-sidebar-border transition-opacity duration-150 group-hover/sidebar:opacity-0 motion-reduce:transition-none" />
-              <span className="relative bg-sidebar px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{section}</span>
+            <h2 className="mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5 motion-reduce:transition-none">
+              <span className="px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{section}</span>
             </h2>
             <div className="space-y-0.5">
               {navItems.filter(item => item.section === section).map(item => {
@@ -71,10 +70,10 @@ export function AppSidebar(props: AppSidebarProps) {
                     onClick={() => props.onNavigate(item.key)}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'flex h-9 w-full items-center gap-2.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                      'flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-xs font-medium transition-colors',
                       active
-                        ? 'border-sidebar-primary/25 bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
                     )}
                   >
                     <ItemIcon className="size-3.5 shrink-0" />
@@ -87,7 +86,7 @@ export function AppSidebar(props: AppSidebarProps) {
         ))}
       </nav>
 
-      <div className="shrink-0 space-y-1 border-t border-sidebar-border p-1.5">
+      <div className="shrink-0 space-y-1 p-1.5">
         <Button
           variant="ghost"
           size="sm"

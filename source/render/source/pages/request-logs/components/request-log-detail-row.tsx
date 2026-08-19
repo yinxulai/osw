@@ -33,10 +33,10 @@ interface MetricCardProps {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
-  success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-  failed: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30',
-  cancelled: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  pending: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+  success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  failed: 'bg-red-500/15 text-red-600 dark:text-red-400',
+  cancelled: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400',
 }
 
 export function RequestStatusBadge(props: StatusBadgeProps) {
@@ -56,8 +56,8 @@ function AttemptBadge(props: AttemptBadgeProps) {
       className={cn(
         'h-5 gap-1 px-1.5 font-mono text-[10px] font-medium',
         ok
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-          : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400',
+          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          : 'bg-red-500/15 text-red-600 dark:text-red-400',
       )}
     >
       {ok ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
@@ -92,10 +92,10 @@ function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
         {props.attempts.map((attempt, index) => (
           <div key={attempt.attemptIndex} className="grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-xs">
             <div className={cn(
-              'flex size-6 items-center justify-center rounded-full border font-mono text-[10px]',
+              'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
               attempt.status === 'success'
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
-                : 'border-red-500/30 bg-red-500/10 text-red-600',
+                ? 'bg-emerald-500/15 text-emerald-600'
+                : 'bg-red-500/15 text-red-600',
             )}>
               {index + 1}
             </div>

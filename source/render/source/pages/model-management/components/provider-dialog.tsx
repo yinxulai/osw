@@ -71,9 +71,9 @@ export function ProviderDialog(props: ProviderDialogProps) {
                     type="button"
                     onClick={() => onApplyPreset(preset)}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs font-medium transition-colors',
-                      'hover:bg-muted hover:border-primary/30',
-                      providerName === preset.name && 'border-primary/50 bg-primary/5 text-primary',
+                      'flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      'hover:bg-muted',
+                      providerName === preset.name && 'bg-primary/10 text-primary',
                     )}
                   >
                     <span style={{ color: preset.color }}>

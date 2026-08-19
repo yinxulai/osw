@@ -213,7 +213,7 @@ export function RequestLogsPage() {
                             {log.cachedInputTokens === null ? (
                               <span className="text-muted-foreground/60">—</span>
                             ) : log.cachedInputTokens > 0 ? (
-                              <Badge variant="outline" className="h-5 border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                              <Badge className="h-5 bg-emerald-500/15 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
                                 HIT · {formatNumber(log.cachedInputTokens)}
                               </Badge>
                             ) : (

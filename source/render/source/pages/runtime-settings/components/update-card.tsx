@@ -165,7 +165,7 @@ export function UpdateCard() {
         </div>
 
         {info?.preferredAsset && (
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-mono">{info.preferredAsset.name}</span>
               <span>{formatBytes(info.preferredAsset.size)}</span>
@@ -174,7 +174,7 @@ export function UpdateCard() {
         )}
 
         {info?.releaseNotes && hasUpdate && (
-          <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <details className="rounded-md bg-muted/50 px-3 py-2 text-xs">
             <summary className="cursor-pointer select-none font-medium text-foreground">
               查看更新说明
             </summary>

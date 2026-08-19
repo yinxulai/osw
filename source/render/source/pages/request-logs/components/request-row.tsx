@@ -43,10 +43,10 @@ export function RequestRow(props: RequestRowProps) {
               <span
                 key={i}
                 className={cn(
-                  'rounded border px-1.5 py-0.5 text-[11px]',
+                  'rounded px-1.5 py-0.5 text-[11px]',
                   attempt.status === 'success'
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'border-destructive/30 bg-destructive/10 text-destructive',
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-destructive/15 text-destructive',
                 )}
                 title={attempt.errorMessage ?? undefined}
               >

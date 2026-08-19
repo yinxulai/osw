@@ -166,7 +166,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   return (
     <Dialog open={props.open} onOpenChange={open => !running && props.onOpenChange(open)}>
       <DialogContent className="flex max-h-[86vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b border-border px-5 py-4 pr-14">
+        <DialogHeader className="border-b border-border/30 px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-primary"><FlaskConical size={15} /></div>
             <div className="min-w-0">
@@ -180,7 +180,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="border-b border-border bg-muted/10 p-3 lg:border-b-0 lg:border-r">
+          <aside className="border-b border-border/30 bg-muted/10 p-3 lg:border-b-0 lg:border-r lg:border-r-border/30">
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="text-[11px] font-medium text-foreground">待测模型</div>
               <div className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedProviderIds.size}/{availableProviders.length}</div>
@@ -232,10 +232,10 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                                     type="button"
                                     aria-pressed={modelSelectedProtocols.has(endpoint.protocol)}
                                     className={cn(
-                                      'inline-flex items-center rounded-md border px-1.5 py-1 text-[10px] font-medium transition-all',
+                                      'inline-flex items-center rounded-md px-1.5 py-1 text-[10px] font-medium transition-all',
                                       modelSelectedProtocols.has(endpoint.protocol)
-                                        ? 'border-primary/40 bg-primary text-primary-foreground'
-                                        : 'border-border/70 bg-background text-muted-foreground hover:border-border hover:text-foreground',
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
                                     )}
                                     onClick={() => toggleModelProtocol(model.id, endpoint.protocol)}
                                   >
@@ -255,7 +255,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
           </aside>
 
           <div className="flex min-h-0 flex-col">
-            <div className="border-b border-border bg-muted/10 px-4 py-3">
+            <div className="border-b border-border/30 bg-muted/10 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium text-foreground">测试配置</div>
@@ -273,7 +273,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
             </div>
 
             {(running || tasks.length > 0) && (
-              <div className="border-b border-border px-4 py-3">
+              <div className="border-b border-border/30 px-4 py-3">
                 <div className="flex items-center justify-between text-[10px]">
                   <div className="flex items-center gap-3">
                     <span className="font-medium">{running ? '测试进行中' : failureCount > 0 ? '测试完成，存在异常' : '全部测试通过'}</span>

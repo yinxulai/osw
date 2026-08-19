@@ -30,11 +30,11 @@ import { cn } from '@/lib/utils'
 type LevelFilter = 'all' | LogEntry['level']
 
 const LEVEL_STYLE: Record<LogEntry['level'], string> = {
-  error: 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400',
-  warn: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  info: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  log: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
-  debug: 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  error: 'bg-red-500/15 text-red-600 dark:text-red-400',
+  warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  info: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+  log: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400',
+  debug: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
 }
 
 const LEVEL_LABEL: Record<LogEntry['level'], string> = {
