@@ -1,28 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
-import { requestLogApi, logicalModelApi } from '@/api'
+import { requestLogApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
-import type { RequestLogEntry, LogicalModel } from '@common/schemas'
+import { useLogicalModels, useAppPolling } from '@/services/app-hooks'
+import type { RequestLogEntry } from '@common/schemas'
 
 export function useRequestLogsService() {
   const toast = useToast()
+  const logicalModels = useLogicalModels()
   const [logs, setLogs] = useState<RequestLogEntry[]>([])
-  const [logicalModels, setLogicalModels] = useState<LogicalModel[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  // 确保逻辑模型数据可用（用于名称映射）
+  useAppPolling('logicalModels', 30000)
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
-    const [result, modelsResult] = await Promise.all([
-      requestLogApi.list(50),
-      logicalModelApi.list(),
-    ])
+    const result = await requestLogApi.list(50)
     if (!result.success) {
       toast.error(result.errorMessage)
       setLoading(false)
       return
-    }
-    if (modelsResult.success) {
-      setLogicalModels(modelsResult.data)
     }
     setLogs(result.data.logs)
     setLoading(false)

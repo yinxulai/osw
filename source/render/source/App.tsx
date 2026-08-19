@@ -9,8 +9,7 @@ import { OverviewPage } from './pages/overview/page'
 import { RuntimeSettingsPage } from './pages/runtime-settings/page'
 import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
-import { proxyApi } from './api'
-import type { ProxyServerStatus } from '@common/schemas'
+import { useProxyStatus, useAppPolling } from './services/app-hooks'
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>('queue')
@@ -21,7 +20,10 @@ function App() {
     return 'system'
   })
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
-  const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
+  const proxyStatus = useProxyStatus()
+
+  // 全局代理状态轮询（5秒），后台静默刷新不触发 loading
+  useAppPolling('proxyStatus', 5000)
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -42,20 +44,6 @@ function App() {
     }
     localStorage.setItem('theme', themeMode)
   }, [theme, themeMode])
-
-  useEffect(() => {
-    let cancelled = false
-    const refreshStatus = async () => {
-      const result = await proxyApi.status()
-      if (!cancelled && result.success) setProxyStatus(result.data)
-    }
-    void refreshStatus()
-    const timer = window.setInterval(() => void refreshStatus(), 5000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [])
 
   const toggleTheme = () => setThemeMode(current => current === 'dark' ? 'light' : 'dark')
 

@@ -1,32 +1,39 @@
-import { useCallback, useEffect, useState } from 'react'
-import { proxyApi, settingsApi, configApi } from '@/api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { settingsApi, configApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
-import type { Settings, ProxyServerStatus } from '@common/schemas'
+import {
+  useSettings,
+  useSettingsLoading,
+  useProxyStatus,
+  useAppPolling,
+  useAppActions,
+} from '@/services/app-hooks'
+import type { Settings } from '@common/schemas'
 
 export function useRuntimeSettingsService() {
   const toast = useToast()
+  const appActions = useAppActions()
+  const globalSettings = useSettings()
+  const proxyStatus = useProxyStatus()
+  const settingsLoading = useSettingsLoading()
+
+  // 本地编辑副本
   const [settings, setSettings] = useState<Settings | null>(null)
-  const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const initializedRef = useRef(false)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    const [settingsResult, statusResult] = await Promise.all([settingsApi.get(), proxyApi.status()])
-    if (!settingsResult.success || !statusResult.success) {
-      toast.error(!settingsResult.success ? settingsResult.errorMessage : !statusResult.success ? statusResult.errorMessage : '加载失败')
-      setLoading(false)
-      return
-    }
-    setSettings(settingsResult.data)
-    setProxyStatus(statusResult.data)
-    setLoading(false)
-  }, [toast])
+  useAppPolling('settings', 15000)
 
+  // 全局 settings 首次加载后同步到本地编辑副本
   useEffect(() => {
-    void loadData()
-  }, [loadData])
+    if (initializedRef.current) return
+    if (settingsLoading || !globalSettings) return
+    initializedRef.current = true
+    setSettings(globalSettings)
+    setLoading(false)
+  }, [settingsLoading, globalSettings])
 
   const updateField = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings(prev => prev ? { ...prev, [key]: value } : null)
@@ -58,21 +65,21 @@ export function useRuntimeSettingsService() {
       previousListenHost !== updateResult.data.listenHost ||
       previousListenPort !== updateResult.data.listenPort
     if (needsRestart) {
-      const restartResult = await proxyApi.restart()
+      const restartResult = await appActions.restartProxy()
       setSaving(false)
       if (!restartResult.success) {
         toast.error(`设置已保存，但代理重启失败：${restartResult.errorMessage}`)
         return
       }
-      setProxyStatus(restartResult.data)
     } else {
       setSaving(false)
     }
     setSettings(updateResult.data)
+    appActions.invalidateSettings()
     setSaved(true)
     toast.success('设置已保存')
     window.setTimeout(() => setSaved(false), 2000)
-  }, [proxyStatus, settings, toast])
+  }, [proxyStatus, settings, appActions, toast])
 
   // ========== 配置导入导出 ==========
 
@@ -94,6 +101,12 @@ export function useRuntimeSettingsService() {
     toast.success('配置已导出')
   }, [toast])
 
+  const reload = useCallback(async () => {
+    appActions.invalidateSettings()
+    appActions.invalidateProviders()
+    appActions.invalidateLogicalModels()
+  }, [appActions])
+
   const importConfig = useCallback(async (file: File) => {
     try {
       const text = await file.text()
@@ -106,11 +119,11 @@ export function useRuntimeSettingsService() {
       toast.success(
         `导入成功：${result.data.imported.providers} 个供应商 / ${result.data.imported.logicalModels} 个模型 / ${result.data.imported.upstreamModels} 条绑定`,
       )
-      await loadData()
+      await reload()
     } catch (err) {
       toast.error(`导入失败：${err instanceof Error ? err.message : String(err)}`)
     }
-  }, [loadData, toast])
+  }, [reload, toast])
 
   const seedDevelopmentData = useCallback(async () => {
     if (!window.confirm('插入开发测试数据？已有配置不会被覆盖。')) return
@@ -120,8 +133,8 @@ export function useRuntimeSettingsService() {
       return
     }
     toast.success(result.data.inserted ? '测试数据已插入' : '测试数据已存在')
-    await loadData()
-  }, [loadData, toast])
+    await reload()
+  }, [reload, toast])
 
   return {
     settings,
@@ -131,7 +144,7 @@ export function useRuntimeSettingsService() {
     saved,
     updateField,
     saveSettings,
-    reload: loadData,
+    reload,
     exportConfig,
     importConfig,
     seedDevelopmentData,

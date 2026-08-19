@@ -1,74 +1,109 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import {
   upstreamModelApi,
-  healthApi,
-  logicalModelApi,
-  providerApi,
-  proxyApi,
   queueApi,
   requestLogApi,
 } from '@/api'
 import { useToast } from '@/components/ui/toast'
-import type { LogicalModel, UpstreamModel, Provider, ProviderHealth, ProxyServerStatus } from '@common/schemas'
+import {
+  useProviders,
+  useHealth,
+  useLogicalModels,
+  useProxyStatus,
+  useAppPolling,
+  useAppActions,
+} from '@/services/app-hooks'
+import type { UpstreamModel } from '@common/schemas'
 import { calculateQueueModelMetrics, type QueueModelMetrics } from './lib/model-metrics'
 
 export function useQueueControlService() {
   const toast = useToast()
-  const [logicalModel, setLogicalModel] = useState<LogicalModel | null>(null)
+  const appActions = useAppActions()
+
+  // 全局共享状态（通过 store 订阅，不会因轮询导致本页 loading 闪烁）
+  const providers = useProviders()
+  const health = useHealth()
+  const logicalModels = useLogicalModels()
+  const proxyStatus = useProxyStatus()
+
+  // 本页状态
   const [models, setModels] = useState<UpstreamModel[]>([])
-  const [providers, setProviders] = useState<Record<string, Provider>>({})
-  const [health, setHealth] = useState<Record<string, ProviderHealth>>({})
   const [modelMetrics, setModelMetrics] = useState<Record<string, QueueModelMetrics>>({})
-  const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
   const [manualModelId, setManualModelId] = useState<string | null>(null)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
-  const hasLoadedRef = useRef(false)
+  const initializedRef = useRef(false)
 
-  const loadData = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true)
-    const [modelResult, providerResult, healthResult, statusResult, queueResult, logResult] = await Promise.all([
-      logicalModelApi.list(),
-      providerApi.list(),
-      healthApi.list(),
-      proxyApi.status(),
+  // 订阅全局轮询：健康状态 5 秒、代理状态 5 秒（App 已订阅，这里共享）
+  useAppPolling('health', 5000)
+  useAppPolling('proxyStatus', 5000)
+  useAppPolling('logicalModels', 30000)
+
+  const logicalModel = useMemo(
+    () => logicalModels.find(model => model.enabled) ?? logicalModels[0] ?? null,
+    [logicalModels],
+  )
+
+  const loadModels = useCallback(async (modelId: string) => {
+    const result = await upstreamModelApi.list(modelId)
+    if (!result.success) {
+      toast.error(result.errorMessage)
+      return
+    }
+    setModels(result.data)
+  }, [toast])
+
+  // 初始化：等全局逻辑模型数据就绪后加载本页数据
+  useEffect(() => {
+    if (initializedRef.current) return
+    if (logicalModels.length === 0) return
+
+    initializedRef.current = true
+    const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]
+    if (currentModel) {
+      void loadModels(currentModel.id)
+    }
+    setLoading(false)
+  }, [logicalModels, loadModels])
+
+  // 当 logicalModel 变化时重新加载上游模型
+  useEffect(() => {
+    if (!initializedRef.current || !logicalModel) return
+    void loadModels(logicalModel.id)
+  }, [logicalModel?.id, loadModels])
+
+  // 队列状态 + 请求指标（本页专属数据，首次加载后静默刷新）
+  const loadQueueData = useCallback(async () => {
+    const [queueResult, logResult] = await Promise.all([
       queueApi.status(),
       requestLogApi.list(100),
     ])
-    const failed = [modelResult, providerResult, healthResult, statusResult, queueResult, logResult].find(result => !result.success)
-    if (failed && !failed.success) {
-      toast.error(failed.errorMessage)
-      setLoading(false)
-      return
+    if (queueResult.success) {
+      setManualModelId(queueResult.data.manualModelId)
+      setMode(queueResult.data.manualModelId ? 'manual' : 'auto')
     }
-    if (!modelResult.success || !providerResult.success || !healthResult.success || !statusResult.success || !queueResult.success || !logResult.success) return
-    const currentModel = modelResult.data.find(model => model.enabled) ?? modelResult.data[0] ?? null
-    const modelListResult = currentModel ? await upstreamModelApi.list(currentModel.id) : null
-    if (modelListResult && !modelListResult.success) {
-      toast.error(modelListResult.errorMessage)
-      setLoading(false)
-      return
+    if (logResult.success) {
+      setModelMetrics(calculateQueueModelMetrics(logResult.data.logs))
     }
-    setLogicalModel(currentModel)
-    setModels(modelListResult?.success ? modelListResult.data : [])
-    setProviders(Object.fromEntries(providerResult.data.map(provider => [provider.id, provider])))
-    setHealth(Object.fromEntries(healthResult.data.map(item => [item.providerId, item])))
-    setModelMetrics(calculateQueueModelMetrics(logResult.data.logs))
-    setProxyStatus(statusResult.data)
-    setManualModelId(queueResult.data.manualModelId)
-    setMode(queueResult.data.manualModelId ? 'manual' : 'auto')
-    hasLoadedRef.current = true
-    setLoading(false)
-  }, [toast])
+  }, [])
 
   useEffect(() => {
-    void loadData()
-  }, [loadData])
+    if (!initializedRef.current) return
+    void loadQueueData()
+    const timer = window.setInterval(() => void loadQueueData(), 5000)
+    return () => window.clearInterval(timer)
+  }, [initializedRef.current, loadQueueData])
 
   const proxyBaseUrl = proxyStatus ? `http://${proxyStatus.host}:${proxyStatus.port}` : ''
+
+  // providers 数组转为 id 映射，供组件按 id 查找
+  const providersMap = useMemo(
+    () => Object.fromEntries(providers.map(p => [p.id, p])),
+    [providers],
+  )
 
   const copyEndpoint = useCallback(async (url?: string) => {
     await navigator.clipboard.writeText(url ?? proxyBaseUrl)
@@ -111,6 +146,13 @@ export function useQueueControlService() {
     if (!enabled && manualModelId === model.id) await changeMode('auto')
   }, [manualModelId, changeMode])
 
+  const reload = useCallback(async () => {
+    if (logicalModel) {
+      await loadModels(logicalModel.id)
+    }
+    await loadQueueData()
+  }, [logicalModel, loadModels, loadQueueData])
+
   const handleDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
     const oldIndex = models.findIndex(model => model.id === active.id)
@@ -120,22 +162,26 @@ export function useQueueControlService() {
     const results = await Promise.all(reordered.map(model => upstreamModelApi.update(model.id, { priority: model.priority })))
     if (results.some(result => !result.success)) {
       toast.error('队列顺序保存失败，已恢复服务端数据')
-      await loadData()
+      await reload()
     }
-  }, [models, loadData])
+  }, [models, reload])
 
   const toggleProxy = useCallback(async () => {
-    const result = proxyStatus?.running ? await proxyApi.stop() : await proxyApi.start()
-    if (!result.success) { toast.error(result.errorMessage); return }
-    setProxyStatus(result.data)
+    const result = proxyStatus?.running
+      ? await appActions.stopProxy()
+      : await appActions.startProxy()
+    if (!result.success) {
+      toast.error(result.errorMessage)
+      return
+    }
     toast.success(result.data.running ? '服务已启动' : '服务已停止')
-  }, [proxyStatus, toast])
+  }, [proxyStatus, appActions, toast])
 
   return {
     // 状态
     logicalModel,
     models,
-    providers,
+    providers: providersMap,
     health,
     modelMetrics,
     proxyStatus,
@@ -145,7 +191,7 @@ export function useQueueControlService() {
     loading,
     proxyBaseUrl,
     // 操作
-    loadData,
+    reload,
     copyEndpoint,
     changeMode,
     selectManualModel,

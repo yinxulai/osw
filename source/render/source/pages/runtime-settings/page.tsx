@@ -8,6 +8,7 @@ import { FailoverCard } from './components/failover-card'
 import { LogRetentionCard } from './components/log-retention-card'
 import { GeneralCard } from './components/general-card'
 import { DataManagementCard } from './components/data-management-card'
+import { UpdateCard } from './components/update-card'
 import type { ThemeMode } from '@/components/app-sidebar'
 
 interface RuntimeSettingsPageProps {
@@ -58,6 +59,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
               themeMode={props.themeMode}
               onThemeModeChange={props.onThemeModeChange}
             />
+
+            <UpdateCard />
 
             <DataManagementCard
               onExport={() => void service.exportConfig()}

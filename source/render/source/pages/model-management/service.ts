@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
-import { upstreamModelApi, healthApi, logicalModelApi, providerApi } from '@/api'
+import { upstreamModelApi, providerApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
-import type { LogicalModel, UpstreamModel, Protocol, ProtocolEndpoint, Provider, ProviderHealth } from '@common/schemas'
+import {
+  useProviders,
+  useProvidersLoading,
+  useHealth,
+  useLogicalModels,
+  useLogicalModelsLoading,
+  useAppPolling,
+  useAppActions,
+} from '@/services/app-hooks'
+import type { UpstreamModel, Protocol, ProtocolEndpoint, Provider } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from './lib/protocols'
 
 export interface BindingEntry {
@@ -43,13 +52,21 @@ export function getEffectiveEndpointUrl(endpoint: ProtocolEndpoint, provider?: P
 
 export function useModelManagementService() {
   const toast = useToast()
-  const [providers, setProviders] = useState<Provider[]>([])
-  const [logicalModel, setLogicalModel] = useState<LogicalModel | null>(null)
+  const appActions = useAppActions()
+
+  // 全局共享状态
+  const providers = useProviders()
+  const health = useHealth()
+  const logicalModels = useLogicalModels()
+  const providersLoading = useProvidersLoading()
+  const logicalModelsLoading = useLogicalModelsLoading()
+
+  // 本页状态
   const [models, setModels] = useState<UpstreamModel[]>([])
-  const [health, setHealth] = useState<Record<string, ProviderHealth>>({})
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const initializedRef = useRef(false)
 
   // Provider dialog state
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
@@ -65,53 +82,54 @@ export function useModelManagementService() {
   const [modelId, setModelId] = useState('')
   const [bindingEntries, setBindingEntries] = useState<BindingEntry[]>([])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    const [providerResult, modelResult, healthResult] = await Promise.all([
-      providerApi.list(),
-      logicalModelApi.list(),
-      healthApi.list(),
-    ])
-    if (!providerResult.success || !modelResult.success || !healthResult.success) {
-      toast.error(
-        !providerResult.success ? providerResult.errorMessage
-          : !modelResult.success ? modelResult.errorMessage
-            : !healthResult.success ? healthResult.errorMessage : '加载失败',
-      )
-      setLoading(false)
+  // 订阅全局轮询
+  useAppPolling('providers', 10000)
+  useAppPolling('health', 5000)
+
+  const logicalModel = useMemo(
+    () => logicalModels.find(model => model.enabled) ?? logicalModels[0] ?? null,
+    [logicalModels],
+  )
+
+  const loadModels = useCallback(async (modelId: string) => {
+    const result = await upstreamModelApi.list(modelId)
+    if (!result.success) {
+      toast.error(result.errorMessage)
       return
     }
+    setModels(result.data)
+  }, [toast])
 
-    let currentModel = modelResult.data.find(model => model.enabled) ?? modelResult.data[0]
-    if (!currentModel) {
-      const result = await logicalModelApi.create({ name: 'default', description: '默认代理模型' })
-      if (!result.success) {
-        toast.error(result.errorMessage)
-        setLoading(false)
-        return
-      }
-      currentModel = result.data
+  /** 写操作后刷新：静默刷新全局数据 + 重新加载本页模型列表 */
+  const reload = useCallback(async () => {
+    appActions.invalidateProviders()
+    appActions.invalidateHealth()
+    appActions.invalidateLogicalModels()
+    if (logicalModel) {
+      await loadModels(logicalModel.id)
     }
+  }, [appActions, logicalModel, loadModels])
 
-    const modelListResult = await upstreamModelApi.list(currentModel.id)
-    if (!modelListResult.success) {
-      toast.error(modelListResult.errorMessage)
-      setLoading(false)
-      return
-    }
-    setProviders(providerResult.data)
-    setLogicalModel(currentModel)
-    setModels(modelListResult.data)
-    setHealth(Object.fromEntries(healthResult.data.map(item => [item.providerId, item])))
-    setSelectedProviderId(current => providerResult.data.some(provider => provider.id === current)
-      ? current
-      : providerResult.data[0]?.id ?? '')
-    setLoading(false)
-  }, [])
-
+  // 当全局数据首次加载完成后，初始化本页数据
   useEffect(() => {
-    void loadData()
-  }, [loadData])
+    if (initializedRef.current) return
+    if (providersLoading || logicalModelsLoading) return
+    if (logicalModels.length === 0) return
+
+    initializedRef.current = true
+    const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]
+    if (currentModel) {
+      void loadModels(currentModel.id)
+    }
+    setSelectedProviderId(providers[0]?.id ?? '')
+    setLoading(false)
+  }, [providersLoading, logicalModelsLoading, logicalModels, providers, loadModels])
+
+  // 当 logicalModel 变化时重新加载上游模型（非首次）
+  useEffect(() => {
+    if (!initializedRef.current || !logicalModel) return
+    void loadModels(logicalModel.id)
+  }, [logicalModel?.id, loadModels])
 
   const selectedProvider = useMemo(
     () => providers.find(provider => provider.id === selectedProviderId),
@@ -176,16 +194,16 @@ export function useModelManagementService() {
     setProviderDialogOpen(false)
     setSelectedProviderId(result.data.id)
     toast.success(editingProviderId ? '供应商已更新' : '供应商已添加')
-    await loadData()
-  }, [providerName, apiKey, timeout, editingProviderId, providerEndpointEntries, loadData])
+    await reload()
+  }, [providerName, apiKey, timeout, editingProviderId, providerEndpointEntries, reload])
 
   const removeProvider = useCallback(async (provider: Provider) => {
     if (!window.confirm(`删除供应商"${provider.name}"？关联模型将被禁用。`)) return
     const result = await providerApi.remove(provider.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     toast.success('供应商已删除')
-    await loadData()
-  }, [loadData])
+    await reload()
+  }, [reload])
 
   // ========== Model CRUD ==========
 
@@ -244,21 +262,21 @@ export function useModelManagementService() {
     setSaving(false)
     if (!result.success) {
       toast.error(result.errorMessage)
-      await loadData()
+      await reload()
       return
     }
     setModelDialogOpen(false)
     toast.success(editingModel ? '模型已更新' : '模型已添加')
-    await loadData()
-  }, [logicalModel, selectedProvider, modelId, bindingEntries, editingModel, models, loadData])
+    await reload()
+  }, [logicalModel, selectedProvider, modelId, bindingEntries, editingModel, models, reload])
 
   const removeModel = useCallback(async (model: UpstreamModel) => {
     if (!window.confirm(`删除模型"${model.upstreamModelId}"？该模型关联的所有协议接口都会被移除。`)) return
     const result = await upstreamModelApi.remove(model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     toast.success('模型已删除')
-    await loadData()
-  }, [loadData])
+    await reload()
+  }, [reload])
 
   // ========== Drag & Drop ==========
 
@@ -278,9 +296,9 @@ export function useModelManagementService() {
     const results = await Promise.all(updates.map(update => upstreamModelApi.update(update.id, { priority: update.priority })))
     if (results.some(result => !result.success)) {
       toast.error('模型顺序保存失败，已恢复服务端数据')
-      await loadData()
+      await reload()
     }
-  }, [selectedModels, loadData])
+  }, [selectedModels, reload])
 
   return {
     // 状态
@@ -324,7 +342,7 @@ export function useModelManagementService() {
     // 其他
     setSelectedProviderId,
     handleDragEnd,
-    loadData,
+    reload,
     // 常量
     PROTOCOL_OPTIONS,
   }

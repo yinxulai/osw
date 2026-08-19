@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, stopServer } from '@server/index'
@@ -6,6 +6,10 @@ import { getRuntimeProfile } from '@common/runtime-profile'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
 import { AutoLaunchManager } from './auto-launch'
+import { UpdaterManager, type UpdateState } from './updater'
+// Vite 将 build/icon.png 打包为 data URL，避免运行时路径解析问题。
+// Windows 任务栏/窗口图标需要位图，PNG 可被 nativeImage 直接识别。
+import windowIconPng from '../../build/icon.png?url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -34,6 +38,40 @@ app.setPath('userData', path.join(app.getPath('appData'), runtimeProfile.userDat
 let win: BrowserWindow | null = null
 let trayManager: TrayManager | null = null
 let autoLaunchManager: AutoLaunchManager | null = null
+let updaterManager: UpdaterManager | null = null
+
+// Windows 任务栏图标依赖 AppUserModelID；必须在创建任何窗口前设置，
+// 否则系统会把进程归到默认 Electron 应用，导致显示默认图标。
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.yinxulai.one-switch')
+}
+
+function broadcastUpdateState(state: UpdateState) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('updater:state-changed', state)
+  }
+}
+
+function registerUpdaterIpc() {
+  const updater = new UpdaterManager()
+  updater.subscribe(broadcastUpdateState)
+  updaterManager = updater
+
+  ipcMain.handle('updater:get-state', () => updater.getState())
+  ipcMain.handle('updater:check', () => updater.checkForUpdates())
+  ipcMain.handle('updater:download', () => updater.downloadUpdate())
+  ipcMain.handle('updater:install', () => updater.installUpdate())
+  ipcMain.handle('updater:open-releases', () => updater.openReleasesPage())
+}
+
+registerUpdaterIpc()
+
+function resolveWindowIcon() {
+  // Vite 把 ?url 解析为 data URL，开发/打包后均可直接使用，
+  // 避免生产环境下 build/ 目录未被复制到 dist 的路径问题。
+  // Windows 任务栏/窗口图标接受 PNG；exe/安装包图标由 electron-builder 使用 icon.ico。
+  return nativeImage.createFromDataURL(windowIconPng)
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -43,6 +81,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     autoHideMenuBar: true,
+    icon: resolveWindowIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -109,6 +148,14 @@ app.whenReady().then(async () => {
     void autoLaunchManager.init()
   } else {
     console.log('[auto-launch] skipped in development')
+  }
+
+  // 启动 10 秒后静默检查一次更新，避免阻塞启动。
+  // 仅在生产环境执行，开发环境下版本号无意义。
+  if (runtimeProfile.environment === 'production' && updaterManager) {
+    setTimeout(() => {
+      void updaterManager!.checkForUpdates()
+    }, 10_000)
   }
 
   app.on('activate', () => {

@@ -144,21 +144,19 @@ jobs:
           cd "$DMG_DIR"
           shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
 
-      - name: Collect installer
-        if: runner.os != 'macOS'
+      - name: Collect installer and update metadata
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.asset }}
-          if-no-files-found: error
-
-      - name: Collect macOS installer and checksum
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
+          # 发布产物包含：
+          # - 安装包（.dmg/.exe/.AppImage）
+          # - .blockmap：electron-updater 差量更新所需
+          # - latest*.yml：electron-updater 版本检查元数据
+          #   （latest.yml / latest-mac.yml / latest-linux.yml）
           path: |
-            release/**/*.dmg
+            ${{ matrix.asset }}
+            release/**/*.blockmap
+            release/**/latest*.yml
             release/**/*.dmg.sha256
           if-no-files-found: error
 
