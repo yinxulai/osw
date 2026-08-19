@@ -10,7 +10,6 @@ import {
   FlaskConical,
   GripVertical,
   History,
-  Layers3,
   MessageSquareCode,
   MoreHorizontal,
   Pause,
@@ -118,7 +117,7 @@ function LinearPrototypePage() {
       <aside className="lp-sidebar">
         <div className="lp-window-drag"><span /><span /><span /></div>
         <button className="lp-workspace" type="button">
-          <span className="lp-logo"><Layers3 size={14} /></span>
+          <img className="lp-logo" src="/icon.svg" alt="" />
           <span>One Switch</span>
           <ChevronDown size={13} />
         </button>

@@ -29,7 +29,7 @@
 .lp-window-drag span { width: 10px; height: 10px; border-radius: 50%; background: #343438; }
 .lp-workspace { border: 0; background: transparent; display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 6px 12px; font-size: 13px; font-weight: 600; text-align: left; }
 .lp-workspace > span:nth-child(2) { flex: 1; }
-.lp-logo { width: 23px; height: 23px; border: 1px solid #39393c; border-radius: 5px; display: grid; place-items: center; background: #202022; color: #d2d2d5; }
+.lp-logo { width: 23px; height: 23px; object-fit: contain; }
 .lp-nav { margin-top: 12px; flex: 1; }
 .lp-nav p { color: #56565c; font-size: 10px; font-weight: 600; text-transform: uppercase; margin: 14px 9px 6px; }
 .lp-nav button { width: 100%; display: flex; align-items: center; gap: 9px; border: 0; background: transparent; border-radius: 5px; padding: 7px 9px; color: #97979e; font-size: 12px; text-align: left; transition: background 120ms ease, color 120ms ease; }
