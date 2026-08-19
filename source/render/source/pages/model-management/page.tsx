@@ -56,7 +56,6 @@ export function ModelManagementPage() {
               <ProviderGrid
                 providers={service.providers}
                 models={service.models}
-                health={service.health}
                 selectedProviderId={service.selectedProviderId}
                 onSelect={service.setSelectedProviderId}
               />
@@ -65,7 +64,6 @@ export function ModelManagementPage() {
                 <ProviderDetail
                   provider={service.selectedProvider}
                   models={service.selectedModels}
-                  health={service.health}
                   onEditProvider={() => service.openProviderDialog(service.selectedProvider)}
                   onRemoveProvider={() => service.removeProvider(service.selectedProvider!)}
                   onAddModel={() => service.openModelDialog()}
@@ -80,7 +78,7 @@ export function ModelManagementPage() {
                     title={service.providers.length > 0 ? '选择一个供应商查看详情' : '还没有供应商'}
                     description={
                       service.providers.length > 0
-                        ? '从左侧列表中选择一个供应商，即可查看和管理其上游模型、协议地址与健康状态。'
+                        ? '从左侧列表中选择一个供应商，即可查看和管理其上游模型与协议地址。'
                         : '创建供应商并配置凭据后，即可添加上游模型与协议地址。'
                     }
                     action={

@@ -58,7 +58,7 @@
     --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
-    --card-border: 0 0% 90%;
+    --card-border: 0 0% 95%;
     --card-shadow: 0 0 0 20px hsl(var(--card-border) / 0.1);
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
