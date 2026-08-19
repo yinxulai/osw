@@ -16,6 +16,18 @@
 - **本地可观测性**：提供请求尝试记录、成功率、延迟、TTFT、Token 用量、缓存命中和失败原因统计。
 - **本地优先**：API Key 使用 Electron `safeStorage` 加密保存，配置导出默认不包含密钥。
 
+## 界面预览
+
+截图素材统一存放在 [`snapshot/`](./snapshot/) 目录中。
+
+![One Switch 界面预览 01](./snapshot/preview-01.png)
+
+![One Switch 界面预览 02](./snapshot/preview-02.png)
+
+![One Switch 界面预览 03](./snapshot/preview-03.png)
+
+![One Switch 界面预览 04](./snapshot/preview-04.png)
+
 ## 支持的协议
 
 | 协议 | 本地路径 | 常见上游 |
