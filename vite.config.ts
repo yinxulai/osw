@@ -62,6 +62,7 @@ export default defineConfig({
   ],
   resolve: { alias: renderAlias },
   root: 'source/render',
+  publicDir: fileURLToPath(new URL('./build', import.meta.url)),
   build: {
     outDir: fileURLToPath(new URL('./dist/render', import.meta.url)),
     emptyOutDir: true,
