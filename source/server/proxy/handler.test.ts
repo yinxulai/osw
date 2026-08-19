@@ -52,6 +52,14 @@ async function listen(handler: http.RequestListener): Promise<{ server: http.Ser
   return { server, url: `http://127.0.0.1:${port}` }
 }
 
+async function waitFor(condition: () => boolean, timeoutMilliseconds = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for condition')
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+}
+
 function model(id: string, providerId: string, upstreamUrl: string, upstreamModelId: string, protocol: ModelWithProvider['model']['endpoints'][number]['protocol'] = 'openai-completions'): ModelWithProvider {
   const time = Date.now()
   return {
@@ -307,6 +315,50 @@ describe('handleProxyRequest', () => {
           output_tokens: 80,
         },
       }),
+    )
+  })
+
+  it('cancels the upstream request when the local client aborts', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+
+    let upstreamRequestReceived!: () => void
+    let upstreamConnectionClosed!: () => void
+    const requestReceived = new Promise<void>(resolve => { upstreamRequestReceived = resolve })
+    const connectionClosed = new Promise<void>(resolve => { upstreamConnectionClosed = resolve })
+    const upstream = await listen((req, res) => {
+      req.once('close', upstreamConnectionClosed)
+      req.once('data', () => upstreamRequestReceived())
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write('data: {"type":"response.created"}\n\n')
+    })
+    mocks.models = [
+      model('model_cancel', 'prov_cancel', `${upstream.url}/v1/responses`, 'cancel-model', 'openai-responses'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const client = http.request(`${proxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    })
+    client.on('error', () => undefined)
+    client.end(JSON.stringify({ model: 'client-model', input: 'Hello', stream: true }))
+    await requestReceived
+    client.destroy()
+
+    await connectionClosed
+    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+      (input as { status?: string }).status === 'cancelled'
+    )))
+    expect(mocks.markProviderFailure).not.toHaveBeenCalled()
+    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'cancelled' }),
     )
   })
 })

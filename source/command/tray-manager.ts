@@ -5,13 +5,13 @@ import {
   startProxyServer,
   stopProxyServer,
 } from '@server/index'
-import { listLogicalModels, listUpstreamModelsByLogicalModel } from '@server/database/store'
 import type { ProxyServerStatus } from '@common/schemas'
 
 export class TrayManager {
   private tray: Tray | null = null
   private mainWindow: BrowserWindow | null = null
-  private status: TrayIconStatus = 'stopped'
+  private status: TrayIconStatus | null = null
+  private statusPort: number | null = null
   private statusPoller: NodeJS.Timeout | null = null
   private isQuitting = false
 
@@ -26,12 +26,14 @@ export class TrayManager {
     this.tray.setToolTip('One Switch')
 
     // 初始菜单
-    this.updateMenu()
+    void this.updateMenu()
 
-    // 点击托盘图标显示/隐藏窗口
-    this.tray.on('click', () => {
-      this.toggleWindow()
-    })
+    // macOS 会直接展示关联菜单；其他平台也允许左键打开菜单。
+    if (process.platform !== 'darwin') {
+      this.tray.on('click', () => {
+        this.tray?.popUpContextMenu()
+      })
+    }
 
     // 轮询代理状态更新图标
     this.startStatusPolling()
@@ -41,7 +43,7 @@ export class TrayManager {
       // 如果不是退出应用，只是关闭窗口，则隐藏到托盘
       if (!this.isQuitting) {
         event.preventDefault()
-        mainWindow.hide()
+        this.hideWindow()
       }
     })
   }
@@ -64,17 +66,6 @@ export class TrayManager {
     this.isQuitting = true
   }
 
-  private toggleWindow(): void {
-    if (!this.mainWindow) return
-
-    if (this.mainWindow.isVisible()) {
-      this.mainWindow.hide()
-    } else {
-      this.mainWindow.show()
-      this.mainWindow.focus()
-    }
-  }
-
   private async updateMenu(): Promise<void> {
     if (!this.tray) return
 
@@ -88,72 +79,32 @@ export class TrayManager {
     const isRunning = proxyStatus?.running ?? false
     const port = proxyStatus?.port ?? 0
 
-    // 获取默认队列状态
-    let queueStatus: { name: string; total: number; active: number } | null = null
-    try {
-      const models = await listLogicalModels(false)
-      if (models.length > 0) {
-        const defaultModel = models[0]
-        const upstreamModels = await listUpstreamModelsByLogicalModel(defaultModel.id)
-        queueStatus = {
-          name: defaultModel.name,
-          total: upstreamModels.length,
-          active: upstreamModels.filter(m => m.enabled).length,
-        }
-      }
-    } catch {
-      // ignore
-    }
-
     const template: Electron.MenuItemConstructorOptions[] = [
       {
-        label: 'One Switch',
-        enabled: false,
-      },
-      {
-        label: isRunning ? `服务运行中 · 端口 ${port}` : '服务已停止',
+        label: isRunning ? `代理服务运行中 · 端口 ${port}` : '代理服务已停止',
         enabled: false,
       },
       { type: 'separator' },
       {
-        label: isRunning ? '停止服务' : '启动服务',
+        label: '打开主界面',
+        click: () => {
+          void this.showWindow()
+        },
+      },
+      {
+        label: isRunning ? '停止代理服务' : '启动代理服务',
         click: () => {
           void this.toggleProxy()
         },
       },
       { type: 'separator' },
-    ]
-
-    // 默认队列状态
-    if (queueStatus) {
-      template.push(
-        {
-          label: `队列：${queueStatus.name}`,
-          enabled: false,
-        },
-        {
-          label: `上游模型：${queueStatus.active}/${queueStatus.total} 待命`,
-          enabled: false,
-        },
-        { type: 'separator' },
-      )
-    }
-
-    template.push(
       {
-        label: '打开控制台',
-        click: () => {
-          this.showWindow()
-        },
-      },
-      { type: 'separator' },
-      {
-        label: '退出',
+        label: '退出 One Switch',
         click: () => {
           this.quitApp()
         },
       },
-    )
+    ]
 
     const menu = Menu.buildFromTemplate(template)
     this.tray.setContextMenu(menu)
@@ -173,10 +124,27 @@ export class TrayManager {
     }
   }
 
-  private showWindow(): void {
+  async showWindow(): Promise<void> {
     if (!this.mainWindow) return
+
+    if (process.platform === 'darwin') {
+      try {
+        await app.dock?.show()
+      } catch (error) {
+        console.error('[tray] failed to show Dock icon', error)
+      }
+    }
     this.mainWindow.show()
     this.mainWindow.focus()
+  }
+
+  private hideWindow(): void {
+    if (!this.mainWindow) return
+
+    this.mainWindow.hide()
+    if (process.platform === 'darwin') {
+      app.dock?.hide()
+    }
   }
 
   private quitApp(): void {
@@ -202,8 +170,9 @@ export class TrayManager {
       const status = await getProxyServerStatus()
       const newStatus: TrayIconStatus = status.running ? 'running' : 'stopped'
 
-      if (newStatus !== this.status) {
+      if (newStatus !== this.status || status.port !== this.statusPort) {
         this.status = newStatus
+        this.statusPort = status.port
         const icon = generateTrayIcon(newStatus)
         this.tray.setImage(icon)
         this.tray.setToolTip(

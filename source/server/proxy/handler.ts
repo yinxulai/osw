@@ -15,6 +15,21 @@ import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
 
+class ClientRequestCancelledError extends Error {
+  readonly code = 'CLIENT_REQUEST_ABORTED'
+
+  constructor() {
+    super('客户端已取消请求')
+    this.name = 'ClientRequestCancelledError'
+  }
+}
+
+function isClientRequestCancelled(error: unknown): boolean {
+  return error instanceof ClientRequestCancelledError || (
+    error instanceof Error && error.message === 'CLIENT_REQUEST_ABORTED'
+  )
+}
+
 interface AttemptOutcome {
   disposition: UpstreamStatusDisposition
   statusCode: number
@@ -87,6 +102,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
 
   // 收集请求体（用于重试时重发）
   const requestBody = await readRequestBody(req)
+  if (req.aborted) return
   const startedAt = Date.now()
 
   // 先创建请求日志（占位状态），供各 attempt 作为外键引用，结束时再更新为最终状态
@@ -112,6 +128,10 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   for (const target of models) {
+    if (req.aborted) {
+      await finalizeRequestLog(requestId, 'cancelled', startedAt)
+      return
+    }
     try {
       const outcome = await attemptRequest(req, res, target, protocol, requestBody, requestId, attemptIndex)
 
@@ -146,6 +166,24 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       attemptIndex++
     } catch (err) {
       lastError = err as Error
+      if (isClientRequestCancelled(err)) {
+        try {
+          await createRequestAttempt({
+            requestId,
+            providerId: target.provider.id,
+            upstreamModelId: target.model.upstreamModelId,
+            attemptIndex,
+            status: 'cancelled',
+            errorCode: 'CLIENT_REQUEST_ABORTED',
+            errorMessage: lastError.message,
+            durationMilliseconds: Date.now() - startedAt,
+          })
+        } catch (logError) {
+          console.error(`[proxy] 写入取消请求尝试日志失败: ${(logError as Error).message}`)
+        }
+        await finalizeRequestLog(requestId, 'cancelled', startedAt)
+        return
+      }
       console.error(
         `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
       )
@@ -245,6 +283,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     upstreamBody.length,
   )
 
+  const controller = new AbortController()
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
     port: parsed.port || (isHttps ? 443 : 80),
@@ -252,6 +291,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     method: req.method,
     headers,
     timeout: provider.timeoutMilliseconds,
+    signal: controller.signal,
   }
 
   const attemptStartedAt = Date.now()
@@ -273,6 +313,47 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   }
 
   return new Promise<AttemptOutcome>((resolve, reject) => {
+    let settled = false
+    const cleanupClientListeners = () => {
+      req.removeListener('aborted', onClientAbort)
+      res.removeListener('close', onDownstreamClose)
+    }
+    const rejectCancelled = () => {
+      if (settled) return
+      settled = true
+      cleanupClientListeners()
+      reject(new ClientRequestCancelledError())
+    }
+    const onClientAbort = () => {
+      controller.abort()
+      rejectCancelled()
+    }
+    const onDownstreamClose = () => {
+      // A normal response emits close after writableEnded; only treat an
+      // incomplete response as a client disconnect.
+      if (!res.writableEnded) onClientAbort()
+    }
+
+    if (req.aborted || res.destroyed) {
+      rejectCancelled()
+      return
+    }
+    req.once('aborted', onClientAbort)
+    res.once('close', onDownstreamClose)
+
+    const rejectAttempt = (error: Error) => {
+      if (settled) return
+      settled = true
+      cleanupClientListeners()
+      reject(error)
+    }
+    const resolveAttempt = (outcome: AttemptOutcome) => {
+      if (settled) return
+      settled = true
+      cleanupClientListeners()
+      resolve(outcome)
+    }
+
     const upstreamReq = transport.request(options, upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
@@ -326,11 +407,11 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         upstreamRes.on('end', () => {
           if (idleTimer) clearTimeout(idleTimer)
           void recordAttempt('failed', `Status_${statusCode}`, `上游返回 ${statusCode}`)
-          resolve({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt })
+          resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt })
         })
         upstreamRes.on('error', err => {
           if (idleTimer) clearTimeout(idleTimer)
-          reject(err)
+          rejectAttempt(err)
         })
         upstreamRes.resume()
         return
@@ -385,7 +466,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           res.end()
         }
         void recordAttempt(disposition === 'success' ? 'success' : 'failed')
-        resolve({
+        resolveAttempt({
           disposition,
           statusCode,
           durationMilliseconds: Date.now() - attemptStartedAt,
@@ -401,12 +482,16 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
       upstreamRes.on('error', err => {
         if (idleTimer) clearTimeout(idleTimer)
-        reject(err)
+        rejectAttempt(err)
       })
     })
 
     upstreamReq.on('error', err => {
-      reject(err)
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        rejectCancelled()
+        return
+      }
+      rejectAttempt(err)
     })
 
     upstreamReq.on('timeout', () => {

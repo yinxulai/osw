@@ -36,8 +36,11 @@ export const modelTestRoutes: Record<string, ManagementHandler> = {
   '/api/model-test/run': handleTestModels,
 }
 
-async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+async function handleTestModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { logicalModelId, protocol, providerIds, modelIds } = TestModelsSchema.parse(body)
+  const controller = new AbortController()
+  const onClientAbort = () => controller.abort()
+  req.once('aborted', onClientAbort)
 
   const models = await listUpstreamModelsByLogicalModel(logicalModelId)
   const providers = await listProviders()
@@ -55,6 +58,7 @@ async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body
   const results: ModelTestResult[] = []
 
   for (const model of testableModels) {
+    if (controller.signal.aborted) return
     const provider = providerMap.get(model.providerId)
     if (!provider) continue
 
@@ -81,7 +85,15 @@ async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body
       }
 
       const testBody = buildTestBody(protocol, model.upstreamModelId)
-      const result = await sendTestRequest(targetUrl, protocol, apiKey, endpoint.customAuthHeader ?? null, testBody, provider.timeoutMilliseconds)
+      const result = await sendTestRequest(
+        targetUrl,
+        protocol,
+        apiKey,
+        endpoint.customAuthHeader ?? null,
+        testBody,
+        provider.timeoutMilliseconds,
+        controller.signal,
+      )
 
       results.push({
         modelId: model.id,
@@ -96,6 +108,7 @@ async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body
         outputTokens: result.outputTokens,
       })
     } catch (error) {
+      if (controller.signal.aborted) return
       results.push({
         modelId: model.id,
         upstreamModelId: model.upstreamModelId,
@@ -108,7 +121,7 @@ async function handleTestModels(_req: IncomingMessage, res: ServerResponse, body
     }
   }
 
-  sendSuccess(res, { results })
+  if (!controller.signal.aborted) sendSuccess(res, { results })
 }
 
 function buildTestBody(protocol: Protocol, modelId: string): string {
@@ -143,7 +156,7 @@ interface TestRequestResult {
   outputTokens?: number | null
 }
 
-function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, customAuthHeader: string | null, body: string, timeout: number): Promise<TestRequestResult> {
+function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, customAuthHeader: string | null, body: string, timeout: number, signal: AbortSignal): Promise<TestRequestResult> {
   return new Promise(resolve => {
     const parsed = new URL(targetUrl)
     const isHttps = parsed.protocol === 'https:'
@@ -163,6 +176,7 @@ function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, 
       method: 'POST',
       headers,
       timeout,
+      signal,
     }
 
     const req = transport.request(options, res => {
@@ -197,6 +211,13 @@ function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, 
     })
 
     req.on('error', err => {
+      if (signal.aborted) {
+        resolve({
+          success: false,
+          errorMessage: '客户端已取消请求',
+        })
+        return
+      }
       resolve({
         success: false,
         errorMessage: err.message,

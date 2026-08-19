@@ -45,10 +45,10 @@ export function AppSidebar(props: AppSidebarProps) {
   const sections = [...new Set(navItems.map(item => item.section))]
 
   return (
-    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56">
+    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-3">
         <img src="icon.svg" alt="" className="h-7 w-7 shrink-0" />
-        <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">
+        <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">
           <h1 className="truncate text-sm font-medium leading-tight tracking-tight">One Switch</h1>
           <p className="font-mono text-[10px] uppercase tracking-[1.2px] text-muted-foreground">local ai gateway</p>
         </div>
@@ -57,9 +57,9 @@ export function AppSidebar(props: AppSidebarProps) {
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-1.5">
         {sections.map(section => (
           <section key={section}>
-            <h2 className="relative mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5">
-              <span className="absolute inset-x-2 border-t border-sidebar-border transition-opacity duration-150 group-hover/sidebar:opacity-0" />
-              <span className="relative bg-sidebar px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{section}</span>
+            <h2 className="relative mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5 motion-reduce:transition-none">
+              <span className="absolute inset-x-2 border-t border-sidebar-border transition-opacity duration-150 group-hover/sidebar:opacity-0 motion-reduce:transition-none" />
+              <span className="relative bg-sidebar px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{section}</span>
             </h2>
             <div className="space-y-0.5">
               {navItems.filter(item => item.section === section).map(item => {
@@ -77,8 +77,8 @@ export function AppSidebar(props: AppSidebarProps) {
                         : 'border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
                     )}
                   >
-                    <ItemIcon size={15} className="shrink-0" />
-                    <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{item.label}</span>
+                    <ItemIcon className="size-3.5 shrink-0" />
+                    <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{item.label}</span>
                   </button>
                 )
               })}
@@ -95,12 +95,14 @@ export function AppSidebar(props: AppSidebarProps) {
           className="w-full justify-start gap-2.5 px-2.5"
           aria-label={props.theme === 'dark' ? '切换到浅色' : '切换到深色'}
         >
-          {props.theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{props.theme === 'dark' ? '浅色模式' : '深色模式'}</span>
+          {props.theme === 'dark' ? <Sun /> : <Moon />}
+          <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{props.theme === 'dark' ? '浅色模式' : '深色模式'}</span>
         </Button>
-        <div className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', props.proxyRunning ? 'animate-pulse bg-success' : 'bg-muted-foreground/50')} />
-          <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{props.proxyRunning ? `服务运行中 · ${props.proxyPort ?? 0}` : '服务已停止'}</span>
+        <div className="flex h-7 items-center gap-2.5 px-2.5 text-[11px] text-muted-foreground">
+          <span className="flex size-3.5 shrink-0 items-center justify-center" aria-hidden="true">
+            <span className={cn('size-1.5 rounded-full', props.proxyRunning ? 'animate-pulse bg-success motion-reduce:animate-none' : 'bg-muted-foreground/50')} />
+          </span>
+          <span className="truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{props.proxyRunning ? `服务运行中 · ${props.proxyPort ?? 0}` : '服务已停止'}</span>
         </div>
       </div>
     </div>

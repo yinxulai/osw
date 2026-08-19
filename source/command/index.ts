@@ -95,8 +95,13 @@ app.whenReady().then(async () => {
   createWindow()
 
   // 初始化系统托盘
-  trayManager = new TrayManager()
-  trayManager.init(win!)
+  try {
+    trayManager = new TrayManager()
+    trayManager.init(win!)
+  } catch (error) {
+    trayManager = null
+    console.error('[one-switch] failed to initialize tray', error)
+  }
 
   // 开发环境不应修改系统登录项。
   if (runtimeProfile.environment === 'production') {
@@ -108,10 +113,7 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    else if (win) {
-      win.show()
-      win.focus()
-    }
+    else if (trayManager) void trayManager.showWindow()
   })
 })
 
