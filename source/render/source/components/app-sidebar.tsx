@@ -1,0 +1,107 @@
+import {
+  BarChart3,
+  CircleDot,
+  History,
+  Layers,
+  Moon,
+  Plug,
+  Settings,
+  SquareTerminal,
+  Sun,
+  type LucideIcon,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+
+export type PageKey = 'queue' | 'providers' | 'overview' | 'requests' | 'settings' | 'logs'
+export type Theme = 'light' | 'dark'
+
+interface NavItem {
+  key: PageKey
+  label: string
+  icon: LucideIcon
+  section: string
+}
+
+interface AppSidebarProps {
+  activePage: PageKey
+  theme: Theme
+  proxyRunning: boolean
+  proxyPort?: number
+  onNavigate: (page: PageKey) => void
+  onToggleTheme: () => void
+}
+
+const navItems: NavItem[] = [
+  { key: 'queue', label: '模型队列', icon: Layers, section: '主要' },
+  { key: 'providers', label: '模型管理', icon: Plug, section: '主要' },
+  { key: 'overview', label: '统计分析', icon: BarChart3, section: '数据' },
+  { key: 'requests', label: '请求记录', icon: History, section: '数据' },
+  { key: 'logs', label: '运行日志', icon: SquareTerminal, section: '系统' },
+  { key: 'settings', label: '设置', icon: Settings, section: '系统' },
+]
+
+export function AppSidebar(props: AppSidebarProps) {
+  const sections = [...new Set(navItems.map(item => item.section))]
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-4">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+          <CircleDot size={15} />
+        </div>
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-medium leading-tight tracking-tight">One Switch</h1>
+          <p className="font-mono text-[10px] uppercase tracking-[1.2px] text-muted-foreground">local ai gateway</p>
+        </div>
+      </div>
+
+      <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
+        {sections.map(section => (
+          <section key={section}>
+            <h2 className="mb-1 px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50">{section}</h2>
+            <div className="space-y-0.5">
+              {navItems.filter(item => item.section === section).map(item => {
+                const ItemIcon = item.icon
+                const active = props.activePage === item.key
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => props.onNavigate(item.key)}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex h-9 w-full items-center gap-2.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                      active
+                        ? 'border-sidebar-primary/25 bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                    )}
+                  >
+                    <ItemIcon size={15} className="shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+      </nav>
+
+      <div className="shrink-0 space-y-1 border-t border-sidebar-border p-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={props.onToggleTheme}
+          className="w-full justify-start gap-2.5 px-2.5"
+          aria-label={props.theme === 'dark' ? '切换到浅色' : '切换到深色'}
+        >
+          {props.theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+          {props.theme === 'dark' ? '浅色模式' : '深色模式'}
+        </Button>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', props.proxyRunning ? 'animate-pulse bg-success' : 'bg-muted-foreground/50')} />
+          <span className="truncate">{props.proxyRunning ? `服务运行中 · ${props.proxyPort ?? 0}` : '服务已停止'}</span>
+        </div>
+      </div>
+    </div>
+  )
+}

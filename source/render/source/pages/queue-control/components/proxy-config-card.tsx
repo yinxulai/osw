@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Copy, KeyRound, Plug, Server } from 'lucide-react'
+import { Check, Copy, KeyRound, Pause, Play, Plug, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -53,6 +53,7 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
           variant={proxyRunning ? 'secondary' : 'default'}
           onClick={onToggleProxy}
         >
+          {proxyRunning ? <Pause size={13} /> : <Play size={13} />}
           {proxyRunning ? '暂停服务' : '启动服务'}
         </Button>
       </CardHeader>

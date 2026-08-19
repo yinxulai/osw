@@ -42,6 +42,15 @@ export function QueueControlPage(props: QueueControlPageProps) {
           </div>
         ) : (
           <>
+            <ProxyConfigCard
+              proxyBaseUrl={service.proxyBaseUrl}
+              proxyPort={service.proxyStatus?.port ?? 0}
+              proxyRunning={service.proxyStatus?.running ?? false}
+              copied={service.copied}
+              onToggleProxy={() => void service.toggleProxy()}
+              onCopyEndpoint={url => void service.copyEndpoint(url)}
+            />
+
             <QueueListCard
               models={service.models}
               providers={service.providers}
@@ -56,15 +65,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
               onToggleEnabled={service.updateEnabled}
               onDragEnd={service.handleDragEnd}
               onNavigateToModels={onNavigateToModels}
-            />
-
-            <ProxyConfigCard
-              proxyBaseUrl={service.proxyBaseUrl}
-              proxyPort={service.proxyStatus?.port ?? 0}
-              proxyRunning={service.proxyStatus?.running ?? false}
-              copied={service.copied}
-              onToggleProxy={() => void service.toggleProxy()}
-              onCopyEndpoint={url => void service.copyEndpoint(url)}
             />
           </>
         )}

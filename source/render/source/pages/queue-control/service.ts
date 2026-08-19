@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import {
@@ -26,9 +26,10 @@ export function useQueueControlService() {
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
+  const hasLoadedRef = useRef(false)
 
   const loadData = useCallback(async () => {
-    setLoading(true)
+    if (!hasLoadedRef.current) setLoading(true)
     const [modelResult, providerResult, healthResult, statusResult, queueResult, logResult] = await Promise.all([
       logicalModelApi.list(),
       providerApi.list(),
@@ -59,6 +60,7 @@ export function useQueueControlService() {
     setProxyStatus(statusResult.data)
     setManualModelId(queueResult.data.manualModelId)
     setMode(queueResult.data.manualModelId ? 'manual' : 'auto')
+    hasLoadedRef.current = true
     setLoading(false)
   }, [toast])
 

@@ -136,7 +136,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: 0;
-    transition: background-color 180ms ease, color 180ms ease;
   }
 
   button, input, textarea, select { font: inherit; }

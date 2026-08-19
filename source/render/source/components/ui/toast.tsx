@@ -86,13 +86,11 @@ export function ToastProvider(props: ToastProviderProps) {
     }
   }, [])
 
-  const value: ToastContextValue = {
-    toast,
-    success: (msg: string) => toast(msg, 'success'),
-    error: (msg: string) => toast(msg, 'error', 6000),
-    info: (msg: string) => toast(msg, 'info'),
-    warning: (msg: string) => toast(msg, 'warning'),
-  }
+  const success = useCallback((message: string) => toast(message, 'success'), [toast])
+  const error = useCallback((message: string) => toast(message, 'error', 6000), [toast])
+  const info = useCallback((message: string) => toast(message, 'info'), [toast])
+  const warning = useCallback((message: string) => toast(message, 'warning'), [toast])
+  const value: ToastContextValue = { toast, success, error, info, warning }
 
   return (
     <ToastContext.Provider value={value}>

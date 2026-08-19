@@ -26,10 +26,12 @@ interface AppLayoutProps {
 export function AppLayout(props: AppLayoutProps) {
   const { sidebar, children } = props
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-background text-foreground">
-      {sidebar}
-      <main className="ml-12 min-w-0 flex-1 overflow-auto overscroll-contain">
-        <div className="mx-auto w-full max-w-7xl p-4 sm:p-5 md:p-8">{children}</div>
+    <div className="grid h-screen w-full grid-cols-[14rem_minmax(0,1fr)] overflow-hidden bg-background text-foreground">
+      <aside className="min-h-0 overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+        {sidebar}
+      </aside>
+      <main className="min-w-0 overflow-auto overscroll-contain">
+        <div className="mx-auto min-h-full w-full max-w-7xl px-5 py-6 md:px-8 md:py-8">{children}</div>
       </main>
     </div>
   )
