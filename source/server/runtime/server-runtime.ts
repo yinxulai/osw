@@ -48,6 +48,7 @@ export class ServerRuntime {
       this.managementServer = await startManagementServer({
         host: this.options.managementHost,
         port: this.options.runtimeProfile.managementPort,
+        environment: this.options.runtimeProfile.environment,
       })
       await startProxyServer()
       this.state = 'running'

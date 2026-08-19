@@ -4,7 +4,7 @@ import { generateKeyReference } from '@common/keychain'
 import { ProviderSchema, UpstreamUrlsSchema, type Provider } from '@common/schemas'
 import {
   createProvider,
-  deleteProvider,
+  deleteProvider as deleteProviderRecord,
   getProvider,
   listProviders,
   resetProviderHealth,
@@ -92,10 +92,14 @@ async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, 
 const DeleteProviderSchema = z.object({ id: z.string() })
 async function handleDeleteProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = DeleteProviderSchema.parse(body)
-  const provider = await getProvider(id)
-  await deleteProvider(id)
-  if (provider) await getSecretStore().delete(provider.apiKeyReference)
+  await deleteProviderAndSecret(id)
   sendSuccess(res, { id })
+}
+
+export async function deleteProviderAndSecret(id: string): Promise<void> {
+  const provider = await getProvider(id)
+  await deleteProviderRecord(id)
+  if (provider) await getSecretStore().delete(provider.apiKeyReference)
 }
 
 const ResetHealthSchema = z.object({ providerId: z.string() })

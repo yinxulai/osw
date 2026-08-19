@@ -1,15 +1,16 @@
 import { useRef } from 'react'
-import { Download, Upload } from 'lucide-react'
+import { Database, Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface DataManagementCardProps {
   onExport: () => void
   onImport: (file: File) => void
+  onSeedDevelopment: () => void
 }
 
 export function DataManagementCard(props: DataManagementCardProps) {
-  const { onExport, onImport } = props
+  const { onExport, onImport, onSeedDevelopment } = props
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -51,6 +52,18 @@ export function DataManagementCard(props: DataManagementCardProps) {
           导出的配置文件不包含 API Key。导入时需在文件中手动添加{' '}
           <code className="rounded bg-muted px-1">apiKey</code> 字段。
         </p>
+        {import.meta.env.DEV && (
+          <div className="mt-4 border-t pt-3">
+            <p className="mb-2 text-xs font-medium">开发功能</p>
+            <Button variant="outline" onClick={onSeedDevelopment}>
+              <Database className="mr-1 h-3.5 w-3.5" />
+              插入测试数据
+            </Button>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              添加示例供应商、模型、绑定和请求记录，不会覆盖已有配置。
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

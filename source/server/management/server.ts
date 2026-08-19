@@ -1,10 +1,12 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
 import type { Server } from 'node:http'
+import type { RuntimeEnvironment } from '@common/runtime-profile'
 
 export interface ManagementServerOptions {
   host?: string
   port?: number
+  environment?: RuntimeEnvironment
 }
 
 let managementServer: Server | null = null
@@ -16,6 +18,7 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
 
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 9301
+  const environment = options.environment ?? 'production'
   const candidate = http.createServer(async (req, res) => {
     setCorsHeaders(res)
     if (req.method === 'OPTIONS') {
@@ -33,7 +36,7 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
       writeJsonError(res, 405, 'METHOD_NOT_ALLOWED', '只支持 POST 请求')
       return
     }
-    await handleApiRequest(req, res)
+    await handleApiRequest(req, res, environment)
   })
 
   managementServer = candidate

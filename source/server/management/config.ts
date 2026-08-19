@@ -18,10 +18,17 @@ import {
   updateUpstreamModel,
 } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
+import { seedDevelopmentData } from '../database/development-seed'
 
 export const configRoutes: Record<string, ManagementHandler> = {
   '/api/config/export': handleExportConfig,
   '/api/config/import': handleImportConfig,
+  '/api/config/seed-development': handleSeedDevelopment,
+}
+
+async function handleSeedDevelopment(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const inserted = await seedDevelopmentData(getSecretStore(), { allowExisting: true })
+  sendSuccess(res, { inserted })
 }
 
 // ========== 导出配置 ==========

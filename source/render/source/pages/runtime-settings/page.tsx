@@ -54,6 +54,7 @@ export function RuntimeSettingsPage() {
             <DataManagementCard
               onExport={() => void service.exportConfig()}
               onImport={file => void service.importConfig(file)}
+              onSeedDevelopment={() => void service.seedDevelopmentData()}
             />
 
             <div className="flex justify-end">

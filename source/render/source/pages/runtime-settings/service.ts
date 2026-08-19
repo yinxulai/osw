@@ -110,6 +110,17 @@ export function useRuntimeSettingsService() {
     }
   }, [loadData, toast])
 
+  const seedDevelopmentData = useCallback(async () => {
+    if (!window.confirm('插入开发测试数据？已有配置不会被覆盖。')) return
+    const result = await configApi.seedDevelopment()
+    if (!result.success) {
+      toast.error(`插入失败：${result.errorMessage}`)
+      return
+    }
+    toast.success(result.data.inserted ? '测试数据已插入' : '测试数据已存在')
+    await loadData()
+  }, [loadData, toast])
+
   return {
     settings,
     proxyStatus,
@@ -121,5 +132,6 @@ export function useRuntimeSettingsService() {
     reload: loadData,
     exportConfig,
     importConfig,
+    seedDevelopmentData,
   }
 }

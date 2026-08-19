@@ -247,4 +247,5 @@ export const configApi = {
       '/config/import',
       { config, mode },
     ),
+  seedDevelopment: () => request<{ inserted: boolean }>('/config/seed-development', {}),
 }

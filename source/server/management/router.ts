@@ -12,6 +12,7 @@ import { requestLogRoutes } from './request-logs'
 import { analyticsRoutes } from './analytics'
 import { configRoutes } from './config'
 import { modelTestRoutes } from './model-test'
+import type { RuntimeEnvironment } from '@common/runtime-profile'
 
 const routes: Record<string, ManagementHandler> = {
   ...providerRoutes,
@@ -26,8 +27,12 @@ const routes: Record<string, ManagementHandler> = {
   ...modelTestRoutes,
 }
 
-export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')
+  if (url.pathname === '/api/config/seed-development' && environment !== 'development') {
+    sendError(res, 'NOT_FOUND', `API 路径不存在: ${url.pathname}`, 404)
+    return
+  }
   const handler = routes[url.pathname]
 
   if (!handler) {
