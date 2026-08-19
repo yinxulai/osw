@@ -29,11 +29,18 @@ describe('development seed', () => {
   it('populates an empty development database with representative data', async () => {
     expect(await seedDevelopmentData(secretStore)).toBe(true)
 
-    expect(await listProviders()).toHaveLength(4)
+    expect(await listProviders()).toHaveLength(5)
     expect(await listLogicalModels()).toHaveLength(3)
-    expect(await listUpstreamModels()).toHaveLength(7)
-    expect(await listRequestLogs()).toHaveLength(18)
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    const upstreamModels = await listUpstreamModels()
+    expect(upstreamModels).toHaveLength(10)
+    expect(upstreamModels.filter(model => model.endpoints.length === 3)).toHaveLength(3)
+    expect(await listRequestLogs()).toHaveLength(30)
+    expect(new Set((await listRequestLogs()).map(request => request.protocol))).toEqual(new Set([
+      'openai-completions',
+      'openai-responses',
+      'anthropic-messages',
+    ]))
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 
   it('does not modify a database that already has configuration', async () => {
@@ -61,14 +68,14 @@ describe('development seed', () => {
 
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(true)
     expect((await listProviders()).map(provider => provider.name)).toContain('Existing provider')
-    expect(await listProviders()).toHaveLength(5)
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    expect(await listProviders()).toHaveLength(6)
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
 
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(false)
-    expect(await listProviders()).toHaveLength(5)
+    expect(await listProviders()).toHaveLength(6)
     expect(await listLogicalModels()).toHaveLength(3)
-    expect(await listUpstreamModels()).toHaveLength(7)
-    expect(await listRequestLogs()).toHaveLength(18)
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    expect(await listUpstreamModels()).toHaveLength(10)
+    expect(await listRequestLogs()).toHaveLength(30)
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 })

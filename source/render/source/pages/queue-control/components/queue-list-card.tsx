@@ -100,13 +100,12 @@ export function QueueListCard(props: QueueListCardProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="overflow-hidden rounded-b-lg border-t border-border/50">
-                <div className="hidden min-h-8 grid-cols-[4rem_minmax(12rem,1.4fr)_5.5rem_minmax(10rem,1fr)_minmax(8rem,.9fr)_7.5rem] items-center border-b border-border/50 bg-muted/25 px-4 text-[10px] font-medium text-muted-foreground lg:grid">
+              <div className="overflow-x-auto overflow-y-hidden rounded-b-lg border-t border-border/50">
+                <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/50 bg-muted/25 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
                   <span>顺序</span>
                   <span>供应商与上游模型</span>
-                  <span>协议</span>
                   <span>性能</span>
-                  <span>健康状态</span>
+                  <span className="hidden lg:block">健康状态</span>
                   <span className="text-right">状态</span>
                 </div>
                 {models.map(model => {

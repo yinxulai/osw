@@ -1,12 +1,12 @@
 import {
-  BarChart3,
+  ChartColumnIncreasing,
   CircleDot,
-  History,
-  Layers,
+  ClipboardList,
+  Cog,
+  Database,
   Moon,
-  Plug,
-  Settings,
-  SquareTerminal,
+  ListOrdered,
+  ScrollText,
   Sun,
   type LucideIcon,
 } from 'lucide-react'
@@ -33,12 +33,12 @@ interface AppSidebarProps {
 }
 
 const navItems: NavItem[] = [
-  { key: 'queue', label: '模型队列', icon: Layers, section: '主要' },
-  { key: 'providers', label: '模型管理', icon: Plug, section: '主要' },
-  { key: 'overview', label: '统计分析', icon: BarChart3, section: '数据' },
-  { key: 'requests', label: '请求记录', icon: History, section: '数据' },
-  { key: 'logs', label: '运行日志', icon: SquareTerminal, section: '系统' },
-  { key: 'settings', label: '设置', icon: Settings, section: '系统' },
+  { key: 'queue', label: '模型队列', icon: ListOrdered, section: '主要' },
+  { key: 'providers', label: '模型管理', icon: Database, section: '主要' },
+  { key: 'overview', label: '统计分析', icon: ChartColumnIncreasing, section: '数据' },
+  { key: 'requests', label: '请求记录', icon: ClipboardList, section: '数据' },
+  { key: 'logs', label: '运行日志', icon: ScrollText, section: '系统' },
+  { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]
 
 export function AppSidebar(props: AppSidebarProps) {
@@ -59,7 +59,10 @@ export function AppSidebar(props: AppSidebarProps) {
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-1.5">
         {sections.map(section => (
           <section key={section}>
-            <h2 className="mb-1 h-5 truncate px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{section}</h2>
+            <h2 className="relative mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5">
+              <span className="absolute inset-x-2 border-t border-sidebar-border transition-opacity duration-150 group-hover/sidebar:opacity-0" />
+              <span className="relative bg-sidebar px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75">{section}</span>
+            </h2>
             <div className="space-y-0.5">
               {navItems.filter(item => item.section === section).map(item => {
                 const ItemIcon = item.icon

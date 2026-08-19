@@ -49,6 +49,17 @@ const PROVIDER_FIXTURES = [
       'openai-completions': 'https://api.deepseek.com/chat/completions',
     },
   },
+  {
+    id: 'prov_dev_all_protocols',
+    name: '协议实验室（开发示例）',
+    apiKeyReference: 'key_dev_all_protocols',
+    apiKey: 'sk-development-all-protocols',
+    upstreamUrls: {
+      'openai-completions': 'https://api.example.com/v1/chat/completions',
+      'openai-responses': 'https://api.example.com/v1/responses',
+      'anthropic-messages': 'https://api.example.com/v1/messages',
+    },
+  },
 ] as const
 
 const LOGICAL_MODEL_FIXTURES = [
@@ -65,7 +76,18 @@ const UPSTREAM_MODEL_FIXTURES = [
   ['model_dev_reasoning', 'prov_dev_openai', 'o3', 'openai-responses', 2],
   ['model_dev_fast', 'prov_dev_ark', 'doubao-seed-1-6-flash', 'openai-completions', 1],
   ['model_dev_fast', 'prov_dev_deepseek', 'deepseek-chat', 'openai-completions', 2],
+  ['model_dev_default', 'prov_dev_all_protocols', 'universal-chat', 'all', 4],
+  ['model_dev_reasoning', 'prov_dev_all_protocols', 'universal-reasoner', 'all', 3],
+  ['model_dev_fast', 'prov_dev_all_protocols', 'universal-fast', 'all', 3],
 ] as const
+
+const ALL_PROTOCOLS = [
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+] as const
+
+const DEVELOPMENT_REQUEST_COUNT = 30
 
 interface DevelopmentSeedOptions {
   allowExisting?: boolean
@@ -93,7 +115,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     db.select({ id: upstreamModels.id }).from(upstreamModels).where(inArray(upstreamModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
   )
   const existingRequestIds = new Set(
-    db.select({ id: requestLogs.id }).from(requestLogs).where(inArray(requestLogs.id, Array.from({ length: 18 }, (_, index) => `req_dev_${String(index + 1).padStart(2, '0')}`))).all().map(row => row.id),
+    db.select({ id: requestLogs.id }).from(requestLogs).where(inArray(requestLogs.id, Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => `req_dev_${String(index + 1).padStart(2, '0')}`))).all().map(row => row.id),
   )
   const hasMissingFixtures =
     existingProviderIds.size < PROVIDER_FIXTURES.length
@@ -146,14 +168,14 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       logicalModelId: fixture[0],
       providerId: fixture[1],
       upstreamModelId: fixture[2],
-      endpoints: JSON.stringify([{ protocol: fixture[3], upstreamUrl: '', customAuthHeader: null }]),
+      endpoints: JSON.stringify((fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]).map(protocol => ({ protocol, upstreamUrl: '', customAuthHeader: null }))),
       priority: fixture[4],
       enabled: true,
       createdTime: timestamp,
       updatedTime: timestamp,
     }))).run()
 
-    const sampleRequests = Array.from({ length: 18 }, (_, index) => {
+    const sampleRequests = Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => {
       const failed = index === 4 || index === 11
       const logicalModel = LOGICAL_MODEL_FIXTURES[index % LOGICAL_MODEL_FIXTURES.length]
       const provider = PROVIDER_FIXTURES[index % PROVIDER_FIXTURES.length]
@@ -163,7 +185,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       return {
         id: `req_dev_${String(index + 1).padStart(2, '0')}`,
         logicalModelId: logicalModel.id,
-        protocol: index % 4 === 2 ? 'anthropic-messages' : 'openai-completions',
+        protocol: index % 3 === 0 ? 'openai-completions' : index % 3 === 1 ? 'openai-responses' : 'anthropic-messages',
         status: failed ? 'failed' : 'success',
         totalDurationMilliseconds: duration,
         totalTokens: failed ? null : inputTokens + outputTokens,
