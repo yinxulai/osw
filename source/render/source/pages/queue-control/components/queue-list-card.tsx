@@ -100,7 +100,7 @@ export function QueueListCard(props: QueueListCardProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="overflow-x-auto overflow-y-hidden rounded-b-lg border-t border-border/50">
+              <div className="overflow-x-auto overflow-y-hidden rounded-b-lg">
                 <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/50 bg-muted/25 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
                   <span>顺序</span>
                   <span>供应商与上游模型</span>

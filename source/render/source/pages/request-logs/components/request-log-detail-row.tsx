@@ -68,7 +68,7 @@ function AttemptBadge(props: AttemptBadgeProps) {
 
 function MetricCard(props: MetricCardProps) {
   return (
-    <div className="rounded-lg border bg-background/80 px-3 py-2.5">
+    <div className="rounded-lg bg-card px-3 py-2.5">
       <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{props.label}</div>
       <div className={cn('mt-1 font-mono text-base font-medium tabular-nums', props.accent && 'text-emerald-600 dark:text-emerald-400')}>
         {props.value}
@@ -80,7 +80,7 @@ function MetricCard(props: MetricCardProps) {
 
 function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
   return (
-    <section className="overflow-hidden rounded-lg border bg-background/80">
+    <section className="overflow-hidden rounded-lg bg-card">
       <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Route size={12} />
@@ -129,7 +129,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
   const rawUsage = props.rawUsage ? JSON.stringify(props.rawUsage, null, 2) : null
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-background/80">
+    <section className="overflow-hidden rounded-lg bg-card">
       <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Braces size={12} />

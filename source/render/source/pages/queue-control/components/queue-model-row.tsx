@@ -125,7 +125,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
                   return (
                     <Tooltip key={endpoint.protocol}>
                       <TooltipTrigger asChild>
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded border bg-background text-muted-foreground" aria-label={meta.label}>
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-muted/50 text-muted-foreground" aria-label={meta.label}>
                           <ProtocolIcon size={11} />
                         </span>
                       </TooltipTrigger>

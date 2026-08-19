@@ -79,7 +79,7 @@ export function ModelDialog(props: ModelDialogProps) {
             {bindingEntries.map((entry, index) => (
               <div
                 key={entry.protocol}
-                className={cn('space-y-3 rounded-md border p-3 transition-colors', !entry.enabled && 'opacity-60')}
+                className={cn('space-y-3 rounded-md bg-muted/30 p-3 transition-colors', !entry.enabled && 'opacity-60')}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">

@@ -33,7 +33,7 @@ export function QueueTestControls(props: QueueTestControlsProps) {
   if (props.protocols.length === 0) return null
 
   return (
-    <div className="flex items-center overflow-hidden rounded-md border bg-background">
+    <div className="flex items-center overflow-hidden rounded-md bg-card">
       <Select value={props.selectedProtocol} onValueChange={value => props.onProtocolChange(value as Protocol | 'all')}>
         <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-muted/20 text-[11px] focus:outline-none">
           <SelectValue />
@@ -64,7 +64,7 @@ export function QueueTestSummary(props: QueueTestSummaryProps) {
   const failureCount = props.results.length - successCount
 
   return (
-    <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-4 rounded-lg border bg-muted/20 px-3 py-2.5 text-[11px]">
+    <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-4 rounded-lg bg-muted/20 px-3 py-2.5 text-[11px]">
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 font-medium">
           <Activity size={12} className="text-primary" />

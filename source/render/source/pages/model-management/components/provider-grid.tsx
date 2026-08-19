@@ -26,7 +26,7 @@ export function ProviderGrid(props: ProviderGridProps) {
 
   return (
     <Card className="h-fit overflow-hidden">
-      <CardHeader className="border-b border-border/70 pb-3">
+      <CardHeader className="pb-3">
         <CardTitle>供应商</CardTitle>
         <CardDescription>
           密钥按供应商保存，可为每个协议配置默认接口地址，模型可单独覆盖。

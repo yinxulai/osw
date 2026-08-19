@@ -17,7 +17,7 @@ export function StatsGrid(props: StatsGridProps) {
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-border sm:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="min-w-[140px] bg-card p-3">
           <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">

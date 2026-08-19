@@ -168,7 +168,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
       <DialogContent className="flex max-h-[86vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/45 text-primary"><FlaskConical size={15} /></div>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-primary"><FlaskConical size={15} /></div>
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-sm">
                 渠道诊断
@@ -194,7 +194,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                 }).length
 
                 return (
-                  <div key={provider.id} className="rounded-lg border bg-background/60 p-2">
+                  <div key={provider.id} className="rounded-lg bg-background/60 p-2">
                     <button
                       type="button"
                       className={cn(
@@ -217,7 +217,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                           const selectedCount = modelSelectedProtocols.size
 
                           return (
-                            <div key={model.id} className="rounded-md border border-border/70 bg-background/80 p-2">
+                            <div key={model.id} className="rounded-md bg-background/80 p-2">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-[10px] font-medium text-foreground">{model.upstreamModelId}</div>
@@ -288,7 +288,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
 
             <main className="min-h-0 flex-1 overflow-auto p-4">
               {visibleTasks.length > 0 ? (
-                <div className="overflow-hidden rounded-md border bg-background">
+                <div className="overflow-hidden rounded-md bg-card">
                   <div className="hidden grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] gap-3 border-b bg-muted/30 px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:grid"><span /><span>目标</span><span>协议</span><span>结果</span><span className="text-right">响应</span></div>
                   {visibleTasks.map(task => {
                     return <div key={task.id} className="grid gap-2 border-b px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
@@ -303,7 +303,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                 </div>
               ) : (
                 <div className="flex min-h-52 flex-col items-center justify-center text-center">
-                  <div className="mb-3 flex size-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground"><Cpu size={18} /></div>
+                  <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-muted/30 text-muted-foreground"><Cpu size={18} /></div>
                   <div className="text-xs font-medium">{enabledModels.length === 0 ? '没有可测试的模型绑定' : '当前范围没有测试任务'}</div>
                   <div className="mt-1.5 max-w-sm text-[11px] leading-5 text-muted-foreground">
                     {enabledModels.length === 0 ? '请先在模型管理中添加并启用上游模型，然后返回这里验证协议与渠道。' : '在左侧列表中勾选需要测试的渠道和协议，结果会在这里展示。'}

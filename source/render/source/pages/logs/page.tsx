@@ -196,7 +196,7 @@ export function LogsPage() {
           </Dialog>
         </div>
 
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-lg bg-card">
           <div className="max-h-[calc(100vh-190px)] overflow-auto">
             <table className="w-full table-fixed text-xs">
               <thead className="sticky top-0 z-10 bg-muted/95 text-left text-muted-foreground backdrop-blur-sm">

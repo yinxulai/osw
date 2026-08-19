@@ -110,7 +110,7 @@ export function RequestLogsPage() {
             description="通过本地代理发起请求后，这里会记录实际使用的模型、耗时、缓存与故障切换详情。"
             className="min-h-64"
           />
-        ) : <div className="overflow-hidden rounded-lg border">
+        ) : <div className="overflow-hidden rounded-lg bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>

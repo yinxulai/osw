@@ -16,6 +16,91 @@ import { FailureReasons } from './components/failure-reasons'
 export function OverviewPage() {
   const { timeRange, setTimeRange, data, loading, hasData } = useOverviewService()
 
+  const renderLoading = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-border sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-card p-3">
+            <Skeleton className="mb-2 h-3 w-16" />
+            <Skeleton className="h-6 w-20" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <Skeleton className="h-40 w-full" />
+        </Card>
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Skeleton className="h-3 w-3 rounded-full" />
+                <Skeleton className="h-3 flex-1" />
+                <Skeleton className="h-3 w-10" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <Skeleton className="h-32 w-full" />
+        </Card>
+      </div>
+    </div>
+  )
+
+  const renderEmpty = () => (
+    <EmptyState
+      icon={BarChart3}
+      title="暂无统计数据"
+      description="代理请求产生后，这里会显示请求量、成功率、延迟与模型分布。"
+      className="min-h-72"
+    />
+  )
+
+  const renderContent = () => {
+    if (!data) return null
+    return (
+      <>
+        <StatsGrid summary={data.summary} />
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
+          <TrendChart trend={data.trend} range={timeRange} />
+          <ProviderDistribution stats={data.providerStats} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+          <ModelRanking stats={data.modelStats} />
+          <LatencyDistribution buckets={data.latencyDistribution} />
+        </div>
+
+        <FailureReasons
+          reasons={data.failureReasons}
+          failedCount={data.summary.failedCount}
+          successRate={data.summary.successRate}
+        />
+      </>
+    )
+  }
+
+  const renderBody = () => {
+    if (loading) return renderLoading()
+    if (!hasData) return renderEmpty()
+    return renderContent()
+  }
+
   return (
     <PageLayout>
       <PageHeader
@@ -32,81 +117,7 @@ export function OverviewPage() {
         )}
       />
       <PageContent>
-        {loading && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-card p-3">
-                  <Skeleton className="mb-2 h-3 w-16" />
-                  <Skeleton className="h-6 w-20" />
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
-              <Card className="p-4">
-                <Skeleton className="mb-4 h-4 w-24" />
-                <Skeleton className="h-40 w-full" />
-              </Card>
-              <Card className="p-4">
-                <Skeleton className="mb-4 h-4 w-24" />
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Skeleton className="h-3 w-3 rounded-full" />
-                      <Skeleton className="h-3 flex-1" />
-                      <Skeleton className="h-3 w-10" />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-              <Card className="p-4">
-                <Skeleton className="mb-4 h-4 w-24" />
-                <div className="space-y-3">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 w-full" />
-                  ))}
-                </div>
-              </Card>
-              <Card className="p-4">
-                <Skeleton className="mb-4 h-4 w-24" />
-                <Skeleton className="h-32 w-full" />
-              </Card>
-            </div>
-          </div>
-        )}
-
-        {!loading && !hasData && (
-          <EmptyState
-            icon={BarChart3}
-            title="暂无统计数据"
-            description="代理请求产生后，这里会显示请求量、成功率、延迟与模型分布。"
-            className="min-h-72"
-          />
-        )}
-
-        {!loading && hasData && data && (
-          <>
-            <StatsGrid summary={data.summary} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
-              <TrendChart trend={data.trend} range={timeRange} />
-              <ProviderDistribution stats={data.providerStats} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
-              <ModelRanking stats={data.modelStats} />
-              <LatencyDistribution buckets={data.latencyDistribution} />
-            </div>
-
-            <FailureReasons
-              reasons={data.failureReasons}
-              failedCount={data.summary.failedCount}
-              successRate={data.summary.successRate}
-            />
-          </>
-        )}
+        {renderBody()}
       </PageContent>
     </PageLayout>
   )
