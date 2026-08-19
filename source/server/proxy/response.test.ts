@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { classifyUpstreamStatus } from './response'
 
 describe('classifyUpstreamStatus', () => {
-  it.each([200, 201, 204, 301, 399])('treats %i as a successful upstream response', status => {
+  it.each([200, 201, 204])('treats %i as a successful upstream response', status => {
     expect(classifyUpstreamStatus(status)).toBe('success')
+  })
+
+  it.each([300, 301, 399])('does not treat redirect %i as a successful model response', status => {
+    expect(classifyUpstreamStatus(status)).toBe('terminal')
   })
 
   it.each([408, 401, 403, 429, 500, 502, 503, 599])('allows failover for %i', status => {

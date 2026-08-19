@@ -189,6 +189,8 @@ export const ApiErrorCodeSchema = z.enum([
   'UPSTREAM_ERROR',
   'ALL_PROVIDERS_FAILED',
   'PROXY_NOT_RUNNING',
+  'NO_MODEL_CONFIGURED',
+  'PROXY_INTERNAL_ERROR',
 ])
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 

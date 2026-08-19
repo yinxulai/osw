@@ -4,7 +4,7 @@ import { URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { getAvailableModels, detectProtocolFromPath, findEndpoint } from './router'
 import { markProviderSuccess, markProviderFailure } from './health'
-import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus } from '../database/store'
+import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
@@ -135,7 +135,6 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         console.log(
           `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
-        await markProviderFailure(target.provider.id)
         await finalizeRequestLog(requestId, 'failed', startedAt)
         return
       }
@@ -216,6 +215,8 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
       rawUsage: metrics?.rawUsage ?? null,
       ttftMilliseconds: metrics?.ttftMilliseconds ?? null,
     })
+    const settings = await getSettings()
+    await pruneRequestLogs(settings.logRetentionCount)
   } catch (error) {
     console.error(`[proxy] 更新请求日志失败: ${(error as Error).message}`)
   }
@@ -423,9 +424,23 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', chunk => chunks.push(chunk))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
+    let settled = false
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+
+    req.on('data', chunk => {
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (settled) return
+      settled = true
+      resolve(Buffer.concat(chunks))
+    })
+    req.on('aborted', () => fail(new Error('CLIENT_REQUEST_ABORTED')))
+    req.on('error', error => fail(error))
   })
 }
 

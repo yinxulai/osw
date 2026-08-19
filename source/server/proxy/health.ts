@@ -1,7 +1,7 @@
 import {
   getProviderHealth,
   recordHealthSuccess,
-  recordHealthFailure,
+  recordProviderFailure,
   listProviderHealth,
   resetProviderHealth,
   getSettings,
@@ -20,20 +20,12 @@ export async function markProviderSuccess(providerId: string): Promise<void> {
 
 export async function markProviderFailure(providerId: string): Promise<void> {
   const settings = await getSettings()
-  const health = await getProviderHealth(providerId)
-  const consecutiveFailures = (health?.consecutiveFailures ?? 0) + 1
-
-  let cooldownUntilTime: number | null = null
-  if (consecutiveFailures >= settings.consecutiveFailureThreshold) {
-    const exponent = consecutiveFailures - settings.consecutiveFailureThreshold
-    const seconds = Math.min(
-      settings.cooldownBaseSeconds * Math.pow(2, exponent),
-      settings.cooldownMaxSeconds,
-    )
-    cooldownUntilTime = Date.now() + seconds * 1000
-  }
-
-  await recordHealthFailure(providerId, cooldownUntilTime)
+  await recordProviderFailure(
+    providerId,
+    settings.consecutiveFailureThreshold,
+    settings.cooldownBaseSeconds,
+    settings.cooldownMaxSeconds,
+  )
 }
 
 export async function getAllHealth() {

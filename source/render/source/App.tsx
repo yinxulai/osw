@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
 import { AppLayout } from '@/components/layout'
-import { AppSidebar, type PageKey, type Theme } from '@/components/app-sidebar'
+import { AppSidebar, type PageKey, type Theme, type ThemeMode } from '@/components/app-sidebar'
 import { QueueControlPage } from './pages/queue-control/page'
 import { ModelManagementPage } from './pages/model-management/page'
 import { OverviewPage } from './pages/overview/page'
@@ -14,13 +14,24 @@ import type { ProxyServerStatus } from '@common/schemas'
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>('queue')
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'dark'
-    const saved = localStorage.getItem('theme') as Theme | null
-    if (saved) return saved
-    return 'dark'
+    const saved = localStorage.getItem('theme')
+    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved
+    return 'system'
   })
+  const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const [proxyStatus, setProxyStatus] = useState<ProxyServerStatus | null>(null)
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateSystemTheme = () => setSystemTheme(media.matches ? 'dark' : 'light')
+    updateSystemTheme()
+    media.addEventListener('change', updateSystemTheme)
+    return () => media.removeEventListener('change', updateSystemTheme)
+  }, [])
+
+  const theme: Theme = themeMode === 'system' ? systemTheme : themeMode
 
   useEffect(() => {
     const root = document.documentElement
@@ -29,8 +40,8 @@ function App() {
     } else {
       root.classList.remove('dark')
     }
-    localStorage.setItem('theme', theme)
-  }, [theme])
+    localStorage.setItem('theme', themeMode)
+  }, [theme, themeMode])
 
   useEffect(() => {
     let cancelled = false
@@ -46,7 +57,7 @@ function App() {
     }
   }, [])
 
-  const toggleTheme = () => setTheme(current => current === 'dark' ? 'light' : 'dark')
+  const toggleTheme = () => setThemeMode(current => current === 'dark' ? 'light' : 'dark')
 
   return (
     <ToastProvider>
@@ -68,7 +79,12 @@ function App() {
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}
-          {activePage === 'settings' && <RuntimeSettingsPage />}
+          {activePage === 'settings' && (
+            <RuntimeSettingsPage
+              themeMode={themeMode}
+              onThemeModeChange={setThemeMode}
+            />
+          )}
         </AppLayout>
       </TooltipProvider>
     </ToastProvider>

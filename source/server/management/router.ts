@@ -47,7 +47,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     if (error instanceof z.ZodError) {
       sendError(res, 'VALIDATION_ERROR', error.errors.map(issue => issue.message).join('; '), 400)
     } else {
-      sendError(res, 'INTERNAL_ERROR', (error as Error).message, 500)
+      const message = error instanceof Error ? error.message : String(error)
+      sendError(res, 'INTERNAL_ERROR', message, 500)
     }
   }
 }
@@ -55,8 +56,18 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 async function parseJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', chunk => chunks.push(chunk))
+    let settled = false
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+    req.on('data', chunk => {
+      chunks.push(chunk)
+    })
     req.on('end', () => {
+      if (settled) return
+      settled = true
       const raw = Buffer.concat(chunks).toString('utf-8')
       if (!raw) {
         resolve({})
@@ -68,6 +79,7 @@ async function parseJsonBody(req: IncomingMessage): Promise<unknown> {
         reject(new Error('Invalid JSON body'))
       }
     })
-    req.on('error', reject)
+    req.on('aborted', () => fail(new Error('CLIENT_REQUEST_ABORTED')))
+    req.on('error', error => fail(error))
   })
 }

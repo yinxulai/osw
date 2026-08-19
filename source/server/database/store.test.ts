@@ -14,8 +14,12 @@ import {
   listUpstreamModelsByLogicalModel,
   deleteProvider,
   createRequestLog,
+  createRequestAttempt,
   updateRequestLogStatus,
   listRequestLogs,
+  pruneRequestLogs,
+  getProviderStats,
+  listAttemptsByRequest,
   listLogicalModels,
   listProviders,
 } from './store'
@@ -141,5 +145,109 @@ describe('store row mapping', () => {
     await deleteProvider(provider.id)
 
     expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
+  })
+
+  it('prunes request logs and their attempts beyond the retention count', async () => {
+    const provider = await createProvider({
+      name: 'Provider',
+      apiKeyReference: 'key_reference',
+      timeoutMilliseconds: 30_000,
+      enabled: true,
+      upstreamUrls: '{}',
+    })
+    const logs = await Promise.all([1, 2, 3].map(index => createRequestLog({
+      id: `req_retention_${index}`,
+      logicalModelId: 'model_default',
+      protocol: 'openai-completions',
+      status: 'success',
+      totalDurationMilliseconds: index,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })))
+    await Promise.all(logs.map(log => createRequestAttempt({
+      requestId: log.id,
+      providerId: provider.id,
+      upstreamModelId: 'upstream-model',
+      attemptIndex: 0,
+      status: 'success',
+      errorCode: null,
+      errorMessage: null,
+      durationMilliseconds: 1,
+    })))
+
+    await pruneRequestLogs(2)
+
+    const remainingLogs = await listRequestLogs(10)
+    expect(remainingLogs).toHaveLength(2)
+    const remainingIds = new Set(remainingLogs.map(log => log.id))
+    const remainingAttempts = (await Promise.all(logs.map(log => listAttemptsByRequest(log.id))))
+      .flat()
+      .filter(attempt => remainingIds.has(attempt.requestId))
+    expect(remainingAttempts).toHaveLength(2)
+    expect((await getProviderStats(0))[0].requests).toBe(2)
+  })
+
+  it('attributes failover statistics to the final attempt only', async () => {
+    const firstProvider = await createProvider({
+      name: 'First',
+      apiKeyReference: 'first_key',
+      timeoutMilliseconds: 30_000,
+      enabled: true,
+      upstreamUrls: '{}',
+    })
+    const secondProvider = await createProvider({
+      name: 'Second',
+      apiKeyReference: 'second_key',
+      timeoutMilliseconds: 30_000,
+      enabled: true,
+      upstreamUrls: '{}',
+    })
+    const log = await createRequestLog({
+      id: 'req_failover_stats',
+      logicalModelId: 'model_default',
+      protocol: 'openai-completions',
+      status: 'success',
+      totalDurationMilliseconds: 10,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+    await createRequestAttempt({
+      requestId: log.id,
+      providerId: firstProvider.id,
+      upstreamModelId: 'first-model',
+      attemptIndex: 0,
+      status: 'failed',
+      errorCode: 'Status_503',
+      errorMessage: 'failed',
+      durationMilliseconds: 5,
+    })
+    await createRequestAttempt({
+      requestId: log.id,
+      providerId: secondProvider.id,
+      upstreamModelId: 'second-model',
+      attemptIndex: 1,
+      status: 'success',
+      errorCode: null,
+      errorMessage: null,
+      durationMilliseconds: 5,
+    })
+
+    const stats = await getProviderStats(0)
+    expect(stats).toHaveLength(1)
+    expect(stats[0]).toMatchObject({ providerId: secondProvider.id, requests: 1, success: 1, failed: 0 })
   })
 })

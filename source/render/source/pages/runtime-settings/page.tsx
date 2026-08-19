@@ -8,8 +8,14 @@ import { FailoverCard } from './components/failover-card'
 import { LogRetentionCard } from './components/log-retention-card'
 import { GeneralCard } from './components/general-card'
 import { DataManagementCard } from './components/data-management-card'
+import type { ThemeMode } from '@/components/app-sidebar'
 
-export function RuntimeSettingsPage() {
+interface RuntimeSettingsPageProps {
+  themeMode: ThemeMode
+  onThemeModeChange: (mode: ThemeMode) => void
+}
+
+export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
   const service = useRuntimeSettingsService()
 
   return (
@@ -49,6 +55,8 @@ export function RuntimeSettingsPage() {
             <GeneralCard
               autoLaunch={service.settings.autoLaunch}
               onAutoLaunchChange={value => service.updateField('autoLaunch', value)}
+              themeMode={props.themeMode}
+              onThemeModeChange={props.onThemeModeChange}
             />
 
             <DataManagementCard

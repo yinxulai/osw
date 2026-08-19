@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type {
   Provider,
   LogicalModel,
@@ -374,18 +374,34 @@ export async function recordHealthSuccess(providerId: string): Promise<void> {
     .run()
 }
 
-export async function recordHealthFailure(providerId: string, cooldownUntil: number | null): Promise<void> {
+export async function recordProviderFailure(providerId: string, consecutiveFailureThreshold: number, cooldownBaseSeconds: number, cooldownMaxSeconds: number): Promise<void> {
+  const db = getDb()
   const time = now()
-  getDb()
-    .update(providerHealth)
-    .set({
-      consecutiveFailures: sql`${providerHealth.consecutiveFailures} + 1`,
-      cooldownUntilTime: cooldownUntil,
-      lastFailureTime: time,
-      updatedTime: time,
-    })
-    .where(eq(providerHealth.providerId, providerId))
-    .run()
+  db.transaction(transaction => {
+    const current = transaction
+      .select()
+      .from(providerHealth)
+      .where(eq(providerHealth.providerId, providerId))
+      .get()
+    const consecutiveFailures = (current?.consecutiveFailures ?? 0) + 1
+    let cooldownUntilTime: number | null = null
+    if (consecutiveFailures >= consecutiveFailureThreshold) {
+      const exponent = consecutiveFailures - consecutiveFailureThreshold
+      const seconds = Math.min(cooldownBaseSeconds * Math.pow(2, exponent), cooldownMaxSeconds)
+      cooldownUntilTime = time + seconds * 1000
+    }
+
+    transaction
+      .update(providerHealth)
+      .set({
+        consecutiveFailures,
+        cooldownUntilTime,
+        lastFailureTime: time,
+        updatedTime: time,
+      })
+      .where(eq(providerHealth.providerId, providerId))
+      .run()
+  })
 }
 
 export async function resetProviderHealth(providerId: string): Promise<void> {
@@ -552,6 +568,23 @@ export async function listRequestLogs(limit = 50): Promise<RequestLog[]> {
   return rows.map(mapRequestLog)
 }
 
+export async function pruneRequestLogs(retentionCount: number): Promise<void> {
+  if (!Number.isInteger(retentionCount) || retentionCount < 1) return
+  const db = getDb()
+  db.transaction(transaction => {
+    const allRows = transaction
+      .select({ id: requestLogs.id })
+      .from(requestLogs)
+      .orderBy(desc(requestLogs.createdTime))
+      .all()
+    const staleRows = allRows.slice(retentionCount)
+    const staleIds = staleRows.map(row => row.id)
+    if (staleIds.length === 0) return
+    transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
+    transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
+  })
+}
+
 export async function createRequestAttempt(
   input: Omit<RequestAttempt, 'id' | 'createdTime'>,
 ): Promise<RequestAttempt> {
@@ -662,7 +695,7 @@ export async function getRequestTrend(sinceMs: number, days: number): Promise<Da
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = formatLocalDate(d)
     const row = map.get(key)
     result.push({
       day: key,
@@ -672,6 +705,13 @@ export async function getRequestTrend(sinceMs: number, days: number): Promise<Da
     })
   }
   return result
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export interface ProviderStat {
@@ -685,21 +725,24 @@ export interface ProviderStat {
 
 export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]> {
   const db = getDb()
-  // 用 request_attempts 的 attemptIndex=0 作为"归属 provider"统计（即首次尝试的 provider）
-  // 更准确的方式：按 request_logs 关联，但 request_logs 没有 providerId
-  // 用 attemptIndex=0 代表该请求最初分配给哪个 provider
+  // 每个请求只归属最后一次尝试的 Provider，避免故障转移导致请求量重复计算。
+  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
+    SELECT max(final_attempt.attemptIndex)
+    FROM request_attempts AS final_attempt
+    WHERE final_attempt.requestId = ${requestAttempts.requestId}
+  )`
   const rows = db
     .select({
       providerId: requestAttempts.providerId,
       providerName: providers.name,
       requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
       success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
-      failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' and ${requestAttempts.attemptIndex} = 0 then ${requestAttempts.requestId} end)`.as('failed'),
+      failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' then ${requestAttempts.requestId} end)`.as('failed'),
       avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
     })
     .from(requestAttempts)
     .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
-    .where(sql`${requestAttempts.createdTime} >= ${sinceMs}`)
+    .where(and(sql`${requestAttempts.createdTime} >= ${sinceMs}`, finalAttempt))
     .groupBy(requestAttempts.providerId)
     .orderBy(sql`requests desc`)
     .all()
@@ -725,6 +768,11 @@ export interface ModelStat {
 
 export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
   const db = getDb()
+  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
+    SELECT max(final_attempt.attemptIndex)
+    FROM request_attempts AS final_attempt
+    WHERE final_attempt.requestId = ${requestAttempts.requestId}
+  )`
   const rows = db
     .select({
       upstreamModelId: requestAttempts.upstreamModelId,
@@ -736,7 +784,7 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
     })
     .from(requestAttempts)
     .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
-    .where(sql`${requestAttempts.createdTime} >= ${sinceMs}`)
+    .where(and(sql`${requestAttempts.createdTime} >= ${sinceMs}`, finalAttempt))
     .groupBy(requestAttempts.upstreamModelId, requestAttempts.providerId)
     .orderBy(sql`requests desc`)
     .limit(limit)
@@ -785,14 +833,23 @@ export interface FailureReasonStat {
 
 export async function getFailureReasons(sinceMs: number): Promise<FailureReasonStat[]> {
   const db = getDb()
-  // 按 errorCode 分类统计失败 attempt
+  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
+    SELECT max(final_attempt.attemptIndex)
+    FROM request_attempts AS final_attempt
+    WHERE final_attempt.requestId = ${requestAttempts.requestId}
+  )`
+  // 按最终失败 attempt 分类，确保原因总数与失败请求数一致。
   const rows = db
     .select({
       errorCode: requestAttempts.errorCode,
       count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count'),
     })
     .from(requestAttempts)
-    .where(sql`${requestAttempts.createdTime} >= ${sinceMs} and ${requestAttempts.status} = 'failed'`)
+    .where(and(
+      sql`${requestAttempts.createdTime} >= ${sinceMs}`,
+      eq(requestAttempts.status, 'failed'),
+      finalAttempt,
+    ))
     .groupBy(requestAttempts.errorCode)
     .orderBy(sql`count desc`)
     .all()

@@ -34,6 +34,8 @@ export function useRuntimeSettingsService() {
 
   const saveSettings = useCallback(async () => {
     if (!settings) return
+    const previousListenHost = proxyStatus?.host ?? settings.listenHost
+    const previousListenPort = proxyStatus?.port ?? settings.listenPort
     setSaving(true)
     setSaved(false)
     const updateResult = await settingsApi.update({
@@ -53,8 +55,8 @@ export function useRuntimeSettingsService() {
     }
     // 代理相关配置变更才重启代理
     const needsRestart =
-      settings.listenHost !== updateResult.data.listenHost ||
-      settings.listenPort !== updateResult.data.listenPort
+      previousListenHost !== updateResult.data.listenHost ||
+      previousListenPort !== updateResult.data.listenPort
     if (needsRestart) {
       const restartResult = await proxyApi.restart()
       setSaving(false)
@@ -70,7 +72,7 @@ export function useRuntimeSettingsService() {
     setSaved(true)
     toast.success('设置已保存')
     window.setTimeout(() => setSaved(false), 2000)
-  }, [settings, toast])
+  }, [proxyStatus, settings, toast])
 
   // ========== 配置导入导出 ==========
 

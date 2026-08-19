@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   markProviderSuccess: vi.fn(),
   createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
   updateRequestLogStatus: vi.fn(),
+  pruneRequestLogs: vi.fn(),
 }))
 
 vi.mock('./router', async importOriginal => {
@@ -26,10 +27,11 @@ vi.mock('./health', () => ({
 }))
 
 vi.mock('../database/store', () => ({
-  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000 }),
+  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionCount: 1_000 }),
   createRequestLog: mocks.createRequestLog,
   createRequestAttempt: async (input: Record<string, unknown>) => ({ id: 'att_test', ...input }),
   updateRequestLogStatus: mocks.updateRequestLogStatus,
+  pruneRequestLogs: mocks.pruneRequestLogs,
 }))
 
 import { handleProxyRequest } from './handler'

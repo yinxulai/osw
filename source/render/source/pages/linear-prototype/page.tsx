@@ -117,7 +117,7 @@ function LinearPrototypePage() {
       <aside className="lp-sidebar">
         <div className="lp-window-drag"><span /><span /><span /></div>
         <button className="lp-workspace" type="button">
-          <img className="lp-logo" src="/icon.svg" alt="" />
+          <img className="lp-logo" src="icon.svg" alt="" />
           <span>One Switch</span>
           <ChevronDown size={13} />
         </button>

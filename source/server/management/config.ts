@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { UpstreamUrlsSchema, type Provider, type LogicalModel, type UpstreamModel, type Settings } from '@common/schemas'
+import { ProtocolEndpointSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type UpstreamModel, type Settings } from '@common/schemas'
 import type { ManagementHandler } from './response'
 import { sendSuccess, sendError } from './response'
 import {
@@ -16,6 +16,9 @@ import {
   updateLogicalModel,
   createUpstreamModel,
   updateUpstreamModel,
+  deleteProvider,
+  deleteLogicalModel,
+  deleteUpstreamModel,
 } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { seedDevelopmentData } from '../database/development-seed'
@@ -169,7 +172,7 @@ const ImportConfigSchema = z.object({
         logicalModelId: z.string().optional(),
         providerId: z.string().optional(),
         upstreamModelId: z.string(),
-        endpoints: z.array(z.any()).optional(),
+        endpoints: z.array(ProtocolEndpointSchema).optional(),
         priority: z.number().int(),
         enabled: z.boolean().optional(),
       }),
@@ -180,8 +183,65 @@ const ImportConfigSchema = z.object({
 
 async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   try {
-    const { config } = ImportConfigSchema.parse(body)
+    const { config, mode } = ImportConfigSchema.parse(body)
     const secretStore = getSecretStore()
+
+    const existingProviders = await listProviders(false)
+    const existingModels = await listLogicalModels(false)
+    const existingUpstreamModels = await listUpstreamModels(false)
+    const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
+    const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
+    const existingModelNames = new Set(existingModels.map(model => model.name))
+    const existingModelIds = new Set(existingModels.map(model => model.id))
+    const providerNames = new Set(existingProviderNames)
+    const modelNames = new Set(existingModelNames)
+    const importedProviderNames = new Set<string>()
+    const importedModelNames = new Set<string>()
+    const importedBindingKeys = new Set<string>()
+
+    for (const provider of config.providers) {
+      if (importedProviderNames.has(provider.name)) {
+        throw new Error(`导入文件中存在重复供应商: ${provider.name}`)
+      }
+      importedProviderNames.add(provider.name)
+      providerNames.add(provider.name)
+      if (!existingProviderNames.has(provider.name) && !provider.apiKey) {
+        throw new Error(`供应商 "${provider.name}" 缺少 API Key，请在导入文件中添加 apiKey 字段`)
+      }
+    }
+
+    for (const model of config.logicalModels) {
+      if (importedModelNames.has(model.name)) {
+        throw new Error(`导入文件中存在重复逻辑模型: ${model.name}`)
+      }
+      importedModelNames.add(model.name)
+      modelNames.add(model.name)
+    }
+
+    for (const upstreamModel of config.upstreamModels) {
+      const logicalModelId = upstreamModel.logicalModelId
+      if (logicalModelId && !existingModelIds.has(logicalModelId)) {
+        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的逻辑模型`)
+      }
+      if (!logicalModelId && (!upstreamModel.logicalModelName || !modelNames.has(upstreamModel.logicalModelName))) {
+        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的逻辑模型`)
+      }
+
+      const providerId = upstreamModel.providerId
+      if (providerId && !existingProviderIds.has(providerId)) {
+        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的供应商`)
+      }
+      if (!providerId && (!upstreamModel.providerName || !providerNames.has(upstreamModel.providerName))) {
+        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的供应商`)
+      }
+
+      const bindingKey = `${logicalModelId ?? upstreamModel.logicalModelName}\0${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
+      if (importedBindingKeys.has(bindingKey)) {
+        throw new Error(`导入文件中存在重复上游模型: ${upstreamModel.upstreamModelId}`)
+      }
+      importedBindingKeys.add(bindingKey)
+      ProtocolEndpointSchema.array().parse(upstreamModel.endpoints ?? [])
+    }
 
     // 1. 更新设置
     if (Object.keys(config.settings).length > 0) {
@@ -189,8 +249,8 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     }
 
     // 2. 处理供应商
-    const existingProviders = await listProviders(false)
     const providerNameToId = new Map<string, string>()
+    const importedProviderIds = new Set<string>()
     let importedProviders = 0
 
     for (const p of config.providers) {
@@ -205,6 +265,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         if (p.apiKey) await secretStore.set(existing.apiKeyReference, p.apiKey)
         const updated = await updateProvider(existing.id, updates)
         providerNameToId.set(p.name, updated.id)
+        importedProviderIds.add(updated.id)
       } else {
         if (!p.apiKey) {
           sendError(res, 'VALIDATION_ERROR', `供应商 "${p.name}" 缺少 API Key，请在导入文件中添加 apiKey 字段`, 400)
@@ -220,13 +281,14 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           upstreamUrls: p.endpoints ? JSON.stringify(p.endpoints) : '{}',
         })
         providerNameToId.set(p.name, created.id)
+        importedProviderIds.add(created.id)
       }
       importedProviders++
     }
 
     // 3. 处理逻辑模型
-    const existingModels = await listLogicalModels(false)
     const modelNameToId = new Map<string, string>()
+    const importedModelIds = new Set<string>()
     let importedLogicalModels = 0
 
     for (const m of config.logicalModels) {
@@ -238,6 +300,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: m.enabled ?? true,
         })
         modelNameToId.set(m.name, updated.id)
+        importedModelIds.add(updated.id)
       } else {
         const created = await createLogicalModel({
           name: m.name,
@@ -245,13 +308,14 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: m.enabled ?? true,
         })
         modelNameToId.set(m.name, created.id)
+        importedModelIds.add(created.id)
       }
       importedLogicalModels++
     }
 
     // 4. 处理上游模型
-    const existingUpstreamModels = await listUpstreamModels(false)
     let importedUpstreamModels = 0
+    const importedUpstreamKeys = new Set<string>()
 
     for (const um of config.upstreamModels) {
       let logicalModelId = um.logicalModelId
@@ -295,7 +359,24 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: um.enabled ?? true,
         })
       }
+      importedUpstreamKeys.add(`${logicalModelId}\0${providerId}\0${um.upstreamModelId}`)
       importedUpstreamModels++
+    }
+
+    if (mode === 'replace') {
+      for (const upstreamModel of existingUpstreamModels) {
+        const key = `${upstreamModel.logicalModelId}\0${upstreamModel.providerId}\0${upstreamModel.upstreamModelId}`
+        if (!importedUpstreamKeys.has(key)) await deleteUpstreamModel(upstreamModel.id)
+      }
+      for (const model of existingModels) {
+        if (!importedModelIds.has(model.id)) await deleteLogicalModel(model.id)
+      }
+      for (const provider of existingProviders) {
+        if (!importedProviderIds.has(provider.id)) {
+          await deleteProvider(provider.id)
+          await secretStore.delete(provider.apiKeyReference)
+        }
+      }
     }
 
     sendSuccess(res, {

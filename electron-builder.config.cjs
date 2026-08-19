@@ -13,6 +13,7 @@ module.exports = {
   ],
   afterPack: 'scripts/macos-adhoc-sign.cjs',
   mac: {
+    icon: 'build/icon-mac.png',
     target: ['dmg'],
     category: 'public.app-category.developer-tools',
     identity: null,

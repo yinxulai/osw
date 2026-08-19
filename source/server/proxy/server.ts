@@ -13,33 +13,47 @@ let proxyServer: Server | null = null
 let proxyStartupPromise: Promise<Server> | null = null
 let lifecyclePromise: Promise<void> = Promise.resolve()
 
-export async function startProxyServer(): Promise<Server> {
+export function startProxyServer(): Promise<Server> {
   if (proxyServer?.listening) return Promise.resolve(proxyServer)
   if (proxyStartupPromise) return proxyStartupPromise
 
-  const settings = await getSettings()
-  const candidate = http.createServer(async (req, res) => {
-    const url = new URL(req.url!, 'http://localhost')
+  let candidate: Server | null = null
+  const startup = (async () => {
+    const settings = await getSettings()
+    candidate = http.createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url!, 'http://localhost')
 
-    if (url.pathname === '/v1/models') {
-      await writeModelsResponse(res)
-      return
-    }
+        if (url.pathname === '/v1/models') {
+          await writeModelsResponse(res)
+          return
+        }
 
-    const models = await listLogicalModels()
-    if (models.length === 0) {
-      writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置逻辑模型')
-      return
-    }
+        const activeModel = (await listLogicalModels()).find(model => model.enabled)
+        if (!activeModel) {
+          writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置已启用的逻辑模型')
+          return
+        }
 
-    await handleProxyRequest(req, res, models[0].id)
-  })
+        await handleProxyRequest(req, res, activeModel.id)
+      } catch (error) {
+        if (res.headersSent) {
+          res.destroy(error instanceof Error ? error : new Error(String(error)))
+          return
+        }
+        writeJsonError(res, 500, 'PROXY_INTERNAL_ERROR', '代理处理失败')
+      }
+    })
 
-  proxyServer = candidate
-  proxyStartupPromise = listen(candidate, settings.listenHost, settings.listenPort)
+    proxyServer = candidate
+    const server = await listen(candidate, settings.listenHost, settings.listenPort)
+    console.log(`[one-switch] proxy server listening on ${settings.listenHost}:${settings.listenPort}`)
+    return server
+  })()
+
+  proxyStartupPromise = startup
     .then(server => {
       proxyStartupPromise = null
-      console.log(`[one-switch] proxy server listening on ${settings.listenHost}:${settings.listenPort}`)
       return server
     })
     .catch(error => {
