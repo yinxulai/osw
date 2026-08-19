@@ -177,9 +177,6 @@
   select {
     font: inherit;
   }
-  button {
-    box-shadow: none !important;
-  }
   button:focus-visible,
   input:focus-visible,
   textarea:focus-visible,
