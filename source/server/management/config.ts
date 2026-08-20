@@ -18,6 +18,7 @@ import {
   updateLogicalModel,
   createUpstreamModel,
   updateUpstreamModel,
+  upsertSchedulingPolicy,
   deleteProvider,
   deleteLogicalModel,
   deleteUpstreamModel,
@@ -259,6 +260,22 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const existingProviders = await listProviders(false)
     const existingModels = await listLogicalModels(false)
     const existingUpstreamModels = await listUpstreamModels(false)
+    const importedPolicies = config.schedulingPolicies
+    const providerModels = config.providerModels.length > 0
+      ? config.providerModels.map(model => ({
+          id: model.id,
+          providerId: model.providerId,
+          upstreamModelId: model.modelName,
+          endpoints: (model.endpoints ?? []).map(endpoint => ({
+            protocol: endpoint.protocol,
+            upstreamUrl: endpoint.url ?? '',
+            customAuthHeader: null,
+            protocolConversionEnabled: endpoint.conversions?.some(conversion => conversion.enabled) ?? false,
+          })),
+          priority: importedPolicies.find(policy => policy.providerModelId === model.id)?.priority ?? 0,
+          enabled: model.enabled,
+        }))
+      : config.upstreamModels
     const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
     const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
     const providerNames = new Set(existingProviderNames)
@@ -281,16 +298,17 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       importedModelNames.add(model.name)
     }
 
-    for (const upstreamModel of config.upstreamModels) {
+    for (const upstreamModel of providerModels) {
       const providerId = upstreamModel.providerId
+      const providerName = 'providerName' in upstreamModel ? upstreamModel.providerName : undefined
       if (providerId && !existingProviderIds.has(providerId)) {
         throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的供应商`)
       }
-      if (!providerId && (!upstreamModel.providerName || !providerNames.has(upstreamModel.providerName))) {
+      if (!providerId && (!providerName || !providerNames.has(providerName))) {
         throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的供应商`)
       }
 
-      const upstreamModelKey = `${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
+      const upstreamModelKey = `${providerId ?? providerName}\0${upstreamModel.upstreamModelId}`
       if (importedUpstreamModelKeys.has(upstreamModelKey)) {
         throw new Error(`导入文件中存在重复上游模型: ${upstreamModel.upstreamModelId}`)
       }
@@ -365,9 +383,10 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     let importedUpstreamModels = 0
     const importedUpstreamKeys = new Set<string>()
 
-    for (const um of config.upstreamModels) {
+    const importedProviderModelIds = new Map<string, string>()
+    for (const um of providerModels) {
       let providerId = um.providerId
-      if (!providerId && um.providerName) {
+      if (!providerId && 'providerName' in um && um.providerName) {
         providerId = providerNameToId.get(um.providerName)
       }
       if (!providerId) {
@@ -381,23 +400,45 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           eum.upstreamModelId === um.upstreamModelId,
       )
 
+      let importedId: string
       if (existing) {
-        await updateUpstreamModel(existing.id, {
+        const updated = await updateUpstreamModel(existing.id, {
           endpoints: um.endpoints ?? [],
           priority: um.priority,
           enabled: um.enabled ?? true,
         })
+        importedId = updated.id
       } else {
-        await createUpstreamModel({
+        const created = await createUpstreamModel({
           providerId,
           upstreamModelId: um.upstreamModelId,
           endpoints: um.endpoints ?? [],
           priority: um.priority,
           enabled: um.enabled ?? true,
         })
+        importedId = created.id
       }
+      if ('id' in um && um.id) importedProviderModelIds.set(um.id, importedId)
       importedUpstreamKeys.add(`${providerId}\0${um.upstreamModelId}`)
       importedUpstreamModels++
+    }
+
+    if (config.version === 2) {
+      for (const policy of importedPolicies) {
+        const providerModelId = importedProviderModelIds.get(policy.providerModelId) ?? policy.providerModelId
+        const logicalModelId = importedModelIds.has(policy.logicalModelId)
+          ? policy.logicalModelId
+          : policy.logicalModelId
+        await upsertSchedulingPolicy({
+          logicalModelId,
+          providerModelId,
+          strategy: policy.strategy,
+          priority: policy.priority,
+          weight: policy.weight,
+          enabled: policy.enabled,
+          failoverEnabled: policy.failoverEnabled,
+        })
+      }
     }
 
     if (mode === 'replace') {
