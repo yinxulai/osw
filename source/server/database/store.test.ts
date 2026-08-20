@@ -22,6 +22,7 @@ import {
   listAttemptsByRequest,
   listLogicalModels,
   listProviders,
+  updateSettings,
 } from './store'
 
 let temporaryDirectory: string
@@ -39,6 +40,7 @@ afterEach(async () => {
 describe('store row mapping', () => {
   it('uses an environment-specific port only when settings are first created', async () => {
     expect((await getSettings({ listenPort: 19300 })).listenPort).toBe(19300)
+    await updateSettings({ listenPort: 19300 })
     expect((await getSettings()).listenPort).toBe(19300)
   })
 
@@ -59,6 +61,7 @@ describe('store row mapping', () => {
           protocol: 'openai-completions',
           upstreamUrl: 'https://api.example.com/v1/chat/completions',
           customAuthHeader: null,
+          protocolConversionEnabled: false,
         },
       ],
       priority: 1,
@@ -77,6 +80,7 @@ describe('store row mapping', () => {
     const log = await createRequestLog({
       logicalModelId: 'model',
       protocol: 'openai-responses',
+      upstreamProtocol: null,
       status: 'failed',
       totalDurationMilliseconds: 0,
       totalTokens: null,
@@ -133,6 +137,7 @@ describe('store row mapping', () => {
           protocol: 'openai-completions',
           upstreamUrl: 'https://api.example.com/v1/chat/completions',
           customAuthHeader: null,
+          protocolConversionEnabled: false,
         },
       ],
       priority: 1,
@@ -155,8 +160,7 @@ describe('store row mapping', () => {
     const logs = await Promise.all([1, 2, 3].map(index => createRequestLog({
       id: `req_retention_${index}`,
       logicalModelId: 'model_default',
-      protocol: 'openai-completions',
-      status: 'success',
+      protocol: 'openai-completions',      upstreamProtocol: null,      status: 'success',
       totalDurationMilliseconds: index,
       totalTokens: null,
       inputTokens: null,
@@ -209,8 +213,7 @@ describe('store row mapping', () => {
     const log = await createRequestLog({
       id: 'req_failover_stats',
       logicalModelId: 'model_default',
-      protocol: 'openai-completions',
-      status: 'success',
+      protocol: 'openai-completions',      upstreamProtocol: null,      status: 'success',
       totalDurationMilliseconds: 10,
       totalTokens: null,
       inputTokens: null,

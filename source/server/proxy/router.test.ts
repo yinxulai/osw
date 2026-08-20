@@ -8,8 +8,8 @@ describe('findEndpoint', () => {
     providerId: 'prov_1',
     upstreamModelId: 'upstream-1',
     endpoints: [
-      { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null },
-      { protocol: 'anthropic-messages', upstreamUrl: 'https://b.example.com', customAuthHeader: 'Bearer x' },
+      { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
+      { protocol: 'anthropic-messages', upstreamUrl: 'https://b.example.com', customAuthHeader: 'Bearer x', protocolConversionEnabled: false },
     ],
     priority: 1,
     enabled: true,

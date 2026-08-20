@@ -75,7 +75,7 @@ P1 优先实现三个最高频方向：
 
 ## 数据模型变更
 
-- `upstream_models` 新增 `protocolConversionEnabled` integer（0/1，默认 0）
+- `upstream_models.endpoints`（JSON）中每个端点对象新增 `protocolConversionEnabled` boolean（默认 false）：按端点（协议）粒度开启转换
 - `request_logs` 新增 `upstreamProtocol` text nullable：记录端点实际使用的协议；与 `protocol`（客户端协议）不同即表示发生了转换
 - `request_attempts` 无需变更（attempt 绑定具体端点，可推导）
 
@@ -83,9 +83,7 @@ P1 优先实现三个最高频方向：
 
 ### 模型编辑表单
 
-- 协议端点列表上方新增开关：「协议转换」+ 说明文案「开启后，此模型可接收其他协议的请求并自动转换（兼容层，部分参数可能丢失）」
-- 开关开启时，每个端点条目下方展示该端点新增的转换能力徽标，如端点为 OpenAI 时显示 `Anthropic ⟶ OpenAI`、`Responses ⟶ OpenAI`
-- 转换器标记为「不支持」的方向显示为灰色不可用态
+- 每个协议端点条目内新增开关：「协议转换」+ 说明文案「开启后，此端点可接收其他协议的请求并自动转换（兼容层，部分参数可能丢失）」
 
 ### 队列控制页
 

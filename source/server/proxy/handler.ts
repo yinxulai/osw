@@ -113,6 +113,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       id: requestId,
       logicalModelId,
       protocol,
+      upstreamProtocol: null,
       status: 'pending',
       totalDurationMilliseconds: 0,
       totalTokens: null,

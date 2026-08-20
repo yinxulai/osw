@@ -42,6 +42,8 @@ export async function closeDatabase(): Promise<void> {
 }
 
 function ensureSchema(db: DatabaseSync): void {
+  migrateLegacySettings(db)
+  migrateLegacyProviders(db)
   for (const statement of INITIAL_SCHEMA) {
     db.exec(statement)
   }
@@ -49,6 +51,7 @@ function ensureSchema(db: DatabaseSync): void {
   ensureColumn(db, 'request_logs', 'cachedInputTokens', 'INTEGER')
   ensureColumn(db, 'request_logs', 'cacheCreationInputTokens', 'INTEGER')
   ensureColumn(db, 'request_logs', 'promptCacheHit', 'INTEGER')
+  ensureColumn(db, 'request_logs', 'upstreamProtocol', 'TEXT')
   ensureColumn(db, 'request_attempts', 'upstreamRequestId', 'TEXT')
   ensureColumn(db, 'request_attempts', 'errorResponse', 'TEXT')
   dropColumn(db, 'upstream_models', 'logicalModelId')
@@ -63,6 +66,74 @@ function ensureDefaultLogicalModel(db: DatabaseSync): void {
      SELECT 'default', '默认模型', '系统自动创建的默认逻辑模型', 1, ?, ?
      WHERE NOT EXISTS (SELECT 1 FROM logical_models)`,
   ).run(BigInt(Date.now()), BigInt(Date.now()))
+}
+
+/** 旧宽表 settings 迁移到 key-value 结构；仅当检测到旧表时执行一次 */
+function migrateLegacySettings(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(settings)').all() as Array<{ name: string }>
+  if (!columns.length || !columns.some(column => column.name === 'listenHost')) return
+  const legacy = db
+    .prepare(
+      `SELECT listenHost, listenPort, accessTokenReference, logRetentionCount,
+              cooldownBaseSeconds, cooldownMaxSeconds, consecutiveFailureThreshold,
+              idleTimeoutMilliseconds, autoLaunch, updatedTime
+       FROM settings WHERE id = 'singleton'`,
+    )
+    .get() as Record<string, unknown> | undefined
+  db.exec('DROP TABLE settings')
+  db.exec(
+    `CREATE TABLE settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )`,
+  )
+  if (!legacy) return
+  const insert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+  for (const [key, value] of Object.entries(legacy)) {
+    insert.run(key, JSON.stringify(value))
+  }
+}
+
+/** 旧宽表 providers 迁移到 id+data 结构；仅当检测到旧表时执行一次 */
+function migrateLegacyProviders(db: DatabaseSync): void {
+  const columns = db.prepare('PRAGMA table_info(providers)').all() as Array<{ name: string }>
+  if (!columns.length || !columns.some(column => column.name === 'name')) return
+  const legacy = db
+    .prepare(
+      `SELECT id, name, apiKeyReference, timeoutMilliseconds, enabled, upstreamUrls,
+              createdTime, updatedTime, deletedTime
+       FROM providers`,
+    )
+    .all() as Array<Record<string, unknown>>
+  db.exec('DROP TABLE providers')
+  db.exec(
+    `CREATE TABLE providers (
+      id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      createdTime BIGINT NOT NULL,
+      updatedTime BIGINT NOT NULL,
+      deletedTime BIGINT
+    )`,
+  )
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_providers_deleted_time ON providers(deletedTime)',
+  )
+  const insert = db.prepare(
+    'INSERT INTO providers (id, data, createdTime, updatedTime, deletedTime) VALUES (?, ?, ?, ?, ?)',
+  )
+  for (const row of legacy) {
+    const { id, createdTime, updatedTime, deletedTime, ...rest } = row
+    insert.run(
+      id as string,
+      JSON.stringify({
+        ...rest,
+        enabled: Boolean(rest.enabled),
+      }),
+      createdTime as number,
+      updatedTime as number,
+      (deletedTime ?? null) as number | null,
+    )
+  }
 }
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {
@@ -86,11 +157,7 @@ function dropColumn(db: DatabaseSync, table: string, column: string): void {
 const INITIAL_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS providers (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    apiKeyReference TEXT NOT NULL,
-    timeoutMilliseconds INTEGER NOT NULL DEFAULT 30000,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    upstreamUrls TEXT NOT NULL DEFAULT '{}',
+    data TEXT NOT NULL,
     createdTime BIGINT NOT NULL,
     updatedTime BIGINT NOT NULL,
     deletedTime BIGINT
@@ -132,17 +199,8 @@ const INITIAL_SCHEMA = [
     FOREIGN KEY (providerId) REFERENCES providers(id)
   )`,
   `CREATE TABLE IF NOT EXISTS settings (
-    id TEXT PRIMARY KEY CHECK (id = 'singleton'),
-    listenHost TEXT NOT NULL DEFAULT '127.0.0.1',
-    listenPort INTEGER NOT NULL DEFAULT 9300,
-    accessTokenReference TEXT,
-    logRetentionCount INTEGER NOT NULL DEFAULT 5000,
-    cooldownBaseSeconds INTEGER NOT NULL DEFAULT 30,
-    cooldownMaxSeconds INTEGER NOT NULL DEFAULT 300,
-    consecutiveFailureThreshold INTEGER NOT NULL DEFAULT 3,
-    idleTimeoutMilliseconds INTEGER NOT NULL DEFAULT 30000,
-    autoLaunch INTEGER NOT NULL DEFAULT 0,
-    updatedTime BIGINT NOT NULL
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS request_logs (
     id TEXT PRIMARY KEY,

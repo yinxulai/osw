@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
 import { ProviderIcon } from './provider-icon'
 import { PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
-import { PROTOCOL_DESCRIPTIONS, PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
+import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
 import type { ProviderEndpointEntry } from '../service'
 
 interface ProviderDialogProps {
@@ -172,7 +172,6 @@ export function ProviderDialog(props: ProviderDialogProps) {
                         placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
                     <ProtocolUrlHint protocol={entry.protocol} />
                   </div>
                 )}

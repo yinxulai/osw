@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
-import { PROTOCOL_DESCRIPTIONS, PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
+import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS, PROTOCOL_SHORT_LABELS, CONVERTIBLE_PROTOCOLS } from '../lib/protocols'
 import type { FetchedUpstreamModel } from '@/api'
 import type { BindingEntry } from '../service'
 
@@ -88,7 +89,7 @@ export function ModelDialog(props: ModelDialogProps) {
               onChange={event => setModelId(event.target.value)}
               placeholder="例如：gpt-4o / claude-3-5-sonnet-20241022"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               这是上游供应商识别的模型名称，请求会原样转发。
             </p>
 
@@ -131,7 +132,7 @@ export function ModelDialog(props: ModelDialogProps) {
           <div className="space-y-3">
             <div>
               <Label className="text-sm">协议绑定</Label>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 至少启用一个协议；默认使用供应商级别的接口地址，也可以单独覆盖。
               </p>
             </div>
@@ -142,11 +143,11 @@ export function ModelDialog(props: ModelDialogProps) {
                 className={cn('space-y-3 rounded-md bg-muted/30 p-3 transition-colors', !entry.enabled && 'opacity-60')}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium">
+                  <span className="text-sm font-medium">
                     {PROTOCOL_OPTIONS.find(o => o.value === entry.protocol)?.label}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground">{entry.enabled ? '已启用' : '未启用'}</span>
+                    <span className="text-xs text-muted-foreground">{entry.enabled ? '已启用' : '未启用'}</span>
                     <Switch
                       checked={entry.enabled}
                       onCheckedChange={checked => updateBindingEntry(index, { enabled: checked })}
@@ -157,7 +158,7 @@ export function ModelDialog(props: ModelDialogProps) {
                 {entry.enabled && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {entry.overrideUrl ? '使用自定义地址' : '使用供应商默认地址'}
                       </span>
                       <Switch
@@ -183,7 +184,38 @@ export function ModelDialog(props: ModelDialogProps) {
                       </>
                     )}
 
-                    <p className="text-[11px] text-muted-foreground">{PROTOCOL_DESCRIPTIONS[entry.protocol]}</p>
+                    {/* 协议转换（端点级开关，仅在有支持的转换方向时展示） */}
+                    {CONVERTIBLE_PROTOCOLS[entry.protocol].length > 0 && (
+                    <div className="space-y-2 rounded-md border border-dashed border-border p-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Repeat size={12} className="text-muted-foreground" />
+                          <span className="text-xs font-medium">协议转换</span>
+                        </div>
+                        <Switch
+                          checked={entry.protocolConversionEnabled}
+                          onCheckedChange={checked => updateBindingEntry(index, { protocolConversionEnabled: checked })}
+                        />
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        开启后，此端点可接收其他协议的请求并自动转换（兼容层，部分参数可能丢失）
+                      </p>
+                      {entry.protocolConversionEnabled && (
+                        <div className="flex flex-wrap gap-1">
+                          {CONVERTIBLE_PROTOCOLS[entry.protocol].map(from => (
+                            <span
+                              key={from}
+                              className="inline-flex items-center gap-1 rounded border border-dashed border-amber-500/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                            >
+                              <Repeat size={9} />
+                              {PROTOCOL_SHORT_LABELS[from]} → {PROTOCOL_SHORT_LABELS[entry.protocol]}
+                            </span>
+                          ))}
+                          <p className="w-full text-[10px] leading-relaxed text-muted-foreground/80">原生请求优先；转换请求仅在没有原生候选时使用</p>
+                        </div>
+                      )}
+                    </div>
+                    )}
                   </div>
                 )}
               </div>

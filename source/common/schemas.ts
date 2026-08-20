@@ -56,6 +56,8 @@ export const ProtocolEndpointSchema = z.object({
   upstreamUrl: z.string().default(''),
   /** 自定义认证请求头名称；为空则按协议标准方式认证 */
   customAuthHeader: z.string().nullable(),
+  /** 开启后，该端点可通过协议转换接受其他协议的请求 */
+  protocolConversionEnabled: z.boolean().default(false),
 })
 export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
 
@@ -95,7 +97,7 @@ export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   listenHost: z.string().default('127.0.0.1'),
   listenPort: z.number().int().min(1).max(65535).default(9300),
-  accessTokenReference: z.string().nullable(),
+  accessTokenReference: z.string().nullable().default(null),
   logRetentionCount: z.number().int().positive().default(1000),
   cooldownBaseSeconds: z.number().int().positive().default(30),
   cooldownMaxSeconds: z.number().int().positive().default(300),
@@ -115,6 +117,8 @@ export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
   protocol: ProtocolSchema,
+  /** 实际请求上游时使用的协议；与 protocol 不同表示经过了协议转换 */
+  upstreamProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
@@ -216,6 +220,7 @@ export const RequestLogEntrySchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
   protocol: ProtocolSchema,
+  upstreamProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),

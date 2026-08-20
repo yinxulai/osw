@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { SettingsSchema, ProviderSchema } from '@common/schemas'
 import type {
   Provider,
   LogicalModel,
@@ -71,14 +72,17 @@ export async function createProvider(
   const id = generateId('prov_')
   const time = now()
   const db = getDb()
+  const provider = ProviderSchema.parse({
+    ...input,
+    id,
+    createdTime: time,
+    updatedTime: time,
+    deletedTime: null,
+  })
   db.insert(providers)
     .values({
       id,
-      name: input.name,
-      apiKeyReference: input.apiKeyReference,
-      timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
-      enabled: input.enabled ?? true,
-      upstreamUrls: input.upstreamUrls ?? '{}',
+      data: serializeProviderData(provider),
       createdTime: time,
       updatedTime: time,
     })
@@ -90,38 +94,30 @@ export async function createProvider(
       updatedTime: time,
     })
     .run()
-  return {
-    id,
-    name: input.name,
-    apiKeyReference: input.apiKeyReference,
-    timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
-    enabled: input.enabled ?? true,
-    upstreamUrls: input.upstreamUrls ?? '{}',
-    createdTime: time,
-    updatedTime: time,
-    deletedTime: null,
-  }
+  return provider
 }
 
 export async function updateProvider(id: string, updates: Partial<Omit<Provider, 'id' | 'createdTime'>>): Promise<Provider> {
   const db = getDb()
   const time = now()
+  const existing = db.select().from(providers).where(eq(providers.id, id)).get()
+  if (!existing) throw new Error(`provider not found: ${id}`)
+  const next = ProviderSchema.parse({
+    ...mapProvider(existing),
+    ...updates,
+    id,
+    createdTime: Number(existing.createdTime),
+    updatedTime: time,
+  })
   db.update(providers)
     .set({
-      ...(updates.name !== undefined ? { name: updates.name } : {}),
-      ...(updates.apiKeyReference !== undefined ? { apiKeyReference: updates.apiKeyReference } : {}),
-      ...(updates.timeoutMilliseconds !== undefined
-        ? { timeoutMilliseconds: updates.timeoutMilliseconds }
-        : {}),
-      ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
-      ...(updates.upstreamUrls !== undefined ? { upstreamUrls: updates.upstreamUrls } : {}),
-      ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
+      data: serializeProviderData(next),
       updatedTime: time,
+      deletedTime: next.deletedTime,
     })
     .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
     .run()
-  const row = db.select().from(providers).where(eq(providers.id, id)).get()
-  return mapProvider(row!)
+  return next
 }
 
 export async function deleteProvider(id: string): Promise<void> {
@@ -388,8 +384,6 @@ export async function resetProviderHealth(providerId: string): Promise<void> {
 
 // ========== Settings ==========
 
-const SETTINGS_ID = 'singleton'
-
 export interface SettingsDefaults {
   listenPort: number
 }
@@ -398,57 +392,53 @@ const PRODUCTION_SETTINGS_DEFAULTS: SettingsDefaults = {
   listenPort: 9300,
 }
 
+/** SettingsSchema 除 id/updatedTime 外的字段，即需要持久化的键 */
+const SETTINGS_KEYS = Object.keys(SettingsSchema.shape).filter(
+  key => key !== 'id' && key !== 'updatedTime',
+)
+
+function parseStoredValue(key: string, raw: string | undefined): unknown {
+  if (raw === undefined) return undefined
+  try {
+    return JSON.parse(raw)
+  } catch {
+    console.warn(`[store] settings key "${key}" has invalid JSON, ignoring`, raw)
+    return undefined
+  }
+}
+
 export async function getSettings(defaults = PRODUCTION_SETTINGS_DEFAULTS): Promise<Settings> {
   const db = getDb()
-  const existing = db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).get()
-  if (existing) return mapSettings(existing)
-  const time = now()
-  db.insert(settings)
-    .values({
-      id: SETTINGS_ID,
-      listenPort: defaults.listenPort,
-      updatedTime: time,
-    })
-    .run()
-  const row = db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).get()
-  return mapSettings(row!)
+  const rows = db.select().from(settings).all()
+  const stored = new Map(rows.map(row => [row.key, row.value]))
+  const parsed: Record<string, unknown> = {}
+  for (const key of SETTINGS_KEYS) {
+    const value = parseStoredValue(key, stored.get(key))
+    if (value !== undefined) parsed[key] = value
+  }
+  return SettingsSchema.parse({
+    id: 'singleton',
+    ...parsed,
+    listenPort: parsed.listenPort ?? defaults.listenPort,
+    updatedTime: now(),
+  })
 }
 
 export async function updateSettings(
   updates: Partial<Omit<Settings, 'id' | 'updatedTime'>>,
 ): Promise<Settings> {
-  await getSettings()
-  const time = now()
   const db = getDb()
-  db.update(settings)
-    .set({
-      ...(updates.listenHost !== undefined ? { listenHost: updates.listenHost } : {}),
-      ...(updates.listenPort !== undefined ? { listenPort: updates.listenPort } : {}),
-      ...(updates.accessTokenReference !== undefined
-        ? { accessTokenReference: updates.accessTokenReference }
-        : {}),
-      ...(updates.logRetentionCount !== undefined
-        ? { logRetentionCount: updates.logRetentionCount }
-        : {}),
-      ...(updates.cooldownBaseSeconds !== undefined
-        ? { cooldownBaseSeconds: updates.cooldownBaseSeconds }
-        : {}),
-      ...(updates.cooldownMaxSeconds !== undefined
-        ? { cooldownMaxSeconds: updates.cooldownMaxSeconds }
-        : {}),
-      ...(updates.consecutiveFailureThreshold !== undefined
-        ? { consecutiveFailureThreshold: updates.consecutiveFailureThreshold }
-        : {}),
-      ...(updates.idleTimeoutMilliseconds !== undefined
-        ? { idleTimeoutMilliseconds: updates.idleTimeoutMilliseconds }
-        : {}),
-      ...(updates.autoLaunch !== undefined ? { autoLaunch: updates.autoLaunch } : {}),
-      updatedTime: time,
-    })
-    .where(eq(settings.id, SETTINGS_ID))
-    .run()
-  const row = db.select().from(settings).where(eq(settings.id, SETTINGS_ID)).get()
-  const result = mapSettings(row!)
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) continue
+    db.insert(settings)
+      .values({ key, value: JSON.stringify(value) })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value: JSON.stringify(value) },
+      })
+      .run()
+  }
+  const result = await getSettings()
   notifySettingsChanged(result)
   return result
 }
@@ -466,6 +456,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
       id,
       logicalModelId: input.logicalModelId,
       protocol: input.protocol,
+      upstreamProtocol: input.upstreamProtocol ?? null,
       status: input.status,
       totalDurationMilliseconds: input.totalDurationMilliseconds,
       totalTokens: input.totalTokens ?? null,
@@ -484,6 +475,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     id,
     logicalModelId: input.logicalModelId,
     protocol: input.protocol,
+    upstreamProtocol: input.upstreamProtocol ?? null,
     status: input.status,
     totalDurationMilliseconds: input.totalDurationMilliseconds,
     totalTokens: input.totalTokens ?? null,
@@ -501,6 +493,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
 
 export interface RequestLogUpdate {
   status?: RequestStatus
+  upstreamProtocol?: RequestLog['upstreamProtocol']
   totalDurationMilliseconds?: number
   totalTokens?: number | null
   inputTokens?: number | null
@@ -737,7 +730,7 @@ export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]>
   const rows = db
     .select({
       providerId: requestAttempts.providerId,
-      providerName: providers.name,
+      providerName: sql<string>`json_extract(${providers.data}, '$.name')`.as('providerName'),
       requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
       success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
       failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' then ${requestAttempts.requestId} end)`.as('failed'),
@@ -780,7 +773,7 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
     .select({
       upstreamModelId: requestAttempts.upstreamModelId,
       providerId: requestAttempts.providerId,
-      providerName: providers.name,
+      providerName: sql<string>`json_extract(${providers.data}, '$.name')`.as('providerName'),
       requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
       success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
       avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
@@ -888,16 +881,33 @@ export async function getFailureReasons(sinceMs: number): Promise<FailureReasonS
 // ========== Row mappers ==========
 
 function mapProvider(row: typeof providers.$inferSelect): Provider {
+  const data = parseProviderData(row.data)
   return {
+    ...data,
     id: row.id,
-    name: row.name,
-    apiKeyReference: row.apiKeyReference,
-    timeoutMilliseconds: row.timeoutMilliseconds,
-    enabled: row.enabled,
-    upstreamUrls: row.upstreamUrls,
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function serializeProviderData(provider: Provider): string {
+  const { id: _id, createdTime: _created, updatedTime: _updated, deletedTime: _deleted, ...data } = provider
+  return JSON.stringify(data)
+}
+
+function parseProviderData(raw: string): Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    console.warn('[store] provider data has invalid JSON, ignoring', raw)
+    return {
+      name: '',
+      apiKeyReference: '',
+      timeoutMilliseconds: 30000,
+      enabled: false,
+      upstreamUrls: '{}',
+    }
   }
 }
 
@@ -947,22 +957,6 @@ function mapHealth(row: typeof providerHealth.$inferSelect): ProviderHealth {
   }
 }
 
-function mapSettings(row: typeof settings.$inferSelect): Settings {
-  return {
-    id: 'singleton',
-    listenHost: row.listenHost,
-    listenPort: row.listenPort,
-    accessTokenReference: row.accessTokenReference,
-    logRetentionCount: row.logRetentionCount,
-    cooldownBaseSeconds: row.cooldownBaseSeconds,
-    cooldownMaxSeconds: row.cooldownMaxSeconds,
-    consecutiveFailureThreshold: row.consecutiveFailureThreshold,
-    idleTimeoutMilliseconds: row.idleTimeoutMilliseconds,
-    autoLaunch: Boolean(row.autoLaunch),
-    updatedTime: Number(row.updatedTime),
-  }
-}
-
 function serializeRawUsage(rawUsage: RequestLog['rawUsage'] | undefined): string | null {
   return rawUsage == null ? null : JSON.stringify(rawUsage)
 }
@@ -984,6 +978,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     id: row.id,
     logicalModelId: row.logicalModelId,
     protocol: row.protocol as RequestLog['protocol'],
+    upstreamProtocol: (row.upstreamProtocol as RequestLog['upstreamProtocol']) ?? null,
     status: row.status as RequestStatus,
     totalDurationMilliseconds: row.totalDurationMilliseconds,
     totalTokens: row.totalTokens,

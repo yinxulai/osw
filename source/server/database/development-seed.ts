@@ -133,11 +133,13 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     const providersToInsert = PROVIDER_FIXTURES.filter(provider => !existingProviderIds.has(provider.id))
     if (providersToInsert.length > 0) transaction.insert(providers).values(providersToInsert.map(provider => ({
       id: provider.id,
-      name: provider.name,
-      apiKeyReference: provider.apiKeyReference,
-      timeoutMilliseconds: 30_000,
-      enabled: true,
-      upstreamUrls: JSON.stringify(provider.upstreamUrls),
+      data: JSON.stringify({
+        name: provider.name,
+        apiKeyReference: provider.apiKeyReference,
+        timeoutMilliseconds: 30_000,
+        enabled: true,
+        upstreamUrls: JSON.stringify(provider.upstreamUrls),
+      }),
       createdTime: timestamp,
       updatedTime: timestamp,
     }))).run()

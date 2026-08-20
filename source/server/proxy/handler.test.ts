@@ -67,7 +67,7 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
       id,
       providerId,
       upstreamModelId,
-      endpoints: [{ protocol, upstreamUrl, customAuthHeader: null }],
+      endpoints: [{ protocol, upstreamUrl, customAuthHeader: null, protocolConversionEnabled: false }],
       priority: 1,
       enabled: true,
       createdTime: time,

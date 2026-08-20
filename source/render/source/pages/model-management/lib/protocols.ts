@@ -1,11 +1,5 @@
 import type { Protocol } from '@common/schemas'
 
-export const PROTOCOL_DESCRIPTIONS: Record<Protocol, string> = {
-  'openai-completions': 'OpenAI 兼容的 /chat/completions 接口，适用于 OpenAI、DeepSeek、Ollama 等。',
-  'openai-responses': 'OpenAI 新一代 /responses 接口，适用于 OpenAI 官方模型。',
-  'anthropic-messages': 'Anthropic Claude 的 /messages 接口。',
-}
-
 export const PROTOCOL_PLACEHOLDERS: Record<Protocol, string> = {
   'openai-completions': 'https://api.openai.com/v1/chat/completions',
   'openai-responses': 'https://api.openai.com/v1/responses',
@@ -31,3 +25,19 @@ export const PROTOCOL_OPTIONS = [
   { value: 'openai-responses' as Protocol, label: 'OpenAI Responses' },
   { value: 'anthropic-messages' as Protocol, label: 'Anthropic Messages' },
 ]
+
+export const PROTOCOL_SHORT_LABELS: Record<Protocol, string> = {
+  'openai-completions': 'OpenAI',
+  'openai-responses': 'Responses',
+  'anthropic-messages': 'Anthropic',
+}
+
+/**
+ * 每个端点原生协议可接收的转换来源协议（客户端协议）。
+ * 与服务端 conversion 注册表保持一致；无条目表示暂不支持转换。
+ */
+export const CONVERTIBLE_PROTOCOLS: Record<Protocol, Protocol[]> = {
+  'openai-completions': ['anthropic-messages', 'openai-responses'],
+  'openai-responses': [],
+  'anthropic-messages': ['openai-completions'],
+}

@@ -34,6 +34,15 @@ export function RequestRow(props: RequestRowProps) {
           </Badge>
           <span className="text-muted-foreground">
             {PROTOCOL_LABEL[log.protocol] ?? log.protocol}
+            {log.upstreamProtocol && log.upstreamProtocol !== log.protocol && (
+              <>
+                {' '}
+                <span className="text-muted-foreground/60">→</span>{' '}
+                <span className="text-amber-600 dark:text-amber-400">
+                  {PROTOCOL_LABEL[log.upstreamProtocol] ?? log.upstreamProtocol}
+                </span>
+              </>
+            )}
           </span>
           <span className="text-muted-foreground">{formatTime(log.createdTime)}</span>
         </div>

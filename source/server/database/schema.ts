@@ -1,21 +1,19 @@
 import {
-  check,
   index,
   integer,
   sqliteTable,
   text,
 } from 'drizzle-orm/sqlite-core'
-import { sql } from 'drizzle-orm'
 
+/**
+ * 供应商表：id + JSON data。新增供应商字段只需更新 ProviderSchema，无需变更表结构。
+ */
 export const providers = sqliteTable(
   'providers',
   {
     id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    apiKeyReference: text('apiKeyReference').notNull(),
-    timeoutMilliseconds: integer('timeoutMilliseconds').notNull().default(30000),
-    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    upstreamUrls: text('upstreamUrls').notNull().default('{}'),
+    /** JSON 序列化的 ProviderSchema 字段（除 id 外） */
+    data: text('data').notNull(),
     createdTime: integer('createdTime').notNull(),
     updatedTime: integer('updatedTime').notNull(),
     deletedTime: integer('deletedTime'),
@@ -77,23 +75,14 @@ export const providerHealth = sqliteTable(
   },
 )
 
-export const settings = sqliteTable(
-  'settings',
-  {
-    id: text('id').primaryKey(),
-    listenHost: text('listenHost').notNull().default('127.0.0.1'),
-    listenPort: integer('listenPort').notNull().default(9300),
-    accessTokenReference: text('accessTokenReference'),
-    logRetentionCount: integer('logRetentionCount').notNull().default(5000),
-    cooldownBaseSeconds: integer('cooldownBaseSeconds').notNull().default(30),
-    cooldownMaxSeconds: integer('cooldownMaxSeconds').notNull().default(300),
-    consecutiveFailureThreshold: integer('consecutiveFailureThreshold').notNull().default(3),
-    idleTimeoutMilliseconds: integer('idleTimeoutMilliseconds').notNull().default(30000),
-    autoLaunch: integer('autoLaunch', { mode: 'boolean' }).notNull().default(false),
-    updatedTime: integer('updatedTime').notNull(),
-  },
-  table => [check('settings_singleton_id', sql`${table.id} = 'singleton'`)],
-)
+/**
+ * 通用 key-value 设置表：每个设置项一行，value 存 JSON。
+ * 新增设置项只需更新 SettingsSchema 默认值，无需变更表结构。
+ */
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})
 
 export const requestLogs = sqliteTable(
   'request_logs',
@@ -101,6 +90,8 @@ export const requestLogs = sqliteTable(
     id: text('id').primaryKey(),
     logicalModelId: text('logicalModelId').notNull(),
     protocol: text('protocol').notNull(),
+    /** 实际请求上游时使用的协议；与 protocol 不同表示经过了协议转换 */
+    upstreamProtocol: text('upstreamProtocol'),
     status: text('status').notNull(),
     totalDurationMilliseconds: integer('totalDurationMilliseconds').notNull(),
     totalTokens: integer('totalTokens'),

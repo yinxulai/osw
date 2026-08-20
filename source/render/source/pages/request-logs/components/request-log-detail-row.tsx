@@ -225,7 +225,17 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                 <span>{modelName}</span><span>·</span>
-                <span>{PROTOCOL_LABEL[log.protocol] ?? log.protocol}</span><span>·</span>
+                <span>
+                  {PROTOCOL_LABEL[log.protocol] ?? log.protocol}
+                  {log.upstreamProtocol && log.upstreamProtocol !== log.protocol && (
+                    <>
+                      {' '}→{' '}
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {PROTOCOL_LABEL[log.upstreamProtocol] ?? log.upstreamProtocol}（经协议转换）
+                      </span>
+                    </>
+                  )}
+                </span><span>·</span>
                 <span className="font-mono">{log.id}</span>
               </div>
             </div>

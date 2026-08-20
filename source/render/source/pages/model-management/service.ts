@@ -21,6 +21,7 @@ export interface BindingEntry {
   enabled: boolean
   overrideUrl: boolean
   upstreamUrl: string
+  protocolConversionEnabled: boolean
 }
 
 export interface ProviderEndpointEntry {
@@ -211,8 +212,8 @@ export function useModelManagementService() {
     setBindingEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
       return match
-        ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.upstreamUrl.trim()), upstreamUrl: match.upstreamUrl }
-        : { protocol: option.value, enabled: false, overrideUrl: false, upstreamUrl: '' }
+        ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.upstreamUrl.trim()), upstreamUrl: match.upstreamUrl, protocolConversionEnabled: match.protocolConversionEnabled ?? false }
+        : { protocol: option.value, enabled: false, overrideUrl: false, upstreamUrl: '', protocolConversionEnabled: false }
     }))
     setModelDialogOpen(true)
   }, [])
@@ -288,6 +289,7 @@ export function useModelManagementService() {
       protocol: entry.protocol,
       upstreamUrl: entry.overrideUrl ? entry.upstreamUrl.trim() : '',
       customAuthHeader: null,
+      protocolConversionEnabled: entry.protocolConversionEnabled,
     }))
 
     const basePriority = editingModel

@@ -73,9 +73,14 @@ describe('database lifecycle', () => {
 
     client
       .prepare(
-        'INSERT INTO providers (id, name, apiKeyReference, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO providers (id, data, createdTime, updatedTime) VALUES (?, ?, ?, ?)',
       )
-      .run('provider', 'Provider', 'key', time, time)
+      .run(
+        'provider',
+        JSON.stringify({ name: 'Provider', apiKeyReference: 'key', timeoutMilliseconds: 30000, enabled: true, upstreamUrls: '{}' }),
+        time,
+        time,
+      )
     client
       .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
       .run('model', 'Model', time, time)
@@ -183,9 +188,7 @@ describe('database lifecycle', () => {
         'cacheHit',
       ]),
     )
-    expect(settingsColumns.map(column => (column as { name: string }).name)).toContain(
-      'autoLaunch',
-    )
+    expect(settingsColumns.map(column => (column as { name: string }).name)).toEqual(['key', 'value'])
     expect(attemptForeignKeys.map(key => (key as { table: string }).table)).toEqual([
       'providers',
       'request_logs',
@@ -193,9 +196,5 @@ describe('database lifecycle', () => {
     expect(attemptIndexes.map(index => (index as { name: string }).name)).toContain(
       'idx_attempts_request_order',
     )
-    expect(() => client.prepare('INSERT INTO settings (id, updatedTime) VALUES (?, ?)').run(
-      'another-settings-row',
-      Date.now(),
-    )).toThrow()
   })
 })
