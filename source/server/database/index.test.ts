@@ -42,14 +42,14 @@ describe('database lifecycle', () => {
     await expect(closeDatabase()).resolves.toBeUndefined()
   })
 
-  it('seeds a default logical model on a fresh database', async () => {
+  it('seeds the auto logical model on a fresh database', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
 
     const rows = client.prepare('SELECT id, name, enabled FROM logical_models').all()
-    expect(rows).toEqual([{ id: 'default', name: '默认模型', enabled: 1 }])
+    expect(rows).toEqual([{ id: 'auto', name: 'auto', enabled: 1 }])
   })
 
-  it('does not seed a default logical model when one already exists', async () => {
+  it('restores auto when a database has no logical model', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client
     const time = Date.now()
@@ -62,140 +62,79 @@ describe('database lifecycle', () => {
     await closeDatabase()
     const reopened = (await initDatabase(directory)).$client
 
-    const rows = reopened.prepare('SELECT id FROM logical_models').all()
-    expect(rows).toEqual([{ id: 'custom' }])
+    const rows = reopened.prepare('SELECT id FROM logical_models ORDER BY id').all()
+    expect(rows).toEqual([{ id: 'auto' }, { id: 'custom' }])
   })
 
-  it('creates the upstream_models table with endpoints column', async () => {
+  it('creates the v0.3 relational baseline with an idempotent auto model', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client
-    const time = Date.now()
+    const expectedTables = [
+      'settings', 'providers', 'provider_health', 'provider_model_health',
+      'provider_models', 'provider_settings', 'provider_endpoints',
+      'provider_model_endpoints', 'protocol_converters', 'logical_models',
+      'scheduling_policies', 'request_logs', 'request_metrics', 'request_usages',
+      'request_attempts', 'request_contents',
+    ]
+    const tables = client
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all()
+      .map(row => (row as { name: string }).name)
 
-    client
-      .prepare(
-        'INSERT INTO providers (id, data, createdTime, updatedTime) VALUES (?, ?, ?, ?)',
-      )
-      .run(
-        'provider',
-        JSON.stringify({ name: 'Provider', apiKeyReference: 'key', timeoutMilliseconds: 30000, enabled: true, upstreamUrls: '{}' }),
-        time,
-        time,
-      )
-    client
-      .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
-      .run('model', 'Model', time, time)
-    client
-      .prepare(
-        'INSERT INTO upstream_models (id, providerId, upstreamModelId, endpoints, priority, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      )
-      .run(
-        'model_upstream',
-        'provider',
-        'upstream-model',
-        JSON.stringify([
-          {
-            protocol: 'openai-completions',
-            upstreamUrl: 'https://api.example.com/v1/chat/completions',
-            customAuthHeader: null,
-          },
-        ]),
-        1,
-        1,
-        time,
-        time,
-      )
-
-    const rows = client
-      .prepare(
-        'SELECT upstreamModelId, endpoints, enabled FROM upstream_models WHERE id = ?',
-      )
-      .all('model_upstream')
-
-    expect(rows).toHaveLength(1)
-    expect(rows[0].upstreamModelId).toBe('upstream-model')
-    expect(rows[0].enabled).toBe(1)
-    expect(JSON.parse(String(rows[0].endpoints))).toEqual([
-      {
-        protocol: 'openai-completions',
-        upstreamUrl: 'https://api.example.com/v1/chat/completions',
-        customAuthHeader: null,
-      },
+    expect(tables).toEqual([...expectedTables].sort())
+    expect(client.prepare('SELECT id, name FROM logical_models').all()).toEqual([
+      { id: 'auto', name: 'auto' },
     ])
+
+    await closeDatabase()
+    const reopened = (await initDatabase(directory)).$client
+    expect(reopened.prepare('SELECT COUNT(*) AS count FROM logical_models').get()).toEqual({ count: 1 })
   })
 
-  it('adds raw usage to an existing database without losing request logs', async () => {
+  it('enforces v0.3 binding uniqueness and health foreign keys', async () => {
+    const client = (await initDatabase(createTemporaryDirectory())).$client
+    const time = Date.now()
+    client.prepare('INSERT INTO providers (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('prov_test', 'Test', time, time)
+    client.prepare('INSERT INTO provider_models (id, providerId, modelName, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)').run('pm_test', 'prov_test', 'model-a', time, time)
+    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('auto', 'pm_test', 0, 100, time, time)
+
+    expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('auto', 'pm_test', time, time)).toThrow()
+    expect(() => client.prepare('INSERT INTO provider_health (providerId, updatedTime) VALUES (?, ?)').run('missing', time)).toThrow()
+  })
+
+  it('does not migrate or read an old database', async () => {
     const directory = createTemporaryDirectory()
     const databasePath = path.join(directory, 'one-switch.db')
     const legacyClient = new DatabaseSync(databasePath)
-    legacyClient.exec(`
-      CREATE TABLE request_logs (
-        id TEXT PRIMARY KEY NOT NULL,
-        logicalModelId TEXT NOT NULL,
-        protocol TEXT NOT NULL,
-        status TEXT NOT NULL,
-        totalDurationMilliseconds INTEGER NOT NULL,
-        totalTokens INTEGER,
-        inputTokens INTEGER,
-        outputTokens INTEGER,
-        ttftMilliseconds INTEGER,
-        cacheHit INTEGER,
-        createdTime BIGINT NOT NULL
-      );
-      INSERT INTO request_logs (
-        id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime
-      ) VALUES ('legacy-request', 'model', 'openai-responses', 'success', 25, 1);
-    `)
+    legacyClient.exec('CREATE TABLE upstream_models (id TEXT PRIMARY KEY)')
     legacyClient.close()
 
-    const client = (await initDatabase(directory)).$client
-    const columns = client.prepare('PRAGMA table_info(request_logs)').all()
-    const row = client.prepare('SELECT id, rawUsage FROM request_logs WHERE id = ?').get('legacy-request')
-
-    expect(columns.map(column => (column as { name: string }).name)).toEqual(
-      expect.arrayContaining(['rawUsage', 'cachedInputTokens', 'cacheCreationInputTokens', 'promptCacheHit']),
-    )
-    expect(row).toEqual({ id: 'legacy-request', rawUsage: null })
+    await expect(initDatabase(directory)).rejects.toThrow(/Incompatible database schema/)
   })
 
-  it('creates the complete release baseline without migration artifacts', async () => {
+  it('rejects the removed legacy request log shape', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
-    const tables = client
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-      .all()
+    expect(() => client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run('req_old', 'auto', 'openai-completions', 'success', 1, Date.now())).toThrow()
+  })
+
+  it('creates the expected v0.3 indexes and request columns', async () => {
+    const client = (await initDatabase(createTemporaryDirectory())).$client
     const requestLogColumns = client.prepare('PRAGMA table_info(request_logs)').all()
     const settingsColumns = client.prepare('PRAGMA table_info(settings)').all()
-    const attemptForeignKeys = client.prepare('PRAGMA foreign_key_list(request_attempts)').all()
-    const attemptIndexes = client.prepare('PRAGMA index_list(request_attempts)').all()
+    const attemptColumns = client.prepare('PRAGMA table_info(request_attempts)').all()
+    const indexes = client.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all()
 
-    expect(tables).toEqual([
-      { name: 'logical_models' },
-      { name: 'provider_health' },
-      { name: 'providers' },
-      { name: 'request_attempts' },
-      { name: 'request_contents' },
-      { name: 'request_logs' },
-      { name: 'settings' },
-      { name: 'upstream_models' },
+    expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual([
+      'id', 'status', 'protocol', 'logicalModelId', 'metadata', 'createdTime',
     ])
-    expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual(
-      expect.arrayContaining([
-        'inputTokens',
-        'outputTokens',
-        'cachedInputTokens',
-        'cacheCreationInputTokens',
-        'promptCacheHit',
-        'rawUsage',
-        'ttftMilliseconds',
-        'cacheHit',
-      ]),
+    expect(settingsColumns.map(column => (column as { name: string }).name)).toEqual([
+      'key', 'value', 'valueType', 'updatedTime',
+    ])
+    expect(attemptColumns.map(column => (column as { name: string }).name)).toEqual(
+      expect.arrayContaining(['providerModelId', 'providerName', 'providerModelName', 'url', 'httpStatus', 'retryable']),
     )
-    expect(settingsColumns.map(column => (column as { name: string }).name)).toEqual(['key', 'value'])
-    expect(attemptForeignKeys.map(key => (key as { table: string }).table)).toEqual([
-      'providers',
-      'request_logs',
-    ])
-    expect(attemptIndexes.map(index => (index as { name: string }).name)).toContain(
-      'idx_attempts_request_order',
+    expect(indexes.map(index => (index as { name: string }).name)).toEqual(
+      expect.arrayContaining(['idx_scheduling_policies_route', 'sqlite_autoindex_request_attempts_2']),
     )
   })
 })
