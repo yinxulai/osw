@@ -54,7 +54,13 @@ const CreateProviderModelSchema = z.object({
 })
 async function handleCreateProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderModelSchema.parse(body)
-  const model = await createUpstreamModel(input)
+  const model = await createUpstreamModel({
+    providerId: input.providerId,
+    upstreamModelId: input.modelName,
+    endpoints: input.endpoints,
+    priority: input.priority,
+    enabled: input.enabled,
+  })
   await upsertSchedulingPolicy({ logicalModelId: input.logicalModelId, providerModelId: model.id, priority: input.priority })
   sendSuccess(res, await getProviderModel(model.id) ?? model)
 }
