@@ -136,6 +136,18 @@ export const logicalModelApi = {
 
 // ========== Upstream Model ==========
 
+type ProviderModelEndpointView = {
+  id: string
+  url: string | null
+  enabled: boolean
+  protocol: Protocol
+  providerModelId: string
+  providerEndpointId: string
+  conversions: Array<{ id: string; clientProtocol: Protocol; enabled: boolean }>
+}
+
+type ProviderModelView = ProviderModel & { endpoints: ProviderModelEndpointView[] }
+
 type ProviderModelUpdateInput = {
   logicalModelId?: string
   modelName?: string
@@ -144,11 +156,22 @@ type ProviderModelUpdateInput = {
   endpoints?: ProtocolEndpoint[]
 }
 
+type ProviderModelCreateInput = {
+  providerId: string
+  modelName: string
+  logicalModelId?: string
+  priority?: number
+  enabled?: boolean
+  endpoints?: ProtocolEndpoint[]
+}
+
 export const providerModelApi = {
-  list: () => request<ProviderModel[]>('/provider-model/list', {}),
-  get: (id: string) => request<ProviderModel>('/provider-model/get', { id }),
+  list: () => request<ProviderModelView[]>('/provider-model/list', {}),
+  get: (id: string) => request<ProviderModelView>('/provider-model/get', { id }),
+  create: (data: ProviderModelCreateInput) => request<ProviderModelView>('/provider-model/create', data),
   update: (id: string, updates: ProviderModelUpdateInput) =>
-    request<ProviderModel>('/provider-model/update', { id, ...updates }),
+    request<ProviderModelView>('/provider-model/update', { id, ...updates }),
+  remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
 }
 
 export const schedulingPolicyApi = {

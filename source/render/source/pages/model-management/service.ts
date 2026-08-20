@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
-import { upstreamModelApi, providerApi } from '@/api'
+import { providerModelApi, providerApi } from '@/api'
 import type { FetchedUpstreamModel } from '@/api'
 import { useToast } from '@/components/ui/toast'
 import { useAsyncFn } from '@/services/use-async'
@@ -88,12 +88,27 @@ export function useModelManagementService() {
   useAppPolling('health', 5000)
 
   const loadModels = useCallback(async () => {
-    const result = await upstreamModelApi.list()
+    const result = await providerModelApi.list()
     if (!result.success) {
       toast.error(result.errorMessage)
       return
     }
-    setModels(result.data)
+    setModels(result.data.map(model => ({
+      id: model.id,
+      providerId: model.providerId,
+      upstreamModelId: model.modelName,
+      endpoints: model.endpoints.map(endpoint => ({
+        protocol: endpoint.protocol,
+        upstreamUrl: endpoint.url ?? '',
+        customAuthHeader: null,
+        protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
+      })),
+      priority: 0,
+      enabled: model.enabled,
+      createdTime: model.createdTime,
+      updatedTime: model.updatedTime,
+      deletedTime: model.deletedTime,
+    })))
   }, [toast])
 
   /** 写操作后刷新：静默刷新全局数据 + 重新加载本页模型列表 */
@@ -299,14 +314,16 @@ export function useModelManagementService() {
         : Math.max(...models.map(model => model.priority)) + 1
 
     const result = editingModel
-      ? await upstreamModelApi.update(editingModel.id, {
-          upstreamModelId: modelId.trim(),
+      ? await providerModelApi.update(editingModel.id, {
+          logicalModelId: 'auto',
+          modelName: modelId.trim(),
           endpoints,
         })
-      : await upstreamModelApi.create({
+      : await providerModelApi.create({
           providerId: selectedProvider.id,
-          upstreamModelId: modelId.trim(),
+          modelName: modelId.trim(),
           endpoints,
+          logicalModelId: 'auto',
           priority: basePriority,
         })
 
@@ -324,7 +341,7 @@ export function useModelManagementService() {
 
   const removeModel = useCallback(async (model: UpstreamModel) => {
     if (!window.confirm(`删除模型"${model.upstreamModelId}"？该模型关联的所有协议接口都会被移除。`)) return
-    const result = await upstreamModelApi.remove(model.id)
+    const result = await providerModelApi.remove(model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     toast.success('模型已删除')
     await reload()
@@ -345,7 +362,7 @@ export function useModelManagementService() {
       const update = updates.find(item => item.id === model.id)
       return update ? { ...model, priority: update.priority } : model
     }).sort((left, right) => left.priority - right.priority))
-    const results = await Promise.all(updates.map(update => upstreamModelApi.update(update.id, { priority: update.priority })))
+    const results = await Promise.all(updates.map(update => providerModelApi.update(update.id, { logicalModelId: 'auto', priority: update.priority })))
     if (results.some(result => !result.success)) {
       toast.error('模型顺序保存失败，已恢复服务端数据')
       await reload()
