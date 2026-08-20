@@ -77,5 +77,5 @@ Provider 级别的健康状态，包含连续失败次数、冷却截止时间�
    - Gemini 保留原生 body，在 URL 中替换模型 ID，并保留 `generateContent` / `streamGenerateContent` 动作及 `alt=sse` 等查询参数
    - 注入 Provider 认证头，并安全透传端到端 header
 3. 每个 `provider_endpoints` 配置的是 Provider 按原生协议提供的默认 URL；`provider_model_endpoints.url` 非空时作为该 ProviderModel 绑定的 URL，否则回退到 ProviderEndpoint 的 `url`。OpenAI / Anthropic 直接使用该地址；Gemini 以该地址为基准替换模型和请求动作。
-4. 路由过滤：请求通过某客户端协议进入时，只考虑存在对应原生端点或已启用协议转换绑定的 ProviderModel。
-5. 每个请求从全局 ProviderModel 池动态生成候选队列；OpenAI、Anthropic 等不同协议的 ProviderModel 可以同时存在，但只有原生匹配或明确启用转换的绑定才会进入当前请求的候选。
+4. 路由过滤：请求通过某客户端协议进入时，只考虑当前逻辑模型已绑定且存在对应原生端点或已启用协议转换绑定的 ProviderModel。
+5. 每个请求从当前 LogicalModel 的 `scheduling_policies` 绑定集合动态生成候选队列；OpenAI、Anthropic 等不同协议的 ProviderModel 可以同时存在，但只有当前逻辑模型中原生匹配或明确启用转换的绑定才会进入当前请求的候选。

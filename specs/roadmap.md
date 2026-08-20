@@ -1,6 +1,6 @@
 # 版本规划与验收标准
 
-本文分为"设计定稿""实施计划"和"功能待办"三部分。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
+本文分为"设计定稿"和"功能待办"两部分。详细的源码实施阶段、阶段完成目标和发布门槛见 [implementation-plan.md](./implementation-plan.md)。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
 
 ## 一、设计定稿（已完成）
 
@@ -17,43 +17,7 @@
 - 手动切换只影响后续新请求，不中断已经开始的请求。
 - 请求日志分为稳定元数据、远端尝试记录和可选正文内容三层；正文记录默认关闭，敏感信息必须脱敏。
 
-## 二、实施计划（从头实施）
-
-按依赖顺序分阶段落地，每阶段完成后通过 `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 验证。
-
-### 阶段 1：数据库新基线
-
-- [ ] 按 data-model.md 重建 schema：v0.3 初始化 16 张核心表（含 request_usages），CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL；调度顺序和启用状态存储在 LogicalModel-ProviderModel 绑定表
-- [ ] `settings` 初始化使用 INSERT OR IGNORE 幂等写入
-- [ ] `provider_health` 随 Provider 创建、`provider_model_health` 随 ProviderModel 创建，在同事务中插入
-- [ ] 初始化时幂等创建唯一启用的 `logical_models.auto` 及其 `scheduling_policies`（`priority` + failover）
-- [ ] `request_contents` 请求级和尝试级正文结构（通过可空 attemptId 关联）+ conversions
-- [ ] 删除旧迁移，建立全新初始化基线（不兼容旧版数据库）
-- [ ] store 层 CRUD 与 Zod Schema 对齐新表结构
-
-### 阶段 2：代理管线重构
-
-按 proxy.md「实施说明」五步执行，旧 handler 拆分后删除：
-
-- [ ] 搭建共享骨架：handler 编排（候选路由、尝试循环、手动切换）、transport 纯 I/O（空闲超时、中止、SSE 解析）、hooks 观测订阅
-- [ ] 实现 ProtocolAdapter 接口（buildProviderRequest / createResponsePipeline / classifyError）
-- [ ] 落地 openai、anthropic、gemini 三个协议适配器（protocols/ 目录）
-- [ ] conversions/ 注册表承接协议转换（端点绑定级开关，默认关闭）
-- [ ] usage 提取、日志写入收敛到 hooks 订阅者，handler 不再内联
-- [ ] `/v1/models` 仅返回 MVP 唯一逻辑模型 `auto`
-
-### 阶段 3：管理 API 与控制台
-
-- [ ] providers / provider-model / settings / request-log 管理接口对齐新数据模型，并统一旧版 upstream-model、logs 路径的替换边界
-- [ ] 控制台页面适配新接口与字段
-- [ ] `scheduling_policies` 随 `auto` 初始化，路由读取 `priority` 策略并在 `failoverEnabled = false` 时只尝试起始 ProviderModel
-- [ ] 日志清理（按数量 + 按天）在新表结构上验证
-
-### 阶段 4：MVP 功能验收
-
-即第三章 MVP（P0）全部条目。
-
-## 三、新版本功能待办
+## 二、新版本功能待办
 
 ### MVP（P0）：核心代理验收
 
