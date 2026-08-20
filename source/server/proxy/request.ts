@@ -9,11 +9,11 @@ export function resolveUpstreamUrl(upstreamUrl: string): string {
 }
 
 /**
- * 解析实际使用的上游地址：优先使用模型绑定自身配置的地址，
+ * 解析实际使用的上游地址：优先使用上游模型自身配置的地址，
  * 否则回退到该供应商在对应协议下的默认地址。
  */
-export function resolveEffectiveUpstreamUrl(bindingUrl: string, providerUpstreamUrls: string | null | undefined, protocol: string): string {
-  if (bindingUrl.trim()) return bindingUrl.trim()
+export function resolveEffectiveUpstreamUrl(upstreamUrl: string, providerUpstreamUrls: string | null | undefined, protocol: string): string {
+  if (upstreamUrl.trim()) return upstreamUrl.trim()
 
   let endpoints: Record<string, string> = {}
   if (providerUpstreamUrls) {

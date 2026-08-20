@@ -18,7 +18,7 @@ Server 分为四块：
 | 模块 | 职责 | 包含内容 |
 | --- | --- | --- |
 | `runtime` | 进程级组装与生命周期 | ServerRuntime、管理服务与代理服务的启动、停止和失败回滚 |
-| `management` | 配置管理能力和管理 API | Provider、LogicalModel、Binding、Settings 的管理入口 |
+| `management` | 配置管理能力和管理 API | Provider、LogicalModel、UpstreamModel、AppConfig 的管理入口 |
 | `proxy` | 模型请求代理能力 | 协议识别、路由、转发、认证、健康冷却、重试和请求日志 |
 | `infrastructure` | 共享技术实现 | SQLite、Keychain，以及未来可复用的系统适配器 |
 
@@ -37,12 +37,12 @@ source/server/
 │   ├── router.ts                    # 管理 API 路由和通用请求处理
 │   ├── providers.ts                 # Provider 管理与密钥协调
 │   ├── models.ts                    # LogicalModel 管理
-│   ├── bindings.ts                  # Binding 管理
-│   └── settings.ts                  # Settings 管理
+│   ├── upstream-models.ts           # UpstreamModel 管理
+│   └── app-config.ts                # AppConfig 管理
 ├── proxy/
 │   ├── server.ts                    # 代理监听器和 /v1/models
 │   ├── handler.ts                   # 一次代理请求的流程编排
-│   ├── router.ts                    # 候选 Binding 选择
+│   ├── router.ts                    # 当前逻辑模型的候选上游模型选择
 │   ├── health.ts                    # 健康状态和冷却策略
 │   ├── transport.ts                 # 上游请求和流式传输
 │   ├── protocol.ts                  # 协议识别和请求改写规则
@@ -134,7 +134,7 @@ stateDiagram-v2
 
 1. [已完成] 建立 `runtime` 目录，迁移 `ServerRuntime`。
 2. [已完成] 将根目录的健康逻辑和密钥实现归入 `proxy`、`infrastructure`。
-3. [已完成] 把 `api/handlers.ts` 按 Provider、Model、Binding、Settings 拆入 `management`。
+3. [已完成] 把 `api/handlers.ts` 按 Provider、Model、UpstreamModel、AppConfig 拆入 `management`。
 4. 把 `proxy/handler.ts` 中的上游 HTTP 逻辑拆为 `transport.ts`。
 5. 将 SQLite 代码迁入 `infrastructure/database`，按配置和请求日志拆 store。
 6. 将 ManagementServer、ProxyServer 实例化并交给 Runtime 持有。

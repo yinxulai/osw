@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { SortableBinding } from './sortable-binding'
+import { SortableQueueModel } from './sortable-queue-model'
 import { QueueModelRow } from './queue-model-row'
 import { queueModelMetricKey, type QueueModelMetrics } from '../lib/model-metrics'
 import type { UpstreamModel, Provider, ProviderHealth } from '@common/schemas'
@@ -108,7 +108,7 @@ export function QueueListCard(props: QueueListCardProps) {
                   const selected = mode === 'manual' && manualModelId === model.id
 
                   return (
-                    <SortableBinding key={model.id} id={model.id}>
+                    <SortableQueueModel key={model.id} id={model.id}>
                       {(handleProps, dragging) => (
                         <QueueModelRow
                           model={model}
@@ -124,7 +124,7 @@ export function QueueListCard(props: QueueListCardProps) {
                           onToggleEnabled={enabled => void onToggleEnabled(model, enabled)}
                         />
                       )}
-                    </SortableBinding>
+                    </SortableQueueModel>
                   )
                 })}
               </div>

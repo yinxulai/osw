@@ -17,7 +17,7 @@ import { GripVertical, Pencil, Plus, Server, Trash2, KeyRound, Timer } from 'luc
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { SortableBinding } from './sortable-binding'
+import { SortableUpstreamModel } from './sortable-upstream-model'
 import { ProviderIcon } from './provider-icon'
 import { findPresetByName } from '../lib/provider-presets'
 import type { Provider, UpstreamModel } from '@common/schemas'
@@ -103,7 +103,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
               <div className="overflow-hidden rounded-lg border bg-muted/35 divide-y divide-border/60">
                 {models.map(model => (
-                  <SortableBinding key={model.id} id={model.id}>
+                  <SortableUpstreamModel key={model.id} id={model.id}>
                     {(handleProps, dragging) => (
                       <div className={'flex items-center gap-2 px-3 py-2.5 ' + (dragging ? 'bg-muted/60' : '')}>
                         <button
@@ -154,7 +154,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         </Button>
                       </div>
                     )}
-                  </SortableBinding>
+                  </SortableUpstreamModel>
                 ))}
               </div>
             </SortableContext>

@@ -189,7 +189,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const providerNames = new Set(existingProviderNames)
     const importedProviderNames = new Set<string>()
     const importedModelNames = new Set<string>()
-    const importedBindingKeys = new Set<string>()
+    const importedUpstreamModelKeys = new Set<string>()
 
     for (const provider of config.providers) {
       if (importedProviderNames.has(provider.name)) {
@@ -215,11 +215,11 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的供应商`)
       }
 
-      const bindingKey = `${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
-      if (importedBindingKeys.has(bindingKey)) {
+      const upstreamModelKey = `${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
+      if (importedUpstreamModelKeys.has(upstreamModelKey)) {
         throw new Error(`导入文件中存在重复上游模型: ${upstreamModel.upstreamModelId}`)
       }
-      importedBindingKeys.add(bindingKey)
+      importedUpstreamModelKeys.add(upstreamModelKey)
       ProtocolEndpointSchema.array().parse(upstreamModel.endpoints ?? [])
     }
 

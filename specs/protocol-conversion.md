@@ -77,7 +77,7 @@ P1 优先实现三个最高频方向：
 
 - `upstream_models.endpoints`（JSON）中每个端点对象新增 `protocolConversionEnabled` boolean（默认 false）：按端点（协议）粒度开启转换
 - `request_logs` 新增 `upstreamProtocol` text nullable：记录端点实际使用的协议；与 `protocol`（客户端协议）不同即表示发生了转换
-- `request_attempts` 无需变更（attempt 绑定具体端点，可推导）
+- `request_attempts` 无需变更（attempt 对应的具体端点可由上游模型配置推导）
 
 ## UI 设计
 

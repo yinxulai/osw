@@ -60,7 +60,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
               插入测试数据
             </Button>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              添加示例供应商、模型、绑定和请求记录，不会覆盖已有配置。
+              添加示例供应商、模型、上游模型和请求记录，不会覆盖已有配置。
             </p>
           </div>
         )}

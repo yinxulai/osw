@@ -16,7 +16,7 @@ import type { UpstreamModel, Protocol, ProtocolEndpoint, Provider } from '@commo
 import { PROTOCOL_OPTIONS } from './lib/protocols'
 import type { ProviderPreset } from './lib/provider-presets'
 
-export interface BindingEntry {
+export interface ProtocolEndpointEntry {
   protocol: Protocol
   enabled: boolean
   overrideUrl: boolean
@@ -79,7 +79,7 @@ export function useModelManagementService() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [editingModel, setEditingModel] = useState<UpstreamModel | null>(null)
   const [modelId, setModelId] = useState('')
-  const [bindingEntries, setBindingEntries] = useState<BindingEntry[]>([])
+  const [protocolEntries, setProtocolEntries] = useState<ProtocolEndpointEntry[]>([])
   const [fetchedModels, setFetchedModels] = useState<FetchedUpstreamModel[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
 
@@ -209,7 +209,7 @@ export function useModelManagementService() {
     setEditingModel(model ?? null)
     setModelId(model?.upstreamModelId ?? '')
     setFetchedModels([])
-    setBindingEntries(PROTOCOL_OPTIONS.map(option => {
+    setProtocolEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
       return match
         ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.upstreamUrl.trim()), upstreamUrl: match.upstreamUrl, protocolConversionEnabled: match.protocolConversionEnabled ?? false }
@@ -228,8 +228,8 @@ export function useModelManagementService() {
 
     // 组合候选请求：启用的协议优先（覆盖地址 > 供应商默认地址）；
     // 若一个协议都没启用，则回退到供应商配置了默认地址的所有协议。
-    const enabledEntries: BindingEntry[] = bindingEntries.filter(entry => entry.enabled)
-    const sourceEntries: (BindingEntry | { protocol: Protocol })[] = enabledEntries.length > 0
+    const enabledEntries: ProtocolEndpointEntry[] = protocolEntries.filter(entry => entry.enabled)
+    const sourceEntries: (ProtocolEndpointEntry | { protocol: Protocol })[] = enabledEntries.length > 0
       ? enabledEntries
       : PROTOCOL_OPTIONS
           .map(option => ({ protocol: option.value as Protocol }))
@@ -270,10 +270,10 @@ export function useModelManagementService() {
     } finally {
       setFetchingModels(false)
     }
-  }, [bindingEntries, selectedProvider, toast])
+  }, [protocolEntries, selectedProvider, toast])
 
-  const updateBindingEntry = useCallback((index: number, patch: Partial<BindingEntry>) => {
-    setBindingEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+  const updateProtocolEntry = useCallback((index: number, patch: Partial<ProtocolEndpointEntry>) => {
+    setProtocolEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
   }, [])
 
   const saveModel = useCallback(async () => {
@@ -282,7 +282,7 @@ export function useModelManagementService() {
       return
     }
     if (!modelId.trim()) return
-    const enabledEntries = bindingEntries.filter(entry => entry.enabled)
+    const enabledEntries = protocolEntries.filter(entry => entry.enabled)
     if (enabledEntries.length === 0) return
 
     const endpoints: ProtocolEndpoint[] = enabledEntries.map(entry => ({
@@ -318,7 +318,7 @@ export function useModelManagementService() {
     setModelDialogOpen(false)
     toast.success(editingModel ? '模型已更新' : '模型已添加')
     await reload()
-  }, [selectedProvider, modelId, bindingEntries, editingModel, models, reload])
+  }, [selectedProvider, modelId, protocolEntries, editingModel, models, reload])
 
   const { loading: savingModel, run: runSaveModel } = useAsyncFn(saveModel)
 
@@ -388,9 +388,9 @@ export function useModelManagementService() {
     setModelDialogOpen,
     editingModel,
     modelId,
-    bindingEntries,
+    protocolEntries,
     setModelId,
-    updateBindingEntry,
+    updateProtocolEntry,
     openModelDialog,
     closeModelDialog,
     saveModel: runSaveModel,

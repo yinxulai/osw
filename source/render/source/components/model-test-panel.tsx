@@ -172,7 +172,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
               <DialogTitle className="flex items-center gap-2 text-sm">
                 渠道诊断
               </DialogTitle>
-              <DialogDescription className="mt-1 text-[11px]">验证模型绑定的协议兼容性与上游连通性</DialogDescription>
+              <DialogDescription className="mt-1 text-[11px]">验证上游模型的协议兼容性与连通性</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -302,7 +302,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
               ) : (
                 <div className="flex min-h-52 flex-col items-center justify-center text-center">
                   <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-muted/30 text-muted-foreground"><Cpu size={18} /></div>
-                  <div className="text-xs font-medium">{enabledModels.length === 0 ? '没有可测试的模型绑定' : '当前范围没有测试任务'}</div>
+                  <div className="text-xs font-medium">{enabledModels.length === 0 ? '没有可测试的上游模型' : '当前范围没有测试任务'}</div>
                   <div className="mt-1.5 max-w-sm text-[11px] leading-5 text-muted-foreground">
                     {enabledModels.length === 0 ? '请先在模型管理中添加并启用上游模型，然后返回这里验证协议与渠道。' : '在左侧列表中勾选需要测试的渠道和协议，结果会在这里展示。'}
                   </div>

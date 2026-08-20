@@ -3,12 +3,12 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
 
-interface SortableBindingProps {
+interface SortableUpstreamModelProps {
   id: string
   children: (handleProps: Record<string, unknown>, dragging: boolean) => ReactNode
 }
 
-export function SortableBinding(props: SortableBindingProps) {
+export function SortableUpstreamModel(props: SortableUpstreamModelProps) {
   const { id, children } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   return (

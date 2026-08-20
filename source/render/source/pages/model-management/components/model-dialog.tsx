@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
 import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS, PROTOCOL_SHORT_LABELS, CONVERTIBLE_PROTOCOLS } from '../lib/protocols'
 import type { FetchedUpstreamModel } from '@/api'
-import type { BindingEntry } from '../service'
+import type { ProtocolEndpointEntry } from '../service'
 
 interface ModelDialogProps {
   open: boolean
@@ -18,13 +18,13 @@ interface ModelDialogProps {
   editingModel: { id: string; upstreamModelId: string } | null
   providerName: string
   modelId: string
-  bindingEntries: BindingEntry[]
+  protocolEntries: ProtocolEndpointEntry[]
   saving: boolean
   fetchedModels: FetchedUpstreamModel[]
   fetchingModels: boolean
   onFetchModels: () => void
   setModelId: (id: string) => void
-  updateBindingEntry: (index: number, patch: Partial<BindingEntry>) => void
+  updateProtocolEntry: (index: number, patch: Partial<ProtocolEndpointEntry>) => void
   onCancel: () => void
   onSave: () => void
 }
@@ -36,18 +36,18 @@ export function ModelDialog(props: ModelDialogProps) {
     editingModel,
     providerName,
     modelId,
-    bindingEntries,
+    protocolEntries,
     saving,
     fetchedModels,
     fetchingModels,
     onFetchModels,
     setModelId,
-    updateBindingEntry,
+    updateProtocolEntry,
     onCancel,
     onSave,
   } = props
 
-  const canSave = modelId.trim() && bindingEntries.some(entry => entry.enabled)
+  const canSave = modelId.trim() && protocolEntries.some(entry => entry.enabled)
 
   const [modelSearch, setModelSearch] = useState('')
   const filteredModels = useMemo(() => {
@@ -128,16 +128,16 @@ export function ModelDialog(props: ModelDialogProps) {
 
           <Separator />
 
-          {/* 协议绑定 */}
+          {/* 协议端点 */}
           <div className="space-y-3">
             <div>
-              <Label className="text-sm">协议绑定</Label>
+              <Label className="text-sm">协议端点</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 至少启用一个协议；默认使用供应商级别的接口地址，也可以单独覆盖。
               </p>
             </div>
 
-            {bindingEntries.map((entry, index) => (
+            {protocolEntries.map((entry, index) => (
               <div
                 key={entry.protocol}
                 className={cn('space-y-3 rounded-md bg-muted/30 p-3 transition-colors', !entry.enabled && 'opacity-60')}
@@ -150,7 +150,7 @@ export function ModelDialog(props: ModelDialogProps) {
                     <span className="text-xs text-muted-foreground">{entry.enabled ? '已启用' : '未启用'}</span>
                     <Switch
                       checked={entry.enabled}
-                      onCheckedChange={checked => updateBindingEntry(index, { enabled: checked })}
+                      onCheckedChange={checked => updateProtocolEntry(index, { enabled: checked })}
                     />
                   </div>
                 </div>
@@ -163,7 +163,7 @@ export function ModelDialog(props: ModelDialogProps) {
                       </span>
                       <Switch
                         checked={entry.overrideUrl}
-                        onCheckedChange={checked => updateBindingEntry(index, { overrideUrl: checked })}
+                        onCheckedChange={checked => updateProtocolEntry(index, { overrideUrl: checked })}
                       />
                     </div>
 
@@ -176,7 +176,7 @@ export function ModelDialog(props: ModelDialogProps) {
                             type="url"
                             className="font-mono text-xs"
                             value={entry.upstreamUrl}
-                            onChange={event => updateBindingEntry(index, { upstreamUrl: event.target.value })}
+                            onChange={event => updateProtocolEntry(index, { upstreamUrl: event.target.value })}
                             placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]}
                           />
                         </div>
@@ -194,7 +194,7 @@ export function ModelDialog(props: ModelDialogProps) {
                         </div>
                         <Switch
                           checked={entry.protocolConversionEnabled}
-                          onCheckedChange={checked => updateBindingEntry(index, { protocolConversionEnabled: checked })}
+                          onCheckedChange={checked => updateProtocolEntry(index, { protocolConversionEnabled: checked })}
                         />
                       </div>
                       <p className="text-[11px] leading-relaxed text-muted-foreground">

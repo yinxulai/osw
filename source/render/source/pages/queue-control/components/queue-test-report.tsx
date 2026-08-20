@@ -71,7 +71,7 @@ export function QueueTestSummary(props: QueueTestSummaryProps) {
           队列连通性报告
         </div>
         <div className="mt-0.5 truncate text-muted-foreground">
-          已探测 {props.protocolCount} 个协议、{props.results.length} 个可用绑定
+          已探测 {props.protocolCount} 个协议、{props.results.length} 个可用上游模型
         </div>
       </div>
       <div className="text-center">

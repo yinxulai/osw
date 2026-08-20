@@ -26,9 +26,9 @@
 
 - [ ] 启动应用后，本地端口可访问
 - [ ] 所有工具统一配置 Base URL 为 `http://127.0.0.1:port`，无需按协议区分
-- [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到对应绑定
-- [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到对应绑定
-- [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到对应绑定
+- [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应上游模型
+- [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应上游模型
+- [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到当前逻辑模型的对应上游模型
 - [ ] 请求 `/v1/models` 返回包含 `default` 的单条模型列表，不透传到上游
 - [ ] 流式请求能持续返回 SSE 数据，不被代理缓冲破坏
 

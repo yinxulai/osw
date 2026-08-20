@@ -101,8 +101,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       availableModels.flatMap(candidate => candidate.model.endpoints.map(endpoint => endpoint.protocol)),
     )]
     const reason = availableModels.length === 0
-      ? '该队列没有已启用且健康的上游模型'
-      : `可用模型未绑定 ${protocol} 协议且未开启协议转换（当前绑定: ${configuredProtocols.join(', ') || '无'}）`
+      ? '该逻辑模型队列没有已启用且健康的上游模型'
+      : `可用上游模型未配置 ${protocol} 协议且未开启协议转换（当前配置协议: ${configuredProtocols.join(', ') || '无'}）`
     console.warn(
       `[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}, reason=${reason})`,
     )

@@ -394,7 +394,7 @@ describe('handleProxyRequest', () => {
 
     expect(response.status).toBe(503)
     const payload = await response.json()
-    expect(payload.errorMessage).toContain('未绑定')
+    expect(payload.errorMessage).toContain('未配置')
     expect(payload.errorMessage).toContain('协议转换')
   })
 

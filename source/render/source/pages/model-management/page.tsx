@@ -120,13 +120,13 @@ export function ModelManagementPage() {
           editingModel={service.editingModel}
           providerName={service.selectedProvider?.name ?? ''}
           modelId={service.modelId}
-          bindingEntries={service.bindingEntries}
+          protocolEntries={service.protocolEntries}
           saving={service.saving}
           fetchedModels={service.fetchedModels}
           fetchingModels={service.fetchingModels}
           onFetchModels={service.fetchModels}
           setModelId={service.setModelId}
-          updateBindingEntry={service.updateBindingEntry}
+          updateProtocolEntry={service.updateProtocolEntry}
           onCancel={service.closeModelDialog}
           onSave={service.saveModel}
         />

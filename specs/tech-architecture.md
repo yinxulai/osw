@@ -192,7 +192,7 @@ one-switch/
 - 成功/失败回调更新状态
 - 提供 `isAvailable(providerId): boolean`
 
-**`proxy/current-binding.ts`** — 当前手动指定的上游模型状态
+**`proxy/current-upstream-model.ts`** — 当前逻辑模型手动指定的上游模型状态
 - 维护当前用户手动指定的上游模型 ID（运行时状态，不持久化）
 - 提供设置/获取当前上游模型的接口
 - 新请求从当前上游模型开始尝试，失败后仍按队列顺序自动切换
@@ -242,19 +242,19 @@ one-switch/
 | `/api/provider/delete` | 删除 Provider | id | - |
 | `/api/provider/test` | 测试连接 | id | 测试结果（成功/失败+原因） |
 | `/api/provider/health/get` | Provider 健康状态 | id | 健康状态对象 |
-| `/api/upstream-model/list` | 上游模型列表（全局共享队列） | - | 上游模型列表（按优先级排序） |
+| `/api/upstream-model/list` | 上游模型池列表 | - | 上游模型列表（按优先级排序） |
 | `/api/upstream-model/create` | 新增上游模型 | providerId, upstreamModelId, endpoints, priority | 新建的上游模型 |
 | `/api/upstream-model/update` | 更新上游模型 | id, 更新字段 | 更新后的上游模型 |
 | `/api/upstream-model/delete` | 删除上游模型 | id | - |
 | `/api/upstream-model/reorder` | 调整优先级 | id, newPriority | 更新后的队列 |
-| `/api/current-binding/get` | 获取当前手动指定的上游模型 | - | 当前上游模型 ID |
-| `/api/current-binding/set` | 手动切换当前上游模型 | bindingId | 新的当前上游模型 |
+| `/api/queue/status` | 获取当前逻辑模型队列状态 | - | 当前手动指定的上游模型 ID |
+| `/api/queue/switch` | 手动切换当前逻辑模型队列起始上游模型 | modelId | 新的当前上游模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
-> 上游模型全局共享，`/api/upstream-model/list` 返回所有启用的上游模型，即自动切换队列。
+> `/api/upstream-model/list` 返回上游模型池；每个逻辑模型请求到达时，代理根据当前逻辑模型配置和该模型池动态生成候选队列。
 
 ### 3. 数据存储（`source/server/database/`）
 
@@ -266,12 +266,13 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 7 张业务表（providers、logical_models、upstream_models、provider_health、settings、request_logs、request_attempts）的 `sqliteTable` 定义
+- 新版本 8 张业务表（app_config、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、audit_events）的 `sqliteTable` 定义
+- `app_config` 按命名空间 key 逐项保存全局配置，value 使用 JSON 编码
 - 从表定义推导行类型（`$inferSelect`）
 
 **`store.ts`** — 数据访问层
 - Provider / LogicalModel / UpstreamModel CRUD、级联操作
-- ProviderHealth 读写、Settings、RequestLog、RequestAttempt
+- ProviderHealth 读写、AppConfig、RequestLog、RequestAttempt、AuditEvent
 - 使用 Drizzle 类型化查询（`select`/`insert`/`update`），映射到领域模型
 
 **`drizzle/`** — Drizzle-kit 迁移
