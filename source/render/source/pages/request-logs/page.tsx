@@ -1,9 +1,9 @@
 import { Fragment, useMemo, useState } from 'react'
 import {
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   RefreshCw,
-  Search,
   Zap,
   Clock,
   ArrowDownToLine,
@@ -14,7 +14,6 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -26,37 +25,46 @@ import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { RequestLogDetailRow, RequestStatusBadge } from './components/request-log-detail-row'
-import { useRequestLogsService } from './service'
+import { useRequestLogsService, PAGE_SIZE } from './service'
 import { formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from './lib/format'
 
 type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
 
 export function RequestLogsPage() {
-  const { logs, loading, refreshing, getModelName, refresh } = useRequestLogsService()
+  const { logs, total, providers, loading, refreshing, getModelName, refresh, setFilter } = useRequestLogsService()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [searchText, setSearchText] = useState('')
+  const [providerFilter, setProviderFilter] = useState<string>('all')
+  const [protocolFilter, setProtocolFilter] = useState<string>('all')
+  const [page, setPage] = useState(1)
 
-  const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      if (statusFilter !== 'all' && log.status !== statusFilter) return false
-      if (searchText) {
-        const q = searchText.toLowerCase()
-        const lastAttempt = log.attempts[log.attempts.length - 1]
-        return (
-          getModelName(log.logicalModelId).toLowerCase().includes(q) ||
-          log.id.toLowerCase().includes(q) ||
-          log.attempts.some(
-            a =>
-              a.providerName.toLowerCase().includes(q) ||
-              a.upstreamModelId.toLowerCase().includes(q),
-          ) ||
-          (lastAttempt?.errorMessage?.toLowerCase().includes(q) ?? false)
-        )
-      }
-      return true
-    })
-  }, [logs, statusFilter, searchText, getModelName])
+  const applyFilter = (next: Partial<{ providerId: string; protocol: string; status: StatusFilter }>) => {
+    if (next.providerId !== undefined) setProviderFilter(next.providerId)
+    if (next.protocol !== undefined) setProtocolFilter(next.protocol)
+    if (next.status !== undefined) setStatusFilter(next.status)
+    setPage(1)
+    void setFilter(next)
+  }
+
+  const providerOptions = useMemo(() => {
+    return providers
+      .map(p => ({ id: p.id, name: p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [providers])
+
+  const protocolOptions = useMemo(() => {
+    return Array.from(new Set(logs.map(log => log.protocol))).sort()
+  }, [logs])
+
+  const filteredLogs = logs
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const goToPage = (next: number) => {
+    const clamped = Math.min(Math.max(1, next), totalPages)
+    setPage(clamped)
+    void refresh(clamped)
+  }
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => (prev === id ? null : id))
@@ -77,16 +85,29 @@ export function RequestLogsPage() {
       <PageContent>
         {/* 筛选栏 */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="搜索队列、提供商、上游模型、错误..."
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-              className="h-8 w-64 pl-8 text-xs"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
+          <Select value={providerFilter} onValueChange={v => applyFilter({ providerId: v })}>
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue placeholder="全部渠道" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部渠道</SelectItem>
+              {providerOptions.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={protocolFilter} onValueChange={v => applyFilter({ protocol: v })}>
+            <SelectTrigger className="h-8 w-32 text-xs">
+              <SelectValue placeholder="全部协议" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部协议</SelectItem>
+              {protocolOptions.map(p => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={v => applyFilter({ status: v as StatusFilter })}>
             <SelectTrigger className="h-8 w-32 text-xs">
               <SelectValue placeholder="全部状态" />
             </SelectTrigger>
@@ -99,7 +120,7 @@ export function RequestLogsPage() {
             </SelectContent>
           </Select>
           <span className="text-xs text-muted-foreground">
-            共 {filteredLogs.length} 条
+            共 {total} 条
           </span>
         </div>
 
@@ -233,6 +254,31 @@ export function RequestLogsPage() {
             </table>
           </div>
         </div>}
+        {!loading && total > PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+            <span>
+              第 {page} / {totalPages} 页
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={page <= 1}
+              onClick={() => goToPage(page - 1)}
+            >
+              <ChevronLeft size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={page >= totalPages}
+              onClick={() => goToPage(page + 1)}
+            >
+              <ChevronRight size={14} />
+            </Button>
+          </div>
+        )}
       </PageContent>
     </PageLayout>
   )

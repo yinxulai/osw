@@ -52,6 +52,7 @@ function ensureSchema(db: DatabaseSync): void {
   ensureColumn(db, 'request_attempts', 'upstreamRequestId', 'TEXT')
   ensureColumn(db, 'request_attempts', 'errorResponse', 'TEXT')
   dropColumn(db, 'upstream_models', 'logicalModelId')
+  ensureColumn(db, 'upstream_models', 'endpoints', "TEXT NOT NULL DEFAULT '[]'")
   ensureDefaultLogicalModel(db)
 }
 
@@ -135,7 +136,7 @@ const INITIAL_SCHEMA = [
     listenHost TEXT NOT NULL DEFAULT '127.0.0.1',
     listenPort INTEGER NOT NULL DEFAULT 9300,
     accessTokenReference TEXT,
-    logRetentionCount INTEGER NOT NULL DEFAULT 1000,
+    logRetentionCount INTEGER NOT NULL DEFAULT 5000,
     cooldownBaseSeconds INTEGER NOT NULL DEFAULT 30,
     cooldownMaxSeconds INTEGER NOT NULL DEFAULT 300,
     consecutiveFailureThreshold INTEGER NOT NULL DEFAULT 3,

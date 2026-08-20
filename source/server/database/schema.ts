@@ -84,7 +84,7 @@ export const settings = sqliteTable(
     listenHost: text('listenHost').notNull().default('127.0.0.1'),
     listenPort: integer('listenPort').notNull().default(9300),
     accessTokenReference: text('accessTokenReference'),
-    logRetentionCount: integer('logRetentionCount').notNull().default(1000),
+    logRetentionCount: integer('logRetentionCount').notNull().default(5000),
     cooldownBaseSeconds: integer('cooldownBaseSeconds').notNull().default(30),
     cooldownMaxSeconds: integer('cooldownMaxSeconds').notNull().default(300),
     consecutiveFailureThreshold: integer('consecutiveFailureThreshold').notNull().default(3),

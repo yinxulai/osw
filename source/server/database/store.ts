@@ -525,14 +525,50 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     .run()
 }
 
-export async function listRequestLogs(limit = 50): Promise<RequestLog[]> {
+export interface RequestLogFilter {
+  providerId?: string
+  protocol?: string
+  status?: RequestStatus
+}
+
+function requestLogFilterConditions(filter?: RequestLogFilter) {
+  if (!filter) return []
+  const conditions = []
+  if (filter.providerId) {
+    conditions.push(
+      sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerId = ${filter.providerId})`,
+    )
+  }
+  if (filter.protocol) conditions.push(eq(requestLogs.protocol, filter.protocol))
+  if (filter.status) conditions.push(eq(requestLogs.status, filter.status))
+  return conditions
+}
+
+export async function listRequestLogs(
+  limit = 50,
+  offset = 0,
+  filter?: RequestLogFilter,
+): Promise<RequestLog[]> {
+  const conditions = requestLogFilterConditions(filter)
   const rows = getDb()
     .select()
     .from(requestLogs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(requestLogs.createdTime))
     .limit(limit)
+    .offset(offset)
     .all()
   return rows.map(mapRequestLog)
+}
+
+export async function countRequestLogs(filter?: RequestLogFilter): Promise<number> {
+  const conditions = requestLogFilterConditions(filter)
+  const row = getDb()
+    .select({ count: sql<number>`count(*)` })
+    .from(requestLogs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .all()[0]
+  return row?.count ?? 0
 }
 
 export async function pruneRequestLogs(retentionCount: number): Promise<void> {

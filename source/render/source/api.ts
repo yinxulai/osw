@@ -187,7 +187,14 @@ export const logsApi = {
 // ========== Request Logs ==========
 
 export const requestLogApi = {
-  list: (limit = 30) => request<{ logs: RequestLogEntry[] }>('/request-log/list', { limit }),
+  list: (params: {
+    limit?: number
+    offset?: number
+    providerId?: string
+    protocol?: string
+    status?: 'pending' | 'success' | 'failed' | 'cancelled'
+  } = {}) =>
+    request<{ logs: RequestLogEntry[]; total: number }>('/request-log/list', params),
 }
 
 // ========== Analytics ==========

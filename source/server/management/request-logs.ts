@@ -3,17 +3,28 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { RequestLogEntry } from '@common/schemas'
-import { listAttemptsByRequest, listProviders, listRequestLogs } from '../database/store'
+import { countRequestLogs, listAttemptsByRequest, listProviders, listRequestLogs } from '../database/store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,
 }
 
-const ListRequestLogsSchema = z.object({ limit: z.number().int().positive().max(200).optional() })
+const ListRequestLogsSchema = z.object({
+  limit: z.number().int().positive().max(200).optional(),
+  offset: z.number().int().nonnegative().optional(),
+  providerId: z.string().optional(),
+  protocol: z.string().optional(),
+  status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
+})
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { limit } = ListRequestLogsSchema.parse(body ?? {})
-  const logs = await listRequestLogs(limit ?? 50)
+  const { limit, offset, providerId, protocol, status } = ListRequestLogsSchema.parse(body ?? {})
+  const pageSize = limit ?? 50
+  const filter = { providerId, protocol, status }
+  const [logs, total] = await Promise.all([
+    listRequestLogs(pageSize, offset ?? 0, filter),
+    countRequestLogs(filter),
+  ])
   const providers = await listProviders()
   const providerNameById = new Map(providers.map(p => [p.id, p.name]))
 
@@ -55,5 +66,5 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
     }),
   )
 
-  sendSuccess(res, { logs: entries })
+  sendSuccess(res, { logs: entries, total })
 }

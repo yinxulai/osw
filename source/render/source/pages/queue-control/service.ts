@@ -68,7 +68,7 @@ export function useQueueControlService() {
   const loadQueueData = useCallback(async () => {
     const [queueResult, logResult] = await Promise.all([
       queueApi.status(),
-      requestLogApi.list(100),
+      requestLogApi.list({ limit: 100 }),
     ])
     if (queueResult.success) {
       setManualModelId(queueResult.data.manualModelId)
