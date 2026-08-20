@@ -589,21 +589,31 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     if (update.status !== undefined) transaction.update(requestLogs).set({ status: update.status }).where(eq(requestLogs.id, id)).run()
     const metrics: Array<{ key: string; value: number; unit: string }> = []
     if (update.totalDurationMilliseconds !== undefined) metrics.push({ key: 'durationMilliseconds', value: update.totalDurationMilliseconds, unit: 'milliseconds' })
-    if (update.ttftMilliseconds !== undefined && update.ttftMilliseconds !== null) metrics.push({ key: 'ttftMilliseconds', value: update.ttftMilliseconds, unit: 'milliseconds' })
-    if (update.inputTokens !== undefined && update.inputTokens !== null) metrics.push({ key: 'inputTokens', value: update.inputTokens, unit: 'tokens' })
-    if (update.outputTokens !== undefined && update.outputTokens !== null) metrics.push({ key: 'outputTokens', value: update.outputTokens, unit: 'tokens' })
-    if (update.cachedInputTokens !== undefined && update.cachedInputTokens !== null) metrics.push({ key: 'cachedInputTokens', value: update.cachedInputTokens, unit: 'tokens' })
-    if (update.cacheCreationInputTokens !== undefined && update.cacheCreationInputTokens !== null) metrics.push({ key: 'cacheCreationInputTokens', value: update.cacheCreationInputTokens, unit: 'tokens' })
-    if (update.promptCacheHit !== undefined && update.promptCacheHit !== null) metrics.push({ key: 'promptCacheHit', value: update.promptCacheHit ? 1 : 0, unit: 'boolean' })
-    if (update.cacheHit !== undefined && update.cacheHit !== null) metrics.push({ key: 'cacheHit', value: update.cacheHit ? 1 : 0, unit: 'boolean' })
+    const optionalMetrics: Array<[keyof RequestLogUpdate, string, string]> = [
+      ['ttftMilliseconds', 'ttftMilliseconds', 'milliseconds'],
+      ['inputTokens', 'inputTokens', 'tokens'],
+      ['outputTokens', 'outputTokens', 'tokens'],
+      ['cachedInputTokens', 'cachedInputTokens', 'tokens'],
+      ['cacheCreationInputTokens', 'cacheCreationInputTokens', 'tokens'],
+    ]
+    for (const [field, key, unit] of optionalMetrics) {
+      const value = update[field]
+      if (value === null) transaction.delete(requestMetrics).where(and(eq(requestMetrics.requestId, id), eq(requestMetrics.key, key))).run()
+      else if (value !== undefined) metrics.push({ key, value: value as number, unit })
+    }
+    for (const [field, key] of [['promptCacheHit', 'promptCacheHit'], ['cacheHit', 'cacheHit']] as const) {
+      const value = update[field]
+      if (value === null) transaction.delete(requestMetrics).where(and(eq(requestMetrics.requestId, id), eq(requestMetrics.key, key))).run()
+      else if (value !== undefined) metrics.push({ key, value: value ? 1 : 0, unit: 'boolean' })
+    }
     for (const metric of metrics) transaction.insert(requestMetrics).values({ requestId: id, ...metric, updatedTime: time }).onConflictDoUpdate({ target: [requestMetrics.requestId, requestMetrics.key], set: { value: metric.value, unit: metric.unit, updatedTime: time } }).run()
-    if (update.totalTokens !== undefined && update.totalTokens !== null) {
+    if (update.totalTokens !== undefined) {
       transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'totalTokens'))).run()
-      transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
+      if (update.totalTokens !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
     }
     if (update.rawUsage !== undefined) {
       transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'raw'))).run()
-      transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
+      if (update.rawUsage !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
     }
   })
 }

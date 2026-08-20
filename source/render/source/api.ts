@@ -8,6 +8,8 @@ import type {
   Provider,
   ProviderHealth,
   LogicalModel,
+  ProviderModel,
+  SchedulingPolicy,
   UpstreamModel,
   ProtocolEndpoint,
   Protocol,
@@ -133,6 +135,37 @@ export const logicalModelApi = {
 }
 
 // ========== Upstream Model ==========
+
+type ProviderModelUpdateInput = {
+  logicalModelId?: string
+  modelName?: string
+  enabled?: boolean
+  priority?: number
+  endpoints?: ProtocolEndpoint[]
+}
+
+export const providerModelApi = {
+  list: () => request<ProviderModel[]>('/provider-model/list', {}),
+  get: (id: string) => request<ProviderModel>('/provider-model/get', { id }),
+  update: (id: string, updates: ProviderModelUpdateInput) =>
+    request<ProviderModel>('/provider-model/update', { id, ...updates }),
+}
+
+export const schedulingPolicyApi = {
+  list: (logicalModelId?: string) => request<SchedulingPolicy[]>('/scheduling-policy/list', logicalModelId ? { logicalModelId } : {}),
+  update: (data: SchedulingPolicyInput) => request<SchedulingPolicy>('/scheduling-policy/update', data),
+  remove: (logicalModelId: string, providerModelId: string) => request<{ logicalModelId: string; providerModelId: string }>('/scheduling-policy/delete', { logicalModelId, providerModelId }),
+}
+
+type SchedulingPolicyInput = {
+  logicalModelId: string
+  providerModelId: string
+  strategy?: string
+  priority?: number
+  weight?: number
+  enabled?: boolean
+  failoverEnabled?: boolean
+}
 
 export const upstreamModelApi = {
   list: () =>

@@ -29,6 +29,7 @@ import {
   listProviderHealth,
   listProviderModels,
   listProviderModelsForLogicalModel,
+  listSchedulingPolicies,
   listRequestLogs,
   listUpstreamModels,
   listUpstreamModelsByProvider,
@@ -43,6 +44,8 @@ import {
   updateRequestLogStatus,
   updateSettings,
   updateUpstreamModel,
+  upsertSchedulingPolicy,
+  deleteSchedulingPolicy,
 } from './store'
 
 let directory: string
@@ -138,6 +141,39 @@ describe('provider and model CRUD', () => {
   })
 })
 
+describe('scheduling policies', () => {
+  it('creates defaults, upserts conflicts, filters by logical model, and deletes policies', async () => {
+    const provider = await createProvider(providerInput())
+    const logicalA = await createLogicalModel({ name: 'policy-a' })
+    const logicalB = await createLogicalModel({ name: 'policy-b' })
+    const model = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'policy-model', priority: 0 })
+
+    const created = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id })
+    expect(created).toMatchObject({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 0, weight: 100, enabled: true, failoverEnabled: true })
+    const originalCreatedTime = created.createdTime
+    const updated = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 4, weight: 25, enabled: false, failoverEnabled: false })
+    expect(updated).toMatchObject({ priority: 4, weight: 25, enabled: false, failoverEnabled: false, createdTime: originalCreatedTime })
+    expect(await listSchedulingPolicies(logicalA.id)).toEqual([expect.objectContaining({ providerModelId: model.id, priority: 4 })])
+    expect(await listSchedulingPolicies(logicalB.id)).toEqual([])
+    expect(await listSchedulingPolicies()).toHaveLength(1)
+    await deleteSchedulingPolicy(logicalA.id, model.id)
+    expect(await listSchedulingPolicies()).toEqual([])
+    await deleteSchedulingPolicy(logicalA.id, model.id)
+    await expect(upsertSchedulingPolicy({ logicalModelId: 'model_missing', providerModelId: model.id })).rejects.toThrow()
+  })
+
+  it('orders policies by priority then weight and rejects duplicate rows at the database boundary', async () => {
+    const provider = await createProvider(providerInput())
+    const logical = await createLogicalModel({ name: 'policy-order' })
+    const models = await Promise.all(['one', 'two', 'three'].map(name => createUpstreamModel({ providerId: provider.id, upstreamModelId: name, priority: 0 })))
+    await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[0].id, priority: 1, weight: 50 })
+    await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[1].id, priority: 1, weight: 10 })
+    await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[2].id, priority: 0, weight: 100 })
+    expect((await listSchedulingPolicies(logical.id)).map(policy => policy.providerModelId)).toEqual([models[2].id, models[1].id, models[0].id])
+    expect(() => getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run(logical.id, models[0].id, Date.now(), Date.now())).toThrow()
+  })
+})
+
 describe('health and settings', () => {
   it('records threshold, exponential capped failures, success, reset, and missing rows safely', async () => {
     const provider = await createProvider(providerInput())
@@ -160,11 +196,15 @@ describe('health and settings', () => {
   it('uses defaults, persists all optional values, skips undefined, and notifies listeners', async () => {
     expect(await getSettings({ listenPort: 19000 })).toMatchObject({ listenPort: 19000, listenHost: '127.0.0.1', autoLaunch: false })
     const listener = vi.fn()
+    const throwingListener = vi.fn(() => { throw new Error('listener failed') })
     const unsubscribe = onSettingsChanged(listener)
+    const unsubscribeThrowing = onSettingsChanged(throwingListener)
     await updateSettings({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: null, autoLaunch: true, cooldownBaseSeconds: undefined })
     expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: null, autoLaunch: true })
     expect(listener).toHaveBeenCalledTimes(1)
+    expect(throwingListener).toHaveBeenCalledTimes(1)
     unsubscribe()
+    unsubscribeThrowing()
     await updateSettings({ listenPort: 19002 })
     expect(listener).toHaveBeenCalledTimes(1)
   })
@@ -179,6 +219,8 @@ describe('request logs and analytics', () => {
     await updateRequestLogStatus(log.id, { status: 'success', totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, ttftMilliseconds: 7, promptCacheHit: false, cacheHit: true })
     expect(await listAttemptsByRequest(log.id)).toEqual([expect.objectContaining({ attemptIndex: 0 }), expect.objectContaining({ id: attempt1.id, attemptIndex: 1, errorResponse: '{"x":1}' })])
     expect(await listRequestLogs(10, 0, { providerId: provider.id, protocol: 'openai-completions', status: 'success' })).toEqual([expect.objectContaining({ totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, promptCacheHit: false, cacheHit: true })])
+    await updateRequestLogStatus(log.id, { totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })
+    expect(await listRequestLogs(10)).toEqual([expect.objectContaining({ totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })])
     expect(await countRequestLogs({ providerId: provider.id })).toBe(1)
     expect(await countRequestLogs({ status: 'cancelled' })).toBe(0)
   })

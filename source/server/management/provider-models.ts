@@ -4,8 +4,10 @@ import { ProtocolSchema } from '@common/schemas'
 import {
   getProviderModel,
   listProviderModels,
+  listSchedulingPolicies,
   updateUpstreamModel,
   upsertSchedulingPolicy,
+  deleteSchedulingPolicy,
 } from '../database/store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
@@ -14,6 +16,9 @@ export const providerModelRoutes: Record<string, ManagementHandler> = {
   '/api/provider-model/list': handleListProviderModels,
   '/api/provider-model/get': handleGetProviderModel,
   '/api/provider-model/update': handleUpdateProviderModel,
+  '/api/scheduling-policy/list': handleListSchedulingPolicies,
+  '/api/scheduling-policy/update': handleUpdateSchedulingPolicy,
+  '/api/scheduling-policy/delete': handleDeleteSchedulingPolicy,
 }
 
 const ListProviderModelsSchema = z.object({ includeDeleted: z.boolean().optional() }).default({})
@@ -55,4 +60,31 @@ async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerRespo
   }
   const view = await getProviderModel(updated.id)
   sendSuccess(res, view ?? updated)
+}
+
+const SchedulingPolicyListSchema = z.object({ logicalModelId: z.string().min(1).optional() }).default({})
+async function handleListSchedulingPolicies(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = SchedulingPolicyListSchema.parse(body)
+  sendSuccess(res, await listSchedulingPolicies(input.logicalModelId))
+}
+
+const SchedulingPolicyUpdateSchema = z.object({
+  logicalModelId: z.string().min(1),
+  providerModelId: z.string().min(1),
+  strategy: z.string().min(1).optional(),
+  priority: z.number().int().optional(),
+  weight: z.number().int().nonnegative().optional(),
+  enabled: z.boolean().optional(),
+  failoverEnabled: z.boolean().optional(),
+})
+async function handleUpdateSchedulingPolicy(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = SchedulingPolicyUpdateSchema.parse(body)
+  sendSuccess(res, await upsertSchedulingPolicy(input))
+}
+
+const SchedulingPolicyDeleteSchema = z.object({ logicalModelId: z.string().min(1), providerModelId: z.string().min(1) })
+async function handleDeleteSchedulingPolicy(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = SchedulingPolicyDeleteSchema.parse(body)
+  await deleteSchedulingPolicy(input.logicalModelId, input.providerModelId)
+  sendSuccess(res, { logicalModelId: input.logicalModelId, providerModelId: input.providerModelId })
 }
