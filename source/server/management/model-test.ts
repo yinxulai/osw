@@ -3,7 +3,7 @@ import http from 'node:http'
 import https from 'node:https'
 import { URL } from 'node:url'
 import { z } from 'zod'
-import { listUpstreamModels, listProviders } from '../database/store'
+import { listProviderModels, listProviders } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { findEndpoint } from '../proxy/router'
 import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl } from '../proxy/request'
@@ -41,7 +41,22 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
   const onClientAbort = () => controller.abort()
   req.once('aborted', onClientAbort)
 
-  const models = await listUpstreamModels()
+  const models = (await listProviderModels()).map(model => ({
+    id: model.id,
+    providerId: model.providerId,
+    upstreamModelId: model.modelName,
+    endpoints: model.endpoints.map(endpoint => ({
+      protocol: endpoint.protocol,
+      upstreamUrl: endpoint.url ?? '',
+      customAuthHeader: null,
+      protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
+    })),
+    priority: 0,
+    enabled: model.enabled,
+    createdTime: model.createdTime,
+    updatedTime: model.updatedTime,
+    deletedTime: model.deletedTime,
+  }))
   const providers = await listProviders()
   const providerMap = new Map(providers.map(p => [p.id, p]))
   const providerFilter = providerIds ? new Set(providerIds) : null
