@@ -34,7 +34,7 @@ export type Provider = z.infer<typeof ProviderSchema>
 // ========== Logical Model ==========
 
 export const LogicalModelSchema = z.object({
-  id: z.string().startsWith('model_'),
+  id: z.string(),
   name: z.string().min(1).max(100),
   description: z.string().default(''),
   enabled: z.boolean().default(true),
@@ -64,7 +64,7 @@ export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
  * 一个模型只占队列中的一行，即使支持多个协议。
  */
 export const UpstreamModelSchema = z.object({
-  id: z.string().startsWith('model_'),
+  id: z.string(),
   providerId: z.string().startsWith('prov_'),
   upstreamModelId: z.string().min(1),
   /** 协议端点列表，一个模型可支持多个协议 */
@@ -113,7 +113,7 @@ export type RawUsage = z.infer<typeof RawUsageSchema>
 
 export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
-  logicalModelId: z.string().startsWith('model_'),
+  logicalModelId: z.string(),
   protocol: ProtocolSchema,
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
