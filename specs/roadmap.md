@@ -6,16 +6,16 @@
 
 以下设计文档已评审定稿，是实施的唯一依据：
 
-- [x] [data-model.md](./data-model.md)：8 张表基线（settings、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents），JSON config + 稳定关系列、三层日志、软删除、Unix 毫秒时间戳。
+- [x] [data-model.md](./data-model.md)：15 张表基线（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics），标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、三层日志、软删除、Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。
 - [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
 ### 产品与设计原则（摘要）
 
-- 经常扩展的配置、供应商属性和模型属性优先进入 Schema 驱动的 JSON/KV 数据；只有需要筛选、排序、关联或建立索引的稳定字段才进入关系型列。
-- 上游模型是全局共享池成员，每个上游模型有独立启用开关；逻辑模型的候选队列由全局启用的上游模型动态组成，路由按协议筛选后再按优先级、健康与冷却状态尝试。
+- 身份、关系、枚举、开关、数值以及参与路由/查询/排序/统计的字段必须进入关系型列；只有协议私有原始详情、大体积正文和真正开放的扩展数据才使用 JSON/KV。
+- Provider 模型是全局共享池成员，每个 Provider 模型有独立启用开关；逻辑模型的候选队列由全局启用的 Provider 模型动态组成，路由按协议筛选后再按优先级、健康与冷却状态尝试。
 - 手动切换只影响后续新请求，不中断已经开始的请求。
-- 请求日志分为稳定元数据、上游尝试记录和可选正文内容三层；正文记录默认关闭，敏感信息必须脱敏。
+- 请求日志分为稳定元数据、远端尝试记录和可选正文内容三层；正文记录默认关闭，敏感信息必须脱敏。
 
 ## 二、实施计划（从头实施）
 
@@ -23,10 +23,10 @@
 
 ### 阶段 1：数据库新基线
 
-- [ ] 按 data-model.md 重建 schema：8 张表、CHECK 约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, upstreamModelId) WHERE deletedTime IS NULL
+- [ ] 按 data-model.md 重建 schema：15 张表（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics）、CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL
 - [ ] `settings` 初始化使用 INSERT OR IGNORE 幂等写入
-- [ ] `provider_health` 随 Provider 创建同事务插入
-- [ ] `request_contents` 四列正文结构（requestHeader/requestBody/responseHeader/responseBody）+ attempts + conversions（attemptId 关联）
+- [ ] `provider_health` 随 Provider 创建、`provider_model_health` 随 ProviderModel 创建，在同事务中插入
+- [ ] `request_contents` 请求级和尝试级正文结构（通过可空 attemptId 关联）+ conversions
 - [ ] 删除旧迁移，建立全新初始化基线（不兼容旧版数据库）
 - [ ] store 层 CRUD 与 Zod Schema 对齐新表结构
 
@@ -37,7 +37,7 @@
 - [ ] 搭建共享骨架：handler 编排（候选路由、尝试循环、手动切换）、transport 纯 I/O（空闲超时、中止、SSE 解析）、hooks 观测订阅
 - [ ] 实现 ProtocolAdapter 接口（buildUpstreamRequest / createResponsePipeline / classifyError）
 - [ ] 落地 openai、anthropic、gemini 三个协议适配器（protocols/ 目录）
-- [ ] conversions/ 注册表承接协议转换（模型级开关，默认关闭）
+- [ ] conversions/ 注册表承接协议转换（端点绑定级开关，默认关闭）
 - [ ] usage 提取、日志写入收敛到 hooks 订阅者，handler 不再内联
 - [ ] `/v1/models` 返回所有启用逻辑模型
 
@@ -59,18 +59,18 @@
 
 - [ ] 启动应用后，本地端口可访问
 - [ ] 所有工具统一配置 Base URL 为 `http://127.0.0.1:port`，无需按协议区分
-- [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应上游模型
-- [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应上游模型
-- [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到当前逻辑模型的对应上游模型
+- [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应 ProviderModel
+- [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应 ProviderModel
+- [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到当前逻辑模型的对应 ProviderModel
 - [ ] 请求 `/v1/models` 返回所有启用中的逻辑模型名，不透传到上游
 - [ ] 流式请求能持续返回 SSE 数据，不被代理缓冲破坏
 - [ ] 多工具并发请求时，日志记录和健康状态更新无错乱
 
 #### 2. 自动切换队列验证
 
-- [ ] 队列中只有 openai 协议的项；通过 anthropic 协议请求时，返回"当前协议下无可用上游模型"
+- [ ] 队列中只有 openai 协议的项；通过 anthropic 协议请求时，返回"当前协议下无可用 ProviderModel"
 - [ ] 队列中同时有 openai 和 anthropic 的项；通过 openai 请求时只尝试 openai 项，通过 anthropic 请求时只尝试 anthropic 项
-- [ ] 请求体中 model 字段为任意值时，转发到上游后被替换为当前队列项的 upstreamModelId
+- [ ] 请求体中 model 字段为任意值时，转发到远端后被替换为当前队列项的 `modelName`
 - [ ] 队列第一项失败（不可达），自动切换到第二项并成功返回
 
 #### 3. 错误分类与自动切换验证
@@ -83,10 +83,10 @@
 #### 4. 手动切换验证
 
 - [ ] 在控制台手动切换到队列第二项，新发起的请求从第二项开始尝试
-- [ ] 手动切换时，正在进行的流式请求不中断，继续使用原上游模型完成
-- [ ] 手动切换到的上游模型失败后，仍按队列顺序自动往下切换
+- [ ] 手动切换时，正在进行的流式请求不中断，继续使用原 ProviderModel 完成
+- [ ] 手动切换到的 ProviderModel 失败后，仍按队列顺序自动往下切换
 - [ ] 手动切换不改变队列的优先级顺序
-- [ ] 重启应用后，当前手动指定的上游模型重置为队列第一项
+- [ ] 重启应用后，当前手动指定的 ProviderModel 重置为队列第一项
 
 #### 5. 流式边界验证
 
@@ -115,7 +115,7 @@
 ### MVP（P0）：请求正文调试能力
 
 - [ ] 代理链路采集客户端请求和最终响应正文
-- [ ] 采集每次上游尝试的请求、响应和错误正文
+- [ ] 在 `request_contents` 中按 `attemptId` 采集每次上游尝试的请求、响应和错误正文
 - [ ] 采集协议转换前后的请求/响应内容
 - [ ] 实现 `/api/request-log/content/get` 查询接口
 - [ ] 增加 `RequestContentSchema` 和正文 CRUD/映射逻辑
@@ -135,8 +135,8 @@
 - 日志筛选（按状态、逻辑模型、供应商、时间）与请求 ID 贯穿，优先于协议转换器落地
 - 冷却/熔断状态可视化：队列页展示“冷却中（剩余时间）/ 连续失败次数”徽标，让自动切换可解释
 - 配置备份/恢复：导出脱敏配置文件（密钥仅存系统密钥环，提示用户单独备份或重输）
-- Token 用量统计：按 `request_logs.usage` 聚合展示今日/本周用量（不做费用预估）
-- 协议兼容转换器（详见 [protocol-conversion.md](./protocol-conversion.md)）：模型级转换开关、anthropic-messages ↔ openai-completions、openai-responses → openai-completions 三个方向、流式 SSE 转换、队列页转换徽标
+- Token 用量统计：按 `request_metrics` 中的 `tokens.*` 指标聚合展示今日/本周用量（不做费用预估）
+- 协议兼容转换器（详见 [protocol-conversion.md](./protocol-conversion.md)）：端点绑定级转换开关、anthropic-messages ↔ openai-completions、openai-responses → openai-completions 三个方向、流式 SSE 转换、队列页转换徽标
 - Linux 打包与托盘体验完善
 - 更细粒度的错误切换策略配置
 - 日志导出

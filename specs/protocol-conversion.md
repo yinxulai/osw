@@ -2,9 +2,9 @@
 
 ## 背景与定位
 
-现有架构遵循「零协议转换」原则：客户端协议必须与上游模型端点协议一致，代理只做透传。这导致一个常见问题——用户只有 OpenAI 兼容渠道时，Anthropic 协议的客户端工具（如 Claude Code、Claude 桌面端）完全无法使用该队列。
+现有架构遵循「零协议转换」原则：客户端协议必须与 Provider 模型端点协议一致，代理只做透传。这导致一个常见问题——用户只有 OpenAI 兼容渠道时，Anthropic 协议的客户端工具（如 Claude Code、Claude 桌面端）完全无法使用该队列。
 
-协议兼容转换器（Protocol Conversion）作为**可选能力**打破这一限制：在上游模型上开启后，代理将客户端协议的请求/响应报文转换为端点原生协议，包括流式 SSE 事件的实时转换。
+协议兼容转换器（Protocol Conversion）作为**可选能力**打破这一限制：为具体 ProviderModel 端点绑定创建并启用对应的 protocol_converter 后，代理将客户端协议的请求/响应报文转换为 Provider 端点的原生协议，包括流式 SSE 事件的实时转换。
 
 > 转换是尽力而为的兼容层，不是完整语义等价。不支持的字段会被丢弃或降级，文档与 UI 中必须明确提示。
 
@@ -12,9 +12,10 @@
 
 ### 转换开关
 
-- 开关位于**上游模型**级别（模型编辑表单中，协议端点配置区域上方）
-- 关闭（默认）：维持现状，端点只服务同协议请求
-- 开启：该模型的所有端点额外接受其他客户端协议的请求，经转换后发送
+- 协议转换器位于**ProviderModel 端点绑定 × 客户端协议**级别，存储在 `protocol_converters`。每条记录代表一个可选的客户端协议转换器。
+- 关闭（默认）：维持现状，绑定只服务 Provider 默认端点的原生协议。
+- 开启：只允许明确配置的客户端协议经过转换后使用该绑定，不会让该 ProviderModel 的所有端点隐式开放转换。
+- 转换配置关联 `provider_model_endpoints`，而不是直接关联 `provider_models`：同一 Provider 模型可以绑定多个 Provider 端点，每个端点支持的转换矩阵可以不同。
 
 ### 转换对（Conversion Pair）
 
@@ -24,7 +25,7 @@
 
 ### MVP 转换矩阵
 
-| 客户端协议 | 上游 openai-completions | 上游 openai-responses | 上游 anthropic-messages |
+| 客户端协议 | Provider openai-completions | Provider openai-responses | Provider anthropic-messages |
 |-----------|------------------------|----------------------|------------------------|
 | openai-completions | 直连 | 转换（P2） | 转换（P1） |
 | openai-responses | 转换（P1） | 直连 | 转换（P2） |
@@ -43,7 +44,7 @@ P1 优先实现三个最高频方向：
   → 协议识别 (path) 得到 A
   → 队列过滤：
       原生匹配：endpoint.protocol === A 且未开启转换 —— 原生候选
-      转换匹配：模型开启转换 且 存在 A → endpoint.protocol 转换器 —— 转换候选
+      转换匹配：存在 A → endpoint.providerEndpoint.protocol 的已启用 protocol_converter —— 转换候选
   → 排序：原生候选优先于转换候选（同优先级内）
   → 尝试某个候选：
       原生候选：现有透传路径
@@ -55,15 +56,15 @@ P1 优先实现三个最高频方向：
 - 原生端点始终优先：只有当所有原生候选失败后，才尝试转换候选
 - 转换候选之间按模型优先级排序
 - 某方向转换器标记为「不支持」时，该组合不出现在候选中
-- 过滤后为空仍返回「当前协议下无可用上游模型」
+- 过滤后为空仍返回「当前协议下无可用 ProviderModel」
 
 ### 转换失败语义
 
 | 阶段 | 行为 |
 |------|------|
 | 客户端请求体无法解析/转换 | 返回 400，不切换（等价于请求格式错误） |
-| 上游返回可切换错误（429/5xx/网络等） | 正常分类，照常切换下一个候选 |
-| 上游 200 后响应体转换失败（非流式） | 记录错误日志，返回 502，不切换（数据已产生） |
+| Provider 返回可切换错误（429/5xx/网络等） | 正常分类，照常切换下一个候选 |
+| Provider 返回 200 后响应体转换失败（非流式） | 记录错误日志，返回 502，不切换（数据已产生） |
 | 流式转换中途失败 | 终止流，向客户端发送协议对应的错误事件后关闭，记录失败，不切换 |
 
 ### 流式转换
@@ -75,19 +76,22 @@ P1 优先实现三个最高频方向：
 
 ## 数据模型变更
 
-- `upstream_models.endpoints`（JSON）中每个端点对象新增 `protocolConversionEnabled` boolean（默认 false）：按端点（协议）粒度开启转换
-- `request_logs` 新增 `upstreamProtocol` text nullable：记录端点实际使用的协议；与 `protocol`（客户端协议）不同即表示发生了转换
-- `request_attempts` 无需变更（attempt 对应的具体端点可由上游模型配置推导）
+- 新增 `provider_endpoints`：Provider 按原生协议维护默认端点。
+- `provider_model_endpoints`：将 ProviderModel 绑定到 Provider 默认端点，可选 `url`。
+- 新增 `protocol_converters`：按 ProviderModel 端点绑定和客户端协议配置 `enabled`；目标 Provider 协议通过 `provider_model_endpoints.providerEndpointId -> provider_endpoints.protocol` 得到。
+- `request_logs.protocol` 记录客户端协议；Provider 端点协议记录在 `request_attempts.providerProtocol`，与客户端协议不同即表示发生了转换。
+- 新增 `request_metrics`：按请求保存可扩展数值指标；Token 和其他用量保存到 `request_usages`。
+- `request_attempts.providerProtocol` 为 nullable，记录本次尝试实际使用的端点协议，不依赖当前端点配置推导；Provider 返回的请求标识记录在 `providerRequestId`。
 
 ## UI 设计
 
 ### 模型编辑表单
 
-- 每个协议端点条目内新增开关：「协议转换」+ 说明文案「开启后，此端点可接收其他协议的请求并自动转换（兼容层，部分参数可能丢失）」
+- 每个 ProviderModel 端点绑定条目内提供客户端协议转换配置：「添加转换协议」+ 说明文案「仅允许选中的客户端协议经过转换后使用此端点（兼容层，部分参数可能丢失）」
 
 ### 队列控制页
 
-- 每个上游模型条目的协议徽标区：
+- 每个 ProviderModel 条目的协议徽标区：
   - 原生协议：现有实心徽标（如 `OpenAI`）
   - 转换支持的协议：特殊徽标——带转换图标的描边样式（如 `⟳ Anthropic`），hover 提示「经协议转换支持」
 - 排序展示上，模型条目可同时出现原生徽标 + 若干转换徽标，原生在前
@@ -117,9 +121,9 @@ source/server/conversion/
 ```ts
 interface ProtocolConverter {
   support: 'full' | 'partial' | 'unsupported'
-  convertRequest(body: unknown): unknown          // 客户端 → 上游
-  convertResponse(body: unknown): unknown         // 上游 → 客户端（非流式）
-  createStreamConverter(): StreamConverter        // 上游 SSE → 客户端 SSE
+  convertRequest(body: unknown): unknown          // 客户端 → Provider
+  convertResponse(body: unknown): unknown         // Provider → 客户端（非流式）
+  createStreamConverter(): StreamConverter        // Provider SSE → 客户端 SSE
 }
 ```
 
@@ -138,11 +142,11 @@ interface ProtocolConverter {
 
 ## 验收标准
 
-- [ ] 模型开启转换后，`anthropic-messages` 客户端请求能经 `openai-completions` 端点成功返回，非流式与流式均正常
+- [ ] ProviderModel 端点绑定启用对应转换后，`anthropic-messages` 客户端请求能经 `openai-completions` 端点成功返回，非流式与流式均正常
 - [ ] 队列同时存在原生候选与转换候选时，原生候选优先；原生全部失败后自动落到转换候选
 - [ ] 转换候选失败（429/5xx）时照常切换，错误分类与透传一致
 - [ ] 客户端请求体不合法时返回 400 且不切换
 - [ ] 流式转换中途中断时，客户端收到协议对应的错误事件，连接正常关闭
 - [ ] 队列控制页能区分原生徽标与转换徽标
-- [ ] 请求日志正确显示 `客户端协议 → 上游协议`
+- [ ] 请求日志正确显示 `客户端协议 → Provider 协议`
 - [ ] 开关关闭的模型行为与现状完全一致（回归）

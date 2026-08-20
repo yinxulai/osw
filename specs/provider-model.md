@@ -2,9 +2,9 @@
 
 ## Provider
 
-一个模型服务渠道，管理 API Key 和健康状态。
+一个模型服务渠道，管理端点、密钥引用和健康状态。
 
-> 认证方式不由 Provider 配置，而是由协议决定默认值（见下方「协议默认认证方式」）。API Key 可选，代理根据端点所属协议自动选择认证方式；本地或测试集群等无需鉴权的上游可以留空。
+> 认证方式不由 Provider 配置，而是由协议适配器决定默认值（见下方「协议默认认证方式」）。代理根据端点所属协议读取密钥引用并生成认证信息；本地或测试集群等无需鉴权的 Provider 端点可以留空。
 
 ### 字段
 
@@ -12,9 +12,7 @@
 |------|------|------|
 | id | string | 唯一标识 |
 | name | string | 显示名称 |
-| apiKey | string（可选） | API Key（存储在系统密钥环中，配置文件仅存引用；本地或测试集群可留空） |
-| timeoutMilliseconds | number | 空闲超时时间（毫秒）：两次数据到达之间的最大间隔，流式持续返回数据不会超时 |
-| enabled | boolean | 是否启用 |
+| enabled | boolean | 是否启用；Provider 级设置通过 `provider_settings` 的命名空间 KV 管理 |
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
 
@@ -25,7 +23,7 @@
 | OpenAI | Bearer Token | `Authorization: Bearer <apiKey>` |
 | Anthropic | Header | `x-api-key: <apiKey>` |
 | Gemini | Header | `x-goog-api-key: <apiKey>` |
-| Custom | 可配置 | 用户自定义认证头名称或参数名 |
+| Custom | 由适配器决定 | 认证参数由具体协议适配器处理，不在 Provider 设置中持久化 |
 
 ### 健康状态（运行时）
 
@@ -37,7 +35,7 @@
 | lastSuccessTime | number \| null | 最近成功时间 |
 | lastFailureTime | number \| null | 最近失败时间 |
 
-> Provider 不持有统一 Base URL，完整目标地址由每个上游模型的协议端点配置。
+> Provider 通过 `provider_endpoints` 持有按协议的默认端点；`provider_model_endpoints` 将 ProviderModel 绑定到默认端点，可选填写独立 URL。连接超时和密钥引用统一存储在 `provider_settings` 的 KV 记录中。
 
 ## Logical Model
 
@@ -54,9 +52,9 @@
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
 
-## Upstream Model（上游模型）
+## Provider Model（Provider 模型）
 
-> Provider 上的一个实际模型，可挂载多个协议端点，是路由的最小单元。所有启用的上游模型会自动进入每个逻辑模型的候选队列。
+> Provider 上的一个实际模型，可挂载多个协议端点，是路由的最小单元。所有启用的 Provider 模型会自动进入每个逻辑模型的候选队列。
 
 ### 字段
 
@@ -64,8 +62,8 @@
 |------|------|------|
 | id | string | 唯一标识 |
 | providerId | string | 所属 Provider |
-| upstreamModelId | string | 上游实际模型 ID（转发时替换请求中的 model 字段） |
-| endpoints | `ProtocolEndpoint[]` | 各协议端点（完整上游 URL、认证头） |
+| modelName | string | Provider API 中的实际模型名（转发时替换请求中的 model 字段） |
+| providerEndpointIds | string[] | 绑定的 Provider 默认端点；实际数据库通过 `provider_model_endpoints` 关系表表示 |
 | priority | number | 优先级，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
 | createdTime | number | 创建时间 |
@@ -73,9 +71,9 @@
 
 ### 约束
 
-- 同一 Provider 下可以有多个上游模型，按优先级排序组成全局队列
+- 同一 Provider 下可以有多个 ProviderModel，按优先级排序组成全局队列
 - 端点的协议决定了它只会在该协议的请求中被选用
-- 转发请求时，请求体中的 `model` 字段会被替换为 `upstreamModelId` 的值
+- 转发请求时，请求体中的 `model` 字段会被替换为 `modelName` 的值
 
 ## 配置示例（全局共享队列）
 
@@ -85,50 +83,41 @@
     {
       "id": "prov-openai",
       "name": "OpenAI",
-      "timeoutMilliseconds": 30000,
       "enabled": true
     },
     {
       "id": "prov-anthropic",
       "name": "Anthropic",
-      "timeoutMilliseconds": 30000,
       "enabled": true
     },
     {
       "id": "prov-deepseek",
       "name": "DeepSeek",
-      "timeoutMilliseconds": 30000,
       "enabled": true
     }
   ],
-  "upstreamModels": [
+  "providerModels": [
     {
       "id": "upstream-001",
       "providerId": "prov-openai",
-      "upstreamModelId": "gpt-4o",
-      "endpoints": [
-        { "protocol": "openai-completions", "upstreamUrl": "https://api.openai.com/v1/chat/completions", "customAuthHeader": null }
-      ],
+      "modelName": "gpt-4o",
+      "providerEndpointIds": ["endpoint-openai"],
       "priority": 1,
       "enabled": true
     },
     {
       "id": "upstream-002",
       "providerId": "prov-deepseek",
-      "upstreamModelId": "deepseek-chat",
-      "endpoints": [
-        { "protocol": "openai-completions", "upstreamUrl": "https://api.deepseek.com/v1/chat/completions", "customAuthHeader": null }
-      ],
+      "modelName": "deepseek-chat",
+      "providerEndpointIds": ["endpoint-deepseek-openai"],
       "priority": 2,
       "enabled": true
     },
     {
       "id": "upstream-003",
       "providerId": "prov-anthropic",
-      "upstreamModelId": "claude-sonnet-4-20240229",
-      "endpoints": [
-        { "protocol": "anthropic-messages", "upstreamUrl": "https://api.anthropic.com/v1/messages", "customAuthHeader": null }
-      ],
+      "modelName": "claude-sonnet-4-20240229",
+      "providerEndpointIds": ["endpoint-anthropic"],
       "priority": 3,
       "enabled": true
     }
@@ -136,4 +125,4 @@
 }
 ```
 
-> 上游模型池由所有 enabled 的项组成。每个逻辑模型请求到达时，系统按 priority 从该池生成当前逻辑模型的自动切换队列，先过滤协议匹配的端点，再依次尝试，失败自动切换到下一个。
+> ProviderModel 池由所有 enabled 的项组成。每个逻辑模型请求到达时，系统按 priority 从该池生成当前逻辑模型的自动切换队列，先过滤协议匹配的端点，再依次尝试，失败自动切换到下一个。

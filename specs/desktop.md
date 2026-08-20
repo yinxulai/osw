@@ -41,7 +41,7 @@ Electron + Node + TypeScript + React/Vite
 - 各供应商健康状态（连续失败、冷却状态、最近成功）
 - 快捷操作：复制 Base URL、暂停/恢复
 
-> 手动切换是核心特性：切换后新请求立即使用新上游模型，正在进行的请求不中断。
+> 手动切换是核心特性：切换后新请求立即使用新的 ProviderModel，正在进行的请求不中断。
 
 ### 供应商页
 
@@ -51,9 +51,9 @@ Electron + Node + TypeScript + React/Vite
 
 ### 自动切换队列页
 
-管理自动切换队列，每个队列项是一个上游模型：
+管理自动切换队列，每个队列项是一个 ProviderModel：
 
-- 队列列表（协议类型、上游 URL、上游模型 ID、Provider、优先级、启用状态、健康状态）
+- 队列列表（协议类型、远端 URL、Provider API 模型名、Provider、优先级、启用状态、ProviderModel 健康状态）
 - **当前使用标识**：高亮显示当前正在使用的队列项
 - 新增 / 编辑 / 删除队列项
 - 拖拽调整队列顺序（优先级）
@@ -64,8 +64,8 @@ Electron + Node + TypeScript + React/Vite
 ### 请求日志页
 
 - 最近请求列表（时间、逻辑模型、协议、最终供应商、状态码、耗时）
-- 查看某次请求的详细尝试过程（每个候选上游模型的结果）
-- 查看完整客户端请求/响应和每次上游尝试内容
+- 查看某次请求的详细尝试过程（每个候选 ProviderModel 的结果）
+- 查看完整客户端请求/响应和每次 Provider 尝试内容
 - 有协议转换时查看转换前后的请求/响应内容
 - 使用 Drawer 或 Dialog 打开详情，支持格式化、复制和折叠
 - 筛选：按模型、协议、供应商、状态、时间范围
@@ -86,10 +86,10 @@ Electron + Node + TypeScript + React/Vite
 
 1. 启动应用，菜单栏/托盘出现图标
 2. 引导添加第一个 Provider（名称、API Key、超时）
-3. 在自动切换队列页添加队列项（选择协议、填入上游 URL 和上游模型 ID、选择 Provider）
+3. 在自动切换队列页添加队列项（选择协议、填入远端 URL 和 Provider API 模型名、选择 Provider）
 4. 可继续添加多个队列项，拖拽调整顺序
 5. 一键复制本地 Base URL
-6. 在 AI 工具中配置 Base URL（model 字段可填任意值，代理会自动替换为上游模型 ID）
+6. 在 AI 工具中配置 Base URL（model 字段可填任意值，代理会自动替换为 ProviderModel 的 `modelName`）
 7. 发送测试请求，控制台显示尝试过程和切换路径
 
 ### 日常使用

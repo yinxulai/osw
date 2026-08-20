@@ -56,7 +56,7 @@
 ### 为什么用 SQLite 替代 JSON/JSONL
 
 - **查询能力**：日志筛选、分页、统计用 SQL 比遍历 JSONL 高效得多
-- **事务一致性**：配置变更（如删除 Provider 级联禁用上游模型）用事务保证原子性
+- **事务一致性**：配置变更（如删除 Provider 级联禁用 Provider 模型）用事务保证原子性
 - **迁移可控**：首发前只保留最终基线，首发后冻结基线并追加事务化版本迁移
 - **单文件部署**：SQLite 是单个文件，和 JSON 一样便携，备份/导入导出都方便
 - **Drizzle ORM**：提供类型安全的同步数据访问，SQLite 查询集中在 database store 边界；基于 Node 22.5+ 内置 `node:sqlite`，零原生依赖、无 ABI 问题
@@ -84,7 +84,7 @@ one-switch/
 │   │   ├── proxy/                  # 代理透传层
 │   │   │   ├── server.ts           # 代理 HTTP 监听与独立启停/重启
 │   │   │   ├── protocol.ts         # 协议识别规则（path → protocol）
-│   │   │   ├── router.ts           # 路由引擎：协议匹配、上游模型选择、切换逻辑
+│   │   │   ├── router.ts           # 路由引擎：协议匹配、ProviderModel 选择、切换逻辑
 │   │   │   ├── transport.ts        # 上游透传：http.request、pipe、超时、错误分类
 │   │   │   ├── stream-switch.ts    # 流式切换边界控制
 │   │   │   ├── models-api.ts       # /v1/models 本地接口
@@ -92,7 +92,7 @@ one-switch/
 │   │   ├── api/                    # 管理 API（挂载到 /api 前缀）
 │   │   │   ├── index.ts            # API 路由分发
 │   │   │   ├── providers.ts        # Provider CRUD
-│   │   │   ├── models.ts           # 逻辑模型与上游模型 CRUD
+│   │   │   ├── models.ts           # 逻辑模型与 Provider 模型 CRUD
 │   │   │   ├── logs.ts             # 请求日志查询
 │   │   │   ├── health.ts           # 健康状态查询
 │   │   │   └── settings.ts         # 服务设置
@@ -170,8 +170,8 @@ one-switch/
 
 **`proxy/router.ts`** — 路由引擎
 - 输入：protocol + modelName
-- 输出：候选上游模型列表（按优先级排序，过滤禁用/冷却/额度耗尽）
-- 切换时取下一个上游模型
+- 输出：候选 Provider 模型列表（按优先级排序，过滤禁用/冷却/额度耗尽）
+- 切换时取下一个 Provider 模型
 - 处理"该协议下无可用端点自动跳过"逻辑
 
 **`proxy/transport.ts`** — 上游透传
@@ -192,11 +192,11 @@ one-switch/
 - 成功/失败回调更新状态
 - 提供 `isAvailable(providerId): boolean`
 
-**`proxy/current-upstream-model.ts`** — 当前逻辑模型手动指定的上游模型状态
-- 维护当前用户手动指定的上游模型 ID（运行时状态，不持久化）
-- 提供设置/获取当前上游模型的接口
-- 新请求从当前上游模型开始尝试，失败后仍按队列顺序自动切换
-- 进行中的请求持有自己的上游模型引用，不受外部切换影响
+**`proxy/current-upstream-model.ts`** — 当前逻辑模型手动指定的 Provider 模型状态
+- 维护当前用户手动指定的 Provider 模型 ID（运行时状态，不持久化）
+- 提供设置/获取当前 Provider 模型的接口
+- 新请求从当前 Provider 模型开始尝试，失败后仍按队列顺序自动切换
+- 进行中的请求持有自己的 Provider 模型引用，不受外部切换影响
 
 **`proxy/models-api.ts`** — `/v1/models` 本地接口
 
@@ -236,19 +236,19 @@ one-switch/
 | `/api/settings/get` | 获取服务设置 | - | 设置对象 |
 | `/api/settings/update` | 更新服务设置 | 部分设置字段 | 更新后的设置对象 |
 | `/api/provider/list` | Provider 列表 | 分页/筛选参数 | 列表 + 总数 |
-| `/api/provider/create` | 新增 Provider | name, apiKey, timeoutMilliseconds | 新建的 Provider |
+| `/api/provider/create` | 新增 Provider | name, apiKey, settings, endpoints | 新建的 Provider |
 | `/api/provider/get` | Provider 详情 | id | Provider 详情 |
 | `/api/provider/update` | 更新 Provider | id, 更新字段 | 更新后的 Provider |
 | `/api/provider/delete` | 删除 Provider | id | - |
 | `/api/provider/test` | 测试连接 | id | 测试结果（成功/失败+原因） |
 | `/api/provider/health/get` | Provider 健康状态 | id | 健康状态对象 |
-| `/api/upstream-model/list` | 上游模型池列表 | - | 上游模型列表（按优先级排序） |
-| `/api/upstream-model/create` | 新增上游模型 | providerId, upstreamModelId, endpoints, priority | 新建的上游模型 |
-| `/api/upstream-model/update` | 更新上游模型 | id, 更新字段 | 更新后的上游模型 |
-| `/api/upstream-model/delete` | 删除上游模型 | id | - |
-| `/api/upstream-model/reorder` | 调整优先级 | id, newPriority | 更新后的队列 |
-| `/api/queue/status` | 获取当前逻辑模型队列状态 | - | 当前手动指定的上游模型 ID |
-| `/api/queue/switch` | 手动切换当前逻辑模型队列起始上游模型 | modelId | 新的当前上游模型 |
+| `/api/provider-model/list` | Provider 模型池列表 | - | Provider 模型列表（按优先级排序） |
+| `/api/provider-model/create` | 新增 Provider 模型 | providerId, modelName, endpointBindings, priority | 新建的 Provider 模型 |
+| `/api/provider-model/update` | 更新 Provider 模型 | id, 更新字段 | 更新后的 Provider 模型 |
+| `/api/provider-model/delete` | 删除 Provider 模型 | id | - |
+| `/api/provider-model/reorder` | 调整优先级 | id, newPriority | 更新后的队列 |
+| `/api/queue/status` | 获取当前逻辑模型队列状态 | - | 当前手动指定的 Provider 模型 ID |
+| `/api/queue/switch` | 手动切换当前逻辑模型队列起始 Provider 模型 | modelId | 新的当前 Provider 模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
 | `/api/request-log/content/get` | 获取请求内容 | requestId | 客户端请求/响应、上游尝试和转换前后内容 |
@@ -256,7 +256,7 @@ one-switch/
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
-> `/api/upstream-model/list` 返回上游模型池；每个逻辑模型请求到达时，代理根据当前逻辑模型配置和该模型池动态生成候选队列。
+> `/api/provider-model/list` 返回 Provider 模型池；每个逻辑模型请求到达时，代理根据当前逻辑模型配置和该模型池动态生成候选队列。
 
 ### 3. 数据存储（`source/server/database/`）
 
@@ -268,14 +268,14 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 新版本 8 张业务表（settings、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents）的 `sqliteTable` 定义
-- `settings` 按命名空间 key 逐项保存全局配置，value 使用 JSON 编码
+- 新版本 15 张业务表（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics）的 `sqliteTable` 定义。
+- `settings` 按命名空间 key 逐项保存全局配置，标量按类型保存，数组/对象才使用 JSON 编码
 - `request_contents` 独立保存可选的请求/响应正文，避免大字段影响日志列表查询
 - 从表定义推导行类型（`$inferSelect`）
 
 **`store.ts`** — 数据访问层
-- Provider / LogicalModel / UpstreamModel CRUD、级联操作
-- ProviderHealth 读写、AppConfig、RequestLog、RequestAttempt、RequestContent、AuditEvent
+- Provider / LogicalModel / ProviderModel CRUD、级联操作
+- ProviderHealth 读写、Settings、ProviderSettings、RequestLog、RequestMetric、RequestAttempt、RequestContent、AuditEvent
 - 使用 Drizzle 类型化查询（`select`/`insert`/`update`），映射到领域模型
 
 **`drizzle/`** — Drizzle-kit 迁移
@@ -306,7 +306,7 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 
 - **概览页**：服务状态、今日统计、供应商健康卡片
 - **供应商页**：列表、增删改查、测试连接、健康状态
-- **模型路由页**：上游模型列表、端点管理、拖拽排序
+- **模型路由页**：Provider 模型列表、端点管理、拖拽排序
 - **请求日志页**：列表、筛选、详情（尝试过程时间线）
 - **请求内容查看器**：使用 Drawer 或 Dialog 查看完整请求/响应，协议转换时展示转换前后内容
 - **设置页**：端口、开机自启、访问 Token、日志保留条数、日志保留天数、按天立即清理、请求内容记录、导入导出、关于
