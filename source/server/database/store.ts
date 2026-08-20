@@ -3,6 +3,9 @@ import { SettingsSchema, ProviderSchema } from '@common/schemas'
 import type {
   Provider,
   LogicalModel,
+  ProviderModel,
+  ProviderModelEndpoint,
+  ProtocolConverter,
   UpstreamModel,
   ProtocolEndpoint,
   ProviderHealth,
@@ -20,6 +23,7 @@ import {
   providerModelHealth,
   providerEndpoints,
   providerModelEndpoints,
+  protocolConverters,
   providerSettings,
   providers,
   requestAttempts,
@@ -91,7 +95,7 @@ export async function createProvider(input: CreateProviderInput): Promise<Provid
     .values({
       id,
       name: provider.name,
-      description: '',
+      description: provider.description ?? '',
       enabled: provider.enabled,
       createdTime: time,
       updatedTime: time,
@@ -185,9 +189,9 @@ export async function getLogicalModel(id: string): Promise<LogicalModel | undefi
   return row ? mapLogicalModel(row) : undefined
 }
 
-export async function createLogicalModel(
-  input: Omit<LogicalModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): Promise<LogicalModel> {
+type CreateLogicalModelInput = Pick<LogicalModel, 'name'> & Partial<Pick<LogicalModel, 'description' | 'enabled'>>
+
+export async function createLogicalModel(input: CreateLogicalModelInput): Promise<LogicalModel> {
   const id = generateId('model_')
   const time = now()
   getDb()
@@ -239,6 +243,29 @@ export async function deleteLogicalModel(id: string): Promise<void> {
     .run()
 }
 
+// ========== Provider Model ========== 
+
+export interface ProviderModelView extends ProviderModel {
+  endpoints: Array<ProviderModelEndpointView>
+}
+
+export interface ProviderModelEndpointView extends ProviderModelEndpoint {
+  protocol: ProtocolEndpoint['protocol']
+  conversions: ProtocolConverter[]
+}
+
+export async function listProviderModels(includeDeleted = false): Promise<ProviderModelView[]> {
+  const rows = getDb().select().from(providerModels)
+    .where(includeDeleted ? undefined : isNull(providerModels.deletedTime))
+    .orderBy(providerModels.createdTime).all()
+  return rows.map(mapProviderModelView)
+}
+
+export async function getProviderModel(id: string): Promise<ProviderModelView | undefined> {
+  const row = getDb().select().from(providerModels).where(eq(providerModels.id, id)).get()
+  return row ? mapProviderModelView(row) : undefined
+}
+
 // ========== Provider Model compatibility surface ==========
 
 export async function listUpstreamModelsByProvider(providerId: string, includeDeleted = false): Promise<UpstreamModel[]> {
@@ -260,7 +287,9 @@ export async function getUpstreamModel(id: string): Promise<UpstreamModel | unde
   return row ? mapProviderModel(row) : undefined
 }
 
-export async function createUpstreamModel(input: Omit<UpstreamModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Promise<UpstreamModel> {
+type CreateUpstreamModelInput = Pick<UpstreamModel, 'providerId' | 'upstreamModelId' | 'priority'> & Partial<Pick<UpstreamModel, 'endpoints' | 'enabled'>>
+
+export async function createUpstreamModel(input: CreateUpstreamModelInput): Promise<UpstreamModel> {
   const id = generateId('model_')
   const time = now()
   const db = getDb()
@@ -497,8 +526,14 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     if (update.promptCacheHit !== undefined && update.promptCacheHit !== null) metrics.push({ key: 'promptCacheHit', value: update.promptCacheHit ? 1 : 0, unit: 'boolean' })
     if (update.cacheHit !== undefined && update.cacheHit !== null) metrics.push({ key: 'cacheHit', value: update.cacheHit ? 1 : 0, unit: 'boolean' })
     for (const metric of metrics) transaction.insert(requestMetrics).values({ requestId: id, ...metric, updatedTime: time }).onConflictDoUpdate({ target: [requestMetrics.requestId, requestMetrics.key], set: { value: metric.value, unit: metric.unit, updatedTime: time } }).run()
-    if (update.totalTokens !== undefined && update.totalTokens !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
-    if (update.rawUsage !== undefined) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
+    if (update.totalTokens !== undefined && update.totalTokens !== null) {
+      transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'totalTokens'))).run()
+      transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
+    }
+    if (update.rawUsage !== undefined) {
+      transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'raw'))).run()
+      transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
+    }
   })
 }
 
@@ -593,9 +628,9 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
   })
 }
 
-export async function createRequestAttempt(
-  input: Omit<RequestAttempt, 'id' | 'createdTime' | 'upstreamRequestId' | 'errorResponse'> & Partial<Pick<RequestAttempt, 'upstreamRequestId' | 'errorResponse'>>,
-): Promise<RequestAttempt> {
+type CreateRequestAttemptInput = Pick<RequestAttempt, 'requestId' | 'providerId' | 'upstreamModelId' | 'attemptIndex' | 'status' | 'durationMilliseconds'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage' | 'upstreamRequestId' | 'errorResponse'>>
+
+export async function createRequestAttempt(input: CreateRequestAttemptInput): Promise<RequestAttempt> {
   const id = generateId('att_')
   const time = now()
   getDb()
@@ -666,10 +701,15 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
       success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
       failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
       avgLatency: sql<number>`avg((SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds'))`.as('avgLatency'),
-      tokens: sql<number>`coalesce(sum((SELECT value FROM request_usages u WHERE u.requestId = ${requestLogs.id} AND u.type = 'totalTokens')), 0)`.as('tokens'),
     })
     .from(requestLogs)
     .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
+    .get()
+  const usageResult = db
+    .select({ tokens: sql<number>`coalesce(sum(${requestUsages.value}), 0)`.as('tokens') })
+    .from(requestUsages)
+    .innerJoin(requestLogs, eq(requestUsages.requestId, requestLogs.id))
+    .where(and(eq(requestUsages.type, 'totalTokens'), sql`${requestLogs.createdTime} >= ${sinceMs}`))
     .get()
   const total = result?.total ?? 0
   const success = result?.success ?? 0
@@ -680,7 +720,7 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
     failedCount: failed,
     successRate: total > 0 ? success / total : 0,
     avgLatencyMs: result?.avgLatency ?? 0,
-    totalTokens: result?.tokens ?? 0,
+    totalTokens: usageResult?.tokens ?? 0,
   }
 }
 
@@ -928,6 +968,40 @@ function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+  }
+}
+
+function mapProviderModelView(row: typeof providerModels.$inferSelect): ProviderModelView {
+  const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
+    .from(providerModelEndpoints)
+    .innerJoin(providerEndpoints, eq(providerModelEndpoints.providerEndpointId, providerEndpoints.id))
+    .where(eq(providerModelEndpoints.providerModelId, row.id)).all()
+  return {
+    id: row.id,
+    providerId: row.providerId,
+    modelName: row.modelName,
+    enabled: row.enabled,
+    createdTime: Number(row.createdTime),
+    updatedTime: Number(row.updatedTime),
+    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
+    endpoints: endpointRows.map(({ endpoint, binding }) => ({
+      id: binding.id,
+      providerModelId: binding.providerModelId,
+      providerEndpointId: binding.providerEndpointId,
+      url: binding.url,
+      enabled: binding.enabled,
+      createdTime: Number(binding.createdTime),
+      updatedTime: Number(binding.updatedTime),
+      protocol: endpoint.protocol as ProtocolEndpoint['protocol'],
+      conversions: getDb().select().from(protocolConverters).where(eq(protocolConverters.providerModelEndpointId, binding.id)).all().map(converter => ({
+        id: converter.id,
+        providerModelEndpointId: converter.providerModelEndpointId,
+        clientProtocol: converter.clientProtocol as ProtocolConverter['clientProtocol'],
+        enabled: converter.enabled,
+        createdTime: Number(converter.createdTime),
+        updatedTime: Number(converter.updatedTime),
+      })),
+    })),
   }
 }
 
