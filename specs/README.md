@@ -4,7 +4,7 @@
 
 ## 核心原则
 
-**零协议转换。** 代理不解析、不修改、不转换任何协议的报文结构。每个上游模型端点直接配置某协议下的完整上游地址；代理根据请求 path 自动识别协议类型，只在配置了该协议端点的上游模型中选择。
+**默认零协议转换。** 代理默认不解析、不修改、不转换任何协议的报文结构。每个上游模型端点直接配置某协议下的完整上游地址；代理根据请求 path 自动识别协议类型，只在配置了该协议端点的上游模型中选择。可选的[协议兼容转换器](./protocol-conversion.md)允许在上游模型上按需开启跨协议转换。
 
 ## 文档索引
 
@@ -13,6 +13,7 @@
 | [product.md](./product.md) | 产品定位、目标用户、核心价值、非目标 |
 | [architecture.md](./architecture.md) | 系统架构、核心概念、零协议转换原则 |
 | [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
+| [protocol-conversion.md](./protocol-conversion.md) | 协议兼容转换器：转换开关、转换矩阵、流式转换、UI 展示 |
 | [provider-model.md](./provider-model.md) | Provider、Logical Model、Model Binding 配置模型 |
 | [data-model.md](./data-model.md) | 完整数据模型：数据库表设计、Zod Schema、索引、关系 |
 | [desktop.md](./desktop.md) | 桌面端形态、菜单栏、控制台页面、用户流程 |

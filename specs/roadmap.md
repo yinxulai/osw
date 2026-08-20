@@ -82,6 +82,7 @@
 
 ### 范围
 
+- 协议兼容转换器（详见 [protocol-conversion.md](./protocol-conversion.md)）：模型级转换开关、anthropic-messages ↔ openai-completions、openai-responses → openai-completions 三个方向、流式 SSE 转换、队列页转换徽标
 - Linux 打包与托盘体验完善
 - 手动额度阈值与用量统计
 - 供应商测试连接能力
