@@ -1,12 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { ProtocolEndpointSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type UpstreamModel, type Settings } from '@common/schemas'
+import { ProtocolEndpointSchema, ProtocolSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type UpstreamModel, type Settings } from '@common/schemas'
 import type { ManagementHandler } from './response'
 import { sendSuccess, sendError } from './response'
 import {
   listProviders,
   listLogicalModels,
+  listProviderModels,
+  listSchedulingPolicies,
   listUpstreamModels,
   getSettings,
   updateSettings,
@@ -61,19 +63,46 @@ interface ExportedUpstreamModel {
   enabled: boolean
 }
 
+interface ExportedProviderModel {
+  id: string
+  providerId: string
+  modelName: string
+  enabled: boolean
+  endpoints: Array<{
+    protocol: string
+    url: string | null
+    enabled: boolean
+    conversions: Array<{ clientProtocol: string; enabled: boolean }>
+  }>
+}
+
+interface ExportedSchedulingPolicy {
+  logicalModelId: string
+  providerModelId: string
+  strategy: string
+  priority: number
+  weight: number
+  enabled: boolean
+  failoverEnabled: boolean
+}
+
 interface ExportedConfig {
-  version: 1
+  version: 2 | 1
   exportedAt: number
   settings: Partial<Settings>
   providers: ExportedProvider[]
   logicalModels: ExportedLogicalModel[]
+  providerModels: ExportedProviderModel[]
+  schedulingPolicies: ExportedSchedulingPolicy[]
   upstreamModels: ExportedUpstreamModel[]
 }
 
 async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const [providers, logicalModels, upstreamModels, settings] = await Promise.all([
+  const [providers, logicalModels, providerModels, schedulingPolicies, upstreamModels, settings] = await Promise.all([
     listProviders(false),
     listLogicalModels(false),
+    listProviderModels(false),
+    listSchedulingPolicies(),
     listUpstreamModels(false),
     getSettings(),
   ])
@@ -81,7 +110,7 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
   const providerById = new Map(providers.map(p => [p.id, p]))
 
   const config: ExportedConfig = {
-    version: 1,
+    version: 2,
     exportedAt: Date.now(),
     settings: {
       listenHost: settings.listenHost,
@@ -106,6 +135,27 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
       name: m.name,
       description: m.description,
       enabled: m.enabled,
+    })),
+    providerModels: providerModels.map(model => ({
+      id: model.id,
+      providerId: model.providerId,
+      modelName: model.modelName,
+      enabled: model.enabled,
+      endpoints: model.endpoints.map(endpoint => ({
+        protocol: endpoint.protocol,
+        url: endpoint.url,
+        enabled: endpoint.enabled,
+        conversions: endpoint.conversions.map(converter => ({ clientProtocol: converter.clientProtocol, enabled: converter.enabled })),
+      })),
+    })),
+    schedulingPolicies: schedulingPolicies.map(policy => ({
+      logicalModelId: policy.logicalModelId,
+      providerModelId: policy.providerModelId,
+      strategy: policy.strategy,
+      priority: policy.priority,
+      weight: policy.weight,
+      enabled: policy.enabled,
+      failoverEnabled: policy.failoverEnabled,
     })),
     upstreamModels: upstreamModels.map((m: UpstreamModel): ExportedUpstreamModel => ({
       id: m.id,
@@ -132,7 +182,7 @@ function parseEndpoints(upstreamUrls: string): Record<string, string> {
 
 const ImportConfigSchema = z.object({
   config: z.object({
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     settings: z.object({
       listenHost: z.string().optional(),
       listenPort: z.number().int().min(1).max(65535).optional(),
@@ -163,6 +213,29 @@ const ImportConfigSchema = z.object({
         enabled: z.boolean().optional(),
       }),
     ).default([]),
+    providerModels: z.array(
+      z.object({
+        id: z.string().optional(),
+        providerId: z.string(),
+        modelName: z.string(),
+        enabled: z.boolean().optional(),
+        endpoints: z.array(z.object({
+          protocol: ProtocolSchema,
+          url: z.string().nullable().optional(),
+          enabled: z.boolean().optional(),
+          conversions: z.array(z.object({ clientProtocol: ProtocolSchema, enabled: z.boolean().optional() })).optional(),
+        })).optional(),
+      }),
+    ).default([]),
+    schedulingPolicies: z.array(z.object({
+      logicalModelId: z.string(),
+      providerModelId: z.string(),
+      strategy: z.string().optional(),
+      priority: z.number().int(),
+      weight: z.number().int().optional(),
+      enabled: z.boolean().optional(),
+      failoverEnabled: z.boolean().optional(),
+    })).default([]),
     upstreamModels: z.array(
       z.object({
         id: z.string().optional(),

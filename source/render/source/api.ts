@@ -236,7 +236,7 @@ export const modelTestApi = {
 // ========== Config Import/Export ==========
 
 export interface ExportedConfig {
-  version: 1
+  version: 2 | 1
   exportedAt: number
   settings: Partial<Settings>
   providers: Array<{
@@ -254,7 +254,28 @@ export interface ExportedConfig {
     description?: string
     enabled?: boolean
   }>
-  upstreamModels: Array<{
+  providerModels?: Array<{
+    id?: string
+    providerId: string
+    modelName: string
+    enabled?: boolean
+    endpoints?: Array<{
+      protocol: string
+      url?: string | null
+      enabled?: boolean
+      conversions?: Array<{ clientProtocol: string; enabled?: boolean }>
+    }>
+  }>
+  schedulingPolicies?: Array<{
+    logicalModelId: string
+    providerModelId: string
+    strategy?: string
+    priority: number
+    weight?: number
+    enabled?: boolean
+    failoverEnabled?: boolean
+  }>
+  upstreamModels?: Array<{
     id?: string
     providerName?: string
     providerId?: string
