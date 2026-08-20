@@ -66,7 +66,7 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
     model: {
       id,
       providerId,
-      upstreamModelId,
+      modelName: upstreamModelId,
       endpoints: [{ protocol, upstreamUrl, customAuthHeader: null, protocolConversionEnabled: false }],
       priority: 1,
       enabled: true,

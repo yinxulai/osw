@@ -6,8 +6,8 @@ import type {
   ProviderModel,
   ProviderModelEndpoint,
   ProtocolConverter,
-  UpstreamModel,
-  ProtocolEndpoint,
+  ProviderModelRoute,
+  ProviderModelRouteEndpoint,
   ProviderHealth,
   Settings,
   RequestLog,
@@ -295,7 +295,7 @@ export interface ProviderModelView extends ProviderModel {
 }
 
 export interface ProviderModelEndpointView extends ProviderModelEndpoint {
-  protocol: ProtocolEndpoint['protocol']
+  protocol: ProviderModelRouteEndpoint['protocol']
   conversions: ProtocolConverter[]
 }
 
@@ -306,7 +306,7 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
   return rows.map(mapProviderModelView)
 }
 
-export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false): Promise<UpstreamModel[]> {
+export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false): Promise<ProviderModelRoute[]> {
   const rows = getDb().select({ model: providerModels, policy: schedulingPolicies })
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
@@ -325,33 +325,33 @@ export async function getProviderModel(id: string): Promise<ProviderModelView | 
 
 // ========== Provider Model compatibility surface ==========
 
-export async function listUpstreamModelsByProvider(providerId: string, includeDeleted = false): Promise<UpstreamModel[]> {
+export async function listProviderModelRoutesByProvider(providerId: string, includeDeleted = false): Promise<ProviderModelRoute[]> {
   const rows = getDb().select().from(providerModels)
     .where(includeDeleted ? eq(providerModels.providerId, providerId) : and(eq(providerModels.providerId, providerId), isNull(providerModels.deletedTime)))
     .orderBy(providerModels.createdTime).all()
   return rows.map(row => mapProviderModel(row))
 }
 
-export async function listUpstreamModels(includeDeleted = true): Promise<UpstreamModel[]> {
+export async function listProviderModelRoutes(includeDeleted = true): Promise<ProviderModelRoute[]> {
   const rows = getDb().select().from(providerModels)
     .where(includeDeleted ? undefined : isNull(providerModels.deletedTime))
     .orderBy(providerModels.createdTime).all()
   return rows.map(row => mapProviderModel(row))
 }
 
-export async function getUpstreamModel(id: string): Promise<UpstreamModel | undefined> {
+export async function getProviderModelRoute(id: string): Promise<ProviderModelRoute | undefined> {
   const row = getDb().select().from(providerModels).where(eq(providerModels.id, id)).get()
   return row ? mapProviderModel(row) : undefined
 }
 
-type CreateUpstreamModelInput = Pick<UpstreamModel, 'providerId' | 'upstreamModelId' | 'priority'> & Partial<Pick<UpstreamModel, 'endpoints' | 'enabled'>>
+type CreateProviderModelRouteInput = Pick<ProviderModelRoute, 'providerId' | 'modelName' | 'priority'> & Partial<Pick<ProviderModelRoute, 'endpoints' | 'enabled'>>
 
-export async function createUpstreamModel(input: CreateUpstreamModelInput): Promise<UpstreamModel> {
+export async function createProviderModelRoute(input: CreateProviderModelRouteInput): Promise<ProviderModelRoute> {
   const id = generateId('model_')
   const time = now()
   const db = getDb()
   db.transaction(transaction => {
-    transaction.insert(providerModels).values({ id, providerId: input.providerId, modelName: input.upstreamModelId, enabled: input.enabled ?? true, createdTime: time, updatedTime: time }).run()
+    transaction.insert(providerModels).values({ id, providerId: input.providerId, modelName: input.modelName, enabled: input.enabled ?? true, createdTime: time, updatedTime: time }).run()
     transaction.insert(providerModelHealth).values({ providerModelId: id, updatedTime: time }).run()
     for (const endpoint of input.endpoints ?? []) {
       const endpointRow = transaction.select().from(providerEndpoints).where(and(eq(providerEndpoints.providerId, input.providerId), eq(providerEndpoints.protocol, endpoint.protocol))).get()
@@ -360,16 +360,16 @@ export async function createUpstreamModel(input: CreateUpstreamModelInput): Prom
       transaction.insert(providerModelEndpoints).values({ id: generateId('pme_'), providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
     }
   })
-  return { id, providerId: input.providerId, upstreamModelId: input.upstreamModelId, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
+  return { id, providerId: input.providerId, modelName: input.modelName, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
 }
 
-export async function updateUpstreamModel(id: string, updates: Partial<Omit<UpstreamModel, 'id' | 'createdTime'>>): Promise<UpstreamModel> {
+export async function updateProviderModelRoute(id: string, updates: Partial<Omit<ProviderModelRoute, 'id' | 'createdTime'>>): Promise<ProviderModelRoute> {
   const time = now()
   const db = getDb()
-  const existing = await getUpstreamModel(id)
+  const existing = await getProviderModelRoute(id)
   if (!existing) throw new Error(`provider model not found: ${id}`)
   db.transaction(transaction => {
-    transaction.update(providerModels).set({ ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}), ...(updates.upstreamModelId !== undefined ? { modelName: updates.upstreamModelId } : {}), ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}), ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}), updatedTime: time }).where(eq(providerModels.id, id)).run()
+    transaction.update(providerModels).set({ ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}), ...(updates.modelName !== undefined ? { modelName: updates.modelName } : {}), ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}), ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}), updatedTime: time }).where(eq(providerModels.id, id)).run()
     if (updates.endpoints !== undefined) {
       transaction.delete(protocolConverters).where(sql`providerModelEndpointId IN (SELECT id FROM provider_model_endpoints WHERE providerModelId = ${id})`).run()
       transaction.delete(providerModelEndpoints).where(eq(providerModelEndpoints.providerModelId, id)).run()
@@ -386,7 +386,7 @@ export async function updateUpstreamModel(id: string, updates: Partial<Omit<Upst
   return { ...existing, ...updates, id, updatedTime: time }
 }
 
-export async function deleteUpstreamModel(id: string): Promise<void> {
+export async function deleteProviderModelRoute(id: string): Promise<void> {
   const time = now()
   getDb().update(providerModels).set({ enabled: false, deletedTime: time, updatedTime: time }).where(and(eq(providerModels.id, id), isNull(providerModels.deletedTime))).run()
 }
@@ -1073,7 +1073,7 @@ function mapProviderModelView(row: typeof providerModels.$inferSelect): Provider
       enabled: binding.enabled,
       createdTime: Number(binding.createdTime),
       updatedTime: Number(binding.updatedTime),
-      protocol: endpoint.protocol as ProtocolEndpoint['protocol'],
+      protocol: endpoint.protocol as ProviderModelRouteEndpoint['protocol'],
       conversions: getDb().select().from(protocolConverters).where(eq(protocolConverters.providerModelEndpointId, binding.id)).all().map(converter => ({
         id: converter.id,
         providerModelEndpointId: converter.providerModelEndpointId,
@@ -1086,7 +1086,7 @@ function mapProviderModelView(row: typeof providerModels.$inferSelect): Provider
   }
 }
 
-function mapProviderModel(row: typeof providerModels.$inferSelect): UpstreamModel {
+function mapProviderModel(row: typeof providerModels.$inferSelect): ProviderModelRoute {
   const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
     .from(providerModelEndpoints)
     .innerJoin(providerEndpoints, eq(providerModelEndpoints.providerEndpointId, providerEndpoints.id))
@@ -1094,8 +1094,8 @@ function mapProviderModel(row: typeof providerModels.$inferSelect): UpstreamMode
   return {
     id: row.id,
     providerId: row.providerId,
-    upstreamModelId: row.modelName,
-    endpoints: endpointRows.map(({ endpoint, binding }) => ({ protocol: endpoint.protocol as ProtocolEndpoint['protocol'], upstreamUrl: binding.url ?? endpoint.url, customAuthHeader: null, protocolConversionEnabled: false })),
+    modelName: row.modelName,
+    endpoints: endpointRows.map(({ endpoint, binding }) => ({ protocol: endpoint.protocol as ProviderModelRouteEndpoint['protocol'], upstreamUrl: binding.url ?? endpoint.url, customAuthHeader: null, protocolConversionEnabled: false })),
     priority: 0,
     enabled: row.enabled,
     createdTime: Number(row.createdTime),

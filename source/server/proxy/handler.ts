@@ -148,7 +148,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
 
       if (outcome.disposition === 'success') {
         console.log(
-          `[proxy] 透传成功: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 透传成功: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await markProviderSuccess(target.provider.id)
         await finalizeRequestLog(requestId, 'success', startedAt, {
@@ -165,14 +165,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       }
       if (outcome.disposition === 'terminal') {
         console.log(
-          `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await finalizeRequestLog(requestId, 'failed', startedAt)
         return
       }
 
       console.warn(
-        `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await markProviderFailure(target.provider.id)
       attemptIndex++
@@ -183,7 +183,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           await createRequestAttempt({
             requestId,
             providerId: target.provider.id,
-            upstreamModelId: target.model.upstreamModelId,
+            upstreamModelId: target.model.modelName,
             attemptIndex,
             status: 'cancelled',
             errorCode: 'CLIENT_REQUEST_ABORTED',
@@ -199,13 +199,13 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         return
       }
       console.error(
-        `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.upstreamModelId} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
+        `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
       )
       try {
         await createRequestAttempt({
           requestId,
           providerId: target.provider.id,
-          upstreamModelId: target.model.upstreamModelId,
+          upstreamModelId: target.model.modelName,
           attemptIndex,
           status: 'failed',
           errorCode: 'UPSTREAM_ERROR',
@@ -285,15 +285,15 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const nativeEndpoint = findEndpoint(model, protocol)
   const convertibleEndpoint = nativeEndpoint ? undefined : findConvertibleEndpoint(model, protocol)
   const endpoint = nativeEndpoint ?? convertibleEndpoint
-  if (!endpoint) throw new Error(`模型 ${model.upstreamModelId} 不支持协议 ${protocol}`)
+  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协议 ${protocol}`)
   const endpointProtocol = endpoint.protocol
   const converting = !nativeEndpoint
 
   const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, endpointProtocol))
   const parsed = new URL(targetUrl)
   const upstreamBody = converting
-    ? injectUsageParams(convertRequestBody(protocol, endpointProtocol, requestBody, model.upstreamModelId), endpointProtocol)
-    : injectUsageParams(rewriteRequestModel(requestBody, model.upstreamModelId), endpointProtocol)
+    ? injectUsageParams(convertRequestBody(protocol, endpointProtocol, requestBody, model.modelName), endpointProtocol)
+    : injectUsageParams(rewriteRequestModel(requestBody, model.modelName), endpointProtocol)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
@@ -322,7 +322,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       await createRequestAttempt({
         requestId,
         providerId: provider.id,
-        upstreamModelId: model.upstreamModelId,
+        upstreamModelId: model.modelName,
         attemptIndex,
         status,
         errorCode: errorCode ?? null,

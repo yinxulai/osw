@@ -112,19 +112,19 @@ export type LogicalModel = z.infer<typeof LogicalModelSchema>
 
 // ========== Provider Model ==========
 
-/** Legacy-shaped route view used by the current proxy while route APIs migrate. */
+/** Protocol endpoint configuration for a provider model route. */
 export const ProtocolEndpointSchema = z.object({
   protocol: ProtocolSchema,
   upstreamUrl: z.string().default(''),
   customAuthHeader: z.string().nullable().default(null),
   protocolConversionEnabled: z.boolean().default(false),
 })
-export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
+export type ProviderModelRouteEndpoint = z.infer<typeof ProtocolEndpointSchema>
 
-export const UpstreamModelSchema = z.object({
+export const ProviderModelRouteSchema = z.object({
   id: z.string(),
   providerId: z.string().startsWith('prov_'),
-  upstreamModelId: z.string().min(1),
+  modelName: z.string().min(1),
   endpoints: z.array(ProtocolEndpointSchema).default([]),
   priority: z.number().int(),
   enabled: z.boolean().default(true),
@@ -132,7 +132,7 @@ export const UpstreamModelSchema = z.object({
   updatedTime: z.number().int(),
   deletedTime: z.number().int().nullable(),
 })
-export type UpstreamModel = z.infer<typeof UpstreamModelSchema>
+export type ProviderModelRoute = z.infer<typeof ProviderModelRouteSchema>
 
 // ========== Provider Health ==========
 

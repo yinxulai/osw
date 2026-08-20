@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { detectProtocolFromPath, findConvertibleEndpoint, findEndpoint } from './router'
-import type { UpstreamModel } from '@common/schemas'
+import type { ProviderModelRoute } from '@common/schemas'
 
 describe('findEndpoint', () => {
-  const model: UpstreamModel = {
+  const model: ProviderModelRoute = {
     id: 'model_1',
     providerId: 'prov_1',
-    upstreamModelId: 'upstream-1',
+    modelName: 'upstream-1',
     endpoints: [
       { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
       { protocol: 'anthropic-messages', upstreamUrl: 'https://b.example.com', customAuthHeader: 'Bearer x', protocolConversionEnabled: false },
@@ -29,10 +29,10 @@ describe('findEndpoint', () => {
 })
 
 describe('findConvertibleEndpoint', () => {
-  const base: UpstreamModel = {
+  const base: ProviderModelRoute = {
     id: 'model_1',
     providerId: 'prov_1',
-    upstreamModelId: 'upstream-1',
+    modelName: 'upstream-1',
     endpoints: [],
     priority: 1,
     enabled: true,
@@ -42,7 +42,7 @@ describe('findConvertibleEndpoint', () => {
   }
 
   it('returns the conversion-enabled endpoint for a convertible client protocol', () => {
-    const model: UpstreamModel = {
+    const model: ProviderModelRoute = {
       ...base,
       endpoints: [
         { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
@@ -53,7 +53,7 @@ describe('findConvertibleEndpoint', () => {
   })
 
   it('ignores endpoints without protocolConversionEnabled', () => {
-    const model: UpstreamModel = {
+    const model: ProviderModelRoute = {
       ...base,
       endpoints: [
         { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
@@ -63,7 +63,7 @@ describe('findConvertibleEndpoint', () => {
   })
 
   it('ignores endpoints whose protocol cannot serve the client protocol', () => {
-    const model: UpstreamModel = {
+    const model: ProviderModelRoute = {
       ...base,
       endpoints: [
         { protocol: 'openai-responses', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
@@ -74,7 +74,7 @@ describe('findConvertibleEndpoint', () => {
   })
 
   it('does not match an endpoint serving its own protocol', () => {
-    const model: UpstreamModel = {
+    const model: ProviderModelRoute = {
       ...base,
       endpoints: [
         { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },

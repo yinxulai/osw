@@ -20,7 +20,7 @@ const TestModelsSchema = z.object({
 
 export interface ModelTestResult {
   modelId: string
-  upstreamModelId: string
+  modelName: string
   providerId: string
   providerName: string
   success: boolean
@@ -44,7 +44,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
   const models = (await listProviderModels()).map(model => ({
     id: model.id,
     providerId: model.providerId,
-    upstreamModelId: model.modelName,
+    modelName: model.modelName,
     endpoints: model.endpoints.map(endpoint => ({
       protocol: endpoint.protocol,
       upstreamUrl: endpoint.url ?? '',
@@ -85,7 +85,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
         resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, protocol),
       )
       const apiKey = await getSecretStore().get(provider.apiKeyReference)
-      const testBody = buildTestBody(protocol, model.upstreamModelId)
+      const testBody = buildTestBody(protocol, model.modelName)
       const result = await sendTestRequest(
         targetUrl,
         protocol,
@@ -98,7 +98,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
       results.push({
         modelId: model.id,
-        upstreamModelId: model.upstreamModelId,
+        modelName: model.modelName,
         providerId: provider.id,
         providerName: provider.name,
         success: result.success,
@@ -112,7 +112,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
       if (controller.signal.aborted) return
       results.push({
         modelId: model.id,
-        upstreamModelId: model.upstreamModelId,
+        modelName: model.modelName,
         providerId: provider.id,
         providerName: provider.name,
         success: false,

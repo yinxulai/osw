@@ -20,16 +20,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SortableUpstreamModel } from './sortable-upstream-model'
 import { ProviderIcon } from './provider-icon'
 import { findPresetByName } from '../lib/provider-presets'
-import type { Provider, UpstreamModel } from '@common/schemas'
+import type { Provider, ProviderModelRoute } from '@common/schemas'
 
 interface ProviderDetailProps {
   provider: Provider
-  models: UpstreamModel[]
+  models: ProviderModelRoute[]
   onEditProvider: () => void
   onRemoveProvider: () => void
   onAddModel: () => void
-  onEditModel: (model: UpstreamModel) => void
-  onRemoveModel: (model: UpstreamModel) => void
+  onEditModel: (model: ProviderModelRoute) => void
+  onRemoveModel: (model: ProviderModelRoute) => void
   onDragEnd: (event: DragEndEvent) => void
 }
 
@@ -107,7 +107,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                     {(handleProps, dragging) => (
                       <div className={'flex items-center gap-2 px-3 py-2.5 ' + (dragging ? 'bg-muted/60' : '')}>
                         <button
-                          aria-label={`拖动 ${model.upstreamModelId}`}
+                          aria-label={`拖动 ${model.modelName}`}
                           className="cursor-grab touch-none text-muted-foreground/50"
                           {...handleProps}
                         >
@@ -118,7 +118,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-xs font-medium">{model.upstreamModelId}</span>
+                            <span className="truncate text-xs font-medium">{model.modelName}</span>
                             <span className="flex flex-wrap gap-1">
                               {model.endpoints.map(endpoint => (
                                 <Badge key={endpoint.protocol} variant={endpoint.upstreamUrl ? 'secondary' : 'muted'} className="h-5 px-1.5 text-[9px]">

@@ -17,13 +17,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableQueueModel } from './sortable-queue-model'
 import { QueueModelRow } from './queue-model-row'
 import { queueModelMetricKey, type QueueModelMetrics } from '../lib/model-metrics'
-import type { UpstreamModel, Provider, ProviderHealth } from '@common/schemas'
+import type { ProviderModelRoute, Provider, ProviderHealth } from '@common/schemas'
 
 export type ProviderMap = Record<string, Provider>
 export type HealthMap = Record<string, ProviderHealth>
 
 interface QueueListCardProps {
-  models: UpstreamModel[]
+  models: ProviderModelRoute[]
   providers: ProviderMap
   health: HealthMap
   modelMetrics: Record<string, QueueModelMetrics>
@@ -31,8 +31,8 @@ interface QueueListCardProps {
   manualModelId: string
   isCooling: (providerId: string) => boolean
   onModeChange: (mode: 'auto' | 'manual') => void
-  onSelectManualModel: (model: UpstreamModel) => void
-  onToggleEnabled: (model: UpstreamModel, enabled: boolean) => void
+  onSelectManualModel: (model: ProviderModelRoute) => void
+  onToggleEnabled: (model: ProviderModelRoute, enabled: boolean) => void
   onDragEnd: (event: DragEndEvent) => void
   onNavigateToModels?: () => void
 }
@@ -114,7 +114,7 @@ export function QueueListCard(props: QueueListCardProps) {
                           model={model}
                           provider={providers[model.providerId]}
                           providerHealth={health[model.providerId]}
-                          metrics={modelMetrics[queueModelMetricKey(model.providerId, model.upstreamModelId)]}
+                          metrics={modelMetrics[queueModelMetricKey(model.providerId, model.modelName)]}
                           mode={mode}
                           selected={selected}
                           cooling={cooling}

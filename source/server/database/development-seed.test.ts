@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from './index'
 import { seedDevelopmentData } from './development-seed'
-import { createProvider, listLogicalModels, listProviders, listRequestLogs, listUpstreamModels } from './store'
+import { createProvider, listLogicalModels, listProviders, listRequestLogs, listProviderModelRoutes } from './store'
 
 let temporaryDirectory: string
 let secretStore: KeychainApi
@@ -32,7 +32,7 @@ describe('development seed', () => {
     expect(await listProviders()).toHaveLength(5)
     // 3 个夹具 + 初始化时自动创建的 default 逻辑模型
     expect(await listLogicalModels()).toHaveLength(4)
-    const upstreamModels = await listUpstreamModels()
+    const upstreamModels = await listProviderModelRoutes()
     expect(upstreamModels).toHaveLength(10)
     expect(upstreamModels.filter(model => model.endpoints.length === 3)).toHaveLength(3)
     expect(await listRequestLogs()).toHaveLength(30)
@@ -75,7 +75,7 @@ describe('development seed', () => {
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(false)
     expect(await listProviders()).toHaveLength(6)
     expect(await listLogicalModels()).toHaveLength(4)
-    expect(await listUpstreamModels()).toHaveLength(10)
+    expect(await listProviderModelRoutes()).toHaveLength(10)
     expect(await listRequestLogs()).toHaveLength(30)
     expect(secretStore.set).toHaveBeenCalledTimes(5)
   })

@@ -12,7 +12,7 @@ import {
   Timer,
   Zap,
 } from 'lucide-react'
-import type { Protocol, Provider, ProviderHealth, UpstreamModel } from '@common/schemas'
+import type { Protocol, Provider, ProviderHealth, ProviderModelRoute } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import type { QueueModelMetrics } from '../lib/model-metrics'
 
 interface QueueModelRowProps {
-  model: UpstreamModel
+  model: ProviderModelRoute
   provider?: Provider
   providerHealth?: ProviderHealth
   metrics?: QueueModelMetrics
@@ -109,7 +109,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
       <div
         className="flex min-h-9 w-full cursor-grab touch-none select-none items-center gap-2 rounded-md px-1.5 text-muted-foreground/70 active:cursor-grabbing"
         {...(props.mode === 'auto' ? props.dragHandleProps : {})}
-        aria-label={props.mode === 'auto' ? `拖动 ${model.upstreamModelId}` : undefined}
+        aria-label={props.mode === 'auto' ? `拖动 ${model.modelName}` : undefined}
       >
         {props.mode === 'manual' ? (
           props.selected ? <CircleDot size={16} className="text-primary" /> : <Circle size={16} className="text-muted-foreground/40" />
@@ -124,7 +124,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
         <div className="min-w-0 flex-1">
         <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
           <div className="flex min-w-0 items-center gap-1.5">
-            <div className="truncate font-mono text-[11px] text-muted-foreground">{model.upstreamModelId}</div>
+            <div className="truncate font-mono text-[11px] text-muted-foreground">{model.modelName}</div>
             <TooltipProvider delayDuration={150}>
               <div className="flex shrink-0 items-center gap-0.5">
                 {model.endpoints.map(endpoint => {
@@ -190,7 +190,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
           checked={model.enabled}
           onCheckedChange={props.onToggleEnabled}
           onClick={event => event.stopPropagation()}
-          aria-label={`${model.upstreamModelId} 启用状态`}
+          aria-label={`${model.modelName} 启用状态`}
         />
       </div>
     </div>

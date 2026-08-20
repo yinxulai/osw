@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { providerModelApi, providerApi } from '@/api'
-import type { FetchedUpstreamModel } from '@/api'
+import type { FetchedProviderModel } from '@/api'
 import { useToast } from '@/components/ui/toast'
 import { useAsyncFn } from '@/services/use-async'
 import {
@@ -12,7 +12,7 @@ import {
   useAppPolling,
   useAppActions,
 } from '@/services/app-hooks'
-import type { UpstreamModel, Protocol, ProtocolEndpoint, Provider } from '@common/schemas'
+import type { ProviderModelRoute, Protocol, ProviderModelRouteEndpoint, Provider } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from './lib/protocols'
 import type { ProviderPreset } from './lib/provider-presets'
 
@@ -46,7 +46,7 @@ function parseProviderEndpoints(provider?: Provider): ProviderEndpoints {
   }
 }
 
-export function getEffectiveEndpointUrl(endpoint: ProtocolEndpoint, provider?: Provider): string {
+export function getEffectiveEndpointUrl(endpoint: ProviderModelRouteEndpoint, provider?: Provider): string {
   if (endpoint.upstreamUrl.trim()) return endpoint.upstreamUrl
   if (!provider) return ''
   return parseProviderEndpoints(provider)[endpoint.protocol] ?? ''
@@ -62,7 +62,7 @@ export function useModelManagementService() {
   const providersLoading = useProvidersLoading()
 
   // 本页状态
-  const [models, setModels] = useState<UpstreamModel[]>([])
+  const [models, setModels] = useState<ProviderModelRoute[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
@@ -77,10 +77,10 @@ export function useModelManagementService() {
 
   // Model dialog state
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
-  const [editingModel, setEditingModel] = useState<UpstreamModel | null>(null)
+  const [editingModel, setEditingModel] = useState<ProviderModelRoute | null>(null)
   const [modelId, setModelId] = useState('')
   const [protocolEntries, setProtocolEntries] = useState<ProtocolEndpointEntry[]>([])
-  const [fetchedModels, setFetchedModels] = useState<FetchedUpstreamModel[]>([])
+  const [fetchedModels, setFetchedModels] = useState<FetchedProviderModel[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
 
   // 订阅全局轮询
@@ -96,7 +96,7 @@ export function useModelManagementService() {
     setModels(result.data.map(model => ({
       id: model.id,
       providerId: model.providerId,
-      upstreamModelId: model.modelName,
+      modelName: model.modelName,
       endpoints: model.endpoints.map(endpoint => ({
         protocol: endpoint.protocol,
         upstreamUrl: endpoint.url ?? '',
@@ -220,9 +220,9 @@ export function useModelManagementService() {
 
   // ========== Model CRUD ==========
 
-  const openModelDialog = useCallback((model?: UpstreamModel) => {
+  const openModelDialog = useCallback((model?: ProviderModelRoute) => {
     setEditingModel(model ?? null)
-    setModelId(model?.upstreamModelId ?? '')
+    setModelId(model?.modelName ?? '')
     setFetchedModels([])
     setProtocolEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
@@ -272,7 +272,7 @@ export function useModelManagementService() {
         providerId: selectedProvider.id,
         baseUrl: request.baseUrl,
       })))
-      const merged = new Map<string, FetchedUpstreamModel>()
+      const merged = new Map<string, FetchedProviderModel>()
       for (const result of results) {
         if (!result.success) continue
         for (const model of result.data.models) if (!merged.has(model.id)) merged.set(model.id, model)
@@ -300,7 +300,7 @@ export function useModelManagementService() {
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
     if (enabledEntries.length === 0) return
 
-    const endpoints: ProtocolEndpoint[] = enabledEntries.map(entry => ({
+    const endpoints: ProviderModelRouteEndpoint[] = enabledEntries.map(entry => ({
       protocol: entry.protocol,
       upstreamUrl: entry.overrideUrl ? entry.upstreamUrl.trim() : '',
       customAuthHeader: null,
@@ -339,8 +339,8 @@ export function useModelManagementService() {
 
   const { loading: savingModel, run: runSaveModel } = useAsyncFn(saveModel)
 
-  const removeModel = useCallback(async (model: UpstreamModel) => {
-    if (!window.confirm(`删除模型"${model.upstreamModelId}"？该模型关联的所有协议接口都会被移除。`)) return
+  const removeModel = useCallback(async (model: ProviderModelRoute) => {
+    if (!window.confirm(`删除模型"${model.modelName}"？该模型关联的所有协议接口都会被移除。`)) return
     const result = await providerModelApi.remove(model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     toast.success('模型已删除')

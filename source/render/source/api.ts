@@ -9,9 +9,9 @@ import type {
   ProviderHealth,
   LogicalModel,
   ProviderModel,
+  ProviderModelRoute,
   SchedulingPolicy,
-  UpstreamModel,
-  ProtocolEndpoint,
+  ProviderModelRouteEndpoint,
   Protocol,
   Settings,
   ProxyServerStatus,
@@ -40,14 +40,6 @@ type UpdateProviderInput = Partial<Pick<Provider, 'name' | 'timeoutMilliseconds'
 type CreateLogicalModelInput = {
   name: string
   description?: string
-  enabled?: boolean
-}
-
-type CreateUpstreamModelInput = {
-  providerId: string
-  upstreamModelId: string
-  endpoints?: ProtocolEndpoint[]
-  priority: number
   enabled?: boolean
 }
 
@@ -94,14 +86,14 @@ async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse
 
 // ========== Provider ==========
 
-export interface FetchedUpstreamModel {
+export interface FetchedProviderModel {
   id: string
   ownedBy: string | null
   displayName: string | null
   createdTime: number | null
 }
 
-export interface FetchUpstreamModelsInput {
+export interface FetchProviderModelsInput {
   protocol: Protocol
   providerId?: string
   baseUrl?: string
@@ -111,8 +103,8 @@ export interface FetchUpstreamModelsInput {
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
-  fetchModels: (input: FetchUpstreamModelsInput) =>
-    request<{ models: FetchedUpstreamModel[]; matchedUrl: string; attempts: { url: string; statusCode?: number; error?: string }[] }>('/provider/fetch-models', input),
+  fetchModels: (input: FetchProviderModelsInput) =>
+    request<{ models: FetchedProviderModel[]; matchedUrl: string; attempts: { url: string; statusCode?: number; error?: string }[] }>('/provider/fetch-models', input),
   create: (data: CreateProviderInput) =>
     request<Provider>('/provider/create', data),
   update: (id: string, updates: UpdateProviderInput) =>
@@ -153,7 +145,7 @@ type ProviderModelUpdateInput = {
   modelName?: string
   enabled?: boolean
   priority?: number
-  endpoints?: ProtocolEndpoint[]
+  endpoints?: ProviderModelRouteEndpoint[]
 }
 
 type ProviderModelCreateInput = {
@@ -162,7 +154,7 @@ type ProviderModelCreateInput = {
   logicalModelId?: string
   priority?: number
   enabled?: boolean
-  endpoints?: ProtocolEndpoint[]
+  endpoints?: ProviderModelRouteEndpoint[]
 }
 
 export const providerModelApi = {
@@ -171,6 +163,7 @@ export const providerModelApi = {
   create: (data: ProviderModelCreateInput) => request<ProviderModelView>('/provider-model/create', data),
   update: (id: string, updates: ProviderModelUpdateInput) =>
     request<ProviderModelView>('/provider-model/update', { id, ...updates }),
+  queue: () => request<ProviderModelRoute[]>('/provider-model/queue', {}),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
 }
 
@@ -188,16 +181,6 @@ type SchedulingPolicyInput = {
   weight?: number
   enabled?: boolean
   failoverEnabled?: boolean
-}
-
-export const upstreamModelApi = {
-  list: () =>
-    request<UpstreamModel[]>('/upstream-model/list', {}),
-  create: (data: CreateUpstreamModelInput) =>
-    request<UpstreamModel>('/upstream-model/create', data),
-  update: (id: string, updates: Partial<UpstreamModel>) =>
-    request<UpstreamModel>('/upstream-model/update', { id, ...updates }),
-  remove: (id: string) => request<{ id: string }>('/upstream-model/delete', { id }),
 }
 
 // ========== Settings ==========
@@ -268,7 +251,7 @@ export const analyticsApi = {
 
 export interface ModelTestResult {
   modelId: string
-  upstreamModelId: string
+  modelName: string
   providerId: string
   providerName: string
   success: boolean
@@ -336,7 +319,7 @@ export interface ExportedConfig {
     providerName?: string
     providerId?: string
     upstreamModelId: string
-    endpoints?: ProtocolEndpoint[]
+    endpoints?: ProviderModelRouteEndpoint[]
     priority: number
     enabled?: boolean
   }>

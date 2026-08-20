@@ -4,18 +4,20 @@ import { ProtocolSchema } from '@common/schemas'
 import {
   getProviderModel,
   listProviderModels,
+  listProviderModelRoutes,
   listSchedulingPolicies,
-  createUpstreamModel,
-  updateUpstreamModel,
+  createProviderModelRoute,
+  updateProviderModelRoute,
   upsertSchedulingPolicy,
   deleteSchedulingPolicy,
-  deleteUpstreamModel,
+  deleteProviderModelRoute,
 } from '../database/store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 
 export const providerModelRoutes: Record<string, ManagementHandler> = {
   '/api/provider-model/list': handleListProviderModels,
+  '/api/provider-model/queue': handleListProviderModelQueue,
   '/api/provider-model/get': handleGetProviderModel,
   '/api/provider-model/create': handleCreateProviderModel,
   '/api/provider-model/update': handleUpdateProviderModel,
@@ -29,6 +31,11 @@ const ListProviderModelsSchema = z.object({ includeDeleted: z.boolean().optional
 async function handleListProviderModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = ListProviderModelsSchema.parse(body)
   sendSuccess(res, await listProviderModels(input.includeDeleted ?? false))
+}
+
+async function handleListProviderModelQueue(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  z.object({ includeDeleted: z.boolean().optional() }).parse(body)
+  sendSuccess(res, await listProviderModelRoutes(true))
 }
 
 const GetProviderModelSchema = z.object({ id: z.string().min(1) })
@@ -54,9 +61,9 @@ const CreateProviderModelSchema = z.object({
 })
 async function handleCreateProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderModelSchema.parse(body)
-  const model = await createUpstreamModel({
+  const model = await createProviderModelRoute({
     providerId: input.providerId,
-    upstreamModelId: input.modelName,
+    modelName: input.modelName,
     endpoints: input.endpoints,
     priority: input.priority,
     enabled: input.enabled,
@@ -80,8 +87,8 @@ const UpdateProviderModelSchema = z.object({
 })
 async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = UpdateProviderModelSchema.parse(body)
-  const updated = await updateUpstreamModel(input.id, {
-    ...(input.modelName !== undefined ? { upstreamModelId: input.modelName } : {}),
+  const updated = await updateProviderModelRoute(input.id, {
+    ...(input.modelName !== undefined ? { modelName: input.modelName } : {}),
     ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
     ...(input.endpoints !== undefined ? { endpoints: input.endpoints } : {}),
   })
@@ -94,7 +101,7 @@ async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerRespo
 
 async function handleDeleteProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = GetProviderModelSchema.parse(body)
-  await deleteUpstreamModel(id)
+  await deleteProviderModelRoute(id)
   sendSuccess(res, { id })
 }
 

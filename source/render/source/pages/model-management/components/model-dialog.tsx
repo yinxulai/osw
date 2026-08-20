@@ -9,18 +9,18 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
 import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS, PROTOCOL_SHORT_LABELS, CONVERTIBLE_PROTOCOLS } from '../lib/protocols'
-import type { FetchedUpstreamModel } from '@/api'
+import type { FetchedProviderModel } from '@/api'
 import type { ProtocolEndpointEntry } from '../service'
 
 interface ModelDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  editingModel: { id: string; upstreamModelId: string } | null
+  editingModel: { id: string; modelName: string } | null
   providerName: string
   modelId: string
   protocolEntries: ProtocolEndpointEntry[]
   saving: boolean
-  fetchedModels: FetchedUpstreamModel[]
+  fetchedModels: FetchedProviderModel[]
   fetchingModels: boolean
   onFetchModels: () => void
   setModelId: (id: string) => void

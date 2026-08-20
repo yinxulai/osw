@@ -5,11 +5,11 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Server } from 'lucide-react'
 import { ProviderIcon } from './provider-icon'
 import { findPresetByName } from '../lib/provider-presets'
-import type { Provider, UpstreamModel } from '@common/schemas'
+import type { Provider, ProviderModelRoute } from '@common/schemas'
 
 interface ProviderGridProps {
   providers: Provider[]
-  models: UpstreamModel[]
+  models: ProviderModelRoute[]
   selectedProviderId: string
   onSelect: (id: string) => void
 }
@@ -33,7 +33,7 @@ export function ProviderGrid(props: ProviderGridProps) {
               const preset = findPresetByName(provider.name)
               const iconColor = preset?.color
               const modelCount = new Set(
-                models.filter(model => model.providerId === provider.id).map(model => model.upstreamModelId),
+                models.filter(model => model.providerId === provider.id).map(model => model.modelName),
               ).size
 
               return (

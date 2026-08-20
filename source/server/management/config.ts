@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { ProtocolEndpointSchema, ProtocolSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type UpstreamModel, type Settings } from '@common/schemas'
+import { ProtocolSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type Settings } from '@common/schemas'
 import type { ManagementHandler } from './response'
 import { sendSuccess, sendError } from './response'
 import {
@@ -9,19 +9,19 @@ import {
   listLogicalModels,
   listProviderModels,
   listSchedulingPolicies,
-  listUpstreamModels,
+  listProviderModelRoutes,
   getSettings,
   updateSettings,
   createProvider,
   updateProvider,
   createLogicalModel,
   updateLogicalModel,
-  createUpstreamModel,
-  updateUpstreamModel,
+  createProviderModelRoute,
+  updateProviderModelRoute,
   upsertSchedulingPolicy,
   deleteProvider,
   deleteLogicalModel,
-  deleteUpstreamModel,
+  deleteProviderModelRoute,
 } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { seedDevelopmentData } from '../database/development-seed'
@@ -55,15 +55,6 @@ interface ExportedLogicalModel {
   enabled: boolean
 }
 
-interface ExportedUpstreamModel {
-  id: string
-  providerName: string
-  upstreamModelId: string
-  endpoints: UpstreamModel['endpoints']
-  priority: number
-  enabled: boolean
-}
-
 interface ExportedProviderModel {
   id: string
   providerId: string
@@ -88,30 +79,26 @@ interface ExportedSchedulingPolicy {
 }
 
 interface ExportedConfig {
-  version: 2 | 1
+  version: 3
   exportedAt: number
   settings: Partial<Settings>
   providers: ExportedProvider[]
   logicalModels: ExportedLogicalModel[]
   providerModels: ExportedProviderModel[]
   schedulingPolicies: ExportedSchedulingPolicy[]
-  upstreamModels: ExportedUpstreamModel[]
 }
 
 async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const [providers, logicalModels, providerModels, schedulingPolicies, upstreamModels, settings] = await Promise.all([
+  const [providers, logicalModels, providerModels, schedulingPolicies, settings] = await Promise.all([
     listProviders(false),
     listLogicalModels(false),
     listProviderModels(false),
     listSchedulingPolicies(),
-    listUpstreamModels(false),
     getSettings(),
   ])
 
-  const providerById = new Map(providers.map(p => [p.id, p]))
-
   const config: ExportedConfig = {
-    version: 2,
+    version: 3,
     exportedAt: Date.now(),
     settings: {
       listenHost: settings.listenHost,
@@ -158,14 +145,6 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
       enabled: policy.enabled,
       failoverEnabled: policy.failoverEnabled,
     })),
-    upstreamModels: upstreamModels.map((m: UpstreamModel): ExportedUpstreamModel => ({
-      id: m.id,
-      providerName: providerById.get(m.providerId)?.name ?? '',
-      upstreamModelId: m.upstreamModelId,
-      endpoints: m.endpoints,
-      priority: m.priority,
-      enabled: m.enabled,
-    })),
   }
 
   sendSuccess(res, { config, content: JSON.stringify(config, null, 2) })
@@ -183,7 +162,7 @@ function parseEndpoints(upstreamUrls: string): Record<string, string> {
 
 const ImportConfigSchema = z.object({
   config: z.object({
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.literal(3),
     settings: z.object({
       listenHost: z.string().optional(),
       listenPort: z.number().int().min(1).max(65535).optional(),
@@ -237,17 +216,6 @@ const ImportConfigSchema = z.object({
       enabled: z.boolean().optional(),
       failoverEnabled: z.boolean().optional(),
     })).default([]),
-    upstreamModels: z.array(
-      z.object({
-        id: z.string().optional(),
-        providerName: z.string().optional(),
-        providerId: z.string().optional(),
-        upstreamModelId: z.string(),
-        endpoints: z.array(ProtocolEndpointSchema).optional(),
-        priority: z.number().int(),
-        enabled: z.boolean().optional(),
-      }),
-    ).default([]),
   }),
   mode: z.enum(['merge', 'replace']).default('merge'),
 })
@@ -259,30 +227,15 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
 
     const existingProviders = await listProviders(false)
     const existingModels = await listLogicalModels(false)
-    const existingUpstreamModels = await listUpstreamModels(false)
+    const existingProviderModelRoutes = await listProviderModelRoutes(false)
     const importedPolicies = config.schedulingPolicies
-    const providerModels = config.providerModels.length > 0
-      ? config.providerModels.map(model => ({
-          id: model.id,
-          providerId: providerIdMap.get(model.providerId) ?? model.providerId,
-          upstreamModelId: model.modelName,
-          endpoints: (model.endpoints ?? []).map(endpoint => ({
-            protocol: endpoint.protocol,
-            upstreamUrl: endpoint.url ?? '',
-            customAuthHeader: null,
-            protocolConversionEnabled: endpoint.conversions?.some(conversion => conversion.enabled) ?? false,
-          })),
-          priority: importedPolicies.find(policy => policy.providerModelId === model.id)?.priority ?? 0,
-          enabled: model.enabled,
-        }))
-      : config.upstreamModels
     const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
     const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
     const providerIdMap = new Map<string, string>()
     const providerNames = new Set(existingProviderNames)
     const importedProviderNames = new Set<string>()
     const importedModelNames = new Set<string>()
-    const importedUpstreamModelKeys = new Set<string>()
+    const importedProviderModelKeys = new Set<string>()
 
     for (const provider of config.providers) {
       if (importedProviderNames.has(provider.name)) {
@@ -297,24 +250,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         throw new Error(`导入文件中存在重复逻辑模型: ${model.name}`)
       }
       importedModelNames.add(model.name)
-    }
-
-    for (const upstreamModel of providerModels) {
-      const providerId = upstreamModel.providerId
-      const providerName = 'providerName' in upstreamModel ? upstreamModel.providerName : undefined
-      if (providerId && !existingProviderIds.has(providerId)) {
-        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的供应商`)
-      }
-      if (!providerId && (!providerName || !providerNames.has(providerName))) {
-        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的供应商`)
-      }
-
-      const upstreamModelKey = `${providerId ?? providerName}\0${upstreamModel.upstreamModelId}`
-      if (importedUpstreamModelKeys.has(upstreamModelKey)) {
-        throw new Error(`导入文件中存在重复上游模型: ${upstreamModel.upstreamModelId}`)
-      }
-      importedUpstreamModelKeys.add(upstreamModelKey)
-      ProtocolEndpointSchema.array().parse(upstreamModel.endpoints ?? [])
     }
 
     // 1. 更新设置
@@ -386,70 +321,51 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       importedLogicalModels++
     }
 
-    // 4. 处理上游模型
-    let importedUpstreamModels = 0
-    const importedUpstreamKeys = new Set<string>()
-
+    // 4. 处理 ProviderModel
+    let importedProviderModels = 0
     const importedProviderModelIds = new Map<string, string>()
-    for (const um of providerModels) {
-      let providerId = um.providerId
-      if (!providerId && 'providerName' in um && um.providerName) {
-        providerId = providerNameToId.get(um.providerName)
-      }
-      if (!providerId) {
-        sendError(res, 'VALIDATION_ERROR', `上游模型 "${um.upstreamModelId}" 无法找到对应的供应商`, 400)
+    for (const model of config.providerModels) {
+      const providerId = providerIdMap.get(model.providerId) ?? model.providerId
+      if (!existingProviderIds.has(model.providerId) && !providerNameToId.has(model.providerId)) {
+        sendError(res, 'VALIDATION_ERROR', `ProviderModel "${model.modelName}" 引用了不存在的供应商`, 400)
         return
       }
-
-      const existing = existingUpstreamModels.find(
-        (eum: UpstreamModel) =>
-          eum.providerId === providerId &&
-          eum.upstreamModelId === um.upstreamModelId,
-      )
-
-      let importedId: string
-      if (existing) {
-        const updated = await updateUpstreamModel(existing.id, {
-          endpoints: um.endpoints ?? [],
-          priority: um.priority,
-          enabled: um.enabled ?? true,
-        })
-        importedId = updated.id
-      } else {
-        const created = await createUpstreamModel({
-          providerId,
-          upstreamModelId: um.upstreamModelId,
-          endpoints: um.endpoints ?? [],
-          priority: um.priority,
-          enabled: um.enabled ?? true,
-        })
-        importedId = created.id
-      }
-      if ('id' in um && um.id) importedProviderModelIds.set(um.id, importedId)
-      importedUpstreamKeys.add(`${providerId}\0${um.upstreamModelId}`)
-      importedUpstreamModels++
+      const resolvedProviderId = providerNameToId.get(providerId) ?? providerId
+      const key = `${resolvedProviderId}\0${model.modelName}`
+      if (importedProviderModelKeys.has(key)) throw new Error(`导入文件中存在重复 ProviderModel: ${model.modelName}`)
+      importedProviderModelKeys.add(key)
+      const existing = existingProviderModelRoutes.find(route => route.providerId === resolvedProviderId && route.modelName === model.modelName)
+      const endpoints = (model.endpoints ?? []).map(endpoint => ({
+        protocol: endpoint.protocol,
+        upstreamUrl: endpoint.url ?? '',
+        customAuthHeader: null,
+        protocolConversionEnabled: endpoint.conversions?.some(conversion => conversion.enabled) ?? false,
+      }))
+      const imported = existing
+        ? await updateProviderModelRoute(existing.id, { endpoints, enabled: model.enabled ?? true })
+        : await createProviderModelRoute({ providerId: resolvedProviderId, modelName: model.modelName, endpoints, priority: importedPolicies.find(policy => policy.providerModelId === model.id)?.priority ?? 0, enabled: model.enabled ?? true })
+      if (model.id) importedProviderModelIds.set(model.id, imported.id)
+      importedProviderModels++
     }
 
-    if (config.version === 2) {
-      for (const policy of importedPolicies) {
-        const providerModelId = importedProviderModelIds.get(policy.providerModelId) ?? policy.providerModelId
-        const logicalModelId = logicalModelIdMap.get(policy.logicalModelId) ?? policy.logicalModelId
-        await upsertSchedulingPolicy({
-          logicalModelId,
-          providerModelId,
-          strategy: policy.strategy,
-          priority: policy.priority,
-          weight: policy.weight,
-          enabled: policy.enabled,
-          failoverEnabled: policy.failoverEnabled,
-        })
-      }
+    for (const policy of importedPolicies) {
+      const providerModelId = importedProviderModelIds.get(policy.providerModelId) ?? policy.providerModelId
+      const logicalModelId = logicalModelIdMap.get(policy.logicalModelId) ?? policy.logicalModelId
+      await upsertSchedulingPolicy({
+        logicalModelId,
+        providerModelId,
+        strategy: policy.strategy,
+        priority: policy.priority,
+        weight: policy.weight,
+        enabled: policy.enabled,
+        failoverEnabled: policy.failoverEnabled,
+      })
     }
 
     if (mode === 'replace') {
-      for (const upstreamModel of existingUpstreamModels) {
-        const key = `${upstreamModel.providerId}\0${upstreamModel.upstreamModelId}`
-        if (!importedUpstreamKeys.has(key)) await deleteUpstreamModel(upstreamModel.id)
+      for (const providerModel of existingProviderModelRoutes) {
+        const key = `${providerModel.providerId}\0${providerModel.modelName}`
+        if (!importedProviderModelKeys.has(key)) await deleteProviderModelRoute(providerModel.id)
       }
       for (const model of existingModels) {
         if (!importedModelIds.has(model.id)) await deleteLogicalModel(model.id)
@@ -466,7 +382,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       imported: {
         providers: importedProviders,
         logicalModels: importedLogicalModels,
-        upstreamModels: importedUpstreamModels,
+        providerModels: importedProviderModels,
       },
     })
   } catch (err) {

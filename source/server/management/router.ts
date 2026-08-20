@@ -6,7 +6,6 @@ import type { ManagementHandler } from './response'
 import { sendError } from './response'
 import { runtimeControlRoutes } from './runtime-control'
 import { settingsRoutes } from './settings'
-import { upstreamModelRoutes } from './upstream-models'
 import { providerModelRoutes } from './provider-models'
 import { logRoutes } from './logs'
 import { requestLogRoutes } from './request-logs'
@@ -19,7 +18,6 @@ import type { RuntimeEnvironment } from '@common/runtime-profile'
 const routes: Record<string, ManagementHandler> = {
   ...providerRoutes,
   ...modelRoutes,
-  ...upstreamModelRoutes,
   ...providerModelRoutes,
   ...settingsRoutes,
   ...runtimeControlRoutes,

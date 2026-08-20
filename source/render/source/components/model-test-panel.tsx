@@ -10,7 +10,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react'
-import type { Protocol, Provider, UpstreamModel } from '@common/schemas'
+import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
 import { modelTestApi, type ModelTestResult } from '@/api'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 interface ModelTestPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  models: UpstreamModel[]
+  models: ProviderModelRoute[]
   providers: Provider[]
 }
 
@@ -34,7 +34,7 @@ type TestTaskStatus = 'queued' | 'running' | 'success' | 'failed'
 interface TestTask {
   id: string
   modelId: string
-  upstreamModelId: string
+  modelName: string
   providerId: string
   providerName: string
   protocol: Protocol
@@ -93,7 +93,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
     return model.endpoints.filter(endpoint => selectedProtocols.has(endpoint.protocol)).map(endpoint => ({
       id: `${model.id}:${endpoint.protocol}`,
       modelId: model.id,
-      upstreamModelId: model.upstreamModelId,
+      modelName: model.modelName,
       providerId: provider.id,
       providerName: provider.name,
       protocol: endpoint.protocol,
@@ -218,7 +218,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                             <div key={model.id} className="rounded-md bg-background/80 p-2">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0">
-                                  <div className="truncate text-[10px] font-medium text-foreground">{model.upstreamModelId}</div>
+                                  <div className="truncate text-[10px] font-medium text-foreground">{model.modelName}</div>
                                   <div className="mt-0.5 text-[9px] text-muted-foreground">{selectedCount}/{model.endpoints.length} 协议</div>
                                 </div>
                                 <div className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedCount}</div>
@@ -291,7 +291,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                   {visibleTasks.map(task => {
                     return <div key={task.id} className="grid gap-2 border-b border-border px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
                       <TaskStatus status={task.status} />
-                      <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.upstreamModelId}</span></div></div>
+                      <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.modelName}</span></div></div>
                       <div className="min-w-0 text-[11px] text-muted-foreground"><span className="truncate">{PROTOCOL_LABELS[task.protocol]}</span></div>
                       <div className={cn('text-[10px] font-medium', task.status === 'success' && 'text-emerald-600', task.status === 'failed' && 'text-red-600', task.status === 'running' && 'text-primary')}>{task.status === 'queued' ? '等待' : task.status === 'running' ? '请求中' : task.status === 'success' ? '通过' : '失败'}</div>
                       <div className="text-[10px] text-muted-foreground md:text-right">{task.result?.statusCode ? `HTTP ${task.result.statusCode} · ` : ''}{task.result ? `${task.result.durationMilliseconds}ms` : '—'}{task.result?.success && <span className="ml-1 font-mono">↓{task.result.outputTokens ?? '—'}</span>}</div>

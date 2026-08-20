@@ -9,10 +9,10 @@ import {
   createProvider,
   createRequestAttempt,
   createRequestLog,
-  createUpstreamModel,
+  createProviderModelRoute,
   deleteLogicalModel,
   deleteProvider,
-  deleteUpstreamModel,
+  deleteProviderModelRoute,
   getLatencyDistribution,
   getFailureReasons,
   getModelStats,
@@ -22,7 +22,7 @@ import {
   getProviderStats,
   getRequestTrend,
   getSettings,
-  getUpstreamModel,
+  getProviderModelRoute,
   listAttemptsByRequest,
   listLogicalModels,
   listProviders,
@@ -31,8 +31,8 @@ import {
   listProviderModelsForLogicalModel,
   listSchedulingPolicies,
   listRequestLogs,
-  listUpstreamModels,
-  listUpstreamModelsByProvider,
+  listProviderModelRoutes,
+  listProviderModelRoutesByProvider,
   onSettingsChanged,
   pruneRequestLogsBefore,
   pruneRequestLogs,
@@ -43,7 +43,7 @@ import {
   updateProvider,
   updateRequestLogStatus,
   updateSettings,
-  updateUpstreamModel,
+  updateProviderModelRoute,
   upsertSchedulingPolicy,
   deleteSchedulingPolicy,
 } from './store'
@@ -94,29 +94,29 @@ describe('provider and model CRUD', () => {
 
   it('handles model defaults, endpoint reuse, optional endpoints, and soft deletion', async () => {
     const provider = await createProvider(providerInput())
-    const first = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'model-a', priority: 7 })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-a', priority: 7 })
     expect(first).toMatchObject({ endpoints: [], priority: 7, enabled: true })
-    const second = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'model-b', priority: 1, endpoints: [{ protocol: 'openai-completions', upstreamUrl: '', customAuthHeader: null, protocolConversionEnabled: false }] })
-    const third = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'model-c', priority: 2, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://override.example', customAuthHeader: null, protocolConversionEnabled: false }, { protocol: 'anthropic-messages', upstreamUrl: 'https://anthropic.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    expect((await getUpstreamModel(second.id))?.endpoints[0].upstreamUrl).toBe('https://invalid.local')
-    expect((await getUpstreamModel(third.id))?.endpoints).toHaveLength(2)
-    expect((await listUpstreamModelsByProvider(provider.id)).map(model => model.upstreamModelId)).toEqual(['model-a', 'model-b', 'model-c'])
-    expect((await listUpstreamModels(false)).every(model => model.deletedTime === null)).toBe(true)
-    await updateUpstreamModel(first.id, { upstreamModelId: 'model-a2', enabled: false, endpoints: [{ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    expect(await getUpstreamModel(first.id)).toMatchObject({ upstreamModelId: 'model-a2', enabled: false, endpoints: [expect.objectContaining({ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example' })] })
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-b', priority: 1, endpoints: [{ protocol: 'openai-completions', upstreamUrl: '', customAuthHeader: null, protocolConversionEnabled: false }] })
+    const third = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-c', priority: 2, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://override.example', customAuthHeader: null, protocolConversionEnabled: false }, { protocol: 'anthropic-messages', upstreamUrl: 'https://anthropic.example', customAuthHeader: null, protocolConversionEnabled: true }] })
+    expect((await getProviderModelRoute(second.id))?.endpoints[0].upstreamUrl).toBe('https://invalid.local')
+    expect((await getProviderModelRoute(third.id))?.endpoints).toHaveLength(2)
+    expect((await listProviderModelRoutesByProvider(provider.id)).map(model => model.modelName)).toEqual(['model-a', 'model-b', 'model-c'])
+    expect((await listProviderModelRoutes(false)).every(model => model.deletedTime === null)).toBe(true)
+    await updateProviderModelRoute(first.id, { modelName: 'model-a2', enabled: false, endpoints: [{ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example', customAuthHeader: null, protocolConversionEnabled: true }] })
+    expect(await getProviderModelRoute(first.id)).toMatchObject({ modelName: 'model-a2', enabled: false, endpoints: [expect.objectContaining({ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example' })] })
     expect((await listProviderModels()).find(model => model.id === first.id)?.endpoints[0].conversions).toHaveLength(1)
-    await deleteUpstreamModel(first.id)
-    expect((await listUpstreamModelsByProvider(provider.id)).map(model => model.id)).not.toContain(first.id)
-    expect((await listUpstreamModelsByProvider(provider.id, true)).map(model => model.id)).toContain(first.id)
+    await deleteProviderModelRoute(first.id)
+    expect((await listProviderModelRoutesByProvider(provider.id)).map(model => model.id)).not.toContain(first.id)
+    expect((await listProviderModelRoutesByProvider(provider.id, true)).map(model => model.id)).toContain(first.id)
     expect((await listProviderModelsForLogicalModel('auto')).every(model => model.enabled)).toBe(true)
-    await expect(updateUpstreamModel('model_missing', {})).rejects.toThrow('provider model not found')
+    await expect(updateProviderModelRoute('model_missing', {})).rejects.toThrow('provider model not found')
   })
 
   it('supports provider model views, policy ordering, disabled policies, and deleted models', async () => {
     const provider = await createProvider(providerInput())
     const logical = await createLogicalModel({ name: 'route-target' })
-    const first = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'route-a', priority: 99, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://route-a.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    const second = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'route-b', priority: 99 })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-a', priority: 99, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://route-a.example', customAuthHeader: null, protocolConversionEnabled: true }] })
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-b', priority: 99 })
     const time = Date.now()
     getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, 1, time, time)
     getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, 0, time, time)
@@ -125,7 +125,7 @@ describe('provider and model CRUD', () => {
     expect(await listProviderModelsForLogicalModel(logical.id)).toMatchObject([{ id: second.id, priority: 10 }, { id: first.id, priority: 20 }])
     getDb().$client.prepare('UPDATE scheduling_policies SET enabled = 0 WHERE logicalModelId = ? AND providerModelId = ?').run(logical.id, second.id)
     expect((await listProviderModelsForLogicalModel(logical.id)).map(model => model.id)).toEqual([first.id])
-    await deleteUpstreamModel(first.id)
+    await deleteProviderModelRoute(first.id)
     expect(await listProviderModelsForLogicalModel(logical.id)).toEqual([])
     expect(await listProviderModelsForLogicalModel(logical.id, true)).toEqual([])
   })
@@ -146,7 +146,7 @@ describe('scheduling policies', () => {
     const provider = await createProvider(providerInput())
     const logicalA = await createLogicalModel({ name: 'policy-a' })
     const logicalB = await createLogicalModel({ name: 'policy-b' })
-    const model = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'policy-model', priority: 0 })
+    const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'policy-model', priority: 0 })
 
     const created = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id })
     expect(created).toMatchObject({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 0, weight: 100, enabled: true, failoverEnabled: true })
@@ -165,7 +165,7 @@ describe('scheduling policies', () => {
   it('orders policies by priority then weight and rejects duplicate rows at the database boundary', async () => {
     const provider = await createProvider(providerInput())
     const logical = await createLogicalModel({ name: 'policy-order' })
-    const models = await Promise.all(['one', 'two', 'three'].map(name => createUpstreamModel({ providerId: provider.id, upstreamModelId: name, priority: 0 })))
+    const models = await Promise.all(['one', 'two', 'three'].map(name => createProviderModelRoute({ providerId: provider.id, modelName: name, priority: 0 })))
     await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[0].id, priority: 1, weight: 50 })
     await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[1].id, priority: 1, weight: 10 })
     await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: models[2].id, priority: 0, weight: 100 })

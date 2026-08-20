@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import {
-  upstreamModelApi,
+  providerModelApi,
+  schedulingPolicyApi,
   queueApi,
   requestLogApi,
 } from '@/api'
@@ -14,7 +15,7 @@ import {
   useAppPolling,
   useAppActions,
 } from '@/services/app-hooks'
-import type { UpstreamModel } from '@common/schemas'
+import type { ProviderModelRoute } from '@common/schemas'
 import { calculateQueueModelMetrics, type QueueModelMetrics } from './lib/model-metrics'
 
 export function useQueueControlService() {
@@ -27,7 +28,7 @@ export function useQueueControlService() {
   const proxyStatus = useProxyStatus()
 
   // 本页状态
-  const [models, setModels] = useState<UpstreamModel[]>([])
+  const [models, setModels] = useState<ProviderModelRoute[]>([])
   const [modelMetrics, setModelMetrics] = useState<Record<string, QueueModelMetrics>>({})
   const [manualModelId, setManualModelId] = useState<string | null>(null)
   const [mode, setMode] = useState<'auto' | 'manual'>('auto')
@@ -41,12 +42,35 @@ export function useQueueControlService() {
   useAppPolling('proxyStatus', 5000)
 
   const loadModels = useCallback(async () => {
-    const result = await upstreamModelApi.list()
-    if (!result.success) {
-      toast.error(result.errorMessage)
+    const [modelResult, policyResult] = await Promise.all([
+      providerModelApi.list(),
+      schedulingPolicyApi.list('auto'),
+    ])
+    if (!modelResult.success) {
+      toast.error(modelResult.errorMessage)
       return
     }
-    setModels(result.data)
+    if (!policyResult.success) {
+      toast.error(policyResult.errorMessage)
+      return
+    }
+    const priorityByModelId = new Map(policyResult.data.map(policy => [policy.providerModelId, policy.priority]))
+    setModels(modelResult.data.map(model => ({
+      id: model.id,
+      providerId: model.providerId,
+      modelName: model.modelName,
+      endpoints: model.endpoints.map(endpoint => ({
+        protocol: endpoint.protocol,
+        upstreamUrl: endpoint.url ?? '',
+        customAuthHeader: null,
+        protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
+      })),
+      priority: priorityByModelId.get(model.id) ?? Number.MAX_SAFE_INTEGER,
+      enabled: model.enabled,
+      createdTime: model.createdTime,
+      updatedTime: model.updatedTime,
+      deletedTime: model.deletedTime,
+    })))
   }, [toast])
 
   // 初始化：加载全局上游模型队列
@@ -122,17 +146,17 @@ export function useQueueControlService() {
     return Boolean(cooldownUntil && cooldownUntil > Date.now())
   }, [health])
 
-  const selectManualModel = useCallback(async (model: UpstreamModel) => {
+  const selectManualModel = useCallback(async (model: ProviderModelRoute) => {
     if (mode !== 'manual' || !model.enabled || isCooling(model.providerId)) return
     const result = await queueApi.switch(model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     setManualModelId(model.id)
   }, [mode, isCooling])
 
-  const updateEnabled = useCallback(async (model: UpstreamModel, enabled: boolean) => {
-    const result = await upstreamModelApi.update(model.id, { enabled })
+  const updateEnabled = useCallback(async (model: ProviderModelRoute, enabled: boolean) => {
+    const result = await providerModelApi.update(model.id, { enabled })
     if (!result.success) { toast.error(result.errorMessage); return }
-    setModels(current => current.map(item => item.id === model.id ? result.data : item))
+    setModels(current => current.map(item => item.id === model.id ? { ...item, enabled: result.data.enabled } : item))
     if (!enabled && manualModelId === model.id) await changeMode('auto')
   }, [manualModelId, changeMode])
 
@@ -147,7 +171,11 @@ export function useQueueControlService() {
     const newIndex = models.findIndex(model => model.id === over.id)
     const reordered = arrayMove(models, oldIndex, newIndex).map((model, index) => ({ ...model, priority: index + 1 }))
     setModels(reordered)
-    const results = await Promise.all(reordered.map(model => upstreamModelApi.update(model.id, { priority: model.priority })))
+    const results = await Promise.all(reordered.map(model => schedulingPolicyApi.update({
+      logicalModelId: 'auto',
+      providerModelId: model.id,
+      priority: model.priority,
+    })))
     if (results.some(result => !result.success)) {
       toast.error('队列顺序保存失败，已恢复服务端数据')
       await reload()

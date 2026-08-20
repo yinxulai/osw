@@ -1,10 +1,10 @@
 import { listProviderModelsForLogicalModel, getProvider } from '../database/store'
 import { isProviderAvailable } from './health'
 import { isConvertible } from './conversion'
-import type { UpstreamModel, Provider, Protocol } from '@common/schemas'
+import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
 
 export interface ModelWithProvider {
-  model: UpstreamModel
+  model: ProviderModelRoute
   provider: Provider
 }
 
@@ -33,7 +33,7 @@ export async function getAvailableModels(logicalModelId = 'model_default'): Prom
 /**
  * 从模型端点列表中查找指定协议的端点
  */
-export function findEndpoint(model: UpstreamModel, protocol: Protocol) {
+export function findEndpoint(model: ProviderModelRoute, protocol: Protocol) {
   return model.endpoints.find(endpoint => endpoint.protocol === protocol)
 }
 
@@ -41,7 +41,7 @@ export function findEndpoint(model: UpstreamModel, protocol: Protocol) {
  * 查找可接收 clientProtocol 请求（经协议转换）的端点。
  * 仅返回显式开启 protocolConversionEnabled 的端点。
  */
-export function findConvertibleEndpoint(model: UpstreamModel, clientProtocol: Protocol) {
+export function findConvertibleEndpoint(model: ProviderModelRoute, clientProtocol: Protocol) {
   return model.endpoints.find(
     endpoint => endpoint.protocolConversionEnabled === true && isConvertible(endpoint.protocol, clientProtocol),
   )
