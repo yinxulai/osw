@@ -3,10 +3,11 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, listAttemptsByRequest, listProviders, listRequestLogs } from '../database/store'
+import { countRequestLogs, listAttemptsByRequest, listProviders, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,
+  '/api/request-log/prune': handlePruneRequestLogs,
 }
 
 const ListRequestLogsSchema = z.object({
@@ -16,6 +17,14 @@ const ListRequestLogsSchema = z.object({
   protocol: z.string().optional(),
   status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
 })
+
+const PruneRequestLogsSchema = z.object({ retentionDays: z.number().int().positive() })
+
+async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { retentionDays } = PruneRequestLogsSchema.parse(body ?? {})
+  const deleted = await pruneRequestLogsBefore(retentionDays)
+  sendSuccess(res, { deleted })
+}
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { limit, offset, providerId, protocol, status } = ListRequestLogsSchema.parse(body ?? {})

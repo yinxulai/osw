@@ -20,6 +20,7 @@ import {
   providers,
   requestAttempts,
   requestLogs,
+  requestContents,
   settings,
 } from './schema'
 
@@ -560,20 +561,48 @@ export async function countRequestLogs(filter?: RequestLogFilter): Promise<numbe
   return row?.count ?? 0
 }
 
-export async function pruneRequestLogs(retentionCount: number): Promise<void> {
-  if (!Number.isInteger(retentionCount) || retentionCount < 1) return
+export async function pruneRequestLogs(retentionCount: number, retentionDays: number | null = null): Promise<void> {
+  if ((!Number.isInteger(retentionCount) || retentionCount < 1) && (retentionDays == null || !Number.isInteger(retentionDays) || retentionDays < 1)) return
   const db = getDb()
   db.transaction(transaction => {
     const allRows = transaction
-      .select({ id: requestLogs.id })
+      .select({ id: requestLogs.id, createdTime: requestLogs.createdTime })
       .from(requestLogs)
       .orderBy(desc(requestLogs.createdTime))
       .all()
-    const staleRows = allRows.slice(retentionCount)
-    const staleIds = staleRows.map(row => row.id)
+    const countStaleIds = Number.isInteger(retentionCount) && retentionCount > 0
+      ? allRows.slice(retentionCount).map(row => row.id)
+      : []
+    const cutoffTime = retentionDays != null && Number.isInteger(retentionDays) && retentionDays > 0
+      ? Date.now() - retentionDays * 24 * 60 * 60 * 1000
+      : null
+    const ageStaleIds = cutoffTime == null
+      ? []
+      : allRows.filter(row => row.createdTime < cutoffTime).map(row => row.id)
+    const staleIds = [...new Set([...countStaleIds, ...ageStaleIds])]
     if (staleIds.length === 0) return
+    transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
     transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
     transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
+  })
+}
+
+export async function pruneRequestLogsBefore(retentionDays: number): Promise<number> {
+  if (!Number.isInteger(retentionDays) || retentionDays < 1) return 0
+  const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000
+  const db = getDb()
+  return db.transaction(transaction => {
+    const staleRows = transaction
+      .select({ id: requestLogs.id })
+      .from(requestLogs)
+      .where(sql`${requestLogs.createdTime} < ${cutoffTime}`)
+      .all()
+    const staleIds = staleRows.map(row => row.id)
+    if (staleIds.length === 0) return 0
+    transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
+    transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
+    transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
+    return staleIds.length
   })
 }
 

@@ -219,12 +219,7 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
  * model 字段会被替换为上游模型 ID。
  * 不支持的转换方向抛出 Error。
  */
-export function convertRequestBody(
-  clientProtocol: Protocol,
-  endpointProtocol: Protocol,
-  requestBody: Buffer,
-  upstreamModelId: string,
-): Buffer {
+export function convertRequestBody(clientProtocol: Protocol, endpointProtocol: Protocol, requestBody: Buffer, upstreamModelId: string): Buffer {
   if (clientProtocol === endpointProtocol) {
     // 原生路径：仅重写 model
     const payload = JSON.parse(requestBody.toString('utf8')) as Json

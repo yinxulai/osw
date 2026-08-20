@@ -172,6 +172,7 @@ describe('database lifecycle', () => {
       { name: 'provider_health' },
       { name: 'providers' },
       { name: 'request_attempts' },
+      { name: 'request_contents' },
       { name: 'request_logs' },
       { name: 'settings' },
       { name: 'upstream_models' },

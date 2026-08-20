@@ -139,6 +139,23 @@ export const requestAttempts = sqliteTable(
   ],
 )
 
+export const requestContents = sqliteTable(
+  'request_contents',
+  {
+    requestId: text('requestId')
+      .primaryKey()
+      .references(() => requestLogs.id),
+    captureStatus: text('captureStatus').notNull(),
+    clientRequest: text('clientRequest'),
+    clientResponse: text('clientResponse'),
+    attempts: text('attempts'),
+    conversion: text('conversion'),
+    createdTime: integer('createdTime').notNull(),
+    updatedTime: integer('updatedTime').notNull(),
+  },
+  table => [index('idx_request_contents_updated_time').on(table.updatedTime)],
+)
+
 export type ProviderRow = typeof providers.$inferSelect
 export type LogicalModelRow = typeof logicalModels.$inferSelect
 export type UpstreamModelRow = typeof upstreamModels.$inferSelect
@@ -146,3 +163,4 @@ export type ProviderHealthRow = typeof providerHealth.$inferSelect
 export type SettingsRow = typeof settings.$inferSelect
 export type RequestLogRow = typeof requestLogs.$inferSelect
 export type RequestAttemptRow = typeof requestAttempts.$inferSelect
+export type RequestContentRow = typeof requestContents.$inferSelect

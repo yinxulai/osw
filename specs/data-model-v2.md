@@ -12,13 +12,14 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 2. **经常增加或调整的配置使用 JSON 文档。**
 3. **运行时状态与用户配置分离。**
 4. **请求日志保留必要的查询字段，同时将不稳定的指标放入 JSON。**
-5. **历史日志不依赖可变配置，不为日志快照增加外键。**
-6. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
-7. **数据库初始化结构由当前代码直接定义，不保留运行时兼容迁移逻辑。**
+5. **请求/响应正文与日志索引分离，正文按需记录并完整保留。**
+6. **历史日志不依赖可变配置，不为日志快照增加外键。**
+7. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
+8. **数据库初始化结构由当前代码直接定义，不保留运行时兼容迁移逻辑。**
 
 ## 2. 数据库总览
 
-新版本包含以下 8 张表：
+新版本包含以下 9 张表：
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -29,6 +30,7 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 | `provider_health` | Provider 运行时健康状态 | 高频运行状态 |
 | `request_attempts` | 请求内每次上游尝试 | 历史观测数据 |
 | `request_logs` | 每次代理请求的汇总日志 | 历史观测数据 |
+| `request_contents` | 请求/响应正文及转换前后内容 | 可选历史观测数据 |
 | `audit_events` | 配置变更审计记录 | 历史审计数据 |
 
 关系概览：
@@ -37,6 +39,7 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 erDiagram
   providers ||--o{ upstream_models : contains
   providers ||--|| provider_health : has
+  request_logs ||--o| request_contents : captures
   request_logs ||--o{ request_attempts : contains
   providers ||--o{ request_attempts : attempted_by
 
@@ -93,6 +96,18 @@ erDiagram
     text usage
     text summary
     text metadata
+  }
+
+  request_contents {
+    text requestId PK_FK
+    text captureStatus
+    text clientRequest
+    text clientResponse
+    text attempts
+    text conversion
+    integer truncated
+    integer createdTime
+    integer updatedTime
   }
 
   request_attempts {
@@ -152,6 +167,8 @@ routing.cooldownBaseSeconds
 routing.cooldownMaxSeconds
 routing.consecutiveFailureThreshold
 logging.retentionCount
+logging.retentionDays
+logging.captureRequestContent
 security.accessTokenReference
 desktop.autoLaunch
 ui.theme
@@ -439,7 +456,84 @@ CREATE INDEX idx_request_logs_logical_model
 
 未来增加新的 Token 类型、缓存指标、计费信息或响应元数据时，不需要修改表结构。
 
-### 3.7 `request_attempts`
+### 3.7 `request_contents`
+
+请求正文和响应正文属于大体积、可能包含敏感信息且变化频繁的数据，不直接塞入 `request_logs` 或 `request_attempts` 的宽表。每个请求最多一行内容记录，通过 `requestId` 关联请求汇总；上游每次尝试的内容通过 `attempts` 数组保存，这样重试链路不会互相覆盖。
+
+内容记录区分客户端视角和上游视角：
+
+- `clientRequest`：客户端收到的原始请求（方法、路径、请求头和正文）；
+- `clientResponse`：最终返回给客户端的响应（状态、响应头和正文）；
+- `attempts`：每次上游尝试的请求/响应内容；
+- `conversion`：发生协议转换时，保存转换前后的请求和响应；未转换时为 `null`。
+
+建议首发结构如下：
+
+```sql
+CREATE TABLE request_contents (
+  requestId TEXT PRIMARY KEY,
+  captureStatus TEXT NOT NULL,
+  clientRequest TEXT,
+  clientResponse TEXT,
+  attempts TEXT,
+  conversion TEXT,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+
+  FOREIGN KEY (requestId) REFERENCES request_logs(id)
+);
+
+CREATE INDEX idx_request_contents_updated_time
+  ON request_contents(updatedTime);
+```
+
+其中 JSON 文档使用稳定的 envelope，允许后续增加字段而不变更表结构：
+
+```json
+{
+  "schemaVersion": 1,
+  "method": "POST",
+  "path": "/v1/messages",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "model": "client-model",
+    "messages": []
+  },
+  "bodyText": null,
+  "contentType": "application/json",
+  "isStreaming": false,
+  "capturedAt": 1755643200000
+}
+```
+
+`conversion` 示例：
+
+```json
+{
+  "fromProtocol": "anthropic-messages",
+  "toProtocol": "openai-completions",
+  "requestBefore": {},
+  "requestAfter": {},
+  "responseBefore": {},
+  "responseAfter": {},
+  "streamEventsBefore": [],
+  "streamEventsAfter": []
+}
+```
+
+安全与容量约束：
+
+- 默认关闭正文采集，只有用户在设置中显式开启后才记录；
+- 日志清理支持按保留天数执行，并同时删除请求正文、尝试记录和请求汇总；
+- API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏；
+- 本地工具默认不限制正文大小；开启记录后完整保存已接收的请求和响应内容；
+- 流式响应记录已接收的事件/文本片段，不阻塞代理转发，不因日志写入失败影响请求；
+- 清理请求日志时，先删除 `request_contents`，再删除 `request_attempts` 和 `request_logs`；
+- 导出日志必须明确包含正文的开关，默认不导出正文。
+
+### 3.8 `request_attempts`
 
 每次上游尝试一行，保存故障转移顺序和统计所需字段。
 
@@ -496,7 +590,7 @@ CREATE INDEX idx_request_attempts_model_time
 - `errorCode`；
 - `createdTime`。
 
-### 3.8 `audit_events`
+### 3.9 `audit_events`
 
 记录配置实体的变更前后内容。该表不参与代理核心链路，可按产品需求启用或延后实现。
 

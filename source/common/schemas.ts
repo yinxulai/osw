@@ -99,6 +99,8 @@ export const SettingsSchema = z.object({
   listenPort: z.number().int().min(1).max(65535).default(9300),
   accessTokenReference: z.string().nullable().default(null),
   logRetentionCount: z.number().int().positive().default(1000),
+  logRetentionDays: z.number().int().positive().nullable().default(null),
+  captureRequestContent: z.boolean().default(false),
   cooldownBaseSeconds: z.number().int().positive().default(30),
   cooldownMaxSeconds: z.number().int().positive().default(300),
   consecutiveFailureThreshold: z.number().int().positive().default(3),

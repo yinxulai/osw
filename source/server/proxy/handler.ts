@@ -272,7 +272,7 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
       upstreamProtocol: metrics?.upstreamProtocol ?? null,
     })
     const settings = await getSettings()
-    await pruneRequestLogs(settings.logRetentionCount)
+    await pruneRequestLogs(settings.logRetentionCount, settings.logRetentionDays)
   } catch (error) {
     console.error(`[proxy] 更新请求日志失败: ${(error as Error).message}`)
   }

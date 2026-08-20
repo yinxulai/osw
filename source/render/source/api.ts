@@ -197,6 +197,8 @@ export type ListRequestLogsParams = {
 export const requestLogApi = {
   list: (params: ListRequestLogsParams = {}) =>
     request<{ logs: RequestLogEntry[]; total: number }>('/request-log/list', params),
+  prune: (retentionDays: number) =>
+    request<{ deleted: number }>('/request-log/prune', { retentionDays }),
 }
 
 // ========== Analytics ==========

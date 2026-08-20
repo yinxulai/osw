@@ -251,6 +251,8 @@ one-switch/
 | `/api/queue/switch` | 手动切换当前逻辑模型队列起始上游模型 | modelId | 新的当前上游模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
+| `/api/request-log/content/get` | 获取请求内容 | requestId | 客户端请求/响应、上游尝试和转换前后内容 |
+| `/api/request-log/prune` | 按天清理请求日志 | retentionDays | 删除指定天数之前的日志及关联内容 |
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
@@ -266,13 +268,14 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 新版本 8 张业务表（app_config、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、audit_events）的 `sqliteTable` 定义
+- 新版本 9 张业务表（app_config、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents、audit_events）的 `sqliteTable` 定义
 - `app_config` 按命名空间 key 逐项保存全局配置，value 使用 JSON 编码
+- `request_contents` 独立保存可选的请求/响应正文，避免大字段影响日志列表查询
 - 从表定义推导行类型（`$inferSelect`）
 
 **`store.ts`** — 数据访问层
 - Provider / LogicalModel / UpstreamModel CRUD、级联操作
-- ProviderHealth 读写、AppConfig、RequestLog、RequestAttempt、AuditEvent
+- ProviderHealth 读写、AppConfig、RequestLog、RequestAttempt、RequestContent、AuditEvent
 - 使用 Drizzle 类型化查询（`select`/`insert`/`update`），映射到领域模型
 
 **`drizzle/`** — Drizzle-kit 迁移
@@ -305,7 +308,8 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 - **供应商页**：列表、增删改查、测试连接、健康状态
 - **模型路由页**：上游模型列表、端点管理、拖拽排序
 - **请求日志页**：列表、筛选、详情（尝试过程时间线）
-- **设置页**：端口、开机自启、访问 Token、日志保留、导入导出、关于
+- **请求内容查看器**：使用 Drawer 或 Dialog 查看完整请求/响应，协议转换时展示转换前后内容
+- **设置页**：端口、开机自启、访问 Token、日志保留条数、日志保留天数、按天立即清理、请求内容记录、导入导出、关于
 
 ## 构建与打包
 

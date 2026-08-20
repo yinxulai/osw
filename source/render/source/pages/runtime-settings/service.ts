@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { settingsApi, configApi } from '@/api'
+import { settingsApi, configApi, requestLogApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
 import { useAsyncFn } from '@/services/use-async'
 import {
@@ -48,6 +48,8 @@ export function useRuntimeSettingsService() {
       listenHost: settings.listenHost,
       listenPort: settings.listenPort,
       logRetentionCount: settings.logRetentionCount,
+      logRetentionDays: settings.logRetentionDays,
+      captureRequestContent: settings.captureRequestContent,
       cooldownBaseSeconds: settings.cooldownBaseSeconds,
       cooldownMaxSeconds: settings.cooldownMaxSeconds,
       consecutiveFailureThreshold: settings.consecutiveFailureThreshold,
@@ -77,6 +79,16 @@ export function useRuntimeSettingsService() {
   }, [proxyStatus, settings, appActions, toast])
 
   const { loading: saving, run: runSaveSettings } = useAsyncFn(saveSettings)
+
+  const pruneLogs = useCallback(async (retentionDays: number): Promise<number | null> => {
+    const result = await requestLogApi.prune(retentionDays)
+    if (!result.success) {
+      toast.error(`清理日志失败：${result.errorMessage}`)
+      return null
+    }
+    toast.success(`已清理 ${result.data.deleted} 条请求日志`)
+    return result.data.deleted
+  }, [toast])
 
   // ========== 配置导入导出 ==========
 
@@ -141,6 +153,7 @@ export function useRuntimeSettingsService() {
     saved,
     updateField,
     saveSettings: runSaveSettings,
+    pruneLogs,
     reload,
     exportConfig,
     importConfig,

@@ -137,6 +137,8 @@ const ImportConfigSchema = z.object({
       listenHost: z.string().optional(),
       listenPort: z.number().int().min(1).max(65535).optional(),
       logRetentionCount: z.number().int().positive().optional(),
+      logRetentionDays: z.number().int().positive().nullable().optional(),
+      captureRequestContent: z.boolean().optional(),
       cooldownBaseSeconds: z.number().int().positive().optional(),
       cooldownMaxSeconds: z.number().int().positive().optional(),
       consecutiveFailureThreshold: z.number().int().positive().optional(),

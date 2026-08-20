@@ -259,11 +259,7 @@ export function serializeSseEvent(event: SseEvent): string {
 // ========== 响应转换入口 ==========
 
 /** 非流式响应转换 */
-export function convertResponseBody(
-  clientProtocol: Protocol,
-  endpointProtocol: Protocol,
-  body: Buffer,
-): Buffer {
+export function convertResponseBody(clientProtocol: Protocol, endpointProtocol: Protocol, body: Buffer): Buffer {
   if (clientProtocol === endpointProtocol) return body
 
   const payload = JSON.parse(body.toString('utf8')) as Json

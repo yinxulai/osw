@@ -241,4 +241,16 @@ const INITIAL_SCHEMA = [
   'CREATE INDEX IF NOT EXISTS idx_attempts_request_order ON request_attempts(requestId, attemptIndex)',
   'CREATE INDEX IF NOT EXISTS idx_attempts_provider ON request_attempts(providerId)',
   'CREATE INDEX IF NOT EXISTS idx_attempts_created_time ON request_attempts(createdTime)',
+  `CREATE TABLE IF NOT EXISTS request_contents (
+    requestId TEXT PRIMARY KEY,
+    captureStatus TEXT NOT NULL,
+    clientRequest TEXT,
+    clientResponse TEXT,
+    attempts TEXT,
+    conversion TEXT,
+    createdTime BIGINT NOT NULL,
+    updatedTime BIGINT NOT NULL,
+    FOREIGN KEY (requestId) REFERENCES request_logs(id)
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_request_contents_updated_time ON request_contents(updatedTime)',
 ]
