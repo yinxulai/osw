@@ -54,7 +54,6 @@ interface ExportedLogicalModel {
 
 interface ExportedUpstreamModel {
   id: string
-  logicalModelName: string
   providerName: string
   upstreamModelId: string
   endpoints: UpstreamModel['endpoints']
@@ -80,7 +79,6 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
   ])
 
   const providerById = new Map(providers.map(p => [p.id, p]))
-  const logicalModelById = new Map(logicalModels.map(m => [m.id, m]))
 
   const config: ExportedConfig = {
     version: 1,
@@ -111,7 +109,6 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
     })),
     upstreamModels: upstreamModels.map((m: UpstreamModel): ExportedUpstreamModel => ({
       id: m.id,
-      logicalModelName: logicalModelById.get(m.logicalModelId)?.name ?? '',
       providerName: providerById.get(m.providerId)?.name ?? '',
       upstreamModelId: m.upstreamModelId,
       endpoints: m.endpoints,
@@ -167,9 +164,7 @@ const ImportConfigSchema = z.object({
     upstreamModels: z.array(
       z.object({
         id: z.string().optional(),
-        logicalModelName: z.string().optional(),
         providerName: z.string().optional(),
-        logicalModelId: z.string().optional(),
         providerId: z.string().optional(),
         upstreamModelId: z.string(),
         endpoints: z.array(ProtocolEndpointSchema).optional(),
@@ -191,10 +186,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const existingUpstreamModels = await listUpstreamModels(false)
     const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
     const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
-    const existingModelNames = new Set(existingModels.map(model => model.name))
-    const existingModelIds = new Set(existingModels.map(model => model.id))
     const providerNames = new Set(existingProviderNames)
-    const modelNames = new Set(existingModelNames)
     const importedProviderNames = new Set<string>()
     const importedModelNames = new Set<string>()
     const importedBindingKeys = new Set<string>()
@@ -212,18 +204,9 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         throw new Error(`导入文件中存在重复逻辑模型: ${model.name}`)
       }
       importedModelNames.add(model.name)
-      modelNames.add(model.name)
     }
 
     for (const upstreamModel of config.upstreamModels) {
-      const logicalModelId = upstreamModel.logicalModelId
-      if (logicalModelId && !existingModelIds.has(logicalModelId)) {
-        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的逻辑模型`)
-      }
-      if (!logicalModelId && (!upstreamModel.logicalModelName || !modelNames.has(upstreamModel.logicalModelName))) {
-        throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的逻辑模型`)
-      }
-
       const providerId = upstreamModel.providerId
       if (providerId && !existingProviderIds.has(providerId)) {
         throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 引用了不存在的供应商`)
@@ -232,7 +215,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         throw new Error(`上游模型 "${upstreamModel.upstreamModelId}" 无法找到对应的供应商`)
       }
 
-      const bindingKey = `${logicalModelId ?? upstreamModel.logicalModelName}\0${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
+      const bindingKey = `${providerId ?? upstreamModel.providerName}\0${upstreamModel.upstreamModelId}`
       if (importedBindingKeys.has(bindingKey)) {
         throw new Error(`导入文件中存在重复上游模型: ${upstreamModel.upstreamModelId}`)
       }
@@ -280,7 +263,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     }
 
     // 3. 处理逻辑模型
-    const modelNameToId = new Map<string, string>()
     const importedModelIds = new Set<string>()
     let importedLogicalModels = 0
 
@@ -292,7 +274,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           description: m.description ?? '',
           enabled: m.enabled ?? true,
         })
-        modelNameToId.set(m.name, updated.id)
         importedModelIds.add(updated.id)
       } else {
         const created = await createLogicalModel({
@@ -300,7 +281,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           description: m.description ?? '',
           enabled: m.enabled ?? true,
         })
-        modelNameToId.set(m.name, created.id)
         importedModelIds.add(created.id)
       }
       importedLogicalModels++
@@ -311,15 +291,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const importedUpstreamKeys = new Set<string>()
 
     for (const um of config.upstreamModels) {
-      let logicalModelId = um.logicalModelId
-      if (!logicalModelId && um.logicalModelName) {
-        logicalModelId = modelNameToId.get(um.logicalModelName)
-      }
-      if (!logicalModelId) {
-        sendError(res, 'VALIDATION_ERROR', `上游模型 "${um.upstreamModelId}" 无法找到对应的逻辑模型`, 400)
-        return
-      }
-
       let providerId = um.providerId
       if (!providerId && um.providerName) {
         providerId = providerNameToId.get(um.providerName)
@@ -331,7 +302,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
 
       const existing = existingUpstreamModels.find(
         (eum: UpstreamModel) =>
-          eum.logicalModelId === logicalModelId &&
           eum.providerId === providerId &&
           eum.upstreamModelId === um.upstreamModelId,
       )
@@ -344,7 +314,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         })
       } else {
         await createUpstreamModel({
-          logicalModelId,
           providerId,
           upstreamModelId: um.upstreamModelId,
           endpoints: um.endpoints ?? [],
@@ -352,13 +321,13 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: um.enabled ?? true,
         })
       }
-      importedUpstreamKeys.add(`${logicalModelId}\0${providerId}\0${um.upstreamModelId}`)
+      importedUpstreamKeys.add(`${providerId}\0${um.upstreamModelId}`)
       importedUpstreamModels++
     }
 
     if (mode === 'replace') {
       for (const upstreamModel of existingUpstreamModels) {
-        const key = `${upstreamModel.logicalModelId}\0${upstreamModel.providerId}\0${upstreamModel.upstreamModelId}`
+        const key = `${upstreamModel.providerId}\0${upstreamModel.upstreamModelId}`
         if (!importedUpstreamKeys.has(key)) await deleteUpstreamModel(upstreamModel.id)
       }
       for (const model of existingModels) {

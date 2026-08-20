@@ -65,7 +65,6 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
   return {
     model: {
       id,
-      logicalModelId: 'model_default',
       providerId,
       upstreamModelId,
       endpoints: [{ protocol, upstreamUrl, customAuthHeader: null }],

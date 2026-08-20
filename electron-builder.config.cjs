@@ -6,7 +6,9 @@ module.exports = {
   directories: {
     output: 'release/${version}',
   },
-  artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
+  // 注意：文件名不能包含空格。GitHub 会把 release 资产文件名中的空格替换为 "."，
+  // 而 electron-updater 按 latest*.yml 中的原始文件名拼接下载 URL，会导致 404。
+  artifactName: 'One-Switch-${version}-${os}-${arch}.${ext}',
   files: [
     'dist',
     '!dist/**/*.map',

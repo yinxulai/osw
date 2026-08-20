@@ -10,7 +10,7 @@
 | timestamp | 请求时间 |
 | protocol | 协议类型 |
 | logicalModel | 逻辑模型名 |
-| finalBindingId | 最终成功的绑定（失败则为 null） |
+| finalUpstreamModelId | 最终成功的上游模型（失败则为 null） |
 | statusCode | 最终响应状态码 |
 | durationMs | 总耗时 |
 | isStreaming | 是否流式 |
@@ -20,7 +20,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| bindingId | 绑定 ID |
+| upstreamModelId | 上游模型 ID |
 | providerId | 供应商 ID |
 | upstreamUrl | 上游地址 |
 | statusCode | 响应状态码（网络错误则为 null） |
@@ -69,7 +69,7 @@
 
 - 连续失败达到阈值后进入短期冷却
 - 默认冷却时间：30 秒 ~ 5 分钟，可按错误类型区分
-- 冷却期间跳过该供应商的所有绑定
+- 冷却期间跳过该供应商的所有上游模型
 - 冷却结束后允许下一次真实请求探测恢复
 - 成功请求后连续失败计数重置
 

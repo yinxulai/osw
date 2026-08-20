@@ -27,7 +27,6 @@ interface QueueListCardProps {
   providers: ProviderMap
   health: HealthMap
   modelMetrics: Record<string, QueueModelMetrics>
-  logicalModelName?: string
   mode: 'auto' | 'manual'
   manualModelId: string
   isCooling: (providerId: string) => boolean
@@ -44,7 +43,6 @@ export function QueueListCard(props: QueueListCardProps) {
     providers,
     health,
     modelMetrics,
-    logicalModelName,
     mode,
     manualModelId,
     isCooling,
@@ -68,9 +66,6 @@ export function QueueListCard(props: QueueListCardProps) {
         <div>
           <div className="flex items-center gap-2">
             <CardTitle>优先级队列</CardTitle>
-            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {logicalModelName ?? '未配置'}
-            </span>
           </div>
           <CardDescription className="mt-1">
             {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加上游模型后配置优先级和故障转移'}

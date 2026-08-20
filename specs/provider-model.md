@@ -4,7 +4,7 @@
 
 一个模型服务渠道，管理 API Key 和健康状态。
 
-> 认证方式不由 Provider 配置，而是由协议决定默认值（见下方「协议默认认证方式」）。API Key 可选，代理根据绑定所属协议自动选择认证方式；本地或测试集群等无需鉴权的上游可以留空。
+> 认证方式不由 Provider 配置，而是由协议决定默认值（见下方「协议默认认证方式」）。API Key 可选，代理根据端点所属协议自动选择认证方式；本地或测试集群等无需鉴权的上游可以留空。
 
 ### 字段
 
@@ -54,34 +54,30 @@
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
 
-## Model Binding
+## Upstream Model（上游模型）
 
-逻辑模型在某一协议下到具体上游的绑定，是路由的最小单元。
+Provider 上的一个实际模型，可挂载多个协议端点，是路由的最小单元。上游模型**全局共享**：不隶属于任何逻辑模型，所有启用的上游模型自动进入全局自动切换队列。
 
 ### 字段
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | string | 唯一标识 |
-| logicalModelId | string | 所属逻辑模型 |
-| protocol | `openai` \| `anthropic` \| `gemini` \| `custom` | 协议类型 |
-| upstreamUrl | string | 完整上游 URL（含 path 和 query） |
-| upstreamModelId | string | 上游实际模型 ID（转发时替换请求中的 model 字段） |
 | providerId | string | 所属 Provider |
+| upstreamModelId | string | 上游实际模型 ID（转发时替换请求中的 model 字段） |
+| endpoints | `ProtocolEndpoint[]` | 各协议端点（完整上游 URL、认证头） |
 | priority | number | 优先级，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
-| customAuthHeader | string \| null | Custom 协议下的认证头名称（其他协议忽略） |
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
 
 ### 约束
 
-- 一个逻辑模型可以在多个协议下各有若干绑定
-- 同一逻辑模型 + 同一协议下可以有多个绑定（不同供应商或不同上游地址），按优先级排序
-- 绑定的协议决定了它只会在该协议的请求中被选用
-- 转发请求时，请求体中的 `model` 字段会被替换为 `upstreamModelId` 的值（MVP 单模型模式下始终替换）
+- 同一 Provider 下可以有多个上游模型，按优先级排序组成全局队列
+- 端点的协议决定了它只会在该协议的请求中被选用
+- 转发请求时，请求体中的 `model` 字段会被替换为 `upstreamModelId` 的值
 
-## 配置示例（MVP 单模型队列）
+## 配置示例（全局共享队列）
 
 ```json
 {
@@ -105,43 +101,39 @@
       "enabled": true
     }
   ],
-  "logicalModels": [
+  "upstreamModels": [
     {
-      "id": "model-default",
-      "name": "default",
-      "enabled": true,
-      "bindings": [
-        {
-          "id": "bind-001",
-          "protocol": "openai",
-          "upstreamUrl": "https://api.openai.com/v1/chat/completions",
-          "upstreamModelId": "gpt-4o",
-          "providerId": "prov-openai",
-          "priority": 1,
-          "enabled": true
-        },
-        {
-          "id": "bind-002",
-          "protocol": "openai",
-          "upstreamUrl": "https://api.deepseek.com/v1/chat/completions",
-          "upstreamModelId": "deepseek-chat",
-          "providerId": "prov-deepseek",
-          "priority": 2,
-          "enabled": true
-        },
-        {
-          "id": "bind-003",
-          "protocol": "anthropic",
-          "upstreamUrl": "https://api.anthropic.com/v1/messages",
-          "upstreamModelId": "claude-sonnet-4-20240229",
-          "providerId": "prov-anthropic",
-          "priority": 3,
-          "enabled": true
-        }
-      ]
+      "id": "upstream-001",
+      "providerId": "prov-openai",
+      "upstreamModelId": "gpt-4o",
+      "endpoints": [
+        { "protocol": "openai-completions", "upstreamUrl": "https://api.openai.com/v1/chat/completions", "customAuthHeader": null }
+      ],
+      "priority": 1,
+      "enabled": true
+    },
+    {
+      "id": "upstream-002",
+      "providerId": "prov-deepseek",
+      "upstreamModelId": "deepseek-chat",
+      "endpoints": [
+        { "protocol": "openai-completions", "upstreamUrl": "https://api.deepseek.com/v1/chat/completions", "customAuthHeader": null }
+      ],
+      "priority": 2,
+      "enabled": true
+    },
+    {
+      "id": "upstream-003",
+      "providerId": "prov-anthropic",
+      "upstreamModelId": "claude-sonnet-4-20240229",
+      "endpoints": [
+        { "protocol": "anthropic-messages", "upstreamUrl": "https://api.anthropic.com/v1/messages", "customAuthHeader": null }
+      ],
+      "priority": 3,
+      "enabled": true
     }
   ]
 }
 ```
 
-> MVP 只有一个 `default` 逻辑模型，bindings 构成一个自动切换队列。请求来时按 priority 排序，先过滤协议匹配的项，再依次尝试，失败自动切换到下一个。
+> 上游模型全局共享，所有 enabled 的项构成一个自动切换队列。请求来时按 priority 排序，先过滤协议匹配的端点，再依次尝试，失败自动切换到下一个。

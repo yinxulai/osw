@@ -8,8 +8,6 @@ import {
   useProviders,
   useProvidersLoading,
   useHealth,
-  useLogicalModels,
-  useLogicalModelsLoading,
   useAppPolling,
   useAppActions,
 } from '@/services/app-hooks'
@@ -59,9 +57,7 @@ export function useModelManagementService() {
   // 全局共享状态
   const providers = useProviders()
   const health = useHealth()
-  const logicalModels = useLogicalModels()
   const providersLoading = useProvidersLoading()
-  const logicalModelsLoading = useLogicalModelsLoading()
 
   // 本页状态
   const [models, setModels] = useState<UpstreamModel[]>([])
@@ -87,13 +83,8 @@ export function useModelManagementService() {
   useAppPolling('providers', 10000)
   useAppPolling('health', 5000)
 
-  const logicalModel = useMemo(
-    () => logicalModels.find(model => model.enabled) ?? logicalModels[0] ?? null,
-    [logicalModels],
-  )
-
-  const loadModels = useCallback(async (modelId: string) => {
-    const result = await upstreamModelApi.list(modelId)
+  const loadModels = useCallback(async () => {
+    const result = await upstreamModelApi.list()
     if (!result.success) {
       toast.error(result.errorMessage)
       return
@@ -105,31 +96,19 @@ export function useModelManagementService() {
   const reload = useCallback(async () => {
     appActions.invalidateProviders()
     appActions.invalidateHealth()
-    appActions.invalidateLogicalModels()
-    if (logicalModel) {
-      await loadModels(logicalModel.id)
-    }
-  }, [appActions, logicalModel, loadModels])
+    await loadModels()
+  }, [appActions, loadModels])
 
   // 当全局数据首次加载完成后，初始化本页数据
   useEffect(() => {
     if (initializedRef.current) return
-    if (providersLoading || logicalModelsLoading) return
+    if (providersLoading) return
 
     initializedRef.current = true
-    const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]
-    if (currentModel) {
-      void loadModels(currentModel.id)
-    }
+    void loadModels()
     setSelectedProviderId(providers[0]?.id ?? '')
     setLoading(false)
-  }, [providersLoading, logicalModelsLoading, logicalModels, providers, loadModels])
-
-  // 当 logicalModel 变化时重新加载上游模型（非首次）
-  useEffect(() => {
-    if (!initializedRef.current || !logicalModel) return
-    void loadModels(logicalModel.id)
-  }, [logicalModel?.id, loadModels])
+  }, [providersLoading, providers, loadModels])
 
   const selectedProvider = useMemo(
     () => providers.find(provider => provider.id === selectedProviderId),
@@ -315,7 +294,6 @@ export function useModelManagementService() {
   return {
     // 状态
     providers,
-    logicalModel,
     models,
     health,
     selectedProviderId,

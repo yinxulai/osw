@@ -51,6 +51,7 @@ function ensureSchema(db: DatabaseSync): void {
   ensureColumn(db, 'request_logs', 'promptCacheHit', 'INTEGER')
   ensureColumn(db, 'request_attempts', 'upstreamRequestId', 'TEXT')
   ensureColumn(db, 'request_attempts', 'errorResponse', 'TEXT')
+  dropColumn(db, 'upstream_models', 'logicalModelId')
   ensureDefaultLogicalModel(db)
 }
 
@@ -67,6 +68,17 @@ function ensureColumn(db: DatabaseSync, table: string, column: string, definitio
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (!columns.some(candidate => candidate.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+/** 删除旧列；旧 SQLite 不支持 DROP COLUMN 时保留列但不读写，不影响行为 */
+function dropColumn(db: DatabaseSync, table: string, column: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!columns.some(candidate => candidate.name === column)) return
+  try {
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
+  } catch {
+    // 忽略：列保留但不读写
   }
 }
 
@@ -96,7 +108,6 @@ const INITIAL_SCHEMA = [
   'CREATE INDEX IF NOT EXISTS idx_logical_models_deleted_time ON logical_models(deletedTime)',
   `CREATE TABLE IF NOT EXISTS upstream_models (
     id TEXT PRIMARY KEY,
-    logicalModelId TEXT NOT NULL,
     providerId TEXT NOT NULL,
     upstreamModelId TEXT NOT NULL,
     endpoints TEXT NOT NULL DEFAULT '[]',
@@ -105,10 +116,9 @@ const INITIAL_SCHEMA = [
     createdTime BIGINT NOT NULL,
     updatedTime BIGINT NOT NULL,
     deletedTime BIGINT,
-    FOREIGN KEY (logicalModelId) REFERENCES logical_models(id),
     FOREIGN KEY (providerId) REFERENCES providers(id)
   )`,
-  'CREATE INDEX IF NOT EXISTS idx_upstream_models_logical_priority ON upstream_models(logicalModelId, priority)',
+  'CREATE INDEX IF NOT EXISTS idx_upstream_models_priority ON upstream_models(priority)',
   'CREATE INDEX IF NOT EXISTS idx_upstream_models_provider ON upstream_models(providerId)',
   'CREATE INDEX IF NOT EXISTS idx_upstream_models_deleted_time ON upstream_models(deletedTime)',
   `CREATE TABLE IF NOT EXISTS provider_health (

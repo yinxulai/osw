@@ -35,8 +35,7 @@ export function startProxyServer(): Promise<Server> {
           return
         }
 
-        await handleProxyRequest(req, res, activeModel.id)
-      } catch (error) {
+        await handleProxyRequest(req, res, activeModel.id)      } catch (error) {
         if (res.headersSent) {
           res.destroy(error instanceof Error ? error : new Error(String(error)))
           return

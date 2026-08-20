@@ -5,7 +5,6 @@ import type { UpstreamModel } from '@common/schemas'
 describe('findEndpoint', () => {
   const model: UpstreamModel = {
     id: 'model_1',
-    logicalModelId: 'model_default',
     providerId: 'prov_1',
     upstreamModelId: 'upstream-1',
     endpoints: [

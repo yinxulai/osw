@@ -208,44 +208,14 @@ export async function updateLogicalModel(id: string, updates: Partial<Omit<Logic
 export async function deleteLogicalModel(id: string): Promise<void> {
   const time = now()
   const db = getDb()
-  db.transaction(transaction => {
-    transaction
-      .update(logicalModels)
-      .set({ deletedTime: time, updatedTime: time })
-      .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
-      .run()
-    transaction
-      .update(upstreamModels)
-      .set({ deletedTime: time, updatedTime: time })
-      .where(and(eq(upstreamModels.logicalModelId, id), isNull(upstreamModels.deletedTime)))
-      .run()
-  })
+  // 上游模型全局共享，删除逻辑模型不再级联删除上游模型
+  db.update(logicalModels)
+    .set({ deletedTime: time, updatedTime: time })
+    .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
+    .run()
 }
 
 // ========== Upstream Model ==========
-
-export async function listUpstreamModelsByLogicalModel(logicalModelId: string, includeDeleted = false): Promise<UpstreamModel[]> {
-  const db = getDb()
-  const rows = includeDeleted
-    ? db
-        .select()
-        .from(upstreamModels)
-        .where(eq(upstreamModels.logicalModelId, logicalModelId))
-        .orderBy(upstreamModels.priority)
-        .all()
-    : db
-        .select()
-        .from(upstreamModels)
-        .where(
-          and(
-            eq(upstreamModels.logicalModelId, logicalModelId),
-            isNull(upstreamModels.deletedTime),
-          ),
-        )
-        .orderBy(upstreamModels.priority)
-        .all()
-  return rows.map(mapUpstreamModel)
-}
 
 export async function listUpstreamModelsByProvider(providerId: string, includeDeleted = false): Promise<UpstreamModel[]> {
   const db = getDb()
@@ -287,7 +257,6 @@ export async function createUpstreamModel(
     .insert(upstreamModels)
     .values({
       id,
-      logicalModelId: input.logicalModelId,
       providerId: input.providerId,
       upstreamModelId: input.upstreamModelId,
       endpoints: JSON.stringify(input.endpoints ?? []),
@@ -299,7 +268,6 @@ export async function createUpstreamModel(
     .run()
   return {
     id,
-    logicalModelId: input.logicalModelId,
     providerId: input.providerId,
     upstreamModelId: input.upstreamModelId,
     endpoints: input.endpoints ?? [],
@@ -316,7 +284,6 @@ export async function updateUpstreamModel(id: string, updates: Partial<Omit<Upst
   const time = now()
   db.update(upstreamModels)
     .set({
-      ...(updates.logicalModelId !== undefined ? { logicalModelId: updates.logicalModelId } : {}),
       ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
       ...(updates.upstreamModelId !== undefined
         ? { upstreamModelId: updates.upstreamModelId }
@@ -917,7 +884,6 @@ function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
 function mapUpstreamModel(row: typeof upstreamModels.$inferSelect): UpstreamModel {
   return {
     id: row.id,
-    logicalModelId: row.logicalModelId,
     providerId: row.providerId,
     upstreamModelId: row.upstreamModelId,
     endpoints: parseEndpoints(row.endpoints),

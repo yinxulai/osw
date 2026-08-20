@@ -81,11 +81,10 @@ describe('database lifecycle', () => {
       .run('model', 'Model', time, time)
     client
       .prepare(
-        'INSERT INTO upstream_models (id, logicalModelId, providerId, upstreamModelId, endpoints, priority, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO upstream_models (id, providerId, upstreamModelId, endpoints, priority, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         'model_upstream',
-        'model',
         'provider',
         'upstream-model',
         JSON.stringify([

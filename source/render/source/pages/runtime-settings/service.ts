@@ -114,7 +114,7 @@ export function useRuntimeSettingsService() {
         return
       }
       toast.success(
-        `导入成功：${result.data.imported.providers} 个供应商 / ${result.data.imported.logicalModels} 个模型 / ${result.data.imported.upstreamModels} 条绑定`,
+        `导入成功：${result.data.imported.providers} 个供应商 / ${result.data.imported.upstreamModels} 个上游模型`,
       )
       await reload()
     } catch (err) {

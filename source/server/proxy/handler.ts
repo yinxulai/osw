@@ -77,7 +77,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   // 获取可用 models，并过滤出支持当前协议的模型
-  const availableModels = await getAvailableModels(logicalModelId)
+  const availableModels = await getAvailableModels()
   let models = availableModels.filter(m => findEndpoint(m.model, protocol))
 
   // 如果有手动指定的 model，把它排到最前面

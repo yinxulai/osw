@@ -3,7 +3,7 @@ import http from 'node:http'
 import https from 'node:https'
 import { URL } from 'node:url'
 import { z } from 'zod'
-import { listUpstreamModelsByLogicalModel, listProviders } from '../database/store'
+import { listUpstreamModels, listProviders } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { findEndpoint } from '../proxy/router'
 import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl } from '../proxy/request'
@@ -13,7 +13,6 @@ import { sendSuccess } from './response'
 import type { Protocol } from '@common/schemas'
 
 const TestModelsSchema = z.object({
-  logicalModelId: z.string(),
   protocol: z.enum(['openai-completions', 'openai-responses', 'anthropic-messages']),
   providerIds: z.array(z.string()).optional(),
   modelIds: z.array(z.string()).optional(),
@@ -37,12 +36,12 @@ export const modelTestRoutes: Record<string, ManagementHandler> = {
 }
 
 async function handleTestModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { logicalModelId, protocol, providerIds, modelIds } = TestModelsSchema.parse(body)
+  const { protocol, providerIds, modelIds } = TestModelsSchema.parse(body)
   const controller = new AbortController()
   const onClientAbort = () => controller.abort()
   req.once('aborted', onClientAbort)
 
-  const models = await listUpstreamModelsByLogicalModel(logicalModelId)
+  const models = await listUpstreamModels()
   const providers = await listProviders()
   const providerMap = new Map(providers.map(p => [p.id, p]))
   const providerFilter = providerIds ? new Set(providerIds) : null

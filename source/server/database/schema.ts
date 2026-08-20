@@ -44,9 +44,6 @@ export const upstreamModels = sqliteTable(
   'upstream_models',
   {
     id: text('id').primaryKey(),
-    logicalModelId: text('logicalModelId')
-      .notNull()
-      .references(() => logicalModels.id),
     providerId: text('providerId')
       .notNull()
       .references(() => providers.id),
@@ -60,7 +57,7 @@ export const upstreamModels = sqliteTable(
     deletedTime: integer('deletedTime'),
   },
   table => [
-    index('idx_upstream_models_logical_priority').on(table.logicalModelId, table.priority),
+    index('idx_upstream_models_priority').on(table.priority),
     index('idx_upstream_models_provider').on(table.providerId),
     index('idx_upstream_models_deleted_time').on(table.deletedTime),
   ],

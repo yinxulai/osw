@@ -10,7 +10,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react'
-import type { LogicalModel, Protocol, Provider, UpstreamModel } from '@common/schemas'
+import type { Protocol, Provider, UpstreamModel } from '@common/schemas'
 import { modelTestApi, type ModelTestResult } from '@/api'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,7 +25,6 @@ import { cn } from '@/lib/utils'
 interface ModelTestPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  logicalModel: LogicalModel | null
   models: UpstreamModel[]
   providers: Provider[]
 }
@@ -134,7 +133,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   }
 
   const runTests = async () => {
-    if (!props.logicalModel || plannedTasks.length === 0 || running) return
+    if (plannedTasks.length === 0 || running) return
     const pendingTasks = plannedTasks.map(task => ({ ...task }))
     setTasks(pendingTasks)
     setRunning(true)
@@ -144,7 +143,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
       while (nextIndex < pendingTasks.length) {
         const task = pendingTasks[nextIndex++]
         setTasks(current => current.map(item => item.id === task.id ? { ...item, status: 'running' } : item))
-        const response = await modelTestApi.run(props.logicalModel!.id, task.protocol, {
+        const response = await modelTestApi.run(task.protocol, {
           providerIds: [task.providerId],
           modelIds: [task.modelId],
         })
@@ -172,7 +171,6 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-sm">
                 渠道诊断
-                <span className="truncate font-mono text-[10px] font-normal text-muted-foreground">/ {props.logicalModel?.name ?? '未选择模型'}</span>
               </DialogTitle>
               <DialogDescription className="mt-1 text-[11px]">验证模型绑定的协议兼容性与上游连通性</DialogDescription>
             </div>
@@ -264,7 +262,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="rounded-md bg-muted/60 px-2 py-1 font-mono text-[10px] tabular-nums text-muted-foreground">{plannedTasks.length} 项</span>
                   {tasks.length > 0 && !running && <Button variant="ghost" size="icon-sm" title="清除结果" onClick={clearTasks}><RotateCcw size={13} /></Button>}
-                  <Button size="sm" disabled={!props.logicalModel || plannedTasks.length === 0 || running} onClick={() => void runTests()}>
+                  <Button size="sm" disabled={plannedTasks.length === 0 || running} onClick={() => void runTests()}>
                     {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
                     {running ? `${completedCount}/${tasks.length}` : '运行测试'}
                   </Button>

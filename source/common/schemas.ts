@@ -65,7 +65,6 @@ export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
  */
 export const UpstreamModelSchema = z.object({
   id: z.string().startsWith('model_'),
-  logicalModelId: z.string().startsWith('model_'),
   providerId: z.string().startsWith('prov_'),
   upstreamModelId: z.string().min(1),
   /** 协议端点列表，一个模型可支持多个协议 */

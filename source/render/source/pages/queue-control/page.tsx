@@ -70,7 +70,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
               providers={service.providers}
               health={service.health}
               modelMetrics={service.modelMetrics}
-              logicalModelName={service.logicalModel?.name}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}
               isCooling={service.isCooling}

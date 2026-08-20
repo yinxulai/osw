@@ -1,5 +1,5 @@
 import type { KeychainApi } from '@common/keychain'
-import { eq, inArray } from 'drizzle-orm'
+import { inArray } from 'drizzle-orm'
 import { getDb } from './index'
 import {
   logicalModels,
@@ -95,19 +95,9 @@ interface DevelopmentSeedOptions {
 
 export async function seedDevelopmentData(secretStore: KeychainApi, options: DevelopmentSeedOptions = {}): Promise<boolean> {
   const db = getDb()
-  // 自动初始化的 default 逻辑模型不算已有配置；播种前若它无任何绑定则移除
-  const defaultLogicalModel = db.select({ id: logicalModels.id }).from(logicalModels).where(eq(logicalModels.id, 'default')).get()
-  if (defaultLogicalModel) {
-    const hasDefaultBindings = Boolean(
-      db.select({ id: upstreamModels.id }).from(upstreamModels).where(eq(upstreamModels.logicalModelId, 'default')).limit(1).get(),
-    )
-    if (!hasDefaultBindings) {
-      db.delete(logicalModels).where(eq(logicalModels.id, 'default')).run()
-    }
-  }
+  // 注意：logical_models 不参与判断 —— 初始化时会自动创建 default 逻辑模型，不代表用户已有配置
   const hasConfiguration = Boolean(
     db.select({ id: providers.id }).from(providers).limit(1).get()
-    || db.select({ id: logicalModels.id }).from(logicalModels).limit(1).get()
     || db.select({ id: requestLogs.id }).from(requestLogs).limit(1).get(),
   )
   if (hasConfiguration && !options.allowExisting) return false
@@ -175,7 +165,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     const upstreamModelsToInsert = UPSTREAM_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingUpstreamModelIds.has(`model_dev_upstream_${index + 1}`))
     if (upstreamModelsToInsert.length > 0) transaction.insert(upstreamModels).values(upstreamModelsToInsert.map(({ fixture, index }) => ({
       id: `model_dev_upstream_${index + 1}`,
-      logicalModelId: fixture[0],
       providerId: fixture[1],
       upstreamModelId: fixture[2],
       endpoints: JSON.stringify((fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]).map(protocol => ({ protocol, upstreamUrl: '', customAuthHeader: null }))),

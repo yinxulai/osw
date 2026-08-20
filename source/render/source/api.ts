@@ -41,7 +41,6 @@ type CreateLogicalModelInput = {
 }
 
 type CreateUpstreamModelInput = {
-  logicalModelId?: string
   providerId: string
   upstreamModelId: string
   endpoints?: ProtocolEndpoint[]
@@ -119,8 +118,8 @@ export const logicalModelApi = {
 // ========== Upstream Model ==========
 
 export const upstreamModelApi = {
-  list: (logicalModelId: string) =>
-    request<UpstreamModel[]>('/upstream-model/list', { logicalModelId }),
+  list: () =>
+    request<UpstreamModel[]>('/upstream-model/list', {}),
   create: (data: CreateUpstreamModelInput) =>
     request<UpstreamModel>('/upstream-model/create', data),
   update: (id: string, updates: Partial<UpstreamModel>) =>
@@ -202,8 +201,8 @@ export interface ModelTestFilters {
 }
 
 export const modelTestApi = {
-  run: (logicalModelId: string, protocol: string, filters: ModelTestFilters = {}) =>
-    request<{ results: ModelTestResult[] }>('/model-test/run', { logicalModelId, protocol, ...filters }),
+  run: (protocol: string, filters: ModelTestFilters = {}) =>
+    request<{ results: ModelTestResult[] }>('/model-test/run', { protocol, ...filters }),
 }
 
 // ========== Config Import/Export ==========
@@ -229,9 +228,7 @@ export interface ExportedConfig {
   }>
   upstreamModels: Array<{
     id?: string
-    logicalModelName?: string
     providerName?: string
-    logicalModelId?: string
     providerId?: string
     upstreamModelId: string
     endpoints?: ProtocolEndpoint[]

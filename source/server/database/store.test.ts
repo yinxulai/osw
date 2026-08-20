@@ -11,7 +11,7 @@ import {
   getLogicalModel,
   getProvider,
   getSettings,
-  listUpstreamModelsByLogicalModel,
+  listUpstreamModels,
   deleteProvider,
   createRequestLog,
   createRequestAttempt,
@@ -52,7 +52,6 @@ describe('store row mapping', () => {
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
     const upstreamModel = await createUpstreamModel({
-      logicalModelId: model.id,
       providerId: provider.id,
       upstreamModelId: 'upstream-model',
       endpoints: [
@@ -71,7 +70,7 @@ describe('store row mapping', () => {
     expect((await getLogicalModel(model.id))?.enabled).toBe(true)
     expect((await listLogicalModels())[0].enabled).toBe(true)
     expect((await getUpstreamModel(upstreamModel.id))?.enabled).toBe(false)
-    expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
+    expect((await listUpstreamModels())[0].enabled).toBe(false)
   })
 
   it('round-trips nested raw usage when request metrics are updated', async () => {
@@ -126,9 +125,7 @@ describe('store row mapping', () => {
       enabled: true,
       upstreamUrls: '{}',
     })
-    const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
     await createUpstreamModel({
-      logicalModelId: model.id,
       providerId: provider.id,
       upstreamModelId: 'upstream-model',
       endpoints: [
@@ -144,7 +141,7 @@ describe('store row mapping', () => {
 
     await deleteProvider(provider.id)
 
-    expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
+    expect((await listUpstreamModels())[0].enabled).toBe(false)
   })
 
   it('prunes request logs and their attempts beyond the retention count', async () => {

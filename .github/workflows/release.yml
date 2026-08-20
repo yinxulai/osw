@@ -107,11 +107,11 @@ jobs:
           - name: Windows
             os: windows-latest
             artifact: windows
-            asset: release/**/One Switch-*.exe
+            asset: release/**/One-Switch-*.exe
           - name: Linux
             os: ubuntu-latest
             artifact: linux
-            asset: release/**/One Switch-*.AppImage
+            asset: release/**/One-Switch-*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out release tag

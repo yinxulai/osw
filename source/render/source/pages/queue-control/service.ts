@@ -10,7 +10,6 @@ import { useToast } from '@/components/ui/toast'
 import {
   useProviders,
   useHealth,
-  useLogicalModels,
   useProxyStatus,
   useAppPolling,
   useAppActions,
@@ -25,7 +24,6 @@ export function useQueueControlService() {
   // 全局共享状态（通过 store 订阅，不会因轮询导致本页 loading 闪烁）
   const providers = useProviders()
   const health = useHealth()
-  const logicalModels = useLogicalModels()
   const proxyStatus = useProxyStatus()
 
   // 本页状态
@@ -40,15 +38,9 @@ export function useQueueControlService() {
   // 订阅全局轮询：健康状态 5 秒、代理状态 5 秒（App 已订阅，这里共享）
   useAppPolling('health', 5000)
   useAppPolling('proxyStatus', 5000)
-  useAppPolling('logicalModels', 30000)
 
-  const logicalModel = useMemo(
-    () => logicalModels.find(model => model.enabled) ?? logicalModels[0] ?? null,
-    [logicalModels],
-  )
-
-  const loadModels = useCallback(async (modelId: string) => {
-    const result = await upstreamModelApi.list(modelId)
+  const loadModels = useCallback(async () => {
+    const result = await upstreamModelApi.list()
     if (!result.success) {
       toast.error(result.errorMessage)
       return
@@ -56,23 +48,21 @@ export function useQueueControlService() {
     setModels(result.data)
   }, [toast])
 
-  // 初始化：等全局逻辑模型数据就绪后加载本页数据
+  // 初始化：加载全局上游模型队列
   useEffect(() => {
     if (initializedRef.current) return
 
     initializedRef.current = true
-    const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]
-    if (currentModel) {
-      void loadModels(currentModel.id)
-    }
+    void loadModels()
     setLoading(false)
-  }, [logicalModels, loadModels])
+  }, [loadModels])
 
-  // 当 logicalModel 变化时重新加载上游模型
+  // 定期静默刷新队列
   useEffect(() => {
-    if (!initializedRef.current || !logicalModel) return
-    void loadModels(logicalModel.id)
-  }, [logicalModel?.id, loadModels])
+    if (!initializedRef.current) return
+    const timer = window.setInterval(() => void loadModels(), 30000)
+    return () => window.clearInterval(timer)
+  }, [initializedRef.current, loadModels])
 
   // 队列状态 + 请求指标（本页专属数据，首次加载后静默刷新）
   const loadQueueData = useCallback(async () => {
@@ -146,11 +136,9 @@ export function useQueueControlService() {
   }, [manualModelId, changeMode])
 
   const reload = useCallback(async () => {
-    if (logicalModel) {
-      await loadModels(logicalModel.id)
-    }
+    await loadModels()
     await loadQueueData()
-  }, [logicalModel, loadModels, loadQueueData])
+  }, [loadModels, loadQueueData])
 
   const handleDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
@@ -178,7 +166,6 @@ export function useQueueControlService() {
 
   return {
     // 状态
-    logicalModel,
     models,
     providers: providersMap,
     health,

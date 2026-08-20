@@ -56,7 +56,7 @@
 ### 为什么用 SQLite 替代 JSON/JSONL
 
 - **查询能力**：日志筛选、分页、统计用 SQL 比遍历 JSONL 高效得多
-- **事务一致性**：配置变更（如删除 Provider 级联删除绑定）用事务保证原子性
+- **事务一致性**：配置变更（如删除 Provider 级联禁用上游模型）用事务保证原子性
 - **迁移可控**：首发前只保留最终基线，首发后冻结基线并追加事务化版本迁移
 - **单文件部署**：SQLite 是单个文件，和 JSON 一样便携，备份/导入导出都方便
 - **Drizzle ORM**：提供类型安全的同步数据访问，SQLite 查询集中在 database store 边界；基于 Node 22.5+ 内置 `node:sqlite`，零原生依赖、无 ABI 问题
@@ -84,7 +84,7 @@ one-switch/
 │   │   ├── proxy/                  # 代理透传层
 │   │   │   ├── server.ts           # 代理 HTTP 监听与独立启停/重启
 │   │   │   ├── protocol.ts         # 协议识别规则（path → protocol）
-│   │   │   ├── router.ts           # 路由引擎：模型匹配、绑定选择、切换逻辑
+│   │   │   ├── router.ts           # 路由引擎：协议匹配、上游模型选择、切换逻辑
 │   │   │   ├── transport.ts        # 上游透传：http.request、pipe、超时、错误分类
 │   │   │   ├── stream-switch.ts    # 流式切换边界控制
 │   │   │   ├── models-api.ts       # /v1/models 本地接口
@@ -92,7 +92,7 @@ one-switch/
 │   │   ├── api/                    # 管理 API（挂载到 /api 前缀）
 │   │   │   ├── index.ts            # API 路由分发
 │   │   │   ├── providers.ts        # Provider CRUD
-│   │   │   ├── models.ts           # 逻辑模型与绑定 CRUD
+│   │   │   ├── models.ts           # 逻辑模型与上游模型 CRUD
 │   │   │   ├── logs.ts             # 请求日志查询
 │   │   │   ├── health.ts           # 健康状态查询
 │   │   │   └── settings.ts         # 服务设置
@@ -170,9 +170,9 @@ one-switch/
 
 **`proxy/router.ts`** — 路由引擎
 - 输入：protocol + modelName
-- 输出：候选绑定列表（按优先级排序，过滤禁用/冷却/额度耗尽）
-- 切换时取下一个绑定
-- 处理"模型在该协议下无绑定自动绕过"逻辑
+- 输出：候选上游模型列表（按优先级排序，过滤禁用/冷却/额度耗尽）
+- 切换时取下一个上游模型
+- 处理"该协议下无可用端点自动跳过"逻辑
 
 **`proxy/transport.ts`** — 上游透传
 - 封装 `http.request` / `https.request`
@@ -192,11 +192,11 @@ one-switch/
 - 成功/失败回调更新状态
 - 提供 `isAvailable(providerId): boolean`
 
-**`proxy/current-binding.ts`** — 当前绑定状态（手动切换）
-- 维护当前用户手动指定的绑定 ID（运行时状态，不持久化）
-- 提供设置/获取当前绑定的接口
-- 新请求从当前绑定开始尝试，当前绑定失败后仍按队列顺序自动切换
-- 进行中的请求持有自己的绑定引用，不受外部切换影响
+**`proxy/current-binding.ts`** — 当前手动指定的上游模型状态
+- 维护当前用户手动指定的上游模型 ID（运行时状态，不持久化）
+- 提供设置/获取当前上游模型的接口
+- 新请求从当前上游模型开始尝试，失败后仍按队列顺序自动切换
+- 进行中的请求持有自己的上游模型引用，不受外部切换影响
 
 **`proxy/models-api.ts`** — `/v1/models` 本地接口
 
@@ -242,19 +242,19 @@ one-switch/
 | `/api/provider/delete` | 删除 Provider | id | - |
 | `/api/provider/test` | 测试连接 | id | 测试结果（成功/失败+原因） |
 | `/api/provider/health/get` | Provider 健康状态 | id | 健康状态对象 |
-| `/api/binding/list` | 绑定列表（自动切换队列） | logicalModelId(可选) | 绑定列表（按优先级排序） |
-| `/api/binding/create` | 新增绑定 | protocol, upstreamUrl, upstreamModelId, providerId, priority | 新建的绑定 |
-| `/api/binding/update` | 更新绑定 | id, 更新字段 | 更新后的绑定 |
-| `/api/binding/delete` | 删除绑定 | id | - |
-| `/api/binding/reorder` | 调整绑定优先级 | id, newPriority | 更新后的队列 |
-| `/api/current-binding/get` | 获取当前绑定 | - | 当前绑定 ID |
-| `/api/current-binding/set` | 手动切换当前绑定 | bindingId | 新的当前绑定 |
+| `/api/upstream-model/list` | 上游模型列表（全局共享队列） | - | 上游模型列表（按优先级排序） |
+| `/api/upstream-model/create` | 新增上游模型 | providerId, upstreamModelId, endpoints, priority | 新建的上游模型 |
+| `/api/upstream-model/update` | 更新上游模型 | id, 更新字段 | 更新后的上游模型 |
+| `/api/upstream-model/delete` | 删除上游模型 | id | - |
+| `/api/upstream-model/reorder` | 调整优先级 | id, newPriority | 更新后的队列 |
+| `/api/current-binding/get` | 获取当前手动指定的上游模型 | - | 当前上游模型 ID |
+| `/api/current-binding/set` | 手动切换当前上游模型 | bindingId | 新的当前上游模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
-> MVP 只有一个逻辑模型（default），`/api/binding/list` 默认返回该模型的所有绑定，即自动切换队列。
+> 上游模型全局共享，`/api/upstream-model/list` 返回所有启用的上游模型，即自动切换队列。
 
 ### 3. 数据存储（`source/server/database/`）
 
@@ -302,7 +302,7 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 
 - **概览页**：服务状态、今日统计、供应商健康卡片
 - **供应商页**：列表、增删改查、测试连接、健康状态
-- **模型路由页**：逻辑模型列表、绑定管理、拖拽排序
+- **模型路由页**：上游模型列表、端点管理、拖拽排序
 - **请求日志页**：列表、筛选、详情（尝试过程时间线）
 - **设置页**：端口、开机自启、访问 Token、日志保留、导入导出、关于
 

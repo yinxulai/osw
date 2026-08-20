@@ -37,7 +37,6 @@ One Switch 使用 SQLite 保存配置、运行状态和请求观测数据，使�
 
 ```mermaid
 erDiagram
-  logical_models ||--o{ upstream_models : routes_to
   providers ||--o{ upstream_models : serves
   providers ||--|| provider_health : has
   request_logs ||--o{ request_attempts : contains
@@ -58,7 +57,6 @@ erDiagram
   }
   upstream_models {
     text id PK
-    text logicalModelId FK
     text providerId FK
     text upstreamModelId
     text endpoints
@@ -116,10 +114,10 @@ Provider 只做软删除，不会物理移除。
 ### upstream_models
 
 路由队列中的最小单元，表示一个 Provider 上的一个实际模型，并可挂载多个协议端点。
+上游模型**全局共享**：不隶属于任何逻辑模型，所有启用的上游模型自动进入全局自动切换队列。
 
 | 字段 | 约束 | 说明 |
 | --- | --- | --- |
-| `logicalModelId` | FK, NOT NULL | 所属逻辑模型 |
 | `providerId` | FK, NOT NULL | 所属供应商 |
 | `upstreamModelId` | NOT NULL | 发送给上游的模型 ID |
 | `endpoints` | NOT NULL, DEFAULT `[]` | `ProtocolEndpoint[]` JSON |
@@ -130,7 +128,7 @@ Provider 只做软删除，不会物理移除。
 `endpoints` 同样是整体读写的小型配置列表，由 `ProtocolEndpointSchema` 校验。端点是上游模型
 的组成部分，而不是独立生命周期实体，因此当前不拆表。
 
-队列顺序通过 `(logicalModelId, priority)` 索引读取。priority 不设唯一约束，因为拖拽排序过程
+队列顺序通过 `priority` 索引读取。priority 不设唯一约束，因为拖拽排序过程
 可能短暂产生重复位置，最终顺序应由业务层一次性归一化。
 
 ## 运行状态表

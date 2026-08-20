@@ -1,4 +1,4 @@
-import { listUpstreamModelsByLogicalModel, getProvider } from '../database/store'
+import { listUpstreamModels, getProvider } from '../database/store'
 import { isProviderAvailable } from './health'
 import type { UpstreamModel, Provider, Protocol } from '@common/schemas'
 
@@ -8,10 +8,10 @@ export interface ModelWithProvider {
 }
 
 /**
- * 获取指定逻辑模型的可用 upstream model 列表，按优先级排序，过滤掉冷却中的 provider
+ * 获取可用的 upstream model 列表（全局共享队列），按优先级排序，过滤掉冷却中的 provider
  */
-export async function getAvailableModels(logicalModelId: string): Promise<ModelWithProvider[]> {
-  const models = await listUpstreamModelsByLogicalModel(logicalModelId)
+export async function getAvailableModels(): Promise<ModelWithProvider[]> {
+  const models = await listUpstreamModels()
 
   const result: ModelWithProvider[] = []
 
