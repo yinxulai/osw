@@ -238,8 +238,8 @@ export function useModelManagementService() {
   }, [])
 
   const saveModel = useCallback(async () => {
-    if (!logicalModel || !selectedProvider) {
-      toast.error(logicalModel ? '请先选择一个供应商' : '逻辑模型尚未加载完成，请稍后重试')
+    if (!selectedProvider) {
+      toast.error('请先选择一个供应商')
       return
     }
     if (!modelId.trim()) return
@@ -264,7 +264,6 @@ export function useModelManagementService() {
           endpoints,
         })
       : await upstreamModelApi.create({
-          logicalModelId: logicalModel.id,
           providerId: selectedProvider.id,
           upstreamModelId: modelId.trim(),
           endpoints,
@@ -279,7 +278,7 @@ export function useModelManagementService() {
     setModelDialogOpen(false)
     toast.success(editingModel ? '模型已更新' : '模型已添加')
     await reload()
-  }, [logicalModel, selectedProvider, modelId, bindingEntries, editingModel, models, reload])
+  }, [selectedProvider, modelId, bindingEntries, editingModel, models, reload])
 
   const { loading: savingModel, run: runSaveModel } = useAsyncFn(saveModel)
 

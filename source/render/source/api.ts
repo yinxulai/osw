@@ -41,7 +41,7 @@ type CreateLogicalModelInput = {
 }
 
 type CreateUpstreamModelInput = {
-  logicalModelId: string
+  logicalModelId?: string
   providerId: string
   upstreamModelId: string
   endpoints?: ProtocolEndpoint[]

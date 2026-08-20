@@ -4,6 +4,7 @@ import { UpstreamModelSchema } from '@common/schemas'
 import {
   createUpstreamModel,
   deleteUpstreamModel,
+  listLogicalModels,
   listUpstreamModelsByLogicalModel,
   updateUpstreamModel,
 } from '../database/store'
@@ -30,12 +31,20 @@ const CreateUpstreamModelSchema = UpstreamModelSchema.pick({
   endpoints: true,
   priority: true,
   enabled: true,
-}).partial({ endpoints: true, enabled: true })
+}).partial({ logicalModelId: true, endpoints: true, enabled: true })
+
+/** 当前激活的逻辑模型：enabled 优先，否则第一个；MVP 阶段前端可不传 logicalModelId */
+async function resolveActiveLogicalModelId(): Promise<string> {
+  const models = await listLogicalModels()
+  const active = models.find(model => model.enabled) ?? models[0]
+  if (!active) throw new Error('没有可用的逻辑模型')
+  return active.id
+}
 
 async function handleCreateUpstreamModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateUpstreamModelSchema.parse(body)
   sendSuccess(res, await createUpstreamModel({
-    logicalModelId: input.logicalModelId,
+    logicalModelId: input.logicalModelId ?? (await resolveActiveLogicalModelId()),
     providerId: input.providerId,
     upstreamModelId: input.upstreamModelId,
     endpoints: input.endpoints ?? [],
