@@ -311,7 +311,21 @@ export async function updateUpstreamModel(id: string, updates: Partial<Omit<Upst
   const db = getDb()
   const existing = await getUpstreamModel(id)
   if (!existing) throw new Error(`provider model not found: ${id}`)
-  db.update(providerModels).set({ ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}), ...(updates.upstreamModelId !== undefined ? { modelName: updates.upstreamModelId } : {}), ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}), ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}), updatedTime: time }).where(eq(providerModels.id, id)).run()
+  db.transaction(transaction => {
+    transaction.update(providerModels).set({ ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}), ...(updates.upstreamModelId !== undefined ? { modelName: updates.upstreamModelId } : {}), ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}), ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}), updatedTime: time }).where(eq(providerModels.id, id)).run()
+    if (updates.endpoints !== undefined) {
+      transaction.delete(protocolConverters).where(sql`providerModelEndpointId IN (SELECT id FROM provider_model_endpoints WHERE providerModelId = ${id})`).run()
+      transaction.delete(providerModelEndpoints).where(eq(providerModelEndpoints.providerModelId, id)).run()
+      for (const endpoint of updates.endpoints) {
+        const endpointRow = transaction.select().from(providerEndpoints).where(and(eq(providerEndpoints.providerId, existing.providerId), eq(providerEndpoints.protocol, endpoint.protocol))).get()
+        const endpointId = endpointRow?.id ?? generateId('end_')
+        if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: existing.providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
+        const bindingId = generateId('pme_')
+        transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
+        if (endpoint.protocolConversionEnabled) transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol: endpoint.protocol, enabled: true, createdTime: time, updatedTime: time }).run()
+      }
+    }
+  })
   return { ...existing, ...updates, id, updatedTime: time }
 }
 

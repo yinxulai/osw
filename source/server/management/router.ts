@@ -7,6 +7,7 @@ import { sendError } from './response'
 import { runtimeControlRoutes } from './runtime-control'
 import { settingsRoutes } from './settings'
 import { upstreamModelRoutes } from './upstream-models'
+import { providerModelRoutes } from './provider-models'
 import { logRoutes } from './logs'
 import { requestLogRoutes } from './request-logs'
 import { analyticsRoutes } from './analytics'
@@ -19,6 +20,7 @@ const routes: Record<string, ManagementHandler> = {
   ...providerRoutes,
   ...modelRoutes,
   ...upstreamModelRoutes,
+  ...providerModelRoutes,
   ...settingsRoutes,
   ...runtimeControlRoutes,
   ...logRoutes,
