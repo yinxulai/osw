@@ -5,9 +5,11 @@ import {
   getProviderModel,
   listProviderModels,
   listSchedulingPolicies,
+  createUpstreamModel,
   updateUpstreamModel,
   upsertSchedulingPolicy,
   deleteSchedulingPolicy,
+  deleteUpstreamModel,
 } from '../database/store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
@@ -15,7 +17,9 @@ import { sendSuccess } from './response'
 export const providerModelRoutes: Record<string, ManagementHandler> = {
   '/api/provider-model/list': handleListProviderModels,
   '/api/provider-model/get': handleGetProviderModel,
+  '/api/provider-model/create': handleCreateProviderModel,
   '/api/provider-model/update': handleUpdateProviderModel,
+  '/api/provider-model/delete': handleDeleteProviderModel,
   '/api/scheduling-policy/list': handleListSchedulingPolicies,
   '/api/scheduling-policy/update': handleUpdateSchedulingPolicy,
   '/api/scheduling-policy/delete': handleDeleteSchedulingPolicy,
@@ -33,6 +37,26 @@ async function handleGetProviderModel(_req: IncomingMessage, res: ServerResponse
   const model = await getProviderModel(id)
   if (!model) throw new Error(`provider model not found: ${id}`)
   sendSuccess(res, model)
+}
+
+const CreateProviderModelSchema = z.object({
+  providerId: z.string().min(1),
+  modelName: z.string().min(1),
+  logicalModelId: z.string().min(1).default('auto'),
+  priority: z.number().int().default(0),
+  enabled: z.boolean().default(true),
+  endpoints: z.array(z.object({
+    protocol: ProtocolSchema,
+    upstreamUrl: z.string().default(''),
+    customAuthHeader: z.string().nullable().default(null),
+    protocolConversionEnabled: z.boolean().default(false),
+  })).default([]),
+})
+async function handleCreateProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = CreateProviderModelSchema.parse(body)
+  const model = await createUpstreamModel(input)
+  await upsertSchedulingPolicy({ logicalModelId: input.logicalModelId, providerModelId: model.id, priority: input.priority })
+  sendSuccess(res, await getProviderModel(model.id) ?? model)
 }
 
 const UpdateProviderModelSchema = z.object({
@@ -60,6 +84,12 @@ async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerRespo
   }
   const view = await getProviderModel(updated.id)
   sendSuccess(res, view ?? updated)
+}
+
+async function handleDeleteProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id } = GetProviderModelSchema.parse(body)
+  await deleteUpstreamModel(id)
+  sendSuccess(res, { id })
 }
 
 const SchedulingPolicyListSchema = z.object({ logicalModelId: z.string().min(1).optional() }).default({})
