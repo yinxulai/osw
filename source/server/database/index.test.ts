@@ -42,6 +42,30 @@ describe('database lifecycle', () => {
     await expect(closeDatabase()).resolves.toBeUndefined()
   })
 
+  it('seeds a default logical model on a fresh database', async () => {
+    const client = (await initDatabase(createTemporaryDirectory())).$client
+
+    const rows = client.prepare('SELECT id, name, enabled FROM logical_models').all()
+    expect(rows).toEqual([{ id: 'default', name: '默认模型', enabled: 1 }])
+  })
+
+  it('does not seed a default logical model when one already exists', async () => {
+    const directory = createTemporaryDirectory()
+    const client = (await initDatabase(directory)).$client
+    const time = Date.now()
+
+    client.prepare('DELETE FROM logical_models').run()
+    client
+      .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
+      .run('custom', 'Custom', time, time)
+
+    await closeDatabase()
+    const reopened = (await initDatabase(directory)).$client
+
+    const rows = reopened.prepare('SELECT id FROM logical_models').all()
+    expect(rows).toEqual([{ id: 'custom' }])
+  })
+
   it('creates the upstream_models table with endpoints column', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client

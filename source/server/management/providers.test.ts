@@ -4,9 +4,13 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider, getProvider } from '../database/store'
+import { createProvider, getProvider, listProviders } from '../database/store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
-import { deleteProviderAndSecret } from './providers'
+import { deleteProviderAndSecret, providerRoutes } from './providers'
+
+function mockResponse() {
+  return { setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
+}
 
 let temporaryDirectory: string
 let secretStore: KeychainApi
@@ -41,5 +45,28 @@ describe('provider management', () => {
 
     expect(await getProvider(provider.id)).toMatchObject({ deletedTime: expect.any(Number) })
     expect(secretStore.delete).toHaveBeenCalledWith('key_reference')
+  })
+
+  it('creates a provider without an API key for local or test clusters', async () => {
+    const res = mockResponse()
+    await providerRoutes['/api/provider/create']({} as import('node:http').IncomingMessage, res, {
+      name: 'Local Cluster',
+    })
+
+    expect(secretStore.set).not.toHaveBeenCalled()
+    const providers = await listProviders()
+    expect(providers).toHaveLength(1)
+    expect(providers[0]).toMatchObject({ name: 'Local Cluster', enabled: true })
+  })
+
+  it('stores the API key when one is provided', async () => {
+    const res = mockResponse()
+    await providerRoutes['/api/provider/create']({} as import('node:http').IncomingMessage, res, {
+      name: 'OpenAI',
+      apiKey: 'sk-test',
+    })
+
+    expect(secretStore.set).toHaveBeenCalledTimes(1)
+    expect(secretStore.set).toHaveBeenCalledWith(expect.stringMatching(/^key_/), 'sk-test')
   })
 })

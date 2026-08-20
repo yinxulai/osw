@@ -1,5 +1,5 @@
 import type { KeychainApi } from '@common/keychain'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { getDb } from './index'
 import {
   logicalModels,
@@ -95,6 +95,16 @@ interface DevelopmentSeedOptions {
 
 export async function seedDevelopmentData(secretStore: KeychainApi, options: DevelopmentSeedOptions = {}): Promise<boolean> {
   const db = getDb()
+  // 自动初始化的 default 逻辑模型不算已有配置；播种前若它无任何绑定则移除
+  const defaultLogicalModel = db.select({ id: logicalModels.id }).from(logicalModels).where(eq(logicalModels.id, 'default')).get()
+  if (defaultLogicalModel) {
+    const hasDefaultBindings = Boolean(
+      db.select({ id: upstreamModels.id }).from(upstreamModels).where(eq(upstreamModels.logicalModelId, 'default')).limit(1).get(),
+    )
+    if (!hasDefaultBindings) {
+      db.delete(logicalModels).where(eq(logicalModels.id, 'default')).run()
+    }
+  }
   const hasConfiguration = Boolean(
     db.select({ id: providers.id }).from(providers).limit(1).get()
     || db.select({ id: logicalModels.id }).from(logicalModels).limit(1).get()

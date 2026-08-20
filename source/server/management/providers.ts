@@ -43,14 +43,14 @@ const CreateProviderSchema = ProviderSchema.pick({
   timeoutMilliseconds: true,
   enabled: true,
 })
-  .extend({ apiKey: z.string().min(1), endpoints: UpstreamUrlsSchema.optional() })
+  .extend({ apiKey: z.string().min(1).optional(), endpoints: UpstreamUrlsSchema.optional() })
   .partial({ timeoutMilliseconds: true, enabled: true })
 
 async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderSchema.parse(body)
   const apiKeyReference = generateKeyReference()
   const secretStore = getSecretStore()
-  await secretStore.set(apiKeyReference, input.apiKey)
+  if (input.apiKey) await secretStore.set(apiKeyReference, input.apiKey)
   try {
     const provider = await createProvider({
       name: input.name,

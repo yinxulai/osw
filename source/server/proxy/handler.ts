@@ -278,7 +278,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const rewrittenBody = rewriteRequestModel(requestBody, model.upstreamModelId)
   const upstreamBody = injectUsageParams(rewrittenBody, protocol)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
-  if (!apiKey) throw new Error(`API key is unavailable for provider ${provider.id}`)
 
   const isHttps = parsed.protocol === 'https:'
   const transport = isHttps ? https : http

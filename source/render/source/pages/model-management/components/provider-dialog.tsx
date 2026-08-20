@@ -49,14 +49,14 @@ export function ProviderDialog(props: ProviderDialogProps) {
     onApplyPreset,
   } = props
 
-  const canSave = providerName.trim() && (editingProviderId || apiKey.trim())
+  const canSave = Boolean(providerName.trim())
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle>
-          <DialogDescription>供应商保存各自的 API Key 与请求参数，供上游模型共用。</DialogDescription>
+          <DialogDescription>API Key 可选；本地或测试集群等无需鉴权的上游可以留空。</DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
@@ -100,7 +100,7 @@ export function ProviderDialog(props: ProviderDialogProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="provider-key">API Key</Label>
+                <Label htmlFor="provider-key">API Key（可选）</Label>
                 <div className="relative">
                   <KeyRound size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -109,10 +109,10 @@ export function ProviderDialog(props: ProviderDialogProps) {
                     className="pl-8"
                     value={apiKey}
                     onChange={event => setApiKey(event.target.value)}
-                    placeholder={editingProviderId ? '留空表示不修改' : 'sk-...'}
+                    placeholder={editingProviderId ? '留空表示不修改' : '可选，例如 sk-...'}
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground">仅保存在本机，用于调用该供应商的上游接口。</p>
+                <p className="text-[11px] text-muted-foreground">仅保存在本机；无需鉴权的上游可以留空。</p>
               </div>
 
               <div className="space-y-1.5">

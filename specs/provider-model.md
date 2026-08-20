@@ -4,7 +4,7 @@
 
 一个模型服务渠道，管理 API Key 和健康状态。
 
-> 认证方式不由 Provider 配置，而是由协议决定默认值（见下方「协议默认认证方式」）。每个 Provider 只需提供一个 API Key，代理根据绑定所属协议自动选择认证方式。
+> 认证方式不由 Provider 配置，而是由协议决定默认值（见下方「协议默认认证方式」）。API Key 可选，代理根据绑定所属协议自动选择认证方式；本地或测试集群等无需鉴权的上游可以留空。
 
 ### 字段
 
@@ -12,7 +12,7 @@
 |------|------|------|
 | id | string | 唯一标识 |
 | name | string | 显示名称 |
-| apiKey | string | API Key（存储在系统密钥环中，配置文件仅存引用） |
+| apiKey | string（可选） | API Key（存储在系统密钥环中，配置文件仅存引用；本地或测试集群可留空） |
 | timeoutMilliseconds | number | 空闲超时时间（毫秒）：两次数据到达之间的最大间隔，流式持续返回数据不会超时 |
 | enabled | boolean | 是否启用 |
 | createdTime | number | 创建时间 |

@@ -205,9 +205,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       }
       importedProviderNames.add(provider.name)
       providerNames.add(provider.name)
-      if (!existingProviderNames.has(provider.name) && !provider.apiKey) {
-        throw new Error(`供应商 "${provider.name}" 缺少 API Key，请在导入文件中添加 apiKey 字段`)
-      }
     }
 
     for (const model of config.logicalModels) {
@@ -267,12 +264,8 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         providerNameToId.set(p.name, updated.id)
         importedProviderIds.add(updated.id)
       } else {
-        if (!p.apiKey) {
-          sendError(res, 'VALIDATION_ERROR', `供应商 "${p.name}" 缺少 API Key，请在导入文件中添加 apiKey 字段`, 400)
-          return
-        }
         const apiKeyReference = generateKeyReference()
-        await secretStore.set(apiKeyReference, p.apiKey)
+        if (p.apiKey) await secretStore.set(apiKeyReference, p.apiKey)
         const created = await createProvider({
           name: p.name,
           apiKeyReference,

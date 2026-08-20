@@ -23,7 +23,7 @@ const API_BASE = getRuntimeProfile(import.meta.env.DEV ? 'development' : 'produc
 
 type CreateProviderInput = {
   name: string
-  apiKey: string
+  apiKey?: string
   timeoutMilliseconds?: number
   enabled?: boolean
   endpoints?: Record<string, string>

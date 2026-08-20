@@ -178,7 +178,7 @@ export function useModelManagementService() {
   }, [])
 
   const saveProvider = useCallback(async () => {
-    if (!providerName.trim() || (!editingProviderId && !apiKey.trim())) return
+    if (!providerName.trim()) return
     const endpoints: Record<string, string> = Object.fromEntries(
       providerEndpointEntries
         .filter(entry => entry.enabled)
@@ -238,7 +238,10 @@ export function useModelManagementService() {
   }, [])
 
   const saveModel = useCallback(async () => {
-    if (!logicalModel || !selectedProvider) return
+    if (!logicalModel || !selectedProvider) {
+      toast.error(logicalModel ? '请先选择一个供应商' : '逻辑模型尚未加载完成，请稍后重试')
+      return
+    }
     if (!modelId.trim()) return
     const enabledEntries = bindingEntries.filter(entry => entry.enabled)
     if (enabledEntries.length === 0) return

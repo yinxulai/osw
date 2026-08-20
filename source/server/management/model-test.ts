@@ -71,19 +71,6 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
         resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, protocol),
       )
       const apiKey = await getSecretStore().get(provider.apiKeyReference)
-      if (!apiKey) {
-        results.push({
-          modelId: model.id,
-          upstreamModelId: model.upstreamModelId,
-          providerId: provider.id,
-          providerName: provider.name,
-          success: false,
-          durationMilliseconds: Date.now() - startedAt,
-          errorMessage: 'API Key 未配置',
-        })
-        continue
-      }
-
       const testBody = buildTestBody(protocol, model.upstreamModelId)
       const result = await sendTestRequest(
         targetUrl,
@@ -156,7 +143,7 @@ interface TestRequestResult {
   outputTokens?: number | null
 }
 
-function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string, customAuthHeader: string | null, body: string, timeout: number, signal: AbortSignal): Promise<TestRequestResult> {
+function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string | null, customAuthHeader: string | null, body: string, timeout: number, signal: AbortSignal): Promise<TestRequestResult> {
   return new Promise(resolve => {
     const parsed = new URL(targetUrl)
     const isHttps = parsed.protocol === 'https:'

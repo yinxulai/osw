@@ -23,4 +23,15 @@ describe('createAuthHeaders', () => {
       'X-Custom-Key': 'secret',
     })
   })
+
+  it('omits auth headers entirely when the API key is absent (local/test clusters)', () => {
+    expect(createAuthHeaders('openai-completions', null, null)).toEqual({})
+    expect(createAuthHeaders('openai-responses', null, null)).toEqual({})
+  })
+
+  it('keeps the Anthropic version header when the API key is absent', () => {
+    expect(createAuthHeaders('anthropic-messages', null, null)).toEqual({
+      'anthropic-version': '2023-06-01',
+    })
+  })
 })

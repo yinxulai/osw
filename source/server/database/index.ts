@@ -51,6 +51,16 @@ function ensureSchema(db: DatabaseSync): void {
   ensureColumn(db, 'request_logs', 'promptCacheHit', 'INTEGER')
   ensureColumn(db, 'request_attempts', 'upstreamRequestId', 'TEXT')
   ensureColumn(db, 'request_attempts', 'errorResponse', 'TEXT')
+  ensureDefaultLogicalModel(db)
+}
+
+/** 全新安装时保证至少存在一个默认逻辑模型，避免空表导致前端无法保存上游模型 */
+function ensureDefaultLogicalModel(db: DatabaseSync): void {
+  db.prepare(
+    `INSERT INTO logical_models (id, name, description, enabled, createdTime, updatedTime)
+     SELECT 'default', '默认模型', '系统自动创建的默认逻辑模型', 1, ?, ?
+     WHERE NOT EXISTS (SELECT 1 FROM logical_models)`,
+  ).run(BigInt(Date.now()), BigInt(Date.now()))
 }
 
 function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string): void {

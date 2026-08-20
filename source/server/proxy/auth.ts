@@ -1,6 +1,9 @@
 import type { Protocol } from '@common/schemas'
 
-export function createAuthHeaders(protocol: Protocol, apiKey: string, customAuthHeader: string | null): Record<string, string> {
+export function createAuthHeaders(protocol: Protocol, apiKey: string | null, customAuthHeader: string | null): Record<string, string> {
+  if (!apiKey) {
+    return protocol === 'anthropic-messages' ? { 'anthropic-version': '2023-06-01' } : {}
+  }
   if (customAuthHeader) return { [customAuthHeader]: apiKey }
 
   switch (protocol) {
