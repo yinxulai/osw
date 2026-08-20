@@ -5,6 +5,7 @@ import {
   getProviderModel,
   listProviderModels,
   updateUpstreamModel,
+  upsertSchedulingPolicy,
 } from '../database/store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
@@ -31,6 +32,7 @@ async function handleGetProviderModel(_req: IncomingMessage, res: ServerResponse
 
 const UpdateProviderModelSchema = z.object({
   id: z.string().min(1),
+  logicalModelId: z.string().min(1).optional(),
   modelName: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
   endpoints: z.array(z.object({
@@ -47,8 +49,10 @@ async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerRespo
     ...(input.modelName !== undefined ? { upstreamModelId: input.modelName } : {}),
     ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
     ...(input.endpoints !== undefined ? { endpoints: input.endpoints } : {}),
-    ...(input.priority !== undefined ? { priority: input.priority } : {}),
   })
+  if (input.logicalModelId && input.priority !== undefined) {
+    await upsertSchedulingPolicy({ logicalModelId: input.logicalModelId, providerModelId: input.id, priority: input.priority })
+  }
   const view = await getProviderModel(updated.id)
   sendSuccess(res, view ?? updated)
 }

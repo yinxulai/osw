@@ -27,7 +27,10 @@ import {
   listLogicalModels,
   listProviders,
   listProviderHealth,
+  listProviderModels,
+  listProviderModelsForLogicalModel,
   listRequestLogs,
+  listUpstreamModels,
   listUpstreamModelsByProvider,
   onSettingsChanged,
   pruneRequestLogsBefore,
@@ -67,6 +70,7 @@ describe('provider and model CRUD', () => {
   it('creates, updates, lists, soft-deletes, and restores visibility', async () => {
     const provider = await createProvider({ ...providerInput(), description: 'initial', enabled: true })
     expect(await getProvider(provider.id)).toMatchObject({ name: 'Provider', description: 'initial', apiKeyReference: 'Provider-key' })
+    expect(await getProvider('prov_missing')).toBeUndefined()
     const updated = await updateProvider(provider.id, { name: 'Updated', description: 'changed', enabled: false, timeoutMilliseconds: 20_000, upstreamUrls: '{}' })
     expect(updated).toMatchObject({ name: 'Updated', enabled: false, timeoutMilliseconds: 20_000, upstreamUrls: '{}' })
     expect((await listProviders()).map(item => item.id)).toContain(provider.id)
@@ -94,12 +98,33 @@ describe('provider and model CRUD', () => {
     expect((await getUpstreamModel(second.id))?.endpoints[0].upstreamUrl).toBe('https://invalid.local')
     expect((await getUpstreamModel(third.id))?.endpoints).toHaveLength(2)
     expect((await listUpstreamModelsByProvider(provider.id)).map(model => model.upstreamModelId)).toEqual(['model-a', 'model-b', 'model-c'])
-    await updateUpstreamModel(first.id, { upstreamModelId: 'model-a2', enabled: false })
-    expect(await getUpstreamModel(first.id)).toMatchObject({ upstreamModelId: 'model-a2', enabled: false })
+    expect((await listUpstreamModels(false)).every(model => model.deletedTime === null)).toBe(true)
+    await updateUpstreamModel(first.id, { upstreamModelId: 'model-a2', enabled: false, endpoints: [{ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example', customAuthHeader: null, protocolConversionEnabled: true }] })
+    expect(await getUpstreamModel(first.id)).toMatchObject({ upstreamModelId: 'model-a2', enabled: false, endpoints: [expect.objectContaining({ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example' })] })
+    expect((await listProviderModels()).find(model => model.id === first.id)?.endpoints[0].conversions).toHaveLength(1)
     await deleteUpstreamModel(first.id)
     expect((await listUpstreamModelsByProvider(provider.id)).map(model => model.id)).not.toContain(first.id)
     expect((await listUpstreamModelsByProvider(provider.id, true)).map(model => model.id)).toContain(first.id)
+    expect((await listProviderModelsForLogicalModel('auto')).every(model => model.enabled)).toBe(true)
     await expect(updateUpstreamModel('model_missing', {})).rejects.toThrow('provider model not found')
+  })
+
+  it('supports provider model views, policy ordering, disabled policies, and deleted models', async () => {
+    const provider = await createProvider(providerInput())
+    const logical = await createLogicalModel({ name: 'route-target' })
+    const first = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'route-a', priority: 99, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://route-a.example', customAuthHeader: null, protocolConversionEnabled: true }] })
+    const second = await createUpstreamModel({ providerId: provider.id, upstreamModelId: 'route-b', priority: 99 })
+    const time = Date.now()
+    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, 1, time, time)
+    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, 0, time, time)
+    const views = await listProviderModels()
+    expect(views.find(model => model.id === first.id)?.endpoints[0]).toMatchObject({ protocol: 'openai-completions', url: 'https://route-a.example', conversions: [] })
+    expect(await listProviderModelsForLogicalModel(logical.id)).toMatchObject([{ id: second.id, priority: 10 }, { id: first.id, priority: 20 }])
+    getDb().$client.prepare('UPDATE scheduling_policies SET enabled = 0 WHERE logicalModelId = ? AND providerModelId = ?').run(logical.id, second.id)
+    expect((await listProviderModelsForLogicalModel(logical.id)).map(model => model.id)).toEqual([first.id])
+    await deleteUpstreamModel(first.id)
+    expect(await listProviderModelsForLogicalModel(logical.id)).toEqual([])
+    expect(await listProviderModelsForLogicalModel(logical.id, true)).toEqual([])
   })
 
   it('supports logical model defaults, updates, soft deletion, and unique-name conflicts', async () => {

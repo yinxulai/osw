@@ -13,6 +13,7 @@ import type {
   RequestLog,
   RequestAttempt,
   RequestStatus,
+  SchedulingPolicy,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
@@ -220,6 +221,8 @@ export async function createLogicalModel(input: CreateLogicalModelInput): Promis
 export async function updateLogicalModel(id: string, updates: Partial<Omit<LogicalModel, 'id' | 'createdTime'>>): Promise<LogicalModel> {
   const db = getDb()
   const time = now()
+  const existing = db.select().from(logicalModels).where(eq(logicalModels.id, id)).get()
+  if (!existing) throw new Error(`logical model not found: ${id}`)
   db.update(logicalModels)
     .set({
       ...(updates.name !== undefined ? { name: updates.name } : {}),
@@ -242,6 +245,47 @@ export async function deleteLogicalModel(id: string): Promise<void> {
     .set({ deletedTime: time, updatedTime: time })
     .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
     .run()
+}
+
+// ========== Scheduling Policy ========== 
+
+function mapSchedulingPolicy(row: typeof schedulingPolicies.$inferSelect): SchedulingPolicy {
+  return { ...row }
+}
+
+export async function listSchedulingPolicies(logicalModelId?: string): Promise<SchedulingPolicy[]> {
+  const condition = logicalModelId ? eq(schedulingPolicies.logicalModelId, logicalModelId) : undefined
+  return getDb().select().from(schedulingPolicies)
+    .where(condition)
+    .orderBy(schedulingPolicies.priority, schedulingPolicies.weight)
+    .all()
+    .map(mapSchedulingPolicy)
+}
+
+export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId' | 'providerModelId'> & Partial<Pick<SchedulingPolicy, 'strategy' | 'priority' | 'weight' | 'enabled' | 'failoverEnabled'>>
+
+export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput): Promise<SchedulingPolicy> {
+  const time = now()
+  const values = {
+    logicalModelId: input.logicalModelId,
+    providerModelId: input.providerModelId,
+    strategy: input.strategy ?? 'priority',
+    priority: input.priority ?? 0,
+    weight: input.weight ?? 100,
+    enabled: input.enabled ?? true,
+    failoverEnabled: input.failoverEnabled ?? true,
+    createdTime: time,
+    updatedTime: time,
+  }
+  getDb().insert(schedulingPolicies).values(values).onConflictDoUpdate({
+    target: [schedulingPolicies.logicalModelId, schedulingPolicies.providerModelId],
+    set: { strategy: values.strategy, priority: values.priority, weight: values.weight, enabled: values.enabled, failoverEnabled: values.failoverEnabled, updatedTime: time },
+  }).run()
+  return mapSchedulingPolicy(getDb().select().from(schedulingPolicies).where(and(eq(schedulingPolicies.logicalModelId, input.logicalModelId), eq(schedulingPolicies.providerModelId, input.providerModelId))).get()!)
+}
+
+export async function deleteSchedulingPolicy(logicalModelId: string, providerModelId: string): Promise<void> {
+  getDb().delete(schedulingPolicies).where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), eq(schedulingPolicies.providerModelId, providerModelId))).run()
 }
 
 // ========== Provider Model ========== 
