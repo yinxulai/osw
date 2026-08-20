@@ -2,7 +2,9 @@ import http from 'node:http'
 import https from 'node:https'
 import { URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { getAvailableModels, detectProtocolFromPath, findEndpoint } from './router'
+import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertibleEndpoint } from './router'
+import { convertRequestBody } from './conversion'
+import { convertResponseBody, createSseConverter } from './conversion-response'
 import { markProviderSuccess, markProviderFailure } from './health'
 import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
@@ -45,6 +47,7 @@ interface AttemptOutcome {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
+  upstreamProtocol?: Protocol | null
 }
 
 // 手动切换状态：当前指定的 upstream model ID
@@ -76,9 +79,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
-  // 获取可用 models，并过滤出支持当前协议的模型
+  // 获取可用 models：原生协议候选优先，其后是开启了协议转换的候选
   const availableModels = await getAvailableModels()
-  let models = availableModels.filter(m => findEndpoint(m.model, protocol))
+  const nativeModels = availableModels.filter(m => findEndpoint(m.model, protocol))
+  const convertedModels = availableModels.filter(m =>
+    !findEndpoint(m.model, protocol)
+    && findConvertibleEndpoint(m.model, protocol),
+  )
+  let models = [...nativeModels, ...convertedModels]
 
   // 如果有手动指定的 model，把它排到最前面
   if (manualModelId) {
@@ -94,7 +102,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     )]
     const reason = availableModels.length === 0
       ? '该队列没有已启用且健康的上游模型'
-      : `可用模型未绑定 ${protocol} 协议（当前绑定: ${configuredProtocols.join(', ') || '无'}）`
+      : `可用模型未绑定 ${protocol} 协议且未开启协议转换（当前绑定: ${configuredProtocols.join(', ') || '无'}）`
     console.warn(
       `[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}, reason=${reason})`,
     )
@@ -151,6 +159,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           cacheCreationInputTokens: outcome.cacheCreationInputTokens ?? null,
           promptCacheHit: outcome.promptCacheHit ?? null,
           rawUsage: outcome.rawUsage ?? null,
+          upstreamProtocol: outcome.upstreamProtocol ?? null,
         })
         return
       }
@@ -241,6 +250,7 @@ interface RequestLogMetrics {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
+  upstreamProtocol?: Protocol | null
 }
 
 async function finalizeRequestLog(requestId: string, status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void> {
@@ -259,6 +269,7 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
       promptCacheHit: metrics?.promptCacheHit ?? null,
       rawUsage: metrics?.rawUsage ?? null,
       ttftMilliseconds: metrics?.ttftMilliseconds ?? null,
+      upstreamProtocol: metrics?.upstreamProtocol ?? null,
     })
     const settings = await getSettings()
     await pruneRequestLogs(settings.logRetentionCount)
@@ -271,13 +282,18 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const { model, provider } = target
   const settings = await getSettings()
 
-  const endpoint = findEndpoint(model, protocol)
+  const nativeEndpoint = findEndpoint(model, protocol)
+  const convertibleEndpoint = nativeEndpoint ? undefined : findConvertibleEndpoint(model, protocol)
+  const endpoint = nativeEndpoint ?? convertibleEndpoint
   if (!endpoint) throw new Error(`模型 ${model.upstreamModelId} 不支持协议 ${protocol}`)
+  const endpointProtocol = endpoint.protocol
+  const converting = !nativeEndpoint
 
-  const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, endpoint.protocol))
+  const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, endpointProtocol))
   const parsed = new URL(targetUrl)
-  const rewrittenBody = rewriteRequestModel(requestBody, model.upstreamModelId)
-  const upstreamBody = injectUsageParams(rewrittenBody, protocol)
+  const upstreamBody = converting
+    ? injectUsageParams(convertRequestBody(protocol, endpointProtocol, requestBody, model.upstreamModelId), endpointProtocol)
+    : injectUsageParams(rewriteRequestModel(requestBody, model.upstreamModelId), endpointProtocol)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
@@ -285,7 +301,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
   const headers = createUpstreamHeaders(
     req.headers,
-    createAuthHeaders(endpoint.protocol, apiKey, endpoint.customAuthHeader),
+    createAuthHeaders(endpointProtocol, apiKey, endpoint.customAuthHeader),
     upstreamBody.length,
   )
 
@@ -434,8 +450,18 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
       // 转发响应头
       if (!res.headersSent) {
-        res.writeHead(statusCode, createDownstreamHeaders(upstreamRes.headers))
+        const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
+        if (converting) {
+          // 转换路径：响应体结构会变，移除上游长度限制头
+          delete downstreamHeaders['content-length']
+        }
+        res.writeHead(statusCode, downstreamHeaders)
       }
+
+      // 协议转换流式转换器（非转换路径为透传）
+      const sseConverter = converting && isStreaming
+        ? createSseConverter(protocol, endpointProtocol)
+        : null
 
       upstreamRes.on('data', chunk => {
         resetIdleTimer()
@@ -460,7 +486,12 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))
         }
         if (!res.writableEnded) {
-          res.write(chunk)
+          if (sseConverter) {
+            const converted = sseConverter.push(chunk.toString('utf8'))
+            if (converted) res.write(converted)
+          } else {
+            res.write(chunk)
+          }
         }
       })
 
@@ -481,6 +512,19 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         }
 
         if (!res.writableEnded) {
+          if (sseConverter) {
+            const tail = sseConverter.push('') + sseConverter.flush()
+            if (tail) res.write(tail)
+            // OpenAI 客户端期望 [DONE] 结束标记
+            if (protocol === 'openai-completions') res.write('data: [DONE]\n\n')
+          } else if (converting && !isStreaming && responseBuffer) {
+            try {
+              res.write(convertResponseBody(protocol, endpointProtocol, Buffer.from(responseBuffer)))
+            } catch (error) {
+              console.error(`[proxy] 响应转换失败: ${(error as Error).message}`)
+              res.write(responseBuffer)
+            }
+          }
           res.end()
         }
         const body = disposition === 'success' ? null : (errorResponse || null)
@@ -505,6 +549,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           cacheCreationInputTokens,
           promptCacheHit: cachedInputTokens == null ? null : cachedInputTokens > 0,
           rawUsage,
+          upstreamProtocol: converting ? endpointProtocol : null,
         })
       })
 

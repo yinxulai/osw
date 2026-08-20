@@ -1,5 +1,6 @@
 import { listUpstreamModels, getProvider } from '../database/store'
 import { isProviderAvailable } from './health'
+import { isConvertible } from './conversion'
 import type { UpstreamModel, Provider, Protocol } from '@common/schemas'
 
 export interface ModelWithProvider {
@@ -34,6 +35,16 @@ export async function getAvailableModels(): Promise<ModelWithProvider[]> {
  */
 export function findEndpoint(model: UpstreamModel, protocol: Protocol) {
   return model.endpoints.find(endpoint => endpoint.protocol === protocol)
+}
+
+/**
+ * 查找可接收 clientProtocol 请求（经协议转换）的端点。
+ * 仅返回显式开启 protocolConversionEnabled 的端点。
+ */
+export function findConvertibleEndpoint(model: UpstreamModel, clientProtocol: Protocol) {
+  return model.endpoints.find(
+    endpoint => endpoint.protocolConversionEnabled === true && isConvertible(endpoint.protocol, clientProtocol),
+  )
 }
 
 /**
