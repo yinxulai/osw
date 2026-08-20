@@ -22,7 +22,7 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 
 ## 2. 数据库总览
 
-v0.3 包含以下 15 张核心表。
+v0.3 包含以下 16 张核心表。
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -52,7 +52,8 @@ erDiagram
   providers ||--o{ provider_models : contains
   providers ||--|| provider_health : aggregates
   provider_models ||--|| provider_model_health : has
-  logical_models ||--|| scheduling_policies : uses
+  logical_models ||--o{ scheduling_policies : orders
+  provider_models ||--o{ scheduling_policies : participates
   provider_models ||--o{ provider_model_endpoints : exposes
   provider_model_endpoints ||--o{ protocol_converters : enables
   provider_endpoints ||--o{ provider_model_endpoints : binds
@@ -91,7 +92,10 @@ erDiagram
 
   scheduling_policies {
     text logicalModelId PK, FK
-    text strategy
+    text providerModelId PK, FK
+    integer priority
+    integer weight
+    boolean enabled
     boolean failoverEnabled
     integer createdTime
     integer updatedTime
@@ -216,8 +220,11 @@ erDiagram
     text requestId FK
     text providerId
     text providerModelId
+    text providerName
+    text providerModelName
     text providerProtocol
     text providerRequestId
+    text url
     boolean retryable
     integer httpStatus
     integer attemptIndex
@@ -348,7 +355,7 @@ CREATE INDEX idx_provider_endpoints_protocol
 
 ### 3.5 `logical_models`
 
-逻辑模型只保存对外身份、展示字段和生命周期。调度行为统一由 `scheduling_policies` 管理。
+v0.3 MVP 只初始化并暴露一个逻辑模型 `auto`。它是客户端统一使用的虚拟模型名，代表当前启用的 ProviderModel 自动切换池；MVP 不支持创建、删除或配置多个逻辑模型。表结构提前保留未来扩展所需的身份和生命周期字段。
 
 ```sql
 CREATE TABLE logical_models (
@@ -365,23 +372,33 @@ CREATE INDEX idx_logical_models_enabled ON logical_models(enabled);
 CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 ```
 
+初始化时必须幂等创建 `auto`，并保证 MVP 中不存在其他启用的逻辑模型。
+
 ### 3.6 `scheduling_policies`
 
-调度策略是逻辑模型的独立配置实体，避免将路由行为混入模型身份表。
+`scheduling_policies` 是 **LogicalModel 与 ProviderModel 之间的调度绑定表**，不是逻辑模型的单独全局策略配置。每一行表示一个 ProviderModel 是否加入某个逻辑模型的候选池，以及它在该候选池中的顺序和权重。因此，不同逻辑模型可以绑定相同的 ProviderModel，但为其配置不同的 `priority`、`weight` 和启用状态；ProviderModel 本身不再拥有跨逻辑模型共享的全局排序。
+
+v0.3 只支持 `strategy = priority`，并在 `auto` 初始化时为需要的 ProviderModel 创建绑定。`failoverEnabled` 是逻辑模型级行为，存储在该逻辑模型对应的策略配置中；后续若需要拆分策略元数据，应新增独立策略元数据表，而不能把绑定顺序退回 ProviderModel。MVP 不提供多逻辑模型 CRUD，P2 再开放每个逻辑模型的绑定管理。
 
 ```sql
 CREATE TABLE scheduling_policies (
-  logicalModelId TEXT PRIMARY KEY REFERENCES logical_models(id),
-  strategy TEXT NOT NULL DEFAULT 'priority',
+  logicalModelId TEXT NOT NULL REFERENCES logical_models(id),
+  providerModelId TEXT NOT NULL REFERENCES provider_models(id),
+  strategy TEXT NOT NULL DEFAULT 'priority' CHECK (strategy IN ('priority')),
+  priority INTEGER NOT NULL DEFAULT 0,
+  weight INTEGER NOT NULL DEFAULT 100 CHECK (weight > 0),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   failoverEnabled INTEGER NOT NULL DEFAULT 1 CHECK (failoverEnabled IN (0, 1)),
   createdTime INTEGER NOT NULL,
-  updatedTime INTEGER NOT NULL
+  updatedTime INTEGER NOT NULL,
+  PRIMARY KEY (logicalModelId, providerModelId)
 );
+
+CREATE INDEX idx_scheduling_policies_route
+  ON scheduling_policies(logicalModelId, enabled, priority, weight);
 ```
 
-`strategy` 当前支持 `priority`；后续可扩展为 `weighted`、`latency` 等明确枚举。
-
-`request_logs.logicalModelId` 保留请求发生时的逻辑模型标识，但不建立外键。逻辑模型删除后，历史日志仍然必须可读取。逻辑模型与 Provider 模型之间没有持久化关联；路由时从全局 Provider 模型池动态生成候选队列。
+`failoverEnabled` 在 MVP 的 `auto` 绑定中保持一致；多逻辑模型开放后，各逻辑模型可以独立配置。`request_logs.logicalModelId` 保留请求发生时的逻辑模型标识，但不建立外键。MVP 请求的逻辑模型必须是 `auto`；路由只从 `auto` 的启用绑定中动态生成候选队列。
 
 ### 3.7 `provider_models`、`provider_model_endpoints` 与 `protocol_converters`
 
@@ -393,8 +410,6 @@ CREATE TABLE provider_models (
   providerId TEXT NOT NULL REFERENCES providers(id),
   modelName TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-  priority INTEGER NOT NULL DEFAULT 0,
-  weight INTEGER NOT NULL DEFAULT 100 CHECK (weight > 0),
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
   deletedTime INTEGER
@@ -423,8 +438,8 @@ CREATE TABLE protocol_converters (
 
 CREATE UNIQUE INDEX idx_provider_models_provider_model_active
   ON provider_models(providerId, modelName) WHERE deletedTime IS NULL;
-CREATE INDEX idx_provider_models_route
-  ON provider_models(providerId, enabled, priority, weight);
+CREATE INDEX idx_provider_models_enabled
+  ON provider_models(providerId, enabled, deletedTime);
 CREATE INDEX idx_provider_model_endpoints_provider_endpoint
   ON provider_model_endpoints(providerEndpointId, enabled);
 CREATE INDEX idx_protocol_converters_protocol
@@ -700,7 +715,11 @@ CREATE TABLE request_attempts (
   requestId TEXT NOT NULL,
   providerId TEXT NOT NULL,
   providerModelId TEXT NOT NULL,
+  providerName TEXT NOT NULL,
+  providerModelName TEXT NOT NULL,
   providerProtocol TEXT,
+  providerRequestId TEXT,
+  url TEXT NOT NULL,
   attemptIndex INTEGER NOT NULL,
   status TEXT NOT NULL,
   httpStatus INTEGER,
@@ -708,7 +727,6 @@ CREATE TABLE request_attempts (
   durationMilliseconds INTEGER NOT NULL,
   errorCode TEXT,
   errorMessage TEXT,
-  providerRequestId TEXT,
   details TEXT,
   createdTime INTEGER NOT NULL,
 
@@ -723,7 +741,7 @@ CREATE INDEX idx_request_attempts_model_time
   ON request_attempts(providerModelId, createdTime);
 ```
 
-`providerId` 和 `providerModelId` 均不建立外键：历史尝试不依赖 Provider 或 ProviderModel 的当前存在性（配置实体未来可能物理删除），两者仅作为快照标识，配合请求日志中的 Provider/ProviderModel 名称快照展示。
+`providerId` 和 `providerModelId` 均不建立外键：历史尝试不依赖 Provider 或 ProviderModel 的当前存在性（配置实体未来可能物理删除）。由于详情页必须在配置删除后仍能展示名称，`request_attempts` 还必须在写入时保存 `providerName`、`providerModelName` 和实际 `url` 快照；ID 仅用于关联和筛选，不得依赖当前配置反查。
 
 `httpStatus`、`retryable` 和 `providerProtocol` 是稳定的观测字段，必须使用独立列；协议私有错误正文、原始 usage 和网络诊断信息才放入 `details` JSON。
 
@@ -732,6 +750,9 @@ CREATE INDEX idx_request_attempts_model_time
 - `requestId`；
 - `providerId`；
 - `providerModelId`；
+- `providerName`；
+- `providerModelName`；
+- `url`；
 - `attemptIndex`；
 - `status`；
 - `providerProtocol`；
@@ -805,7 +826,7 @@ settings.value（仅保留真正动态的扩展设置；标准设置必须有独
 ```text
 Provider name / enabled / timeout / auth type
 LogicalModel name / description / enabled / routing strategy
-ProviderModel modelName / enabled / priority / weight
+ProviderModel modelName / enabled；scheduling_policies priority / weight / enabled
 Provider protocol / URL / ProviderModel endpoint binding / conversion client protocol / enabled
 日志 status / protocol / model IDs / provider ID
 请求级数值指标（如耗时、TTFT） -> `request_metrics`
@@ -867,6 +888,8 @@ Store 层应分为两部分：
 业务层不应直接调用 `JSON.stringify`、`JSON.parse` 或 `json_extract` 读取配置内容。
 
 ## 8. 删除与历史数据规则
+
+初始化时必须幂等创建唯一启用的 `logical_models.auto` 及其 `scheduling_policies` 默认行；v0.3 MVP 不提供其他逻辑模型的创建、删除和独立策略配置。
 
 ### 配置实体
 

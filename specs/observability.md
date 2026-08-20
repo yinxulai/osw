@@ -52,6 +52,8 @@
 | attemptIndex | `request_attempts.attemptIndex` | 请求内尝试顺序，从 0 开始 |
 | providerId | `request_attempts.providerId` | Provider 快照标识 |
 | providerModelId | `request_attempts.providerModelId` | ProviderModel 快照标识 |
+| providerName | `request_attempts.providerName` | 写入时的 Provider 名称快照 |
+| providerModelName | `request_attempts.providerModelName` | 写入时的 ProviderModel 名称快照 |
 | providerProtocol | `request_attempts.providerProtocol` | 实际使用的 Provider 原生协议 |
 | providerRequestId | `request_attempts.providerRequestId` | Provider 返回的请求标识 |
 | httpStatus | `request_attempts.httpStatus` | Provider HTTP 状态码；网络错误时为空 |
@@ -61,7 +63,7 @@
 | errorCode | `request_attempts.errorCode` | 结构化错误码 |
 | errorMessage | `request_attempts.errorMessage` | 错误摘要 |
 | switched | 服务层派生 | `attemptIndex > 0` 或后续存在尝试时，表示发生过队列切换 |
-| url | `request_attempts.details` | 如需展示实际 URL，应作为不可变快照写入 `details`，不能从当前配置反推 |
+| url | `request_attempts.url` | 写入时的实际 URL 快照，不能从当前配置反推 |
 
 ### 日志策略
 
@@ -70,7 +72,7 @@
 - 默认不保存完整请求体和响应体；用户显式开启“记录请求内容”后才采集
 - 开启后记录客户端原始请求、最终响应，以及每次 Provider 尝试的请求/响应。
 - 发生协议转换时，额外记录转换前请求、转换后请求、转换前响应和转换后响应。
-- 正文与请求日志索引分开存储，本地工具不限制正文大小；日志写入失败不影响代理请求。
+- 正文与请求日志索引分开存储；必须配置单请求和总数据库容量保护，超限时标记 `captureStatus` 为降级/失败并停止继续采集，不影响代理请求。
 - 日志清理依次删除 `request_contents`、`request_usages`、`request_metrics`、`request_attempts`，最后删除 `request_logs`。
 - Authorization、API Key、Cookie 等敏感请求头始终脱敏
 - 日志存储在本地应用数据目录

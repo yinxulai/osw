@@ -56,7 +56,7 @@
 
 > Provider 上的一个实际模型，是路由的最小单元。ProviderModel 不直接拥有端点数组；它通过 `provider_model_endpoints` 绑定一个或多个 `provider_endpoints`，绑定记录可选填写模型专属 `url`。
 >
-> ProviderModel 属于全局共享池。每个请求根据逻辑模型、客户端协议、启用状态、优先级和两层健康状态动态计算候选队列，不持久化逻辑模型与 ProviderModel 的队列关系。
+> ProviderModel 是可复用的供应商模型实体。每个请求根据当前逻辑模型的 `scheduling_policies` 绑定、客户端协议、启用状态、绑定优先级和两层健康状态动态计算候选队列。调度顺序属于绑定关系，不属于 ProviderModel 全局实体。
 
 ### 字段
 
@@ -66,7 +66,7 @@
 | providerId | string | 所属 Provider |
 | modelName | string | Provider API 中的实际模型名（转发时替换请求中的 `model` 字段） |
 | endpointBindings | object[] | ProviderModel 与 `provider_endpoints` 的绑定视图；持久化使用 `provider_model_endpoints` 关系表 |
-| priority | number | 全局候选队列优先级，数字越小优先级越高 |
+| priority | number | 当前逻辑模型绑定中的候选顺序，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
@@ -84,8 +84,9 @@
 
 ### 约束
 
-- 同一 Provider 下可以有多个 ProviderModel；所有启用的 ProviderModel 组成全局共享池。
-- 每个请求根据逻辑模型、客户端协议、绑定状态、优先级和健康状态动态生成候选队列。
+- 同一 Provider 下可以有多个 ProviderModel；ProviderModel 可被多个逻辑模型复用。
+- 每个逻辑模型通过 `scheduling_policies` 维护自己的绑定集合、启用状态和候选顺序。
+- 每个请求根据当前逻辑模型、客户端协议、绑定状态、绑定优先级和健康状态动态生成候选队列。
 - `provider_endpoints.protocol` 决定原生协议；协议转换由对应 `protocol_converters` 决定。
 - 转发请求时，请求体中的 `model` 字段会被替换为 `modelName` 的值。
 

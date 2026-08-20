@@ -4,16 +4,16 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是实施的唯一依据：
+以下设计文档已评审定稿，是后续实施的唯一依据；当前仅完成设计，尚未开始按此目标迁移实现代码。
 
-- [x] [data-model.md](./data-model.md)：15 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
+- [x] [data-model.md](./data-model.md)：16 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。
 - [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
 ### 产品与设计原则（摘要）
 
 - 身份、关系、枚举、开关、数值以及参与路由/查询/排序/统计的字段必须进入关系型列；只有协议私有原始详情、大体积正文和真正开放的扩展数据才使用 JSON/KV。
-- Provider 模型是全局共享池成员，每个 Provider 模型有独立启用开关；逻辑模型的候选队列由全局启用的 Provider 模型动态组成，路由按协议筛选后再按优先级、健康与冷却状态尝试。
+- v0.3 MVP 只暴露一个逻辑模型 `auto`；ProviderModel 通过 `scheduling_policies` 绑定到该逻辑模型，绑定行保存候选顺序、权重和启用状态。后续每个逻辑模型都可以配置自己的 ProviderModel 绑定和顺序；多逻辑模型属于 P2。
 - 手动切换只影响后续新请求，不中断已经开始的请求。
 - 请求日志分为稳定元数据、远端尝试记录和可选正文内容三层；正文记录默认关闭，敏感信息必须脱敏。
 
@@ -23,9 +23,10 @@
 
 ### 阶段 1：数据库新基线
 
-- [ ] 按 data-model.md 重建 schema：v0.3 初始化 15 张核心表（含 request_usages），CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL
+- [ ] 按 data-model.md 重建 schema：v0.3 初始化 16 张核心表（含 request_usages），CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL；调度顺序和启用状态存储在 LogicalModel-ProviderModel 绑定表
 - [ ] `settings` 初始化使用 INSERT OR IGNORE 幂等写入
 - [ ] `provider_health` 随 Provider 创建、`provider_model_health` 随 ProviderModel 创建，在同事务中插入
+- [ ] 初始化时幂等创建唯一启用的 `logical_models.auto` 及其 `scheduling_policies`（`priority` + failover）
 - [ ] `request_contents` 请求级和尝试级正文结构（通过可空 attemptId 关联）+ conversions
 - [ ] 删除旧迁移，建立全新初始化基线（不兼容旧版数据库）
 - [ ] store 层 CRUD 与 Zod Schema 对齐新表结构
@@ -39,12 +40,13 @@
 - [ ] 落地 openai、anthropic、gemini 三个协议适配器（protocols/ 目录）
 - [ ] conversions/ 注册表承接协议转换（端点绑定级开关，默认关闭）
 - [ ] usage 提取、日志写入收敛到 hooks 订阅者，handler 不再内联
-- [ ] `/v1/models` 返回所有启用逻辑模型
+- [ ] `/v1/models` 仅返回 MVP 唯一逻辑模型 `auto`
 
 ### 阶段 3：管理 API 与控制台
 
-- [ ] providers / models / settings / request-logs 管理接口对齐新数据模型
+- [ ] providers / provider-model / settings / request-log 管理接口对齐新数据模型，并统一旧版 upstream-model、logs 路径的替换边界
 - [ ] 控制台页面适配新接口与字段
+- [ ] `scheduling_policies` 随 `auto` 初始化，路由读取 `priority` 策略并在 `failoverEnabled = false` 时只尝试起始 ProviderModel
 - [ ] 日志清理（按数量 + 按天）在新表结构上验证
 
 ### 阶段 4：MVP 功能验收
@@ -62,7 +64,8 @@
 - [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应 ProviderModel
 - [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应 ProviderModel
 - [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到当前逻辑模型的对应 ProviderModel
-- [ ] 请求 `/v1/models` 返回所有启用中的逻辑模型名，不透传到上游
+- [ ] 请求 `/v1/models` 返回唯一启用的 `auto`，不透传到上游
+- [ ] 请求体 `model` 缺失或不为 `auto` 时返回明确的模型参数错误
 - [ ] 流式请求能持续返回 SSE 数据，不被代理缓冲破坏
 - [ ] 多工具并发请求时，日志记录和健康状态更新无错乱
 
@@ -70,7 +73,7 @@
 
 - [ ] 队列中只有 openai 协议的项；通过 anthropic 协议请求时，返回"当前协议下无可用 ProviderModel"
 - [ ] 队列中同时有 openai 和 anthropic 的项；通过 openai 请求时只尝试 openai 项，通过 anthropic 请求时只尝试 anthropic 项
-- [ ] 请求体中 model 字段为任意值时，转发到远端后被替换为当前队列项的 `modelName`
+- [ ] 请求体中 `model` 字段为 `auto` 时，转发到远端后被替换为当前队列项的 `modelName`；缺失或其他值按模型参数错误拒绝
 - [ ] 队列第一项失败（不可达），自动切换到第二项并成功返回
 
 #### 3. 错误分类与自动切换验证
@@ -96,12 +99,16 @@
 #### 6. 健康状态验证
 
 - [ ] 连续失败达到阈值后供应商进入冷却，后续请求跳过它
+- [ ] Provider 级 401/403、端点级认证失败和明确的 Provider 网络故障更新 Provider 健康；模型不存在/模型级 4xx 更新 ProviderModel 健康
+- [ ] 429 的健康归属按错误响应可判定范围记录：Provider 明确限流时更新 Provider，否则更新 ProviderModel
 - [ ] 冷却结束后，新请求允许再次尝试该供应商
 - [ ] 成功请求后连续失败计数重置
 
 #### 7. 安全与隐私验证
 
 - [ ] 服务默认只监听 `127.0.0.1`
+- [ ] 代理服务和管理服务分别执行 Host 头校验，拒绝不允许的 Host，覆盖 DNS rebinding 测试
+- [ ] 若启用本地 Bearer Token，代理和管理 API 按明确配置边界校验 Token；Token 只存系统密钥环，并覆盖生成、轮换、删除和失效测试
 - [ ] 导出配置时 API Key 已脱敏
 - [ ] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
 - [ ] 关闭应用后代理端口释放
@@ -147,7 +154,7 @@
 ### 范围
 
 - 请求级路由解释：日志详情展示候选队列快照与每项被跳过的原因（协议不匹配/冷却中/已禁用）
-- 多逻辑模型支持（模型列表、模型别名、`auto` 聚合模型）
+- 多逻辑模型支持（模型列表、模型别名、按逻辑模型配置独立候选池；`auto` 作为默认聚合模型）
 - 更多协议路径预设（Ollama 本地、OpenRouter、Azure 等）
 - 按延迟、成功率、权重或成本的智能路由
 - 主动健康探测

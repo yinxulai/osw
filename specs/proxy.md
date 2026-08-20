@@ -126,7 +126,7 @@ proxy/
 
 ### `/v1/models`
 
-返回所有启用中的逻辑模型名，方便支持模型列表拉取的工具自动发现。
+返回 MVP 唯一启用的逻辑模型 `auto`，方便支持模型列表拉取的工具自动发现。
 
 响应格式兼容 OpenAI Models API：
 
@@ -144,28 +144,29 @@ proxy/
 }
 ```
 
-> `data` 数组包含每个启用中的逻辑模型一项，`id` 为逻辑模型名。
+> MVP 中 `data` 数组只包含 `auto` 一项，`id` 为逻辑模型名。后续支持多逻辑模型时，再按启用状态返回多个逻辑模型。
 
 ## 路由策略
 
 ### 单队列模型
 
-ProviderModel 属于全局共享池。每个请求根据逻辑模型上下文和客户端协议动态计算一个**自动切换候选队列**（按优先级排序）。客户端不需要指定 ProviderModel ID，请求中的 `model` 字段仅用于识别逻辑模型，转发时会被替换。
+v0.3 MVP 只接受逻辑模型 `auto`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前逻辑模型的绑定关系和客户端协议动态计算一个**自动切换候选队列**。客户端不需要指定 ProviderModel ID；请求中的 `model` 字段必须为 `auto`（缺失或其他值按协议返回模型参数错误），转发时会被替换为当前 ProviderModel 的 `modelName`。
 
-- 无论客户端请求体中 `model` 字段写什么，都使用同一个队列
+- `auto` 请求只使用 `scheduling_policies` 中绑定到 `auto` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
+- 同一个 ProviderModel 可以绑定到多个逻辑模型，并在不同逻辑模型中拥有不同的优先级、权重和启用状态
 - 候选队列中的每个 ProviderModel 都通过端点绑定获得 Provider 协议、有效 URL、Provider API 模型名和所属 Provider
 - 请求来时，自动根据协议过滤队列，按顺序尝试，失败自动切换到下一个
 - 转发到上游时，`model` 字段会被替换为当前 ProviderModel 的 **modelName**
 - 支持用户手动切换到队列中的某个 ProviderModel：新请求使用新模型，正在进行的请求不中断
 
-> ProviderModel 全局共享，不持久化逻辑模型与 ProviderModel 的队列关系；所有 enabled 且存在可用端点绑定的 ProviderModel 进入动态候选池。
+> ProviderModel 是可复用的供应商模型实体，但调度资格和顺序由 `scheduling_policies(logicalModelId, providerModelId)` 决定；MVP 中只有绑定到 `auto`、绑定启用且存在可用端点的 ProviderModel 才进入候选池。
 
 ### 路由步骤
 
 1. **协议识别**：根据请求 path 自动匹配协议类型
-2. **队列过滤**：从自动切换队列中，筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）
-3. **确定起始位置**：如果用户手动指定了当前 ProviderModel，则从该模型开始；否则从队列头部开始
-4. **顺序尝试**：按优先级依次尝试每个 ProviderModel
+2. **队列过滤**：从 `auto` 自动切换队列中，筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）
+3. **确定起始位置**：如果用户手动指定了当前 ProviderModel，则从该模型开始；目标已禁用、冷却或协议不匹配时返回明确错误，不静默选择其他起始项；否则从队列头部开始
+4. **顺序尝试**：按当前逻辑模型绑定行的 `priority ASC, weight DESC, createdTime ASC, providerModelId ASC` 稳定排序依次尝试；v0.3 `priority` 策略不使用权重做随机调度。不同逻辑模型分别读取自己的绑定行，因此可以拥有不同顺序
 5. **模型名替换**：每个 ProviderModel 转发前，将请求体中的 model 替换为该模型的 `modelName`
 6. **失败切换**：遇到可切换错误时，自动尝试队列中的下一个 ProviderModel
 

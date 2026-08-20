@@ -1,21 +1,23 @@
 # 技术架构与框架选型
 
+> **状态说明：本文描述 v0.3 设计目标，当前尚未开始实施。** `source/` 中的旧版实现不视为本文目标架构的已落地版本；实施阶段将按本规格重建数据库、代理管线、管理 API 和渲染层契约。
+
 ## 整体技术栈
 
 | 层级 | 技术选型 | 说明 |
 |------|----------|------|
 | 桌面壳 | Electron | 跨平台桌面应用 |
-| 构建工具 | electron-vite | 主进程 / 预加载 / 渲染进程统一构建 |
+| 构建工具 | Vite | 主进程 / 预加载 / 渲染进程统一构建 |
 | 主进程 | TypeScript + 原生 Node `http` | 独立的代理服务与管理服务，不引入 HTTP 框架 |
 | 代理透传 | 原生 `http.request` + 手动 pipe | 流式可控、依赖最少 |
 | Schema 定义 | Zod | 运行时类型校验、配置声明、API 请求/响应验证 |
-| API 规范 | OpenAPI 3.1 | 管理接口正式定义，作为前后端契约 |
-| 代码生成 | openapi-typescript + @tanstack/react-query 生成 | 从 OpenAPI 生成类型和 API 调用端代码 |
+| API 规范 | OpenAPI 3.1（实施阶段补齐） | 管理接口正式定义，作为前后端契约 |
+| 代码生成 | openapi-typescript（实施阶段接入） | 从 OpenAPI 生成 TypeScript 类型；API client 保持轻量 fetch 封装 |
 | 本地存储 | SQLite（`node:sqlite` + Drizzle ORM）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
 | 数据库迁移 | 单一首发基线 + 发布后版本迁移 | 首发结构干净，发布后升级可追踪 |
 | 渲染进程 | React 18 + TypeScript | 控制台 UI |
 | UI 组件 | shadcn/ui + Tailwind CSS | 现代、可定制、体积小 |
-| 状态管理 | TanStack Query | 服务端状态，配合 HTTP API 模式 |
+| 状态管理 | 轻量外部 Store + React hooks | 共享应用状态、缓存和轮询 |
 
 ## 关键技术决策
 
@@ -38,7 +40,7 @@
 
 ### 为什么用统一 POST 风格 API
 
-管理 API 全部使用 POST 方法，路径格式为 `/api/资源/动作`，不依赖 HTTP 方法和状态码语义：
+管理 API 全部使用 POST 方法，路径格式为 `/api/资源/动作`，不依赖 HTTP 方法和状态码语义。以下是 v0.3 目标契约；当前源码中的旧版 `/api/upstream-model/*` 等路径尚未迁移：
 
 - **简单一致**：前端调用统一用 POST，不需要区分 GET/POST/PUT/DELETE，不需要处理不同状态码
 - **结构化错误**：错误通过 body 中的 `success`、`errorCode`、`errorMessage` 表达，类型安全，前端可统一处理
@@ -49,7 +51,7 @@
 ### 为什么用 OpenAPI 定义管理接口
 
 - **接口契约**：前后端通过 OpenAPI 文档对齐，避免手写类型不一致
-- **代码生成**：用 `openapi-typescript` 生成 TypeScript 类型，用 `openapi-typescript-codegen` 或自定义生成器生成 API client 和 TanStack Query hooks
+- **代码生成**：实施阶段用 `openapi-typescript` 生成 TypeScript 类型；API client 使用轻量 fetch 封装，避免把不存在的生成文件或查询库当作当前实现依赖
 - **文档即测试**：服务端用 Zod 校验请求/响应，确保与 OpenAPI 定义一致
 - **未来扩展**：后续加 CLI、Web 控制台、第三方集成都可以直接复用 OpenAPI 定义
 
@@ -108,7 +110,7 @@ one-switch/
 │   │   └── index.ts                # 命令行模式入口：无头启动代理服务
 │   │
 │   ├── common/                     # server / command / render 共享
-│   │   ├── openapi.yaml            # OpenAPI 3.1 规范：管理接口定义
+│   │   ├── openapi.yaml             # 实施阶段新增：OpenAPI 3.1 管理接口定义
 │   │   ├── schema.ts               # Zod schema（可被 server 和 command 引用）
 │   │   ├── types.ts                # 从 Zod 推导的类型定义 / 共享类型
 │   │   ├── constants.ts            # 常量：默认端口、协议列表、错误类型等
@@ -119,7 +121,7 @@ one-switch/
 │       ├── main.tsx
 │       ├── App.tsx
 │       ├── lib/                    # 工具、API client
-│       │   ├── api.ts              # TanStack Query 封装的 API 调用
+│       │   ├── api.ts              # 轻量 fetch API client
 │       │   └── utils.ts
 │       ├── components/             # shadcn/ui 组件 + 业务组件
 │       │   └── ui/                 # shadcn/ui 生成的组件
@@ -136,6 +138,8 @@ one-switch/
 ```
 
 ## 核心模块设计
+
+> 下方目录和模块为 v0.3 实施目标。当前源码仍保留旧版目录与命名，尚未开始迁移。
 
 ### 1. 核心服务（`source/server/`）
 
@@ -169,7 +173,7 @@ one-switch/
 - 提供 `detectProtocol(path): Protocol | null`
 
 **`proxy/router.ts`** — 路由引擎
-- 输入：protocol + modelName
+- 输入：clientProtocol + `logicalModelName`（v0.3 MVP 必须为 `auto`）
 - 输出：候选 Provider 模型列表（按优先级排序，过滤禁用/冷却/额度耗尽）
 - 切换时取下一个 Provider 模型
 - 处理"该协议下无可用端点自动跳过"逻辑
@@ -200,9 +204,9 @@ one-switch/
 
 **`proxy/models-api.ts`** — `/v1/models` 本地接口
 
-### 2. 管理 API（`source/server/api/`）
+### 2. 管理 API（目标模块 `source/server/management/`）
 
-统一 POST 风格 API，挂载到独立管理服务的 `/api` 前缀。管理服务默认监听 `127.0.0.1:9301`，React UI 通过 HTTP client 调用。
+统一 POST 风格 API，挂载到独立管理服务的 `/api` 前缀。管理服务默认监听 `127.0.0.1:9301`，React UI 通过轻量 HTTP client 调用。当前源码尚未按该目标目录迁移。
 
 **设计原则：**
 - 所有接口统一使用 `POST` 方法，不依赖 HTTP 方法语义
@@ -242,12 +246,12 @@ one-switch/
 | `/api/provider/delete` | 删除 Provider | id | - |
 | `/api/provider/test` | 测试连接 | id | 测试结果（成功/失败+原因） |
 | `/api/provider/health/get` | Provider 健康状态 | id | 健康状态对象 |
-| `/api/provider-model/list` | Provider 模型池列表 | - | Provider 模型列表（按优先级排序） |
-| `/api/provider-model/create` | 新增 Provider 模型 | providerId, modelName, endpointBindings, priority | 新建的 Provider 模型 |
+| `/api/provider-model/list` | Provider 模型池列表 | logicalModelId | 当前逻辑模型的绑定及 Provider 模型 |
+| `/api/provider-model/create` | 新增 Provider 模型并创建绑定 | providerId, modelName, endpointBindings, logicalModelId, priority | 新建的 Provider 模型及绑定 |
 | `/api/provider-model/update` | 更新 Provider 模型 | id, 更新字段 | 更新后的 Provider 模型 |
 | `/api/provider-model/delete` | 删除 Provider 模型 | id | - |
-| `/api/provider-model/reorder` | 调整优先级 | id, newPriority | 更新后的队列 |
-| `/api/queue/status` | 获取当前逻辑模型队列状态 | - | 当前手动指定的 Provider 模型 ID |
+| `/api/provider-model/reorder` | 调整逻辑模型候选池顺序 | logicalModelId, providerModelId, newPriority | 更新后的绑定队列 |
+| `/api/queue/status` | 获取 `auto` 队列状态 | - | 当前手动指定的 Provider 模型 ID |
 | `/api/queue/switch` | 手动切换当前逻辑模型队列起始 Provider 模型 | modelId | 新的当前 Provider 模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
@@ -256,7 +260,7 @@ one-switch/
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
-> `/api/provider-model/list` 返回 Provider 模型池；每个逻辑模型请求到达时，代理根据当前逻辑模型配置和该模型池动态生成候选队列。
+> `/api/provider-model/list` 返回 `auto` 的 ProviderModel 候选池；v0.3 不提供多逻辑模型的独立候选池。
 
 ### 3. 数据存储（`source/server/database/`）
 
@@ -268,7 +272,7 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 新版本 v0.3 15 张核心表（包含 `request_usages`）的 `sqliteTable` 定义。
+- 新版本 v0.3 16 张核心表（包含 `request_usages`）的 `sqliteTable` 定义；其中 `scheduling_policies` 是 LogicalModel-ProviderModel 调度绑定表；这是实施目标，不代表当前源码已完成迁移。
 - `settings` 按命名空间 key 逐项保存全局配置，标量按类型保存，数组/对象才使用 JSON 编码
 - `request_contents` 独立保存可选的请求/响应正文，避免大字段影响日志列表查询
 - 从表定义推导行类型（`$inferSelect`）
@@ -297,12 +301,9 @@ one-switch/
 
 ### 5. 渲染进程（`source/render/`）
 
-React + TypeScript + shadcn/ui + Tailwind + TanStack Query
+React + TypeScript + shadcn/ui + Tailwind + 轻量外部 Store
 
-API 调用端代码从 `source/common/openapi.yaml` 生成：
-- `openapi-typescript` 生成 TypeScript 类型
-- 生成 TanStack Query hooks（或基于 fetch 的 API client）
-- 保证前后端类型一致，减少手动维护成本
+渲染层通过管理 HTTP API 获取 Provider、健康状态、`auto` 队列、设置和请求日志；共享数据由外部 Store 缓存，selector hooks 订阅状态，轮询采用静默刷新。具体 Store 结构以现有渲染状态架构为参考，v0.3 实施时再与新 API 契约对齐。
 
 - **概览页**：服务状态、今日统计、供应商健康卡片
 - **供应商页**：列表、增删改查、测试连接、健康状态
@@ -313,7 +314,7 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 
 ## 构建与打包
 
-### electron-vite
+### Vite
 
 - 主进程、预加载脚本、渲染进程统一配置
 - 开发时支持热重载（主进程重启、渲染进程 HMR）
@@ -330,7 +331,7 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 
 ## 开发流程
 
-1. `npm run dev` — 启动 electron-vite 开发模式，主进程和渲染进程热重载
+1. `pnpm dev` — 启动 Vite 开发模式，主进程和渲染进程热重载
 2. `npm run build` — 构建主进程、预加载、渲染进程
 3. `npm run package` — 打包当前平台安装包
 4. `npm run test` — 运行单元测试（代理核心逻辑、配置迁移等）
@@ -340,6 +341,6 @@ API 调用端代码从 `source/common/openapi.yaml` 生成：
 1. **代理服务纯 Node 化**：不依赖 Electron，可独立测试、未来抽 CLI
 2. **管理 API 走 HTTP**：React UI 和未来 CLI/Web 控制台复用同一套 API
 3. **原生 http 不引入框架**：减少依赖、完全控制流式行为
-4. **TanStack Query 管理服务端状态**：配合 HTTP API 模式，缓存、重试、乐观更新开箱即用
+4. **轻量外部 Store 管理共享状态**：集中缓存 Provider、健康状态、`auto` 队列和设置，避免页面重复请求与轮询闪烁
 5. **shadcn/ui + Tailwind**：组件按需复制、体积小、定制灵活
-6. **electron-vite 统一构建**：一套配置管三个进程，开发体验好
+6. **Vite 统一构建**：一套配置管三个进程，开发体验好
