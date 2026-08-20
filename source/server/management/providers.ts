@@ -43,7 +43,10 @@ const CreateProviderSchema = ProviderSchema.pick({
   timeoutMilliseconds: true,
   enabled: true,
 })
-  .extend({ apiKey: z.string().min(1).optional(), endpoints: UpstreamUrlsSchema.optional() })
+  .extend({
+    apiKey: z.string().trim().min(1).optional(),
+    endpoints: UpstreamUrlsSchema.optional(),
+  })
   .partial({ timeoutMilliseconds: true, enabled: true })
 
 async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
@@ -74,7 +77,10 @@ const UpdateProviderSchema = ProviderSchema.pick({
 })
   .partial()
   .required({ id: true })
-  .extend({ apiKey: z.string().min(1).optional(), endpoints: UpstreamUrlsSchema.optional() })
+  .extend({
+    apiKey: z.string().trim().min(1).optional(),
+    endpoints: UpstreamUrlsSchema.optional(),
+  })
 
 async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id, apiKey, endpoints, ...updates } = UpdateProviderSchema.parse(body)

@@ -173,7 +173,7 @@ export function useModelManagementService() {
         })
       : await providerApi.create({
           name: providerName.trim(),
-          apiKey: apiKey.trim(),
+          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           timeoutMilliseconds: Number(timeout),
           endpoints,
         })
