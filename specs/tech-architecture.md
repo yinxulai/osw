@@ -268,8 +268,8 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 新版本 9 张业务表（app_config、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents、audit_events）的 `sqliteTable` 定义
-- `app_config` 按命名空间 key 逐项保存全局配置，value 使用 JSON 编码
+- 新版本 8 张业务表（settings、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents）的 `sqliteTable` 定义
+- `settings` 按命名空间 key 逐项保存全局配置，value 使用 JSON 编码
 - `request_contents` 独立保存可选的请求/响应正文，避免大字段影响日志列表查询
 - 从表定义推导行类型（`$inferSelect`）
 
