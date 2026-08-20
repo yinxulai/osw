@@ -186,14 +186,16 @@ export const logsApi = {
 
 // ========== Request Logs ==========
 
+export type ListRequestLogsParams = {
+  limit?: number
+  offset?: number
+  providerId?: string
+  protocol?: string
+  status?: 'pending' | 'success' | 'failed' | 'cancelled'
+}
+
 export const requestLogApi = {
-  list: (params: {
-    limit?: number
-    offset?: number
-    providerId?: string
-    protocol?: string
-    status?: 'pending' | 'success' | 'failed' | 'cancelled'
-  } = {}) =>
+  list: (params: ListRequestLogsParams = {}) =>
     request<{ logs: RequestLogEntry[]; total: number }>('/request-log/list', params),
 }
 

@@ -544,11 +544,7 @@ function requestLogFilterConditions(filter?: RequestLogFilter) {
   return conditions
 }
 
-export async function listRequestLogs(
-  limit = 50,
-  offset = 0,
-  filter?: RequestLogFilter,
-): Promise<RequestLog[]> {
+export async function listRequestLogs(limit = 50, offset = 0, filter?: RequestLogFilter): Promise<RequestLog[]> {
   const conditions = requestLogFilterConditions(filter)
   const rows = getDb()
     .select()

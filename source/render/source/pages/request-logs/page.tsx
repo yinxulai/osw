@@ -30,6 +30,8 @@ import { formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from 
 
 type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
 
+type RequestLogsFilter = { providerId: string; protocol: string; status: StatusFilter }
+
 export function RequestLogsPage() {
   const { logs, total, providers, loading, refreshing, getModelName, refresh, setFilter } = useRequestLogsService()
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -38,7 +40,7 @@ export function RequestLogsPage() {
   const [protocolFilter, setProtocolFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
 
-  const applyFilter = (next: Partial<{ providerId: string; protocol: string; status: StatusFilter }>) => {
+  const applyFilter = (next: Partial<RequestLogsFilter>) => {
     if (next.providerId !== undefined) setProviderFilter(next.providerId)
     if (next.protocol !== undefined) setProtocolFilter(next.protocol)
     if (next.status !== undefined) setStatusFilter(next.status)
