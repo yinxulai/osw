@@ -328,9 +328,14 @@ export function createSseConverter(clientProtocol: Protocol, endpointProtocol: P
     },
     flush(): string {
       if (!buffer.trim()) return ''
-      const out = convertEvent({ data: buffer })
+      const raw = buffer
       buffer = ''
-      return out
+      // 剩余文本可能已含 data: 前缀，也可能只是裸 JSON
+      const stripped = raw
+        .split('\n')
+        .map(line => (line.startsWith('data:') ? line.slice(5).trim() : line))
+        .join('\n')
+      return convertEvent({ data: stripped })
     },
   }
 }

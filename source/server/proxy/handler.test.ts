@@ -88,6 +88,12 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
   }
 }
 
+function convertibleModel(id: string, providerId: string, upstreamUrl: string, upstreamModelId: string, protocol: ModelWithProvider['model']['endpoints'][number]['protocol']): ModelWithProvider {
+  const entry = model(id, providerId, upstreamUrl, upstreamModelId, protocol)
+  entry.model.endpoints[0].protocolConversionEnabled = true
+  return entry
+}
+
 describe('handleProxyRequest', () => {
   it('discards a retryable response before forwarding the next successful response', async () => {
     configureSecretStore({
@@ -314,6 +320,162 @@ describe('handleProxyRequest', () => {
           output_tokens: 80,
         },
       }),
+    )
+  })
+
+  it('converts an anthropic request to an openai-completions endpoint and back', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((req, res) => {
+      const chunks: Buffer[] = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({
+          id: 'chatcmpl_conv',
+          model: body.model,
+          choices: [{ index: 0, message: { role: 'assistant', content: 'converted' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 2 },
+        }))
+      })
+    })
+    mocks.models = [
+      convertibleModel('model_conv', 'prov_conv', `${upstream.url}/v1/chat/completions`, 'upstream-model', 'openai-completions'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', system: 'sys', max_tokens: 32, messages: [{ role: 'user', content: 'hi' }] }),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const payload = JSON.parse(text)
+    expect(payload.type).toBe('message')
+    expect(payload.content).toEqual([{ type: 'text', text: 'converted' }])
+    expect(payload.stop_reason).toBe('end_turn')
+    expect(payload.usage).toEqual({ input_tokens: 5, output_tokens: 2 })
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
+    )
+  })
+
+  it('rejects when no native or conversion-enabled endpoint exists', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{}')
+    })
+    mocks.models = [
+      model('model_native', 'prov_native', `${upstream.url}/v1/chat/completions`, 'native-model', 'openai-completions'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+    })
+
+    expect(response.status).toBe(503)
+    const payload = await response.json()
+    expect(payload.errorMessage).toContain('未绑定')
+    expect(payload.errorMessage).toContain('协议转换')
+  })
+
+  it('prefers the native endpoint over a conversion-enabled endpoint', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const native = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ id: 'msg_native', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'native' }], stop_reason: 'end_turn' }))
+    })
+    const convertible = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ id: 'chatcmpl_conv', choices: [{ index: 0, message: { role: 'assistant', content: 'converted' }, finish_reason: 'stop' }] }))
+    })
+    const entry = convertibleModel('model_pref', 'prov_pref', `${convertible.url}/v1/chat/completions`, 'conv-model', 'openai-completions')
+    entry.model.endpoints.push({ protocol: 'anthropic-messages', upstreamUrl: `${native.url}/v1/messages`, customAuthHeader: null, protocolConversionEnabled: false })
+    mocks.models = [entry]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+    })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.id).toBe('msg_native')
+    expect(payload.content).toEqual([{ type: 'text', text: 'native' }])
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ upstreamProtocol: null }),
+    )
+  })
+
+  it('streams a converted SSE response with a trailing DONE marker', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write('data: {"choices":[{"delta":{"content":"he"}}]}\n\n')
+      res.write('data: {"choices":[{"delta":{"content":"y"}}]}\n\n')
+      res.end('data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\ndata: [DONE]\n\n')
+    })
+    mocks.models = [
+      convertibleModel('model_stream_conv', 'prov_stream_conv', `${upstream.url}/v1/chat/completions`, 'stream-model', 'openai-completions'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'model_default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16, stream: true }),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const events = text.split('\n\n').filter(Boolean)
+    const parsed = events.map(event => {
+      const data = event.split('\n').find(line => line.startsWith('data: '))?.slice(6)
+      if (!data || data === '[DONE]') return data ?? null
+      return JSON.parse(data)
+    })
+    expect(parsed[0]).toEqual({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'he' } })
+    expect(parsed[1]).toEqual({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'y' } })
+    expect(parsed[2]).toEqual({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 3, output_tokens: 2 } })
+    expect(parsed[3]).toBe('[DONE]')
+    expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+    expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
     )
   })
 

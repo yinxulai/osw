@@ -489,7 +489,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           if (sseConverter) {
             const converted = sseConverter.push(chunk.toString('utf8'))
             if (converted) res.write(converted)
-          } else {
+          } else if (!converting || isStreaming) {
+            // 非流式转换路径先缓冲原始响应，end 时统一转换后写出
             res.write(chunk)
           }
         }

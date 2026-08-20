@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectProtocolFromPath, findEndpoint } from './router'
+import { detectProtocolFromPath, findConvertibleEndpoint, findEndpoint } from './router'
 import type { UpstreamModel } from '@common/schemas'
 
 describe('findEndpoint', () => {
@@ -25,6 +25,62 @@ describe('findEndpoint', () => {
 
   it('returns undefined when the protocol is not configured', () => {
     expect(findEndpoint(model, 'openai-responses')).toBeUndefined()
+  })
+})
+
+describe('findConvertibleEndpoint', () => {
+  const base: UpstreamModel = {
+    id: 'model_1',
+    providerId: 'prov_1',
+    upstreamModelId: 'upstream-1',
+    endpoints: [],
+    priority: 1,
+    enabled: true,
+    createdTime: 0,
+    updatedTime: 0,
+    deletedTime: null,
+  }
+
+  it('returns the conversion-enabled endpoint for a convertible client protocol', () => {
+    const model: UpstreamModel = {
+      ...base,
+      endpoints: [
+        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+      ],
+    }
+    expect(findConvertibleEndpoint(model, 'anthropic-messages')?.protocol).toBe('openai-completions')
+    expect(findConvertibleEndpoint(model, 'openai-responses')?.protocol).toBe('openai-completions')
+  })
+
+  it('ignores endpoints without protocolConversionEnabled', () => {
+    const model: UpstreamModel = {
+      ...base,
+      endpoints: [
+        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
+      ],
+    }
+    expect(findConvertibleEndpoint(model, 'anthropic-messages')).toBeUndefined()
+  })
+
+  it('ignores endpoints whose protocol cannot serve the client protocol', () => {
+    const model: UpstreamModel = {
+      ...base,
+      endpoints: [
+        { protocol: 'openai-responses', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+      ],
+    }
+    expect(findConvertibleEndpoint(model, 'anthropic-messages')).toBeUndefined()
+    expect(findConvertibleEndpoint(model, 'openai-completions')).toBeUndefined()
+  })
+
+  it('does not match an endpoint serving its own protocol', () => {
+    const model: UpstreamModel = {
+      ...base,
+      endpoints: [
+        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+      ],
+    }
+    expect(findConvertibleEndpoint(model, 'openai-completions')).toBeUndefined()
   })
 })
 
