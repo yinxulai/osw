@@ -105,7 +105,6 @@ erDiagram
     text clientResponse
     text attempts
     text conversion
-    integer truncated
     integer createdTime
     integer updatedTime
   }
@@ -287,7 +286,14 @@ CREATE INDEX idx_logical_models_deleted_time
 
 ### 3.4 `upstream_models`
 
-上游模型是 Provider 上可被路由的真实模型配置。每个启用的上游模型会自动出现在所有启用逻辑模型的候选队列中。每个逻辑模型的队列是根据逻辑模型配置和全局上游模型池动态生成的。
+上游模型是 Provider 上可被路由的真实模型配置。每个上游模型都有独立的启用开关（`config.enabled`）。**只有同时满足以下条件的上游模型才会进入逻辑模型的候选队列：**
+
+1. 上游模型自身 `enabled = true`；
+2. 所属 Provider `enabled = true` 且未被软删除；
+3. 上游模型未被软删除；
+4. 上游模型至少有一个与请求协议匹配（或可转换）的端点。
+
+禁用（`enabled = false`）的上游模型不会出现在任何逻辑模型的候选队列中，但其配置完整保留，重新启用后立即恢复参与路由。每个逻辑模型的队列是根据逻辑模型配置和全局上游模型池动态生成的。
 
 ```sql
 CREATE TABLE upstream_models (
@@ -352,7 +358,7 @@ CREATE INDEX idx_upstream_models_deleted_time
 
 以下内容全部属于可演进配置：
 
-- `enabled`；
+- `enabled`（启用开关，控制是否参与路由）；
 - `priority` 和 `weight`；
 - 协议端点；
 - 重试和冷却策略；
@@ -512,6 +518,7 @@ CREATE INDEX idx_request_contents_updated_time
 
 ```json
 {
+  "schemaVersion": 1,
   "fromProtocol": "anthropic-messages",
   "toProtocol": "openai-completions",
   "requestBefore": {},
@@ -753,9 +760,10 @@ Store 层应分为两部分：
 
 请求日志按保留策略物理删除：
 
-1. 先删除 `request_attempts`；
-2. 再删除 `request_logs`；
-3. `audit_events` 按独立审计保留策略清理。
+1. 先删除 `request_contents`；
+2. 再删除 `request_attempts`；
+3. 最后删除 `request_logs`；
+4. `audit_events` 按独立审计保留策略清理。
 
 历史日志不依赖 `logical_models`、`upstream_models` 的当前配置内容。逻辑模型队列是运行时根据当前逻辑模型和全局上游模型池计算出来的，不单独持久化队列关系。
 
@@ -797,6 +805,56 @@ Store 层应分为两部分：
 8. 配置导入导出逻辑；
 9. Provider、模型、路由和统计相关 SQL；
 10. 删除旧版 Drizzle 迁移文件，生成新的首发基线。
+
+## 11. 后续演进建议（评审补充）
+
+以下是对当前设计的补充建议，按优先级排列，供后续迭代评审时决策。
+
+### 11.1 建议尽快明确
+
+**`app_config` 与 `settings` 表名统一。**
+当前代码使用 `settings`，本文使用 `app_config`。落地前必须二选一，避免文档与实现长期分叉。建议以本文的 `app_config` 为准并重命名现有表，因为“命名空间 KV”的语义比“settings”更准确，也为未来非设置类全局状态留出空间。
+
+**`request_contents` 的 `attempts` 数组上限。**
+正文不限制大小，但单个请求的尝试次数可能很多（重试风暴）。建议在文档层面约定：`attempts` 数组按实际尝试次数完整保存，但每次尝试的正文若超过某个“展示友好”阈值（如 1MB），可在 envelope 中降级为 `bodyPreview` + `bodyOmitted: true`，这不是存储限制，而是防止单行 JSON 过大导致 UI 无法渲染。是否采用需要产品决策。
+
+**`captureStatus` 枚举值定义。**
+建议明确为：`captured`（完整采集）、`partial`（流式采集中断或部分丢失）、`disabled`（未开启采集）、`failed`（采集异常）。日志详情页据此展示不同状态，而不是猜测内容为空的原因。
+
+### 11.2 建议在实现前定稿
+
+**时间戳统一为毫秒。**
+`createdTime` 等字段当前实现为毫秒（`Date.now()`），文档未显式声明单位。建议在本文明确“所有时间戳均为 Unix 毫秒”，避免后续统计 SQL 中出现秒/毫秒混用。
+
+**`request_logs.logicalModelId` 的快照语义。**
+当前仅存 ID。若逻辑模型被删除，日志详情页将无法显示模型名称。建议在 `metadata` JSON 中冗余 `logicalModelName` 快照，与“历史日志不依赖可变配置”原则一致（快照属于日志自身数据，不是外键依赖）。
+
+**`provider_health` 的清理时机。**
+第 8 节写“保留，或者在事务中清理”，建议定稿为：Provider 软删除时保留健康状态（便于恢复后观察），Provider 物理删除（若未来提供）时一并清理。
+
+**`audit_events` 的启用决策。**
+该表目前标注“可按产品需求启用或延后实现”。建议明确：若 v0.3 不实现，则从 9 张表中移除，改为 8 张表，避免“文档有、代码无”的长期分叉；若实现，需同步定义 `resourceType` 枚举和保留策略。
+
+**索引与查询模式对齐。**
+建议在实现前根据日志页的实际查询模式复核索引：
+- 日志列表默认按 `createdTime DESC` 分页 → 已有索引覆盖；
+- 按状态筛选 → 已有索引覆盖；
+- 按逻辑模型筛选 → 已有索引覆盖；
+- 按供应商筛选日志 → 当前无直接索引，需通过 `request_attempts` JOIN，若日志页需要此筛选，考虑在 `request_logs.metadata` 中冗余 `providerId` 或接受 JOIN 开销。
+
+### 11.3 可延后但建议预留
+
+**`request_contents` 独立分页查询。**
+正文表体积远大于日志表。若未来提供“仅浏览有正文的日志”视图，`request_contents` 上的 `requestId IN (...)` 查询即可满足；暂不需要额外反向索引。
+
+**JSON 文档升级函数的注册机制。**
+第 4 节描述了 `V1 -> V2 -> V3` 升级链，建议实现时采用显式注册表（`{ 1: upgradeToV2, 2: upgradeToV3 }`）而非 if-else 链，便于测试每个升级步骤。
+
+**数据库文件版本标记。**
+虽然不兼容旧版，建议在 `app_config` 中写入 `database.schemaBaseline = "v0.3"`，未来再发不兼容版本时可用于检测并提示用户，而不是静默打开结构不匹配的库。
+
+**WAL checkpoint 与应用退出。**
+本地桌面应用退出时建议执行 `PRAGMA wal_checkpoint(TRUNCATE)`，避免残留过大的 WAL 文件；这属于实现细节，但值得写入 desktop spec。
 
 ## 11. 最终结论
 
