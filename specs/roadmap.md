@@ -1,58 +1,55 @@
 # 版本规划与验收标准
 
-本文分为“已完成的新版本基础”“新版本设计”和“后续功能待办”三部分，避免把已完成工作继续列为待办。
+本文分为"设计定稿""实施计划"和"功能待办"三部分。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
 
-## 一、已完成：新版本基础重构
+## 一、设计定稿（已完成）
 
-### 数据模型与配置
+以下设计文档已评审定稿，是实施的唯一依据：
 
-- [x] 新版本从零设计，不以旧版本表结构兼容为目标。
-- [x] `settings` 使用逐 key 存储的 namespace KV 结构，新增配置项不需要修改表结构。
-- [x] 保留 `logical_models` 和 `upstream_models` 表名。
-- [x] `upstream_models` 作为全局共享上游模型池，不再通过 `logicalModelId` 绑定逻辑模型。
-- [x] 供应商和模型的可扩展字段采用 JSON 存储，稳定查询字段保留为关系型列。
-- [x] 请求日志稳定字段与正文内容分离，新增 `request_contents` 表。
+- [x] [data-model.md](./data-model.md)：8 张表基线（settings、providers、logical_models、upstream_models、provider_health、request_logs、request_attempts、request_contents），JSON config + 稳定关系列、三层日志、软删除、Unix 毫秒时间戳。
+- [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。
+- [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
-### 日志保留与隐私
+### 产品与设计原则（摘要）
 
-- [x] 请求日志记录请求、响应和上游尝试元数据。
-- [x] 支持按数量自动清理日志。
-- [x] 支持按天自动清理日志，按数量和按天策略同时生效。
-- [x] 设置页支持手动清理指定天数之前的日志。
-- [x] 清理时同步删除请求正文、上游尝试记录和请求汇总。
-- [x] 默认关闭完整请求/响应正文记录。
-- [x] 正文不设置人为大小上限，由保留条数和保留天数控制生命周期。
-
-### 工程验证
-
-- [x] 数据库初始化基线包含 9 张业务表。
-- [x] 已补充 `request_contents` 初始化和类型定义。
-- [x] 服务端测试、TypeScript 类型检查和 lint 均通过。
-
-## 二、新版本设计与产品原则
-
-本章描述新版本的稳定设计，不是当前迭代待办。
-
-### 数据演进
-
-- 经常扩展的配置、供应商属性和模型属性优先进入 Schema 驱动的 JSON/KV 数据。
-- 只有需要筛选、排序、关联或建立索引的稳定字段才进入关系型列。
-- 新增字段必须同步运行时 Schema、默认值、导入导出和数据库初始化基线。
-
-### 上游模型与路由
-
-- 上游模型是全局共享池成员，不属于某个逻辑模型的绑定对象。
-- 每个上游模型有独立启用开关；禁用的上游模型不进入任何逻辑模型的候选队列，配置保留，重新启用后立即恢复。
-- 每个逻辑模型的候选队列由全局启用的上游模型动态组成。
-- 路由按协议筛选候选项，再按优先级、健康状态和冷却状态尝试。
+- 经常扩展的配置、供应商属性和模型属性优先进入 Schema 驱动的 JSON/KV 数据；只有需要筛选、排序、关联或建立索引的稳定字段才进入关系型列。
+- 上游模型是全局共享池成员，每个上游模型有独立启用开关；逻辑模型的候选队列由全局启用的上游模型动态组成，路由按协议筛选后再按优先级、健康与冷却状态尝试。
 - 手动切换只影响后续新请求，不中断已经开始的请求。
+- 请求日志分为稳定元数据、上游尝试记录和可选正文内容三层；正文记录默认关闭，敏感信息必须脱敏。
 
-### 可观测性与隐私
+## 二、实施计划（从头实施）
 
-- 请求日志分为稳定元数据、上游尝试记录和可选正文内容三层。
-- 正文记录面向本地调试，默认关闭，启用后完整保存在本地数据库。
-- `Authorization`、API Key、Cookie、Set-Cookie 等敏感信息必须脱敏。
-- 日志查看入口应支持客户端请求、最终响应、每次上游尝试及协议转换前后内容。
+按依赖顺序分阶段落地，每阶段完成后通过 `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 验证。
+
+### 阶段 1：数据库新基线
+
+- [ ] 按 data-model.md 重建 schema：8 张表、CHECK 约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, upstreamModelId) WHERE deletedTime IS NULL
+- [ ] `settings` 初始化使用 INSERT OR IGNORE 幂等写入
+- [ ] `provider_health` 随 Provider 创建同事务插入
+- [ ] `request_contents` 四列正文结构（requestHeader/requestBody/responseHeader/responseBody）+ attempts + conversions（attemptId 关联）
+- [ ] 删除旧迁移，建立全新初始化基线（不兼容旧版数据库）
+- [ ] store 层 CRUD 与 Zod Schema 对齐新表结构
+
+### 阶段 2：代理管线重构
+
+按 proxy.md「实施说明」五步执行，旧 handler 拆分后删除：
+
+- [ ] 搭建共享骨架：handler 编排（候选路由、尝试循环、手动切换）、transport 纯 I/O（空闲超时、中止、SSE 解析）、hooks 观测订阅
+- [ ] 实现 ProtocolAdapter 接口（buildUpstreamRequest / createResponsePipeline / classifyError）
+- [ ] 落地 openai、anthropic、gemini 三个协议适配器（protocols/ 目录）
+- [ ] conversions/ 注册表承接协议转换（模型级开关，默认关闭）
+- [ ] usage 提取、日志写入收敛到 hooks 订阅者，handler 不再内联
+- [ ] `/v1/models` 返回所有启用逻辑模型
+
+### 阶段 3：管理 API 与控制台
+
+- [ ] providers / models / settings / request-logs 管理接口对齐新数据模型
+- [ ] 控制台页面适配新接口与字段
+- [ ] 日志清理（按数量 + 按天）在新表结构上验证
+
+### 阶段 4：MVP 功能验收
+
+即第三章 MVP（P0）全部条目。
 
 ## 三、新版本功能待办
 
