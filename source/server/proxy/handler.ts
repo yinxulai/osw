@@ -301,13 +301,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   }
 
   const attemptStartedAt = Date.now()
-  const recordAttempt = async (
-    status: RequestStatus,
-    errorCode?: string,
-    errorMessage?: string,
-    upstreamRequestId?: string | null,
-    errorResponse?: string | null,
-  ) => {
+  const recordAttempt = async (status: RequestStatus, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, errorResponse?: string | null) => {
     try {
       await createRequestAttempt({
         requestId,

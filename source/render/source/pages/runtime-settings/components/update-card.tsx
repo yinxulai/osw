@@ -5,6 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/toast'
 
+type StatusBadgeProps = {
+  status: UpdateCheckStatus
+}
+
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -178,7 +182,7 @@ export function UpdateCard() {
             <summary className="cursor-pointer select-none font-medium text-foreground">
               查看更新说明
             </summary>
-            <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-sans text-[11px] leading-relaxed text-muted-foreground">
+            <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap wrap-break-word font-sans text-[11px] leading-relaxed text-muted-foreground">
               {info.releaseNotes}
             </pre>
           </details>
@@ -235,7 +239,8 @@ export function UpdateCard() {
   )
 }
 
-function StatusBadge({ status }: { status: UpdateCheckStatus }) {
+function StatusBadge(props: StatusBadgeProps) {
+  const { status } = props
   switch (status) {
     case 'checking':
       return <Badge variant="info">检查中</Badge>

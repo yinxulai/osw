@@ -11,7 +11,8 @@ interface ProviderIconProps {
  * 供应商品牌图标。
  * 根据供应商名称匹配内置预设；未匹配时回退到应用图标。
  */
-export function ProviderIcon({ name, size = 17, className }: ProviderIconProps) {
+export function ProviderIcon(props: ProviderIconProps) {
+  const { name, size = 17, className } = props
   const preset = findPresetByName(name)
 
   if (preset) {

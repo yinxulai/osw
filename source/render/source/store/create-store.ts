@@ -50,10 +50,7 @@ export function createStore<T extends object>(initialState: T): Store<T> {
 /**
  * 订阅 store 的某个切片，仅当切片引用变化时重渲染。
  */
-export function useStoreSelector<T extends object, S>(
-  store: Store<T>,
-  selector: (state: T) => S,
-): S {
+export function useStoreSelector<T extends object, S>(store: Store<T>, selector: (state: T) => S): S {
   return useSyncExternalStore(
     store.subscribe,
     () => selector(store.getSnapshot()),
