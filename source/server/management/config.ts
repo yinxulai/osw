@@ -264,7 +264,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const providerModels = config.providerModels.length > 0
       ? config.providerModels.map(model => ({
           id: model.id,
-          providerId: model.providerId,
+          providerId: providerIdMap.get(model.providerId) ?? model.providerId,
           upstreamModelId: model.modelName,
           endpoints: (model.endpoints ?? []).map(endpoint => ({
             protocol: endpoint.protocol,
@@ -278,6 +278,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       : config.upstreamModels
     const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
     const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
+    const providerIdMap = new Map<string, string>()
     const providerNames = new Set(existingProviderNames)
     const importedProviderNames = new Set<string>()
     const importedModelNames = new Set<string>()
@@ -329,6 +330,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     for (const p of config.providers) {
       const existing = existingProviders.find(ep => ep.name === p.name)
       if (existing) {
+        if (p.id) providerIdMap.set(p.id, existing.id)
         const updates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled' | 'upstreamUrls'>> = {
           name: p.name,
         }
@@ -338,6 +340,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         if (p.apiKey) await secretStore.set(existing.apiKeyReference, p.apiKey)
         const updated = await updateProvider(existing.id, updates)
         providerNameToId.set(p.name, updated.id)
+        if (p.id) providerIdMap.set(p.id, updated.id)
         importedProviderIds.add(updated.id)
       } else {
         const apiKeyReference = generateKeyReference()
@@ -350,6 +353,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           upstreamUrls: p.endpoints ? JSON.stringify(p.endpoints) : '{}',
         })
         providerNameToId.set(p.name, created.id)
+        if (p.id) providerIdMap.set(p.id, created.id)
         importedProviderIds.add(created.id)
       }
       importedProviders++
@@ -357,6 +361,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
 
     // 3. 处理逻辑模型
     const importedModelIds = new Set<string>()
+    const logicalModelIdMap = new Map<string, string>()
     let importedLogicalModels = 0
 
     for (const m of config.logicalModels) {
@@ -368,6 +373,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: m.enabled ?? true,
         })
         importedModelIds.add(updated.id)
+        if (m.id) logicalModelIdMap.set(m.id, updated.id)
       } else {
         const created = await createLogicalModel({
           name: m.name,
@@ -375,6 +381,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: m.enabled ?? true,
         })
         importedModelIds.add(created.id)
+        if (m.id) logicalModelIdMap.set(m.id, created.id)
       }
       importedLogicalModels++
     }
@@ -426,9 +433,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     if (config.version === 2) {
       for (const policy of importedPolicies) {
         const providerModelId = importedProviderModelIds.get(policy.providerModelId) ?? policy.providerModelId
-        const logicalModelId = importedModelIds.has(policy.logicalModelId)
-          ? policy.logicalModelId
-          : policy.logicalModelId
+        const logicalModelId = logicalModelIdMap.get(policy.logicalModelId) ?? policy.logicalModelId
         await upsertSchedulingPolicy({
           logicalModelId,
           providerModelId,
