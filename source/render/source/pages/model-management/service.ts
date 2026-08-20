@@ -118,6 +118,11 @@ export function useModelManagementService() {
     [providers, selectedProviderId],
   )
 
+  // 切换供应商后，之前获取到的上游模型列表不再适用，清空避免误用
+  useEffect(() => {
+    setFetchedModels([])
+  }, [selectedProviderId])
+
   const selectedModels = useMemo(
     () => models
       .filter(model => model.providerId === selectedProviderId)
@@ -202,6 +207,7 @@ export function useModelManagementService() {
   const openModelDialog = useCallback((model?: UpstreamModel) => {
     setEditingModel(model ?? null)
     setModelId(model?.upstreamModelId ?? '')
+    setFetchedModels([])
     setBindingEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
       return match
