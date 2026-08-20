@@ -35,8 +35,9 @@ export function useQueueControlService() {
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
 
-  // 订阅全局轮询：健康状态 5 秒、代理状态 5 秒（App 已订阅，这里共享）
+  // 订阅全局轮询：供应商 30 秒、健康状态 5 秒、代理状态 5 秒（App 已订阅，这里共享）
   useAppPolling('health', 5000)
+  useAppPolling('providers', 30000)
   useAppPolling('proxyStatus', 5000)
 
   const loadModels = useCallback(async () => {
