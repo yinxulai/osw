@@ -1,5 +1,104 @@
 # 本地代理服务
 
+## 代理管线架构
+
+代理采用**协议适配器 + 共享骨架**的结构：协议差异进适配器，流程共性进骨架。
+
+### 设计动机
+
+协议差异（model 改写位置、usage 结构、认证头格式、流式结束标记等）如果以 if/else 形式散落在传输层，会随协议数量组合爆炸（协议 × 阶段），且"透传"与"转换"两种模式又叠加在协议维度上。因此每个协议独立实现为适配器，骨架只保留与协议无关的流程。
+
+### 管线流程
+
+```mermaid
+flowchart TD
+    A[proxy/server.ts 监听] --> B[协议识别]
+    B --> C[构建 RequestContext<br/>requestId / protocol / 客户端请求快照]
+    C --> D[router.ts 候选解析<br/>原生协议优先 + 可转换候选]
+    D --> E[手动切换起点 + 健康过滤]
+    E --> F{尝试循环 handler.ts 编排}
+    F --> G[ProtocolAdapter.buildUpstreamRequest<br/>model 改写 / usage 注入 / 认证头]
+    G --> H[transport.ts 纯上游 I/O<br/>连接 / 转发字节 / 空闲超时 / 中止]
+    H --> I[ProtocolAdapter.createResponsePipeline<br/>透传或转换 / usage 提取]
+    I -->|retry| J[health.ts 失败计数 / 冷却] --> F
+    I -->|success / terminal| K[收尾：日志定稿 + 清理]
+```
+
+### 分层职责
+
+| 层 | 文件 | 职责 | 明确不做 |
+| --- | --- | --- | --- |
+| 入口 | `server.ts` | 监听、`/v1/models`、协议识别入口 | 不含业务逻辑 |
+| 上下文 | `request-context.ts` | 一次请求的全部状态（requestId、protocol、快照、尝试记录） | — |
+| 路由 | `router.ts` | 候选解析、手动切换起点、健康过滤 | 不做 I/O |
+| 编排 | `handler.ts` | 尝试循环、结果分类后的分支决策、收尾（瘦身后约百行） | 不含协议细节、日志细节 |
+| 传输 | `transport.ts` | 纯 HTTP I/O：连接、逐块转发、空闲超时、客户端中止检测，通过事件回调（onHeaders/onChunk/onEnd/onError）向外汇报 | 不含日志、usage、转换逻辑 |
+| 协议 | `protocols/*.ts` | 每协议一个适配器（见下） | — |
+| 观测 | `hooks/*.ts` | 日志写入、usage 提取、正文采集，订阅管线事件 | 不改传输行为 |
+
+### ProtocolAdapter 接口契约
+
+每个协议实现一个适配器：
+
+```typescript
+interface ProtocolAdapter {
+  /** 请求方向：model 改写（body 或 URL）、usage 注入参数、认证头格式 */
+  buildUpstreamRequest(input: ClientRequestSnapshot, target: UpstreamTarget): BuiltRequest
+
+  /** 响应方向：透传或转换管线、该协议自身的 usage 提取 */
+  createResponsePipeline(ctx: ResponseContext): ResponsePipeline
+
+  /** 可选：该协议特有的可重试错误判断（如 Anthropic overloaded_error） */
+  classifyError?(statusCode: number, body: unknown): 'retry' | 'terminal'
+}
+```
+
+- 透传模式：适配器直接转发字节；
+- 转换模式：当客户端协议与上游端点协议不同时，由 `protocols/conversions/` 中按 `(from, to)` 注册的转换器接管请求与响应（含流式 SSE）；
+- usage 提取归属各适配器：每个协议自己知道 usage 字段结构，不再用统一字段名猜测。
+
+### 目录结构
+
+```text
+proxy/
+├── server.ts                 # 监听 + /v1/models
+├── handler.ts                # 编排骨架（协议无关）
+├── request-context.ts        # RequestContext
+├── router.ts                 # 候选解析 + 手动切换 + 健康过滤
+├── transport.ts              # 纯上游 I/O + 事件发射
+├── response.ts               # 通用状态分类
+├── health.ts
+├── auth.ts
+├── headers.ts
+├── protocols/
+│   ├── types.ts              # ProtocolAdapter 接口
+│   ├── openai-completions.ts
+│   ├── openai-responses.ts
+│   ├── anthropic-messages.ts
+│   ├── gemini.ts
+│   └── conversions/          # 跨协议转换器，按 (from, to) 注册
+└── hooks/
+    ├── request-logger.ts     # 唯一日志写入点（request_logs / request_attempts）
+    ├── usage-tracker.ts      # token / usage 提取
+    └── content-capture.ts    # request_contents 正文采集（未来）
+```
+
+### 观测订阅原则
+
+日志、usage、正文采集都是管线的订阅者，监听传输层事件：
+
+- 新增观测能力 = 新增一个订阅者，不修改传输代码；
+- 日志写入收敛到 `hooks/request-logger.ts` 单点，消除散落在编排各分支中的手写写入；
+- 正文采集（MVP 待办）接入时只需实现 `content-capture.ts`。
+
+### 迁移步骤
+
+1. 抽取 `transport.ts`：把 `handler.ts` 中的上游 HTTP 逻辑（连接、转发、空闲超时、中止）迁出，事件化；
+2. 定义 `protocols/types.ts` 接口，将现有 `request.ts` / `conversion.ts` / `conversion-response.ts` / usage 提取按协议归位到各适配器；
+3. 抽取 `request-context.ts` 与 `hooks/request-logger.ts`，日志写入收敛单点；
+4. `handler.ts` 瘦身为纯编排；
+5. 每步完成后运行 `pnpm test:server` 与 `pnpm typecheck`，保持现有对外契约（管理 API、日志结构）不变。
+
 ## 服务基本信息
 
 - 默认监听 `127.0.0.1` 的可配置端口，不暴露到局域网
