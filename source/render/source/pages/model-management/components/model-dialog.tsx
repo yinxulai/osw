@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -7,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
 import { PROTOCOL_DESCRIPTIONS, PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
+import type { FetchedUpstreamModel } from '@/api'
 import type { BindingEntry } from '../service'
 
 interface ModelDialogProps {
@@ -17,6 +19,9 @@ interface ModelDialogProps {
   modelId: string
   bindingEntries: BindingEntry[]
   saving: boolean
+  fetchedModels: FetchedUpstreamModel[]
+  fetchingModels: boolean
+  onFetchModels: () => void
   setModelId: (id: string) => void
   updateBindingEntry: (index: number, patch: Partial<BindingEntry>) => void
   onCancel: () => void
@@ -32,6 +37,9 @@ export function ModelDialog(props: ModelDialogProps) {
     modelId,
     bindingEntries,
     saving,
+    fetchedModels,
+    fetchingModels,
+    onFetchModels,
     setModelId,
     updateBindingEntry,
     onCancel,
@@ -39,6 +47,15 @@ export function ModelDialog(props: ModelDialogProps) {
   } = props
 
   const canSave = modelId.trim() && bindingEntries.some(entry => entry.enabled)
+
+  const [modelSearch, setModelSearch] = useState('')
+  const filteredModels = useMemo(() => {
+    const keyword = modelSearch.trim().toLowerCase()
+    if (!keyword) return fetchedModels
+    return fetchedModels.filter(model =>
+      model.id.toLowerCase().includes(keyword) ||
+      (model.displayName ?? '').toLowerCase().includes(keyword))
+  }, [fetchedModels, modelSearch])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -53,7 +70,18 @@ export function ModelDialog(props: ModelDialogProps) {
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
           {/* 模型 ID */}
           <div className="space-y-1.5">
-            <Label htmlFor="model-id">模型 ID</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="model-id">模型 ID</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={fetchingModels}
+                onClick={onFetchModels}
+              >
+                {fetchingModels ? '获取中…' : '从上游获取模型列表'}
+              </Button>
+            </div>
             <Input
               id="model-id"
               value={modelId}
@@ -63,6 +91,38 @@ export function ModelDialog(props: ModelDialogProps) {
             <p className="text-[11px] text-muted-foreground">
               这是上游供应商识别的模型名称，请求会原样转发。
             </p>
+
+            {fetchedModels.length > 0 && (
+              <div className="mt-2 space-y-2 rounded-md border">
+                <Input
+                  className="h-8 border-0 border-b rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  value={modelSearch}
+                  onChange={event => setModelSearch(event.target.value)}
+                  placeholder={`搜索 ${fetchedModels.length} 个模型…`}
+                />
+                <div className="max-h-48 overflow-y-auto p-1">
+                  {filteredModels.length === 0 && (
+                    <p className="px-2 py-3 text-center text-xs text-muted-foreground">没有匹配的模型</p>
+                  )}
+                  {filteredModels.map(model => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent',
+                        model.id === modelId && 'bg-accent',
+                      )}
+                      onClick={() => setModelId(model.id)}
+                    >
+                      <span className="truncate font-mono">{model.id}</span>
+                      {model.ownedBy && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{model.ownedBy}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <Separator />

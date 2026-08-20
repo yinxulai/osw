@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { upstreamModelApi, providerApi } from '@/api'
+import type { FetchedUpstreamModel } from '@/api'
 import { useToast } from '@/components/ui/toast'
 import { useAsyncFn } from '@/services/use-async'
 import {
@@ -78,6 +79,8 @@ export function useModelManagementService() {
   const [editingModel, setEditingModel] = useState<UpstreamModel | null>(null)
   const [modelId, setModelId] = useState('')
   const [bindingEntries, setBindingEntries] = useState<BindingEntry[]>([])
+  const [fetchedModels, setFetchedModels] = useState<FetchedUpstreamModel[]>([])
+  const [fetchingModels, setFetchingModels] = useState(false)
 
   // 订阅全局轮询
   useAppPolling('providers', 10000)
@@ -212,6 +215,56 @@ export function useModelManagementService() {
     setModelDialogOpen(false)
   }, [])
 
+  const fetchModels = useCallback(async () => {
+    if (!selectedProvider) return
+    const providerEndpoints = parseProviderEndpoints(selectedProvider)
+
+    // 组合候选请求：启用的协议优先（覆盖地址 > 供应商默认地址）；
+    // 若一个协议都没启用，则回退到供应商配置了默认地址的所有协议。
+    const enabledEntries: BindingEntry[] = bindingEntries.filter(entry => entry.enabled)
+    const sourceEntries: (BindingEntry | { protocol: Protocol })[] = enabledEntries.length > 0
+      ? enabledEntries
+      : PROTOCOL_OPTIONS
+          .map(option => ({ protocol: option.value as Protocol }))
+          .filter(option => Boolean(providerEndpoints[option.protocol]))
+
+    const requests = sourceEntries
+      .map(entry => {
+        const overrideUrl = 'overrideUrl' in entry && entry.overrideUrl ? entry.upstreamUrl.trim() : ''
+        return {
+          protocol: entry.protocol,
+          baseUrl: overrideUrl || providerEndpoints[entry.protocol] || '',
+        }
+      })
+      .filter(request => request.baseUrl)
+
+    if (requests.length === 0) {
+      toast.error('没有可用的上游地址：请启用协议并填写覆盖地址，或在供应商中配置默认接口地址')
+      return
+    }
+
+    setFetchingModels(true)
+    try {
+      const results = await Promise.all(requests.map(request => providerApi.fetchModels({
+        protocol: request.protocol,
+        providerId: selectedProvider.id,
+        baseUrl: request.baseUrl,
+      })))
+      const merged = new Map<string, FetchedUpstreamModel>()
+      for (const result of results) {
+        if (!result.success) continue
+        for (const model of result.data.models) if (!merged.has(model.id)) merged.set(model.id, model)
+      }
+      if (merged.size === 0) {
+        toast.error('上游未返回可用模型，请检查地址和 API Key')
+        return
+      }
+      setFetchedModels([...merged.values()].sort((a, b) => a.id.localeCompare(b.id)))
+    } finally {
+      setFetchingModels(false)
+    }
+  }, [bindingEntries, selectedProvider, toast])
+
   const updateBindingEntry = useCallback((index: number, patch: Partial<BindingEntry>) => {
     setBindingEntries(current => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
   }, [])
@@ -301,6 +354,10 @@ export function useModelManagementService() {
     selectedModels,
     loading,
     saving: savingProvider || savingModel,
+    // Model dialog: fetched upstream models
+    fetchedModels,
+    fetchingModels,
+    fetchModels,
     // Provider dialog
     providerDialogOpen,
     setProviderDialogOpen,

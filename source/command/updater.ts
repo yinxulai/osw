@@ -84,6 +84,14 @@ export class UpdaterManager {
     // 允许预发布版本（pre-release 阶段）
     autoUpdater.allowPrerelease = true
 
+    // macOS 应用为 ad-hoc 签名（无开发者证书），每次构建的 CDHash 都不同，
+    // ShipIt 校验 designated requirement 必然失败（"代码未能满足指定的代码要求"）。
+    // 因此关闭更新包的代码签名校验；zip 内的完整性由 latest-mac.yml 的 sha512 保证。
+    if (process.platform === 'darwin') {
+      // electron-updater 类型定义未暴露该属性，运行时实际存在（MacUpdater 支持）
+      ;(autoUpdater as unknown as { verifyUpdateCodeSignature: boolean }).verifyUpdateCodeSignature = false
+    }
+
     autoUpdater.on('checking-for-update', () => {
       this.setState({ status: 'checking', errorMessage: null })
     })

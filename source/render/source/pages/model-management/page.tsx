@@ -122,6 +122,9 @@ export function ModelManagementPage() {
           modelId={service.modelId}
           bindingEntries={service.bindingEntries}
           saving={service.saving}
+          fetchedModels={service.fetchedModels}
+          fetchingModels={service.fetchingModels}
+          onFetchModels={service.fetchModels}
           setModelId={service.setModelId}
           updateBindingEntry={service.updateBindingEntry}
           onCancel={service.closeModelDialog}

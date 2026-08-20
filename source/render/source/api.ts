@@ -10,6 +10,7 @@ import type {
   LogicalModel,
   UpstreamModel,
   ProtocolEndpoint,
+  Protocol,
   Settings,
   ProxyServerStatus,
   LogEntry,
@@ -91,9 +92,25 @@ async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse
 
 // ========== Provider ==========
 
+export interface FetchedUpstreamModel {
+  id: string
+  ownedBy: string | null
+  displayName: string | null
+  createdTime: number | null
+}
+
+export interface FetchUpstreamModelsInput {
+  protocol: Protocol
+  providerId?: string
+  baseUrl?: string
+  apiKey?: string
+}
+
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
+  fetchModels: (input: FetchUpstreamModelsInput) =>
+    request<{ models: FetchedUpstreamModel[]; matchedUrl: string; attempts: { url: string; statusCode?: number; error?: string }[] }>('/provider/fetch-models', input),
   create: (data: CreateProviderInput) =>
     request<Provider>('/provider/create', data),
   update: (id: string, updates: UpdateProviderInput) =>
