@@ -1,5 +1,4 @@
 import http from 'node:http'
-import https from 'node:https'
 import { URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertibleEndpoint } from './router'
@@ -16,6 +15,7 @@ import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
+import { sendUpstreamRequest } from './transport'
 
 class ClientRequestCancelledError extends Error {
   readonly code = 'CLIENT_REQUEST_ABORTED'
@@ -297,7 +297,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
-  const transport = isHttps ? https : http
 
   const headers = createUpstreamHeaders(
     req.headers,
@@ -378,7 +377,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       resolve(outcome)
     }
 
-    const upstreamReq = transport.request(options, upstreamRes => {
+    const upstreamReq = sendUpstreamRequest(parsed, options, upstreamBody, upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
@@ -572,11 +571,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       upstreamReq.destroy(new Error('Connection timeout'))
     })
 
-    // 发送请求体
-    if (upstreamBody.length > 0) {
-      upstreamReq.write(upstreamBody)
-    }
-    upstreamReq.end()
   })
 }
 
