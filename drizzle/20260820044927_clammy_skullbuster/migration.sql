@@ -39,6 +39,8 @@ CREATE TABLE `request_attempts` (
 	`status` text NOT NULL,
 	`errorCode` text,
 	`errorMessage` text,
+	`upstreamRequestId` text,
+	`errorResponse` text,
 	`durationMilliseconds` integer NOT NULL,
 	`createdTime` integer NOT NULL,
 	CONSTRAINT `fk_request_attempts_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`),
@@ -54,6 +56,10 @@ CREATE TABLE `request_logs` (
 	`totalTokens` integer,
 	`inputTokens` integer,
 	`outputTokens` integer,
+	`cachedInputTokens` integer,
+	`cacheCreationInputTokens` integer,
+	`promptCacheHit` integer,
+	`rawUsage` text,
 	`ttftMilliseconds` integer,
 	`cacheHit` integer,
 	`createdTime` integer NOT NULL
@@ -76,7 +82,6 @@ CREATE TABLE `settings` (
 --> statement-breakpoint
 CREATE TABLE `upstream_models` (
 	`id` text PRIMARY KEY,
-	`logicalModelId` text NOT NULL,
 	`providerId` text NOT NULL,
 	`upstreamModelId` text NOT NULL,
 	`endpoints` text DEFAULT '[]' NOT NULL,
@@ -85,7 +90,6 @@ CREATE TABLE `upstream_models` (
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	`deletedTime` integer,
-	CONSTRAINT `fk_upstream_models_logicalModelId_logical_models_id_fk` FOREIGN KEY (`logicalModelId`) REFERENCES `logical_models`(`id`),
 	CONSTRAINT `fk_upstream_models_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
 );
 --> statement-breakpoint
@@ -98,6 +102,6 @@ CREATE INDEX `idx_attempts_provider` ON `request_attempts` (`providerId`);--> st
 CREATE INDEX `idx_attempts_created_time` ON `request_attempts` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_created_time` ON `request_logs` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_status` ON `request_logs` (`status`);--> statement-breakpoint
-CREATE INDEX `idx_upstream_models_logical_priority` ON `upstream_models` (`logicalModelId`,`priority`);--> statement-breakpoint
+CREATE INDEX `idx_upstream_models_priority` ON `upstream_models` (`priority`);--> statement-breakpoint
 CREATE INDEX `idx_upstream_models_provider` ON `upstream_models` (`providerId`);--> statement-breakpoint
 CREATE INDEX `idx_upstream_models_deleted_time` ON `upstream_models` (`deletedTime`);

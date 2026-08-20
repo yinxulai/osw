@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "e899fa0d-0b74-4d54-bdec-c6e78a258646",
+  "id": "a428743b-134d-4582-85dd-916f826b99f7",
   "prevIds": [
-    "43151e93-87c0-465b-a76f-13a6a903784d"
+    "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
     {
@@ -335,6 +335,26 @@
       "table": "request_attempts"
     },
     {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamRequestId",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "errorResponse",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
@@ -431,6 +451,36 @@
       "default": null,
       "generated": null,
       "name": "outputTokens",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cachedInputTokens",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cacheCreationInputTokens",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "promptCacheHit",
       "entityType": "columns",
       "table": "request_logs"
     },
@@ -600,16 +650,6 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "logicalModelId",
-      "entityType": "columns",
-      "table": "upstream_models"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
       "name": "providerId",
       "entityType": "columns",
       "table": "upstream_models"
@@ -728,21 +768,6 @@
       "name": "fk_request_attempts_providerId_providers_id_fk",
       "entityType": "fks",
       "table": "request_attempts"
-    },
-    {
-      "columns": [
-        "logicalModelId"
-      ],
-      "tableTo": "logical_models",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "nameExplicit": false,
-      "name": "fk_upstream_models_logicalModelId_logical_models_id_fk",
-      "entityType": "fks",
-      "table": "upstream_models"
     },
     {
       "columns": [
@@ -955,10 +980,6 @@
     {
       "columns": [
         {
-          "value": "logicalModelId",
-          "isExpression": false
-        },
-        {
           "value": "priority",
           "isExpression": false
         }
@@ -966,7 +987,7 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "idx_upstream_models_logical_priority",
+      "name": "idx_upstream_models_priority",
       "entityType": "indexes",
       "table": "upstream_models"
     },
