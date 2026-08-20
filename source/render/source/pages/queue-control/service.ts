@@ -59,7 +59,6 @@ export function useQueueControlService() {
   // 初始化：等全局逻辑模型数据就绪后加载本页数据
   useEffect(() => {
     if (initializedRef.current) return
-    if (logicalModels.length === 0) return
 
     initializedRef.current = true
     const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]

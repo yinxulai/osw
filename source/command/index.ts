@@ -142,8 +142,23 @@ function createWindow() {
   // 移除默认菜单栏
   win.setMenuBarVisibility(false)
   if (process.platform === 'darwin') {
-    // 保留系统编辑菜单，否则 Cmd+V 等原生输入快捷键会失效。
+    // 保留系统应用菜单，否则 Cmd+V / Cmd+Q 等原生快捷键会失效。
+    // - Cmd+Q 退出应用（走 before-quit 清理流程）
+    // - Cmd+W 关闭窗口（被 tray-manager 拦截为隐藏到菜单栏）
+    // - Cmd+M 最小化、Cmd+H 隐藏、Cmd+R 刷新界面
     Menu.setApplicationMenu(Menu.buildFromTemplate([
+      {
+        label: app.getName(),
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' },
+        ],
+      },
       {
         label: 'Edit',
         submenu: [
@@ -154,6 +169,28 @@ function createWindow() {
           { role: 'copy' },
           { role: 'paste' },
           { role: 'selectAll' },
+        ],
+      },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { type: 'separator' },
+          { role: 'resetZoom' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' },
+          { role: 'toggleDevTools', visible: isDevelopment },
+        ],
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' },
+          { role: 'zoom' },
+          { role: 'close' },
         ],
       },
     ]))

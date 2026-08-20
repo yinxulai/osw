@@ -41,7 +41,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     key: 'qiniu',
-    name: '七牛云 Modelink',
+    name: '七牛云',
     color: '#00bcd4',
     endpoints: {
       'openai-completions': 'https://api.qnaigc.com/v1/chat/completions',

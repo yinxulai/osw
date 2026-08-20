@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { settingsApi, configApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
+import { useAsyncFn } from '@/services/use-async'
 import {
   useSettings,
   useSettingsLoading,
@@ -20,7 +21,6 @@ export function useRuntimeSettingsService() {
   // 本地编辑副本
   const [settings, setSettings] = useState<Settings | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const initializedRef = useRef(false)
 
@@ -43,7 +43,6 @@ export function useRuntimeSettingsService() {
     if (!settings) return
     const previousListenHost = proxyStatus?.host ?? settings.listenHost
     const previousListenPort = proxyStatus?.port ?? settings.listenPort
-    setSaving(true)
     setSaved(false)
     const updateResult = await settingsApi.update({
       listenHost: settings.listenHost,
@@ -56,7 +55,6 @@ export function useRuntimeSettingsService() {
       autoLaunch: settings.autoLaunch,
     })
     if (!updateResult.success) {
-      setSaving(false)
       toast.error(updateResult.errorMessage)
       return
     }
@@ -66,13 +64,10 @@ export function useRuntimeSettingsService() {
       previousListenPort !== updateResult.data.listenPort
     if (needsRestart) {
       const restartResult = await appActions.restartProxy()
-      setSaving(false)
       if (!restartResult.success) {
         toast.error(`设置已保存，但代理重启失败：${restartResult.errorMessage}`)
         return
       }
-    } else {
-      setSaving(false)
     }
     setSettings(updateResult.data)
     appActions.invalidateSettings()
@@ -80,6 +75,8 @@ export function useRuntimeSettingsService() {
     toast.success('设置已保存')
     window.setTimeout(() => setSaved(false), 2000)
   }, [proxyStatus, settings, appActions, toast])
+
+  const { loading: saving, run: runSaveSettings } = useAsyncFn(saveSettings)
 
   // ========== 配置导入导出 ==========
 
@@ -143,7 +140,7 @@ export function useRuntimeSettingsService() {
     saving,
     saved,
     updateField,
-    saveSettings,
+    saveSettings: runSaveSettings,
     reload,
     exportConfig,
     importConfig,

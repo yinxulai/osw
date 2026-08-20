@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@common': fileURLToPath(new URL('./source/common', import.meta.url)),
       '@server': fileURLToPath(new URL('./source/server', import.meta.url)),
+      '@': fileURLToPath(new URL('./source/render/source', import.meta.url)),
     },
   },
   test: {

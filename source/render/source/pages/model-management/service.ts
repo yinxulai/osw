@@ -3,6 +3,7 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { upstreamModelApi, providerApi } from '@/api'
 import { useToast } from '@/components/ui/toast'
+import { useAsyncFn } from '@/services/use-async'
 import {
   useProviders,
   useProvidersLoading,
@@ -66,7 +67,6 @@ export function useModelManagementService() {
   const [models, setModels] = useState<UpstreamModel[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const initializedRef = useRef(false)
 
   // Provider dialog state
@@ -115,7 +115,6 @@ export function useModelManagementService() {
   useEffect(() => {
     if (initializedRef.current) return
     if (providersLoading || logicalModelsLoading) return
-    if (logicalModels.length === 0) return
 
     initializedRef.current = true
     const currentModel = logicalModels.find(m => m.enabled) ?? logicalModels[0]
@@ -180,7 +179,6 @@ export function useModelManagementService() {
 
   const saveProvider = useCallback(async () => {
     if (!providerName.trim() || (!editingProviderId && !apiKey.trim())) return
-    setSaving(true)
     const endpoints: Record<string, string> = Object.fromEntries(
       providerEndpointEntries
         .filter(entry => entry.enabled)
@@ -200,13 +198,14 @@ export function useModelManagementService() {
           timeoutMilliseconds: Number(timeout),
           endpoints,
         })
-    setSaving(false)
     if (!result.success) { toast.error(result.errorMessage); return }
     setProviderDialogOpen(false)
     setSelectedProviderId(result.data.id)
     toast.success(editingProviderId ? '供应商已更新' : '供应商已添加')
     await reload()
   }, [providerName, apiKey, timeout, editingProviderId, providerEndpointEntries, reload])
+
+  const { loading: savingProvider, run: runSaveProvider } = useAsyncFn(saveProvider)
 
   const removeProvider = useCallback(async (provider: Provider) => {
     if (!window.confirm(`删除供应商"${provider.name}"？关联模型将被禁用。`)) return
@@ -243,7 +242,6 @@ export function useModelManagementService() {
     if (!modelId.trim()) return
     const enabledEntries = bindingEntries.filter(entry => entry.enabled)
     if (enabledEntries.length === 0) return
-    setSaving(true)
 
     const endpoints: ProtocolEndpoint[] = enabledEntries.map(entry => ({
       protocol: entry.protocol,
@@ -270,7 +268,6 @@ export function useModelManagementService() {
           priority: basePriority,
         })
 
-    setSaving(false)
     if (!result.success) {
       toast.error(result.errorMessage)
       await reload()
@@ -280,6 +277,8 @@ export function useModelManagementService() {
     toast.success(editingModel ? '模型已更新' : '模型已添加')
     await reload()
   }, [logicalModel, selectedProvider, modelId, bindingEntries, editingModel, models, reload])
+
+  const { loading: savingModel, run: runSaveModel } = useAsyncFn(saveModel)
 
   const removeModel = useCallback(async (model: UpstreamModel) => {
     if (!window.confirm(`删除模型"${model.upstreamModelId}"？该模型关联的所有协议接口都会被移除。`)) return
@@ -321,7 +320,7 @@ export function useModelManagementService() {
     selectedProvider,
     selectedModels,
     loading,
-    saving,
+    saving: savingProvider || savingModel,
     // Provider dialog
     providerDialogOpen,
     setProviderDialogOpen,
@@ -337,7 +336,7 @@ export function useModelManagementService() {
     openProviderDialog,
     closeProviderDialog,
     applyPreset,
-    saveProvider,
+    saveProvider: runSaveProvider,
     removeProvider,
     // Model dialog
     modelDialogOpen,
@@ -349,7 +348,7 @@ export function useModelManagementService() {
     updateBindingEntry,
     openModelDialog,
     closeModelDialog,
-    saveModel,
+    saveModel: runSaveModel,
     removeModel,
     // 其他
     setSelectedProviderId,

@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { analyticsApi } from '@/api'
-import { useToast } from '@/components/ui/toast'
-import type { AnalyticsRange, AnalyticsSummary } from '@common/schemas'
+import { useAsyncData } from '@/services/use-async'
+import type { AnalyticsRange } from '@common/schemas'
 
 export function useOverviewService() {
-  const toast = useToast()
   const [timeRange, setTimeRange] = useState<AnalyticsRange>('7d')
-  const [data, setData] = useState<AnalyticsSummary | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  const loadData = useCallback(async (range: AnalyticsRange) => {
-    setLoading(true)
-    const res = await analyticsApi.summary(range)
-    if (!res.success) {
-      toast.error(res.errorMessage)
-      setLoading(false)
-      return
-    }
-    setData(res.data)
-    setLoading(false)
-  }, [toast])
-
-  useEffect(() => {
-    void loadData(timeRange)
-  }, [timeRange, loadData])
+  const { data, loading } = useAsyncData(
+    () => analyticsApi.summary(timeRange).then(result => {
+      if (!result.success) throw new Error(result.errorMessage)
+      return result.data
+    }),
+    [timeRange],
+  )
 
   const hasData = data && data.summary.totalRequests > 0
 
