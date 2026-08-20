@@ -586,7 +586,7 @@ export async function pruneRequestLogs(retentionCount: number): Promise<void> {
 }
 
 export async function createRequestAttempt(
-  input: Omit<RequestAttempt, 'id' | 'createdTime'>,
+  input: Omit<RequestAttempt, 'id' | 'createdTime' | 'upstreamRequestId' | 'errorResponse'> & Partial<Pick<RequestAttempt, 'upstreamRequestId' | 'errorResponse'>>,
 ): Promise<RequestAttempt> {
   const id = generateId('att_')
   const time = now()
@@ -601,6 +601,8 @@ export async function createRequestAttempt(
       status: input.status,
       errorCode: input.errorCode ?? null,
       errorMessage: input.errorMessage ?? null,
+      upstreamRequestId: input.upstreamRequestId ?? null,
+      errorResponse: input.errorResponse ?? null,
       durationMilliseconds: input.durationMilliseconds,
       createdTime: time,
     })
@@ -614,6 +616,8 @@ export async function createRequestAttempt(
     status: input.status,
     errorCode: input.errorCode ?? null,
     errorMessage: input.errorMessage ?? null,
+    upstreamRequestId: input.upstreamRequestId ?? null,
+    errorResponse: input.errorResponse ?? null,
     durationMilliseconds: input.durationMilliseconds,
     createdTime: time,
   }
@@ -1007,6 +1011,8 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     status: row.status as RequestStatus,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
+    upstreamRequestId: row.upstreamRequestId ?? null,
+    errorResponse: row.errorResponse ?? null,
     durationMilliseconds: row.durationMilliseconds,
     createdTime: Number(row.createdTime),
   }

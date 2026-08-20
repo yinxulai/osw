@@ -27,7 +27,7 @@ export function AppLayout(props: AppLayoutProps) {
   const { sidebar, children } = props
   return (
     <div className="grid h-screen w-full grid-cols-[3rem_minmax(0,1fr)] overflow-hidden bg-background text-foreground">
-      <aside className="relative z-30 min-h-0 overflow-visible bg-sidebar text-sidebar-foreground">
+      <aside className="relative z-30 min-h-0 overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         {sidebar}
       </aside>
       <main className="min-w-0 overflow-auto overscroll-contain">

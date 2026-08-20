@@ -36,6 +36,8 @@ interface AttemptOutcome {
   durationMilliseconds: number
   errorCode?: string
   errorMessage?: string
+  upstreamRequestId?: string | null
+  errorResponse?: string | null
   ttftMilliseconds?: number
   inputTokens?: number | null
   outputTokens?: number | null
@@ -176,6 +178,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
             status: 'cancelled',
             errorCode: 'CLIENT_REQUEST_ABORTED',
             errorMessage: lastError.message,
+            upstreamRequestId: null,
+            errorResponse: null,
             durationMilliseconds: Date.now() - startedAt,
           })
         } catch (logError) {
@@ -196,6 +200,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           status: 'failed',
           errorCode: 'UPSTREAM_ERROR',
           errorMessage: lastError.message,
+          upstreamRequestId: null,
+          errorResponse: null,
           durationMilliseconds: Date.now() - startedAt,
         })
       } catch (logError) {
@@ -295,7 +301,13 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   }
 
   const attemptStartedAt = Date.now()
-  const recordAttempt = async (status: RequestStatus, errorCode?: string, errorMessage?: string) => {
+  const recordAttempt = async (
+    status: RequestStatus,
+    errorCode?: string,
+    errorMessage?: string,
+    upstreamRequestId?: string | null,
+    errorResponse?: string | null,
+  ) => {
     try {
       await createRequestAttempt({
         requestId,
@@ -305,6 +317,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         status,
         errorCode: errorCode ?? null,
         errorMessage: errorMessage ?? null,
+        upstreamRequestId: upstreamRequestId ?? null,
+        errorResponse: errorResponse ?? null,
         durationMilliseconds: Date.now() - attemptStartedAt,
       })
     } catch (error) {
@@ -366,6 +380,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       let cacheCreationInputTokens: number | null = null
       let rawUsage: RawUsage | null = null
       let responseBuffer = ''
+      let errorResponse = ''
+      const upstreamRequestId = extractUpstreamRequestId(upstreamRes.headers)
 
       const contentType = String(upstreamRes.headers['content-type'] ?? '')
       const isStreaming = contentType.includes('text/event-stream')
@@ -403,11 +419,16 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       resetIdleTimer()
 
       if (disposition === 'retry') {
-        upstreamRes.on('data', resetIdleTimer)
+        upstreamRes.on('data', chunk => {
+          resetIdleTimer()
+          errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))
+        })
         upstreamRes.on('end', () => {
           if (idleTimer) clearTimeout(idleTimer)
-          void recordAttempt('failed', `Status_${statusCode}`, `上游返回 ${statusCode}`)
-          resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt })
+          const body = errorResponse || null
+          const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
+          void recordAttempt('failed', `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
+          resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
           if (idleTimer) clearTimeout(idleTimer)
@@ -441,6 +462,9 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           }
         }
 
+        if (disposition !== 'success') {
+          errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))
+        }
         if (!res.writableEnded) {
           res.write(chunk)
         }
@@ -465,11 +489,21 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         if (!res.writableEnded) {
           res.end()
         }
-        void recordAttempt(disposition === 'success' ? 'success' : 'failed')
+        const body = disposition === 'success' ? null : (errorResponse || null)
+        const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(responseBuffer)
+        void recordAttempt(
+          disposition === 'success' ? 'success' : 'failed',
+          disposition === 'success' ? undefined : `Status_${statusCode}`,
+          disposition === 'success' ? undefined : `上游返回 ${statusCode}`,
+          resolvedRequestId,
+          body,
+        )
         resolveAttempt({
           disposition,
           statusCode,
           durationMilliseconds: Date.now() - attemptStartedAt,
+          upstreamRequestId: resolvedRequestId,
+          errorResponse: body,
           ttftMilliseconds,
           inputTokens,
           outputTokens,
@@ -504,6 +538,43 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     }
     upstreamReq.end()
   })
+}
+
+const MAX_ERROR_RESPONSE_LENGTH = 64 * 1024
+
+function appendLimited(current: string, incoming: string): string {
+  if (current.length >= MAX_ERROR_RESPONSE_LENGTH) return current
+  return (current + incoming).slice(0, MAX_ERROR_RESPONSE_LENGTH)
+}
+
+function extractUpstreamRequestId(headers: http.IncomingHttpHeaders): string | null {
+  const candidates = [
+    headers['x-request-id'],
+    headers['request-id'],
+    headers['anthropic-request-id'],
+    headers['x-correlation-id'],
+    headers['x-amzn-requestid'],
+    headers['x-goog-request-id'],
+  ]
+  for (const value of candidates) {
+    const id = Array.isArray(value) ? value[0] : value
+    if (typeof id === 'string' && id.trim()) return id.trim()
+  }
+  return null
+}
+
+function extractRequestIdFromBody(body: string | null): string | null {
+  if (!body) return null
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>
+    for (const key of ['id', 'request_id', 'requestId']) {
+      const value = parsed[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+    }
+  } catch {
+    // 非 JSON 错误响应没有可提取的请求 ID。
+  }
+  return null
 }
 
 function readRequestBody(req: IncomingMessage): Promise<Buffer> {

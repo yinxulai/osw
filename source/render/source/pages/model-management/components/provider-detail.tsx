@@ -101,7 +101,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             onDragEnd={event => void onDragEnd(event)}
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
-              <div className="overflow-hidden rounded-lg bg-muted/50 divide-y divide-border/50">
+              <div className="overflow-hidden rounded-lg border bg-muted/35 divide-y divide-border/60">
                 {models.map(model => (
                   <SortableBinding key={model.id} id={model.id}>
                     {(handleProps, dragging) => (
@@ -160,7 +160,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="flex min-h-36 flex-col items-center justify-center rounded-lg bg-muted/50 text-center">
+          <div className="flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 text-center">
             <Server size={20} className="mb-2 text-muted-foreground/40" />
             <p className="text-xs font-medium">还没有上游模型</p>
             <p className="mt-1 text-[11px] text-muted-foreground">添加后即可通过本地代理调用</p>

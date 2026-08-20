@@ -142,6 +142,8 @@ export const RequestAttemptSchema = z.object({
   status: RequestStatusSchema,
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
+  upstreamRequestId: z.string().nullable(),
+  errorResponse: z.string().nullable(),
   durationMilliseconds: z.number().int().nonnegative(),
   createdTime: z.number().int(),
 })
@@ -204,6 +206,8 @@ export const RequestLogEntryAttemptSchema = z.object({
   upstreamModelId: z.string(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
+  upstreamRequestId: z.string().nullable(),
+  errorResponse: z.string().nullable(),
   durationMilliseconds: z.number().int().nonnegative(),
   createdTime: z.number().int(),
 })

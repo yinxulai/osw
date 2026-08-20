@@ -1,7 +1,15 @@
-import { Braces, CheckCircle2, Copy, Gauge, Route, XCircle } from 'lucide-react'
+import * as React from 'react'
+import { Braces, CheckCircle2, Copy, ExternalLink, Gauge, Route, XCircle } from 'lucide-react'
 import type { RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import {
   PROTOCOL_LABEL,
@@ -78,6 +86,38 @@ function MetricCard(props: MetricCardProps) {
   )
 }
 
+interface ErrorResponseViewerProps {
+  response: string
+}
+
+function ErrorResponseViewer(props: ErrorResponseViewerProps) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-500 dark:text-red-400"
+        onClick={event => {
+          event.stopPropagation()
+          setOpen(true)
+        }}
+      >
+        查看错误响应 <ExternalLink size={10} />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80vh] max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>上游错误响应</DialogTitle>
+            <DialogDescription>这是该次上游请求返回的原始错误响应。</DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">{props.response}</pre>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
@@ -105,10 +145,16 @@ function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
                 <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.upstreamModelId}</span>
                 <AttemptBadge attempt={attempt} />
               </div>
+              {attempt.upstreamRequestId && (
+                <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                  上游请求 ID：{attempt.upstreamRequestId}
+                </div>
+              )}
               {attempt.errorMessage && (
-                <div className="mt-1 flex items-start gap-1 text-[11px] text-red-600 dark:text-red-400">
+                <div className="mt-1 flex flex-wrap items-start gap-x-1.5 gap-y-1 text-[11px] text-red-600 dark:text-red-400">
                   <XCircle size={11} className="mt-0.5 shrink-0" />
                   <span className="break-all">{attempt.errorMessage}</span>
+                  {attempt.errorResponse && <ErrorResponseViewer response={attempt.errorResponse} />}
                 </div>
               )}
             </div>
@@ -169,7 +215,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   return (
     <tr className="bg-muted/20">
       <td colSpan={10} className="border-b border-border p-0">
-        <div className="border-l-2 border-l-primary/50 bg-gradient-to-r from-primary/[0.035] to-transparent px-5 py-4">
+        <div className="bg-card px-5 py-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">

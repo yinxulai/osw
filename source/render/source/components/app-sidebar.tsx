@@ -45,7 +45,7 @@ export function AppSidebar(props: AppSidebarProps) {
   const sections = [...new Set(navItems.map(item => item.section))]
 
   return (
-    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
+    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
         <img src="icon.svg" alt="" className="h-7 w-7 shrink-0" />
         <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">

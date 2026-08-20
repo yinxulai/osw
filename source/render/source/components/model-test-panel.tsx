@@ -288,7 +288,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
 
             <main className="min-h-0 flex-1 overflow-auto p-4">
               {visibleTasks.length > 0 ? (
-                <div className="overflow-hidden rounded-md bg-card">
+                <div className="overflow-hidden rounded-md border bg-card">
                   <div className="hidden grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] gap-3 border-b border-border bg-muted/30 px-3 py-2 font-mono text-[9px] font-medium uppercase tracking-wide text-muted-foreground md:grid"><span /><span>目标</span><span>协议</span><span>结果</span><span className="text-right">响应</span></div>
                   {visibleTasks.map(task => {
                     return <div key={task.id} className="grid gap-2 border-b border-border px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">

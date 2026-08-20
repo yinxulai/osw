@@ -138,6 +138,8 @@ export const requestAttempts = sqliteTable(
     status: text('status').notNull(),
     errorCode: text('errorCode'),
     errorMessage: text('errorMessage'),
+    upstreamRequestId: text('upstreamRequestId'),
+    errorResponse: text('errorResponse'),
     durationMilliseconds: integer('durationMilliseconds').notNull(),
     createdTime: integer('createdTime').notNull(),
   },

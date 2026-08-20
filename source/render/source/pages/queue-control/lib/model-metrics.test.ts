@@ -11,6 +11,8 @@ function attempt(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogEnt
     upstreamModelId: 'model-a',
     errorCode: null,
     errorMessage: null,
+    upstreamRequestId: null,
+    errorResponse: null,
     durationMilliseconds: 2_000,
     createdTime: 1,
     ...overrides,
