@@ -22,7 +22,8 @@ module.exports = {
   afterPack: 'scripts/macos-adhoc-sign.cjs',
   mac: {
     icon: 'build/icon-mac.png',
-    target: ['dmg'],
+    // electron-updater 在 macOS 上需要 ZIP 来执行自动更新；DMG 仅用于首次安装。
+    target: ['dmg', 'zip'],
     category: 'public.app-category.developer-tools',
     identity: null,
     notarize: false,

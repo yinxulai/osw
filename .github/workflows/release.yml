@@ -101,7 +101,9 @@ jobs:
           - name: macOS
             os: macos-latest
             artifact: macos
-            asset: release/**/*.dmg
+            asset: |
+              release/**/*.dmg
+              release/**/*.zip
           - name: Windows
             os: windows-latest
             artifact: windows
@@ -149,7 +151,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           # 发布产物包含：
-          # - 安装包（.dmg/.exe/.AppImage）
+          # - 安装包（.dmg/.zip/.exe/.AppImage）
           # - .blockmap：electron-updater 差量更新所需
           # - latest*.yml：electron-updater 版本检查元数据
           #   （latest.yml / latest-mac.yml / latest-linux.yml）
