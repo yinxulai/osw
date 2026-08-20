@@ -79,8 +79,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
-  // 获取可用 models：原生协议候选优先，其后是开启了协议转换的候选
-  const availableModels = await getAvailableModels()
+  // 获取当前逻辑模型绑定的可用 models：原生协议候选优先，其后是开启了协议转换的候选
+  const availableModels = await getAvailableModels(logicalModelId)
   const nativeModels = availableModels.filter(m => findEndpoint(m.model, protocol))
   const convertedModels = availableModels.filter(m =>
     !findEndpoint(m.model, protocol)

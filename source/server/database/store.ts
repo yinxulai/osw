@@ -31,6 +31,7 @@ import {
   requestContents,
   requestMetrics,
   requestUsages,
+  schedulingPolicies,
   settings,
 } from './schema'
 
@@ -259,6 +260,18 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
     .where(includeDeleted ? undefined : isNull(providerModels.deletedTime))
     .orderBy(providerModels.createdTime).all()
   return rows.map(mapProviderModelView)
+}
+
+export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false): Promise<UpstreamModel[]> {
+  const rows = getDb().select({ model: providerModels, policy: schedulingPolicies })
+    .from(schedulingPolicies)
+    .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
+    .where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), eq(schedulingPolicies.enabled, true)))
+    .orderBy(schedulingPolicies.priority, schedulingPolicies.weight)
+    .all()
+  return rows
+    .filter(({ model, policy }) => (includeDeleted || model.deletedTime === null) && model.enabled && policy.enabled)
+    .map(({ model, policy }) => ({ ...mapProviderModel(model), priority: policy.priority }))
 }
 
 export async function getProviderModel(id: string): Promise<ProviderModelView | undefined> {
