@@ -99,7 +99,7 @@ one-switch/
 │   │   ├── management/             # 管理服务监听层
 │   │   │   └── server.ts           # 管理 HTTP 监听（默认 127.0.0.1:9301）
 │   │   └── database/               # SQLite 数据存储（node:sqlite + Drizzle）
-│   │       ├── index.ts            # 连接初始化、schema 幂等创建、列级迁移
+│   │       ├── index.ts            # 连接初始化、schema 幂等创建
 │   │       ├── schema.ts           # Drizzle 表定义（sqliteTable）
 │   │       ├── store.ts            # 数据访问层（Drizzle 查询）
 │   │       └── client/             # 数据库客户端类型

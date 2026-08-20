@@ -51,7 +51,7 @@ source/server/
 │   └── headers.ts
 └── infrastructure/
     ├── database/
-    │   ├── index.ts                 # node:sqlite 连接、幂等建表与迁移
+    │   ├── index.ts                 # node:sqlite 连接、幂等建表
     │   ├── schema.ts                # Drizzle 表定义
     │   └── store.ts                 # 数据访问层（Drizzle 查询）
     └── secrets/
@@ -128,16 +128,18 @@ stateDiagram-v2
 - 代理停止或重启不影响管理服务。
 - 启动失败必须关闭已经启动的监听器和数据库。
 - 停止操作保持幂等。
-- 后续将两个监听器的模块级状态迁移为实例，由 `ServerRuntime` 持有。
+- 两个监听器均为实例，由 `ServerRuntime` 持有，不使用模块级可变状态。
 
-## 迁移顺序
+## 实施说明
 
-1. [已完成] 建立 `runtime` 目录，迁移 `ServerRuntime`。
-2. [已完成] 将根目录的健康逻辑和密钥实现归入 `proxy`、`infrastructure`。
-3. [已完成] 把 `api/handlers.ts` 按 Provider、Model、UpstreamModel、AppConfig 拆入 `management`。
-4. 把 `proxy/handler.ts` 中的上游 HTTP 逻辑拆为 `transport.ts`。
-5. 将 SQLite 代码迁入 `infrastructure/database`，按配置和请求日志拆 store。
-6. 将 ManagementServer、ProxyServer 实例化并交给 Runtime 持有。
+重构直接按目标结构落地：
+
+1. [已完成] 建立 `runtime` 目录。
+2. [已完成] 健康逻辑和密钥实现归入 `proxy`、`infrastructure`。
+3. [已完成] 管理 API 按 Provider、Model、UpstreamModel、AppConfig 拆入 `management`。
+4. 将 `proxy/handler.ts` 中的上游 HTTP 逻辑拆为 `transport.ts`（详见 [proxy.md](./proxy.md) 管线架构）。
+5. SQLite 代码归入 `infrastructure/database`，按配置和请求日志拆 store。
+6. ManagementServer、ProxyServer 实例化并交给 Runtime 持有。
 7. 用依赖检查规则禁止跨模块访问内部实现。
 
-每一步完成后运行 `pnpm test:server` 和 `pnpm typecheck`，保持现有服务契约不变。
+每一步完成后运行 `pnpm test:server` 和 `pnpm typecheck`。

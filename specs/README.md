@@ -15,7 +15,7 @@
 | [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
 | [protocol-conversion.md](./protocol-conversion.md) | 协议兼容转换器：转换开关、转换矩阵、流式转换、UI 展示 |
 | [provider-model.md](./provider-model.md) | Provider、Logical Model、Upstream Model 配置模型 |
-| [data-model.md](./data-model.md) | 完整数据模型：数据库表设计、Zod Schema、索引、关系 |
+| [data-model.md](./data-model.md) | 完整数据模型：数据库表设计、JSON 文档版本、索引、关系 |
 | [desktop.md](./desktop.md) | 桌面端形态、菜单栏、控制台页面、用户流程 |
 | [security-privacy.md](./security-privacy.md) | 安全边界、密钥存储、隐私策略 |
 | [observability.md](./observability.md) | 日志、用量统计、健康状态、冷却 |

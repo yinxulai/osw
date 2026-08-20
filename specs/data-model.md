@@ -1,192 +1,880 @@
-# 数据库设计
+# One Switch v0.3 数据模型设计
 
-## 目标与边界
+> 本文是新大版本的目标数据库结构。
+>
+> **发布策略：不兼容旧版本数据库。** 新版本使用全新的数据库初始化结构，不读取、不迁移、不修补旧版本数据库。
 
-One Switch 使用 SQLite 保存配置、运行状态和请求观测数据，使用 Drizzle ORM
-提供类型安全查询。API Key 和访问 Token 的明文不进入数据库，只保存系统密钥环中的引用。
+## 1. 设计目标
 
-数据库设计遵循以下规则：
+One Switch 的配置内容会持续增加，尤其是供应商、模型端点、认证方式、路由策略和模型能力。因此本版本遵循以下原则：
 
-- 配置实体使用软删除，避免历史日志因配置清理而失去上下文。
-- 请求日志保存必要快照，不依赖可变的上游模型配置还原历史行为。
-- 时间统一使用 Unix 毫秒时间戳，数据库类型为 `INTEGER`。
-- SQLite 外键始终启用，写入边界同时使用 Zod 校验。
-- `source/server/database/schema.ts` 是当前目标结构的权威定义。
-- 正式版尚未发布时，`drizzle/` 只保留一份与目标结构一致的首发基线迁移。
-- 首个正式版本发布后，数据库变更才通过只追加、不改写的版本迁移演进。
+1. **稳定身份、关系和查询字段使用独立列。**
+2. **经常增加或调整的配置使用 JSON 文档。**
+3. **运行时状态与用户配置分离。**
+4. **请求日志保留必要的查询字段，同时将不稳定的指标放入 JSON。**
+5. **请求/响应正文与日志索引分离，正文按需记录并完整保留。**
+6. **历史日志不依赖可变配置，不为日志快照增加外键。**
+7. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
+8. **数据库初始化结构由当前代码直接定义，不保留运行时兼容迁移逻辑。**
+9. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
+10. **表名统一为 `settings`，不再引入 `app_config` 作为数据库表名。**
 
-## 数据目录隔离
+## 2. 数据库总览
 
-数据库文件名固定为 `one-switch.db`，密钥引用文件名为 `secrets.json`。两者必须位于
-同一个 Electron `userData` 目录，以便环境整体隔离。
+新版本包含以下 8 张表（`audit_events` 延后到后续版本，不进入 v0.3 基线）：
 
-| 环境 | 数据目录 | 用途 |
+| 表 | 用途 | 数据性质 |
 | --- | --- | --- |
-| 正式版 | `~/Library/Application Support/One Switch/`（macOS） | 用户日常使用的数据 |
-| 开发版 | `~/Library/Application Support/One Switch Development/`（macOS） | `pnpm dev` 的独立测试数据 |
-| 自动化测试 | 操作系统临时目录 | 每个测试独立创建并清理 |
+| `settings` | 全局应用配置 | 命名空间 KV 配置 |
+| `providers` | 供应商稳定身份与生命周期 | 配置实体 |
+| `logical_models` | 对外暴露的逻辑模型 | 配置实体 |
+| `upstream_models` | Provider 上的真实上游模型与路由配置 | 配置实体 |
+| `provider_health` | Provider 运行时健康状态 | 高频运行状态 |
+| `request_attempts` | 请求内每次上游尝试 | 历史观测数据 |
+| `request_logs` | 每次代理请求的汇总日志 | 历史观测数据 |
+| `request_contents` | 请求/响应正文及转换前后内容 | 可选历史观测数据 |
 
-目录名、代理端口、管理端口和管理 API 地址集中定义在
-`source/common/runtime-profile.ts`。Electron 主进程、服务端和 renderer 读取同一份 profile，
-不得通过散落的环境变量或调用点默认值分别配置。
-
-开发版不会读取、修改或迁移正式版数据库。需要用正式数据调试时，应复制数据库及对应的
-密钥引用环境，而不是让两个进程共享同一个 SQLite 文件。
-
-## 关系概览
+关系概览：
 
 ```mermaid
 erDiagram
-  providers ||--o{ upstream_models : serves
+  providers ||--o{ upstream_models : contains
   providers ||--|| provider_health : has
+  request_logs ||--o| request_contents : captures
   request_logs ||--o{ request_attempts : contains
   providers ||--o{ request_attempts : attempted_by
 
-  logical_models {
-    text id PK
-    text name
-    boolean enabled
-    integer deletedTime
+  settings {
+    text key PK
+    text value
+    text valueType
+    integer updatedTime
   }
+
   providers {
     text id PK
-    text apiKeyReference
-    text upstreamUrls
-    boolean enabled
+    text config
+    integer createdTime
+    integer updatedTime
     integer deletedTime
   }
+
+  logical_models {
+    text id PK
+    text config
+    integer createdTime
+    integer updatedTime
+    integer deletedTime
+  }
+
   upstream_models {
     text id PK
     text providerId FK
     text upstreamModelId
-    text endpoints
-    integer priority
+    text config
+    integer createdTime
+    integer updatedTime
+    integer deletedTime
   }
+
+  provider_health {
+    text providerId PK_FK
+    integer consecutiveFailures
+    integer cooldownUntilTime
+    integer lastSuccessTime
+    integer lastFailureTime
+    integer updatedTime
+  }
+
   request_logs {
     text id PK
     text logicalModelId
     text protocol
     text status
+    integer totalDurationMilliseconds
     integer createdTime
+    text usage
+    text summary
+    text metadata
   }
+
+  request_contents {
+    text requestId PK_FK
+    text captureStatus
+    text requestHeader
+    text requestBody
+    text responseHeader
+    text responseBody
+    text attempts
+    text conversions
+    integer createdTime
+    integer updatedTime
+  }
+
   request_attempts {
     text id PK
     text requestId FK
-    text providerId FK
+    text providerId
     text upstreamModelId
     integer attemptIndex
+    text status
+    integer durationMilliseconds
+    text errorCode
+    text errorMessage
+    text upstreamRequestId
+    text details
+    integer createdTime
   }
 ```
 
-`request_logs.logicalModelId` 和 `request_attempts.upstreamModelId` 有意保存请求发生时的标识
-快照，不建立到可软删除、可改名配置的外键。`request_attempts.providerId` 保留外键，因为
-Provider 只做软删除，不会物理移除。
+## 3. 表结构
 
-## 配置表
+以下 SQL 描述目标结构。实际实现使用 Drizzle schema 和运行时初始化 SQL，字段命名保持现有项目的 camelCase 约定。
 
-### providers
+### 3.1 `settings`
 
-供应商和供应商级默认连接设置。
+全局配置使用逐项存储：每个配置项一行，`key` 使用命名空间表示配置归属，`value` 保存 JSON 序列化后的值。这样既保留了配置 key，又避免单例 JSON 带来的整份文档读写和并发覆盖问题。
 
-| 字段 | 约束 | 说明 |
+```sql
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  valueType TEXT NOT NULL,
+  updatedTime INTEGER NOT NULL
+);
+
+CREATE INDEX idx_settings_updated_time
+  ON settings(updatedTime);
+```
+
+推荐的 key：
+
+```text
+proxy.listenHost
+proxy.listenPort
+proxy.idleTimeoutMilliseconds
+routing.cooldownBaseSeconds
+routing.cooldownMaxSeconds
+routing.consecutiveFailureThreshold
+logging.retentionCount
+logging.retentionDays
+logging.captureRequestContent
+security.accessTokenReference
+desktop.autoLaunch
+ui.theme
+ui.visibleColumns
+```
+
+示例记录：
+
+| key | value | valueType |
 | --- | --- | --- |
-| `id` | PK | `prov_` 前缀 ID |
-| `name` | NOT NULL | 显示名称 |
-| `apiKeyReference` | NOT NULL | 系统密钥环引用 |
-| `timeoutMilliseconds` | NOT NULL, DEFAULT 30000 | 上游空闲超时 |
-| `enabled` | NOT NULL, DEFAULT true | 是否参与路由 |
-| `upstreamUrls` | NOT NULL, DEFAULT `{}` | 按协议保存默认 URL 的 JSON 对象 |
-| `createdTime` | NOT NULL | 创建时间 |
-| `updatedTime` | NOT NULL | 最后修改时间 |
-| `deletedTime` | NULL | 软删除时间 |
+| `proxy.listenPort` | `9300` | `number` |
+| `proxy.listenHost` | `"127.0.0.1"` | `string` |
+| `desktop.autoLaunch` | `false` | `boolean` |
+| `ui.visibleColumns` | `[...]` | `array` |
 
-`upstreamUrls` 的结构由 `UpstreamUrlsSchema` 校验。它属于小型、整体更新的配置值，当前保留
-为 JSON 可以避免为三个固定协议引入稀疏子表。若未来需要按端点独立查询、排序或携带更多
-认证配置，再迁移为 `provider_endpoints` 表。
+`value` 始终使用 JSON 编码，因此可以保存字符串、数字、布尔值、数组和对象。`valueType` 用于诊断和导出展示，真正的类型校验由对应的 Zod Schema 负责。
 
-### logical_models
+新增配置项只需要增加命名空间 key、默认值和 Schema，不需要修改数据库表。批量更新必须在一个事务中完成；读取时合并数据库已有值和默认值，并拒绝未知 key 或记录警告。
 
-客户端请求使用的逻辑模型。名称是路由入口，描述和启用状态属于用户配置。
+### 3.2 `providers`
 
-名称当前不设数据库唯一约束，因为软删除后允许重新创建同名模型；业务层必须保证活跃记录
-中名称无歧义。若要下沉到数据库，应使用 `WHERE deletedTime IS NULL` 的部分唯一索引。
+Provider 表只保存稳定身份、时间和软删除状态。所有供应商业务配置保存于 `config`。
 
-### upstream_models
+```sql
+CREATE TABLE providers (
+  id TEXT PRIMARY KEY,
+  config TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER
+);
 
-路由队列中的最小单元，表示一个 Provider 上的一个实际模型，并可挂载多个协议端点。
-上游模型**全局共享**：不隶属于任何逻辑模型，所有启用的上游模型自动进入全局自动切换队列。
+CREATE INDEX idx_providers_deleted_time
+  ON providers(deletedTime);
+```
 
-| 字段 | 约束 | 说明 |
-| --- | --- | --- |
-| `providerId` | FK, NOT NULL | 所属供应商 |
-| `upstreamModelId` | NOT NULL | 发送给上游的模型 ID |
-| `endpoints` | NOT NULL, DEFAULT `[]` | `ProtocolEndpoint[]` JSON |
-| `priority` | NOT NULL | 数字越小越优先 |
-| `enabled` | NOT NULL, DEFAULT true | 是否参与路由 |
-| 时间字段 | | 与其他配置表一致 |
+`config` 示例：
 
-`endpoints` 同样是整体读写的小型配置列表，由 `ProtocolEndpointSchema` 校验。端点是上游模型
-的组成部分，而不是独立生命周期实体，因此当前不拆表。
+```json
+{
+  "schemaVersion": 1,
+  "name": "OpenAI",
+  "enabled": true,
+  "auth": {
+    "type": "api-key",
+    "secretReference": "key_reference"
+  },
+  "connection": {
+    "timeoutMilliseconds": 30000,
+    "proxy": null
+  },
+  "endpoints": {
+    "openai-completions": "https://api.example.com/v1/chat/completions",
+    "openai-responses": "https://api.example.com/v1/responses"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": true,
+    "vision": false,
+    "toolCalling": true
+  },
+  "metadata": {}
+}
+```
 
-队列顺序通过 `priority` 索引读取。priority 不设唯一约束，因为拖拽排序过程
-可能短暂产生重复位置，最终顺序应由业务层一次性归一化。
+以下内容属于 Provider 配置，不再单独建列：
 
-## 运行状态表
+- 名称和描述性信息；
+- 是否启用；
+- 密钥引用和认证方式；
+- 请求超时；
+- 协议默认地址；
+- 自定义请求头；
+- 协议能力；
+- 供应商元数据；
+- 重试、限流和请求转换策略。
 
-### provider_health
+密钥本身仍然不能进入数据库，只保存系统密钥环中的引用。
 
-每个 Provider 恰好一行，`providerId` 同时是主键和外键。保存连续失败次数、冷却截止时间、
-最近成功/失败时间。它是可重建的运行状态，不属于用户配置。
+### 3.3 `logical_models`
 
-### settings
+逻辑模型只保存稳定身份和生命周期。模型名称、说明、开关和路由策略放入 JSON。
 
-单行全局设置，主键固定为 `singleton`。包含服务监听地址、端口、访问 Token 引用、日志保留
-数量、冷却参数、空闲超时和开机自启状态。
+```sql
+CREATE TABLE logical_models (
+  id TEXT PRIMARY KEY,
+  config TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER
+);
 
-应用层只通过固定 ID 读写此表。新数据库使用 CHECK 约束保证单例；历史数据库由应用层保持
-这一不变量。
+CREATE INDEX idx_logical_models_deleted_time
+  ON logical_models(deletedTime);
+```
 
-## 观测表
+`config` 示例：
 
-### request_logs
+```json
+{
+  "schemaVersion": 1,
+  "name": "auto",
+  "description": "自动切换模型",
+  "enabled": true,
+  "routing": {
+    "strategy": "priority",
+    "failover": true
+  },
+  "metadata": {
+    "tags": ["default"]
+  }
+}
+```
 
-每个代理请求一行，保存最终状态、总耗时、Token 用量、首 Token 延迟和缓存命中情况。
+`request_logs.logicalModelId` 保留请求发生时的逻辑模型标识，但不建立外键。逻辑模型删除后，历史日志仍然必须可读取。逻辑模型与上游模型之间没有关联表或关联字段；路由时从全局上游模型池为当前逻辑模型生成候选队列。
 
-主要索引：
+### 3.4 `upstream_models`
 
-- `idx_request_logs_created_time`：日志倒序列表、留存清理和时间窗口统计。
-- `idx_request_logs_status`：按最终状态筛选。
+上游模型是 Provider 上可被路由的真实模型配置。每个上游模型都有独立的启用开关（`config.enabled`）。**只有同时满足以下条件的上游模型才会进入逻辑模型的候选队列：**
 
-### request_attempts
+1. 上游模型自身 `enabled = true`；
+2. 所属 Provider `enabled = true` 且未被软删除；
+3. 上游模型未被软删除；
+4. 上游模型至少有一个与请求协议匹配（或可转换）的端点。
 
-每次上游尝试一行，一个请求可有多次尝试。`upstreamModelId` 保存请求发生时使用的上游模型
-名称快照，不指向 `upstream_models.id`。这是历史结构中已经修正过的重要边界。
+禁用（`enabled = false`）的上游模型不会出现在任何逻辑模型的候选队列中，但其配置完整保留，重新启用后立即恢复参与路由。每个逻辑模型的队列是根据逻辑模型配置和全局上游模型池动态生成的。
 
-主要索引：
+```sql
+CREATE TABLE upstream_models (
+  id TEXT PRIMARY KEY,
+  providerId TEXT NOT NULL,
+  upstreamModelId TEXT NOT NULL,
+  config TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER,
 
-- `idx_attempts_request_order(requestId, attemptIndex)`：按请求读取完整切换链路。
-- `idx_attempts_provider(providerId)`：供应商维度聚合。
-- `idx_attempts_created_time(createdTime)`：时间窗口统计和清理。
+  FOREIGN KEY (providerId) REFERENCES providers(id)
+);
 
-## 数据库基线与发布边界
+CREATE INDEX idx_upstream_models_provider
+  ON upstream_models(providerId);
 
-首发前不承诺兼容开发数据库。结构变化时直接更新目标 schema、运行时建库 SQL 和测试，然后
-重新生成唯一的 `initial_schema` Drizzle 基线；不得保留用于兼容内部迭代的中间迁移。
+CREATE INDEX idx_upstream_models_deleted_time
+  ON upstream_models(deletedTime);
 
-运行时初始化顺序如下：
+CREATE UNIQUE INDEX idx_upstream_models_provider_model_active
+  ON upstream_models(providerId, upstreamModelId)
+  WHERE deletedTime IS NULL;
+```
 
-1. 创建环境独立的数据目录并打开 SQLite。
-2. 启用外键并切换 WAL 模式。
-3. 幂等创建首发目标表和索引。
-4. 任一建库语句失败时关闭连接并终止服务启动。
+`config` 示例：
 
-首个正式版本发布后，当前基线立即冻结。此后的结构变更必须追加版本迁移、在事务中执行，
-并增加从上一正式版本升级且保留数据的回归测试；不得改写已经发布的基线或历史迁移。
+```json
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "priority": 1,
+  "weight": 100,
+  "endpoints": [
+    {
+      "protocol": "openai-completions",
+      "upstreamUrl": "https://api.example.com/v1/chat/completions",
+      "customAuthHeader": null,
+      "protocolConversionEnabled": false
+    }
+  ],
+  "routing": {
+    "maxRetries": 2,
+    "cooldownPolicy": "provider"
+  },
+  "capabilities": {
+    "streaming": true,
+    "vision": false,
+    "toolCalling": true
+  },
+  "metadata": {
+    "region": "us-east",
+    "costTier": "low",
+    "tags": ["fast"]
+  }
+}
+```
 
-## 后续演进原则
+只有以下字段保持关系型：
 
-- JSON 字段只有在需要独立查询、部分更新或建立引用关系时才拆表。
-- 配置表继续软删除；高容量日志按留存策略物理删除。
-- 新增外键前先确认历史快照语义，日志字段通常不应引用可变配置。
-- 新增唯一约束时必须考虑软删除，并优先使用部分唯一索引。
-- 所有数值约束先在 Zod 写入边界执行；数据库 CHECK 用于稳定且可无损迁移的不变量。
+- `id`；
+- `providerId`；
+- `upstreamModelId`；
+- 创建、更新时间；
+- 软删除时间。
+
+以下内容全部属于可演进配置：
+
+- `enabled`（启用开关，控制是否参与路由）；
+- `priority` 和 `weight`；
+- 协议端点；
+- 重试和冷却策略；
+- 模型能力；
+- 区域、价格等级、标签；
+- 自定义请求头和请求转换规则。
+
+### 3.5 `provider_health`
+
+Provider 健康状态是运行时状态，必须与静态配置分离。
+
+```sql
+CREATE TABLE provider_health (
+  providerId TEXT PRIMARY KEY,
+  consecutiveFailures INTEGER NOT NULL DEFAULT 0,
+  cooldownUntilTime INTEGER,
+  lastSuccessTime INTEGER,
+  lastFailureTime INTEGER,
+  updatedTime INTEGER NOT NULL,
+
+  FOREIGN KEY (providerId) REFERENCES providers(id)
+);
+```
+
+该表不保存用户配置，不进入 Provider 的 `config` JSON。健康状态更新需要支持原子更新和高频写入。
+
+生命周期约定：**创建 Provider 时在同一事务中插入 `provider_health` 初始行**，删除 Provider 时按第 8 节规则处理。路由层可以假定：存在 Provider 即存在对应的 health 行，无需处理缺失分支。
+
+### 3.6 `request_logs`
+
+请求日志保留稳定查询字段，变化频繁的 usage 和响应元数据使用 JSON。
+
+```sql
+CREATE TABLE request_logs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'success', 'failed', 'cancelled')),
+  protocol TEXT NOT NULL,
+  logicalModelId TEXT NOT NULL,
+  totalDurationMilliseconds INTEGER NOT NULL,
+  createdTime INTEGER NOT NULL,
+  usage TEXT,
+  summary TEXT,
+  metadata TEXT
+);
+
+CREATE INDEX idx_request_logs_created_time
+  ON request_logs(createdTime);
+
+CREATE INDEX idx_request_logs_status
+  ON request_logs(status);
+
+CREATE INDEX idx_request_logs_logical_model
+  ON request_logs(logicalModelId);
+```
+
+`usage` 示例：
+
+```json
+{
+  "totalTokens": 1280,
+  "inputTokens": 1200,
+  "outputTokens": 80,
+  "cachedInputTokens": 1024,
+  "cacheCreationInputTokens": 0,
+  "raw": {
+    "input_tokens": 1200,
+    "input_tokens_details": {
+      "cached_tokens": 1024
+    }
+  }
+}
+```
+
+`summary` 示例：
+
+```json
+{
+  "upstreamProtocol": "openai-responses",
+  "ttftMilliseconds": 120,
+  "cacheHit": true,
+  "promptCacheHit": true
+}
+```
+
+`metadata` 示例：
+
+```json
+{
+  "streaming": true,
+  "finishReason": "stop",
+  "reasoningTokens": 48,
+  "providerRegion": "us-east",
+  "clientModelName": "glm-5.2",
+  "logicalModelName": "auto",
+  "providerId": "prov_123",
+  "providerName": "OpenAI"
+}
+```
+
+`clientModelName`、`logicalModelName`、`providerId`、`providerName` 均为请求发生时的快照，用于逻辑模型或供应商被删除后日志详情页仍能展示名称，以及追溯“客户端请求的模型名路由到了哪个逻辑模型”；快照属于日志自身数据，不构成对可变配置的依赖。
+
+日志表的稳定查询字段为：
+
+- `logicalModelId`；
+- `protocol`；
+- `status`；
+- `totalDurationMilliseconds`；
+- `createdTime`。
+
+未来增加新的 Token 类型、缓存指标、计费信息或响应元数据时，不需要修改表结构。
+
+### 3.7 `request_contents`
+
+请求正文和响应正文属于大体积、可能包含敏感信息且变化频繁的数据，不直接塞入 `request_logs` 或 `request_attempts` 的宽表。每个请求最多一行内容记录，通过 `requestId` 关联请求汇总；上游每次尝试的内容通过 `attempts` 数组保存，这样重试链路不会互相覆盖。
+
+内容记录区分客户端视角和上游视角：
+
+- `requestHeader`：客户端请求头（脱敏后）；
+- `requestBody`：客户端请求正文；
+- `responseHeader`：返回给客户端的响应头（脱敏后）；
+- `responseBody`：返回给客户端的响应正文；
+- `attempts`：每次上游尝试的请求/响应内容；
+- `conversions`：协议转换记录数组，每次发生转换的尝试一项；未发生任何转换时为 `null`。
+
+`captureStatus` 枚举定稿：
+
+| 值 | 含义 |
+| --- | --- |
+| `captured` | 完整采集 |
+| `partial` | 流式采集中断或部分丢失 |
+| `disabled` | 未开启采集 |
+| `failed` | 采集异常 |
+
+日志详情页根据 `captureStatus` 展示不同状态，而不是猜测内容为空的原因。
+
+建议首发结构如下：
+
+```sql
+CREATE TABLE request_contents (
+  requestId TEXT PRIMARY KEY,
+  captureStatus TEXT NOT NULL CHECK (captureStatus IN ('captured', 'partial', 'disabled', 'failed')),
+  requestHeader TEXT,
+  requestBody TEXT,
+  responseHeader TEXT,
+  responseBody TEXT,
+  attempts TEXT,
+  conversions TEXT,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+
+  FOREIGN KEY (requestId) REFERENCES request_logs(id)
+);
+```
+
+其中 JSON 文档使用稳定的 envelope，允许后续增加字段而不变更表结构。请求头/响应头 envelope 示例：
+
+```json
+{
+  "schemaVersion": 1,
+  "method": "POST",
+  "path": "/v1/messages",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "capturedAt": 1755643200000
+}
+```
+
+正文 envelope 示例：
+
+```json
+{
+  "schemaVersion": 1,
+  "body": {
+    "model": "client-model",
+    "messages": []
+  },
+  "bodyText": null,
+  "contentType": "application/json",
+  "isStreaming": false,
+  "capturedAt": 1755643200000
+}
+```
+
+`body` 保存可解析的 JSON 正文；非 JSON 或二进制正文使用 `bodyText` 保存原文文本（二进制内容 base64 编码并标注 `contentType`）。
+
+`conversions` 示例（数组，每次发生转换的尝试一项，`attemptId` 直接引用 `request_attempts.id`，不依赖数组下标）：
+
+```json
+[
+  {
+    "schemaVersion": 1,
+    "attemptId": "att_01J...",
+    "fromProtocol": "anthropic-messages",
+    "toProtocol": "openai-completions",
+    "requestBefore": {},
+    "requestAfter": {},
+    "responseBefore": {},
+    "responseAfter": {},
+    "streamEventsBefore": [],
+    "streamEventsAfter": []
+  }
+]
+```
+
+同一请求多次尝试且各自发生协议转换时，每项转换独立保存，不会互相覆盖。
+
+安全与容量约束：
+
+- 默认关闭正文采集，只有用户在设置中显式开启后才记录；
+- 日志清理支持按保留天数执行，并同时删除请求正文、尝试记录和请求汇总；
+- API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏；
+- 本地工具默认不限制正文大小；开启记录后完整保存已接收的请求和响应内容；
+- 流式响应记录已接收的事件/文本片段，不阻塞代理转发，不因日志写入失败影响请求；
+- 清理请求日志时，先删除 `request_contents`，再删除 `request_attempts` 和 `request_logs`；
+- 导出日志必须明确包含正文的开关，默认不导出正文。
+
+### 3.8 `request_attempts`
+
+每次上游尝试一行，保存故障转移顺序和统计所需字段。
+
+```sql
+CREATE TABLE request_attempts (
+  id TEXT PRIMARY KEY,
+  requestId TEXT NOT NULL,
+  providerId TEXT NOT NULL,
+  upstreamModelId TEXT NOT NULL,
+  attemptIndex INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  durationMilliseconds INTEGER NOT NULL,
+  errorCode TEXT,
+  errorMessage TEXT,
+  upstreamRequestId TEXT,
+  details TEXT,
+  createdTime INTEGER NOT NULL,
+
+  FOREIGN KEY (requestId) REFERENCES request_logs(id),
+  UNIQUE (requestId, attemptIndex)
+);
+
+CREATE INDEX idx_request_attempts_provider_time
+  ON request_attempts(providerId, createdTime);
+
+CREATE INDEX idx_request_attempts_model_time
+  ON request_attempts(upstreamModelId, createdTime);
+```
+
+`providerId` 不建立外键：历史尝试不依赖 Provider 的当前存在性（Provider 未来可能物理删除），`providerId` 仅作为快照标识，配合 `request_logs.metadata` 中的 `providerName` 快照展示。
+
+`details` 示例：
+
+```json
+{
+  "errorResponse": {},
+  "upstreamProtocol": "openai-responses",
+  "httpStatus": 503,
+  "retryable": true,
+  "responseHeaders": {},
+  "networkError": null
+}
+```
+
+保留独立列的字段：
+
+- `requestId`；
+- `providerId`；
+- `upstreamModelId`；
+- `attemptIndex`；
+- `status`；
+- `durationMilliseconds`；
+- `errorCode`；
+- `createdTime`。
+
+### 3.9 `audit_events`（延后，不在 v0.3 基线）
+
+记录配置实体的变更前后内容。该表不参与代理核心链路，**v0.3 不实现**，待后续版本需要配置变更历史时再引入；届时需同步定义 `resourceType` 枚举和独立保留策略。
+
+```sql
+CREATE TABLE audit_events (
+  id TEXT PRIMARY KEY,
+  resourceType TEXT NOT NULL,
+  resourceId TEXT NOT NULL,
+  action TEXT NOT NULL,
+  beforeData TEXT,
+  afterData TEXT,
+  createdTime INTEGER NOT NULL
+);
+
+CREATE INDEX idx_audit_events_resource
+  ON audit_events(resourceType, resourceId, createdTime);
+
+CREATE INDEX idx_audit_events_created_time
+  ON audit_events(createdTime);
+```
+
+## 4. JSON 文档版本
+
+所有配置 JSON 必须带有 `schemaVersion`：
+
+```json
+{
+  "schemaVersion": 1
+}
+```
+
+读取流程：
+
+```text
+数据库文本
+  -> JSON.parse
+  -> 根据 schemaVersion 升级文档
+  -> 当前版本 Zod Schema 校验
+  -> 返回领域对象
+```
+
+例如 Provider 配置可以演进为：
+
+```text
+ProviderConfigV1 -> ProviderConfigV2 -> ProviderConfigV3
+```
+
+字段重命名、配置嵌套调整和默认值增加通过文档升级完成，不通过数据库 ALTER TABLE 完成。
+
+## 5. 字段存储决策
+
+### 保留为关系型列
+
+```text
+id
+providerId
+requestId
+upstreamModelId
+logicalModelId
+status
+protocol
+attemptIndex
+createdTime
+updatedTime
+deletedTime
+durationMilliseconds
+totalDurationMilliseconds
+```
+
+原因：这些字段用于外键、JOIN、分页、排序、时间过滤、统计和生命周期管理。
+
+### 存入 JSON
+
+```text
+Provider 配置
+Logical Model 配置
+Upstream Model 配置
+settings.value
+usage 详情
+缓存指标
+响应元数据
+错误响应详情
+协议能力
+重试策略
+限流策略
+自定义 Header
+模型标签和扩展信息
+```
+
+## 6. 数据库初始化策略
+
+由于本版本不考虑兼容旧版本，数据库初始化流程保持简单：
+
+1. 创建独立的数据目录；
+2. 打开 `one-switch.db`；
+3. 启用 SQLite 外键；
+4. 切换 WAL 模式；
+5. 创建当前版本全部表和索引；
+6. 按默认值批量插入 `settings` 配置项（使用 `INSERT OR IGNORE`，仅插入不存在的 key，永不覆盖已有值，保证幂等）；
+7. 插入默认逻辑模型；
+8. 初始化 Provider 健康状态。
+
+`source/server/database/index.ts` 不再包含以下逻辑：
+
+- 旧表检测；
+- 旧字段迁移；
+- `ensureColumn`；
+- `dropColumn`；
+- 旧 Provider 宽表转换；
+- 旧 Settings 表转换；
+- 运行时兼容修补。
+
+旧版数据库由用户自行备份或删除。新版本遇到旧数据库文件时，应明确报错并要求重新初始化，而不是尝试隐式迁移。
+
+## 7. Store 层边界
+
+Store 层应分为两部分：
+
+### 关系仓储
+
+负责：
+
+- 表记录的创建、查询、更新、删除；
+- 外键关系；
+- 时间和生命周期；
+- 请求日志分页和统计。
+
+### 文档仓储
+
+负责：
+
+- JSON 序列化和反序列化；
+- `schemaVersion` 升级；
+- Zod 校验；
+- 默认配置合并；
+- 文档级更新。
+
+业务层不应直接调用 `JSON.stringify`、`JSON.parse` 或 `json_extract` 读取配置内容。
+
+## 8. 删除与历史数据规则
+
+### 配置实体
+
+以下表使用软删除：
+
+- `providers`；
+- `logical_models`；
+- `upstream_models`。
+
+### 运行状态
+
+删除 Provider 时：
+
+1. 将 Provider 标记为软删除；
+2. 禁用或软删除其上游模型；
+3. 保留 `provider_health`（便于恢复后观察历史健康状态）；若未来提供物理删除，则在同一事务中清理其健康状态；
+4. 保留历史请求日志和尝试记录。
+
+### 请求日志
+
+请求日志按保留策略物理删除：
+
+1. 先删除 `request_contents`；
+2. 再删除 `request_attempts`；
+3. 最后删除 `request_logs`。
+
+历史日志不依赖 `logical_models`、`upstream_models` 的当前配置内容。逻辑模型队列是运行时根据当前逻辑模型和全局上游模型池计算出来的，不单独持久化队列关系。
+
+## 9. 本版本明确不采用的方案
+
+### 不采用全局多态 `resources` 表
+
+虽然可以减少表数量，但会导致：
+
+- 关系类型不清晰；
+- 外键难以表达；
+- 查询条件复杂；
+- 类型约束更多依赖应用代码；
+- 统计 SQL 可读性变差。
+
+### 不采用全量 EAV 属性表
+
+`key/value` 只用于有明确命名空间、Schema 和默认值管理的全局应用配置，不扩展到所有业务实体。Provider、模型和路由核心配置仍使用经过 Schema 校验的 JSON 文档，避免用通用属性表承载复杂嵌套结构。
+
+### 不把健康状态写进配置 JSON
+
+健康状态更新频繁，且和用户配置的生命周期、事务边界、更新频率完全不同。
+
+### 不把所有日志字段都放入 JSON
+
+状态、协议、时间、耗时和关联标识需要被分页、过滤和聚合，必须保持为独立列。
+
+## 10. 实施清单
+
+本版本落地时需要同步修改：
+
+1. `source/server/database/schema.ts`；
+2. `source/server/database/index.ts`；
+3. `source/server/database/store.ts`；
+4. `source/common/schemas.ts`；
+5. `source/server/database/development-seed.ts`；
+6. `source/server/database/index.test.ts`；
+7. `source/server/database/store.test.ts`；
+8. 配置导入导出逻辑；
+9. Provider、模型、路由和统计相关 SQL；
+10. 删除旧版 Drizzle 迁移文件，生成新的首发基线。
+
+## 11. 后续演进建议（评审补充）
+
+以下建议尚未定稿，按优先级排列，供后续迭代评审时决策。已定稿的决策（表名统一为 `settings`、`audit_events` 延后、`captureStatus` 枚举、时间戳毫秒、日志快照冗余、`provider_health` 清理时机、`conversions` 数组结构、`request_contents` 四列正文结构（requestHeader/requestBody/responseHeader/responseBody）、`request_attempts` 去除 Provider 外键、唯一约束与 CHECK 约束、删除 `settings.version`）已落入正文各章。
+
+### 11.1 待产品决策
+
+**`request_contents` 的 `attempts` 数组展示降级。**
+正文不限制大小，但单个请求的尝试次数可能很多（重试风暴）。建议约定：`attempts` 数组按实际尝试次数完整保存，但每次尝试的正文若超过某个“展示友好”阈值（如 1MB），可在 envelope 中降级为 `bodyPreview` + `bodyOmitted: true`，这不是存储限制，而是防止单行 JSON 过大导致 UI 无法渲染。
+
+**按供应商筛选日志的实现方式。**
+`request_logs.metadata` 已冗余 `providerId` 快照，但 JSON 字段无法直接建索引。若日志页需要高频按供应商筛选，两个选项：
+- 接受 `request_attempts` JOIN 开销（当前方案）；
+- 未来将 `providerId` 提升为 `request_logs` 独立列（需定义清楚是“最终成功供应商”还是“尝试过的供应商”）。
+
+### 11.2 可延后但建议预留
+
+**`request_contents` 独立分页查询。**
+正文表体积远大于日志表。若未来提供“仅浏览有正文的日志”视图，`request_contents` 上的 `requestId IN (...)` 查询即可满足；暂不需要额外反向索引。
+
+**JSON 文档升级函数的注册机制。**
+第 4 节描述了 `V1 -> V2 -> V3` 升级链，建议实现时采用显式注册表（`{ 1: upgradeToV2, 2: upgradeToV3 }`）而非 if-else 链，便于测试每个升级步骤。
+
+**数据库文件版本标记。**
+虽然不兼容旧版，建议在 `settings` 中写入 `database.schemaBaseline = "v0.3"`，未来再发不兼容版本时可用于检测并提示用户，而不是静默打开结构不匹配的库。
+
+**WAL checkpoint 与应用退出。**
+本地桌面应用退出时建议执行 `PRAGMA wal_checkpoint(TRUNCATE)`，避免残留过大的 WAL 文件；这属于实现细节，但值得写入 desktop spec。
+
+## 12. 最终结论
+
+本版本的核心结构是：
+
+```text
+稳定身份与关系 -> 关系型列
+可变业务配置   -> config JSON
+全局配置       -> settings 命名空间 KV
+运行时状态     -> 独立状态表
+稳定日志维度   -> 关系型列
+不稳定日志详情 -> JSON
+配置变更历史   -> audit_events（延后，不在 v0.3 基线）
+```
+
+以后新增认证方式、协议能力、重试策略、路由权重、自定义 Header、供应商元数据、模型能力和新的 usage 指标时，原则上只需要增加或升级 JSON Schema，不需要修改数据库表结构。

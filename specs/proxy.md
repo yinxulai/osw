@@ -80,7 +80,7 @@ proxy/
 └── hooks/
     ├── request-logger.ts     # 唯一日志写入点（request_logs / request_attempts）
     ├── usage-tracker.ts      # token / usage 提取
-    └── content-capture.ts    # request_contents 正文采集（未来）
+    └── content-capture.ts    # request_contents 正文采集
 ```
 
 ### 观测订阅原则
@@ -91,13 +91,15 @@ proxy/
 - 日志写入收敛到 `hooks/request-logger.ts` 单点，消除散落在编排各分支中的手写写入；
 - 正文采集（MVP 待办）接入时只需实现 `content-capture.ts`。
 
-### 迁移步骤
+### 实施说明
 
-1. 抽取 `transport.ts`：把 `handler.ts` 中的上游 HTTP 逻辑（连接、转发、空闲超时、中止）迁出，事件化；
-2. 定义 `protocols/types.ts` 接口，将现有 `request.ts` / `conversion.ts` / `conversion-response.ts` / usage 提取按协议归位到各适配器；
-3. 抽取 `request-context.ts` 与 `hooks/request-logger.ts`，日志写入收敛单点；
-4. `handler.ts` 瘦身为纯编排；
-5. 每步完成后运行 `pnpm test:server` 与 `pnpm typecheck`，保持现有对外契约（管理 API、日志结构）不变。
+重构直接按目标结构落地，不保留旧结构兼容：
+
+1. 新建 `transport.ts`，上游 HTTP 逻辑（连接、转发、空闲超时、中止）全部事件化；
+2. 新建 `protocols/types.ts` 接口，请求改写、协议转换、usage 提取按协议归位到各适配器，`request.ts` / `conversion.ts` / `conversion-response.ts` 中的逻辑拆入后删除原文件；
+3. 新建 `request-context.ts` 与 `hooks/request-logger.ts`，日志写入收敛单点；
+4. `handler.ts` 重写为纯编排；
+5. 每步完成后运行 `pnpm test:server` 与 `pnpm typecheck`。
 
 ## 服务基本信息
 
@@ -124,7 +126,7 @@ proxy/
 
 ### `/v1/models`
 
-返回当前可用的模型列表（MVP 只有一个），方便支持模型列表拉取的工具自动发现。
+返回所有启用中的逻辑模型名，方便支持模型列表拉取的工具自动发现。
 
 响应格式兼容 OpenAI Models API：
 
@@ -142,7 +144,7 @@ proxy/
 }
 ```
 
-> MVP 固定返回一个名为 `default` 的模型。架构上支持多模型，未来扩展时直接增加即可。
+> `data` 数组包含每个启用中的逻辑模型一项，`id` 为逻辑模型名。
 
 ## 路由策略
 
