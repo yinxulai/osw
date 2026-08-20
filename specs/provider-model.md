@@ -2,9 +2,9 @@
 
 ## Provider
 
-一个模型服务渠道，管理端点、密钥引用和健康状态。
+一个模型服务渠道，负责稳定身份、生命周期和 Provider 级设置。Provider 的原生协议端点由 `provider_endpoints` 管理，运行时健康状态由 `provider_health` 管理；密钥引用和超时等设置由 `provider_settings` 管理。
 
-> 认证方式不由 Provider 配置，而是由协议适配器决定默认值（见下方「协议默认认证方式」）。代理根据端点所属协议读取密钥引用并生成认证信息；本地或测试集群等无需鉴权的 Provider 端点可以留空。
+> 认证方式不作为 Provider 实体字段持久化，而是由协议适配器决定默认值（见下方「协议默认认证方式」）。代理根据 `provider_endpoints.protocol` 读取对应密钥引用并生成认证信息；本地或测试集群等无需鉴权的 Provider 端点可以留空。
 
 ### 字段
 
@@ -54,7 +54,9 @@
 
 ## Provider Model（Provider 模型）
 
-> Provider 上的一个实际模型，可挂载多个协议端点，是路由的最小单元。所有启用的 Provider 模型会自动进入每个逻辑模型的候选队列。
+> Provider 上的一个实际模型，是路由的最小单元。ProviderModel 不直接拥有端点数组；它通过 `provider_model_endpoints` 绑定一个或多个 `provider_endpoints`，绑定记录可选填写模型专属 `url`。
+>
+> ProviderModel 属于全局共享池。每个请求根据逻辑模型、客户端协议、启用状态、优先级和两层健康状态动态计算候选队列，不持久化逻辑模型与 ProviderModel 的队列关系。
 
 ### 字段
 
@@ -62,20 +64,32 @@
 |------|------|------|
 | id | string | 唯一标识 |
 | providerId | string | 所属 Provider |
-| modelName | string | Provider API 中的实际模型名（转发时替换请求中的 model 字段） |
-| providerEndpointIds | string[] | 绑定的 Provider 默认端点；实际数据库通过 `provider_model_endpoints` 关系表表示 |
-| priority | number | 优先级，数字越小优先级越高 |
+| modelName | string | Provider API 中的实际模型名（转发时替换请求中的 `model` 字段） |
+| endpointBindings | object[] | ProviderModel 与 `provider_endpoints` 的绑定视图；持久化使用 `provider_model_endpoints` 关系表 |
+| priority | number | 全局候选队列优先级，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
 | createdTime | number | 创建时间 |
 | updatedTime | number | 更新时间 |
 
+### 端点绑定视图
+
+`endpointBindings` 只是 API/导入导出的聚合视图，不是数据库中的 JSON 字段。每个绑定至少包含：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| providerEndpointId | string | 被绑定的 ProviderEndpoint ID |
+| url | string \| null | 模型专属 URL；为空时使用 ProviderEndpoint 的 `url` |
+| enabled | boolean | 是否允许该绑定参与路由 |
+| conversions | object[] | 该绑定的客户端协议转换配置；持久化使用 `protocol_converters` |
+
 ### 约束
 
-- 同一 Provider 下可以有多个 ProviderModel，按优先级排序组成全局队列
-- 端点的协议决定了它只会在该协议的请求中被选用
-- 转发请求时，请求体中的 `model` 字段会被替换为 `modelName` 的值
+- 同一 Provider 下可以有多个 ProviderModel；所有启用的 ProviderModel 组成全局共享池。
+- 每个请求根据逻辑模型、客户端协议、绑定状态、优先级和健康状态动态生成候选队列。
+- `provider_endpoints.protocol` 决定原生协议；协议转换由对应 `protocol_converters` 决定。
+- 转发请求时，请求体中的 `model` 字段会被替换为 `modelName` 的值。
 
-## 配置示例（全局共享队列）
+### 配置示例（API/导出聚合视图）
 
 ```json
 {
@@ -98,26 +112,41 @@
   ],
   "providerModels": [
     {
-      "id": "upstream-001",
+      "id": "provider-model-001",
       "providerId": "prov-openai",
       "modelName": "gpt-4o",
-      "providerEndpointIds": ["endpoint-openai"],
+      "endpointBindings": [{
+        "providerEndpointId": "endpoint-openai",
+        "url": null,
+        "enabled": true,
+        "conversions": []
+      }],
       "priority": 1,
       "enabled": true
     },
     {
-      "id": "upstream-002",
+      "id": "provider-model-002",
       "providerId": "prov-deepseek",
       "modelName": "deepseek-chat",
-      "providerEndpointIds": ["endpoint-deepseek-openai"],
+      "endpointBindings": [{
+        "providerEndpointId": "endpoint-deepseek-openai",
+        "url": null,
+        "enabled": true,
+        "conversions": []
+      }],
       "priority": 2,
       "enabled": true
     },
     {
-      "id": "upstream-003",
+      "id": "provider-model-003",
       "providerId": "prov-anthropic",
       "modelName": "claude-sonnet-4-20240229",
-      "providerEndpointIds": ["endpoint-anthropic"],
+      "endpointBindings": [{
+        "providerEndpointId": "endpoint-anthropic",
+        "url": null,
+        "enabled": true,
+        "conversions": []
+      }],
       "priority": 3,
       "enabled": true
     }
@@ -125,4 +154,4 @@
 }
 ```
 
-> ProviderModel 池由所有 enabled 的项组成。每个逻辑模型请求到达时，系统按 priority 从该池生成当前逻辑模型的自动切换队列，先过滤协议匹配的端点，再依次尝试，失败自动切换到下一个。
+> ProviderModel 池由所有 enabled 的项组成。每个请求到达时，系统根据客户端协议和逻辑模型请求上下文，从全局池动态生成自动切换候选队列，先过滤原生协议匹配或已启用转换的绑定，再按 priority 依次尝试，失败自动切换到下一个。

@@ -22,7 +22,7 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 
 ## 2. 数据库总览
 
-新版本包含以下 16 张核心表（`audit_events` 延后到后续版本，不进入 v0.3 基线）：
+v0.3 包含以下 15 张核心表。
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -57,8 +57,10 @@ erDiagram
   provider_model_endpoints ||--o{ protocol_converters : enables
   provider_endpoints ||--o{ provider_model_endpoints : binds
   request_logs ||--o{ request_metrics : measures
+  request_logs ||--o{ request_usages : records
   request_logs ||--o{ request_contents : captures
   request_logs ||--o{ request_attempts : contains
+  request_attempts ||--o{ request_usages : produces
   request_attempts ||--o| request_contents : captures
   providers ||--o{ request_attempts : attempted_by
 
@@ -514,17 +516,13 @@ CREATE INDEX idx_request_metrics_key
 推荐的 key：
 
 ```text
-tokens.total
-tokens.input
-tokens.output
-tokens.cachedInput
-tokens.cacheCreationInput
+timing.durationMilliseconds
 timing.ttftMilliseconds
 cache.hit
 cache.promptHit
 ```
 
-所有指标值都按 REAL 数值读取。指标查询通过 `(requestId, key)` 获取单请求指标；需要按用量类型、数值范围或时间聚合的查询通过 `request_usages` 完成。
+Token 和其他需要按类型聚合的协议用量只写入 `request_usages`，不得同时写入 `request_metrics`。所有指标值都按 REAL 数值读取。指标查询通过 `(requestId, key)` 获取单请求指标；需要按用量类型、数值范围或时间聚合的查询通过 `request_usages` 完成。
 
 ### 3.11 `request_usages`
 
@@ -568,7 +566,7 @@ CREATE INDEX idx_request_usages_attempt
 
 `clientModelName`、`logicalModelName`、`providerId`、`providerName` 均为请求发生时的快照，用于逻辑模型或供应商被删除后日志详情页仍能展示名称，以及追溯“客户端请求的模型名路由到了哪个逻辑模型”；快照属于日志自身数据，不构成对可变配置的依赖。
 
-请求总耗时、TTFT、Token 和缓存命中等可聚合数值放入 `request_metrics` 或 `request_usages`，不放入 `request_logs`。`request_logs` 只保留请求身份、客户端协议、状态、逻辑模型快照和创建时间等稳定字段。
+请求总耗时、TTFT 等请求级通用指标放入 `request_metrics`；Token、缓存 Token 和其他协议用量放入 `request_usages`，不得重复记录。不放入 `request_logs`。`request_logs` 只保留请求身份、客户端协议、状态、逻辑模型快照和创建时间等稳定字段。
 
 日志表的稳定查询字段为：
 
@@ -577,7 +575,7 @@ CREATE INDEX idx_request_usages_attempt
 - `status`；
 - `createdTime`。
 
-未来增加新的 Token 类型、缓存指标、计费信息或响应指标时，只需增加新的 `request_metrics.key`，不需要修改表结构。
+未来增加新的请求级指标时，只需增加新的 `request_metrics.key`；增加新的 Token 类型、缓存用量或计费明细时，使用新的 `request_usages.type`，不需要修改表结构。
 
 ### 3.12 `request_contents`
 
@@ -689,7 +687,7 @@ CREATE UNIQUE INDEX idx_request_contents_attempt
 - API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏；
 - 本地工具默认不限制正文大小；开启记录后完整保存已接收的请求和响应内容；
 - 流式响应记录已接收的事件/文本片段，不阻塞代理转发，不因日志写入失败影响请求；
-- 清理请求日志时，先删除 `request_contents` 和 `request_metrics`，再删除 `request_attempts` 和 `request_logs`；
+- 清理请求日志时，依次删除 `request_contents`、`request_usages`、`request_metrics`、`request_attempts`，最后删除 `request_logs`；
 - 导出日志必须明确包含正文和指标的开关，默认不导出正文但保留可选指标。
 
 ### 3.13 `request_attempts`
@@ -725,7 +723,7 @@ CREATE INDEX idx_request_attempts_model_time
   ON request_attempts(providerModelId, createdTime);
 ```
 
-`providerId` 不建立外键：历史尝试不依赖 Provider 的当前存在性（Provider 未来可能物理删除），`providerId` 仅作为快照标识，配合请求日志中的 Provider 名称快照展示。
+`providerId` 和 `providerModelId` 均不建立外键：历史尝试不依赖 Provider 或 ProviderModel 的当前存在性（配置实体未来可能物理删除），两者仅作为快照标识，配合请求日志中的 Provider/ProviderModel 名称快照展示。
 
 `httpStatus`、`retryable` 和 `providerProtocol` 是稳定的观测字段，必须使用独立列；协议私有错误正文、原始 usage 和网络诊断信息才放入 `details` JSON。
 
@@ -742,28 +740,6 @@ CREATE INDEX idx_request_attempts_model_time
 - `retryable`；
 - `errorCode`；
 - `createdTime`。
-
-### 3.14 `audit_events`（延后，不在 v0.3 基线）
-
-记录配置实体的变更前后内容。该表不参与代理核心链路，**v0.3 不实现**，待后续版本需要配置变更历史时再引入；届时需同步定义 `resourceType` 枚举和独立保留策略。
-
-```sql
-CREATE TABLE audit_events (
-  id TEXT PRIMARY KEY,
-  resourceType TEXT NOT NULL,
-  resourceId TEXT NOT NULL,
-  action TEXT NOT NULL,
-  beforeData TEXT,
-  afterData TEXT,
-  createdTime INTEGER NOT NULL
-);
-
-CREATE INDEX idx_audit_events_resource
-  ON audit_events(resourceType, resourceId, createdTime);
-
-CREATE INDEX idx_audit_events_created_time
-  ON audit_events(createdTime);
-```
 
 ## 4. JSON 文档版本
 
@@ -832,7 +808,8 @@ LogicalModel name / description / enabled / routing strategy
 ProviderModel modelName / enabled / priority / weight
 Provider protocol / URL / ProviderModel endpoint binding / conversion client protocol / enabled
 日志 status / protocol / model IDs / provider ID
-数值耗时、Token 用量和缓存用量 -> `request_metrics` 或 `request_usages`
+请求级数值指标（如耗时、TTFT） -> `request_metrics`
+Token、缓存 Token 和其他协议用量 -> `request_usages`
 健康计数、冷却时间和时间戳
 ```
 
@@ -959,7 +936,7 @@ Store 层应分为两部分：
 
 ## 11. 后续演进建议（评审补充）
 
-以下建议尚未定稿，按优先级排列，供后续迭代评审时决策。已定稿的决策（表名统一为 `settings`、`audit_events` 延后、`captureStatus` 枚举、时间戳毫秒、日志快照冗余、`provider_health` 与 `provider_model_health` 清理时机、转换记录结构、`request_contents` 请求级和尝试级正文结构（通过可空 `attemptId` 关联）、`request_attempts` 去除 Provider 外键、唯一约束与 CHECK 约束、删除 `settings.version`）已落入正文各章。
+以下建议尚未定稿，按优先级排列，供后续迭代评审时决策。已定稿的决策（表名统一为 `settings`、`captureStatus` 枚举、时间戳毫秒、日志快照冗余、`provider_health` 与 `provider_model_health` 清理时机、转换记录结构、`request_contents` 请求级和尝试级正文结构（通过可空 `attemptId` 关联）、`request_attempts` 去除 Provider 外键、唯一约束与 CHECK 约束、删除 `settings.version`）已落入正文各章。
 
 ### 11.1 待产品决策
 
@@ -997,7 +974,6 @@ Store 层应分为两部分：
 运行时状态                             -> 独立状态表
 稳定日志维度与常用统计                 -> 关系型列
 协议私有原始详情与大体积正文             -> JSON / TEXT
-配置变更历史                           -> audit_events（延后，不在 v0.3 基线）
 ```
 
 以后新增字段时，先判断它是否参与路由、查询、排序、关联、统计或产品展示：若是，新增明确列/子表；只有开放性扩展或协议原始数据才进入 JSON。JSON Schema 不能成为逃避数据库建模的理由。

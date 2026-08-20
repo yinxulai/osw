@@ -192,7 +192,7 @@ one-switch/
 - 成功/失败回调更新状态
 - 提供 `isAvailable(providerId): boolean`
 
-**`proxy/current-upstream-model.ts`** — 当前逻辑模型手动指定的 Provider 模型状态
+**`proxy/current-provider-model.ts`** — 当前逻辑模型手动指定的 ProviderModel 状态
 - 维护当前用户手动指定的 Provider 模型 ID（运行时状态，不持久化）
 - 提供设置/获取当前 Provider 模型的接口
 - 新请求从当前 Provider 模型开始尝试，失败后仍按队列顺序自动切换
@@ -251,7 +251,7 @@ one-switch/
 | `/api/queue/switch` | 手动切换当前逻辑模型队列起始 Provider 模型 | modelId | 新的当前 Provider 模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
-| `/api/request-log/content/get` | 获取请求内容 | requestId | 客户端请求/响应、上游尝试和转换前后内容 |
+| `/api/request-log/content/get` | 获取请求内容 | requestId | 客户端请求/响应、Provider 尝试和转换前后内容 |
 | `/api/request-log/prune` | 按天清理请求日志 | retentionDays | 删除指定天数之前的日志及关联内容 |
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
@@ -268,14 +268,14 @@ one-switch/
 - 提供数据库实例（`getDb`）
 
 **`schema.ts`** — Drizzle 表定义
-- 新版本 15 张业务表（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics）的 `sqliteTable` 定义。
+- 新版本 v0.3 15 张核心表（包含 `request_usages`）的 `sqliteTable` 定义。
 - `settings` 按命名空间 key 逐项保存全局配置，标量按类型保存，数组/对象才使用 JSON 编码
 - `request_contents` 独立保存可选的请求/响应正文，避免大字段影响日志列表查询
 - 从表定义推导行类型（`$inferSelect`）
 
 **`store.ts`** — 数据访问层
 - Provider / LogicalModel / ProviderModel CRUD、级联操作
-- ProviderHealth 读写、Settings、ProviderSettings、RequestLog、RequestMetric、RequestAttempt、RequestContent、AuditEvent
+- ProviderHealth / ProviderModelHealth 读写、Settings、ProviderSettings、RequestLog、RequestMetric、RequestUsage、RequestAttempt、RequestContent
 - 使用 Drizzle 类型化查询（`select`/`insert`/`update`），映射到领域模型
 
 **`drizzle/`** — Drizzle-kit 迁移

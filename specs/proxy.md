@@ -17,8 +17,8 @@ flowchart TD
     C --> D[router.ts 候选解析<br/>原生协议优先 + 可转换候选]
     D --> E[手动切换起点 + 健康过滤]
     E --> F{尝试循环 handler.ts 编排}
-    F --> G[ProtocolAdapter.buildUpstreamRequest<br/>model 改写 / usage 注入 / 认证头]
-    G --> H[transport.ts 纯上游 I/O<br/>连接 / 转发字节 / 空闲超时 / 中止]
+    F --> G[ProtocolAdapter.buildProviderRequest<br/>model 改写 / usage 注入 / 认证头]
+    G --> H[transport.ts Provider I/O<br/>连接 / 转发字节 / 空闲超时 / 中止]
     H --> I[ProtocolAdapter.createResponsePipeline<br/>透传或转换 / usage 提取]
     I -->|retry| J[health.ts 失败计数 / 冷却] --> F
     I -->|success / terminal| K[收尾：日志定稿 + 清理]
@@ -43,7 +43,7 @@ flowchart TD
 ```typescript
 interface ProtocolAdapter {
   /** 请求方向：model 改写（body 或 URL）、usage 注入参数、认证头格式 */
-  buildUpstreamRequest(input: ClientRequestSnapshot, target: UpstreamTarget): BuiltRequest
+  buildProviderRequest(input: ClientRequestSnapshot, target: ProviderModelTarget): BuiltRequest
 
   /** 响应方向：透传或转换管线、该协议自身的 usage 提取 */
   createResponsePipeline(ctx: ResponseContext): ResponsePipeline
@@ -150,15 +150,15 @@ proxy/
 
 ### 单队列模型
 
-全局只有一个**自动切换队列**（即 ProviderModel 列表，按优先级排序）。客户端不需要指定模型 ID，请求中的 `model` 字段会被忽略。
+ProviderModel 属于全局共享池。每个请求根据逻辑模型上下文和客户端协议动态计算一个**自动切换候选队列**（按优先级排序）。客户端不需要指定 ProviderModel ID，请求中的 `model` 字段仅用于识别逻辑模型，转发时会被替换。
 
 - 无论客户端请求体中 `model` 字段写什么，都使用同一个队列
-- 队列中的每个 ProviderModel 都有自己的协议端点、远端 URL、Provider API 模型名、Provider
+- 候选队列中的每个 ProviderModel 都通过端点绑定获得 Provider 协议、有效 URL、Provider API 模型名和所属 Provider
 - 请求来时，自动根据协议过滤队列，按顺序尝试，失败自动切换到下一个
 - 转发到上游时，`model` 字段会被替换为当前 ProviderModel 的 **modelName**
 - 支持用户手动切换到队列中的某个 ProviderModel：新请求使用新模型，正在进行的请求不中断
 
-> ProviderModel 全局共享，不隶属于任何逻辑模型；所有 enabled 的 ProviderModel 自动进入队列。
+> ProviderModel 全局共享，不持久化逻辑模型与 ProviderModel 的队列关系；所有 enabled 且存在可用端点绑定的 ProviderModel 进入动态候选池。
 
 ### 路由步骤
 
@@ -220,7 +220,7 @@ proxy/
 
 - 保留客户端的原始方法和端到端请求头；移除 `connection`、`transfer-encoding` 等逐跳 header
 - 移除客户端认证信息，注入 Provider 配置的认证头；`content-length` 按最终请求体重新计算
-- OpenAI / Anthropic 使用端点配置的完整上游 URL，并将请求体 `model` 改写为 ProviderModel 的 `modelName`
+- OpenAI / Anthropic 使用有效 ProviderModel 端点绑定 URL，并将请求体 `model` 改写为 ProviderModel 的 `modelName`
 - Gemini 保留原生请求体，通过 URL 替换模型 ID，并按客户端请求选择 `generateContent` 或 `streamGenerateContent`
 - Gemini 会保留端点 URL 的查询参数，同时合并客户端的 `alt=sse` 等查询参数
 - 响应状态码、端到端响应头和响应体逐块返回；逐跳响应 header 不向客户端转发

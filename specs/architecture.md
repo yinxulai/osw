@@ -22,9 +22,13 @@ flowchart LR
 ## 核心概念
 
 ### Provider
-一个模型服务渠道，包含名称、认证方式、密钥、默认超时、启用状态、冷却状态。
+一个模型服务渠道，负责稳定身份、生命周期和 Provider 级设置。
 
-> Provider 不持有统一 Base URL，因为每个 Provider 模型端点各自配置完整地址。
+- `provider_endpoints`：Provider 的原生协议端点和默认 URL；
+- `provider_settings`：Provider 级密钥引用、超时等设置；
+- `provider_health`：Provider 聚合运行时健康状态。
+
+ProviderModel 通过 `provider_model_endpoints` 绑定 ProviderEndpoint，并可为绑定配置模型专属 `url`。
 
 ### Protocol
 代理自动识别的 API 协议类型，根据请求 path 匹配判定，无需客户端区分 Base URL。
@@ -43,15 +47,17 @@ flowchart LR
 ### Logical Model
 对外暴露的统一模型名，例如 `auto`、`gpt-4o`、`claude-sonnet`。客户端通过请求体中的 model 字段（各协议自行携带）指定。
 
-### Provider Model
-Provider 上的一个实际模型，可挂载多个协议端点，是路由的最小单元。所有启用的 Provider 模型都会进入每个逻辑模型的候选队列，队列在请求路由时动态生成。
+### ProviderModel
+Provider 上的一个实际模型，是路由的最小单元。ProviderModel 不直接拥有端点数组，而是通过 `provider_model_endpoints` 绑定一个或多个 ProviderEndpoint。
 
-每个 ProviderModel 包含：
-- ProviderModel 端点列表（每个端点含完整远端 URL）
-- 所属 Provider
-- Provider API 模型名
-- 优先级
-- 启用状态
+ProviderModel 包含：
+- 所属 Provider；
+- Provider API 模型名 `modelName`；
+- 一个或多个端点绑定及可选模型专属 `url`；
+- 全局候选队列优先级；
+- 启用状态。
+
+ProviderModel 属于全局共享池。每个请求根据逻辑模型、客户端协议、绑定状态、优先级和健康状态动态生成候选队列，不持久化逻辑模型与 ProviderModel 的队列关系。
 
 ### Route
 一次请求的路由决策结果，包含协议、候选 Provider 模型列表、尝试顺序、失败原因。
@@ -70,6 +76,6 @@ Provider 级别的健康状态，包含连续失败次数、冷却截止时间�
    - OpenAI / Anthropic 将请求体中的 `model` 替换为 ProviderModel 的 `modelName`
    - Gemini 保留原生 body，在 URL 中替换模型 ID，并保留 `generateContent` / `streamGenerateContent` 动作及 `alt=sse` 等查询参数
    - 注入 Provider 认证头，并安全透传端到端 header
-3. 每个 Provider 模型端点配置的是该协议下的**完整上游地址**。OpenAI / Anthropic 直接使用该地址；Gemini 以该地址为基准替换模型和请求动作。
-4. 路由过滤：请求通过某协议进入时，只考虑拥有该协议端点的 ProviderModel。
-5. 每个逻辑模型的候选队列可以同时包含 OpenAI 格式和 Anthropic 格式的 ProviderModel，但它们各自只在对应协议的请求中被选用，之间永远不会互相转换。
+3. 每个 `provider_endpoints` 配置的是 Provider 按原生协议提供的默认 URL；`provider_model_endpoints.url` 非空时作为该 ProviderModel 绑定的 URL，否则回退到 ProviderEndpoint 的 `url`。OpenAI / Anthropic 直接使用该地址；Gemini 以该地址为基准替换模型和请求动作。
+4. 路由过滤：请求通过某客户端协议进入时，只考虑存在对应原生端点或已启用协议转换绑定的 ProviderModel。
+5. 每个请求从全局 ProviderModel 池动态生成候选队列；OpenAI、Anthropic 等不同协议的 ProviderModel 可以同时存在，但只有原生匹配或明确启用转换的绑定才会进入当前请求的候选。

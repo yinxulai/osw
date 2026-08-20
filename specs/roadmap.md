@@ -6,7 +6,7 @@
 
 以下设计文档已评审定稿，是实施的唯一依据：
 
-- [x] [data-model.md](./data-model.md)：15 张表基线（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics），标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、三层日志、软删除、Unix 毫秒时间戳。
+- [x] [data-model.md](./data-model.md)：15 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。
 - [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
@@ -23,7 +23,7 @@
 
 ### 阶段 1：数据库新基线
 
-- [ ] 按 data-model.md 重建 schema：15 张表（含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics）、CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL
+- [ ] 按 data-model.md 重建 schema：v0.3 初始化 15 张核心表（含 request_usages），CHECK 约束、端点唯一约束、UNIQUE(requestId, attemptIndex)、partial unique index (providerId, modelName) WHERE deletedTime IS NULL
 - [ ] `settings` 初始化使用 INSERT OR IGNORE 幂等写入
 - [ ] `provider_health` 随 Provider 创建、`provider_model_health` 随 ProviderModel 创建，在同事务中插入
 - [ ] `request_contents` 请求级和尝试级正文结构（通过可空 attemptId 关联）+ conversions
@@ -35,7 +35,7 @@
 按 proxy.md「实施说明」五步执行，旧 handler 拆分后删除：
 
 - [ ] 搭建共享骨架：handler 编排（候选路由、尝试循环、手动切换）、transport 纯 I/O（空闲超时、中止、SSE 解析）、hooks 观测订阅
-- [ ] 实现 ProtocolAdapter 接口（buildUpstreamRequest / createResponsePipeline / classifyError）
+- [ ] 实现 ProtocolAdapter 接口（buildProviderRequest / createResponsePipeline / classifyError）
 - [ ] 落地 openai、anthropic、gemini 三个协议适配器（protocols/ 目录）
 - [ ] conversions/ 注册表承接协议转换（端点绑定级开关，默认关闭）
 - [ ] usage 提取、日志写入收敛到 hooks 订阅者，handler 不再内联
@@ -135,7 +135,7 @@
 - 日志筛选（按状态、逻辑模型、供应商、时间）与请求 ID 贯穿，优先于协议转换器落地
 - 冷却/熔断状态可视化：队列页展示“冷却中（剩余时间）/ 连续失败次数”徽标，让自动切换可解释
 - 配置备份/恢复：导出脱敏配置文件（密钥仅存系统密钥环，提示用户单独备份或重输）
-- Token 用量统计：按 `request_metrics` 中的 `tokens.*` 指标聚合展示今日/本周用量（不做费用预估）
+- Token 用量统计：按 `request_usages.type` 聚合展示今日/本周用量（不做费用预估）
 - 协议兼容转换器（详见 [protocol-conversion.md](./protocol-conversion.md)）：端点绑定级转换开关、anthropic-messages ↔ openai-completions、openai-responses → openai-completions 三个方向、流式 SSE 转换、队列页转换徽标
 - Linux 打包与托盘体验完善
 - 更细粒度的错误切换策略配置

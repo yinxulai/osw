@@ -43,8 +43,8 @@ P1 优先实现三个最高频方向：
 客户端请求 (协议 A)
   → 协议识别 (path) 得到 A
   → 队列过滤：
-      原生匹配：endpoint.protocol === A 且未开启转换 —— 原生候选
-      转换匹配：存在 A → endpoint.providerEndpoint.protocol 的已启用 protocol_converter —— 转换候选
+      原生匹配：providerEndpoint.protocol === A 且未开启转换 —— 原生候选
+      转换匹配：存在 A → providerEndpoint.protocol 的已启用 protocol_converter —— 转换候选
   → 排序：原生候选优先于转换候选（同优先级内）
   → 尝试某个候选：
       原生候选：现有透传路径
@@ -69,15 +69,15 @@ P1 优先实现三个最高频方向：
 
 ### 流式转换
 
-- SSE 事件需逐事件转换：如上游 `chat.completion.chunk` → 客户端 `anthropic` 的 `message_start / content_block_delta / message_delta / message_stop` 事件序列
-- 转换器维护有状态上下文（如 Anthropic 流需要合成 message_start、分配 content block index）
+- SSE 事件需逐事件转换：如 Provider `chat.completion.chunk` → 客户端 `anthropic` 的 `message_start / content_block_delta / message_delta / message_stop` 事件序列
+- 转换器维护有状态上下文（如 Anthropic 流需要合成 `message_start`、分配 content block index）
 - usage 统计在转换层从上游格式解析后按客户端协议格式回填
 - 空闲超时、切换边界规则与透传路径一致：一旦已向客户端下发转换后的事件，不再切换
 
 ## 数据模型变更
 
 - 新增 `provider_endpoints`：Provider 按原生协议维护默认端点。
-- `provider_model_endpoints`：将 ProviderModel 绑定到 Provider 默认端点，可选 `url`。
+- `provider_model_endpoints`：将 ProviderModel 绑定到 ProviderEndpoint，可选配置模型专属 `url`；为空时回退到 `provider_endpoints.url`。
 - 新增 `protocol_converters`：按 ProviderModel 端点绑定和客户端协议配置 `enabled`；目标 Provider 协议通过 `provider_model_endpoints.providerEndpointId -> provider_endpoints.protocol` 得到。
 - `request_logs.protocol` 记录客户端协议；Provider 端点协议记录在 `request_attempts.providerProtocol`，与客户端协议不同即表示发生了转换。
 - 新增 `request_metrics`：按请求保存可扩展数值指标；Token 和其他用量保存到 `request_usages`。
