@@ -15,12 +15,18 @@ import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import {
   logicalModels,
-  upstreamModels,
   providerHealth,
+  providerModels,
+  providerModelHealth,
+  providerEndpoints,
+  providerModelEndpoints,
+  providerSettings,
   providers,
   requestAttempts,
   requestLogs,
   requestContents,
+  requestMetrics,
+  requestUsages,
   settings,
 } from './schema'
 
@@ -67,14 +73,15 @@ export async function getProvider(id: string): Promise<Provider | undefined> {
   return row ? mapProvider(row) : undefined
 }
 
-export async function createProvider(
-  input: Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): Promise<Provider> {
+type CreateProviderInput = { name: string; description?: string; apiKeyReference: string; timeoutMilliseconds?: number; enabled?: boolean; upstreamUrls?: string }
+
+export async function createProvider(input: CreateProviderInput): Promise<Provider> {
   const id = generateId('prov_')
   const time = now()
   const db = getDb()
   const provider = ProviderSchema.parse({
     ...input,
+    description: input.description ?? '',
     id,
     createdTime: time,
     updatedTime: time,
@@ -83,11 +90,18 @@ export async function createProvider(
   db.insert(providers)
     .values({
       id,
-      data: serializeProviderData(provider),
+      name: provider.name,
+      description: '',
+      enabled: provider.enabled,
       createdTime: time,
       updatedTime: time,
     })
     .run()
+  db.insert(providerSettings).values([
+    { providerId: id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: time },
+    { providerId: id, key: 'connection.timeoutMilliseconds', value: String(provider.timeoutMilliseconds), valueType: 'number', updatedTime: time },
+    { providerId: id, key: 'provider.upstreamUrls', value: provider.upstreamUrls, valueType: 'json', updatedTime: time },
+  ]).run()
   db.insert(providerHealth)
     .values({
       providerId: id,
@@ -112,12 +126,25 @@ export async function updateProvider(id: string, updates: Partial<Omit<Provider,
   })
   db.update(providers)
     .set({
-      data: serializeProviderData(next),
+      name: next.name,
+      description: next.description ?? '',
+      enabled: next.enabled,
       updatedTime: time,
       deletedTime: next.deletedTime,
     })
     .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
     .run()
+  const providerSettingUpdates = [
+    ['security.secretReference', next.apiKeyReference, 'string'],
+    ['connection.timeoutMilliseconds', String(next.timeoutMilliseconds), 'number'],
+    ['provider.upstreamUrls', next.upstreamUrls, 'json'],
+  ] as const
+  for (const [key, value, valueType] of providerSettingUpdates) {
+    db.insert(providerSettings).values({ providerId: id, key, value, valueType, updatedTime: time }).onConflictDoUpdate({
+      target: [providerSettings.providerId, providerSettings.key],
+      set: { value, valueType, updatedTime: time },
+    }).run()
+  }
   return next
 }
 
@@ -131,9 +158,9 @@ export async function deleteProvider(id: string): Promise<void> {
       .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
       .run()
     transaction
-      .update(upstreamModels)
-      .set({ enabled: false, updatedTime: time })
-      .where(and(eq(upstreamModels.providerId, id), isNull(upstreamModels.deletedTime)))
+      .update(providerModels)
+      .set({ enabled: false, updatedTime: time, deletedTime: time })
+      .where(and(eq(providerModels.providerId, id), isNull(providerModels.deletedTime)))
       .run()
   })
 }
@@ -212,100 +239,56 @@ export async function deleteLogicalModel(id: string): Promise<void> {
     .run()
 }
 
-// ========== Upstream Model ==========
+// ========== Provider Model compatibility surface ==========
 
 export async function listUpstreamModelsByProvider(providerId: string, includeDeleted = false): Promise<UpstreamModel[]> {
-  const db = getDb()
-  const rows = includeDeleted
-    ? db
-        .select()
-        .from(upstreamModels)
-        .where(eq(upstreamModels.providerId, providerId))
-        .orderBy(upstreamModels.priority)
-        .all()
-    : db
-        .select()
-        .from(upstreamModels)
-        .where(and(eq(upstreamModels.providerId, providerId), isNull(upstreamModels.deletedTime)))
-        .orderBy(upstreamModels.priority)
-        .all()
-  return rows.map(mapUpstreamModel)
+  const rows = getDb().select().from(providerModels)
+    .where(includeDeleted ? eq(providerModels.providerId, providerId) : and(eq(providerModels.providerId, providerId), isNull(providerModels.deletedTime)))
+    .orderBy(providerModels.createdTime).all()
+  return rows.map(row => mapProviderModel(row))
 }
 
-export async function listUpstreamModels(includeDeleted = false): Promise<UpstreamModel[]> {
-  const db = getDb()
-  const rows = includeDeleted
-    ? db.select().from(upstreamModels).orderBy(upstreamModels.priority).all()
-    : db.select().from(upstreamModels).where(isNull(upstreamModels.deletedTime)).orderBy(upstreamModels.priority).all()
-  return rows.map(mapUpstreamModel)
+export async function listUpstreamModels(includeDeleted = true): Promise<UpstreamModel[]> {
+  const rows = getDb().select().from(providerModels)
+    .where(includeDeleted ? undefined : isNull(providerModels.deletedTime))
+    .orderBy(providerModels.createdTime).all()
+  return rows.map(row => mapProviderModel(row))
 }
 
 export async function getUpstreamModel(id: string): Promise<UpstreamModel | undefined> {
-  const row = getDb().select().from(upstreamModels).where(eq(upstreamModels.id, id)).get()
-  return row ? mapUpstreamModel(row) : undefined
+  const row = getDb().select().from(providerModels).where(eq(providerModels.id, id)).get()
+  return row ? mapProviderModel(row) : undefined
 }
 
-export async function createUpstreamModel(
-  input: Omit<UpstreamModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>,
-): Promise<UpstreamModel> {
+export async function createUpstreamModel(input: Omit<UpstreamModel, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>): Promise<UpstreamModel> {
   const id = generateId('model_')
   const time = now()
-  getDb()
-    .insert(upstreamModels)
-    .values({
-      id,
-      providerId: input.providerId,
-      upstreamModelId: input.upstreamModelId,
-      endpoints: JSON.stringify(input.endpoints ?? []),
-      priority: input.priority,
-      enabled: input.enabled ?? true,
-      createdTime: time,
-      updatedTime: time,
-    })
-    .run()
-  return {
-    id,
-    providerId: input.providerId,
-    upstreamModelId: input.upstreamModelId,
-    endpoints: input.endpoints ?? [],
-    priority: input.priority,
-    enabled: input.enabled ?? true,
-    createdTime: time,
-    updatedTime: time,
-    deletedTime: null,
-  }
+  const db = getDb()
+  db.transaction(transaction => {
+    transaction.insert(providerModels).values({ id, providerId: input.providerId, modelName: input.upstreamModelId, enabled: input.enabled ?? true, createdTime: time, updatedTime: time }).run()
+    transaction.insert(providerModelHealth).values({ providerModelId: id, updatedTime: time }).run()
+    for (const endpoint of input.endpoints ?? []) {
+      const endpointRow = transaction.select().from(providerEndpoints).where(and(eq(providerEndpoints.providerId, input.providerId), eq(providerEndpoints.protocol, endpoint.protocol))).get()
+      const endpointId = endpointRow?.id ?? generateId('end_')
+      if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: input.providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
+      transaction.insert(providerModelEndpoints).values({ id: generateId('pme_'), providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
+    }
+  })
+  return { id, providerId: input.providerId, upstreamModelId: input.upstreamModelId, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
 }
 
 export async function updateUpstreamModel(id: string, updates: Partial<Omit<UpstreamModel, 'id' | 'createdTime'>>): Promise<UpstreamModel> {
-  const db = getDb()
   const time = now()
-  db.update(upstreamModels)
-    .set({
-      ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
-      ...(updates.upstreamModelId !== undefined
-        ? { upstreamModelId: updates.upstreamModelId }
-        : {}),
-      ...(updates.endpoints !== undefined
-        ? { endpoints: JSON.stringify(updates.endpoints) }
-        : {}),
-      ...(updates.priority !== undefined ? { priority: updates.priority } : {}),
-      ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
-      ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
-      updatedTime: time,
-    })
-    .where(and(eq(upstreamModels.id, id), isNull(upstreamModels.deletedTime)))
-    .run()
-  const row = db.select().from(upstreamModels).where(eq(upstreamModels.id, id)).get()
-  return mapUpstreamModel(row!)
+  const db = getDb()
+  const existing = await getUpstreamModel(id)
+  if (!existing) throw new Error(`provider model not found: ${id}`)
+  db.update(providerModels).set({ ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}), ...(updates.upstreamModelId !== undefined ? { modelName: updates.upstreamModelId } : {}), ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}), ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}), updatedTime: time }).where(eq(providerModels.id, id)).run()
+  return { ...existing, ...updates, id, updatedTime: time }
 }
 
 export async function deleteUpstreamModel(id: string): Promise<void> {
   const time = now()
-  getDb()
-    .update(upstreamModels)
-    .set({ deletedTime: time, updatedTime: time })
-    .where(and(eq(upstreamModels.id, id), isNull(upstreamModels.deletedTime)))
-    .run()
+  getDb().update(providerModels).set({ enabled: false, deletedTime: time, updatedTime: time }).where(and(eq(providerModels.id, id), isNull(providerModels.deletedTime))).run()
 }
 
 // ========== Provider Health ==========
@@ -432,10 +415,10 @@ export async function updateSettings(
   for (const [key, value] of Object.entries(updates)) {
     if (value === undefined) continue
     db.insert(settings)
-      .values({ key, value: JSON.stringify(value) })
+      .values({ key, value: JSON.stringify(value), valueType: typeof value, updatedTime: now() })
       .onConflictDoUpdate({
         target: settings.key,
-        set: { value: JSON.stringify(value) },
+        set: { value: JSON.stringify(value), valueType: typeof value, updatedTime: now() },
       })
       .run()
   }
@@ -457,21 +440,13 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
       id,
       logicalModelId: input.logicalModelId,
       protocol: input.protocol,
-      upstreamProtocol: input.upstreamProtocol ?? null,
       status: input.status,
-      totalDurationMilliseconds: input.totalDurationMilliseconds,
-      totalTokens: input.totalTokens ?? null,
-      inputTokens: input.inputTokens ?? null,
-      outputTokens: input.outputTokens ?? null,
-      cachedInputTokens: input.cachedInputTokens ?? null,
-      cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
-      promptCacheHit: input.promptCacheHit ?? null,
-      rawUsage: serializeRawUsage(input.rawUsage),
-      ttftMilliseconds: input.ttftMilliseconds ?? null,
-      cacheHit: input.cacheHit ?? null,
+      metadata: null,
       createdTime: time,
     })
     .run()
+  getDb().insert(requestMetrics).values({ requestId: id, key: 'durationMilliseconds', value: input.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: time }).run()
+  if (input.totalTokens != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: input.totalTokens, unit: 'tokens', createdTime: time }).run()
   return {
     id,
     logicalModelId: input.logicalModelId,
@@ -508,15 +483,23 @@ export interface RequestLogUpdate {
 }
 
 export async function updateRequestLogStatus(id: string, update: RequestLogUpdate): Promise<void> {
-  const { rawUsage, ...fields } = update
-  getDb()
-    .update(requestLogs)
-    .set({
-      ...fields,
-      ...(rawUsage !== undefined ? { rawUsage: serializeRawUsage(rawUsage) } : {}),
-    })
-    .where(eq(requestLogs.id, id))
-    .run()
+  const db = getDb()
+  const time = now()
+  db.transaction(transaction => {
+    if (update.status !== undefined) transaction.update(requestLogs).set({ status: update.status }).where(eq(requestLogs.id, id)).run()
+    const metrics: Array<{ key: string; value: number; unit: string }> = []
+    if (update.totalDurationMilliseconds !== undefined) metrics.push({ key: 'durationMilliseconds', value: update.totalDurationMilliseconds, unit: 'milliseconds' })
+    if (update.ttftMilliseconds !== undefined && update.ttftMilliseconds !== null) metrics.push({ key: 'ttftMilliseconds', value: update.ttftMilliseconds, unit: 'milliseconds' })
+    if (update.inputTokens !== undefined && update.inputTokens !== null) metrics.push({ key: 'inputTokens', value: update.inputTokens, unit: 'tokens' })
+    if (update.outputTokens !== undefined && update.outputTokens !== null) metrics.push({ key: 'outputTokens', value: update.outputTokens, unit: 'tokens' })
+    if (update.cachedInputTokens !== undefined && update.cachedInputTokens !== null) metrics.push({ key: 'cachedInputTokens', value: update.cachedInputTokens, unit: 'tokens' })
+    if (update.cacheCreationInputTokens !== undefined && update.cacheCreationInputTokens !== null) metrics.push({ key: 'cacheCreationInputTokens', value: update.cacheCreationInputTokens, unit: 'tokens' })
+    if (update.promptCacheHit !== undefined && update.promptCacheHit !== null) metrics.push({ key: 'promptCacheHit', value: update.promptCacheHit ? 1 : 0, unit: 'boolean' })
+    if (update.cacheHit !== undefined && update.cacheHit !== null) metrics.push({ key: 'cacheHit', value: update.cacheHit ? 1 : 0, unit: 'boolean' })
+    for (const metric of metrics) transaction.insert(requestMetrics).values({ requestId: id, ...metric, updatedTime: time }).onConflictDoUpdate({ target: [requestMetrics.requestId, requestMetrics.key], set: { value: metric.value, unit: metric.unit, updatedTime: time } }).run()
+    if (update.totalTokens !== undefined && update.totalTokens !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
+    if (update.rawUsage !== undefined) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
+  })
 }
 
 export interface RequestLogFilter {
@@ -582,6 +565,8 @@ export async function pruneRequestLogs(retentionCount: number, retentionDays: nu
     const staleIds = [...new Set([...countStaleIds, ...ageStaleIds])]
     if (staleIds.length === 0) return
     transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
+    transaction.delete(requestUsages).where(inArray(requestUsages.requestId, staleIds)).run()
+    transaction.delete(requestMetrics).where(inArray(requestMetrics.requestId, staleIds)).run()
     transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
     transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
   })
@@ -600,6 +585,8 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
     const staleIds = staleRows.map(row => row.id)
     if (staleIds.length === 0) return 0
     transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
+    transaction.delete(requestUsages).where(inArray(requestUsages.requestId, staleIds)).run()
+    transaction.delete(requestMetrics).where(inArray(requestMetrics.requestId, staleIds)).run()
     transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
     transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
     return staleIds.length
@@ -617,13 +604,19 @@ export async function createRequestAttempt(
       id,
       requestId: input.requestId,
       providerId: input.providerId,
-      upstreamModelId: input.upstreamModelId,
-      attemptIndex: input.attemptIndex,
+      providerModelId: input.upstreamModelId,
+      providerName: '',
+      providerModelName: input.upstreamModelId,
+      providerProtocol: null,
+      providerRequestId: input.upstreamRequestId ?? null,
+      url: '',
       status: input.status,
+      httpStatus: null,
+      retryable: false,
+      attemptIndex: input.attemptIndex,
       errorCode: input.errorCode ?? null,
       errorMessage: input.errorMessage ?? null,
-      upstreamRequestId: input.upstreamRequestId ?? null,
-      errorResponse: input.errorResponse ?? null,
+      details: input.errorResponse ?? null,
       durationMilliseconds: input.durationMilliseconds,
       createdTime: time,
     })
@@ -672,8 +665,8 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
       total: sql<number>`count(*)`.as('total'),
       success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
       failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-      avgLatency: sql<number>`avg(${requestLogs.totalDurationMilliseconds})`.as('avgLatency'),
-      tokens: sql<number>`coalesce(sum(${requestLogs.totalTokens}), 0)`.as('tokens'),
+      avgLatency: sql<number>`avg((SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds'))`.as('avgLatency'),
+      tokens: sql<number>`coalesce(sum((SELECT value FROM request_usages u WHERE u.requestId = ${requestLogs.id} AND u.type = 'totalTokens')), 0)`.as('tokens'),
     })
     .from(requestLogs)
     .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
@@ -759,7 +752,7 @@ export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]>
   const rows = db
     .select({
       providerId: requestAttempts.providerId,
-      providerName: sql<string>`json_extract(${providers.data}, '$.name')`.as('providerName'),
+      providerName: providers.name,
       requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
       success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
       failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' then ${requestAttempts.requestId} end)`.as('failed'),
@@ -800,9 +793,9 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
   )`
   const rows = db
     .select({
-      upstreamModelId: requestAttempts.upstreamModelId,
+      upstreamModelId: requestAttempts.providerModelName,
       providerId: requestAttempts.providerId,
-      providerName: sql<string>`json_extract(${providers.data}, '$.name')`.as('providerName'),
+      providerName: providers.name,
       requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
       success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
       avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
@@ -810,7 +803,7 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
     .from(requestAttempts)
     .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
     .where(and(sql`${requestAttempts.createdTime} >= ${sinceMs}`, finalAttempt))
-    .groupBy(requestAttempts.upstreamModelId, requestAttempts.providerId)
+    .groupBy(requestAttempts.providerModelName, requestAttempts.providerId)
     .orderBy(sql`requests desc`)
     .limit(limit)
     .all()
@@ -844,7 +837,7 @@ export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBu
     const row = db
       .select({ count: sql<number>`count(*)`.as('count') })
       .from(requestLogs)
-      .where(sql`${requestLogs.createdTime} >= ${sinceMs} and ${requestLogs.totalDurationMilliseconds} >= ${b.min} and ${requestLogs.totalDurationMilliseconds} < ${b.max}`)
+      .where(sql`${requestLogs.createdTime} >= ${sinceMs} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') >= ${b.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') < ${b.max}`)
       .get()
     result.push({ range: b.range, count: row?.count ?? 0 })
   }
@@ -910,33 +903,19 @@ export async function getFailureReasons(sinceMs: number): Promise<FailureReasonS
 // ========== Row mappers ==========
 
 function mapProvider(row: typeof providers.$inferSelect): Provider {
-  const data = parseProviderData(row.data)
+  const settingRows = getDb().select().from(providerSettings).where(eq(providerSettings.providerId, row.id)).all()
+  const values = new Map(settingRows.map(setting => [setting.key, setting.value]))
   return {
-    ...data,
     id: row.id,
+    name: row.name,
+    description: row.description,
+    apiKeyReference: values.get('security.secretReference') ?? '',
+    timeoutMilliseconds: Number(values.get('connection.timeoutMilliseconds') ?? 30000),
+    enabled: row.enabled,
+    upstreamUrls: values.get('provider.upstreamUrls') ?? '{}',
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
-  }
-}
-
-function serializeProviderData(provider: Provider): string {
-  const { id: _id, createdTime: _created, updatedTime: _updated, deletedTime: _deleted, ...data } = provider
-  return JSON.stringify(data)
-}
-
-function parseProviderData(raw: string): Omit<Provider, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    console.warn('[store] provider data has invalid JSON, ignoring', raw)
-    return {
-      name: '',
-      apiKeyReference: '',
-      timeoutMilliseconds: 30000,
-      enabled: false,
-      upstreamUrls: '{}',
-    }
   }
 }
 
@@ -952,26 +931,21 @@ function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
   }
 }
 
-function mapUpstreamModel(row: typeof upstreamModels.$inferSelect): UpstreamModel {
+function mapProviderModel(row: typeof providerModels.$inferSelect): UpstreamModel {
+  const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
+    .from(providerModelEndpoints)
+    .innerJoin(providerEndpoints, eq(providerModelEndpoints.providerEndpointId, providerEndpoints.id))
+    .where(eq(providerModelEndpoints.providerModelId, row.id)).all()
   return {
     id: row.id,
     providerId: row.providerId,
-    upstreamModelId: row.upstreamModelId,
-    endpoints: parseEndpoints(row.endpoints),
-    priority: row.priority,
+    upstreamModelId: row.modelName,
+    endpoints: endpointRows.map(({ endpoint, binding }) => ({ protocol: endpoint.protocol as ProtocolEndpoint['protocol'], upstreamUrl: binding.url ?? endpoint.url, customAuthHeader: null, protocolConversionEnabled: false })),
+    priority: 0,
     enabled: row.enabled,
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
-  }
-}
-
-function parseEndpoints(raw: string): ProtocolEndpoint[] {
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as ProtocolEndpoint[]) : []
-  } catch {
-    return []
   }
 }
 
@@ -990,7 +964,7 @@ function serializeRawUsage(rawUsage: RequestLog['rawUsage'] | undefined): string
   return rawUsage == null ? null : JSON.stringify(rawUsage)
 }
 
-function parseRawUsage(rawUsage: string | null): RequestLog['rawUsage'] {
+function parseRawUsage(rawUsage: string | null | undefined): RequestLog['rawUsage'] {
   if (!rawUsage) return null
   try {
     const parsed = JSON.parse(rawUsage)
@@ -1003,22 +977,27 @@ function parseRawUsage(rawUsage: string | null): RequestLog['rawUsage'] {
 }
 
 function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
+  const metrics = new Map(getDb().select().from(requestMetrics).where(eq(requestMetrics.requestId, row.id)).all().map(metric => [metric.key, metric]))
+  const usages = getDb().select().from(requestUsages).where(eq(requestUsages.requestId, row.id)).all()
+  const raw = usages.find(usage => usage.type === 'raw')
+  const totalTokens = usages.find(usage => usage.type === 'totalTokens')
+  const metricValue = (key: string) => metrics.get(key)?.value ?? null
   return {
     id: row.id,
     logicalModelId: row.logicalModelId,
     protocol: row.protocol as RequestLog['protocol'],
-    upstreamProtocol: (row.upstreamProtocol as RequestLog['upstreamProtocol']) ?? null,
+    upstreamProtocol: null,
     status: row.status as RequestStatus,
-    totalDurationMilliseconds: row.totalDurationMilliseconds,
-    totalTokens: row.totalTokens,
-    inputTokens: row.inputTokens ?? null,
-    outputTokens: row.outputTokens ?? null,
-    cachedInputTokens: row.cachedInputTokens ?? null,
-    cacheCreationInputTokens: row.cacheCreationInputTokens ?? null,
-    promptCacheHit: row.promptCacheHit ?? null,
-    rawUsage: parseRawUsage(row.rawUsage),
-    ttftMilliseconds: row.ttftMilliseconds ?? null,
-    cacheHit: row.cacheHit ?? null,
+    totalDurationMilliseconds: Number(metricValue('durationMilliseconds') ?? 0),
+    totalTokens: totalTokens?.value ?? null,
+    inputTokens: metricValue('inputTokens'),
+    outputTokens: metricValue('outputTokens'),
+    cachedInputTokens: metricValue('cachedInputTokens'),
+    cacheCreationInputTokens: metricValue('cacheCreationInputTokens'),
+    promptCacheHit: metricValue('promptCacheHit') == null ? null : metricValue('promptCacheHit') === 1,
+    rawUsage: parseRawUsage(raw?.unit),
+    ttftMilliseconds: metricValue('ttftMilliseconds'),
+    cacheHit: metricValue('cacheHit') == null ? null : metricValue('cacheHit') === 1,
     createdTime: Number(row.createdTime),
   }
 }
@@ -1028,13 +1007,13 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     id: row.id,
     requestId: row.requestId,
     providerId: row.providerId,
-    upstreamModelId: row.upstreamModelId,
+    upstreamModelId: row.providerModelId,
     attemptIndex: row.attemptIndex,
     status: row.status as RequestStatus,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
-    upstreamRequestId: row.upstreamRequestId ?? null,
-    errorResponse: row.errorResponse ?? null,
+    upstreamRequestId: row.providerRequestId ?? null,
+    errorResponse: row.details ?? null,
     durationMilliseconds: row.durationMilliseconds,
     createdTime: Number(row.createdTime),
   }

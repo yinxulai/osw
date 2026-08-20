@@ -21,15 +21,81 @@ export type RequestStatus = z.infer<typeof RequestStatusSchema>
 export const ProviderSchema = z.object({
   id: z.string().startsWith('prov_'),
   name: z.string().min(1).max(100),
+  enabled: z.boolean().default(true),
+  description: z.string().default('').optional(),
   apiKeyReference: z.string(),
   timeoutMilliseconds: z.number().int().positive().default(30000),
-  enabled: z.boolean().default(true),
   upstreamUrls: z.string().default('{}'),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
   deletedTime: z.number().int().nullable(),
 })
 export type Provider = z.infer<typeof ProviderSchema>
+
+export const ProviderSettingSchema = z.object({
+  providerId: z.string().startsWith('prov_'),
+  key: z.string().min(1),
+  value: z.string(),
+  valueType: z.enum(['string', 'number', 'boolean', 'json']).default('string'),
+  updatedTime: z.number().int(),
+})
+export type ProviderSetting = z.infer<typeof ProviderSettingSchema>
+
+export const ProviderEndpointSchema = z.object({
+  id: z.string(),
+  providerId: z.string().startsWith('prov_'),
+  protocol: ProtocolSchema,
+  url: z.string().url(),
+  enabled: z.boolean().default(true),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+})
+export type ProviderEndpoint = z.infer<typeof ProviderEndpointSchema>
+
+export const ProviderModelSchema = z.object({
+  id: z.string(),
+  providerId: z.string().startsWith('prov_'),
+  modelName: z.string().min(1),
+  enabled: z.boolean().default(true),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+  deletedTime: z.number().int().nullable(),
+})
+export type ProviderModel = z.infer<typeof ProviderModelSchema>
+
+export const ProviderModelEndpointSchema = z.object({
+  id: z.string(),
+  providerModelId: z.string(),
+  providerEndpointId: z.string(),
+  url: z.string().url().nullable(),
+  enabled: z.boolean().default(true),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+})
+export type ProviderModelEndpoint = z.infer<typeof ProviderModelEndpointSchema>
+
+export const ProtocolConverterSchema = z.object({
+  id: z.string(),
+  providerModelEndpointId: z.string(),
+  clientProtocol: ProtocolSchema,
+  enabled: z.boolean().default(false),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+})
+export type ProtocolConverter = z.infer<typeof ProtocolConverterSchema>
+
+export const SchedulingPolicySchema = z.object({
+  logicalModelId: z.string(),
+  providerModelId: z.string(),
+  strategy: z.string().default('priority'),
+  priority: z.number().int(),
+  weight: z.number().int(),
+  enabled: z.boolean().default(true),
+  failoverEnabled: z.boolean().default(true),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+})
+export type SchedulingPolicy = z.infer<typeof SchedulingPolicySchema>
 
 // ========== Logical Model ==========
 
@@ -44,34 +110,23 @@ export const LogicalModelSchema = z.object({
 })
 export type LogicalModel = z.infer<typeof LogicalModelSchema>
 
-// ========== Upstream Model ==========
+// ========== Provider Model ==========
 
-/**
- * 单个上游协议端点配置。
- * 同一上游模型可通过多个协议访问，每个协议是一个端点。
- */
+/** Legacy-shaped route view used by the current proxy while route APIs migrate. */
 export const ProtocolEndpointSchema = z.object({
   protocol: ProtocolSchema,
-  /** 完整接口地址；留空则回退到供应商在该协议下的默认地址 */
   upstreamUrl: z.string().default(''),
-  /** 自定义认证请求头名称；为空则按协议标准方式认证 */
-  customAuthHeader: z.string().nullable(),
-  /** 开启后，该端点可通过协议转换接受其他协议的请求 */
+  customAuthHeader: z.string().nullable().default(null),
   protocolConversionEnabled: z.boolean().default(false),
 })
 export type ProtocolEndpoint = z.infer<typeof ProtocolEndpointSchema>
 
-/**
- * 上游模型：一个 (供应商 × 上游模型名) 的实体，内部可挂多个协议端点。
- * 一个模型只占队列中的一行，即使支持多个协议。
- */
 export const UpstreamModelSchema = z.object({
   id: z.string(),
   providerId: z.string().startsWith('prov_'),
   upstreamModelId: z.string().min(1),
-  /** 协议端点列表，一个模型可支持多个协议 */
   endpoints: z.array(ProtocolEndpointSchema).default([]),
-  priority: z.number().int().positive(),
+  priority: z.number().int(),
   enabled: z.boolean().default(true),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
@@ -90,6 +145,9 @@ export const ProviderHealthSchema = z.object({
   updatedTime: z.number().int(),
 })
 export type ProviderHealth = z.infer<typeof ProviderHealthSchema>
+
+export const ProviderModelHealthSchema = ProviderHealthSchema.omit({ providerId: true }).extend({ providerModelId: z.string() })
+export type ProviderModelHealth = z.infer<typeof ProviderModelHealthSchema>
 
 // ========== Settings ==========
 

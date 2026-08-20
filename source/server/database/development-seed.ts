@@ -3,11 +3,18 @@ import { inArray } from 'drizzle-orm'
 import { getDb } from './index'
 import {
   logicalModels,
+  providerEndpoints,
   providerHealth,
+  providerModelEndpoints,
+  providerModelHealth,
+  providerModels,
+  providerSettings,
   providers,
   requestAttempts,
   requestLogs,
-  upstreamModels,
+  requestMetrics,
+  requestUsages,
+  schedulingPolicies,
 } from './schema'
 
 const PROVIDER_FIXTURES = [
@@ -112,7 +119,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     db.select({ id: logicalModels.id }).from(logicalModels).where(inArray(logicalModels.id, LOGICAL_MODEL_FIXTURES.map(model => model.id))).all().map(row => row.id),
   )
   const existingUpstreamModelIds = new Set(
-    db.select({ id: upstreamModels.id }).from(upstreamModels).where(inArray(upstreamModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
+    db.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
   )
   const existingRequestIds = new Set(
     db.select({ id: requestLogs.id }).from(requestLogs).where(inArray(requestLogs.id, Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => `req_dev_${String(index + 1).padStart(2, '0')}`))).all().map(row => row.id),
@@ -133,16 +140,17 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     const providersToInsert = PROVIDER_FIXTURES.filter(provider => !existingProviderIds.has(provider.id))
     if (providersToInsert.length > 0) transaction.insert(providers).values(providersToInsert.map(provider => ({
       id: provider.id,
-      data: JSON.stringify({
-        name: provider.name,
-        apiKeyReference: provider.apiKeyReference,
-        timeoutMilliseconds: 30_000,
-        enabled: true,
-        upstreamUrls: JSON.stringify(provider.upstreamUrls),
-      }),
+      name: provider.name,
+      description: '开发示例供应商',
+      enabled: true,
       createdTime: timestamp,
       updatedTime: timestamp,
     }))).run()
+    if (providersToInsert.length > 0) transaction.insert(providerSettings).values(providersToInsert.flatMap(provider => [
+      { providerId: provider.id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: timestamp },
+      { providerId: provider.id, key: 'connection.timeoutMilliseconds', value: '30000', valueType: 'number', updatedTime: timestamp },
+      { providerId: provider.id, key: 'provider.upstreamUrls', value: JSON.stringify(provider.upstreamUrls), valueType: 'json', updatedTime: timestamp },
+    ])).run()
 
     const healthToInsert = PROVIDER_FIXTURES.filter(provider => !existingHealthProviderIds.has(provider.id))
     if (healthToInsert.length > 0) transaction.insert(providerHealth).values(healthToInsert.map(provider => {
@@ -165,16 +173,28 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     }))).run()
 
     const upstreamModelsToInsert = UPSTREAM_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingUpstreamModelIds.has(`model_dev_upstream_${index + 1}`))
-    if (upstreamModelsToInsert.length > 0) transaction.insert(upstreamModels).values(upstreamModelsToInsert.map(({ fixture, index }) => ({
-      id: `model_dev_upstream_${index + 1}`,
-      providerId: fixture[1],
-      upstreamModelId: fixture[2],
-      endpoints: JSON.stringify((fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]).map(protocol => ({ protocol, upstreamUrl: '', customAuthHeader: null }))),
-      priority: fixture[4],
-      enabled: true,
-      createdTime: timestamp,
-      updatedTime: timestamp,
-    }))).run()
+    if (upstreamModelsToInsert.length > 0) {
+      transaction.insert(providerModels).values(upstreamModelsToInsert.map(({ fixture, index }) => ({
+        id: `model_dev_upstream_${index + 1}`,
+        providerId: fixture[1],
+        modelName: fixture[2],
+        enabled: true,
+        createdTime: timestamp,
+        updatedTime: timestamp,
+      }))).run()
+      transaction.insert(providerModelHealth).values(upstreamModelsToInsert.map(({ index }) => ({ providerModelId: `model_dev_upstream_${index + 1}`, updatedTime: timestamp }))).run()
+      for (const { fixture, index } of upstreamModelsToInsert) {
+        const protocols = fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]
+        for (const protocol of protocols) {
+          const endpointId = `endpoint_dev_${fixture[1]}_${protocol}`
+          const url = PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.upstreamUrls[protocol as keyof typeof PROVIDER_FIXTURES[number]['upstreamUrls']] ?? 'https://api.example.com'
+          const existingEndpoint = transaction.select().from(providerEndpoints).where(inArray(providerEndpoints.id, [endpointId])).get()
+          if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_upstream_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+        }
+        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_upstream_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, failoverEnabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+      }
+    }
 
     const sampleRequests = Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => {
       const failed = index === 4 || index === 11
@@ -205,19 +225,41 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     })
 
     const requestsToInsert = sampleRequests.filter(request => !existingRequestIds.has(request.id))
-    if (requestsToInsert.length > 0) transaction.insert(requestLogs).values(requestsToInsert.map(({ provider: _provider, failed: _failed, ...request }) => request)).run()
-    if (requestsToInsert.length > 0) transaction.insert(requestAttempts).values(requestsToInsert.map(request => ({
-      id: `att_dev_${request.id.slice(-2)}`,
-      requestId: request.id,
-      providerId: request.provider.id,
-      upstreamModelId: UPSTREAM_MODEL_FIXTURES[(Number(request.id.slice(-2)) - 1) % UPSTREAM_MODEL_FIXTURES.length][2],
-      attemptIndex: 0,
+    if (requestsToInsert.length > 0) transaction.insert(requestLogs).values(requestsToInsert.map(request => ({
+      id: request.id,
+      logicalModelId: request.logicalModelId,
+      protocol: request.protocol,
       status: request.status,
-      errorCode: request.failed ? 'UPSTREAM_TIMEOUT' : null,
-      errorMessage: request.failed ? '开发示例：上游请求超时' : null,
-      durationMilliseconds: request.totalDurationMilliseconds,
+      metadata: null,
       createdTime: request.createdTime,
     }))).run()
+    if (requestsToInsert.length > 0) transaction.insert(requestMetrics).values(requestsToInsert.map(request => ({ requestId: request.id, key: 'durationMilliseconds', value: request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp }))).run()
+    const usages = requestsToInsert.flatMap(request => request.totalTokens == null ? [] : [{ id: `usage_dev_${request.id.slice(-2)}`, requestId: request.id, attemptId: null, type: 'totalTokens', value: request.totalTokens, unit: 'tokens', createdTime: request.createdTime }])
+    if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
+    if (requestsToInsert.length > 0) transaction.insert(requestAttempts).values(requestsToInsert.map(request => {
+      const fixture = UPSTREAM_MODEL_FIXTURES[(Number(request.id.slice(-2)) - 1) % UPSTREAM_MODEL_FIXTURES.length]
+      const providerModelId = `model_dev_upstream_${(Number(request.id.slice(-2)) - 1) % UPSTREAM_MODEL_FIXTURES.length + 1}`
+      return {
+        id: `att_dev_${request.id.slice(-2)}`,
+        requestId: request.id,
+        providerId: request.provider.id,
+        providerModelId,
+        providerName: request.provider.name,
+        providerModelName: fixture[2],
+        providerProtocol: fixture[3] === 'all' ? 'openai-completions' : fixture[3],
+        providerRequestId: null,
+        url: '',
+        status: request.status,
+        httpStatus: request.failed ? 504 : 200,
+        retryable: request.failed,
+        attemptIndex: 0,
+        errorCode: request.failed ? 'UPSTREAM_TIMEOUT' : null,
+        errorMessage: request.failed ? '开发示例：上游请求超时' : null,
+        details: null,
+        durationMilliseconds: request.totalDurationMilliseconds,
+        createdTime: request.createdTime,
+      }
+    })).run()
   })
 
   return hasMissingFixtures
