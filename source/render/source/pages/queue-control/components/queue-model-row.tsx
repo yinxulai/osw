@@ -85,7 +85,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
     <div
       onClick={props.onSelect}
       className={cn(
-        'grid min-h-14 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center gap-x-0 overflow-hidden border-b border-border/50 border-l-2 border-l-transparent px-4 py-2.5 last:border-b-0 lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]',
+        'grid min-h-14 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center gap-x-0 overflow-hidden border-b border-border/60 border-l-2 border-l-transparent px-4 py-2.5 lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]',
         props.selected && 'rounded-md border-l-primary bg-primary/5',
         props.mode === 'manual' && model.enabled && !props.cooling && 'cursor-pointer hover:bg-muted/40',
         props.dragging && 'rounded-md bg-muted/60',

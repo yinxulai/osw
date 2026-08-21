@@ -29,7 +29,7 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
         {service.loading || !service.settings ? (
           <div className="space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i} className="border-border/70 p-4 shadow-none">
+              <Card key={i} className="border-border p-4">
                 <Skeleton className="mb-3 h-4 w-32" />
                 <Skeleton className="mb-2 h-3 w-48" />
                 <Skeleton className="h-8 w-40" />

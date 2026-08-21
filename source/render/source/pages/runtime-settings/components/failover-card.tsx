@@ -12,7 +12,7 @@ export function FailoverCard(props: FailoverCardProps) {
   const { settings, onUpdate } = props
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>故障转移</CardTitle>
         <CardDescription>这些设置对后续请求生效</CardDescription>

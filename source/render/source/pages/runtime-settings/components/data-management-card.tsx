@@ -21,7 +21,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
   }
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>数据管理</CardTitle>
         <CardDescription>导出或导入配置，API Key 将被脱敏导出</CardDescription>

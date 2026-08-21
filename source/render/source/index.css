@@ -58,6 +58,7 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
   --radius: 0.375rem;
+  --button-radius: 0.375rem;
 }
 
 @layer base {
@@ -176,6 +177,9 @@
   textarea,
   select {
     font: inherit;
+  }
+  button {
+    border-radius: var(--button-radius);
   }
   button:focus-visible,
   input:focus-visible,

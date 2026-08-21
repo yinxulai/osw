@@ -35,7 +35,7 @@ export function QueueTestControls(props: QueueTestControlsProps) {
   return (
     <div className="flex items-center overflow-hidden rounded-md bg-card">
       <Select value={props.selectedProtocol} onValueChange={value => props.onProtocolChange(value as Protocol | 'all')}>
-        <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-muted/20 text-[11px] focus:outline-none">
+        <SelectTrigger className="h-8 w-36 rounded-none border-0 border-r bg-card text-[11px] focus:outline-none">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -46,7 +46,7 @@ export function QueueTestControls(props: QueueTestControlsProps) {
         </SelectContent>
       </Select>
       <Button
-        variant="ghost"
+        variant="outline"
         size="sm"
         className="h-8 rounded-none px-3 text-[11px]"
         onClick={props.onRun}

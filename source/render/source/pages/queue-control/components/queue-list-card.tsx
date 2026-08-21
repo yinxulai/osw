@@ -99,7 +99,7 @@ export function QueueListCard(props: QueueListCardProps) {
           >
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
               <div className="overflow-x-auto overflow-y-hidden rounded-b-lg">
-                <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/40 bg-muted/30 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
+                <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/60 bg-muted/30 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
                   <span>顺序</span>
                   <span>供应商与模型</span>
                   <span>性能</span>

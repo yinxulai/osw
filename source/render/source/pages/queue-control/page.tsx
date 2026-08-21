@@ -2,7 +2,7 @@ import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Pause, Play } from 'lucide-react'
+import { Circle, Play } from 'lucide-react'
 import { useQueueControlService } from './service'
 import { ProxyConfigCard } from './components/proxy-config-card'
 import { QueueListCard } from './components/queue-list-card'
@@ -24,10 +24,15 @@ export function QueueControlPage(props: QueueControlPageProps) {
         actions={
           <Button
             variant={proxyRunning ? 'secondary' : 'default'}
+            aria-label={proxyRunning ? '暂停服务' : '启动服务'}
             onClick={() => void service.toggleProxy()}
           >
-            {proxyRunning ? <Pause size={13} /> : <Play size={13} />}
-            {proxyRunning ? '暂停服务' : '启动服务'}
+            {proxyRunning ? (
+              <Circle size={8} className="fill-success text-success motion-safe:animate-pulse motion-reduce:animate-none" />
+            ) : (
+              <Play size={13} />
+            )}
+            {proxyRunning ? '运行中' : '启动服务'}
           </Button>
         }
       />

@@ -98,7 +98,7 @@ export function UpdateCard() {
 
   if (!updater) {
     return (
-      <Card className="border-border/70 shadow-none">
+      <Card className="border-border">
         <CardHeader className="border-b border-border/60 px-4 py-4">
           <CardTitle className="flex items-center gap-2">
             <Package className="h-4 w-4" />
@@ -125,7 +125,7 @@ export function UpdateCard() {
   const percent = downloadProgress != null ? Math.round(downloadProgress * 100) : 0
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>

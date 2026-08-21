@@ -8,7 +8,7 @@ interface DevelopmentCardProps {
 
 export function DevelopmentCard(props: DevelopmentCardProps) {
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Database className="h-4 w-4 text-muted-foreground" />

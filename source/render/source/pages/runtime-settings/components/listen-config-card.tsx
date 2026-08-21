@@ -16,7 +16,7 @@ export function ListenConfigCard(props: ListenConfigCardProps) {
   const { listenHost, listenPort, proxyRunning, onHostChange, onPortChange } = props
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div>
           <CardTitle>监听配置</CardTitle>

@@ -15,7 +15,7 @@ export function GeneralCard(props: GeneralCardProps) {
   const { autoLaunch, onAutoLaunchChange, themeMode, onThemeModeChange } = props
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>通用</CardTitle>
         <CardDescription>应用行为相关设置</CardDescription>

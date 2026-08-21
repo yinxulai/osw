@@ -40,7 +40,7 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
   }
 
   return (
-    <Card className="border-border/70 shadow-none">
+    <Card className="border-border">
       <CardHeader className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
