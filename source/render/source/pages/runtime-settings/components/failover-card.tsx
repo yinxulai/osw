@@ -12,12 +12,12 @@ export function FailoverCard(props: FailoverCardProps) {
   const { settings, onUpdate } = props
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>故障转移</CardTitle>
         <CardDescription>这些设置对后续请求生效</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 pt-0 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="grid gap-3 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label htmlFor="failure-threshold" className="text-xs">连续失败阈值</Label>
           <Input

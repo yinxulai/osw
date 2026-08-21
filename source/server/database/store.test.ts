@@ -519,7 +519,7 @@ describe('health and settings', () => {
     const unsubscribe = onSettingsChanged(listener)
     const unsubscribeThrowing = onSettingsChanged(throwingListener)
     await updateSettings({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, autoLaunch: true, cooldownBaseSeconds: undefined })
-    expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: 7, autoLaunch: true })
+    expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: 30, autoLaunch: true })
     expect(listener).toHaveBeenCalledTimes(1)
     expect(throwingListener).toHaveBeenCalledTimes(1)
     unsubscribe()

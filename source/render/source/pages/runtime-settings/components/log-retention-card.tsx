@@ -40,8 +40,8 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b bg-muted/20 pb-4">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -59,7 +59,7 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
           </span>
         </div>
       </CardHeader>
-      <CardContent className="divide-y pt-0">
+      <CardContent className="px-4 py-0">
         <div className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <Trash2 size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

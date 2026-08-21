@@ -1,16 +1,15 @@
 import { useRef } from 'react'
-import { Database, Download, Upload } from 'lucide-react'
+import { Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface DataManagementCardProps {
   onExport: () => void
   onImport: (file: File) => void
-  onSeedDevelopment: () => void
 }
 
 export function DataManagementCard(props: DataManagementCardProps) {
-  const { onExport, onImport, onSeedDevelopment } = props
+  const { onExport, onImport } = props
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -22,12 +21,12 @@ export function DataManagementCard(props: DataManagementCardProps) {
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>数据管理</CardTitle>
         <CardDescription>导出或导入配置，API Key 将被脱敏导出</CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="px-4 py-4">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onExport}>
             <Download className="mr-1 h-3.5 w-3.5" />
@@ -52,18 +51,6 @@ export function DataManagementCard(props: DataManagementCardProps) {
           导出的配置文件不包含 API Key。导入时需在文件中手动添加{' '}
           <code className="rounded bg-muted px-1">apiKey</code> 字段。
         </p>
-        {import.meta.env.DEV && (
-          <div className="mt-4 rounded-md bg-muted/40 px-3 py-3">
-            <p className="mb-2 text-xs font-medium">开发功能</p>
-            <Button variant="secondary" onClick={onSeedDevelopment}>
-              <Database className="mr-1 h-3.5 w-3.5" />
-              插入测试数据
-            </Button>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              添加示例供应商、逻辑模型、供应商模型和请求记录，不会覆盖已有配置。
-            </p>
-          </div>
-        )}
       </CardContent>
     </Card>
   )

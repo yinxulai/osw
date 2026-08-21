@@ -98,8 +98,8 @@ export function UpdateCard() {
 
   if (!updater) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
+      <Card className="border-border/70 shadow-none">
+        <CardHeader className="border-b border-border/60 px-4 py-4">
           <CardTitle className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             版本更新
@@ -108,7 +108,7 @@ export function UpdateCard() {
             基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="px-4 py-4">
           <p className="text-[11px] text-muted-foreground">
             版本更新功能仅在 Electron 桌面端可用。
           </p>
@@ -125,8 +125,8 @@ export function UpdateCard() {
   const percent = downloadProgress != null ? Math.round(downloadProgress * 100) : 0
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -151,7 +151,7 @@ export function UpdateCard() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 space-y-3">
+      <CardContent className="space-y-3 px-4 py-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">
             当前版本：<span className="font-medium text-foreground">v{currentVersion}</span>

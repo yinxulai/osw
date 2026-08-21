@@ -15,12 +15,12 @@ export function GeneralCard(props: GeneralCardProps) {
   const { autoLaunch, onAutoLaunchChange, themeMode, onThemeModeChange } = props
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
         <CardTitle>通用</CardTitle>
         <CardDescription>应用行为相关设置</CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="px-4 py-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 py-1">
             <div className="space-y-0.5">

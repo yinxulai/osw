@@ -156,7 +156,7 @@ export const SettingsSchema = z.object({
   listenHost: z.string().default('127.0.0.1'),
   listenPort: z.number().int().min(1).max(65535).default(9300),
   accessTokenReference: z.string().nullable().default(null),
-  logRetentionDays: z.number().int().positive().default(7),
+  logRetentionDays: z.number().int().positive().default(30),
   captureRequestContent: z.boolean().default(false),
   cooldownBaseSeconds: z.number().int().positive().default(30),
   cooldownMaxSeconds: z.number().int().positive().default(300),

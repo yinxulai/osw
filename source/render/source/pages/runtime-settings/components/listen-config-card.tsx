@@ -16,8 +16,8 @@ export function ListenConfigCard(props: ListenConfigCardProps) {
   const { listenHost, listenPort, proxyRunning, onHostChange, onPortChange } = props
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="border-b border-border/60 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div>
           <CardTitle>监听配置</CardTitle>
           <CardDescription className="mt-1">修改后保存会自动重启代理服务</CardDescription>
@@ -26,7 +26,7 @@ export function ListenConfigCard(props: ListenConfigCardProps) {
           {proxyRunning ? '运行中' : '已停止'}
         </Badge>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
+      <CardContent className="grid gap-3 px-4 py-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="listen-host" className="text-xs">监听地址</Label>
           <Input

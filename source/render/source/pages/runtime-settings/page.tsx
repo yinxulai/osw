@@ -8,6 +8,7 @@ import { FailoverCard } from './components/failover-card'
 import { LogRetentionCard } from './components/log-retention-card'
 import { GeneralCard } from './components/general-card'
 import { DataManagementCard } from './components/data-management-card'
+import { DevelopmentCard } from './components/development-card'
 import { UpdateCard } from './components/update-card'
 import type { ThemeMode } from '@/components/app-sidebar'
 
@@ -27,8 +28,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
 
         {service.loading || !service.settings ? (
           <div className="space-y-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="border-border/70 p-4 shadow-none">
                 <Skeleton className="mb-3 h-4 w-32" />
                 <Skeleton className="mb-2 h-3 w-48" />
                 <Skeleton className="h-8 w-40" />
@@ -68,8 +69,11 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
             <DataManagementCard
               onExport={() => void service.exportConfig()}
               onImport={file => void service.importConfig(file)}
-              onSeedDevelopment={() => void service.seedDevelopmentData()}
             />
+
+            {import.meta.env.DEV && (
+              <DevelopmentCard onSeedDevelopment={() => void service.seedDevelopmentData()} />
+            )}
 
             <div className="flex justify-end">
               <Button
