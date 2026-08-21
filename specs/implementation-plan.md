@@ -287,7 +287,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
 | 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `auto` 幂等初始化已落地 |
 | 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | Provider 默认端点已完全切换到关系表；其余 Store 契约继续收敛 |
-| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离且保持队列顺序的手动起始项已落地 |
+| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离的手动路由生命周期已落地 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
 | 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages、attempts 已关系化，contents 仍待完善 |
 | 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | ProviderEndpoint 管理、配置导入导出与模型发现已切换到关系表 |

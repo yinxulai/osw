@@ -13,13 +13,18 @@ let proxyServer: Server | null = null
 let proxyStartupPromise: Promise<Server> | null = null
 let lifecyclePromise: Promise<void> = Promise.resolve()
 
-export function startProxyServer(): Promise<Server> {
+export interface ProxyServerOptions {
+  port?: number
+}
+
+export function startProxyServer(options: ProxyServerOptions = {}): Promise<Server> {
   if (proxyServer?.listening) return Promise.resolve(proxyServer)
   if (proxyStartupPromise) return proxyStartupPromise
 
   let candidate: Server | null = null
   const startup = (async () => {
     const settings = await getSettings()
+    const listenPort = options.port ?? settings.listenPort
     candidate = http.createServer(async (req, res) => {
       try {
         const url = new URL(req.url!, 'http://localhost')
@@ -45,8 +50,8 @@ export function startProxyServer(): Promise<Server> {
     })
 
     proxyServer = candidate
-    const server = await listen(candidate, settings.listenHost, settings.listenPort)
-    console.log(`[one-switch] proxy server listening on ${settings.listenHost}:${settings.listenPort}`)
+    const server = await listen(candidate, settings.listenHost, listenPort)
+    console.log(`[one-switch] proxy server listening on ${settings.listenHost}:${listenPort}`)
     return server
   })()
 

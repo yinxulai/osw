@@ -30,7 +30,7 @@ describe('server lifecycle', () => {
   it('keeps management available while the proxy is stopped and restarted', async () => {
     const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
     await initDatabase(temporaryDirectory)
-    await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: 9300 })
     await closeDatabase()
     await startServer({
       dataDir: temporaryDirectory,
@@ -74,11 +74,12 @@ describe('server lifecycle', () => {
     await initDatabase(temporaryDirectory)
     await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
     await closeDatabase()
-    await startServer({
+    const runtimeOptions = {
       dataDir: temporaryDirectory,
       secretStore,
       runtimeProfile: createTestRuntimeProfile(proxyPort, managementPort),
-    })
+    }
+    await startServer(runtimeOptions)
     const queueUrl = `http://127.0.0.1:${managementPort}/api/queue`
 
     expect(await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: 'model_auto' })).toMatchObject({
@@ -98,10 +99,27 @@ describe('server lifecycle', () => {
       data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
     })
 
+    await post(`http://127.0.0.1:${managementPort}/api/proxy/restart`)
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
+    })
+
     await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: null })
     expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
       success: true,
       data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
+    })
+
+    await stopServer()
+    await startServer(runtimeOptions)
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'auto' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'auto', manualModelId: null },
+    })
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'secondary', manualModelId: null },
     })
   })
 })
@@ -119,7 +137,7 @@ function createTestRuntimeProfile(proxyPort: number, managementPort: number): Ru
 async function post(url: string, body: unknown = {}): Promise<unknown> {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Connection: 'close' },
     body: JSON.stringify(body),
   })
   return response.json()

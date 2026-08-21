@@ -64,6 +64,10 @@ export function getManualModel(logicalModelId: string): string | null {
   return manualModelIds.get(logicalModelId) ?? null
 }
 
+export function resetManualModels(): void {
+  manualModelIds.clear()
+}
+
 /**
  * 处理代理请求
  * 支持自动故障切换和手动切换

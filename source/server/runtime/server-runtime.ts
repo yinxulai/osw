@@ -6,6 +6,7 @@ import { getSettings, updateSettings } from '../database/store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { installLogCapture } from '../management/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
+import { resetManualModels } from '../proxy/handler'
 import { startProxyServer, stopProxyServer } from '../proxy/server'
 
 export interface ServerRuntimeOptions {
@@ -35,6 +36,7 @@ export class ServerRuntime {
 
     this.state = 'starting'
     try {
+      resetManualModels()
       configureSecretStore(this.options.secretStore)
       installLogCapture()
       await initDatabase(this.options.dataDir)
@@ -50,7 +52,7 @@ export class ServerRuntime {
         port: this.options.runtimeProfile.managementPort,
         environment: this.options.runtimeProfile.environment,
       })
-      await startProxyServer()
+      await startProxyServer({ port: this.options.runtimeProfile.proxyPort })
       this.state = 'running'
       return this.managementServer
     } catch (error) {
