@@ -4,7 +4,7 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：16 表数据库基线已完成，公共 Schema、Store、路由、观测和管理界面正在收敛。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：16 表数据库基线、公共 Schema、Store、关系模型管理、请求观测和管理界面已经完成；核心路由已落地，当前主要收尾协议适配器边界、P0 错误与并发验收，以及正式发布包端到端验证。
 
 当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
@@ -101,6 +101,28 @@
 
 - [x] 模型管理页提供“连接测试”入口，向上游发送最小请求验证可用性
 - [x] 测试结果展示成功/失败及错误原因（鉴权失败、网络不可达、超时等）
+
+### MVP（P0）：代理管线收尾
+
+- [x] 抽出基础 `proxy/transport.ts`，隔离 Node.js HTTP/HTTPS 请求调用并覆盖基础测试
+- [ ] 建立共享 request context，统一请求 ID、协议、取消信号和生命周期数据
+- [ ] 建立 ProtocolAdapter 类型与 OpenAI Completions、OpenAI Responses、Anthropic Messages adapter
+- [ ] 将模型改写、usage 注入、请求/响应转换和流式转换迁移到 adapter 或转换器注册表
+- [ ] 将超时、客户端中止、SSE 和响应头生命周期完整下沉到 transport
+- [ ] 将 attempt、usage 和正文采集改为协议无关的观测 hooks
+- [ ] 收敛 handler，使其只负责候选编排、尝试循环、错误分类和生命周期收尾
+
+### MVP（P0）：正式发布验收
+
+- [x] `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和当前 macOS arm64 `pnpm build` 已通过
+- [x] 已生成 `0.3.0-beta.1` macOS arm64 DMG/zip，并通过 ad-hoc 签名校验
+- [ ] 使用全新用户数据目录完成发布包首次启动和空数据库初始化
+- [ ] 在发布包内完成 Provider 配置、OpenAI/Anthropic 请求、故障转移、日志与正文查看端到端验收
+- [ ] 使用旧数据库启动发布包，确认明确提示重新初始化且不会静默迁移
+- [ ] 完成 macOS arm64/x64 菜单栏、菜单、控制台、开机自启和退出验收
+- [ ] 完成 Windows x64 构建及安装、托盘、控制台和退出验收
+- [ ] 清理旧测试术语和过时文档状态
+- [ ] 更新正式版本号、发布说明、更新元数据和数据库初始化提示
 
 ## P1
 

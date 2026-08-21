@@ -1,6 +1,6 @@
 # 技术架构与框架选型
 
-> **状态说明：本文描述 v0.3 设计目标，当前尚未开始实施。** `source/` 中的旧版实现不视为本文目标架构的已落地版本；实施阶段将按本规格重建数据库、代理管线、管理 API 和渲染层契约。
+> **状态说明：本文描述 v0.3 目标架构。** 数据库、关系模型、核心路由、请求观测、管理 API 和渲染层契约已经大体落地；ProtocolAdapter、request context、完整 transport 边界与 OpenAPI 类型生成仍是实施收尾项。实际进度以 `implementation-plan.md` 为准。
 
 ## 整体技术栈
 
@@ -12,7 +12,7 @@
 | 代理透传 | 原生 `http.request` + 手动 pipe | 流式可控、依赖最少 |
 | Schema 定义 | Zod | 运行时类型校验、配置声明、API 请求/响应验证 |
 | API 规范 | OpenAPI 3.1（实施阶段补齐） | 管理接口正式定义，作为前后端契约 |
-| 代码生成 | openapi-typescript（实施阶段接入） | 从 OpenAPI 生成 TypeScript 类型；API client 保持轻量 fetch 封装 |
+| 代码生成 | openapi-typescript（待接入） | 从 OpenAPI 生成 TypeScript 类型；当前 API client 仍为手写轻量 fetch 封装 |
 | 本地存储 | SQLite（`node:sqlite` + Drizzle ORM）+ 系统密钥环 | 配置和日志存 SQLite，密钥存 keychain |
 | 数据库迁移 | 单一首发基线 + 发布后版本迁移 | 首发结构干净，发布后升级可追踪 |
 | 渲染进程 | React 18 + TypeScript | 控制台 UI |
@@ -110,7 +110,7 @@ one-switch/
 │   │   └── index.ts                # 命令行模式入口：无头启动代理服务
 │   │
 │   ├── common/                     # server / command / render 共享
-│   │   ├── openapi.yaml             # 实施阶段新增：OpenAPI 3.1 管理接口定义
+│   │   ├── openapi.yaml             # 待新增：OpenAPI 3.1 管理接口定义
 │   │   ├── schema.ts               # Zod schema（可被 server 和 command 引用）
 │   │   ├── types.ts                # 从 Zod 推导的类型定义 / 共享类型
 │   │   ├── constants.ts            # 常量：默认端口、协议列表、错误类型等
@@ -139,7 +139,7 @@ one-switch/
 
 ## 核心模块设计
 
-> 下方目录和模块为 v0.3 实施目标。当前源码仍保留旧版目录与命名，尚未开始迁移。
+> 下方目录和模块为 v0.3 目标结构。当前源码已完成主要领域迁移，但 ProtocolAdapter、request context、OpenAPI 定义与部分目录职责仍未完全收敛。
 
 ### 1. 核心服务（`source/server/`）
 
