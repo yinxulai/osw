@@ -13,6 +13,7 @@ export function RequestRow(props: RequestRowProps) {
 
   const succeeded = log.status === 'success'
   const lastAttempt = log.attempts[log.attempts.length - 1]
+  const providerProtocol = log.upstreamProtocol ?? lastAttempt?.providerProtocol
 
   return (
     <div className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
@@ -34,12 +35,12 @@ export function RequestRow(props: RequestRowProps) {
           </Badge>
           <span className="text-muted-foreground">
             {PROTOCOL_LABEL[log.protocol] ?? log.protocol}
-            {log.upstreamProtocol && log.upstreamProtocol !== log.protocol && (
+            {providerProtocol && providerProtocol !== log.protocol && (
               <>
                 {' '}
                 <span className="text-muted-foreground/60">→</span>{' '}
                 <span className="text-amber-600 dark:text-amber-400">
-                  {PROTOCOL_LABEL[log.upstreamProtocol] ?? log.upstreamProtocol}
+                  {PROTOCOL_LABEL[providerProtocol] ?? providerProtocol}
                 </span>
               </>
             )}

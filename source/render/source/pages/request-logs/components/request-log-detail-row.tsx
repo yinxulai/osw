@@ -43,6 +43,8 @@ interface MetricCardProps {
 interface RequestContentsProps {
   contents: RequestContent[] | null
   attempts: RequestLogEntryAttempt[]
+  clientProtocol: string
+  providerProtocol?: string | null
   loading: boolean
   error: string | null
   selectedAttemptId: string | null
@@ -50,6 +52,8 @@ interface RequestContentsProps {
 }
 
 interface ConversionRecord {
+  fromProtocol?: string | null
+  toProtocol?: string | null
   convertedRequestBody?: string | null
   convertedResponseBody?: string | null
 }
@@ -130,6 +134,9 @@ function UpstreamRoute(props: UpstreamRouteProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate font-medium">{attempt.providerName}</span>
                 <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {PROTOCOL_LABEL[attempt.providerProtocol ?? ''] ?? attempt.providerProtocol ?? '协议未知'}
+                </span>
                 <AttemptBadge attempt={attempt} />
               </div>
               <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
@@ -212,13 +219,21 @@ function ContentSection(props: ContentSectionProps) {
 function RequestContents(props: RequestContentsProps) {
   const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
   const conversion = selectedContent?.conversions ? JSON.parse(selectedContent.conversions) as ConversionRecord : null
+  const clientProtocol = conversion?.fromProtocol ?? props.clientProtocol
+  const providerProtocol = conversion?.toProtocol ?? props.providerProtocol ?? props.clientProtocol
+  const clientLabel = PROTOCOL_LABEL[clientProtocol] ?? clientProtocol
+  const providerLabel = PROTOCOL_LABEL[providerProtocol] ?? providerProtocol
+  const requestProtocolLabel = `发往供应商 · ${providerLabel}`
+  const responseProtocolLabel = `返回客户端 · ${clientLabel}`
+  const requestConversionLabel = `${clientLabel} → ${providerLabel}`
+  const responseConversionLabel = `${providerLabel} → ${clientLabel}`
   const drawerSections = selectedContent ? [
-    ['请求头', selectedContent.requestHeaders],
-    ['请求正文', selectedContent.requestBody],
-    ...(conversion?.convertedRequestBody ? [['转换后请求', conversion.convertedRequestBody]] : []),
-    ...(conversion?.convertedResponseBody ? [['转换后响应', conversion.convertedResponseBody]] : []),
-    ['响应头', selectedContent.responseHeaders],
-    ['响应正文', selectedContent.responseBody],
+    [`请求头 · ${requestProtocolLabel}`, selectedContent.requestHeaders],
+    [`请求正文 · ${requestProtocolLabel}`, selectedContent.requestBody],
+    ...(conversion?.convertedRequestBody ? [[`转换后请求 · ${requestConversionLabel}`, conversion.convertedRequestBody]] : []),
+    ...(conversion?.convertedResponseBody ? [[`转换后响应 · ${responseConversionLabel}`, conversion.convertedResponseBody]] : []),
+    [`响应头 · ${responseProtocolLabel}`, selectedContent.responseHeaders],
+    [`响应正文 · ${responseProtocolLabel}`, selectedContent.responseBody],
   ] as Array<[string, string | null]> : []
 
   return (
@@ -252,6 +267,9 @@ function RequestContents(props: RequestContentsProps) {
 
 export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const { log, modelName } = props
+  const providerProtocol = log.upstreamProtocol
+    ?? log.attempts.find(attempt => attempt.status === 'success')?.providerProtocol
+    ?? log.attempts[0]?.providerProtocol
   const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
   const contents = 'contents' in log ? log.contents : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
@@ -270,15 +288,15 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
               <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                 <span>{modelName}</span><span>·</span>
                 <span>
-                  {PROTOCOL_LABEL[log.protocol] ?? log.protocol}
-                  {log.upstreamProtocol && log.upstreamProtocol !== log.protocol && (
+                  请求协议：{PROTOCOL_LABEL[log.protocol] ?? log.protocol}
+                  {providerProtocol && providerProtocol !== log.protocol ? (
                     <>
                       {' '}→{' '}
                       <span className="text-amber-600 dark:text-amber-400">
-                        {PROTOCOL_LABEL[log.upstreamProtocol] ?? log.upstreamProtocol}（经协议转换）
+                        供应商协议：{PROTOCOL_LABEL[providerProtocol] ?? providerProtocol}（经协议转换）
                       </span>
                     </>
-                  )}
+                  ) : <span className="text-muted-foreground/70"> · 原生协议</span>}
                 </span><span>·</span>
                 <span className="font-mono">{log.id}</span>
               </div>
@@ -319,7 +337,16 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
               totalTokens={log.totalTokens}
             />
           </div>
-          <RequestContents contents={contents} attempts={log.attempts} loading={props.detailLoading} error={props.detailError} selectedAttemptId={selectedAttemptId} onClose={() => setSelectedAttemptId(null)} />
+          <RequestContents
+            contents={contents}
+            attempts={log.attempts}
+            clientProtocol={log.protocol}
+            providerProtocol={providerProtocol}
+            loading={props.detailLoading}
+            error={props.detailError}
+            selectedAttemptId={selectedAttemptId}
+            onClose={() => setSelectedAttemptId(null)}
+          />
         </div>
       </td>
     </tr>
