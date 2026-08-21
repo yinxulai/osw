@@ -513,7 +513,7 @@ describe('health and settings', () => {
   })
 
   it('uses defaults, persists optional values, skips undefined, and isolates listener errors', async () => {
-    expect(await getSettings({ listenPort: 19000 })).toMatchObject({ listenPort: 19000, listenHost: '127.0.0.1', autoLaunch: false })
+    expect(await getSettings({ listenPort: 19000 })).toMatchObject({ listenPort: 19000, listenHost: '127.0.0.1', captureRequestContent: true, autoLaunch: false })
     const listener = vi.fn()
     const throwingListener = vi.fn(() => { throw new Error('listener failed') })
     const unsubscribe = onSettingsChanged(listener)
