@@ -118,6 +118,60 @@ describe('database lifecycle', () => {
     ])
   })
 
+  it('removes the legacy logical model column before inserting new upstream models', async () => {
+    const directory = createTemporaryDirectory()
+    const databasePath = path.join(directory, 'one-switch.db')
+    const legacyClient = new DatabaseSync(databasePath, { enableForeignKeyConstraints: true })
+    legacyClient.exec(`
+      CREATE TABLE providers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        apiKeyReference TEXT NOT NULL,
+        createdTime BIGINT NOT NULL,
+        updatedTime BIGINT NOT NULL,
+        deletedTime BIGINT
+      );
+      CREATE TABLE logical_models (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        createdTime BIGINT NOT NULL DEFAULT 0,
+        updatedTime BIGINT NOT NULL DEFAULT 0,
+        deletedTime BIGINT
+      );
+      CREATE TABLE upstream_models (
+        id TEXT PRIMARY KEY,
+        logicalModelId TEXT NOT NULL,
+        providerId TEXT NOT NULL,
+        upstreamModelId TEXT NOT NULL,
+        endpoints TEXT NOT NULL DEFAULT '[]',
+        priority INTEGER NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        createdTime BIGINT NOT NULL,
+        updatedTime BIGINT NOT NULL,
+        deletedTime BIGINT,
+        FOREIGN KEY (logicalModelId) REFERENCES logical_models(id),
+        FOREIGN KEY (providerId) REFERENCES providers(id)
+      );
+      CREATE INDEX idx_upstream_models_logical_priority ON upstream_models(logicalModelId, priority);
+    `)
+    legacyClient.close()
+
+    const client = (await initDatabase(directory)).$client
+    const columns = client.prepare('PRAGMA table_info(upstream_models)').all()
+    const time = Date.now()
+    client
+      .prepare('INSERT INTO providers (id, name, apiKeyReference, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)')
+      .run('provider', 'Provider', 'key', time, time)
+
+    expect(columns.map(column => (column as { name: string }).name)).not.toContain('logicalModelId')
+    expect(() => client
+      .prepare('INSERT INTO upstream_models (id, providerId, upstreamModelId, endpoints, priority, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('model_upstream', 'provider', 'upstream-model', '[]', 1, 1, time, time),
+    ).not.toThrow()
+  })
+
   it('adds raw usage to an existing database without losing request logs', async () => {
     const directory = createTemporaryDirectory()
     const databasePath = path.join(directory, 'one-switch.db')
