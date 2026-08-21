@@ -1,21 +1,17 @@
 import {
   AlertTriangle,
-  BotMessageSquare,
   CheckCircle2,
   Circle,
   CircleDot,
   Clock,
   GripVertical,
-  MessageSquareCode,
-  Repeat,
-  Sparkles,
   Timer,
   Zap,
 } from 'lucide-react'
-import type { Protocol, Provider, ProviderHealth, ProviderModelHealth, ProviderModelRoute } from '@common/schemas'
+import type { Provider, ProviderHealth, ProviderModelHealth, ProviderModelRoute } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolIcons } from '@/components/protocol-icons'
 import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { QueueModelMetrics } from '../lib/model-metrics'
 
@@ -32,19 +28,6 @@ interface QueueModelRowProps {
   dragHandleProps: Record<string, unknown>
   onSelect: () => void
   onToggleEnabled: (enabled: boolean) => void
-}
-
-const PROTOCOL_META: Record<Protocol, { label: string; icon: typeof MessageSquareCode }> = {
-  'openai-completions': { label: 'OpenAI Completions', icon: MessageSquareCode },
-  'openai-responses': { label: 'OpenAI Responses', icon: Sparkles },
-  'anthropic-messages': { label: 'Anthropic Messages', icon: BotMessageSquare },
-}
-
-/** 每个端点原生协议可接收的转换来源协议，与模型管理页 CONVERTIBLE_PROTOCOLS 一致 */
-const CONVERTIBLE_PROTOCOLS: Record<Protocol, Protocol[]> = {
-  'openai-completions': ['anthropic-messages', 'openai-responses'],
-  'openai-responses': [],
-  'anthropic-messages': ['openai-completions'],
 }
 
 function formatRelativeTime(timestamp: number | null | undefined): string {
@@ -127,46 +110,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
         <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="truncate font-mono text-[11px] text-muted-foreground">{model.modelName}</div>
-            <TooltipProvider delayDuration={150}>
-              <div className="flex shrink-0 items-center gap-0.5">
-                {model.endpoints.map(endpoint => {
-                  const meta = PROTOCOL_META[endpoint.protocol]
-                  const ProtocolIcon = meta.icon
-                  return (
-                    <Tooltip key={endpoint.protocol}>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-muted/50 text-muted-foreground" aria-label={meta.label}>
-                          <ProtocolIcon size={11} />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{meta.label}</TooltipContent>
-                    </Tooltip>
-                  )
-                })}
-                {model.endpoints
-                  .filter(endpoint => endpoint.protocolConversionEnabled)
-                  .flatMap(endpoint => CONVERTIBLE_PROTOCOLS[endpoint.protocol]
-                    .filter(from => !model.endpoints.some(native => native.protocol === from))
-                    .map(from => {
-                      const meta = PROTOCOL_META[from]
-                      const ProtocolIcon = meta.icon
-                      return (
-                        <Tooltip key={`conv-${endpoint.protocol}-${from}`}>
-                          <TooltipTrigger asChild>
-                            <span
-                              className="inline-flex h-5 w-5 items-center justify-center rounded border border-dashed border-amber-500/60 text-amber-600 dark:text-amber-400"
-                              aria-label={`${meta.label}（经协议转换支持）`}
-                            >
-                              <ProtocolIcon size={9} className="m-0.5" />
-                              <Repeat size={7} className="-ml-1.5 -mb-1.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{meta.label} · 经协议转换支持（转换为 {PROTOCOL_META[endpoint.protocol].label}）</TooltipContent>
-                        </Tooltip>
-                      )
-                    }))}
-              </div>
-            </TooltipProvider>
+            <ProtocolIcons endpoints={model.endpoints} />
           </div>
         </div>
       </div>

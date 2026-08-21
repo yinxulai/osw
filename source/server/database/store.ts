@@ -158,7 +158,9 @@ export async function createProviderModelRoute(input: CreateProviderModelRouteIn
       const endpointRow = transaction.select().from(providerEndpoints).where(and(eq(providerEndpoints.providerId, input.providerId), eq(providerEndpoints.protocol, endpoint.protocol))).get()
       const endpointId = endpointRow?.id ?? generateId('end_')
       if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: input.providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
-      transaction.insert(providerModelEndpoints).values({ id: generateId('pme_'), providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
+      const bindingId = generateId('pme_')
+      transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
+      if (endpoint.protocolConversionEnabled) transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol: endpoint.protocol, enabled: true, createdTime: time, updatedTime: time }).run()
     }
   })
   return { id, providerId: input.providerId, modelName: input.modelName, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
@@ -621,7 +623,15 @@ function mapProviderModel(row: typeof providerModels.$inferSelect): ProviderMode
     id: row.id,
     providerId: row.providerId,
     modelName: row.modelName,
-    endpoints: endpointRows.map(({ endpoint, binding }) => ({ protocol: endpoint.protocol as ProviderModelRouteEndpoint['protocol'], upstreamUrl: binding.url ?? endpoint.url, customAuthHeader: null, protocolConversionEnabled: false })),
+    endpoints: endpointRows.map(({ endpoint, binding }) => ({
+      protocol: endpoint.protocol as ProviderModelRouteEndpoint['protocol'],
+      upstreamUrl: binding.url ?? endpoint.url,
+      customAuthHeader: null,
+      protocolConversionEnabled: getDb().select().from(protocolConverters)
+        .where(eq(protocolConverters.providerModelEndpointId, binding.id))
+        .all()
+        .some(conversion => conversion.enabled),
+    })),
     priority: 0,
     enabled: row.enabled,
     createdTime: Number(row.createdTime),

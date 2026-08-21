@@ -411,7 +411,11 @@ describe('provider and model CRUD', () => {
     getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, time, time)
     getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, time, time)
     const views = await listProviderModels()
-    expect(views.find(model => model.id === first.id)?.endpoints[0]).toMatchObject({ protocol: 'openai-completions', url: 'https://route-a.example', conversions: [] })
+    expect(views.find(model => model.id === first.id)?.endpoints[0]).toMatchObject({ protocol: 'openai-completions', url: 'https://route-a.example', conversions: [expect.objectContaining({ clientProtocol: 'openai-completions', enabled: true })] })
+    expect((await listProviderModelsForLogicalModel(logical.id)).find(model => model.id === first.id)?.endpoints[0]).toMatchObject({
+      protocol: 'openai-completions',
+      protocolConversionEnabled: true,
+    })
     expect(await listProviderModelsForLogicalModel(logical.id)).toMatchObject([{ id: second.id, priority: 10 }, { id: first.id, priority: 20 }])
     getDb().$client.prepare('UPDATE scheduling_policies SET enabled = 0 WHERE logicalModelId = ? AND providerModelId = ?').run(logical.id, second.id)
     expect((await listProviderModelsForLogicalModel(logical.id)).map(model => model.id)).toEqual([first.id])

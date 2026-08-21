@@ -14,12 +14,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { GripVertical, Pencil, Plus, Server, Trash2, KeyRound, Timer } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { SortableProviderModel } from './sortable-provider-model'
 import { ProviderIcon } from './provider-icon'
+import { ProtocolIcons } from '@/components/protocol-icons'
 import { findPresetByName } from '../lib/provider-presets'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
 
@@ -127,13 +127,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate text-xs font-medium">{model.modelName}</span>
-                            <span className="flex flex-wrap gap-1">
-                              {model.endpoints.map(endpoint => (
-                                <Badge key={endpoint.protocol} variant={endpoint.upstreamUrl ? 'secondary' : 'muted'} className="h-5 px-1.5 text-[9px]">
-                                  {endpoint.protocol.toUpperCase()}
-                                </Badge>
-                              ))}
-                            </span>
+                            <ProtocolIcons endpoints={model.endpoints} />
                           </div>
                           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <KeyRound size={10} />
