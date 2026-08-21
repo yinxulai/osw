@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { listProviderEndpoints, listProviderModels, listProviders } from '../database/store'
 import { generateId } from '@common/utils'
-import { findEndpoint } from '../proxy/router'
+import { findConvertibleEndpoint, findEndpoint } from '../proxy/router'
 import { executeProxyRequest } from '../proxy/handler'
 import { createRequestContext } from '../proxy/request-context'
 import { BufferedProxyResponse } from '../proxy/proxy-response'
@@ -68,7 +68,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
   const testableModels = models.filter(model =>
     model.enabled &&
-    findEndpoint(model, protocol) &&
+    (findEndpoint(model, protocol) || findConvertibleEndpoint(model, protocol)) &&
     (!providerFilter || providerFilter.has(model.providerId)) &&
     (!modelFilter || modelFilter.has(model.id)),
   )
@@ -80,7 +80,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
     const provider = providerMap.get(model.providerId)
     if (!provider) continue
 
-    const endpoint = findEndpoint(model, protocol)
+    const endpoint = findEndpoint(model, protocol) || findConvertibleEndpoint(model, protocol)
     if (!endpoint) continue
 
     const startedAt = Date.now()

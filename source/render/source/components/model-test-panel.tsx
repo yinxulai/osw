@@ -7,11 +7,13 @@ import {
   FlaskConical,
   Loader2,
   Play,
+  Repeat,
   RotateCcw,
   XCircle,
 } from 'lucide-react'
 import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
 import { modelTestApi, type ModelTestResult } from '@/api'
+import { CONVERTIBLE_PROTOCOLS } from '@/pages/model-management/lib/protocols'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -38,6 +40,7 @@ interface TestTask {
   providerId: string
   providerName: string
   protocol: Protocol
+  converted: boolean
   status: TestTaskStatus
   result?: ModelTestResult
   errorMessage?: string
@@ -50,6 +53,20 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
 }
 
 const TEST_CONCURRENCY = 3
+
+function getTestableProtocols(model: ProviderModelRoute): Protocol[] {
+  const protocols = new Set(model.endpoints.map(endpoint => endpoint.protocol))
+  for (const endpoint of model.endpoints) {
+    if (!endpoint.protocolConversionEnabled) continue
+    for (const protocol of CONVERTIBLE_PROTOCOLS[endpoint.protocol]) protocols.add(protocol)
+  }
+  return [...protocols]
+}
+
+function supportsConvertedProtocol(model: ProviderModelRoute, protocol: Protocol): boolean {
+  return !model.endpoints.some(endpoint => endpoint.protocol === protocol)
+    && model.endpoints.some(endpoint => endpoint.protocolConversionEnabled && CONVERTIBLE_PROTOCOLS[endpoint.protocol].includes(protocol))
+}
 
 interface TaskStatusProps {
   status: TestTaskStatus
@@ -84,7 +101,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
       if (isOpening) return {}
       return Object.fromEntries(enabledModels.map(model => [
         model.id,
-        new Set([...current[model.id] ?? []].filter(protocol => model.endpoints.some(endpoint => endpoint.protocol === protocol))),
+        new Set([...current[model.id] ?? []].filter(protocol => getTestableProtocols(model).includes(protocol))),
       ]))
     })
     setSelectedProviderIds(current => isOpening
@@ -100,14 +117,15 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
     if (!selectedProviderIds.has(model.providerId)) return []
     const provider = props.providers.find(item => item.id === model.providerId)
     if (!provider) return []
-    const selectedProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
-    return model.endpoints.filter(endpoint => selectedProtocols.has(endpoint.protocol)).map(endpoint => ({
-      id: `${model.id}:${endpoint.protocol}`,
+    const selectedProtocols = selectedModelProtocols[model.id] ?? new Set(getTestableProtocols(model))
+    return getTestableProtocols(model).filter(protocol => selectedProtocols.has(protocol)).map(protocol => ({
+      id: `${model.id}:${protocol}`,
       modelId: model.id,
       modelName: model.modelName,
       providerId: provider.id,
       providerName: provider.name,
-      protocol: endpoint.protocol,
+      protocol,
+      converted: supportsConvertedProtocol(model, protocol),
       status: 'queued' as const,
     }))
   }), [enabledModels, props.providers, selectedModelProtocols, selectedProviderIds])
@@ -145,7 +163,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
 
   const allTasksSelected = enabledModels.length > 0
     && enabledModels.every(model => selectedProviderIds.has(model.providerId)
-      && model.endpoints.every(endpoint => selectedModelProtocols[model.id]?.has(endpoint.protocol)))
+      && getTestableProtocols(model).every(protocol => selectedModelProtocols[model.id]?.has(protocol)))
 
   const toggleAll = () => {
     if (running) return
@@ -155,7 +173,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
     } else {
       setSelectedProviderIds(new Set(availableProviders.map(provider => provider.id)))
       setSelectedModelProtocols(Object.fromEntries(
-        enabledModels.map(model => [model.id, new Set(model.endpoints.map(endpoint => endpoint.protocol))]),
+        enabledModels.map(model => [model.id, new Set(getTestableProtocols(model))]),
       ))
     }
     clearTasks()
@@ -221,7 +239,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
               {availableProviders.map(provider => {
                 const providerModels = enabledModels.filter(model => model.providerId === provider.id)
                 const providerSelectedCount = providerModels.filter(model => {
-                  const modelProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
+                  const modelProtocols = selectedModelProtocols[model.id] ?? new Set(getTestableProtocols(model))
                   return modelProtocols.size > 0
                 }).length
 
@@ -245,7 +263,8 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                     {selectedProviderIds.has(provider.id) && (
                       <div className="mt-2 space-y-2">
                         {providerModels.map(model => {
-                          const modelSelectedProtocols = selectedModelProtocols[model.id] ?? new Set(model.endpoints.map(endpoint => endpoint.protocol))
+                          const modelProtocols = getTestableProtocols(model)
+                          const modelSelectedProtocols = selectedModelProtocols[model.id] ?? new Set(modelProtocols)
                           const selectedCount = modelSelectedProtocols.size
 
                           return (
@@ -253,27 +272,36 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-[10px] font-medium text-foreground">{model.modelName}</div>
-                                  <div className="mt-0.5 text-[9px] text-muted-foreground">{selectedCount}/{model.endpoints.length} 协议</div>
+                                  <div className="mt-0.5 text-[9px] text-muted-foreground">{selectedCount}/{modelProtocols.length} 协议</div>
                                 </div>
                                 <div className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedCount}</div>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-1.5">
-                                {model.endpoints.map(endpoint => (
-                                  <button
-                                    key={`${model.id}:${endpoint.protocol}`}
-                                    type="button"
-                                    aria-pressed={modelSelectedProtocols.has(endpoint.protocol)}
-                                    className={cn(
-                                      'inline-flex items-center rounded-md px-1.5 py-1 text-[10px] font-medium transition-all',
-                                      modelSelectedProtocols.has(endpoint.protocol)
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
-                                    )}
-                                    onClick={() => toggleModelProtocol(model.id, endpoint.protocol)}
-                                  >
-                                    {PROTOCOL_LABELS[endpoint.protocol]}
-                                  </button>
-                                ))}
+                                {modelProtocols.map(protocol => {
+                                  const converted = supportsConvertedProtocol(model, protocol)
+                                  return (
+                                    <button
+                                      key={`${model.id}:${protocol}`}
+                                      type="button"
+                                      aria-pressed={modelSelectedProtocols.has(protocol)}
+                                      title={converted ? `${PROTOCOL_LABELS[protocol]}（经协议转换支持）` : PROTOCOL_LABELS[protocol]}
+                                      className={cn(
+                                        'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium transition-all',
+                                        converted
+                                          ? modelSelectedProtocols.has(protocol)
+                                            ? 'border border-dashed border-amber-500/70 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                            : 'border border-dashed border-amber-500/50 bg-muted/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300'
+                                          : modelSelectedProtocols.has(protocol)
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                                      )}
+                                      onClick={() => toggleModelProtocol(model.id, protocol)}
+                                    >
+                                      {converted && <Repeat size={9} />}
+                                      {PROTOCOL_LABELS[protocol]}{converted ? '（转换）' : ''}
+                                    </button>
+                                  )
+                                })}
                               </div>
                             </div>
                           )
@@ -326,7 +354,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                     return <div key={task.id} className="grid gap-2 border-b border-border px-3 py-2.5 last:border-b-0 md:grid-cols-[24px_minmax(180px,1.5fr)_minmax(120px,1fr)_80px_140px] md:items-center md:gap-3">
                       <TaskStatus status={task.status} />
                       <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.modelName}</span></div></div>
-                      <div className="min-w-0 text-[11px] text-muted-foreground"><span className="truncate">{PROTOCOL_LABELS[task.protocol]}</span></div>
+                      <div className="min-w-0 text-[11px] text-muted-foreground"><span className={cn('truncate', task.converted && 'text-amber-700 dark:text-amber-300')}>{PROTOCOL_LABELS[task.protocol]}{task.converted ? '（转换）' : ''}</span></div>
                       <div className={cn('text-[10px] font-medium', task.status === 'success' && 'text-emerald-600', task.status === 'failed' && 'text-red-600', task.status === 'running' && 'text-primary')}>{task.status === 'queued' ? '等待' : task.status === 'running' ? '请求中' : task.status === 'success' ? '通过' : '失败'}</div>
                       <div className="text-[10px] text-muted-foreground md:text-right">{task.result?.statusCode ? `HTTP ${task.result.statusCode} · ` : ''}{task.result ? `${task.result.durationMilliseconds}ms` : '—'}{task.result?.success && <span className="ml-1 font-mono">↓{task.result.outputTokens ?? '—'}</span>}</div>
                       {task.errorMessage && <div className="col-span-full ml-9 wrap-break-word rounded-md bg-red-500/[0.07] px-2.5 py-2 font-mono text-[10px] text-red-600 dark:text-red-400">{task.errorMessage}</div>}
