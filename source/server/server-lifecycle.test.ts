@@ -5,7 +5,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, initDatabase } from './database'
 import { updateSettings } from './database/store'
-import { startServer, stopServer } from './index'
+import { getProxyServerStatus, startProxyServer, startServer, stopProxyServer, stopServer } from './index'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
 
@@ -29,6 +29,24 @@ afterEach(async () => {
 })
 
 describe('server lifecycle', () => {
+  it('reports the port actually bound by the proxy server', async () => {
+    const proxyPort = await getAvailablePort()
+    await initDatabase(temporaryDirectory)
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: 9300 })
+
+    try {
+      await startProxyServer({ port: proxyPort })
+
+      expect(await getProxyServerStatus()).toMatchObject({
+        running: true,
+        port: proxyPort,
+      })
+    } finally {
+      await stopProxyServer()
+      await closeDatabase()
+    }
+  })
+
   it('keeps management available while the proxy is stopped and restarted', async () => {
     const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
     await initDatabase(temporaryDirectory)

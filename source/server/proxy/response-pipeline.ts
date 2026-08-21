@@ -105,6 +105,10 @@ export class ResponsePipeline {
       : (this.responseBuffer || null)
   }
 
+  getUsage(): ExtractedUsage {
+    return this.usage
+  }
+
   downstreamHeaders(): string {
     return JSON.stringify(createDownstreamHeaders(this.options.upstreamHeaders))
   }

@@ -16,6 +16,7 @@ import type { UpstreamStatusDisposition } from './response'
 import { attachDownstreamAbort, attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 import { createRequestContext } from './request-context'
 import { protocolAdapters } from './protocols/registry'
+import { ResponsePipeline } from './response-pipeline'
 import type { ProxyObservationHooks } from './hooks'
 import { runAttemptQueue } from './attempt-runner'
 
@@ -575,42 +576,14 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
-      // TTFT 与 token 采集。Prompt Cache 仅从响应 usage 读取，不使用 HTTP/CDN cache headers。
+      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取。
       let ttftMilliseconds: number | undefined
-      let inputTokens: number | null = null
-      let outputTokens: number | null = null
-      let cachedInputTokens: number | null = null
-      let cacheCreationInputTokens: number | null = null
-      let rawUsage: RawUsage | null = null
-      let responseBuffer = ''
       let errorResponse = ''
       const upstreamChunks: string[] = []
-      const downstreamChunks: string[] = []
       const upstreamRequestId = extractUpstreamRequestId(upstreamRes.headers)
 
       const contentType = String(upstreamRes.headers['content-type'] ?? '')
       const isStreaming = contentType.includes('text/event-stream')
-      const applyUsage = (data: Record<string, unknown>) => {
-        const extracted = extractTokenUsage(data)
-        if (extracted.inputTokens != null) inputTokens = extracted.inputTokens
-        if (extracted.outputTokens != null) outputTokens = extracted.outputTokens
-        if (extracted.cachedInputTokens != null) cachedInputTokens = extracted.cachedInputTokens
-        if (extracted.cacheCreationInputTokens != null) {
-          cacheCreationInputTokens = extracted.cacheCreationInputTokens
-        }
-        rawUsage = mergeRawUsage(rawUsage, extracted.rawUsage)
-      }
-      const applySseLine = (line: string) => {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('data:')) return
-        const dataStr = trimmed.slice(5).trim()
-        if (!dataStr || dataStr === '[DONE]') return
-        try {
-          applyUsage(JSON.parse(dataStr) as Record<string, unknown>)
-        } catch {
-          // 忽略非 JSON SSE 事件
-        }
-      }
 
       if (disposition === 'retry') {
         const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
@@ -665,85 +638,37 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         res.writeHead(statusCode, downstreamHeaders)
       }
 
-      // 协议转换流式转换器（非转换路径为透传）
-      const sseConverter = adapter.requiresResponseConversion && isStreaming ? adapter.createStreamConverter() : null
+      const responsePipeline = new ResponsePipeline({
+        adapter,
+        isStreaming,
+        captureEnabled: settings.captureRequestContent,
+        response: res,
+        upstreamHeaders: upstreamRes.headers,
+        onUsage: () => undefined,
+        onUpstreamChunk: () => undefined,
+        onDownstreamChunk: () => undefined,
+      })
 
       upstreamRes.on('data', chunk => {
         const chunkText = chunk.toString('utf8')
-        if (settings.captureRequestContent) upstreamChunks.push(chunkText)
 
         // 记录 TTFT（第一个数据块到达时间）
         if (ttftMilliseconds === undefined) {
           ttftMilliseconds = Date.now() - attemptStartedAt
         }
 
-        if (disposition === 'success') {
-          responseBuffer += chunkText
-
-          if (isStreaming) {
-            // 流式响应：逐行解析 SSE 中的 usage 信息
-            const lines = responseBuffer.split('\n')
-            responseBuffer = lines.pop() ?? ''
-            for (const line of lines) applySseLine(line)
-          }
-        }
-
         if (disposition !== 'success') {
           errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))
         }
-        if (!res.writableEnded) {
-          if (sseConverter) {
-            const converted = sseConverter.push(chunkText)
-            if (converted) {
-              if (settings.captureRequestContent) downstreamChunks.push(converted)
-              res.write(converted)
-            }
-          } else if (!adapter.requiresResponseConversion || isStreaming) {
-            // 非流式转换路径先缓冲原始响应，end 时统一转换后写出
-            if (settings.captureRequestContent) downstreamChunks.push(chunkText)
-            res.write(chunk)
-          }
-        }
+        responsePipeline.push(chunkText, disposition === 'success')
       })
 
       upstreamRes.on('end', async () => {
         idleTimeout.dispose()
 
-        if (disposition === 'success' && responseBuffer) {
-          if (isStreaming) {
-            // 上游可能在最后一个 SSE event 后省略换行。
-            applySseLine(responseBuffer)
-          } else {
-            try {
-              applyUsage(JSON.parse(responseBuffer) as Record<string, unknown>)
-            } catch {
-              // 忽略解析失败
-            }
-          }
-        }
-
-        if (!res.writableEnded) {
-          if (sseConverter) {
-            const tail = adapter.finishStream(sseConverter)
-            if (tail) {
-              if (settings.captureRequestContent) downstreamChunks.push(tail)
-              res.write(tail)
-            }
-          } else if (adapter.requiresResponseConversion && !isStreaming && responseBuffer) {
-            try {
-              const converted = adapter.convertResponse(Buffer.from(responseBuffer))
-              if (settings.captureRequestContent) downstreamChunks.push(converted.toString('utf8'))
-              res.write(converted)
-            } catch (error) {
-              console.error(`[proxy] 响应转换失败: ${(error as Error).message}`)
-              if (settings.captureRequestContent) downstreamChunks.push(responseBuffer)
-              res.write(responseBuffer)
-            }
-          }
-          res.end()
-        }
+        const pipelineResult = responsePipeline.finish(disposition === 'success', errorResponse || null)
         const body = disposition === 'success' ? null : (errorResponse || null)
-        const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(responseBuffer)
+        const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(pipelineResult.upstreamBody)
         const attempt = await recordAttempt(
           disposition === 'success' ? 'success' : 'failed',
           statusCode,
@@ -752,13 +677,9 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           disposition === 'success' ? undefined : `上游返回 ${statusCode}`,
           resolvedRequestId,
           body,
-          { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
+          pipelineResult.usage,
         )
-        const upstreamResponseBody = serializeCapturedBody(isStreaming, upstreamChunks, disposition === 'success' ? responseBuffer : body)
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody, convertedResponseBody: adapter.requiresResponseConversion ? downstreamChunks.join('') : null })
-        const downstreamResponseBody = isStreaming
-          ? serializeStreamingChunks(downstreamChunks)
-          : (downstreamChunks.join('') || responseBuffer || body)
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null })
         resolveAttempt({
           disposition,
           statusCode,
@@ -766,16 +687,12 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           upstreamRequestId: resolvedRequestId,
           errorResponse: body,
           ttftMilliseconds,
-          inputTokens,
-          outputTokens,
-          cachedInputTokens,
-          cacheCreationInputTokens,
-          promptCacheHit: cachedInputTokens == null ? null : cachedInputTokens > 0,
-          rawUsage,
+          ...pipelineResult.usage,
+          promptCacheHit: pipelineResult.usage.cachedInputTokens == null ? null : pipelineResult.usage.cachedInputTokens > 0,
           upstreamProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
           responseStatus: statusCode,
           responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
-          responseBody: downstreamResponseBody,
+          responseBody: pipelineResult.downstreamBody,
           captureStatus: 'captured',
         })
       })
@@ -792,14 +709,14 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
             err.message,
             upstreamRequestId,
             null,
-            { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
+            responsePipeline.getUsage(),
           )
           await recordAttemptContent({
             attemptId: attempt?.id ?? null,
             captureStatus: 'partial',
             responseStatus: statusCode,
             responseHeaders: upstreamRes.headers,
-            responseBody: serializeCapturedBody(isStreaming, upstreamChunks, responseBuffer || null),
+            responseBody: responsePipeline.partialBody(),
           })
           rejectAttempt(new RecordedAttemptError(err, {
             disposition,
@@ -808,7 +725,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
             upstreamRequestId,
             responseStatus: statusCode,
             responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
-            responseBody: isStreaming ? serializeStreamingChunks(downstreamChunks) : downstreamChunks.join(''),
+            responseBody: responsePipeline.partialBody(),
             captureStatus: 'partial',
           }))
         })()
@@ -919,102 +836,4 @@ function writeJsonError(res: ServerResponse, statusCode: number, errorCode: stri
   res.setHeader('Content-Type', 'application/json')
   res.end(body)
   return body
-}
-
-interface ExtractedUsage {
-  inputTokens: number | null
-  outputTokens: number | null
-  cachedInputTokens: number | null
-  cacheCreationInputTokens: number | null
-  rawUsage: RawUsage | null
-}
-
-/** 提取原始 usage，并按费用规则标准化输入、缓存读取和缓存写入 Token。 */
-function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {
-  const usageCandidates: RawUsage[] = []
-  collectUsage(data.usage, usageCandidates)
-  collectUsage(asRecord(data.message)?.usage, usageCandidates)
-  collectUsage(asRecord(data.response)?.usage, usageCandidates)
-
-  if (Array.isArray(data.output)) {
-    for (const item of data.output) collectUsage(asRecord(item)?.usage, usageCandidates)
-  }
-
-  let rawUsage: RawUsage | null = null
-  for (const usage of usageCandidates) rawUsage = mergeRawUsage(rawUsage, usage)
-
-  const inputTokens = firstNumber(
-    rawUsage?.prompt_tokens,
-    rawUsage?.input_tokens,
-    rawUsage?.total_input_tokens,
-    rawUsage?.promptTokenCount,
-    data.input_tokens,
-    data.prompt_tokens,
-  )
-  const outputTokens = firstNumber(
-    rawUsage?.completion_tokens,
-    rawUsage?.output_tokens,
-    rawUsage?.total_output_tokens,
-    rawUsage?.candidatesTokenCount,
-    data.output_tokens,
-    data.completion_tokens,
-  )
-  const cachedInputTokens = firstNumber(
-    asRecord(rawUsage?.prompt_tokens_details)?.cached_tokens,
-    asRecord(rawUsage?.input_tokens_details)?.cached_tokens,
-    rawUsage?.cache_read_input_tokens,
-    rawUsage?.cached_input_tokens,
-    rawUsage?.cache_read_tokens,
-    rawUsage?.cachedContentTokenCount,
-  )
-  const cacheCreation = asRecord(rawUsage?.cache_creation)
-  const cacheCreationInputTokens = firstNumber(
-    rawUsage?.cache_creation_input_tokens,
-    rawUsage?.cache_creation_tokens,
-    rawUsage?.cached_creation_input_tokens,
-    sumNumbers(
-      cacheCreation?.ephemeral_5m_input_tokens,
-      cacheCreation?.ephemeral_1h_input_tokens,
-    ),
-  )
-
-  return { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage }
-}
-
-function collectUsage(value: unknown, target: RawUsage[]): void {
-  const usage = asRecord(value)
-  if (usage) target.push(usage)
-}
-
-function asRecord(value: unknown): RawUsage | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as RawUsage
-    : null
-}
-
-function firstNumber(...values: unknown[]): number | null {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value
-  }
-  return null
-}
-
-function sumNumbers(...values: unknown[]): number | null {
-  const numbers = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  return numbers.length > 0 ? numbers.reduce((sum, value) => sum + value, 0) : null
-}
-
-function mergeRawUsage(current: RawUsage | null, incoming: RawUsage | null): RawUsage | null {
-  if (!incoming) return current
-  if (!current) return { ...incoming }
-
-  const merged: RawUsage = { ...current }
-  for (const [key, value] of Object.entries(incoming)) {
-    const currentValue = asRecord(merged[key])
-    const incomingValue = asRecord(value)
-    merged[key] = currentValue && incomingValue
-      ? mergeRawUsage(currentValue, incomingValue)
-      : value
-  }
-  return merged
 }

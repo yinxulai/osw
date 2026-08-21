@@ -96,10 +96,11 @@ export function restartProxyServer(): Promise<Server> {
 
 export async function getProxyServerStatus(): Promise<ProxyServerStatus> {
   const settings = await getSettings()
+  const address = proxyServer?.address()
   return {
     running: proxyServer?.listening ?? false,
     host: settings.listenHost,
-    port: settings.listenPort,
+    port: address && typeof address !== 'string' ? address.port : settings.listenPort,
   }
 }
 
