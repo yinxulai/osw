@@ -1,12 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { ProviderSchema, UpstreamUrlsSchema, type Provider } from '@common/schemas'
+import { ProtocolSchema, ProviderSchema, type Provider } from '@common/schemas'
 import {
   createProvider,
   deleteProvider as deleteProviderRecord,
   getProvider,
+  listProviderEndpoints,
   listProviders,
+  replaceProviderEndpoints,
   resetProviderHealth,
   updateProvider,
 } from '../database/store'
@@ -17,6 +19,7 @@ import { sendError, sendSuccess } from './response'
 export const providerRoutes: Record<string, ManagementHandler> = {
   '/api/provider/list': handleListProviders,
   '/api/provider/get': handleGetProvider,
+  '/api/provider/endpoints': handleListProviderEndpoints,
   '/api/provider/create': handleCreateProvider,
   '/api/provider/update': handleUpdateProvider,
   '/api/provider/delete': handleDeleteProvider,
@@ -38,6 +41,13 @@ async function handleGetProvider(_req: IncomingMessage, res: ServerResponse, bod
   sendSuccess(res, provider)
 }
 
+async function handleListProviderEndpoints(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id } = GetProviderSchema.parse(body)
+  sendSuccess(res, await listProviderEndpoints(id))
+}
+
+const ProviderEndpointsSchema = z.record(ProtocolSchema, z.string().url())
+
 const CreateProviderSchema = ProviderSchema.pick({
   name: true,
   timeoutMilliseconds: true,
@@ -45,7 +55,7 @@ const CreateProviderSchema = ProviderSchema.pick({
 })
   .extend({
     apiKey: z.string().trim().min(1).optional(),
-    endpoints: UpstreamUrlsSchema.optional(),
+    endpoints: ProviderEndpointsSchema.optional(),
   })
   .partial({ timeoutMilliseconds: true, enabled: true })
 
@@ -60,8 +70,8 @@ async function handleCreateProvider(_req: IncomingMessage, res: ServerResponse, 
       apiKeyReference,
       timeoutMilliseconds: input.timeoutMilliseconds ?? 30000,
       enabled: input.enabled ?? true,
-      upstreamUrls: JSON.stringify(input.endpoints ?? {}),
     })
+    await replaceProviderEndpoints(provider.id, input.endpoints ?? {})
     sendSuccess(res, provider)
   } catch (error) {
     await secretStore.delete(apiKeyReference)
@@ -79,7 +89,7 @@ const UpdateProviderSchema = ProviderSchema.pick({
   .required({ id: true })
   .extend({
     apiKey: z.string().trim().min(1).optional(),
-    endpoints: UpstreamUrlsSchema.optional(),
+    endpoints: ProviderEndpointsSchema.optional(),
   })
 
 async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
@@ -90,9 +100,10 @@ async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, 
     return
   }
   if (apiKey) await getSecretStore().set(current.apiKeyReference, apiKey)
-  const mergedUpdates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled' | 'upstreamUrls'>> = { ...updates }
-  if (endpoints !== undefined) mergedUpdates.upstreamUrls = JSON.stringify(endpoints)
-  sendSuccess(res, await updateProvider(id, mergedUpdates))
+  const mergedUpdates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> = { ...updates }
+  const provider = await updateProvider(id, mergedUpdates)
+  if (endpoints !== undefined) await replaceProviderEndpoints(id, endpoints)
+  sendSuccess(res, provider)
 }
 
 const DeleteProviderSchema = z.object({ id: z.string() })

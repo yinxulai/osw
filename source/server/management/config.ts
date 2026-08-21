@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { generateKeyReference } from '@common/keychain'
-import { ProtocolSchema, UpstreamUrlsSchema, type Provider, type LogicalModel, type Settings } from '@common/schemas'
+import { ProtocolSchema, type Provider, type LogicalModel, type Settings } from '@common/schemas'
 import type { ManagementHandler } from './response'
 import { sendSuccess, sendError } from './response'
 import {
   listProviders,
+  listProviderEndpoints,
   listLogicalModels,
   listProviderModels,
   listSchedulingPolicies,
@@ -14,6 +15,7 @@ import {
   updateSettings,
   createProvider,
   updateProvider,
+  replaceProviderEndpoints,
   createLogicalModel,
   updateLogicalModel,
   createProviderModelRoute,
@@ -88,6 +90,8 @@ interface ExportedConfig {
   schedulingPolicies: ExportedSchedulingPolicy[]
 }
 
+const ProviderEndpointsSchema = z.record(ProtocolSchema, z.string().url())
+
 async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   const [providers, logicalModels, providerModels, schedulingPolicies, settings] = await Promise.all([
     listProviders(false),
@@ -110,14 +114,14 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
       idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
       autoLaunch: settings.autoLaunch,
     },
-    providers: providers.map((p: Provider): ExportedProvider => ({
+    providers: await Promise.all(providers.map(async (p: Provider): Promise<ExportedProvider> => ({
       id: p.id,
       name: p.name,
       timeoutMilliseconds: p.timeoutMilliseconds,
       enabled: p.enabled,
       apiKeyPlaceholder: '***',
-      endpoints: parseEndpoints(p.upstreamUrls),
-    })),
+      endpoints: Object.fromEntries((await listProviderEndpoints(p.id)).filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url])),
+    }))),
     logicalModels: logicalModels.map((m: LogicalModel): ExportedLogicalModel => ({
       id: m.id,
       name: m.name,
@@ -150,14 +154,6 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
   sendSuccess(res, { config, content: JSON.stringify(config, null, 2) })
 }
 
-function parseEndpoints(upstreamUrls: string): Record<string, string> {
-  try {
-    return JSON.parse(upstreamUrls) as Record<string, string>
-  } catch {
-    return {}
-  }
-}
-
 // ========== 导入配置 ==========
 
 const ImportConfigSchema = z.object({
@@ -182,7 +178,7 @@ const ImportConfigSchema = z.object({
         timeoutMilliseconds: z.number().int().positive().optional(),
         enabled: z.boolean().optional(),
         apiKey: z.string().optional(),
-        endpoints: UpstreamUrlsSchema.optional(),
+        endpoints: ProviderEndpointsSchema.optional(),
       }),
     ).default([]),
     logicalModels: z.array(
@@ -262,14 +258,14 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
       const existing = existingProviders.find(ep => ep.name === p.name)
       if (existing) {
         if (p.id) providerIdMap.set(p.id, existing.id)
-        const updates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled' | 'upstreamUrls'>> = {
+        const updates: Partial<Pick<Provider, 'name' | 'timeoutMilliseconds' | 'enabled'>> = {
           name: p.name,
         }
         if (p.timeoutMilliseconds !== undefined) updates.timeoutMilliseconds = p.timeoutMilliseconds
         if (p.enabled !== undefined) updates.enabled = p.enabled
-        if (p.endpoints !== undefined) updates.upstreamUrls = JSON.stringify(p.endpoints)
         if (p.apiKey) await secretStore.set(existing.apiKeyReference, p.apiKey)
         const updated = await updateProvider(existing.id, updates)
+        if (p.endpoints !== undefined) await replaceProviderEndpoints(updated.id, p.endpoints)
         if (p.id) providerIdMap.set(p.id, updated.id)
         importedProviderIds.add(updated.id)
       } else {
@@ -280,8 +276,8 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           apiKeyReference,
           timeoutMilliseconds: p.timeoutMilliseconds ?? 30000,
           enabled: p.enabled ?? true,
-          upstreamUrls: p.endpoints ? JSON.stringify(p.endpoints) : '{}',
         })
+        await replaceProviderEndpoints(created.id, p.endpoints ?? {})
         if (p.id) providerIdMap.set(p.id, created.id)
         importedProviderIds.add(created.id)
       }

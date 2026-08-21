@@ -38,7 +38,6 @@ describe('provider management', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
 
     await deleteProviderAndSecret(provider.id)

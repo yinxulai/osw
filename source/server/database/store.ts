@@ -4,6 +4,7 @@ import type {
   Provider,
   LogicalModel,
   ProviderModel,
+  ProviderEndpoint,
   ProviderModelEndpoint,
   ProtocolConverter,
   ProviderModelRoute,
@@ -80,7 +81,7 @@ export async function getProvider(id: string): Promise<Provider | undefined> {
   return row ? mapProvider(row) : undefined
 }
 
-type CreateProviderInput = { name: string; description?: string; apiKeyReference: string; timeoutMilliseconds?: number; enabled?: boolean; upstreamUrls?: string }
+type CreateProviderInput = { name: string; description?: string; apiKeyReference: string; timeoutMilliseconds?: number; enabled?: boolean }
 
 export async function createProvider(input: CreateProviderInput): Promise<Provider> {
   const id = generateId('prov_')
@@ -107,7 +108,6 @@ export async function createProvider(input: CreateProviderInput): Promise<Provid
   db.insert(providerSettings).values([
     { providerId: id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: time },
     { providerId: id, key: 'connection.timeoutMilliseconds', value: String(provider.timeoutMilliseconds), valueType: 'number', updatedTime: time },
-    { providerId: id, key: 'provider.upstreamUrls', value: provider.upstreamUrls, valueType: 'json', updatedTime: time },
   ]).run()
   db.insert(providerHealth)
     .values({
@@ -144,7 +144,6 @@ export async function updateProvider(id: string, updates: Partial<Omit<Provider,
   const providerSettingUpdates = [
     ['security.secretReference', next.apiKeyReference, 'string'],
     ['connection.timeoutMilliseconds', String(next.timeoutMilliseconds), 'number'],
-    ['provider.upstreamUrls', next.upstreamUrls, 'json'],
   ] as const
   for (const [key, value, valueType] of providerSettingUpdates) {
     db.insert(providerSettings).values({ providerId: id, key, value, valueType, updatedTime: time }).onConflictDoUpdate({
@@ -153,6 +152,49 @@ export async function updateProvider(id: string, updates: Partial<Omit<Provider,
     }).run()
   }
   return next
+}
+
+export async function listProviderEndpoints(providerId: string): Promise<ProviderEndpoint[]> {
+  return getDb()
+    .select()
+    .from(providerEndpoints)
+    .where(eq(providerEndpoints.providerId, providerId))
+    .orderBy(providerEndpoints.protocol)
+    .all()
+    .map(row => ({
+      ...row,
+      protocol: row.protocol as ProviderEndpoint['protocol'],
+      createdTime: Number(row.createdTime),
+      updatedTime: Number(row.updatedTime),
+    }))
+}
+
+export async function replaceProviderEndpoints(providerId: string, endpoints: Partial<Record<ProviderEndpoint['protocol'], string>>): Promise<ProviderEndpoint[]> {
+  const db = getDb()
+  const time = now()
+  db.transaction(transaction => {
+    transaction.update(providerEndpoints)
+      .set({ enabled: false, updatedTime: time })
+      .where(eq(providerEndpoints.providerId, providerId))
+      .run()
+
+    for (const [protocol, url] of Object.entries(endpoints)) {
+      if (!url?.trim()) continue
+      transaction.insert(providerEndpoints).values({
+        id: generateId('end_'),
+        providerId,
+        protocol,
+        url: url.trim(),
+        enabled: true,
+        createdTime: time,
+        updatedTime: time,
+      }).onConflictDoUpdate({
+        target: [providerEndpoints.providerId, providerEndpoints.protocol],
+        set: { url: url.trim(), enabled: true, updatedTime: time },
+      }).run()
+    }
+  })
+  return listProviderEndpoints(providerId)
 }
 
 export async function deleteProvider(id: string): Promise<void> {
@@ -1103,7 +1145,6 @@ function mapProvider(row: typeof providers.$inferSelect): Provider {
     apiKeyReference: values.get('security.secretReference') ?? '',
     timeoutMilliseconds: Number(values.get('connection.timeoutMilliseconds') ?? 30000),
     enabled: row.enabled,
-    upstreamUrls: values.get('provider.upstreamUrls') ?? '{}',
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
@@ -1126,7 +1167,7 @@ function mapProviderModelView(row: typeof providerModels.$inferSelect): Provider
   const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
     .from(providerModelEndpoints)
     .innerJoin(providerEndpoints, eq(providerModelEndpoints.providerEndpointId, providerEndpoints.id))
-    .where(eq(providerModelEndpoints.providerModelId, row.id)).all()
+    .where(and(eq(providerModelEndpoints.providerModelId, row.id), eq(providerModelEndpoints.enabled, true), eq(providerEndpoints.enabled, true))).all()
   return {
     id: row.id,
     providerId: row.providerId,
@@ -1160,7 +1201,7 @@ function mapProviderModel(row: typeof providerModels.$inferSelect): ProviderMode
   const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
     .from(providerModelEndpoints)
     .innerJoin(providerEndpoints, eq(providerModelEndpoints.providerEndpointId, providerEndpoints.id))
-    .where(eq(providerModelEndpoints.providerModelId, row.id)).all()
+    .where(and(eq(providerModelEndpoints.providerModelId, row.id), eq(providerModelEndpoints.enabled, true), eq(providerEndpoints.enabled, true))).all()
   return {
     id: row.id,
     providerId: row.providerId,

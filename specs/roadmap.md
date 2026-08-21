@@ -4,7 +4,9 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据；当前仅完成设计，尚未开始按此目标迁移实现代码。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：16 表数据库基线已完成，公共 Schema、Store、路由、观测和管理界面正在收敛。
+
+当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
 - [x] [data-model.md](./data-model.md)：16 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。

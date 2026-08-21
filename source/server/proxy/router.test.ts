@@ -33,7 +33,6 @@ describe('getAvailableModels', () => {
       apiKeyReference: 'shared-key',
       timeoutMilliseconds: 1_000,
       enabled: true,
-      upstreamUrls: '{}',
       createdTime: time,
       updatedTime: time,
       deletedTime: null,

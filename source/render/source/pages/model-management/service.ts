@@ -32,24 +32,8 @@ export interface ProviderEndpointEntry {
 
 type ProviderEndpoints = Partial<Record<Protocol, string>>
 
-function parseProviderEndpoints(provider?: Provider): ProviderEndpoints {
-  if (!provider) return {}
-  try {
-    const parsed = JSON.parse(provider.upstreamUrls ?? '{}') as Record<string, string>
-    return {
-      'openai-completions': parsed['openai-completions'] ?? '',
-      'openai-responses': parsed['openai-responses'] ?? '',
-      'anthropic-messages': parsed['anthropic-messages'] ?? '',
-    }
-  } catch {
-    return {}
-  }
-}
-
-export function getEffectiveEndpointUrl(endpoint: ProviderModelRouteEndpoint, provider?: Provider): string {
-  if (endpoint.upstreamUrl.trim()) return endpoint.upstreamUrl
-  if (!provider) return ''
-  return parseProviderEndpoints(provider)[endpoint.protocol] ?? ''
+export function getEffectiveEndpointUrl(endpoint: ProviderModelRouteEndpoint): string {
+  return endpoint.upstreamUrl.trim()
 }
 
 export function useModelManagementService() {
@@ -148,19 +132,28 @@ export function useModelManagementService() {
 
   // ========== Provider CRUD ==========
 
-  const openProviderDialog = useCallback((provider?: Provider) => {
+  const openProviderDialog = useCallback(async (provider?: Provider) => {
+    let endpoints: ProviderEndpoints = {}
+    if (provider) {
+      const result = await providerApi.endpoints(provider.id)
+      if (!result.success) {
+        toast.error(result.errorMessage)
+        return
+      }
+      endpoints = Object.fromEntries(result.data.filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url]))
+    }
     setEditingProviderId(provider?.id ?? null)
     setProviderName(provider?.name ?? '')
     setApiKey('')
     setTimeout(String(provider?.timeoutMilliseconds ?? 30000))
     setProviderEndpointEntries(
       PROTOCOL_OPTIONS.map(option => {
-        const url = parseProviderEndpoints(provider)[option.value] ?? ''
+        const url = endpoints[option.value] ?? ''
         return { protocol: option.value, enabled: Boolean(url), url }
       }),
     )
     setProviderDialogOpen(true)
-  }, [])
+  }, [toast])
 
   const closeProviderDialog = useCallback(() => {
     setProviderDialogOpen(false)
@@ -239,7 +232,14 @@ export function useModelManagementService() {
 
   const fetchModels = useCallback(async () => {
     if (!selectedProvider) return
-    const providerEndpoints = parseProviderEndpoints(selectedProvider)
+    const endpointsResult = await providerApi.endpoints(selectedProvider.id)
+    if (!endpointsResult.success) {
+      toast.error(endpointsResult.errorMessage)
+      return
+    }
+    const providerEndpoints: ProviderEndpoints = Object.fromEntries(
+      endpointsResult.data.filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url]),
+    )
 
     // 组合候选请求：启用的协议优先（覆盖地址 > 供应商默认地址）；
     // 若一个协议都没启用，则回退到供应商配置了默认地址的所有协议。

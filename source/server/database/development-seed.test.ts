@@ -50,7 +50,6 @@ describe('development seed', () => {
       apiKeyReference: 'key_existing',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
 
     expect(await seedDevelopmentData(secretStore)).toBe(false)
@@ -64,7 +63,6 @@ describe('development seed', () => {
       apiKeyReference: 'key_existing',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
 
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(true)

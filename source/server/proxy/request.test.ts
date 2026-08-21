@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveUpstreamUrl,
-  resolveEffectiveUpstreamUrl,
   rewriteRequestModel,
 } from './request'
 
@@ -22,59 +21,6 @@ describe('resolveUpstreamUrl', () => {
     )
   })
 
-})
-
-describe('resolveEffectiveUpstreamUrl', () => {
-  it('prefers the model endpoint URL when it is set', () => {
-    expect(
-      resolveEffectiveUpstreamUrl(
-        'https://model.example.com/v1/chat/completions',
-        '{"openai-completions":"https://provider.example.com/v1/chat/completions"}',
-        'openai-completions',
-      ),
-    ).toBe('https://model.example.com/v1/chat/completions')
-  })
-
-  it('falls back to the provider-level URL for the protocol when model endpoint URL is empty', () => {
-    expect(
-      resolveEffectiveUpstreamUrl(
-        '',
-        '{"openai-completions":"https://ark.cn-beijing.volces.com/api/v3/chat/completions"}',
-        'openai-completions',
-      ),
-    ).toBe('https://ark.cn-beijing.volces.com/api/v3/chat/completions')
-  })
-
-  it('trims surrounding whitespace from the resolved URL', () => {
-    expect(
-      resolveEffectiveUpstreamUrl(
-        '  ',
-        '{"anthropic-messages":"  https://api.anthropic.com/v1/messages  "}',
-        'anthropic-messages',
-      ),
-    ).toBe('https://api.anthropic.com/v1/messages')
-  })
-
-  it('throws when neither model endpoint URL nor provider default exists for the protocol', () => {
-    expect(() =>
-      resolveEffectiveUpstreamUrl('', '{}', 'openai-responses'),
-    ).toThrow('未配置上游地址')
-  })
-
-  it('throws when the provider upstreamUrls JSON is malformed', () => {
-    expect(() =>
-      resolveEffectiveUpstreamUrl('', 'not-json', 'openai-completions'),
-    ).toThrow('未配置上游地址')
-  })
-
-  it('throws when the provider upstreamUrls is null or undefined', () => {
-    expect(() => resolveEffectiveUpstreamUrl('', null, 'openai-completions')).toThrow(
-      '未配置上游地址',
-    )
-    expect(() => resolveEffectiveUpstreamUrl('', undefined, 'openai-completions')).toThrow(
-      '未配置上游地址',
-    )
-  })
 })
 
 describe('rewriteRequestModel', () => {

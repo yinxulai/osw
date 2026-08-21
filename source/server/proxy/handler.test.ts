@@ -84,7 +84,6 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
       apiKeyReference: `${providerId}_key`,
       timeoutMilliseconds: 1_000,
       enabled: true,
-      upstreamUrls: '{}',
       createdTime: time,
       updatedTime: time,
       deletedTime: null,

@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { listProviderModels, listProviders } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { findEndpoint } from '../proxy/router'
-import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl } from '../proxy/request'
+import { resolveUpstreamUrl } from '../proxy/request'
 import { createAuthHeaders } from '../proxy/auth'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
@@ -81,9 +81,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
     const startedAt = Date.now()
     try {
-      const targetUrl = resolveUpstreamUrl(
-        resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, protocol),
-      )
+      const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
       const apiKey = await getSecretStore().get(provider.apiKeyReference)
       const testBody = buildTestBody(protocol, model.modelName)
       const result = await sendTestRequest(

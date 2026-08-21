@@ -29,6 +29,7 @@ import {
   listAttemptsByRequest,
   listLogicalModels,
   listProviderHealth,
+  listProviderEndpoints,
   listProviderModels,
   listProviderModelsForLogicalModel,
   listProviders,
@@ -45,6 +46,7 @@ import {
   recordProviderFailure,
   resetProviderModelHealth,
   resetProviderHealth,
+  replaceProviderEndpoints,
   updateLogicalModel,
   updateProvider,
   updateRequestLogStatus,
@@ -66,7 +68,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-const providerInput = (name = 'Provider') => ({ name, apiKeyReference: `${name}-key`, timeoutMilliseconds: 10_000, upstreamUrls: '{"openai-completions":"https://api.example.com/v1"}' })
+const providerInput = (name = 'Provider') => ({ name, apiKeyReference: `${name}-key`, timeoutMilliseconds: 10_000 })
 const logInput = (id?: string) => ({ ...(id ? { id } : {}), logicalModelId: 'auto', protocol: 'openai-completions' as const, upstreamProtocol: null, status: 'pending' as const, totalDurationMilliseconds: 1, totalTokens: null, inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, promptCacheHit: null, rawUsage: null, ttftMilliseconds: null, cacheHit: null })
 
 function oldTimestampLog(id: string, time: number) {
@@ -87,7 +89,6 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: false,
-      upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
     const upstreamModel = await createProviderModelRoute({
@@ -164,7 +165,6 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
     await createProviderModelRoute({
       providerId: provider.id,
@@ -192,7 +192,6 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
     const logs = await Promise.all([1, 2, 3].map(index => createRequestLog({
       id: `req_retention_${index}`,
@@ -238,14 +237,12 @@ describe('store row mapping', () => {
       apiKeyReference: 'first_key',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
     const secondProvider = await createProvider({
       name: 'Second',
       apiKeyReference: 'second_key',
       timeoutMilliseconds: 30_000,
       enabled: true,
-      upstreamUrls: '{}',
     })
     const log = await createRequestLog({
       id: 'req_failover_stats',
@@ -294,8 +291,8 @@ describe('provider and model CRUD', () => {
     const provider = await createProvider({ ...providerInput(), description: 'initial', enabled: true })
     expect(await getProvider(provider.id)).toMatchObject({ name: 'Provider', description: 'initial', apiKeyReference: 'Provider-key' })
     expect(await getProvider('prov_missing')).toBeUndefined()
-    const updated = await updateProvider(provider.id, { name: 'Updated', description: 'changed', enabled: false, timeoutMilliseconds: 20_000, upstreamUrls: '{}' })
-    expect(updated).toMatchObject({ name: 'Updated', enabled: false, timeoutMilliseconds: 20_000, upstreamUrls: '{}' })
+    const updated = await updateProvider(provider.id, { name: 'Updated', description: 'changed', enabled: false, timeoutMilliseconds: 20_000 })
+    expect(updated).toMatchObject({ name: 'Updated', enabled: false, timeoutMilliseconds: 20_000 })
     expect((await listProviders()).map(item => item.id)).toContain(provider.id)
     await deleteProvider(provider.id)
     expect(await getProvider(provider.id)).toMatchObject({ deletedTime: expect.any(Number) })
@@ -311,7 +308,25 @@ describe('provider and model CRUD', () => {
     await updateProvider(provider.id, { apiKeyReference: 'new-key' })
     const rows = getDb().$client.prepare('SELECT key, value FROM provider_settings WHERE providerId = ? ORDER BY key').all(provider.id) as Array<{ key: string; value: string }>
     expect(rows).toEqual(expect.arrayContaining([{ key: 'security.secretReference', value: 'new-key' }]))
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(2)
+  })
+
+  it('replaces provider endpoints by disabling omitted protocols and reusing existing rows', async () => {
+    const provider = await createProvider(providerInput())
+    const initial = await replaceProviderEndpoints(provider.id, {
+      'openai-completions': 'https://api.example.com/v1/chat/completions',
+      'openai-responses': 'https://api.example.com/v1/responses',
+    })
+    const completionsId = initial.find(endpoint => endpoint.protocol === 'openai-completions')?.id
+
+    await replaceProviderEndpoints(provider.id, {
+      'openai-completions': 'https://api.example.com/v2/chat/completions',
+    })
+
+    expect(await listProviderEndpoints(provider.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: completionsId, protocol: 'openai-completions', url: 'https://api.example.com/v2/chat/completions', enabled: true }),
+      expect.objectContaining({ protocol: 'openai-responses', enabled: false }),
+    ]))
   })
 
   it('handles endpoint reuse, optional endpoints, conversion, update, and soft deletion', async () => {

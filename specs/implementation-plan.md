@@ -6,7 +6,7 @@
 
 v0.3 是一次全新的大版本迭代，不以兼容旧源码、旧 API、旧配置或旧数据库为目标。实施过程中允许直接删除旧领域模型和旧迁移逻辑；遇到旧数据库时，应用应要求用户重新初始化，而不是隐式迁移。
 
-当前状态：规格设计已基本定稿，源码仍是旧版可运行基线，尚未开始按本计划迁移。
+当前状态：规格设计已定稿，源码正在 `main` 上按全新、不兼容的 v0.3 契约实施。数据库基线已经切换，公共 Schema、Store、路由、观测和管理界面正在分阶段收敛。
 
 ## 2. 总体目标
 
@@ -284,13 +284,13 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 | 阶段 | 目标 | 状态 | 完成日期 | 备注 |
 | --- | --- | --- | --- | --- |
-| 阶段 0 | 冻结 v0.3 契约 | TODO | - | 规格已基本定稿，需在实现前最终核对 |
-| 阶段 1 | 全新数据库基线 | TODO | - | 不兼容旧数据库 |
-| 阶段 2 | 公共 Schema 与 Store | TODO | - | 切换到 ProviderModel 关系模型 |
-| 阶段 3 | `auto` 调度和路由 | TODO | - | 绑定关系决定候选队列 |
+| 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
+| 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `auto` 幂等初始化已落地 |
+| 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | Provider 默认端点已完全切换到关系表；其余 Store 契约继续收敛 |
+| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由与 Provider/ProviderModel 双层冷却已落地 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
-| 阶段 5 | 请求观测分层 | TODO | - | metrics/usages/contents 分层 |
-| 阶段 6 | 管理 API 和控制台 | TODO | - | 删除旧 UpstreamModel API |
+| 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages、attempts 已关系化，contents 仍待完善 |
+| 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | ProviderEndpoint 管理、配置导入导出与模型发现已切换到关系表 |
 | 阶段 7 | MVP 验收与发布 | TODO | - | P0 全部通过后发布 |
 
 状态只允许使用：`TODO`、`IN_PROGRESS`、`BLOCKED`、`DONE`。阶段状态发生变化时，应同步更新本表和 `roadmap.md`。

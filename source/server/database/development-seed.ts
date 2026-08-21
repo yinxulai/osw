@@ -23,7 +23,7 @@ const PROVIDER_FIXTURES = [
     name: 'OpenAI（开发示例）',
     apiKeyReference: 'key_dev_openai',
     apiKey: 'sk-development-openai',
-    upstreamUrls: {
+    endpoints: {
       'openai-completions': 'https://api.openai.com/v1/chat/completions',
       'openai-responses': 'https://api.openai.com/v1/responses',
     },
@@ -33,7 +33,7 @@ const PROVIDER_FIXTURES = [
     name: 'Anthropic（开发示例）',
     apiKeyReference: 'key_dev_anthropic',
     apiKey: 'sk-development-anthropic',
-    upstreamUrls: {
+    endpoints: {
       'anthropic-messages': 'https://api.anthropic.com/v1/messages',
     },
   },
@@ -42,7 +42,7 @@ const PROVIDER_FIXTURES = [
     name: '火山方舟（开发示例）',
     apiKeyReference: 'key_dev_ark',
     apiKey: 'development-ark-key',
-    upstreamUrls: {
+    endpoints: {
       'openai-completions': 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
       'openai-responses': 'https://ark.cn-beijing.volces.com/api/v3/responses',
     },
@@ -52,7 +52,7 @@ const PROVIDER_FIXTURES = [
     name: 'DeepSeek（开发示例）',
     apiKeyReference: 'key_dev_deepseek',
     apiKey: 'sk-development-deepseek',
-    upstreamUrls: {
+    endpoints: {
       'openai-completions': 'https://api.deepseek.com/chat/completions',
     },
   },
@@ -61,7 +61,7 @@ const PROVIDER_FIXTURES = [
     name: '协议实验室（开发示例）',
     apiKeyReference: 'key_dev_all_protocols',
     apiKey: 'sk-development-all-protocols',
-    upstreamUrls: {
+    endpoints: {
       'openai-completions': 'https://api.example.com/v1/chat/completions',
       'openai-responses': 'https://api.example.com/v1/responses',
       'anthropic-messages': 'https://api.example.com/v1/messages',
@@ -149,7 +149,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     if (providersToInsert.length > 0) transaction.insert(providerSettings).values(providersToInsert.flatMap(provider => [
       { providerId: provider.id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: timestamp },
       { providerId: provider.id, key: 'connection.timeoutMilliseconds', value: '30000', valueType: 'number', updatedTime: timestamp },
-      { providerId: provider.id, key: 'provider.upstreamUrls', value: JSON.stringify(provider.upstreamUrls), valueType: 'json', updatedTime: timestamp },
     ])).run()
 
     const healthToInsert = PROVIDER_FIXTURES.filter(provider => !existingHealthProviderIds.has(provider.id))
@@ -187,7 +186,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         const protocols = fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]
         for (const protocol of protocols) {
           const endpointId = `endpoint_dev_${fixture[1]}_${protocol}`
-          const url = PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.upstreamUrls[protocol as keyof typeof PROVIDER_FIXTURES[number]['upstreamUrls']] ?? 'https://api.example.com'
+          const url = PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.endpoints[protocol as keyof typeof PROVIDER_FIXTURES[number]['endpoints']] ?? 'https://api.example.com'
           const existingEndpoint = transaction.select().from(providerEndpoints).where(inArray(providerEndpoints.id, [endpointId])).get()
           if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
           transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_upstream_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()

@@ -8,30 +8,6 @@ export function resolveUpstreamUrl(upstreamUrl: string): string {
   return parsed.toString()
 }
 
-/**
- * 解析实际使用的上游地址：优先使用上游模型自身配置的地址，
- * 否则回退到该供应商在对应协议下的默认地址。
- */
-export function resolveEffectiveUpstreamUrl(upstreamUrl: string, providerUpstreamUrls: string | null | undefined, protocol: string): string {
-  if (upstreamUrl.trim()) return upstreamUrl.trim()
-
-  let endpoints: Record<string, string> = {}
-  if (providerUpstreamUrls) {
-    try {
-      endpoints = JSON.parse(providerUpstreamUrls) as Record<string, string>
-    } catch {
-      endpoints = {}
-    }
-  }
-  const fallback = endpoints[protocol]
-  if (!fallback || !fallback.trim()) {
-    throw new Error(
-      `未配置上游地址：模型未指定地址，且供应商在协议 ${protocol} 下也没有默认接口地址`,
-    )
-  }
-  return fallback.trim()
-}
-
 export function rewriteRequestModel(requestBody: Buffer, upstreamModelId: string): Buffer {
   if (requestBody.length === 0) return requestBody
 

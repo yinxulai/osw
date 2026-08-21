@@ -9,10 +9,6 @@ export const ProtocolSchema = z.enum([
 ])
 export type Protocol = z.infer<typeof ProtocolSchema>
 
-/** 供应商按协议配置的默认接口地址表 */
-export const UpstreamUrlsSchema = z.record(ProtocolSchema, z.string().url())
-export type UpstreamUrls = z.infer<typeof UpstreamUrlsSchema>
-
 export const RequestStatusSchema = z.enum(['pending', 'success', 'failed', 'cancelled'])
 export type RequestStatus = z.infer<typeof RequestStatusSchema>
 
@@ -25,7 +21,6 @@ export const ProviderSchema = z.object({
   description: z.string().default('').optional(),
   apiKeyReference: z.string(),
   timeoutMilliseconds: z.number().int().positive().default(30000),
-  upstreamUrls: z.string().default('{}'),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
   deletedTime: z.number().int().nullable(),

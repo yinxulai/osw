@@ -9,7 +9,7 @@ import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogSt
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
-import { resolveUpstreamUrl, resolveEffectiveUpstreamUrl, rewriteRequestModel, injectUsageParams } from './request'
+import { resolveUpstreamUrl, rewriteRequestModel, injectUsageParams } from './request'
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
@@ -292,7 +292,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const endpointProtocol = endpoint.protocol
   const converting = !nativeEndpoint
 
-  const targetUrl = resolveUpstreamUrl(resolveEffectiveUpstreamUrl(endpoint.upstreamUrl, provider.upstreamUrls, endpointProtocol))
+  const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
   const parsed = new URL(targetUrl)
   const upstreamBody = converting
     ? injectUsageParams(convertRequestBody(protocol, endpointProtocol, requestBody, model.modelName), endpointProtocol)

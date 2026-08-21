@@ -3,7 +3,7 @@ import http from 'node:http'
 import https from 'node:https'
 import { z } from 'zod'
 import { ProtocolSchema, type Protocol } from '@common/schemas'
-import { getProvider } from '../database/store'
+import { getProvider, listProviderEndpoints } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createAuthHeaders } from '../proxy/auth'
 import type { ManagementHandler } from './response'
@@ -55,13 +55,8 @@ async function handleFetchUpstreamModels(req: IncomingMessage, res: ServerRespon
       return
     }
     if (!baseUrl) {
-      let endpoints: Record<string, string> = {}
-      try {
-        endpoints = JSON.parse(provider.upstreamUrls ?? '{}') as Record<string, string>
-      } catch {
-        endpoints = {}
-      }
-      baseUrl = endpoints[input.protocol] ?? ''
+      const endpoint = (await listProviderEndpoints(provider.id)).find(candidate => candidate.enabled && candidate.protocol === input.protocol)
+      baseUrl = endpoint?.url ?? ''
     }
     if (!apiKey) apiKey = await getSecretStore().get(provider.apiKeyReference)
     timeout = provider.timeoutMilliseconds

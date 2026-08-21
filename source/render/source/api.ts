@@ -6,6 +6,7 @@
 import type {
   ApiResponse,
   Provider,
+  ProviderEndpoint,
   ProviderHealth,
   LogicalModel,
   ProviderModel,
@@ -103,6 +104,7 @@ export interface FetchProviderModelsInput {
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
   get: (id: string) => request<Provider>('/provider/get', { id }),
+  endpoints: (id: string) => request<ProviderEndpoint[]>('/provider/endpoints', { id }),
   fetchModels: (input: FetchProviderModelsInput) =>
     request<{ models: FetchedProviderModel[]; matchedUrl: string; attempts: { url: string; statusCode?: number; error?: string }[] }>('/provider/fetch-models', input),
   create: (data: CreateProviderInput) =>
