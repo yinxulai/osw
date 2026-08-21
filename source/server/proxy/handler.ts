@@ -354,21 +354,24 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
     const totalDuration = Date.now() - startedAt
     const hasTokens = metrics?.inputTokens != null && metrics?.outputTokens != null
     const totalTokens = hasTokens ? (metrics!.inputTokens! + metrics!.outputTokens!) : null
-    await updateRequestLogStatus(requestId, {
+    const update: Parameters<typeof updateRequestLogStatus>[1] = {
       status,
       totalDurationMilliseconds: totalDuration,
+    }
+    if (metrics) Object.assign(update, {
       totalTokens,
-      inputTokens: metrics?.inputTokens ?? null,
-      outputTokens: metrics?.outputTokens ?? null,
-      cachedInputTokens: metrics?.cachedInputTokens ?? null,
-      cacheCreationInputTokens: metrics?.cacheCreationInputTokens ?? null,
-      promptCacheHit: metrics?.promptCacheHit ?? null,
-      rawUsage: metrics?.rawUsage ?? null,
-      ttftMilliseconds: metrics?.ttftMilliseconds ?? null,
-      upstreamProtocol: metrics?.upstreamProtocol ?? null,
+      inputTokens: metrics.inputTokens ?? null,
+      outputTokens: metrics.outputTokens ?? null,
+      cachedInputTokens: metrics.cachedInputTokens ?? null,
+      cacheCreationInputTokens: metrics.cacheCreationInputTokens ?? null,
+      promptCacheHit: metrics.promptCacheHit ?? null,
+      rawUsage: metrics.rawUsage ?? null,
+      ttftMilliseconds: metrics.ttftMilliseconds ?? null,
+      upstreamProtocol: metrics.upstreamProtocol ?? null,
     })
+    await updateRequestLogStatus(requestId, update)
     const settings = await getSettings()
-    await pruneRequestLogs(settings.logRetentionCount, settings.logRetentionDays)
+    await pruneRequestLogs(settings.logRetentionDays)
   } catch (error) {
     console.error(`[proxy] 更新请求日志失败: ${(error as Error).message}`)
   }

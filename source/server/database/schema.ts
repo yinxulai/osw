@@ -197,6 +197,7 @@ export const requestUsages = sqliteTable(
     type: text('type').notNull(),
     value: real('value').notNull(),
     unit: text('unit').notNull().default('count'),
+    rawValue: text('rawValue'),
     createdTime: integer('createdTime').notNull(),
   },
   table => [index('idx_request_usages_type_time').on(table.type, table.createdTime), index('idx_request_usages_request').on(table.requestId), index('idx_request_usages_attempt').on(table.attemptId)],

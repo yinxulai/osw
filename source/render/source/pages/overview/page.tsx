@@ -83,14 +83,16 @@ export function OverviewPage() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
           <ModelRanking stats={data.modelStats} />
-          <LatencyDistribution buckets={data.latencyDistribution} />
         </div>
 
-        <FailureReasons
-          reasons={data.failureReasons}
-          failedCount={data.summary.failedCount}
-          successRate={data.summary.successRate}
-        />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <LatencyDistribution buckets={data.latencyDistribution} />
+          <FailureReasons
+            reasons={data.failureReasons}
+            failedCount={data.summary.failedCount}
+            successRate={data.summary.successRate}
+          />
+        </div>
       </>
     )
   }

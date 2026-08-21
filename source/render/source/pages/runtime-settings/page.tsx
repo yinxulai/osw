@@ -51,10 +51,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
             />
 
             <LogRetentionCard
-              retentionCount={service.settings.logRetentionCount}
               retentionDays={service.settings.logRetentionDays}
               captureRequestContent={service.settings.captureRequestContent}
-              onRetentionCountChange={value => service.updateField('logRetentionCount', value)}
               onRetentionDaysChange={value => service.updateField('logRetentionDays', value)}
               onCaptureRequestContentChange={value => service.updateField('captureRequestContent', value)}
               onPrune={service.pruneLogs}

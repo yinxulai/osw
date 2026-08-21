@@ -57,9 +57,9 @@ export function ProviderGrid(props: ProviderGridProps) {
                     >
                       <ProviderIcon name={provider.name} size={13} />
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{provider.name}</span>
-                      <span className="mt-0.5 block text-[11px] text-muted-foreground">{modelCount} 个模型</span>
+                    <div className="flex min-w-0 flex-1 items-baseline gap-1">
+                      <span className="min-w-0 truncate text-sm font-medium">{provider.name}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">{modelCount} 个模型</span>
                     </div>
                   </div>
                   {!provider.enabled && (

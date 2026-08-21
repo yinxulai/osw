@@ -279,7 +279,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     if (value != null) usageValues.push({ id: generateId('usage_'), requestId: id, attemptId: null, type, value, unit: 'tokens', createdTime: time })
   }
   if (usageValues.length > 0) getDb().insert(requestUsages).values(usageValues).run()
-  if (input.rawUsage != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(input.rawUsage) ?? '', createdTime: time }).run()
+  if (input.rawUsage != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: 'string', rawValue: serializeRawUsage(input.rawUsage), createdTime: time }).run()
   return { id, logicalModelId: input.logicalModelId, protocol: input.protocol, upstreamProtocol: input.upstreamProtocol ?? null, status: input.status, totalDurationMilliseconds: input.totalDurationMilliseconds, totalTokens: input.totalTokens ?? null, inputTokens: input.inputTokens ?? null, outputTokens: input.outputTokens ?? null, cachedInputTokens: input.cachedInputTokens ?? null, cacheCreationInputTokens: input.cacheCreationInputTokens ?? null, promptCacheHit: input.promptCacheHit ?? null, rawUsage: input.rawUsage ?? null, ttftMilliseconds: input.ttftMilliseconds ?? null, cacheHit: input.cacheHit ?? null, createdTime: time }
 }
 
@@ -299,7 +299,7 @@ export async function replaceRequestUsage(input: RequestUsageSnapshot): Promise<
   const scope = input.attemptId === null
     ? and(eq(requestUsages.requestId, input.requestId), isNull(requestUsages.attemptId))
     : and(eq(requestUsages.requestId, input.requestId), eq(requestUsages.attemptId, input.attemptId))
-  const values: Array<{ type: string; value: number; unit: string }> = []
+  const values: Array<{ type: string; value: number; unit: string; rawValue?: string | null }> = []
   for (const [type, value] of [
     ['inputTokens', input.inputTokens],
     ['outputTokens', input.outputTokens],
@@ -309,7 +309,7 @@ export async function replaceRequestUsage(input: RequestUsageSnapshot): Promise<
   ] as const) {
     if (value !== null) values.push({ type, value, unit: 'tokens' })
   }
-  if (input.rawUsage !== null) values.push({ type: 'raw', value: 0, unit: serializeRawUsage(input.rawUsage) ?? '' })
+  if (input.rawUsage !== null) values.push({ type: 'raw', value: 0, unit: 'string', rawValue: serializeRawUsage(input.rawUsage) })
 
   getDb().transaction(transaction => {
     transaction.delete(requestUsages).where(scope).run()
@@ -343,7 +343,7 @@ export async function listRequestUsages(requestId: string): Promise<RequestUsage
       totalTokens: value('totalTokens'),
       cachedInputTokens: value('cachedInputTokens'),
       cacheCreationInputTokens: value('cacheCreationInputTokens'),
-      rawUsage: parseRawUsage(raw?.unit),
+      rawUsage: parseRawUsage(raw?.rawValue),
     }
   })
 }
@@ -387,7 +387,7 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     }
     if (update.rawUsage !== undefined) {
       transaction.delete(requestUsages).where(and(requestScope, eq(requestUsages.type, 'raw'))).run()
-      if (update.rawUsage !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
+      if (update.rawUsage !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: 'string', rawValue: serializeRawUsage(update.rawUsage), createdTime: time }).run()
     }
   })
 }
@@ -445,8 +445,8 @@ export async function countRequestLogs(filter?: RequestLogFilter): Promise<numbe
   return row?.count ?? 0
 }
 
-export async function pruneRequestLogs(retentionCount: number, retentionDays: number | null = null): Promise<void> {
-  if ((!Number.isInteger(retentionCount) || retentionCount < 1) && (retentionDays == null || !Number.isInteger(retentionDays) || retentionDays < 1)) return
+export async function pruneRequestLogs(retentionDays: number): Promise<void> {
+  if (!Number.isInteger(retentionDays) || retentionDays < 1) return
   const db = getDb()
   db.transaction(transaction => {
     const allRows = transaction
@@ -454,16 +454,8 @@ export async function pruneRequestLogs(retentionCount: number, retentionDays: nu
       .from(requestLogs)
       .orderBy(desc(requestLogs.createdTime))
       .all()
-    const countStaleIds = Number.isInteger(retentionCount) && retentionCount > 0
-      ? allRows.slice(retentionCount).map(row => row.id)
-      : []
-    const cutoffTime = retentionDays != null && Number.isInteger(retentionDays) && retentionDays > 0
-      ? Date.now() - retentionDays * 24 * 60 * 60 * 1000
-      : null
-    const ageStaleIds = cutoffTime == null
-      ? []
-      : allRows.filter(row => row.createdTime < cutoffTime).map(row => row.id)
-    const staleIds = [...new Set([...countStaleIds, ...ageStaleIds])]
+    const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000
+    const staleIds = allRows.filter(row => row.createdTime < cutoffTime).map(row => row.id)
     if (staleIds.length === 0) return
     transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
     transaction.delete(requestUsages).where(inArray(requestUsages.requestId, staleIds)).run()
@@ -673,7 +665,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     cachedInputTokens: usageValue('cachedInputTokens'),
     cacheCreationInputTokens: usageValue('cacheCreationInputTokens'),
     promptCacheHit: metricValue('promptCacheHit') == null ? null : metricValue('promptCacheHit') === 1,
-    rawUsage: parseRawUsage(raw?.unit),
+    rawUsage: parseRawUsage(raw?.rawValue),
     ttftMilliseconds: metricValue('ttftMilliseconds'),
     cacheHit: metricValue('cacheHit') == null ? null : metricValue('cacheHit') === 1,
     createdTime: Number(row.createdTime),

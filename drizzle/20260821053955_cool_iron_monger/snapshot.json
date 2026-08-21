@@ -1141,6 +1141,16 @@
       "table": "request_usages"
     },
     {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rawValue",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
       "type": "integer",
       "notNull": true,
       "autoincrement": false,

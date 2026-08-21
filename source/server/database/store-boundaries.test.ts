@@ -12,6 +12,7 @@ import {
   getStatsSummary,
   listRequestUsages,
   replaceRequestUsage,
+  updateRequestLogStatus,
 } from './store'
 
 let temporaryDirectory: string
@@ -103,6 +104,45 @@ describe('request log persistence boundaries', () => {
     expect(await listRequestUsages(log.id)).toEqual([
       expect.objectContaining({ requestId: log.id, attemptId: null, inputTokens: 10, outputTokens: 2, totalTokens: 12 }),
     ])
+  })
+
+  it('preserves request usage when updating status without usage fields', async () => {
+    const log = await createRequestLog({
+      id: 'req_usage_status_update',
+      logicalModelId: 'model_default',
+      protocol: 'openai-responses',
+      upstreamProtocol: null,
+      status: 'pending',
+      totalDurationMilliseconds: 0,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+
+    await replaceRequestUsage({
+      requestId: log.id,
+      attemptId: null,
+      inputTokens: 12,
+      outputTokens: 4,
+      totalTokens: 16,
+      cachedInputTokens: 2,
+      cacheCreationInputTokens: null,
+      rawUsage: { input_tokens: 12, output_tokens: 4 },
+    })
+    await updateRequestLogStatus(log.id, { status: 'success', totalDurationMilliseconds: 25 })
+
+    expect(await getRequestLog(log.id)).toMatchObject({
+      status: 'success',
+      rawUsage: { input_tokens: 12, output_tokens: 4 },
+      inputTokens: 12,
+      outputTokens: 4,
+    })
   })
 })
 

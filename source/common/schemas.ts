@@ -156,8 +156,7 @@ export const SettingsSchema = z.object({
   listenHost: z.string().default('127.0.0.1'),
   listenPort: z.number().int().min(1).max(65535).default(9300),
   accessTokenReference: z.string().nullable().default(null),
-  logRetentionCount: z.number().int().positive().default(1000),
-  logRetentionDays: z.number().int().positive().nullable().default(null),
+  logRetentionDays: z.number().int().positive().default(7),
   captureRequestContent: z.boolean().default(false),
   cooldownBaseSeconds: z.number().int().positive().default(30),
   cooldownMaxSeconds: z.number().int().positive().default(300),
@@ -396,7 +395,10 @@ export const ModelStatSchema = z.object({
   requests: z.number().int().nonnegative(),
   success: z.number().int().nonnegative(),
   successRate: z.number().min(0).max(1),
+  errorRate: z.number().min(0).max(1),
   avgLatencyMs: z.number().nonnegative(),
+  avgTtftMs: z.number().nonnegative().nullable(),
+  cacheHitRate: z.number().min(0).max(1).nullable(),
 })
 export type ModelStat = z.infer<typeof ModelStatSchema>
 

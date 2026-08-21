@@ -36,7 +36,7 @@ vi.mock('./health', () => ({
 }))
 
 vi.mock('../database/store', () => ({
-  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionCount: 1_000, captureRequestContent: mocks.captureRequestContent }),
+  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionDays: 7, captureRequestContent: mocks.captureRequestContent }),
   listLogicalModels: async () => [
     { id: 'default', name: 'default', enabled: true },
     { id: 'secondary', name: 'secondary', enabled: true },

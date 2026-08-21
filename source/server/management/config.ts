@@ -106,7 +106,7 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
     settings: {
       listenHost: settings.listenHost,
       listenPort: settings.listenPort,
-      logRetentionCount: settings.logRetentionCount,
+      logRetentionDays: settings.logRetentionDays,
       cooldownBaseSeconds: settings.cooldownBaseSeconds,
       cooldownMaxSeconds: settings.cooldownMaxSeconds,
       consecutiveFailureThreshold: settings.consecutiveFailureThreshold,
@@ -160,8 +160,7 @@ const ImportConfigSchema = z.object({
     settings: z.object({
       listenHost: z.string().optional(),
       listenPort: z.number().int().min(1).max(65535).optional(),
-      logRetentionCount: z.number().int().positive().optional(),
-      logRetentionDays: z.number().int().positive().nullable().optional(),
+      logRetentionDays: z.number().int().positive().optional(),
       captureRequestContent: z.boolean().optional(),
       cooldownBaseSeconds: z.number().int().positive().optional(),
       cooldownMaxSeconds: z.number().int().positive().optional(),
@@ -244,7 +243,7 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
 
     // 1. 更新设置
     if (Object.keys(config.settings).length > 0) {
-      await updateSettings(config.settings)
+      await updateSettings({ ...config.settings, logRetentionDays: config.settings.logRetentionDays ?? undefined })
     }
 
     // 2. 处理供应商

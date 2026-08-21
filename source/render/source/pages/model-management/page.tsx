@@ -60,7 +60,7 @@ export function ModelManagementPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
               <ProviderGrid
                 providers={service.providers}
                 models={service.models}

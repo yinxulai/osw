@@ -77,7 +77,7 @@ export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]>
   return rows.map(row => ({ providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
 }
 
-export interface ModelStat { providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number }
+export interface ModelStat { providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number; avgTtftMs: number | null; cacheHits: number; cacheSamples: number }
 
 export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
   const finalAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId})`
@@ -88,8 +88,11 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
     requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
     success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
     avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
+    avgTtft: sql<number>`avg((SELECT value FROM request_metrics ttft WHERE ttft.requestId = ${requestAttempts.requestId} AND ttft.key = 'ttftMilliseconds'))`.as('avgTtft'),
+    cacheHits: sql<number>`count(distinct case when (SELECT value FROM request_metrics cache WHERE cache.requestId = ${requestAttempts.requestId} AND cache.key = 'cacheHit') = 1 then ${requestAttempts.requestId} end)`.as('cacheHits'),
+    cacheSamples: sql<number>`count(distinct case when (SELECT value FROM request_metrics cache WHERE cache.requestId = ${requestAttempts.requestId} AND cache.key = 'cacheHit') is not null then ${requestAttempts.requestId} end)`.as('cacheSamples'),
   }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, finalAttempt)).groupBy(requestAttempts.providerModelName, requestAttempts.providerId, requestAttempts.providerName).orderBy(sql`requests desc`).limit(limit).all()
-  return rows.map(row => ({ providerModelName: row.providerModelName, providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
+  return rows.map(row => ({ providerModelName: row.providerModelName, providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0, avgTtftMs: row.avgTtft ?? null, cacheHits: row.cacheHits ?? 0, cacheSamples: row.cacheSamples ?? 0 }))
 }
 
 export interface LatencyBucket { range: string; count: number }
@@ -107,8 +110,8 @@ export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBu
 export interface FailureReasonStat { reason: string; count: number }
 
 export async function getFailureReasons(sinceMs: number): Promise<FailureReasonStat[]> {
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId})`
-  const rows = getDb().select({ errorCode: requestAttempts.errorCode, count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count') }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, eq(requestAttempts.status, 'failed' as RequestStatus), finalAttempt)).groupBy(requestAttempts.errorCode).orderBy(sql`count desc`).all()
+  const finalFailedAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId} AND final_attempt.status = 'failed')`
+  const rows = getDb().select({ errorCode: requestAttempts.errorCode, count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count') }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, eq(requestLogs.status, 'failed'), eq(requestAttempts.status, 'failed' as RequestStatus), finalFailedAttempt)).groupBy(requestAttempts.errorCode).orderBy(sql`count desc`).all()
   const categories: Record<string, number> = { '超时': 0, '限流 (429)': 0, '服务错误 (5xx)': 0, '认证失败': 0, '其他': 0 }
   for (const row of rows) {
     const code = row.errorCode ?? 'UNKNOWN'

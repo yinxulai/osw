@@ -266,7 +266,6 @@ proxy.idleTimeoutSeconds
 routing.cooldownBaseSeconds
 routing.cooldownMaxSeconds
 routing.consecutiveFailureThreshold
-logging.retentionCount
 logging.retentionDays
 logging.captureRequestContent
 security.accessTokenReference

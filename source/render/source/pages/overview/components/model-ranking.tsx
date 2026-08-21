@@ -27,13 +27,16 @@ export function ModelRanking(props: ModelRankingProps) {
                 <th className="text-left font-medium py-2">Provider</th>
                 <th className="text-right font-medium py-2 pr-4">请求数</th>
                 <th className="text-right font-medium py-2">平均延迟</th>
+                <th className="text-right font-medium py-2">平均 TTFT</th>
+                <th className="text-right font-medium py-2">缓存命中</th>
+                <th className="text-right font-medium py-2">错误率</th>
                 <th className="text-right font-medium py-2 pr-4">成功率</th>
               </tr>
             </thead>
             <tbody>
               {stats.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-muted-foreground">暂无数据</td>
+                  <td colSpan={9} className="py-6 text-center text-muted-foreground">暂无数据</td>
                 </tr>
               ) : stats.map((m, idx) => (
                 <tr key={`${m.providerId}-${m.providerModelName}`} className="border-b border-border last:border-0">
@@ -49,6 +52,9 @@ export function ModelRanking(props: ModelRankingProps) {
                   <td className="py-2 text-muted-foreground">{m.providerName}</td>
                   <td className="py-2 text-right pr-4 tabular-nums">{m.requests.toLocaleString()}</td>
                   <td className="py-2 text-right tabular-nums">{formatLatency(m.avgLatencyMs)}</td>
+                  <td className="py-2 text-right tabular-nums">{m.avgTtftMs == null ? '—' : formatLatency(m.avgTtftMs)}</td>
+                  <td className="py-2 text-right tabular-nums">{m.cacheHitRate == null ? '—' : `${(m.cacheHitRate * 100).toFixed(1)}%`}</td>
+                  <td className="py-2 text-right tabular-nums">{(m.errorRate * 100).toFixed(1)}%</td>
                   <td className="py-2 text-right pr-4">
                     <Badge variant={m.successRate >= 0.95 ? 'success' : m.successRate >= 0.8 ? 'warning' : 'destructive'} className="font-normal h-5 px-1.5 text-[11px]">
                       {(m.successRate * 100).toFixed(1)}%

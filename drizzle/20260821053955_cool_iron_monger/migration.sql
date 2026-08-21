@@ -156,8 +156,9 @@ CREATE TABLE `request_usages` (
 	`requestId` text NOT NULL,
 	`attemptId` text,
 	`type` text NOT NULL,
-	`value` real NOT NULL,
 	`unit` text DEFAULT 'count' NOT NULL,
+	`value` real NOT NULL,
+	`rawValue` text,
 	`createdTime` integer NOT NULL,
 	CONSTRAINT `fk_request_usages_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)
 );

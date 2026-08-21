@@ -47,7 +47,6 @@ export function useRuntimeSettingsService() {
     const updateResult = await settingsApi.update({
       listenHost: settings.listenHost,
       listenPort: settings.listenPort,
-      logRetentionCount: settings.logRetentionCount,
       logRetentionDays: settings.logRetentionDays,
       captureRequestContent: settings.captureRequestContent,
       cooldownBaseSeconds: settings.cooldownBaseSeconds,

@@ -66,8 +66,16 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
   }))
 
   const modelStatsWithRate = modelStats.map(m => ({
-    ...m,
+    providerModelName: m.providerModelName,
+    providerId: m.providerId,
+    providerName: m.providerName,
+    requests: m.requests,
+    success: m.success,
+    avgLatencyMs: m.avgLatencyMs,
+    avgTtftMs: m.avgTtftMs,
     successRate: m.requests > 0 ? m.success / m.requests : 0,
+    errorRate: m.requests > 0 ? (m.requests - m.success) / m.requests : 0,
+    cacheHitRate: m.cacheSamples > 0 ? m.cacheHits / m.cacheSamples : null,
   }))
 
   const latencyWithPercent = latencyDistribution.map(l => ({

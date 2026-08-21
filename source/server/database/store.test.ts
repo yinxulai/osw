@@ -185,6 +185,8 @@ describe('store row mapping', () => {
     expect(await listRequestUsages(log.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ attemptId: null, inputTokens: 1200, outputTokens: 80, totalTokens: 1280, cachedInputTokens: 1024, cacheCreationInputTokens: 0, rawUsage }),
     ]))
+    const rawUsageRow = getDb().$client.prepare("SELECT unit, rawValue FROM request_usages WHERE requestId = ? AND type = 'raw'").get(log.id) as { unit: string; rawValue: string }
+    expect(rawUsageRow).toEqual({ unit: 'string', rawValue: JSON.stringify(rawUsage) })
   })
 
   it('disables active upstream models when their provider is deleted', async () => {
@@ -214,7 +216,7 @@ describe('store row mapping', () => {
     expect((await listProviderModelRoutes())[0].enabled).toBe(false)
   })
 
-  it('prunes request logs and their attempts beyond the retention count', async () => {
+  it('prunes request logs and their attempts beyond the retention days', async () => {
     const provider = await createProvider({
       name: 'Provider',
       apiKeyReference: 'key_reference',
@@ -236,6 +238,7 @@ describe('store row mapping', () => {
       ttftMilliseconds: null,
       cacheHit: null,
     })))
+    getDb().$client.prepare('UPDATE request_logs SET createdTime = ? WHERE id = ?').run(Date.now() - 3 * 24 * 60 * 60 * 1000, logs[0].id)
     await Promise.all(logs.map(log => createRequestAttempt({
       requestId: log.id,
       providerId: provider.id,
@@ -515,8 +518,8 @@ describe('health and settings', () => {
     const throwingListener = vi.fn(() => { throw new Error('listener failed') })
     const unsubscribe = onSettingsChanged(listener)
     const unsubscribeThrowing = onSettingsChanged(throwingListener)
-    await updateSettings({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: null, autoLaunch: true, cooldownBaseSeconds: undefined })
-    expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: null, autoLaunch: true })
+    await updateSettings({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, autoLaunch: true, cooldownBaseSeconds: undefined })
+    expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: 7, autoLaunch: true })
     expect(listener).toHaveBeenCalledTimes(1)
     expect(throwingListener).toHaveBeenCalledTimes(1)
     unsubscribe()
@@ -697,12 +700,12 @@ describe('request logs and analytics', () => {
     oldTimestampLog(oldId, Date.now() - 3 * 24 * 60 * 60 * 1000)
     await createRequestAttempt({ requestId: oldId, providerId: provider.id, providerModelId: 'model_old', providerName: provider.name, providerModelName: 'old', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 500, retryable: true, attemptIndex: 0, status: 'failed', durationMilliseconds: 1 })
     await createRequestLog({ ...logInput(newId), status: 'success' })
-    await pruneRequestLogs(0, 0)
+    await pruneRequestLogs(0)
     expect(await countRequestLogs()).toBe(2)
     expect(await pruneRequestLogsBefore(3)).toBe(1)
     expect(await countRequestLogs()).toBe(1)
     expect(await pruneRequestLogsBefore(0)).toBe(0)
-    await pruneRequestLogs(1, 1)
+    await pruneRequestLogs(1)
     expect(await countRequestLogs()).toBe(1)
   })
 
@@ -717,8 +720,9 @@ describe('request logs and analytics', () => {
     expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, failedCount: 1, totalTokens: 10, avgLatencyMs: 6000 })
     expect(await getModelStats(0, 0)).toHaveLength(0)
     expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelName: 'stats-model', requests: 1, avgLatencyMs: 0 })])
-    expect(await getFailureReasons(0)).toEqual([{ reason: '认证失败', count: 1 }])
     expect(await getProviderStats(0)).toEqual([expect.objectContaining({ providerName: 'Stats', failed: 1 })])
+    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_stats', providerName: provider.name, providerModelName: 'stats-model', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 200, retryable: false, attemptIndex: 1, status: 'success', durationMilliseconds: 10 })
+    expect(await getFailureReasons(0)).toEqual([{ reason: '认证失败', count: 1 }])
     expect((await getLatencyDistribution(0)).find(bucket => bucket.range === '> 5s')?.count).toBe(1)
   })
 
