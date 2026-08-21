@@ -17,6 +17,7 @@ import { GripVertical, Pencil, Plus, Server, Trash2, KeyRound, Timer } from 'luc
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { SortableProviderModel } from './sortable-provider-model'
 import { ProviderIcon } from './provider-icon'
 import { findPresetByName } from '../lib/provider-presets'
@@ -25,16 +26,18 @@ import type { Provider, ProviderModelRoute } from '@common/schemas'
 interface ProviderDetailProps {
   provider: Provider
   models: ProviderModelRoute[]
+  onToggleProviderEnabled: (enabled: boolean) => void
   onEditProvider: () => void
   onRemoveProvider: () => void
   onAddModel: () => void
   onEditModel: (model: ProviderModelRoute) => void
+  onToggleModelEnabled: (model: ProviderModelRoute, enabled: boolean) => void
   onRemoveModel: (model: ProviderModelRoute) => void
   onDragEnd: (event: DragEndEvent) => void
 }
 
 export function ProviderDetail(props: ProviderDetailProps) {
-  const { provider, models, onEditProvider, onRemoveProvider, onAddModel, onEditModel, onRemoveModel, onDragEnd } = props
+  const { provider, models, onToggleProviderEnabled, onEditProvider, onRemoveProvider, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onDragEnd } = props
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -64,7 +67,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
             </CardDescription>
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={provider.enabled}
+            onCheckedChange={onToggleProviderEnabled}
+            aria-label={`${provider.name} 启用状态`}
+          />
           <Button variant="outline" onClick={onEditProvider}>
             <Pencil size={13} /> 编辑
           </Button>
@@ -130,11 +138,16 @@ export function ProviderDetail(props: ProviderDetailProps) {
                           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <KeyRound size={10} />
                             密钥已安全配置
-                            <span className="text-muted-foreground/40">·</span>
+                            <span className="text-muted-foreground/70">·</span>
                             <Timer size={10} />
                             超时 {provider.timeoutMilliseconds / 1000} 秒
                           </div>
                         </div>
+                        <Switch
+                          checked={model.enabled}
+                          onCheckedChange={enabled => onToggleModelEnabled(model, enabled)}
+                          aria-label={`${model.modelName} 启用状态`}
+                        />
                         <Button
                           variant="ghost"
                           size="icon-sm"

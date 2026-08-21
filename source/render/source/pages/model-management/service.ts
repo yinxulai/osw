@@ -211,6 +211,16 @@ export function useModelManagementService() {
     await reload()
   }, [reload])
 
+  const updateProviderEnabled = useCallback(async (provider: Provider, enabled: boolean) => {
+    const result = await providerApi.update(provider.id, { enabled })
+    if (!result.success) {
+      toast.error(result.errorMessage)
+      return
+    }
+    toast.success(enabled ? '供应商已启用' : '供应商已停用')
+    await reload()
+  }, [reload, toast])
+
   // ========== Model CRUD ==========
 
   const openModelDialog = useCallback((model?: ProviderModelRoute) => {
@@ -347,6 +357,20 @@ export function useModelManagementService() {
     await reload()
   }, [reload])
 
+  const updateModelEnabled = useCallback(async (model: ProviderModelRoute, enabled: boolean) => {
+    const result = await providerModelApi.update(model.id, {
+      logicalModelId: 'default',
+      enabled,
+    })
+    if (!result.success) {
+      toast.error(result.errorMessage)
+      await loadModels()
+      return
+    }
+    setModels(current => current.map(item => item.id === model.id ? { ...item, enabled } : item))
+    toast.success(enabled ? '模型已启用' : '模型已停用')
+  }, [loadModels, toast])
+
   // ========== Drag & Drop ==========
 
   const handleDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
@@ -400,6 +424,7 @@ export function useModelManagementService() {
     applyPreset,
     saveProvider: runSaveProvider,
     removeProvider,
+    updateProviderEnabled,
     // Model dialog
     modelDialogOpen,
     setModelDialogOpen,
@@ -412,6 +437,7 @@ export function useModelManagementService() {
     closeModelDialog,
     saveModel: runSaveModel,
     removeModel,
+    updateModelEnabled,
     // 其他
     setSelectedProviderId,
     handleDragEnd,

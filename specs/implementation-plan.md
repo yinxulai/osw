@@ -243,8 +243,8 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 ### 阶段 6 工作项
 
-- 将 `upstream-models.ts` 重命名为 ProviderModel 管理接口；
-- 删除旧 `/api/upstream-model/*` 路径；
+- [x] 将旧 `upstream-models.ts` 管理链路收敛为 ProviderModel 管理接口；
+- [x] 删除旧 `/api/upstream-model/*` 路径，不提供兼容别名；
 - [x] 增加 Provider endpoint、ProviderModel endpoint 和转换器独立 CRUD 管理；
 - 增加调度绑定管理；
 - 队列页面改为展示当前 LogicalModel 的绑定顺序；
@@ -282,7 +282,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [ ] 使用旧数据库启动发布包，确认界面明确提示重新初始化且不会静默迁移；
 - [ ] 完成 macOS arm64/x64 菜单栏、菜单、控制台、开机自启和退出验收；
 - [ ] 完成 Windows x64 构建及安装、托盘、控制台和退出验收；
-- [ ] 删除旧迁移、旧 API、旧测试术语和旧文档状态残留；
+- [ ] 清理剩余旧测试术语和过时文档状态；旧数据库表拒绝逻辑与运行时 `upstreamUrl` 字段仍属于当前兼容边界，不能直接删除；
 - [ ] 更新正式版本号、发布说明、更新元数据和全新数据库初始化提示。
 
 ### 阶段 7 交付目标（详细）

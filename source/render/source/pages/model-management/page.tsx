@@ -60,7 +60,7 @@ export function ModelManagementPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
               <ProviderGrid
                 providers={service.providers}
                 models={service.models}
@@ -72,10 +72,12 @@ export function ModelManagementPage() {
                 <ProviderDetail
                   provider={service.selectedProvider}
                   models={service.selectedModels}
+                  onToggleProviderEnabled={enabled => void service.updateProviderEnabled(service.selectedProvider!, enabled)}
                   onEditProvider={() => service.openProviderDialog(service.selectedProvider)}
                   onRemoveProvider={() => service.removeProvider(service.selectedProvider!)}
                   onAddModel={() => service.openModelDialog()}
                   onEditModel={service.openModelDialog}
+                  onToggleModelEnabled={service.updateModelEnabled}
                   onRemoveModel={service.removeModel}
                   onDragEnd={service.handleDragEnd}
                 />

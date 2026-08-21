@@ -13,7 +13,7 @@ import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
-import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
+import { attachDownstreamAbort, attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 import { createRequestContext } from './request-context'
 import { protocolAdapters } from './protocols/registry'
 import type { ProxyObservationHooks } from './hooks'
@@ -537,32 +537,23 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
   return new Promise<AttemptOutcome>((resolve, reject) => {
     let settled = false
-    const cleanupClientListeners = () => {
-      req.removeListener('aborted', onClientAbort)
-      res.removeListener('close', onDownstreamClose)
-    }
+    let downstreamAbort: { dispose(): void } | null = null
+    const cleanupClientListeners = () => downstreamAbort?.dispose()
     const rejectCancelled = () => {
       if (settled) return
       settled = true
       cleanupClientListeners()
       reject(new ClientRequestCancelledError())
     }
-    const onClientAbort = () => {
+    const onAbort = () => {
       controller.abort()
       rejectCancelled()
-    }
-    const onDownstreamClose = () => {
-      // A normal response emits close after writableEnded; only treat an
-      // incomplete response as a client disconnect.
-      if (!res.writableEnded) onClientAbort()
     }
 
     if (req.aborted || res.destroyed) {
       rejectCancelled()
       return
     }
-    req.once('aborted', onClientAbort)
-    res.once('close', onDownstreamClose)
 
     const rejectAttempt = (error: Error) => {
       if (settled) return
@@ -577,7 +568,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       resolve(outcome)
     }
 
-    sendUpstreamRequest(parsed, options, upstreamBody, {
+    const upstreamRequest = sendUpstreamRequest(parsed, options, upstreamBody, {
       onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
@@ -836,6 +827,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       },
       onTimeout: request => request.destroy(new Error('Connection timeout')),
     })
+    downstreamAbort = attachDownstreamAbort(req, res, upstreamRequest, onAbort)
 
   })
 }

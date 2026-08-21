@@ -40,7 +40,7 @@
 
 ### 为什么用统一 POST 风格 API
 
-管理 API 全部使用 POST 方法，路径格式为 `/api/资源/动作`，不依赖 HTTP 方法和状态码语义。以下是 v0.3 目标契约；当前源码中的旧版 `/api/upstream-model/*` 等路径尚未迁移：
+管理 API 全部使用 POST 方法，路径格式为 `/api/资源/动作`，不依赖 HTTP 方法和状态码语义。以下是 v0.3 当前契约；旧版 `/api/upstream-model/*` 路径已删除，不提供兼容别名。实际注册路由以 `source/server/management/router.ts` 为准：
 
 - **简单一致**：前端调用统一用 POST，不需要区分 GET/POST/PUT/DELETE，不需要处理不同状态码
 - **结构化错误**：错误通过 body 中的 `success`、`errorCode`、`errorMessage` 表达，类型安全，前端可统一处理
@@ -76,13 +76,6 @@ one-switch/
 ├── source/
 │   ├── server/                     # 核心主体：管理服务 + 代理服务 + 存储
 │   │   ├── index.ts                # 应用服务编排：共享资源及两项服务生命周期
-│   │   ├── electron/               # Electron 宿主相关
-│   │   │   ├── tray.ts             # 菜单栏/托盘管理
-│   │   │   ├── window.ts           # 控制台窗口管理
-│   │   │   ├── autostart.ts        # 开机自启
-│   │   │   └── secrets.ts          # 系统密钥环封装（safeStorage / keytar）
-│   │   ├── preload/                # 预加载脚本
-│   │   │   └── index.ts            # 暴露最小化 API 给渲染进程（如窗口控制）
 │   │   ├── proxy/                  # 代理透传层
 │   │   │   ├── server.ts           # 代理 HTTP 监听与独立启停/重启
 │   │   │   ├── protocol.ts         # 协议识别规则（path → protocol）
@@ -106,15 +99,15 @@ one-switch/
 │   │       ├── store.ts            # 数据访问层（Drizzle 查询）
 │   │       └── client/             # 数据库客户端类型
 │   │
-│   ├── command/                    # CLI 入口（与 render 平级，同为入口点）
-│   │   └── index.ts                # 命令行模式入口：无头启动代理服务
+│   ├── command/                    # Electron 主进程、预加载与命令入口
+│   │   ├── index.ts                # Electron 应用编排
+│   │   ├── preload.ts              # 暴露最小化 API 给渲染进程
+│   │   ├── auto-launch.ts          # 开机自启
+│   │   ├── tray-manager.ts         # 菜单栏/托盘管理
+│   │   └── secret-store.ts         # 系统密钥环封装
 │   │
 │   ├── common/                     # server / command / render 共享
-│   │   ├── openapi.yaml             # 待新增：OpenAPI 3.1 管理接口定义
-│   │   ├── schema.ts               # Zod schema（可被 server 和 command 引用）
-│   │   ├── types.ts                # 从 Zod 推导的类型定义 / 共享类型
-│   │   ├── constants.ts            # 常量：默认端口、协议列表、错误类型等
-│   │   └── utils.ts                # 通用工具函数
+│   │   ├── schemas.ts              # Zod schema（可被 server、command 和 render 引用）
 │   │
 │   └── render/                     # UI 入口：React 渲染进程
 │       ├── index.html
@@ -206,7 +199,7 @@ one-switch/
 
 ### 2. 管理 API（目标模块 `source/server/management/`）
 
-统一 POST 风格 API，挂载到独立管理服务的 `/api` 前缀。管理服务默认监听 `127.0.0.1:9301`，React UI 通过轻量 HTTP client 调用。当前源码尚未按该目标目录迁移。
+统一 POST 风格 API，挂载到独立管理服务的 `/api` 前缀。管理服务默认监听 `127.0.0.1:9301`，React UI 通过轻量 HTTP client 调用。当前实现位于 `source/server/management/`，并已按该路径迁移；下方接口表保留为契约摘要，具体路由以源码注册表为准。
 
 **设计原则：**
 - 所有接口统一使用 `POST` 方法，不依赖 HTTP 方法语义

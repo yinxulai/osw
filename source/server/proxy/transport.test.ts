@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import http from 'node:http'
-import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
+import { attachDownstreamAbort, attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 
 describe('transport', () => {
   it('sends a request body and exposes the response', async () => {
@@ -105,5 +105,25 @@ describe('transport', () => {
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()))
     }
+  })
+
+  it('destroys the upstream request when the downstream request aborts', () => {
+    const downstreamRequest = new http.IncomingMessage(null as never)
+    const downstreamResponse = new http.ServerResponse(downstreamRequest)
+    const destroy = vi.fn()
+    const upstreamRequest = { destroy } as unknown as http.ClientRequest
+    let aborted = 0
+
+    const binding = attachDownstreamAbort(downstreamRequest, downstreamResponse, upstreamRequest, () => {
+      aborted++
+    })
+    downstreamRequest.emit('aborted')
+
+    expect(aborted).toBe(1)
+    expect(destroy).toHaveBeenCalledWith(expect.objectContaining({ message: 'CLIENT_REQUEST_ABORTED' }))
+
+    binding.dispose()
+    downstreamRequest.emit('aborted')
+    expect(aborted).toBe(1)
   })
 })

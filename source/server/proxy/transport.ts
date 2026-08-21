@@ -9,6 +9,10 @@ export interface ResponseIdleTimeout {
   dispose(): void
 }
 
+export interface DownstreamAbortBinding {
+  dispose(): void
+}
+
 export interface TransportHooks {
   onResponse(response: UpstreamResponse): void
   onError(error: Error): void
@@ -59,5 +63,27 @@ export function attachResponseIdleTimeout(response: UpstreamResponse, timeoutMil
   response.once('error', dispose)
   armTimer()
 
+  return { dispose }
+}
+
+export function attachDownstreamAbort(request: http.IncomingMessage, response: http.ServerResponse, upstreamRequest: http.ClientRequest, onAbort: () => void): DownstreamAbortBinding {
+  let disposed = false
+  const abort = () => {
+    if (disposed) return
+    disposed = true
+    upstreamRequest.destroy(new Error('CLIENT_REQUEST_ABORTED'))
+    onAbort()
+  }
+  const onResponseClose = () => {
+    if (!response.writableEnded) abort()
+  }
+  const dispose = () => {
+    disposed = true
+    request.removeListener('aborted', abort)
+    response.removeListener('close', onResponseClose)
+  }
+
+  request.once('aborted', abort)
+  response.once('close', onResponseClose)
   return { dispose }
 }

@@ -117,7 +117,7 @@
     --secondary: 0 0% 17%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 17%;
-    --muted-foreground: 0 0% 56%;
+    --muted-foreground: 0 0% 66%;
     --accent: 153 61% 52% / 0.12;
     --accent-foreground: 153 61% 70%;
     --destructive: 6 65% 42%;
@@ -140,7 +140,7 @@
     --inset: 0 0% 4%;
 
     --sidebar-background: 0 0% 6%;
-    --sidebar-foreground: 0 0% 72%;
+    --sidebar-foreground: 0 0% 82%;
     --sidebar-primary: 153 61% 52%;
     --sidebar-primary-foreground: 160 30% 7%;
     --sidebar-accent: 153 61% 52% / 0.12;

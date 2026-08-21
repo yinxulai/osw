@@ -281,7 +281,7 @@ export function RequestLogsPage() {
                                 HIT · {formatNumber(log.cachedInputTokens)}
                               </Badge>
                             ) : (
-                              <span className="text-muted-foreground/60">MISS</span>
+                              <span className="font-medium text-muted-foreground">MISS</span>
                             )}
                           </td>
                           <td className="px-2.5 py-2 text-right font-mono">
