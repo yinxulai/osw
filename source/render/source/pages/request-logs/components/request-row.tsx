@@ -27,7 +27,7 @@ export function RequestRow(props: RequestRowProps) {
             {lastAttempt ? lastAttempt.providerName : log.logicalModelId}
           </span>
           <span className="font-mono text-muted-foreground">
-            {lastAttempt?.upstreamModelId ?? '—'}
+            {lastAttempt?.providerModelName ?? '—'}
           </span>
           <Badge variant={succeeded ? 'success' : 'destructive'}>
             {STATUS_LABEL[log.status] ?? log.status}
@@ -59,7 +59,7 @@ export function RequestRow(props: RequestRowProps) {
                 )}
                 title={attempt.errorMessage ?? undefined}
               >
-                尝试{i + 1}: {attempt.providerName}/{attempt.upstreamModelId} ·{' '}
+                尝试{i + 1}: {attempt.providerName}/{attempt.providerModelName} ·{' '}
                 {formatDuration(attempt.durationMilliseconds)}
               </span>
             ))}

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, listAttemptsByRequest, listProviders, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
+import { countRequestLogs, listAttemptsByRequest, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,
@@ -34,9 +34,6 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
     listRequestLogs(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),
   ])
-  const providers = await listProviders()
-  const providerNameById = new Map(providers.map(p => [p.id, p.name]))
-
   const entries: RequestLogEntry[] = await Promise.all(
     logs.map(async log => {
       const attempts = await listAttemptsByRequest(log.id)
@@ -63,12 +60,17 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
             attemptIndex: a.attemptIndex,
             status: a.status,
             providerId: a.providerId,
-            providerName: providerNameById.get(a.providerId) ?? a.providerId,
-            upstreamModelId: a.upstreamModelId,
+            providerName: a.providerName,
+            providerModelId: a.providerModelId,
+            providerModelName: a.providerModelName,
+            providerProtocol: a.providerProtocol,
+            providerRequestId: a.providerRequestId,
+            url: a.url,
+            httpStatus: a.httpStatus,
+            retryable: a.retryable,
             errorCode: a.errorCode,
             errorMessage: a.errorMessage,
-            upstreamRequestId: a.upstreamRequestId,
-            errorResponse: a.errorResponse,
+            details: a.details,
             durationMilliseconds: a.durationMilliseconds,
             createdTime: a.createdTime,
           })),

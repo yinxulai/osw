@@ -821,7 +821,8 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
   })
 }
 
-type CreateRequestAttemptInput = Pick<RequestAttempt, 'requestId' | 'providerId' | 'upstreamModelId' | 'attemptIndex' | 'status' | 'durationMilliseconds'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage' | 'upstreamRequestId' | 'errorResponse'>>
+type CreateRequestAttemptInput = Omit<RequestAttempt, 'id' | 'createdTime' | 'errorCode' | 'errorMessage' | 'details'>
+  & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage' | 'details'>>
 
 export async function createRequestAttempt(input: CreateRequestAttemptInput): Promise<RequestAttempt> {
   const id = generateId('att_')
@@ -832,35 +833,29 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
       id,
       requestId: input.requestId,
       providerId: input.providerId,
-      providerModelId: input.upstreamModelId,
-      providerName: '',
-      providerModelName: input.upstreamModelId,
-      providerProtocol: null,
-      providerRequestId: input.upstreamRequestId ?? null,
-      url: '',
+      providerModelId: input.providerModelId,
+      providerName: input.providerName,
+      providerModelName: input.providerModelName,
+      providerProtocol: input.providerProtocol,
+      providerRequestId: input.providerRequestId,
+      url: input.url,
       status: input.status,
-      httpStatus: null,
-      retryable: false,
+      httpStatus: input.httpStatus,
+      retryable: input.retryable,
       attemptIndex: input.attemptIndex,
       errorCode: input.errorCode ?? null,
       errorMessage: input.errorMessage ?? null,
-      details: input.errorResponse ?? null,
+      details: input.details ?? null,
       durationMilliseconds: input.durationMilliseconds,
       createdTime: time,
     })
     .run()
   return {
     id,
-    requestId: input.requestId,
-    providerId: input.providerId,
-    upstreamModelId: input.upstreamModelId,
-    attemptIndex: input.attemptIndex,
-    status: input.status,
+    ...input,
     errorCode: input.errorCode ?? null,
     errorMessage: input.errorMessage ?? null,
-    upstreamRequestId: input.upstreamRequestId ?? null,
-    errorResponse: input.errorResponse ?? null,
-    durationMilliseconds: input.durationMilliseconds,
+    details: input.details ?? null,
     createdTime: time,
   }
 }
@@ -1273,13 +1268,19 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     id: row.id,
     requestId: row.requestId,
     providerId: row.providerId,
-    upstreamModelId: row.providerModelId,
+    providerModelId: row.providerModelId,
+    providerName: row.providerName,
+    providerModelName: row.providerModelName,
+    providerProtocol: row.providerProtocol as RequestAttempt['providerProtocol'],
+    providerRequestId: row.providerRequestId,
+    url: row.url,
     attemptIndex: row.attemptIndex,
     status: row.status as RequestStatus,
+    httpStatus: row.httpStatus,
+    retryable: row.retryable,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
-    upstreamRequestId: row.providerRequestId ?? null,
-    errorResponse: row.details ?? null,
+    details: row.details,
     durationMilliseconds: row.durationMilliseconds,
     createdTime: Number(row.createdTime),
   }

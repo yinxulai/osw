@@ -197,16 +197,18 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       lastError = err as Error
       if (isClientRequestCancelled(err)) {
         try {
+          const snapshot = resolveAttemptSnapshot(target, protocol)
           await createRequestAttempt({
             requestId,
-            providerId: target.provider.id,
-            upstreamModelId: target.model.modelName,
+            ...snapshot,
             attemptIndex,
             status: 'cancelled',
+            httpStatus: null,
+            retryable: false,
             errorCode: 'CLIENT_REQUEST_ABORTED',
             errorMessage: lastError.message,
-            upstreamRequestId: null,
-            errorResponse: null,
+            providerRequestId: null,
+            details: null,
             durationMilliseconds: Date.now() - startedAt,
           })
         } catch (logError) {
@@ -219,16 +221,18 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
       )
       try {
+        const snapshot = resolveAttemptSnapshot(target, protocol)
         await createRequestAttempt({
           requestId,
-          providerId: target.provider.id,
-          upstreamModelId: target.model.modelName,
+          ...snapshot,
           attemptIndex,
           status: 'failed',
+          httpStatus: null,
+          retryable: !res.headersSent,
           errorCode: 'UPSTREAM_ERROR',
           errorMessage: lastError.message,
-          upstreamRequestId: null,
-          errorResponse: null,
+          providerRequestId: null,
+          details: null,
           durationMilliseconds: Date.now() - startedAt,
         })
       } catch (logError) {
@@ -334,18 +338,20 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   }
 
   const attemptStartedAt = Date.now()
-  const recordAttempt = async (status: RequestStatus, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, errorResponse?: string | null) => {
+  const snapshot = resolveAttemptSnapshot(target, protocol)
+  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null) => {
     try {
       await createRequestAttempt({
         requestId,
-        providerId: provider.id,
-        upstreamModelId: model.modelName,
+        ...snapshot,
         attemptIndex,
         status,
+        httpStatus,
+        retryable,
         errorCode: errorCode ?? null,
         errorMessage: errorMessage ?? null,
-        upstreamRequestId: upstreamRequestId ?? null,
-        errorResponse: errorResponse ?? null,
+        providerRequestId: providerRequestId ?? null,
+        details: details ?? null,
         durationMilliseconds: Date.now() - attemptStartedAt,
       })
     } catch (error) {
@@ -454,7 +460,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           if (idleTimer) clearTimeout(idleTimer)
           const body = errorResponse || null
           const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
-          void recordAttempt('failed', `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
+          void recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
           resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
@@ -549,6 +555,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(responseBuffer)
         void recordAttempt(
           disposition === 'success' ? 'success' : 'failed',
+          statusCode,
+          false,
           disposition === 'success' ? undefined : `Status_${statusCode}`,
           disposition === 'success' ? undefined : `上游返回 ${statusCode}`,
           resolvedRequestId,
@@ -590,6 +598,19 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     })
 
   })
+}
+
+function resolveAttemptSnapshot(target: ModelWithProvider, clientProtocol: Protocol) {
+  const endpoint = findEndpoint(target.model, clientProtocol) ?? findConvertibleEndpoint(target.model, clientProtocol)
+  if (!endpoint) throw new Error(`模型 ${target.model.modelName} 不支持协议 ${clientProtocol}`)
+  return {
+    providerId: target.provider.id,
+    providerModelId: target.model.id,
+    providerName: target.provider.name,
+    providerModelName: target.model.modelName,
+    providerProtocol: endpoint.protocol,
+    url: resolveUpstreamUrl(endpoint.upstreamUrl),
+  }
 }
 
 const MAX_ERROR_RESPONSE_LENGTH = 64 * 1024

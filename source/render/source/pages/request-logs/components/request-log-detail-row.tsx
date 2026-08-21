@@ -142,19 +142,19 @@ function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate font-medium">{attempt.providerName}</span>
-                <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.upstreamModelId}</span>
+                <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
                 <AttemptBadge attempt={attempt} />
               </div>
-              {attempt.upstreamRequestId && (
+              {attempt.providerRequestId && (
                 <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                  上游请求 ID：{attempt.upstreamRequestId}
+                  上游请求 ID：{attempt.providerRequestId}
                 </div>
               )}
               {attempt.errorMessage && (
                 <div className="mt-1 flex flex-wrap items-start gap-x-1.5 gap-y-1 text-[11px] text-red-600 dark:text-red-400">
                   <XCircle size={11} className="mt-0.5 shrink-0" />
                   <span className="break-all">{attempt.errorMessage}</span>
-                  {attempt.errorResponse && <ErrorResponseViewer response={attempt.errorResponse} />}
+                  {attempt.details && <ErrorResponseViewer response={attempt.details} />}
                 </div>
               )}
             </div>

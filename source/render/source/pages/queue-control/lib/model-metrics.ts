@@ -14,8 +14,8 @@ interface MetricAccumulator {
   ttftCount: number
 }
 
-export function queueModelMetricKey(providerId: string, upstreamModelId: string): string {
-  return `${providerId}\0${upstreamModelId}`
+export function queueModelMetricKey(providerId: string, providerModelId: string): string {
+  return `${providerId}\0${providerModelId}`
 }
 
 export function calculateQueueModelMetrics(logs: RequestLogEntry[]): Record<string, QueueModelMetrics> {
@@ -26,7 +26,7 @@ export function calculateQueueModelMetrics(logs: RequestLogEntry[]): Record<stri
     const successfulAttempt = log.attempts.find(attempt => attempt.status === 'success')
     if (!successfulAttempt) continue
 
-    const key = queueModelMetricKey(successfulAttempt.providerId, successfulAttempt.upstreamModelId)
+    const key = queueModelMetricKey(successfulAttempt.providerId, successfulAttempt.providerModelId)
     const accumulator = accumulators.get(key) ?? {
       requestIds: new Set<string>(),
       tpsTotal: 0,

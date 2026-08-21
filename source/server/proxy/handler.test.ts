@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   markProviderModelFailure: vi.fn(),
   markProviderModelSuccess: vi.fn(),
   createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
+  createRequestAttempt: vi.fn(async (input: Record<string, unknown>) => ({ id: 'att_test', ...input })),
   updateRequestLogStatus: vi.fn(),
   pruneRequestLogs: vi.fn(),
 }))
@@ -33,7 +34,7 @@ vi.mock('./health', () => ({
 vi.mock('../database/store', () => ({
   getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionCount: 1_000 }),
   createRequestLog: mocks.createRequestLog,
-  createRequestAttempt: async (input: Record<string, unknown>) => ({ id: 'att_test', ...input }),
+  createRequestAttempt: mocks.createRequestAttempt,
   updateRequestLogStatus: mocks.updateRequestLogStatus,
   pruneRequestLogs: mocks.pruneRequestLogs,
 }))
@@ -293,6 +294,29 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_first')
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
     expect(mocks.markProviderModelSuccess).toHaveBeenCalledWith('model_second')
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerId: 'prov_first',
+      providerModelId: 'model_first',
+      providerName: 'prov_first',
+      providerModelName: 'first-model',
+      providerProtocol: 'openai-completions',
+      url: `${first.url}/configured/first`,
+      httpStatus: 503,
+      retryable: true,
+      status: 'failed',
+      details: 'first provider failed',
+    }))
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      providerId: 'prov_second',
+      providerModelId: 'model_second',
+      providerName: 'prov_second',
+      providerModelName: 'second-model',
+      providerProtocol: 'openai-completions',
+      url: `${second.url}/configured/second?version=1`,
+      httpStatus: 200,
+      retryable: false,
+      status: 'success',
+    }))
   })
 
   it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {

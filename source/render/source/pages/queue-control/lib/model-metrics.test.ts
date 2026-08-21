@@ -8,11 +8,16 @@ function attempt(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogEnt
     status: 'success',
     providerId: 'prov_primary',
     providerName: 'Primary',
-    upstreamModelId: 'model-a',
+    providerModelId: 'model-a',
+    providerModelName: 'model-a',
+    providerProtocol: 'openai-responses',
+    providerRequestId: null,
+    url: 'https://example.com/v1/responses',
+    httpStatus: 200,
+    retryable: false,
     errorCode: null,
     errorMessage: null,
-    upstreamRequestId: null,
-    errorResponse: null,
+    details: null,
     durationMilliseconds: 2_000,
     createdTime: 1,
     ...overrides,
@@ -46,8 +51,8 @@ describe('calculateQueueModelMetrics', () => {
   it('attributes metrics to the successful failover target and uses output tokens for TPS', () => {
     const metrics = calculateQueueModelMetrics([log({
       attempts: [
-        attempt({ status: 'failed', providerId: 'prov_primary', upstreamModelId: 'model-a' }),
-        attempt({ attemptIndex: 1, providerId: 'prov_backup', providerName: 'Backup', upstreamModelId: 'model-b' }),
+        attempt({ status: 'failed', providerId: 'prov_primary', providerModelId: 'model-a' }),
+        attempt({ attemptIndex: 1, providerId: 'prov_backup', providerName: 'Backup', providerModelId: 'model-b', providerModelName: 'model-b' }),
       ],
     })])
 

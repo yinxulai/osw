@@ -211,7 +211,14 @@ describe('store row mapping', () => {
     await Promise.all(logs.map(log => createRequestAttempt({
       requestId: log.id,
       providerId: provider.id,
-      upstreamModelId: 'upstream-model',
+      providerModelId: 'model_upstream',
+      providerName: provider.name,
+      providerModelName: 'upstream-model',
+      providerProtocol: 'openai-completions',
+      providerRequestId: null,
+      url: 'https://example.com/v1/chat/completions',
+      httpStatus: 200,
+      retryable: false,
       attemptIndex: 0,
       status: 'success',
       errorCode: null,
@@ -262,7 +269,14 @@ describe('store row mapping', () => {
     await createRequestAttempt({
       requestId: log.id,
       providerId: firstProvider.id,
-      upstreamModelId: 'first-model',
+      providerModelId: 'model_first',
+      providerName: firstProvider.name,
+      providerModelName: 'first-model',
+      providerProtocol: 'openai-completions',
+      providerRequestId: null,
+      url: 'https://first.example.com/v1/chat/completions',
+      httpStatus: 503,
+      retryable: true,
       attemptIndex: 0,
       status: 'failed',
       errorCode: 'Status_503',
@@ -272,7 +286,14 @@ describe('store row mapping', () => {
     await createRequestAttempt({
       requestId: log.id,
       providerId: secondProvider.id,
-      upstreamModelId: 'second-model',
+      providerModelId: 'model_second',
+      providerName: secondProvider.name,
+      providerModelName: 'second-model',
+      providerProtocol: 'openai-completions',
+      providerRequestId: null,
+      url: 'https://second.example.com/v1/chat/completions',
+      httpStatus: 200,
+      retryable: false,
       attemptIndex: 1,
       status: 'success',
       errorCode: null,
@@ -467,10 +488,13 @@ describe('request logs and analytics', () => {
   it('creates, updates, filters, counts, orders attempts, and clears nullable values', async () => {
     const provider = await createProvider(providerInput())
     const log = await createRequestLog({ ...logInput('req_crud'), status: 'failed', totalTokens: 3 })
-    const attempt1 = await createRequestAttempt({ requestId: log.id, providerId: provider.id, upstreamModelId: 'a', attemptIndex: 1, status: 'failed', errorCode: 'TIMEOUT', errorMessage: 'timeout', upstreamRequestId: 'u1', errorResponse: '{"x":1}', durationMilliseconds: 20 })
-    await createRequestAttempt({ requestId: log.id, providerId: provider.id, upstreamModelId: 'a', attemptIndex: 0, status: 'success', durationMilliseconds: 10 })
+    const attempt1 = await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_a', providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: 'u1', url: 'https://example.com/v1/chat/completions', httpStatus: 504, retryable: true, attemptIndex: 1, status: 'failed', errorCode: 'TIMEOUT', errorMessage: 'timeout', details: '{"x":1}', durationMilliseconds: 20 })
+    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_a', providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 200, retryable: false, attemptIndex: 0, status: 'success', durationMilliseconds: 10 })
     await updateRequestLogStatus(log.id, { status: 'success', totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, ttftMilliseconds: 7, promptCacheHit: false, cacheHit: true })
-    expect(await listAttemptsByRequest(log.id)).toEqual([expect.objectContaining({ attemptIndex: 0 }), expect.objectContaining({ id: attempt1.id, attemptIndex: 1, errorResponse: '{"x":1}' })])
+    expect(await listAttemptsByRequest(log.id)).toEqual([
+      expect.objectContaining({ attemptIndex: 0, providerModelId: 'model_a', httpStatus: 200, retryable: false }),
+      expect.objectContaining({ id: attempt1.id, attemptIndex: 1, providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: 'u1', url: 'https://example.com/v1/chat/completions', httpStatus: 504, retryable: true, details: '{"x":1}' }),
+    ])
     expect(await listRequestLogs(10, 0, { providerId: provider.id, protocol: 'openai-completions', status: 'success' })).toEqual([expect.objectContaining({ totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, promptCacheHit: false, cacheHit: true })])
     await updateRequestLogStatus(log.id, { totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })
     expect(await listRequestLogs(10)).toEqual([expect.objectContaining({ totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })])
@@ -482,7 +506,7 @@ describe('request logs and analytics', () => {
     const provider = await createProvider(providerInput())
     const oldId = 'req_old', newId = 'req_new'
     oldTimestampLog(oldId, Date.now() - 3 * 24 * 60 * 60 * 1000)
-    await createRequestAttempt({ requestId: oldId, providerId: provider.id, upstreamModelId: 'old', attemptIndex: 0, status: 'failed', durationMilliseconds: 1 })
+    await createRequestAttempt({ requestId: oldId, providerId: provider.id, providerModelId: 'model_old', providerName: provider.name, providerModelName: 'old', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 500, retryable: true, attemptIndex: 0, status: 'failed', durationMilliseconds: 1 })
     await createRequestLog({ ...logInput(newId), status: 'success' })
     await pruneRequestLogs(0, 0)
     expect(await countRequestLogs()).toBe(2)
@@ -499,7 +523,7 @@ describe('request logs and analytics', () => {
     expect(await getLatencyDistribution(Date.now())).toHaveLength(5)
     const provider = await createProvider(providerInput('Stats'))
     const log = await createRequestLog({ ...logInput('req_stats'), status: 'failed', totalDurationMilliseconds: 6000, totalTokens: null })
-    await createRequestAttempt({ requestId: log.id, providerId: provider.id, upstreamModelId: 'stats-model', attemptIndex: 0, status: 'failed', errorCode: 'AUTH_401', durationMilliseconds: 6000 })
+    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_stats', providerName: provider.name, providerModelName: 'stats-model', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 401, retryable: true, attemptIndex: 0, status: 'failed', errorCode: 'AUTH_401', durationMilliseconds: 6000 })
     await updateRequestLogStatus(log.id, { totalTokens: 10 })
     expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, failedCount: 1, totalTokens: 10, avgLatencyMs: 6000 })
     expect(await getModelStats(0, 0)).toHaveLength(0)
