@@ -13,6 +13,8 @@ import type {
   Settings,
   RequestLog,
   RequestAttempt,
+  RequestContent,
+  RequestContentCaptureStatus,
   RequestStatus,
   SchedulingPolicy,
 } from '@common/schemas'
@@ -857,6 +859,47 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
     errorMessage: input.errorMessage ?? null,
     details: input.details ?? null,
     createdTime: time,
+  }
+}
+
+type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime'>
+
+export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
+  const id = generateId('content_')
+  const time = now()
+  getDb().insert(requestContents).values({ id, ...input, createdTime: time, updatedTime: time }).run()
+  return { id, ...input, createdTime: time, updatedTime: time }
+}
+
+type UpdateRequestContentInput = Partial<Pick<RequestContent,
+  'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody' | 'conversions'
+>>
+
+export async function updateRequestContent(id: string, input: UpdateRequestContentInput): Promise<void> {
+  getDb().update(requestContents).set({ ...input, updatedTime: now() }).where(eq(requestContents.id, id)).run()
+}
+
+export async function listRequestContents(requestId: string): Promise<RequestContent[]> {
+  return getDb().select().from(requestContents).where(eq(requestContents.requestId, requestId)).orderBy(requestContents.createdTime).all()
+    .map(mapRequestContent)
+}
+
+function mapRequestContent(row: typeof requestContents.$inferSelect): RequestContent {
+  return {
+    id: row.id,
+    requestId: row.requestId,
+    attemptId: row.attemptId,
+    captureStatus: row.captureStatus as RequestContentCaptureStatus,
+    requestMethod: row.requestMethod,
+    requestPath: row.requestPath,
+    requestHeaders: row.requestHeaders,
+    requestBody: row.requestBody,
+    responseStatus: row.responseStatus,
+    responseHeaders: row.responseHeaders,
+    responseBody: row.responseBody,
+    conversions: row.conversions,
+    createdTime: row.createdTime,
+    updatedTime: row.updatedTime,
   }
 }
 

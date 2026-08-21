@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { createDownstreamHeaders, createUpstreamHeaders } from './headers'
+import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 
 describe('proxy headers', () => {
+  it('redacts credentials and cookies before persistence', () => {
+    expect(redactHeaders({
+      authorization: 'Bearer client-token',
+      'x-api-key': 'provider-key',
+      cookie: 'session=secret',
+      'set-cookie': ['session=secret'],
+      'content-type': 'application/json',
+    })).toEqual({
+      authorization: '[REDACTED]',
+      'x-api-key': '[REDACTED]',
+      cookie: '[REDACTED]',
+      'set-cookie': '[REDACTED]',
+      'content-type': 'application/json',
+    })
+  })
+
+  it('redacts a configured custom authentication header case-insensitively', () => {
+    expect(redactHeaders({ 'X-Custom-Key': 'provider-key', accept: 'application/json' }, ['x-custom-key'])).toEqual({
+      'X-Custom-Key': '[REDACTED]',
+      accept: 'application/json',
+    })
+  })
+
   it('preserves end-to-end request headers and replaces authentication', () => {
     const result = createUpstreamHeaders({
       accept: 'text/event-stream',

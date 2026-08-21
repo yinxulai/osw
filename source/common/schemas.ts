@@ -213,6 +213,27 @@ export const RequestAttemptSchema = z.object({
 })
 export type RequestAttempt = z.infer<typeof RequestAttemptSchema>
 
+export const RequestContentCaptureStatusSchema = z.enum(['captured', 'partial', 'disabled', 'failed'])
+export type RequestContentCaptureStatus = z.infer<typeof RequestContentCaptureStatusSchema>
+
+export const RequestContentSchema = z.object({
+  id: z.string().startsWith('content_'),
+  requestId: z.string().startsWith('req_'),
+  attemptId: z.string().startsWith('att_').nullable(),
+  captureStatus: RequestContentCaptureStatusSchema,
+  requestMethod: z.string(),
+  requestPath: z.string(),
+  requestHeaders: z.string().nullable(),
+  requestBody: z.string().nullable(),
+  responseStatus: z.number().int().nullable(),
+  responseHeaders: z.string().nullable(),
+  responseBody: z.string().nullable(),
+  conversions: z.string().nullable(),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+})
+export type RequestContent = z.infer<typeof RequestContentSchema>
+
 // ========== API 响应结构 ==========
 
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>

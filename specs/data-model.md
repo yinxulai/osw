@@ -702,6 +702,7 @@ CREATE UNIQUE INDEX idx_request_contents_attempt
 - API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏；
 - 本地工具默认不限制正文大小；开启记录后完整保存已接收的请求和响应内容；
 - 流式响应记录已接收的事件/文本片段，不阻塞代理转发，不因日志写入失败影响请求；
+- 流式响应按 transport 每次收到或写出的原始 chunk 字符串数组保存，不聚合为统一消息正文，也不重新按 SSE 事件切分；
 - 清理请求日志时，依次删除 `request_contents`、`request_usages`、`request_metrics`、`request_attempts`，最后删除 `request_logs`；
 - 导出日志必须明确包含正文和指标的开关，默认不导出正文但保留可选指标。
 

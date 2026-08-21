@@ -6,12 +6,15 @@ import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 
 const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
+  captureRequestContent: false,
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
   markProviderModelFailure: vi.fn(),
   markProviderModelSuccess: vi.fn(),
   createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
   createRequestAttempt: vi.fn(async (input: Record<string, unknown>) => ({ id: 'att_test', ...input })),
+  createRequestContent: vi.fn(async (input: Record<string, unknown>) => ({ id: input.attemptId ? 'content_attempt' : 'content_request', ...input })),
+  updateRequestContent: vi.fn(),
   updateRequestLogStatus: vi.fn(),
   pruneRequestLogs: vi.fn(),
 }))
@@ -32,9 +35,11 @@ vi.mock('./health', () => ({
 }))
 
 vi.mock('../database/store', () => ({
-  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionCount: 1_000 }),
+  getSettings: async () => ({ idleTimeoutMilliseconds: 1_000, logRetentionCount: 1_000, captureRequestContent: mocks.captureRequestContent }),
   createRequestLog: mocks.createRequestLog,
   createRequestAttempt: mocks.createRequestAttempt,
+  createRequestContent: mocks.createRequestContent,
+  updateRequestContent: mocks.updateRequestContent,
   updateRequestLogStatus: mocks.updateRequestLogStatus,
   pruneRequestLogs: mocks.pruneRequestLogs,
 }))
@@ -47,6 +52,7 @@ afterEach(async () => {
   setManualModel('auto', null)
   setManualModel('secondary', null)
   mocks.models = []
+  mocks.captureRequestContent = false
   vi.clearAllMocks()
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
 })
@@ -294,6 +300,8 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_first')
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
     expect(mocks.markProviderModelSuccess).toHaveBeenCalledWith('model_second')
+    expect(mocks.createRequestContent).not.toHaveBeenCalled()
+    expect(mocks.updateRequestContent).not.toHaveBeenCalled()
     expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
       providerId: 'prov_first',
       providerModelId: 'model_first',
@@ -616,6 +624,7 @@ describe('handleProxyRequest', () => {
   })
 
   it('streams a converted SSE response with a trailing DONE marker', async () => {
+    mocks.captureRequestContent = true
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
@@ -636,7 +645,7 @@ describe('handleProxyRequest', () => {
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer client-secret', cookie: 'session=secret' },
       body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16, stream: true }),
     })
 
@@ -657,6 +666,82 @@ describe('handleProxyRequest', () => {
       expect.any(String),
       expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
     )
+    const requestContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId == null)?.[0]
+    expect(requestContent).toEqual(expect.objectContaining({
+      captureStatus: 'partial',
+      requestHeaders: expect.any(String),
+      requestBody: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16, stream: true }),
+    }))
+    expect(JSON.parse(String(requestContent?.requestHeaders))).toEqual(expect.objectContaining({
+      authorization: '[REDACTED]',
+      cookie: '[REDACTED]',
+      'content-type': 'application/json',
+    }))
+
+    const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId === 'att_test')?.[0]
+    expect(attemptContent).toEqual(expect.objectContaining({
+      captureStatus: 'captured',
+      responseStatus: 200,
+      conversions: JSON.stringify({ schemaVersion: 1, fromProtocol: 'anthropic-messages', toProtocol: 'openai-completions' }),
+    }))
+    expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({
+      schemaVersion: 1,
+      chunks: [
+        'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"y"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\ndata: [DONE]\n\n',
+      ],
+    })
+    const requestUpdate = mocks.updateRequestContent.mock.calls.find(([id]) => id === 'content_request')?.[1]
+    expect(requestUpdate).toEqual(expect.objectContaining({ captureStatus: 'captured', responseStatus: 200 }))
+    expect(JSON.parse(String(requestUpdate?.responseBody))).toEqual({
+      schemaVersion: 1,
+      chunks: [
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"he"}}\n\n',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"y"}}\n\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":3,"output_tokens":2}}\n\ndata: [DONE]\n\n',
+      ],
+    })
+  })
+
+  it('stores received raw chunks as partial when an upstream stream is interrupted', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const firstChunk = 'data: {"type":"response.output_text.delta","delta":"partial"}\n\n'
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(firstChunk, () => {
+        setImmediate(() => res.socket?.destroy(new Error('stream interrupted')))
+      })
+    })
+    mocks.models = [
+      model('model_partial', 'prov_partial', `${upstream.url}/v1/responses`, 'partial-model', 'openai-responses'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    await fetch(`${proxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', input: 'Hello', stream: true }),
+    }).then(response => response.text()).catch(() => undefined)
+    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+      (input as { status?: string }).status === 'failed'
+    )))
+
+    expect(mocks.createRequestAttempt).toHaveBeenCalledTimes(1)
+    expect(mocks.createRequestAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'failed',
+      errorCode: 'UPSTREAM_STREAM_ERROR',
+    }))
+    const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId === 'att_test')?.[0]
+    expect(attemptContent).toEqual(expect.objectContaining({ captureStatus: 'partial', responseStatus: 200 }))
+    expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({ schemaVersion: 1, chunks: [firstChunk] })
   })
 
   it('cancels the upstream request when the local client aborts', async () => {

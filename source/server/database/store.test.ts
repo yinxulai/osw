@@ -8,6 +8,7 @@ import {
   createLogicalModel,
   createProvider,
   createRequestAttempt,
+  createRequestContent,
   createRequestLog,
   createProviderModelRoute,
   deleteLogicalModel,
@@ -34,6 +35,7 @@ import {
   listProviderModelsForLogicalModel,
   listProviders,
   listRequestLogs,
+  listRequestContents,
   listSchedulingPolicies,
   listProviderModelRoutes,
   listProviderModelRoutesByProvider,
@@ -50,6 +52,7 @@ import {
   updateLogicalModel,
   updateProvider,
   updateRequestLogStatus,
+  updateRequestContent,
   updateSettings,
   updateProviderModelRoute,
   upsertSchedulingPolicy,
@@ -485,6 +488,63 @@ describe('health and settings', () => {
 })
 
 describe('request logs and analytics', () => {
+  it('stores request-level and attempt-level content with raw streaming chunks', async () => {
+    const log = await createRequestLog(logInput('req_content'))
+    const provider = await createProvider({ ...providerInput(), enabled: true })
+    const attempt = await createRequestAttempt({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: 'model_content',
+      providerName: provider.name,
+      providerModelName: 'content-model',
+      providerProtocol: 'openai-completions',
+      providerRequestId: null,
+      url: 'https://example.com/v1/chat/completions',
+      httpStatus: 200,
+      retryable: false,
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 1,
+    })
+    await createRequestContent({
+      requestId: log.id,
+      attemptId: null,
+      captureStatus: 'captured',
+      requestMethod: 'POST',
+      requestPath: '/v1/chat/completions',
+      requestHeaders: JSON.stringify({ authorization: '[REDACTED]' }),
+      requestBody: '{"model":"auto"}',
+      responseStatus: null,
+      responseHeaders: null,
+      responseBody: null,
+      conversions: null,
+    })
+    const attemptContent = await createRequestContent({
+      requestId: log.id,
+      attemptId: attempt.id,
+      captureStatus: 'partial',
+      requestMethod: 'POST',
+      requestPath: '/v1/chat/completions',
+      requestHeaders: null,
+      requestBody: '{"model":"content-model"}',
+      responseStatus: 200,
+      responseHeaders: null,
+      responseBody: JSON.stringify({ schemaVersion: 1, chunks: ['data: {"delta":"a"}\n\n', 'data: [DONE]\n\n'] }),
+      conversions: null,
+    })
+
+    await updateRequestContent(attemptContent.id, { captureStatus: 'captured' })
+
+    expect(await listRequestContents(log.id)).toEqual([
+      expect.objectContaining({ attemptId: null, requestBody: '{"model":"auto"}', captureStatus: 'captured' }),
+      expect.objectContaining({
+        attemptId: attempt.id,
+        captureStatus: 'captured',
+        responseBody: JSON.stringify({ schemaVersion: 1, chunks: ['data: {"delta":"a"}\n\n', 'data: [DONE]\n\n'] }),
+      }),
+    ])
+  })
+
   it('creates, updates, filters, counts, orders attempts, and clears nullable values', async () => {
     const provider = await createProvider(providerInput())
     const log = await createRequestLog({ ...logInput('req_crud'), status: 'failed', totalTokens: 3 })

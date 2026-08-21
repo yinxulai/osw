@@ -17,6 +17,22 @@ const CLIENT_AUTH_HEADERS = new Set([
   'x-goog-api-key',
 ])
 
+const SENSITIVE_HEADERS = new Set([
+  ...CLIENT_AUTH_HEADERS,
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+])
+
+export function redactHeaders(source: IncomingHttpHeaders | OutgoingHttpHeaders, additionalSensitiveHeaders: string[] = []): Record<string, string | string[]> {
+  const sensitiveHeaders = new Set([...SENSITIVE_HEADERS, ...additionalSensitiveHeaders.map(name => name.toLowerCase())])
+  return Object.fromEntries(
+    Object.entries(source)
+      .filter((entry): entry is [string, string | string[]] => entry[1] !== undefined)
+      .map(([name, value]) => [name, sensitiveHeaders.has(name.toLowerCase()) ? '[REDACTED]' : value]),
+  )
+}
+
 export function createUpstreamHeaders(source: IncomingHttpHeaders, authHeaders: Record<string, string>, contentLength: number): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
   const connectionHeaders = parseConnectionHeaders(source.connection)

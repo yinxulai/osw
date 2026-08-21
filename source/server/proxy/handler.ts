@@ -5,7 +5,7 @@ import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertib
 import { convertRequestBody } from './conversion'
 import { convertResponseBody, createSseConverter } from './conversion-response'
 import { markProviderSuccess, markProviderFailure, markProviderModelSuccess, markProviderModelFailure } from './health'
-import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
+import { getSettings, createRequestLog, createRequestAttempt, createRequestContent, updateRequestContent, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
@@ -13,7 +13,7 @@ import { resolveUpstreamUrl, validateLogicalModel, rewriteRequestModel, injectUs
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
-import { createDownstreamHeaders, createUpstreamHeaders } from './headers'
+import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
 import { sendUpstreamRequest } from './transport'
 
@@ -23,6 +23,14 @@ class ClientRequestCancelledError extends Error {
   constructor() {
     super('客户端已取消请求')
     this.name = 'ClientRequestCancelledError'
+  }
+}
+
+class RecordedAttemptError extends Error {
+  constructor(cause: Error) {
+    super(cause.message)
+    this.name = 'RecordedAttemptError'
+    this.cause = cause
   }
 }
 
@@ -48,6 +56,10 @@ interface AttemptOutcome {
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
   upstreamProtocol?: Protocol | null
+  responseStatus?: number
+  responseHeaders?: string
+  responseBody?: string | null
+  captureStatus?: 'captured' | 'partial'
 }
 
 const manualModelIds = new Map<string, string>()
@@ -129,6 +141,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   const startedAt = Date.now()
+  const settings = await getSettings()
+  let requestContentId: string | null = null
 
   // 先创建请求日志（占位状态），供各 attempt 作为外键引用，结束时再更新为最终状态
   try {
@@ -149,6 +163,22 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       ttftMilliseconds: null,
       cacheHit: null,
     })
+    if (settings.captureRequestContent) {
+      const content = await createRequestContent({
+        requestId,
+        attemptId: null,
+        captureStatus: 'partial',
+        requestMethod: req.method ?? 'POST',
+        requestPath: req.url ?? '/',
+        requestHeaders: JSON.stringify(redactHeaders(req.headers)),
+        requestBody: requestBody.toString('utf8'),
+        responseStatus: null,
+        responseHeaders: null,
+        responseBody: null,
+        conversions: null,
+      })
+      requestContentId = content.id
+    }
   } catch (error) {
     console.error(`[proxy] 写入请求日志失败: ${(error as Error).message}`)
   }
@@ -167,6 +197,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         )
         await markProviderSuccess(target.provider.id)
         await markProviderModelSuccess(target.model.id)
+        await finalizeRequestContent(requestContentId, outcome)
         await finalizeRequestLog(requestId, 'success', startedAt, {
           ttftMilliseconds: outcome.ttftMilliseconds ?? null,
           inputTokens: outcome.inputTokens ?? null,
@@ -183,6 +214,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         console.log(
           `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
+        await finalizeRequestContent(requestContentId, outcome)
         await finalizeRequestLog(requestId, 'failed', startedAt)
         return
       }
@@ -222,19 +254,21 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       )
       try {
         const snapshot = resolveAttemptSnapshot(target, protocol)
-        await createRequestAttempt({
-          requestId,
-          ...snapshot,
-          attemptIndex,
-          status: 'failed',
-          httpStatus: null,
-          retryable: !res.headersSent,
-          errorCode: 'UPSTREAM_ERROR',
-          errorMessage: lastError.message,
-          providerRequestId: null,
-          details: null,
-          durationMilliseconds: Date.now() - startedAt,
-        })
+        if (!(err instanceof RecordedAttemptError)) {
+          await createRequestAttempt({
+            requestId,
+            ...snapshot,
+            attemptIndex,
+            status: 'failed',
+            httpStatus: null,
+            retryable: !res.headersSent,
+            errorCode: 'UPSTREAM_ERROR',
+            errorMessage: lastError.message,
+            providerRequestId: null,
+            details: null,
+            durationMilliseconds: Date.now() - startedAt,
+          })
+        }
       } catch (logError) {
         console.error(`[proxy] 写入请求尝试日志失败: ${(logError as Error).message}`)
       }
@@ -275,6 +309,14 @@ interface RequestLogMetrics {
   upstreamProtocol?: Protocol | null
 }
 
+interface AttemptContentInput {
+  attemptId: string | null
+  captureStatus: 'captured' | 'partial'
+  responseStatus: number | null
+  responseHeaders: http.IncomingHttpHeaders | null
+  responseBody: string | null
+}
+
 async function finalizeRequestLog(requestId: string, status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void> {
   try {
     const totalDuration = Date.now() - startedAt
@@ -297,6 +339,20 @@ async function finalizeRequestLog(requestId: string, status: RequestStatus, star
     await pruneRequestLogs(settings.logRetentionCount, settings.logRetentionDays)
   } catch (error) {
     console.error(`[proxy] 更新请求日志失败: ${(error as Error).message}`)
+  }
+}
+
+async function finalizeRequestContent(contentId: string | null, outcome: AttemptOutcome): Promise<void> {
+  if (!contentId) return
+  try {
+    await updateRequestContent(contentId, {
+      captureStatus: outcome.captureStatus ?? 'captured',
+      responseStatus: outcome.responseStatus ?? outcome.statusCode,
+      responseHeaders: outcome.responseHeaders ?? null,
+      responseBody: outcome.responseBody ?? null,
+    })
+  } catch (error) {
+    console.error(`[proxy] 更新请求正文失败: ${(error as Error).message}`)
   }
 }
 
@@ -341,7 +397,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const snapshot = resolveAttemptSnapshot(target, protocol)
   const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null) => {
     try {
-      await createRequestAttempt({
+      return await createRequestAttempt({
         requestId,
         ...snapshot,
         attemptIndex,
@@ -356,6 +412,28 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       })
     } catch (error) {
       console.error(`[proxy] 写入请求尝试日志失败: ${(error as Error).message}`)
+      return null
+    }
+  }
+
+  const recordAttemptContent = async (input: AttemptContentInput) => {
+    if (!settings.captureRequestContent || !input.attemptId) return
+    try {
+      await createRequestContent({
+        requestId,
+        attemptId: input.attemptId,
+        captureStatus: input.captureStatus,
+        requestMethod: req.method ?? 'POST',
+        requestPath: parsed.pathname + parsed.search,
+        requestHeaders: JSON.stringify(redactHeaders(headers, endpoint.customAuthHeader ? [endpoint.customAuthHeader] : [])),
+        requestBody: upstreamBody.toString('utf8'),
+        responseStatus: input.responseStatus,
+        responseHeaders: input.responseHeaders ? JSON.stringify(redactHeaders(input.responseHeaders)) : null,
+        responseBody: input.responseBody,
+        conversions: converting ? JSON.stringify({ schemaVersion: 1, fromProtocol: protocol, toProtocol: endpointProtocol }) : null,
+      })
+    } catch (error) {
+      console.error(`[proxy] 写入请求正文失败: ${(error as Error).message}`)
     }
   }
 
@@ -414,6 +492,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       let rawUsage: RawUsage | null = null
       let responseBuffer = ''
       let errorResponse = ''
+      const upstreamChunks: string[] = []
+      const downstreamChunks: string[] = []
       const upstreamRequestId = extractUpstreamRequestId(upstreamRes.headers)
 
       const contentType = String(upstreamRes.headers['content-type'] ?? '')
@@ -454,13 +534,16 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       if (disposition === 'retry') {
         upstreamRes.on('data', chunk => {
           resetIdleTimer()
-          errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))
+          const chunkText = chunk.toString('utf8')
+          if (settings.captureRequestContent) upstreamChunks.push(chunkText)
+          errorResponse = appendLimited(errorResponse, chunkText)
         })
-        upstreamRes.on('end', () => {
+        upstreamRes.on('end', async () => {
           if (idleTimer) clearTimeout(idleTimer)
           const body = errorResponse || null
           const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
-          void recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
+          const attempt = await recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
+          await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: serializeCapturedBody(isStreaming, upstreamChunks, body) })
           resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
@@ -488,6 +571,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
       upstreamRes.on('data', chunk => {
         resetIdleTimer()
+        const chunkText = chunk.toString('utf8')
+        if (settings.captureRequestContent) upstreamChunks.push(chunkText)
 
         // 记录 TTFT（第一个数据块到达时间）
         if (ttftMilliseconds === undefined) {
@@ -495,7 +580,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         }
 
         if (disposition === 'success') {
-          responseBuffer += chunk.toString('utf8')
+          responseBuffer += chunkText
 
           if (isStreaming) {
             // 流式响应：逐行解析 SSE 中的 usage 信息
@@ -510,16 +595,20 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         }
         if (!res.writableEnded) {
           if (sseConverter) {
-            const converted = sseConverter.push(chunk.toString('utf8'))
-            if (converted) res.write(converted)
+            const converted = sseConverter.push(chunkText)
+            if (converted) {
+              if (settings.captureRequestContent) downstreamChunks.push(converted)
+              res.write(converted)
+            }
           } else if (!converting || isStreaming) {
             // 非流式转换路径先缓冲原始响应，end 时统一转换后写出
+            if (settings.captureRequestContent) downstreamChunks.push(chunkText)
             res.write(chunk)
           }
         }
       })
 
-      upstreamRes.on('end', () => {
+      upstreamRes.on('end', async () => {
         if (idleTimer) clearTimeout(idleTimer)
 
         if (disposition === 'success' && responseBuffer) {
@@ -538,14 +627,24 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         if (!res.writableEnded) {
           if (sseConverter) {
             const tail = sseConverter.push('') + sseConverter.flush()
-            if (tail) res.write(tail)
+            if (tail) {
+              if (settings.captureRequestContent) downstreamChunks.push(tail)
+              res.write(tail)
+            }
             // OpenAI 客户端期望 [DONE] 结束标记
-            if (protocol === 'openai-completions') res.write('data: [DONE]\n\n')
+            if (protocol === 'openai-completions') {
+              const done = 'data: [DONE]\n\n'
+              if (settings.captureRequestContent) downstreamChunks.push(done)
+              res.write(done)
+            }
           } else if (converting && !isStreaming && responseBuffer) {
             try {
-              res.write(convertResponseBody(protocol, endpointProtocol, Buffer.from(responseBuffer)))
+              const converted = convertResponseBody(protocol, endpointProtocol, Buffer.from(responseBuffer))
+              if (settings.captureRequestContent) downstreamChunks.push(converted.toString('utf8'))
+              res.write(converted)
             } catch (error) {
               console.error(`[proxy] 响应转换失败: ${(error as Error).message}`)
+              if (settings.captureRequestContent) downstreamChunks.push(responseBuffer)
               res.write(responseBuffer)
             }
           }
@@ -553,7 +652,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         }
         const body = disposition === 'success' ? null : (errorResponse || null)
         const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(responseBuffer)
-        void recordAttempt(
+        const attempt = await recordAttempt(
           disposition === 'success' ? 'success' : 'failed',
           statusCode,
           false,
@@ -562,6 +661,11 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           resolvedRequestId,
           body,
         )
+        const upstreamResponseBody = serializeCapturedBody(isStreaming, upstreamChunks, disposition === 'success' ? responseBuffer : body)
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody })
+        const downstreamResponseBody = isStreaming
+          ? serializeStreamingChunks(downstreamChunks)
+          : (downstreamChunks.join('') || responseBuffer || body)
         resolveAttempt({
           disposition,
           statusCode,
@@ -576,12 +680,35 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           promptCacheHit: cachedInputTokens == null ? null : cachedInputTokens > 0,
           rawUsage,
           upstreamProtocol: converting ? endpointProtocol : null,
+          responseStatus: statusCode,
+          responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
+          responseBody: downstreamResponseBody,
+          captureStatus: 'captured',
         })
       })
 
       upstreamRes.on('error', err => {
         if (idleTimer) clearTimeout(idleTimer)
-        rejectAttempt(err)
+        if (settled) return
+        void (async () => {
+          const attempt = await recordAttempt(
+            'failed',
+            statusCode,
+            false,
+            'UPSTREAM_STREAM_ERROR',
+            err.message,
+            upstreamRequestId,
+            null,
+          )
+          await recordAttemptContent({
+            attemptId: attempt?.id ?? null,
+            captureStatus: 'partial',
+            responseStatus: statusCode,
+            responseHeaders: upstreamRes.headers,
+            responseBody: serializeCapturedBody(isStreaming, upstreamChunks, responseBuffer || null),
+          })
+          rejectAttempt(new RecordedAttemptError(err))
+        })()
       })
     })
 
@@ -611,6 +738,14 @@ function resolveAttemptSnapshot(target: ModelWithProvider, clientProtocol: Proto
     providerProtocol: endpoint.protocol,
     url: resolveUpstreamUrl(endpoint.upstreamUrl),
   }
+}
+
+function serializeStreamingChunks(chunks: string[]): string {
+  return JSON.stringify({ schemaVersion: 1, chunks })
+}
+
+function serializeCapturedBody(isStreaming: boolean, chunks: string[], body: string | null): string | null {
+  return isStreaming ? serializeStreamingChunks(chunks) : body
 }
 
 const MAX_ERROR_RESPONSE_LENGTH = 64 * 1024
