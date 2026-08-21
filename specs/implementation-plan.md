@@ -6,7 +6,7 @@
 
 v0.3 是一次全新的大版本迭代，不以兼容旧源码、旧 API、旧配置或旧数据库为目标。实施过程中允许直接删除旧领域模型和旧迁移逻辑；遇到旧数据库时，应用应要求用户重新初始化，而不是隐式迁移。
 
-当前状态：规格设计已定稿，源码正在 `main` 上按全新、不兼容的 v0.3 契约实施。数据库基线、公共 Schema、Store、关系模型管理、请求观测和管理界面已经完成；核心路由已落地，当前主要收尾代理适配器边界、P0 错误与并发验收，以及正式发布包端到端验证。
+当前状态：规格设计已定稿，源码正在 `main` 上按全新、不兼容的 v0.3 契约实施。数据库基线、公共 Schema、Store、关系模型管理、核心路由、请求观测和管理界面已经完成；当前主要收尾代理适配器边界和正式发布包端到端验证。
 
 ## 2. 总体目标
 
@@ -159,10 +159,10 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [x] 按客户端协议过滤原生端点和已启用转换端点；
 - [x] 同时应用 Provider 和 ProviderModel 健康状态；
 - [x] 将手动起始 ProviderModel 按 LogicalModel 隔离；
-- [ ] 补齐网络错误、401/403、429、500 与响应头前断开的 handler 级故障转移矩阵；
-- [ ] 补齐 Provider 与 ProviderModel 健康失败归因的 handler 级验收；
-- [ ] 补齐多客户端并发请求下 request、attempt、usage 与健康更新隔离测试；
-- [ ] 补齐流式请求进行中切换手动起始 ProviderModel 不影响既有请求的验收。
+- [x] 补齐网络错误、401/403、429、500 与响应头前断开的 handler 级故障转移矩阵；
+- [x] 补齐 Provider 与 ProviderModel 健康失败归因的 handler 级验收；
+- [x] 补齐多客户端并发请求下 request、attempt、usage 与健康更新隔离测试；
+- [x] 补齐流式请求进行中切换手动起始 ProviderModel 不影响既有请求的验收。
 
 ### 阶段 3 交付目标（详细）
 
@@ -275,7 +275,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [x] 执行完整 typecheck、server test、lint；
 - [x] 执行当前 macOS arm64 的完整 build，生成 DMG/zip 并通过 ad-hoc 签名校验；
 - [x] 在自动化测试中覆盖 OpenAI、Anthropic 基础代理场景（Gemini 暂不支持）；
-- [ ] 完成阶段 3 的自动切换、手动切换、健康归因、并发和流式边界矩阵；
+- [x] 完成阶段 3 的自动切换、手动切换、健康归因、并发和流式边界矩阵；
 - [x] 在自动化测试中覆盖 Host 校验、Token、密钥脱敏和正文隐私边界；
 - [ ] 使用全新用户数据目录执行发布包首次启动和空数据库初始化验收；
 - [ ] 在发布包内完成 Provider 配置、OpenAI/Anthropic 请求、故障转移、日志与正文查看端到端验收；
@@ -304,11 +304,11 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
 | 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `default` 幂等初始化已落地 |
 | 阶段 2 | 公共 Schema 与 Store | DONE | 2026-08-21 | 关系实体 CRUD、调度策略边界、Provider/ProviderModel 双层健康读写与列表契约已落地并覆盖测试 |
-| 阶段 3 | `default` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、LogicalModel 队列边界、双层冷却、模型校验、模型发现、健康失败归因和流式提交边界已落地；并发、错误矩阵和手动切换流式边界仍需补齐 handler 级验收 |
+| 阶段 3 | `default` 调度和路由 | DONE | 2026-08-21 | 绑定关系路由、LogicalModel 队列边界、双层冷却、模型校验、模型发现、故障转移与健康归因矩阵、并发隔离和手动切换流式边界均已落地并覆盖测试 |
 | 阶段 4 | 协议适配器和传输层 | IN_PROGRESS | - | 基础 transport 与测试已落地；ProtocolAdapter、request context、观测 hooks 和 handler 职责收敛待完成 |
 | 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、正文与原始 chunk 全量存储、脱敏、历史稳定性与按需详情均已落地并覆盖测试 |
 | 阶段 6 | 管理 API 和控制台 | DONE | 2026-08-21 | 调度绑定按 LogicalModel 查询、队列顺序调整、双层健康展示、关系实体 CRUD、配置脱敏与旧内部术语清理已落地 |
-| 阶段 7 | MVP 验收与发布 | IN_PROGRESS | - | typecheck、server tests、lint 和 macOS arm64 DMG/zip build 已通过；代理适配器、并发/错误矩阵、macOS x64、Windows x64 与发布包端到端仍待验收 |
+| 阶段 7 | MVP 验收与发布 | IN_PROGRESS | - | typecheck、server tests、lint、阶段 3 P0 矩阵和 macOS arm64 DMG/zip build 已通过；代理适配器、macOS x64、Windows x64 与发布包端到端仍待验收 |
 
 状态只允许使用：`TODO`、`IN_PROGRESS`、`BLOCKED`、`DONE`。阶段状态发生变化时，应同步更新本表和 `roadmap.md`。
 

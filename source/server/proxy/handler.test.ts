@@ -71,6 +71,11 @@ async function listen(handler: http.RequestListener): Promise<{ server: http.Ser
   return { server, url: `http://127.0.0.1:${port}` }
 }
 
+async function closeServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  servers.splice(servers.indexOf(server), 1)
+}
+
 async function waitFor(condition: () => boolean, timeoutMilliseconds = 1_000): Promise<void> {
   const deadline = Date.now() + timeoutMilliseconds
   while (!condition()) {
@@ -204,6 +209,105 @@ describe('handleProxyRequest', () => {
     expect(secondHandler).toHaveBeenCalledOnce()
     expect(thirdHandler).toHaveBeenCalledOnce()
     expect(firstHandler).not.toHaveBeenCalled()
+  })
+
+  it('keeps concurrent request logs, attempts, and health updates isolated', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((req, res) => {
+      const chunks: Buffer[] = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { prompt: string }
+        const delay = Number(body.prompt.slice('request-'.length)) % 3
+        setTimeout(() => {
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ prompt: body.prompt }))
+        }, delay)
+      })
+    })
+    mocks.models = [model('model_shared', 'prov_shared', `${upstream.url}/v1/completions`, 'shared-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const responses = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
+      const response = await fetch(`${proxy.url}/v1/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'default', prompt: `request-${index}` }),
+      })
+      return { status: response.status, body: await response.json() }
+    }))
+
+    expect(responses).toEqual(Array.from({ length: 8 }, (_, index) => ({
+      status: 200,
+      body: { prompt: `request-${index}` },
+    })))
+    const requestIds = mocks.createRequestLog.mock.calls.map(([input]) => input.id as string)
+    const attemptRequestIds = mocks.createRequestAttempt.mock.calls.map(([input]) => input.requestId as string)
+    expect(new Set(requestIds).size).toBe(8)
+    expect(attemptRequestIds).toHaveLength(8)
+    expect([...attemptRequestIds].sort()).toEqual([...requestIds].sort())
+    expect(mocks.markProviderSuccess).toHaveBeenCalledTimes(8)
+    expect(mocks.markProviderModelSuccess).toHaveBeenCalledTimes(8)
+    expect(mocks.markProviderFailure).not.toHaveBeenCalled()
+    expect(mocks.markProviderModelFailure).not.toHaveBeenCalled()
+  })
+
+  it('keeps an active stream on its original provider after the manual model changes', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    let finishFirstStream: (() => void) | undefined
+    const first = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write('data: {"provider":"first","part":1}\n\n')
+      finishFirstStream = () => {
+        res.write('data: {"provider":"first","part":2}\n\n')
+        res.end('data: [DONE]\n\n')
+      }
+    })
+    const secondHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.end('data: {"provider":"second"}\n\ndata: [DONE]\n\n')
+    })
+    const second = await listen(secondHandler)
+    mocks.models = [
+      model('model_first', 'prov_first', `${first.url}/v1/completions`, 'first-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const firstResponse = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'first request' }),
+    })
+    setManualModel('default', 'model_second')
+    const secondResponse = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'second request' }),
+    })
+    finishFirstStream?.()
+
+    expect(secondResponse.status).toBe(200)
+    expect(await secondResponse.text()).toBe('data: {"provider":"second"}\n\ndata: [DONE]\n\n')
+    expect(firstResponse.status).toBe(200)
+    expect(await firstResponse.text()).toBe(
+      'data: {"provider":"first","part":1}\n\ndata: {"provider":"first","part":2}\n\ndata: [DONE]\n\n',
+    )
+    expect(secondHandler).toHaveBeenCalledOnce()
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_first')
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
   })
 
   it('rejects an unavailable manual starting model without silently falling back', async () => {
@@ -359,6 +463,104 @@ describe('handleProxyRequest', () => {
       retryable: false,
       status: 'success',
     }))
+  })
+
+  it.each([
+    { status: 401, body: 'invalid api key', failureScope: 'provider' },
+    { status: 403, body: 'account forbidden', failureScope: 'provider' },
+    { status: 429, body: 'account rate limit exceeded', failureScope: 'provider' },
+    { status: 429, body: 'model capacity exhausted', failureScope: 'provider-model' },
+    { status: 500, body: 'model backend failed', failureScope: 'provider-model' },
+  ] as const)('fails over status $status and attributes health to $failureScope', async ({ status, body, failureScope }) => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const first = await listen((_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/plain' })
+      res.end(body)
+    })
+    const second = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"provider":"second"}')
+    })
+    mocks.models = [
+      model('model_failed', 'prov_failed', `${first.url}/v1/completions`, 'failed-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ provider: 'second' })
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerId: 'prov_failed',
+      providerModelId: 'model_failed',
+      httpStatus: status,
+      retryable: true,
+      status: 'failed',
+      details: body,
+    }))
+    if (failureScope === 'provider') {
+      expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_failed')
+      expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
+    } else {
+      expect(mocks.markProviderFailure).not.toHaveBeenCalledWith('prov_failed')
+      expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_failed')
+    }
+  })
+
+  it.each([
+    { name: 'connection refusal', closeBeforeRequest: true },
+    { name: 'disconnect before response headers', closeBeforeRequest: false },
+  ])('fails over after $name and records a provider failure', async ({ closeBeforeRequest }) => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const first = await listen((req, _res) => {
+      req.socket.destroy(new Error('disconnected before headers'))
+    })
+    if (closeBeforeRequest) await closeServer(first.server)
+    const second = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"provider":"second"}')
+    })
+    mocks.models = [
+      model('model_failed', 'prov_failed', `${first.url}/v1/completions`, 'failed-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ provider: 'second' })
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerId: 'prov_failed',
+      providerModelId: 'model_failed',
+      httpStatus: null,
+      retryable: true,
+      status: 'failed',
+      errorCode: 'UPSTREAM_ERROR',
+    }))
+    expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_failed')
+    expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
   })
 
   it('returns an upstream 400 response without trying the next provider', async () => {

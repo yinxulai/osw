@@ -498,6 +498,17 @@ describe('health and settings', () => {
     await recordProviderModelFailure('model_missing', 1, 1, 1)
   })
 
+  it('preserves concurrent provider and provider model failure increments', async () => {
+    const provider = await createProvider(providerInput())
+    const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'concurrent-health-test', priority: 1 })
+
+    await Promise.all(Array.from({ length: 10 }, () => recordProviderFailure(provider.id, 20, 1, 10)))
+    await Promise.all(Array.from({ length: 10 }, () => recordProviderModelFailure(providerModel.id, 20, 1, 10)))
+
+    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 10, cooldownUntilTime: null })
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 10, cooldownUntilTime: null })
+  })
+
   it('uses defaults, persists optional values, skips undefined, and isolates listener errors', async () => {
     expect(await getSettings({ listenPort: 19000 })).toMatchObject({ listenPort: 19000, listenHost: '127.0.0.1', autoLaunch: false })
     const listener = vi.fn()
