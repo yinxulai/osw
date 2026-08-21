@@ -2,20 +2,21 @@ import http from 'node:http'
 import { URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertibleEndpoint } from './router'
-import { convertRequestBody } from './conversion'
-import { convertResponseBody, createSseConverter } from './conversion-response'
 import { markProviderSuccess, markProviderFailure, markProviderModelSuccess, markProviderModelFailure } from './health'
 import { getSettings, listLogicalModels, createRequestLog, createRequestAttempt, createRequestContent, updateRequestContent, updateRequestLogStatus, replaceRequestUsage, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
-import { resolveUpstreamUrl, validateLogicalModel, rewriteRequestModel, injectUsageParams } from './request'
+import { resolveUpstreamUrl, validateLogicalModel } from './request'
 import { classifyHealthFailure, classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
 import { sendUpstreamRequest } from './transport'
+import { createRequestContext } from './request-context'
+import { protocolAdapters } from './protocols/registry'
+import type { ProxyObservationHooks } from './hooks'
 
 class ClientRequestCancelledError extends Error {
   readonly code = 'CLIENT_REQUEST_ABORTED'
@@ -93,7 +94,7 @@ export function resetManualModels(): void {
  * 处理代理请求
  * 支持自动故障切换和手动切换
  */
-export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string): Promise<void> {
+export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string, hooks: ProxyObservationHooks = {}): Promise<void> {
   const requestId = generateId('req_')
   let attemptIndex = 0
   let lastError: Error | null = null
@@ -125,6 +126,16 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
   logicalModelId = resolvedLogicalModel.id
+  const requestContext = createRequestContext({
+    requestId,
+    logicalModelId,
+    clientProtocol: protocol,
+    method: req.method ?? 'POST',
+    path: req.url ?? '/',
+    requestBody,
+    request: req,
+  })
+  await hooks.onRequestStarted?.(requestContext)
 
   // 过滤当前协议可用的候选，保持 scheduling policy 返回的优先级顺序。
   const availableModels = await getAvailableModels(logicalModelId)
@@ -206,7 +217,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       return
     }
     try {
-      const outcome = await attemptRequest(req, res, target, protocol, requestBody, requestId, attemptIndex)
+      const outcome = await attemptRequest(req, res, target, protocol, requestBody, requestId, logicalModelId, attemptIndex, hooks)
 
       if (outcome.disposition === 'success') {
         console.log(
@@ -391,7 +402,7 @@ async function finalizeLocalErrorContent(contentId: string | null, statusCode: n
   }
 }
 
-async function attemptRequest(req: IncomingMessage, res: ServerResponse, target: ModelWithProvider, protocol: Protocol, requestBody: Buffer, requestId: string, attemptIndex: number): Promise<AttemptOutcome> {
+async function attemptRequest(req: IncomingMessage, res: ServerResponse, target: ModelWithProvider, protocol: Protocol, requestBody: Buffer, requestId: string, logicalModelId: string, attemptIndex: number, hooks: ProxyObservationHooks): Promise<AttemptOutcome> {
   const { model, provider } = target
   const settings = await getSettings()
 
@@ -404,9 +415,19 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
   const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
   const parsed = new URL(targetUrl)
-  const upstreamBody = converting
-    ? injectUsageParams(convertRequestBody(protocol, endpointProtocol, requestBody, model.modelName), endpointProtocol)
-    : injectUsageParams(rewriteRequestModel(requestBody, model.modelName), endpointProtocol)
+  const controller = new AbortController()
+  const requestContext = createRequestContext({
+    requestId,
+    logicalModelId,
+    clientProtocol: protocol,
+    method: req.method ?? 'POST',
+    path: req.url ?? '/',
+    requestBody,
+    request: req,
+    signal: controller.signal,
+  })
+  const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
+  const upstreamBody = adapter.prepareRequest(requestContext, model.modelName)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
@@ -417,7 +438,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     upstreamBody.length,
   )
 
-  const controller = new AbortController()
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
     port: parsed.port || (isHttps ? 443 : 80),
@@ -456,6 +476,24 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
         rawUsage: usage?.rawUsage ?? null,
       })
+      await hooks.onAttemptRecorded?.({
+        requestId,
+        attemptIndex,
+        status,
+        httpStatus,
+        retryable,
+        providerId: target.provider.id,
+        providerModelId: target.model.id,
+        providerProtocol: snapshot.providerProtocol,
+        durationMilliseconds: Date.now() - attemptStartedAt,
+        usage: {
+          inputTokens: usage?.inputTokens ?? null,
+          outputTokens: usage?.outputTokens ?? null,
+          cachedInputTokens: usage?.cachedInputTokens ?? null,
+          cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+          rawUsage: usage?.rawUsage ?? null,
+        },
+      })
       return attempt
     } catch (error) {
       console.error(`[proxy] 写入请求尝试日志失败: ${(error as Error).message}`)
@@ -484,6 +522,13 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           convertedRequestBody: upstreamBody.toString('utf8'),
           convertedResponseBody: input.convertedResponseBody ?? null,
         }) : null,
+      })
+      await hooks.onContentCaptured?.({
+        requestId,
+        attemptId: input.attemptId,
+        captureStatus: input.captureStatus,
+        responseStatus: input.responseStatus ?? null,
+        responseBody: input.responseBody ?? null,
       })
     } catch (error) {
       console.error(`[proxy] 写入请求正文失败: ${(error as Error).message}`)
@@ -532,7 +577,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       resolve(outcome)
     }
 
-    const upstreamReq = sendUpstreamRequest(parsed, options, upstreamBody, upstreamRes => {
+    sendUpstreamRequest(parsed, options, upstreamBody, {
+      onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
@@ -636,9 +682,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       }
 
       // 协议转换流式转换器（非转换路径为透传）
-      const sseConverter = converting && isStreaming
-        ? createSseConverter(protocol, endpointProtocol)
-        : null
+      const sseConverter = converting && isStreaming ? adapter.createStreamConverter() : null
 
       upstreamRes.on('data', chunk => {
         resetIdleTimer()
@@ -710,7 +754,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
             }
           } else if (converting && !isStreaming && responseBuffer) {
             try {
-              const converted = convertResponseBody(protocol, endpointProtocol, Buffer.from(responseBuffer))
+              const converted = adapter.convertResponse(Buffer.from(responseBuffer))
               if (settings.captureRequestContent) downstreamChunks.push(converted.toString('utf8'))
               res.write(converted)
             } catch (error) {
@@ -792,18 +836,15 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           }))
         })()
       })
-    })
-
-    upstreamReq.on('error', err => {
+      },
+      onError: err => {
       if (err.name === 'AbortError' || controller.signal.aborted) {
         rejectCancelled()
         return
       }
       rejectAttempt(err)
-    })
-
-    upstreamReq.on('timeout', () => {
-      upstreamReq.destroy(new Error('Connection timeout'))
+      },
+      onTimeout: request => request.destroy(new Error('Connection timeout')),
     })
 
   })

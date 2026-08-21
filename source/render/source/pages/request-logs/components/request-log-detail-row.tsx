@@ -1,15 +1,8 @@
 import * as React from 'react'
-import { AlertCircle, Braces, CheckCircle2, ChevronDown, Copy, FileText, Gauge, LoaderCircle, Route, X, XCircle } from 'lucide-react'
+import { AlertCircle, Braces, CheckCircle2, ChevronDown, Copy, Gauge, LoaderCircle, Route, X, XCircle } from 'lucide-react'
 import type { RequestContent, RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import {
   PROTOCOL_LABEL,
@@ -66,13 +59,6 @@ interface ContentSectionProps {
   value: string
 }
 
-const captureStatusLabels: Record<RequestContent['captureStatus'], string> = {
-  captured: '已采集',
-  partial: '部分采集',
-  disabled: '采集已关闭',
-  failed: '采集失败',
-}
-
 const STATUS_BADGE: Record<string, string> = {
   pending: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
   success: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -119,31 +105,6 @@ function MetricCard(props: MetricCardProps) {
   )
 }
 
-interface ErrorResponseViewerProps {
-  response: string
-}
-
-function ErrorResponseViewer(props: ErrorResponseViewerProps) {
-  const [open, setOpen] = React.useState(false)
-
-  return (
-    <>
-      <button type="button" className="text-[10px] text-red-600 hover:text-red-500 dark:text-red-400" onClick={event => { event.stopPropagation(); setOpen(true) }}>
-        查看错误响应
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[80vh] max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>上游错误响应</DialogTitle>
-            <DialogDescription>这是该次上游请求返回的原始错误响应。</DialogDescription>
-          </DialogHeader>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">{props.response}</pre>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}
-
 function UpstreamRoute(props: UpstreamRouteProps) {
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
@@ -156,7 +117,7 @@ function UpstreamRoute(props: UpstreamRouteProps) {
       </div>
       <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
-          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
+          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(80px,.7fr)_minmax(100px,1fr)_auto_minmax(120px,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
             <div className={cn(
               'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
               attempt.status === 'success'
@@ -165,26 +126,13 @@ function UpstreamRoute(props: UpstreamRouteProps) {
             )}>
               {index + 1}
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-medium">{attempt.providerName}</span>
-                <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
-                <AttemptBadge attempt={attempt} />
-              </div>
-              {attempt.providerRequestId && (
-                <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                  上游请求 ID：{attempt.providerRequestId}
-                </div>
-              )}
-              {attempt.errorMessage && (
-                <div className="mt-1 flex flex-wrap items-start gap-x-1.5 gap-y-1 text-[11px] text-red-600 dark:text-red-400">
-                  <XCircle size={11} className="mt-0.5 shrink-0" />
-                  <span className="break-all">{attempt.errorMessage}</span>
-                  {attempt.details && <ErrorResponseViewer response={attempt.details} />}
-                </div>
-              )}
-            </div>
-            <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="truncate font-medium">{attempt.providerName}</span>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
+            <AttemptBadge attempt={attempt} />
+            <span className="truncate font-mono text-[10px] text-muted-foreground" title={attempt.providerRequestId ?? undefined}>
+              {attempt.providerRequestId ? `请求 ID：${attempt.providerRequestId}` : '请求 ID：—'}
+            </span>
+            <div className="text-right font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
             </div>
           </button>
@@ -271,64 +219,25 @@ function RequestContents(props: RequestContentsProps) {
 
   return (
     <>
-    <section className="mt-3 overflow-hidden rounded-lg bg-inset">
-      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium">
-          <FileText size={12} />
-          正文记录
-        </div>
-        {props.contents && <span className="text-[10px] text-muted-foreground">{props.contents.length} 个视角</span>}
-      </div>
-      {props.loading ? (
-        <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-muted-foreground">
-          <LoaderCircle size={14} className="animate-spin" />
-          正在加载正文记录
-        </div>
-      ) : props.error ? (
-        <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-red-600 dark:text-red-400">
-          <AlertCircle size={14} />
-          {props.error}
-        </div>
-      ) : props.contents && props.contents.length > 0 ? (
-        <div className="divide-y divide-border">
-          {props.contents.map(content => {
-            const attempt = content.attemptId
-              ? props.attempts.find(candidate => candidate.id === content.attemptId)
-              : null
-            const label = content.attemptId == null
-              ? '客户端视角'
-              : `上游尝试 ${attempt ? attempt.attemptIndex + 1 : content.attemptId}`
-            return (
-              <div key={content.id} className="grid gap-2 px-3 py-2.5 text-xs md:grid-cols-[minmax(140px,.4fr)_minmax(0,1fr)_auto] md:items-center">
-                <div>
-                  <div className="font-medium">{label}</div>
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">{captureStatusLabels[content.captureStatus]}</div>
-                </div>
-                <div className="min-w-0 font-mono text-[10px] text-muted-foreground">
-                  <div className="truncate">{content.requestMethod} {content.requestPath}</div>
-                  <div>{content.responseStatus == null ? '无响应状态' : `HTTP ${content.responseStatus}`}</div>
-                </div>
-                <div className="text-[10px] text-muted-foreground md:text-right">点击上游路由查看正文</div>
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        <div className="px-4 py-8 text-center text-xs text-muted-foreground">该请求没有正文记录</div>
-      )}
-    </section>
     <div className={cn('fixed inset-y-0 right-0 z-50 w-full max-w-xl border-l bg-card shadow-2xl transition-transform duration-200', props.selectedAttemptId ? 'translate-x-0' : 'translate-x-full')}>
       <div className="flex h-full flex-col">
-        <div className="flex items-start justify-between border-b px-5 py-4">
+        <div className="flex items-start justify-between border-b px-4 py-3">
           <div>
-            <DialogTitle className="text-sm">{selectedContent ? `上游尝试 ${(props.attempts.find(attempt => attempt.id === props.selectedAttemptId)?.attemptIndex ?? 0) + 1} 正文` : '正文记录'}</DialogTitle>
-            <DialogDescription className="mt-1 text-xs">正文按采集时的原始字符串展示。</DialogDescription>
+            <h2 className="text-xs font-medium">{selectedContent ? `上游尝试 ${(props.attempts.find(attempt => attempt.id === props.selectedAttemptId)?.attemptIndex ?? 0) + 1} 正文` : '正文详情'}</h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">按采集时的原始字符串展示</p>
           </div>
-          <button type="button" aria-label="关闭正文" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onClose}><X size={15} /></button>
+          <button type="button" aria-label="关闭正文" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onClose}><X size={14} /></button>
         </div>
-        <div className="flex-1 space-y-4 overflow-auto p-5">
-          {drawerSections.map(([label, value]) => value && <ContentSection key={label} label={label} value={value} />)}
-          {selectedContent && drawerSections.length === 0 && <div className="py-8 text-center text-xs text-muted-foreground">该尝试没有可展示的正文</div>}
+        <div className="flex-1 space-y-3 overflow-auto p-4">
+          {props.loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground"><LoaderCircle size={14} className="animate-spin" />正在加载正文</div>
+          ) : props.error ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-red-600 dark:text-red-400"><AlertCircle size={14} />{props.error}</div>
+          ) : selectedContent ? (
+            drawerSections.map(([label, value]) => value && <ContentSection key={label} label={label} value={value} />)
+          ) : props.selectedAttemptId ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">该尝试没有正文记录</div>
+          ) : null}
         </div>
       </div>
     </div>

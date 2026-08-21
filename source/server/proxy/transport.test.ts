@@ -36,4 +36,37 @@ describe('transport', () => {
       await new Promise<void>(resolve => server.close(() => resolve()))
     }
   })
+
+  it('routes request lifecycle events through transport hooks', async () => {
+    const server = http.createServer((_req, res) => {
+      res.end('ok')
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('test server did not start')
+    const url = new URL(`http://127.0.0.1:${address.port}/test`)
+    const events: string[] = []
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        sendUpstreamRequest(url, {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: 'GET',
+        }, Buffer.alloc(0), {
+          onResponse: response => {
+            events.push(`response:${response.statusCode}`)
+            response.resume()
+            response.once('end', resolve)
+          },
+          onError: reject,
+          onTimeout: request => request.destroy(new Error('test timeout')),
+        })
+      })
+      expect(events).toEqual(['response:200'])
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  })
 })
