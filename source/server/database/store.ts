@@ -1,35 +1,26 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { ProviderSchema } from '@common/schemas'
+import { and, asc, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { ProtocolConverterSchema, ProviderModelEndpointSchema } from '@common/schemas'
 import type {
-  Provider,
-  LogicalModel,
   ProviderModel,
-  ProviderEndpoint,
   ProviderModelEndpoint,
   ProtocolConverter,
   ProviderModelRoute,
   ProviderModelRouteEndpoint,
-  ProviderHealth,
   RequestLog,
   RequestAttempt,
   RequestContent,
   RequestContentCaptureStatus,
   RawUsage,
   RequestStatus,
-  SchedulingPolicy,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import {
-  logicalModels,
-  providerHealth,
   providerModels,
-  providerModelHealth,
   providerEndpoints,
   providerModelEndpoints,
+  providerModelHealth,
   protocolConverters,
-  providerSettings,
-  providers,
   requestAttempts,
   requestLogs,
   requestContents,
@@ -37,7 +28,49 @@ import {
   requestUsages,
   schedulingPolicies,
 } from './schema'
-import type { ProviderModelHealthRow } from './schema'
+
+export {
+  createProvider,
+  createProviderEndpoint,
+  deleteProvider,
+  deleteProviderEndpoint,
+  deleteProviderSetting,
+  getProvider,
+  getProviderEndpoint,
+  getProviderSetting,
+  listProviderEndpoints,
+  listProviderSettings,
+  listProviders,
+  replaceProviderEndpoints,
+  updateProvider,
+  updateProviderEndpoint,
+  upsertProviderSetting,
+} from './provider-store'
+
+export {
+  getProviderHealth,
+  getProviderModelHealth,
+  listProviderModelHealth,
+  listProviderHealth,
+  recordHealthSuccess,
+  recordProviderFailure,
+  recordProviderModelFailure,
+  recordProviderModelHealthSuccess,
+  resetProviderHealth,
+  resetProviderModelHealth,
+} from './health-store'
+
+export {
+  createLogicalModel,
+  deleteLogicalModel,
+  deleteSchedulingPolicy,
+  getLogicalModel,
+  listLogicalModels,
+  listSchedulingPolicies,
+  updateLogicalModel,
+  upsertSchedulingPolicy,
+} from './logical-model-store'
+export type { UpsertSchedulingPolicyInput } from './logical-model-store'
 
 export { getSettings, onSettingsChanged, updateSettings } from './settings-store'
 export type { SettingsDefaults } from './settings-store'
@@ -58,280 +91,11 @@ export type {
   StatsSummary,
 } from './analytics-store'
 
-// ========== Provider ==========
-
-export async function listProviders(includeDeleted = false): Promise<Provider[]> {
-  const db = getDb()
-  const rows = includeDeleted
-    ? db.select().from(providers).orderBy(desc(providers.createdTime)).all()
-    : db
-        .select()
-        .from(providers)
-        .where(isNull(providers.deletedTime))
-        .orderBy(desc(providers.createdTime))
-        .all()
-  return rows.map(mapProvider)
-}
-
-export async function getProvider(id: string): Promise<Provider | undefined> {
-  const row = getDb().select().from(providers).where(eq(providers.id, id)).get()
-  return row ? mapProvider(row) : undefined
-}
-
-type CreateProviderInput = { name: string; description?: string; apiKeyReference: string; timeoutMilliseconds?: number; enabled?: boolean }
-
-export async function createProvider(input: CreateProviderInput): Promise<Provider> {
-  const id = generateId('prov_')
-  const time = now()
-  const db = getDb()
-  const provider = ProviderSchema.parse({
-    ...input,
-    description: input.description ?? '',
-    id,
-    createdTime: time,
-    updatedTime: time,
-    deletedTime: null,
-  })
-  db.insert(providers)
-    .values({
-      id,
-      name: provider.name,
-      description: provider.description ?? '',
-      enabled: provider.enabled,
-      createdTime: time,
-      updatedTime: time,
-    })
-    .run()
-  db.insert(providerSettings).values([
-    { providerId: id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: time },
-    { providerId: id, key: 'connection.timeoutMilliseconds', value: String(provider.timeoutMilliseconds), valueType: 'number', updatedTime: time },
-  ]).run()
-  db.insert(providerHealth)
-    .values({
-      providerId: id,
-      consecutiveFailures: 0,
-      updatedTime: time,
-    })
-    .run()
-  return provider
-}
-
-export async function updateProvider(id: string, updates: Partial<Omit<Provider, 'id' | 'createdTime'>>): Promise<Provider> {
-  const db = getDb()
-  const time = now()
-  const existing = db.select().from(providers).where(eq(providers.id, id)).get()
-  if (!existing) throw new Error(`provider not found: ${id}`)
-  const next = ProviderSchema.parse({
-    ...mapProvider(existing),
-    ...updates,
-    id,
-    createdTime: Number(existing.createdTime),
-    updatedTime: time,
-  })
-  db.update(providers)
-    .set({
-      name: next.name,
-      description: next.description ?? '',
-      enabled: next.enabled,
-      updatedTime: time,
-      deletedTime: next.deletedTime,
-    })
-    .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
-    .run()
-  const providerSettingUpdates = [
-    ['security.secretReference', next.apiKeyReference, 'string'],
-    ['connection.timeoutMilliseconds', String(next.timeoutMilliseconds), 'number'],
-  ] as const
-  for (const [key, value, valueType] of providerSettingUpdates) {
-    db.insert(providerSettings).values({ providerId: id, key, value, valueType, updatedTime: time }).onConflictDoUpdate({
-      target: [providerSettings.providerId, providerSettings.key],
-      set: { value, valueType, updatedTime: time },
-    }).run()
-  }
-  return next
-}
-
-export async function listProviderEndpoints(providerId: string): Promise<ProviderEndpoint[]> {
-  return getDb()
-    .select()
-    .from(providerEndpoints)
-    .where(eq(providerEndpoints.providerId, providerId))
-    .orderBy(providerEndpoints.protocol)
-    .all()
-    .map(row => ({
-      ...row,
-      protocol: row.protocol as ProviderEndpoint['protocol'],
-      createdTime: Number(row.createdTime),
-      updatedTime: Number(row.updatedTime),
-    }))
-}
-
-export async function replaceProviderEndpoints(providerId: string, endpoints: Partial<Record<ProviderEndpoint['protocol'], string>>): Promise<ProviderEndpoint[]> {
-  const db = getDb()
-  const time = now()
-  db.transaction(transaction => {
-    transaction.update(providerEndpoints)
-      .set({ enabled: false, updatedTime: time })
-      .where(eq(providerEndpoints.providerId, providerId))
-      .run()
-
-    for (const [protocol, url] of Object.entries(endpoints)) {
-      if (!url?.trim()) continue
-      transaction.insert(providerEndpoints).values({
-        id: generateId('end_'),
-        providerId,
-        protocol,
-        url: url.trim(),
-        enabled: true,
-        createdTime: time,
-        updatedTime: time,
-      }).onConflictDoUpdate({
-        target: [providerEndpoints.providerId, providerEndpoints.protocol],
-        set: { url: url.trim(), enabled: true, updatedTime: time },
-      }).run()
-    }
-  })
-  return listProviderEndpoints(providerId)
-}
-
-export async function deleteProvider(id: string): Promise<void> {
-  const time = now()
-  const db = getDb()
-  db.transaction(transaction => {
-    transaction
-      .update(providers)
-      .set({ deletedTime: time, updatedTime: time })
-      .where(and(eq(providers.id, id), isNull(providers.deletedTime)))
-      .run()
-    transaction
-      .update(providerModels)
-      .set({ enabled: false, updatedTime: time, deletedTime: time })
-      .where(and(eq(providerModels.providerId, id), isNull(providerModels.deletedTime)))
-      .run()
-  })
-}
-
-// ========== Logical Model ==========
-
-export async function listLogicalModels(includeDeleted = false): Promise<LogicalModel[]> {
-  const db = getDb()
-  const rows = includeDeleted
-    ? db.select().from(logicalModels).orderBy(desc(logicalModels.createdTime)).all()
-    : db
-        .select()
-        .from(logicalModels)
-        .where(isNull(logicalModels.deletedTime))
-        .orderBy(desc(logicalModels.createdTime))
-        .all()
-  return rows.map(mapLogicalModel)
-}
-
-export async function getLogicalModel(id: string): Promise<LogicalModel | undefined> {
-  const row = getDb().select().from(logicalModels).where(eq(logicalModels.id, id)).get()
-  return row ? mapLogicalModel(row) : undefined
-}
-
-type CreateLogicalModelInput = Pick<LogicalModel, 'name'> & Partial<Pick<LogicalModel, 'description' | 'enabled'>>
-
-export async function createLogicalModel(input: CreateLogicalModelInput): Promise<LogicalModel> {
-  const id = generateId('model_')
-  const time = now()
-  getDb()
-    .insert(logicalModels)
-    .values({
-      id,
-      name: input.name,
-      description: input.description ?? '',
-      enabled: input.enabled ?? true,
-      createdTime: time,
-      updatedTime: time,
-    })
-    .run()
-  return {
-    id,
-    name: input.name,
-    description: input.description ?? '',
-    enabled: input.enabled ?? true,
-    createdTime: time,
-    updatedTime: time,
-    deletedTime: null,
-  }
-}
-
-export async function updateLogicalModel(id: string, updates: Partial<Omit<LogicalModel, 'id' | 'createdTime'>>): Promise<LogicalModel> {
-  const db = getDb()
-  const time = now()
-  const existing = db.select().from(logicalModels).where(eq(logicalModels.id, id)).get()
-  if (!existing) throw new Error(`logical model not found: ${id}`)
-  db.update(logicalModels)
-    .set({
-      ...(updates.name !== undefined ? { name: updates.name } : {}),
-      ...(updates.description !== undefined ? { description: updates.description } : {}),
-      ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
-      ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
-      updatedTime: time,
-    })
-    .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
-    .run()
-  const row = db.select().from(logicalModels).where(eq(logicalModels.id, id)).get()
-  return mapLogicalModel(row!)
-}
-
-export async function deleteLogicalModel(id: string): Promise<void> {
-  const time = now()
-  const db = getDb()
-  // 上游模型全局共享，删除逻辑模型不再级联删除上游模型
-  db.update(logicalModels)
-    .set({ deletedTime: time, updatedTime: time })
-    .where(and(eq(logicalModels.id, id), isNull(logicalModels.deletedTime)))
-    .run()
-}
-
-// ========== Scheduling Policy ========== 
-
-function mapSchedulingPolicy(row: typeof schedulingPolicies.$inferSelect): SchedulingPolicy {
-  return { ...row }
-}
-
-export async function listSchedulingPolicies(logicalModelId?: string): Promise<SchedulingPolicy[]> {
-  const condition = logicalModelId ? eq(schedulingPolicies.logicalModelId, logicalModelId) : undefined
-  return getDb().select().from(schedulingPolicies)
-    .where(condition)
-    .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
-    .all()
-    .map(mapSchedulingPolicy)
-}
-
-export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId' | 'providerModelId'> & Partial<Pick<SchedulingPolicy, 'strategy' | 'priority' | 'weight' | 'enabled'>>
-
-export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput): Promise<SchedulingPolicy> {
-  const time = now()
-  const values = {
-    logicalModelId: input.logicalModelId,
-    providerModelId: input.providerModelId,
-    strategy: input.strategy ?? 'priority',
-    priority: input.priority ?? 0,
-    weight: input.weight ?? 100,
-    enabled: input.enabled ?? true,
-    createdTime: time,
-    updatedTime: time,
-  }
-  getDb().insert(schedulingPolicies).values(values).onConflictDoUpdate({
-    target: [schedulingPolicies.logicalModelId, schedulingPolicies.providerModelId],
-    set: { strategy: values.strategy, priority: values.priority, weight: values.weight, enabled: values.enabled, updatedTime: time },
-  }).run()
-  return mapSchedulingPolicy(getDb().select().from(schedulingPolicies).where(and(eq(schedulingPolicies.logicalModelId, input.logicalModelId), eq(schedulingPolicies.providerModelId, input.providerModelId))).get()!)
-}
-
-export async function deleteSchedulingPolicy(logicalModelId: string, providerModelId: string): Promise<void> {
-  getDb().delete(schedulingPolicies).where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), eq(schedulingPolicies.providerModelId, providerModelId))).run()
-}
-
-// ========== Provider Model ========== 
-
 export interface ProviderModelView extends ProviderModel {
   endpoints: Array<ProviderModelEndpointView>
 }
+
+type RequestLogUpdate = import('@common/schemas').RequestLogUpdate
 
 export interface ProviderModelEndpointView extends ProviderModelEndpoint {
   protocol: ProviderModelRouteEndpoint['protocol']
@@ -361,8 +125,6 @@ export async function getProviderModel(id: string): Promise<ProviderModelView | 
   const row = getDb().select().from(providerModels).where(eq(providerModels.id, id)).get()
   return row ? mapProviderModelView(row) : undefined
 }
-
-// ========== Provider Model compatibility surface ==========
 
 export async function listProviderModelRoutesByProvider(providerId: string, includeDeleted = false): Promise<ProviderModelRoute[]> {
   const rows = getDb().select().from(providerModels)
@@ -430,217 +192,95 @@ export async function deleteProviderModelRoute(id: string): Promise<void> {
   getDb().update(providerModels).set({ enabled: false, deletedTime: time, updatedTime: time }).where(and(eq(providerModels.id, id), isNull(providerModels.deletedTime))).run()
 }
 
-// ========== Provider Health ==========
-
-export async function getProviderHealth(providerId: string): Promise<ProviderHealth | undefined> {
-  const row = getDb()
-    .select()
-    .from(providerHealth)
-    .where(eq(providerHealth.providerId, providerId))
-    .get()
-  return row ? mapHealth(row) : undefined
+export async function listProviderModelEndpoints(providerModelId: string): Promise<ProviderModelEndpoint[]> {
+  return getDb().select().from(providerModelEndpoints).where(eq(providerModelEndpoints.providerModelId, providerModelId)).orderBy(providerModelEndpoints.createdTime, providerModelEndpoints.id).all().map(row => ProviderModelEndpointSchema.parse({ ...row, createdTime: Number(row.createdTime), updatedTime: Number(row.updatedTime) }))
 }
 
-export async function listProviderHealth(): Promise<ProviderHealth[]> {
-  const rows = getDb().select().from(providerHealth).all()
-  return rows.map(mapHealth)
+export async function getProviderModelEndpoint(id: string): Promise<ProviderModelEndpoint | undefined> {
+  const row = getDb().select().from(providerModelEndpoints).where(eq(providerModelEndpoints.id, id)).get()
+  return row ? ProviderModelEndpointSchema.parse({ ...row, createdTime: Number(row.createdTime), updatedTime: Number(row.updatedTime) }) : undefined
 }
 
-export async function recordHealthSuccess(providerId: string): Promise<void> {
+type CreateProviderModelEndpointInput = Omit<ProviderModelEndpoint, 'id' | 'createdTime' | 'updatedTime' | 'url' | 'enabled'> & { url?: string | null; enabled?: boolean }
+
+export async function createProviderModelEndpoint(input: CreateProviderModelEndpointInput): Promise<ProviderModelEndpoint> {
   const time = now()
-  getDb()
-    .update(providerHealth)
-    .set({
-      consecutiveFailures: 0,
-      cooldownUntilTime: null,
-      lastSuccessTime: time,
-      updatedTime: time,
-    })
-    .where(eq(providerHealth.providerId, providerId))
-    .run()
+  const endpoint = ProviderModelEndpointSchema.parse({ ...input, id: generateId('pme_'), url: input.url ?? null, enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
+  getDb().insert(providerModelEndpoints).values(endpoint).run()
+  return endpoint
 }
 
-export async function recordProviderFailure(providerId: string, consecutiveFailureThreshold: number, cooldownBaseSeconds: number, cooldownMaxSeconds: number): Promise<void> {
+export async function updateProviderModelEndpoint(id: string, updates: Partial<Pick<ProviderModelEndpoint, 'providerEndpointId' | 'url' | 'enabled'>>): Promise<ProviderModelEndpoint> {
+  const existing = await getProviderModelEndpoint(id)
+  if (!existing) throw new Error(`provider model endpoint not found: ${id}`)
+  const endpoint = ProviderModelEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
+  getDb().update(providerModelEndpoints).set({ providerEndpointId: endpoint.providerEndpointId, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime }).where(eq(providerModelEndpoints.id, id)).run()
+  return endpoint
+}
+
+export async function deleteProviderModelEndpoint(id: string): Promise<void> {
   const db = getDb()
-  const time = now()
   db.transaction(transaction => {
-    const current = transaction
-      .select()
-      .from(providerHealth)
-      .where(eq(providerHealth.providerId, providerId))
-      .get()
-    const consecutiveFailures = (current?.consecutiveFailures ?? 0) + 1
-    let cooldownUntilTime: number | null = null
-    if (consecutiveFailures >= consecutiveFailureThreshold) {
-      const exponent = consecutiveFailures - consecutiveFailureThreshold
-      const seconds = Math.min(cooldownBaseSeconds * Math.pow(2, exponent), cooldownMaxSeconds)
-      cooldownUntilTime = time + seconds * 1000
-    }
-
-    transaction
-      .update(providerHealth)
-      .set({
-        consecutiveFailures,
-        cooldownUntilTime,
-        lastFailureTime: time,
-        updatedTime: time,
-      })
-      .where(eq(providerHealth.providerId, providerId))
-      .run()
+    transaction.delete(protocolConverters).where(eq(protocolConverters.providerModelEndpointId, id)).run()
+    transaction.delete(providerModelEndpoints).where(eq(providerModelEndpoints.id, id)).run()
   })
 }
 
-export async function resetProviderHealth(providerId: string): Promise<void> {
+export async function listProtocolConverters(providerModelEndpointId: string): Promise<ProtocolConverter[]> {
+  return getDb().select().from(protocolConverters).where(eq(protocolConverters.providerModelEndpointId, providerModelEndpointId)).orderBy(protocolConverters.createdTime, protocolConverters.id).all().map(row => ProtocolConverterSchema.parse({ ...row, createdTime: Number(row.createdTime), updatedTime: Number(row.updatedTime) }))
+}
+
+export async function getProtocolConverter(id: string): Promise<ProtocolConverter | undefined> {
+  const row = getDb().select().from(protocolConverters).where(eq(protocolConverters.id, id)).get()
+  return row ? ProtocolConverterSchema.parse({ ...row, createdTime: Number(row.createdTime), updatedTime: Number(row.updatedTime) }) : undefined
+}
+
+type CreateProtocolConverterInput = Omit<ProtocolConverter, 'id' | 'createdTime' | 'updatedTime' | 'enabled'> & { enabled?: boolean }
+
+export async function createProtocolConverter(input: CreateProtocolConverterInput): Promise<ProtocolConverter> {
   const time = now()
-  getDb()
-    .update(providerHealth)
-    .set({
-      consecutiveFailures: 0,
-      cooldownUntilTime: null,
-      lastSuccessTime: null,
-      lastFailureTime: null,
-      updatedTime: time,
-    })
-    .where(eq(providerHealth.providerId, providerId))
-    .run()
+  const converter = ProtocolConverterSchema.parse({ ...input, id: generateId('conv_'), enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
+  getDb().insert(protocolConverters).values(converter).run()
+  return converter
 }
 
-// ========== Provider Model Health ==========
-
-export async function getProviderModelHealth(providerModelId: string): Promise<ProviderModelHealthRow | undefined> {
-  return getDb()
-    .select()
-    .from(providerModelHealth)
-    .where(eq(providerModelHealth.providerModelId, providerModelId))
-    .get()
+export async function updateProtocolConverter(id: string, updates: Partial<Pick<ProtocolConverter, 'clientProtocol' | 'enabled'>>): Promise<ProtocolConverter> {
+  const existing = await getProtocolConverter(id)
+  if (!existing) throw new Error(`protocol converter not found: ${id}`)
+  const converter = ProtocolConverterSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
+  getDb().update(protocolConverters).set({ clientProtocol: converter.clientProtocol, enabled: converter.enabled, updatedTime: converter.updatedTime }).where(eq(protocolConverters.id, id)).run()
+  return converter
 }
 
-export async function recordProviderModelHealthSuccess(providerModelId: string): Promise<void> {
-  const time = now()
-  getDb()
-    .update(providerModelHealth)
-    .set({
-      consecutiveFailures: 0,
-      cooldownUntilTime: null,
-      lastSuccessTime: time,
-      updatedTime: time,
-    })
-    .where(eq(providerModelHealth.providerModelId, providerModelId))
-    .run()
+export async function deleteProtocolConverter(id: string): Promise<void> {
+  getDb().delete(protocolConverters).where(eq(protocolConverters.id, id)).run()
 }
-
-export async function recordProviderModelFailure(providerModelId: string, consecutiveFailureThreshold: number, cooldownBaseSeconds: number, cooldownMaxSeconds: number): Promise<void> {
-  const db = getDb()
-  const time = now()
-  db.transaction(transaction => {
-    const current = transaction
-      .select()
-      .from(providerModelHealth)
-      .where(eq(providerModelHealth.providerModelId, providerModelId))
-      .get()
-    const consecutiveFailures = (current?.consecutiveFailures ?? 0) + 1
-    let cooldownUntilTime: number | null = null
-    if (consecutiveFailures >= consecutiveFailureThreshold) {
-      const exponent = consecutiveFailures - consecutiveFailureThreshold
-      const seconds = Math.min(cooldownBaseSeconds * Math.pow(2, exponent), cooldownMaxSeconds)
-      cooldownUntilTime = time + seconds * 1000
-    }
-
-    transaction
-      .update(providerModelHealth)
-      .set({
-        consecutiveFailures,
-        cooldownUntilTime,
-        lastFailureTime: time,
-        updatedTime: time,
-      })
-      .where(eq(providerModelHealth.providerModelId, providerModelId))
-      .run()
-  })
-}
-
-export async function resetProviderModelHealth(providerModelId: string): Promise<void> {
-  const time = now()
-  getDb()
-    .update(providerModelHealth)
-    .set({
-      consecutiveFailures: 0,
-      cooldownUntilTime: null,
-      lastSuccessTime: null,
-      lastFailureTime: null,
-      updatedTime: time,
-    })
-    .where(eq(providerModelHealth.providerModelId, providerModelId))
-    .run()
-}
-
-// ========== Request Log ==========
 
 type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
 
 export async function createRequestLog(input: CreateRequestLogInput): Promise<RequestLog> {
   const id = input.id ?? generateId('req_')
   const time = now()
-  getDb()
-    .insert(requestLogs)
-    .values({
-      id,
-      logicalModelId: input.logicalModelId,
-      protocol: input.protocol,
-      status: input.status,
-      metadata: null,
-      createdTime: time,
-    })
-    .run()
-  const metricValues = [
-    ['durationMilliseconds', input.totalDurationMilliseconds, 'milliseconds'],
-    ['ttftMilliseconds', input.ttftMilliseconds, 'milliseconds'],
-    ['promptCacheHit', input.promptCacheHit == null ? null : input.promptCacheHit ? 1 : 0, 'boolean'],
-    ['cacheHit', input.cacheHit == null ? null : input.cacheHit ? 1 : 0, 'boolean'],
-  ].flatMap(([key, value, unit]) => value == null ? [] : [{ requestId: id, key, value, unit, updatedTime: time }])
+  getDb().insert(requestLogs).values({ id, logicalModelId: input.logicalModelId, protocol: input.protocol, status: input.status, metadata: null, createdTime: time }).run()
+  const metricValues: Array<typeof requestMetrics.$inferInsert> = []
+  if (input.totalDurationMilliseconds != null) metricValues.push({ requestId: id, key: 'durationMilliseconds', value: input.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: time })
+  if (input.ttftMilliseconds != null) metricValues.push({ requestId: id, key: 'ttftMilliseconds', value: input.ttftMilliseconds, unit: 'milliseconds', updatedTime: time })
+  if (input.promptCacheHit != null) metricValues.push({ requestId: id, key: 'promptCacheHit', value: input.promptCacheHit ? 1 : 0, unit: 'boolean', updatedTime: time })
+  if (input.cacheHit != null) metricValues.push({ requestId: id, key: 'cacheHit', value: input.cacheHit ? 1 : 0, unit: 'boolean', updatedTime: time })
   getDb().insert(requestMetrics).values(metricValues).run()
-  const usageValues = [
+  const usageValues: Array<typeof requestUsages.$inferInsert> = []
+  for (const [type, value] of [
     ['inputTokens', input.inputTokens],
     ['outputTokens', input.outputTokens],
     ['totalTokens', input.totalTokens],
     ['cachedInputTokens', input.cachedInputTokens],
     ['cacheCreationInputTokens', input.cacheCreationInputTokens],
-  ].flatMap(([type, value]) => value == null ? [] : [{ id: generateId('usage_'), requestId: id, attemptId: null, type, value, unit: 'tokens', createdTime: time }])
+  ] as const) {
+    if (value != null) usageValues.push({ id: generateId('usage_'), requestId: id, attemptId: null, type, value, unit: 'tokens', createdTime: time })
+  }
   if (usageValues.length > 0) getDb().insert(requestUsages).values(usageValues).run()
   if (input.rawUsage != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(input.rawUsage) ?? '', createdTime: time }).run()
-  return {
-    id,
-    logicalModelId: input.logicalModelId,
-    protocol: input.protocol,
-    upstreamProtocol: input.upstreamProtocol ?? null,
-    status: input.status,
-    totalDurationMilliseconds: input.totalDurationMilliseconds,
-    totalTokens: input.totalTokens ?? null,
-    inputTokens: input.inputTokens ?? null,
-    outputTokens: input.outputTokens ?? null,
-    cachedInputTokens: input.cachedInputTokens ?? null,
-    cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
-    promptCacheHit: input.promptCacheHit ?? null,
-    rawUsage: input.rawUsage ?? null,
-    ttftMilliseconds: input.ttftMilliseconds ?? null,
-    cacheHit: input.cacheHit ?? null,
-    createdTime: time,
-  }
-}
-
-export interface RequestLogUpdate {
-  status?: RequestStatus
-  upstreamProtocol?: RequestLog['upstreamProtocol']
-  totalDurationMilliseconds?: number
-  totalTokens?: number | null
-  inputTokens?: number | null
-  outputTokens?: number | null
-  cachedInputTokens?: number | null
-  cacheCreationInputTokens?: number | null
-  promptCacheHit?: boolean | null
-  rawUsage?: RequestLog['rawUsage']
-  ttftMilliseconds?: number | null
-  cacheHit?: boolean | null
+  return { id, logicalModelId: input.logicalModelId, protocol: input.protocol, upstreamProtocol: input.upstreamProtocol ?? null, status: input.status, totalDurationMilliseconds: input.totalDurationMilliseconds, totalTokens: input.totalTokens ?? null, inputTokens: input.inputTokens ?? null, outputTokens: input.outputTokens ?? null, cachedInputTokens: input.cachedInputTokens ?? null, cacheCreationInputTokens: input.cacheCreationInputTokens ?? null, promptCacheHit: input.promptCacheHit ?? null, rawUsage: input.rawUsage ?? null, ttftMilliseconds: input.ttftMilliseconds ?? null, cacheHit: input.cacheHit ?? null, createdTime: time }
 }
 
 export interface RequestUsageSnapshot {
@@ -835,7 +475,7 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
     const staleRows = transaction
       .select({ id: requestLogs.id })
       .from(requestLogs)
-      .where(sql`${requestLogs.createdTime} < ${cutoffTime}`)
+      .where(lt(requestLogs.createdTime, cutoffTime))
       .all()
     const staleIds = staleRows.map(row => row.id)
     if (staleIds.length === 0) return 0
@@ -940,34 +580,6 @@ export async function listAttemptsByRequest(requestId: string): Promise<RequestA
 
 // ========== Row mappers ==========
 
-function mapProvider(row: typeof providers.$inferSelect): Provider {
-  const settingRows = getDb().select().from(providerSettings).where(eq(providerSettings.providerId, row.id)).all()
-  const values = new Map(settingRows.map(setting => [setting.key, setting.value]))
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    apiKeyReference: values.get('security.secretReference') ?? '',
-    timeoutMilliseconds: Number(values.get('connection.timeoutMilliseconds') ?? 30000),
-    enabled: row.enabled,
-    createdTime: Number(row.createdTime),
-    updatedTime: Number(row.updatedTime),
-    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
-  }
-}
-
-function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    enabled: row.enabled,
-    createdTime: Number(row.createdTime),
-    updatedTime: Number(row.updatedTime),
-    deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
-  }
-}
-
 function mapProviderModelView(row: typeof providerModels.$inferSelect): ProviderModelView {
   const endpointRows = getDb().select({ endpoint: providerEndpoints, binding: providerModelEndpoints })
     .from(providerModelEndpoints)
@@ -1017,17 +629,6 @@ function mapProviderModel(row: typeof providerModels.$inferSelect): ProviderMode
     createdTime: Number(row.createdTime),
     updatedTime: Number(row.updatedTime),
     deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
-  }
-}
-
-function mapHealth(row: typeof providerHealth.$inferSelect): ProviderHealth {
-  return {
-    providerId: row.providerId,
-    consecutiveFailures: row.consecutiveFailures,
-    cooldownUntilTime: row.cooldownUntilTime === null ? null : Number(row.cooldownUntilTime),
-    lastSuccessTime: row.lastSuccessTime === null ? null : Number(row.lastSuccessTime),
-    lastFailureTime: row.lastFailureTime === null ? null : Number(row.lastFailureTime),
-    updatedTime: Number(row.updatedTime),
   }
 }
 

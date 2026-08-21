@@ -51,7 +51,7 @@ source/server/
 │   └── headers.ts
 └── infrastructure/
     ├── database/
-    │   ├── index.ts                 # node:sqlite 连接、幂等建表
+    │   ├── index.ts                 # node:sqlite 连接、Drizzle migration 与 seed
     │   ├── schema.ts                # Drizzle 表定义
     │   └── store.ts                 # 数据访问层（Drizzle 查询）
     └── secrets/

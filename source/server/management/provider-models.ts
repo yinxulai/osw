@@ -4,7 +4,7 @@ import { ProtocolSchema } from '@common/schemas'
 import {
   getProviderModel,
   listProviderModels,
-  listProviderModelRoutes,
+  listProviderModelsForLogicalModel,
   listSchedulingPolicies,
   createProviderModelRoute,
   updateProviderModelRoute,
@@ -34,8 +34,8 @@ async function handleListProviderModels(_req: IncomingMessage, res: ServerRespon
 }
 
 async function handleListProviderModelQueue(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  z.object({ includeDeleted: z.boolean().optional() }).parse(body)
-  sendSuccess(res, await listProviderModelRoutes(true))
+  const input = z.object({ logicalModelId: z.string().min(1).default('default'), includeDeleted: z.boolean().optional() }).parse(body)
+  sendSuccess(res, await listProviderModelsForLogicalModel(input.logicalModelId, input.includeDeleted ?? false))
 }
 
 const GetProviderModelSchema = z.object({ id: z.string().min(1) })
@@ -116,7 +116,7 @@ const SchedulingPolicyUpdateSchema = z.object({
   providerModelId: z.string().min(1),
   strategy: z.string().min(1).optional(),
   priority: z.number().int().optional(),
-  weight: z.number().int().nonnegative().optional(),
+  weight: z.number().int().positive().optional(),
   enabled: z.boolean().optional(),
 })
 async function handleUpdateSchedulingPolicy(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

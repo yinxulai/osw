@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { listProviderHealth } from '../database/store'
+import { listProviderHealth, listProviderModelHealth } from '../database/store'
 import { getManualModel, setManualModel } from '../proxy/handler'
 import {
   getProxyServerStatus,
@@ -35,7 +35,8 @@ function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unk
 }
 
 async function handleListHealth(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  sendSuccess(res, await listProviderHealth())
+  const [providers, providerModels] = await Promise.all([listProviderHealth(), listProviderModelHealth()])
+  sendSuccess(res, { providers, providerModels })
 }
 
 async function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {

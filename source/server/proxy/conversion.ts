@@ -219,22 +219,22 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
  * model 字段会被替换为上游模型 ID。
  * 不支持的转换方向抛出 Error。
  */
-export function convertRequestBody(clientProtocol: Protocol, endpointProtocol: Protocol, requestBody: Buffer, upstreamModelId: string): Buffer {
+export function convertRequestBody(clientProtocol: Protocol, endpointProtocol: Protocol, requestBody: Buffer, providerModelName: string): Buffer {
   if (clientProtocol === endpointProtocol) {
     // 原生路径：仅重写 model
     const payload = JSON.parse(requestBody.toString('utf8')) as Json
-    return Buffer.from(JSON.stringify({ ...payload, model: upstreamModelId }))
+    return Buffer.from(JSON.stringify({ ...payload, model: providerModelName }))
   }
 
   const payload = JSON.parse(requestBody.toString('utf8')) as Json
 
   let converted: Json
   if (clientProtocol === 'anthropic-messages' && endpointProtocol === 'openai-completions') {
-    converted = anthropicToOpenAiRequest(payload, upstreamModelId)
+    converted = anthropicToOpenAiRequest(payload, providerModelName)
   } else if (clientProtocol === 'openai-responses' && endpointProtocol === 'openai-completions') {
-    converted = responsesToOpenAiRequest(payload, upstreamModelId)
+    converted = responsesToOpenAiRequest(payload, providerModelName)
   } else if (clientProtocol === 'openai-completions' && endpointProtocol === 'anthropic-messages') {
-    converted = openAiToAnthropicRequest(payload, upstreamModelId)
+    converted = openAiToAnthropicRequest(payload, providerModelName)
   } else {
     throw new Error(`不支持的协议转换方向: ${clientProtocol} -> ${endpointProtocol}`)
   }

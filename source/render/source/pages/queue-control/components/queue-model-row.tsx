@@ -12,7 +12,7 @@ import {
   Timer,
   Zap,
 } from 'lucide-react'
-import type { Protocol, Provider, ProviderHealth, ProviderModelRoute } from '@common/schemas'
+import type { Protocol, Provider, ProviderHealth, ProviderModelHealth, ProviderModelRoute } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -23,6 +23,7 @@ interface QueueModelRowProps {
   model: ProviderModelRoute
   provider?: Provider
   providerHealth?: ProviderHealth
+  providerModelHealth?: ProviderModelHealth
   metrics?: QueueModelMetrics
   mode: 'auto' | 'manual'
   selected: boolean
@@ -65,9 +66,10 @@ function formatAverageTtft(milliseconds: number | null | undefined): string {
   return `${(milliseconds / 1000).toFixed(2)}s`
 }
 
-function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth'>) {
-  const failures = props.providerHealth?.consecutiveFailures ?? 0
-  const lastSuccessTime = props.providerHealth?.lastSuccessTime
+function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth' | 'providerModelHealth'>) {
+  const health = props.providerModelHealth?.consecutiveFailures ? props.providerModelHealth : props.providerHealth
+  const failures = health?.consecutiveFailures ?? 0
+  const lastSuccessTime = health?.lastSuccessTime
 
   if (failures > 0) {
     return (
@@ -180,7 +182,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
           {props.metrics && <span className="text-[10px] text-muted-foreground/70">近 {props.metrics.sampleCount} 次</span>}
       </div>
       <div className="hidden min-w-0 text-[11px] text-muted-foreground lg:block">
-        <ModelHealth providerHealth={props.providerHealth} />
+        <ModelHealth providerHealth={props.providerHealth} providerModelHealth={props.providerModelHealth} />
       </div>
       <div className="flex items-center justify-end gap-2">
         <Badge variant={props.cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>

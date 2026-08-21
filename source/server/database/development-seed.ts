@@ -10,6 +10,7 @@ import {
   providerSettings,
   providers,
   requestAttempts,
+  requestContents,
   requestLogs,
   requestMetrics,
   requestUsages,
@@ -111,20 +112,13 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
   const existingUpstreamModelIds = new Set(
     db.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
   )
-  const existingRequestIds = new Set(
-    db.select({ id: requestLogs.id }).from(requestLogs).where(inArray(requestLogs.id, Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => `req_dev_${String(index + 1).padStart(2, '0')}`))).all().map(row => row.id),
-  )
-  const hasMissingFixtures =
-    existingProviderIds.size < PROVIDER_FIXTURES.length
-    || existingHealthProviderIds.size < PROVIDER_FIXTURES.length
-    || existingUpstreamModelIds.size < UPSTREAM_MODEL_FIXTURES.length
-    || existingRequestIds.size < 18
 
   for (const provider of PROVIDER_FIXTURES) {
     if (!existingProviderIds.has(provider.id)) await secretStore.set(provider.apiKeyReference, provider.apiKey)
   }
 
   const timestamp = Date.now()
+  const batchId = `${timestamp.toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   db.transaction(transaction => {
     const providersToInsert = PROVIDER_FIXTURES.filter(provider => !existingProviderIds.has(provider.id))
     if (providersToInsert.length > 0) transaction.insert(providers).values(providersToInsert.map(provider => ({
@@ -183,7 +177,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       const inputTokens = 320 + index * 47
       const outputTokens = 80 + (index * 29) % 360
       return {
-        id: `req_dev_${String(index + 1).padStart(2, '0')}`,
+        id: `req_dev_${batchId}_${String(index + 1).padStart(2, '0')}`,
         logicalModelId: 'default',
         protocol: index % 3 === 0 ? 'openai-completions' : index % 3 === 1 ? 'openai-responses' : 'anthropic-messages',
         status: failed ? 'failed' : 'success',
@@ -199,27 +193,37 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         cacheHit: failed ? null : index % 3 === 0,
         createdTime: timestamp - index * 3_600_000,
         provider,
+        index,
         failed,
       }
     })
 
-    const requestsToInsert = sampleRequests.filter(request => !existingRequestIds.has(request.id))
-    if (requestsToInsert.length > 0) transaction.insert(requestLogs).values(requestsToInsert.map(request => ({
+    transaction.insert(requestLogs).values(sampleRequests.map(request => ({
       id: request.id,
       logicalModelId: request.logicalModelId,
       protocol: request.protocol,
       status: request.status,
-      metadata: null,
+      metadata: JSON.stringify({ source: 'development-seed', batchId, requestIndex: request.index, stream: false, temperature: 0.7 }),
       createdTime: request.createdTime,
     }))).run()
-    if (requestsToInsert.length > 0) transaction.insert(requestMetrics).values(requestsToInsert.map(request => ({ requestId: request.id, key: 'durationMilliseconds', value: request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp }))).run()
-    const usages = requestsToInsert.flatMap(request => request.totalTokens == null ? [] : [{ id: `usage_dev_${request.id.slice(-2)}`, requestId: request.id, attemptId: null, type: 'totalTokens', value: request.totalTokens, unit: 'tokens', createdTime: request.createdTime }])
+    transaction.insert(requestMetrics).values(sampleRequests.flatMap(request => [
+      { requestId: request.id, key: 'durationMilliseconds', value: request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp },
+      { requestId: request.id, key: 'ttftMilliseconds', value: request.ttftMilliseconds ?? request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp },
+      { requestId: request.id, key: 'httpStatus', value: request.failed ? 504 : 200, unit: 'status', updatedTime: timestamp },
+    ])).run()
+    const usages: Array<typeof requestUsages.$inferInsert> = sampleRequests.flatMap(request => request.totalTokens == null ? [] : [
+      { id: `usage_dev_${request.id}_input`, requestId: request.id, attemptId: null, type: 'inputTokens', value: request.inputTokens!, unit: 'tokens', createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_output`, requestId: request.id, attemptId: null, type: 'outputTokens', value: request.outputTokens!, unit: 'tokens', createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_cached`, requestId: request.id, attemptId: null, type: 'cachedInputTokens', value: request.cachedInputTokens!, unit: 'tokens', createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_total`, requestId: request.id, attemptId: null, type: 'totalTokens', value: request.totalTokens!, unit: 'tokens', createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_cost`, requestId: request.id, attemptId: null, type: 'estimatedCost', value: Number((request.totalTokens * 0.000002).toFixed(6)), unit: 'USD', createdTime: request.createdTime },
+    ])
     if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
-    if (requestsToInsert.length > 0) transaction.insert(requestAttempts).values(requestsToInsert.map(request => {
-      const fixture = UPSTREAM_MODEL_FIXTURES[(Number(request.id.slice(-2)) - 1) % UPSTREAM_MODEL_FIXTURES.length]
-      const providerModelId = `model_dev_upstream_${(Number(request.id.slice(-2)) - 1) % UPSTREAM_MODEL_FIXTURES.length + 1}`
-      return {
-        id: `att_dev_${request.id.slice(-2)}`,
+    transaction.insert(requestAttempts).values(sampleRequests.flatMap(request => {
+      const fixture = UPSTREAM_MODEL_FIXTURES[request.index % UPSTREAM_MODEL_FIXTURES.length]
+      const providerModelId = `model_dev_upstream_${request.index % UPSTREAM_MODEL_FIXTURES.length + 1}`
+      const attempt = {
+        id: `att_dev_${request.id}`,
         requestId: request.id,
         providerId: request.provider.id,
         providerModelId,
@@ -238,8 +242,34 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         durationMilliseconds: request.totalDurationMilliseconds,
         createdTime: request.createdTime,
       }
+      if (!request.failed) return [attempt]
+      return [
+        { ...attempt, id: `att_dev_${request.id}_retry`, status: 'success', httpStatus: 200, retryable: false, attemptIndex: 1, errorCode: null, errorMessage: null, durationMilliseconds: request.totalDurationMilliseconds + 640 },
+        { ...attempt, attemptIndex: 0 },
+      ]
+    })).run()
+    transaction.insert(requestContents).values(sampleRequests.map(request => {
+      const responseBody = request.failed
+        ? JSON.stringify({ error: { type: 'upstream_timeout', message: '开发示例：上游请求超时' } })
+        : JSON.stringify({ id: `chatcmpl-dev-${request.id}`, object: 'chat.completion', model: request.provider.name, choices: [{ index: 0, message: { role: 'assistant', content: '这是开发环境生成的示例响应。' }, finish_reason: 'stop' }], usage: { prompt_tokens: request.inputTokens, completion_tokens: request.outputTokens, total_tokens: request.totalTokens } })
+      return {
+        id: `content_dev_${request.id}`,
+        requestId: request.id,
+        attemptId: null,
+        captureStatus: request.failed ? 'partial' : 'captured',
+        requestMethod: 'POST',
+        requestPath: request.protocol === 'anthropic-messages' ? '/v1/messages' : '/v1/chat/completions',
+        requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]' }),
+        requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: '请生成一段开发环境示例回复。' }], temperature: 0.7, stream: false }),
+        responseStatus: request.failed ? 504 : 200,
+        responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-request-id': `req-${request.id}` }),
+        responseBody,
+        conversions: request.protocol === 'anthropic-messages' ? JSON.stringify([{ direction: 'request', from: 'anthropic-messages', to: 'openai-completions' }, { direction: 'response', from: 'openai-completions', to: 'anthropic-messages' }]) : null,
+        createdTime: request.createdTime,
+        updatedTime: request.createdTime,
+      }
     })).run()
   })
 
-  return hasMissingFixtures
+  return true
 }

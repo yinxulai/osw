@@ -82,9 +82,9 @@ export type ProtocolConverter = z.infer<typeof ProtocolConverterSchema>
 export const SchedulingPolicySchema = z.object({
   logicalModelId: z.string(),
   providerModelId: z.string(),
-  strategy: z.string().default('priority'),
+  strategy: z.string().min(1).default('priority'),
   priority: z.number().int(),
-  weight: z.number().int(),
+  weight: z.number().int().positive(),
   enabled: z.boolean().default(true),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
@@ -143,6 +143,12 @@ export type ProviderHealth = z.infer<typeof ProviderHealthSchema>
 export const ProviderModelHealthSchema = ProviderHealthSchema.omit({ providerId: true }).extend({ providerModelId: z.string() })
 export type ProviderModelHealth = z.infer<typeof ProviderModelHealthSchema>
 
+export const HealthSnapshotSchema = z.object({
+  providers: z.array(ProviderHealthSchema),
+  providerModels: z.array(ProviderModelHealthSchema),
+})
+export type HealthSnapshot = z.infer<typeof HealthSnapshotSchema>
+
 // ========== Settings ==========
 
 export const SettingsSchema = z.object({
@@ -187,6 +193,7 @@ export const RequestLogSchema = z.object({
   createdTime: z.number().int(),
 })
 export type RequestLog = z.infer<typeof RequestLogSchema>
+export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
 
 // ========== Request Attempt ==========
 

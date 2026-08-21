@@ -9,15 +9,15 @@ import { createAuthHeaders } from '../proxy/auth'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 
-export interface FetchedUpstreamModel {
+export interface FetchedProviderModel {
   id: string
   ownedBy: string | null
   displayName: string | null
   createdTime: number | null
 }
 
-export interface FetchUpstreamModelsResult {
-  models: FetchedUpstreamModel[]
+export interface FetchProviderModelsResult {
+  models: FetchedProviderModel[]
   /** 命中的 models 接口地址 */
   matchedUrl: string
   /** 尝试过的候选地址及失败原因 */
@@ -25,7 +25,7 @@ export interface FetchUpstreamModelsResult {
 }
 
 export const providerModelFetchRoutes: Record<string, ManagementHandler> = {
-  '/api/provider/fetch-models': handleFetchUpstreamModels,
+  '/api/provider/fetch-models': handleFetchProviderModels,
 }
 
 const FetchUpstreamModelsSchema = z.object({
@@ -38,7 +38,7 @@ const FetchUpstreamModelsSchema = z.object({
   message: 'providerId 与 baseUrl 至少提供一个',
 })
 
-async function handleFetchUpstreamModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+async function handleFetchProviderModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = FetchUpstreamModelsSchema.parse(body)
   const controller = new AbortController()
   const onClientAbort = () => controller.abort()
@@ -68,7 +68,7 @@ async function handleFetchUpstreamModels(req: IncomingMessage, res: ServerRespon
   }
 
   const candidates = buildModelListUrls(baseUrl)
-  const attempts: FetchUpstreamModelsResult['attempts'] = []
+  const attempts: FetchProviderModelsResult['attempts'] = []
 
   for (const url of candidates) {
     if (controller.signal.aborted) return
@@ -136,7 +136,7 @@ interface ModelListFetchResult {
   ok: boolean
   statusCode?: number
   error?: string
-  models: FetchedUpstreamModel[]
+  models: FetchedProviderModel[]
 }
 
 function fetchModelList(urlPath: string, protocol: Protocol, apiKey: string | null, timeout: number, signal: AbortSignal): Promise<ModelListFetchResult> {
@@ -192,7 +192,7 @@ function fetchModelList(urlPath: string, protocol: Protocol, apiKey: string | nu
 }
 
 /** 解析 OpenAI 风格与 Anthropic 风格的 models 响应；无法解析时返回 null */
-export function parseModelListResponse(body: string): FetchedUpstreamModel[] | null {
+export function parseModelListResponse(body: string): FetchedProviderModel[] | null {
   let json: unknown
   try {
     json = JSON.parse(body)
@@ -203,7 +203,7 @@ export function parseModelListResponse(body: string): FetchedUpstreamModel[] | n
     return null
   }
 
-  const models: FetchedUpstreamModel[] = []
+  const models: FetchedProviderModel[] = []
   for (const item of (json as { data: unknown[] }).data) {
     if (item === null || typeof item !== 'object') continue
     const record = item as Record<string, unknown>

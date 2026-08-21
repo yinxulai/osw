@@ -69,6 +69,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
               models={service.models}
               providers={service.providers}
               health={service.health}
+              providerModelHealth={service.providerModelHealth}
               modelMetrics={service.modelMetrics}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}

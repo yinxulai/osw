@@ -1,5 +1,7 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
+import { isAllowedHost } from '../security/host-validation'
+import { authorizeLocalRequest } from '../security/local-auth'
 import type { Server } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
@@ -20,6 +22,14 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   const port = options.port ?? 9301
   const environment = options.environment ?? 'production'
   const candidate = http.createServer(async (req, res) => {
+    if (!isAllowedHost(req.headers.host, host, port)) {
+      writeJsonError(res, 403, 'INVALID_HOST', 'Host 不被允许')
+      return
+    }
+    if (!await authorizeLocalRequest(req.headers)) {
+      writeJsonError(res, 401, 'UNAUTHORIZED', '需要有效的本地访问 Token')
+      return
+    }
     setCorsHeaders(res)
     if (req.method === 'OPTIONS') {
       res.statusCode = 204
@@ -73,7 +83,7 @@ export async function stopManagementServer(): Promise<void> {
 
 function setCorsHeaders(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
 }
 

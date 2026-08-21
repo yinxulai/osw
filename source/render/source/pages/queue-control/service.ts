@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast'
 import {
   useProviders,
   useHealth,
+  useProviderModelHealth,
   useProxyStatus,
   useAppPolling,
   useAppActions,
@@ -25,6 +26,7 @@ export function useQueueControlService() {
   // 全局共享状态（通过 store 订阅，不会因轮询导致本页 loading 闪烁）
   const providers = useProviders()
   const health = useHealth()
+  const providerModelHealth = useProviderModelHealth()
   const proxyStatus = useProxyStatus()
 
   // 本页状态
@@ -42,30 +44,22 @@ export function useQueueControlService() {
   useAppPolling('proxyStatus', 5000)
 
   const loadModels = useCallback(async () => {
-    const [modelResult, policyResult] = await Promise.all([
-      providerModelApi.list(),
-      schedulingPolicyApi.list('default'),
-    ])
+    const modelResult = await providerModelApi.queue('default')
     if (!modelResult.success) {
       toast.error(modelResult.errorMessage)
       return
     }
-    if (!policyResult.success) {
-      toast.error(policyResult.errorMessage)
-      return
-    }
-    const priorityByModelId = new Map(policyResult.data.map(policy => [policy.providerModelId, policy.priority]))
     setModels(modelResult.data.map(model => ({
       id: model.id,
       providerId: model.providerId,
       modelName: model.modelName,
       endpoints: model.endpoints.map(endpoint => ({
         protocol: endpoint.protocol,
-        upstreamUrl: endpoint.url ?? '',
-        customAuthHeader: null,
-        protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
+        upstreamUrl: endpoint.upstreamUrl,
+        customAuthHeader: endpoint.customAuthHeader,
+        protocolConversionEnabled: endpoint.protocolConversionEnabled,
       })),
-      priority: priorityByModelId.get(model.id) ?? Number.MAX_SAFE_INTEGER,
+      priority: model.priority,
       enabled: model.enabled,
       createdTime: model.createdTime,
       updatedTime: model.updatedTime,
@@ -141,13 +135,14 @@ export function useQueueControlService() {
     setMode('manual')
   }, [manualModelId, models])
 
-  const isCooling = useCallback((providerId: string) => {
-    const cooldownUntil = health[providerId]?.cooldownUntilTime
-    return Boolean(cooldownUntil && cooldownUntil > Date.now())
-  }, [health])
+  const isCooling = useCallback((providerId: string, providerModelId: string) => {
+    const providerCooldownUntil = health[providerId]?.cooldownUntilTime
+    const modelCooldownUntil = providerModelHealth[providerModelId]?.cooldownUntilTime
+    return Boolean((providerCooldownUntil && providerCooldownUntil > Date.now()) || (modelCooldownUntil && modelCooldownUntil > Date.now()))
+  }, [health, providerModelHealth])
 
   const selectManualModel = useCallback(async (model: ProviderModelRoute) => {
-    if (mode !== 'manual' || !model.enabled || isCooling(model.providerId)) return
+    if (mode !== 'manual' || !model.enabled || isCooling(model.providerId, model.id)) return
     const result = await queueApi.switch('default', model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     setManualModelId(model.id)
@@ -198,6 +193,7 @@ export function useQueueControlService() {
     models,
     providers: providersMap,
     health,
+    providerModelHealth,
     modelMetrics,
     proxyStatus,
     manualModelId,

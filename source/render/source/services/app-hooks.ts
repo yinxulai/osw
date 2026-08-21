@@ -43,6 +43,10 @@ export function useHealth() {
   return useStoreSelector(appStore, s => s.health)
 }
 
+export function useProviderModelHealth() {
+  return useStoreSelector(appStore, s => s.providerModelHealth)
+}
+
 export function useHealthLoading() {
   return useStoreSelector(appStore, s => s.healthLoading)
 }

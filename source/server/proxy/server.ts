@@ -1,5 +1,7 @@
 import http from 'node:http'
 import { getSettings } from '../database/store'
+import { isAllowedHost } from '../security/host-validation'
+import { authorizeLocalRequest } from '../security/local-auth'
 import { handleProxyRequest } from './handler'
 import type { Server } from 'node:http'
 
@@ -27,6 +29,14 @@ export function startProxyServer(options: ProxyServerOptions = {}): Promise<Serv
     const listenPort = options.port ?? settings.listenPort
     candidate = http.createServer(async (req, res) => {
       try {
+        if (!isAllowedHost(req.headers.host, settings.listenHost, listenPort)) {
+          writeJsonError(res, 403, 'INVALID_HOST', 'Host 不被允许')
+          return
+        }
+        if (!await authorizeLocalRequest(req.headers)) {
+          writeJsonError(res, 401, 'UNAUTHORIZED', '需要有效的本地访问 Token')
+          return
+        }
         const url = new URL(req.url!, 'http://localhost')
 
         if (url.pathname === '/v1/models') {

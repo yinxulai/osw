@@ -42,6 +42,7 @@ import {
   listAttemptsByRequest,
   listLogicalModels,
   listProviderHealth,
+  listProviderModelHealth,
   listProviderEndpoints,
   listProviderModelEndpoints,
   listProviderSettings,
@@ -51,7 +52,6 @@ import {
   listProviders,
   listRequestLogs,
   listRequestUsages,
-  MAX_CAPTURED_BODY_BYTES,
   listRequestContents,
   listSchedulingPolicies,
   listProviderModelRoutes,
@@ -488,6 +488,9 @@ describe('health and settings', () => {
     expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 1, cooldownUntilTime: null })
     await recordProviderModelFailure(providerModel.id, 2, 10, 15)
     expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) })
+    expect(await listProviderModelHealth()).toEqual([
+      expect.objectContaining({ providerModelId: providerModel.id, consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) }),
+    ])
     await recordProviderModelHealthSuccess(providerModel.id)
     expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null, lastSuccessTime: expect.any(Number) })
     await resetProviderModelHealth(providerModel.id)
@@ -600,9 +603,9 @@ describe('request logs and analytics', () => {
     ])
   })
 
-  it('limits captured bodies, keeps complete streaming chunks, and preserves partial status', async () => {
-    const log = await createRequestLog(logInput('req_content_limit'))
-    const oversizedRequest = 'x'.repeat(MAX_CAPTURED_BODY_BYTES + 1)
+  it('stores large request bodies and every streaming chunk without truncation', async () => {
+    const log = await createRequestLog(logInput('req_content_large'))
+    const largeRequest = 'x'.repeat(1024 * 1024 + 1)
     const content = await createRequestContent({
       requestId: log.id,
       attemptId: null,
@@ -610,13 +613,13 @@ describe('request logs and analytics', () => {
       requestMethod: 'POST',
       requestPath: '/v1/responses',
       requestHeaders: null,
-      requestBody: oversizedRequest,
+      requestBody: largeRequest,
       responseStatus: null,
       responseHeaders: null,
       responseBody: null,
       conversions: null,
     })
-    const firstChunk = 'a'.repeat(MAX_CAPTURED_BODY_BYTES - 100)
+    const firstChunk = 'a'.repeat(1024 * 1024)
     const secondChunk = 'b'.repeat(200)
     await updateRequestContent(content.id, {
       captureStatus: 'captured',
@@ -624,9 +627,9 @@ describe('request logs and analytics', () => {
     })
 
     const stored = (await listRequestContents(log.id))[0]
-    expect(stored.captureStatus).toBe('partial')
-    expect(Buffer.byteLength(stored.requestBody!, 'utf8')).toBe(MAX_CAPTURED_BODY_BYTES)
-    expect(JSON.parse(stored.responseBody!)).toEqual({ schemaVersion: 1, chunks: [firstChunk] })
+    expect(stored.captureStatus).toBe('captured')
+    expect(stored.requestBody).toBe(largeRequest)
+    expect(JSON.parse(stored.responseBody!)).toEqual({ schemaVersion: 1, chunks: [firstChunk, secondChunk] })
   })
 
   it('stores request-level and attempt-level usage independently and replaces one scope atomically', async () => {

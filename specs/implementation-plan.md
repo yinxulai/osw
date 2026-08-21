@@ -214,7 +214,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [x] 本地最终错误响应收敛为 request-level `captured`，已开始的流中断保留客户端视角原始 chunk 并收敛为 `partial`；
 - [x] 日志列表保持轻量，正文通过详情 API 按需读取，并在控制台按客户端与上游 attempt 视角展示；
 - [x] 新增 request logger、usage tracker、content capture hooks；
-- [x] 接入脱敏、1 MiB 正文容量限制和流式 partial 状态。
+- [x] 接入脱敏和流式 partial 状态；正文与原始流式 chunk 全量保存，不设置单条容量上限。
 
 ### 阶段 5 交付目标（详细）
 
@@ -227,7 +227,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 ### 阶段 5 交付目标
 
-故障转移、Token 统计、正文采集、脱敏、容量限制和日志清理测试通过。
+故障转移、Token 统计、正文完整采集、脱敏和日志清理测试通过。
 
 ## 阶段 6：切换管理 API 和控制台
 
@@ -244,6 +244,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - 队列页面改为展示当前 LogicalModel 的绑定顺序；
 - Provider 页面拆分 Provider 设置、默认端点和 ProviderModel；
 - 请求日志和统计页面读取新的观测分层数据。
+- [x] 配置导入导出顶层统一使用 `schemaVersion: 3`，旧 `version` 格式直接拒绝；Provider 密钥仅导出占位符。
 
 ### 阶段 6 交付目标（详细）
 
@@ -290,12 +291,12 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | --- | --- | --- | --- | --- |
 | 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
 | 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `default` 幂等初始化已落地 |
-| 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | ProviderSetting、ProviderEndpoint、ProviderModelEndpoint、ProtocolConverter 独立 CRUD 已落地；其余 Store 契约继续收敛 |
-| 阶段 3 | `default` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离的手动路由生命周期已落地 |
+| 阶段 2 | 公共 Schema 与 Store | DONE | 2026-08-21 | 关系实体 CRUD、调度策略边界、Provider/ProviderModel 双层健康读写与列表契约已落地并覆盖测试 |
+| 阶段 3 | `default` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、LogicalModel 队列边界、双层冷却、模型校验、模型发现、健康失败归因和流式提交边界已落地；并发与部分错误状态的 handler 级验收仍需补齐 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
-| 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、脱敏、容量限制、历史稳定性与按需详情均已落地并覆盖测试 |
-| 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | 四类关系实体独立 CRUD 与连接测试入口已落地；调度绑定和剩余旧术语继续收敛 |
-| 阶段 7 | MVP 验收与发布 | TODO | - | P0 全部通过后发布 |
+| 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、正文与原始 chunk 全量存储、脱敏、历史稳定性与按需详情均已落地并覆盖测试 |
+| 阶段 6 | 管理 API 和控制台 | DONE | 2026-08-21 | 调度绑定按 LogicalModel 查询、队列顺序调整、双层健康展示、关系实体 CRUD、配置脱敏与旧内部术语清理已落地 |
+| 阶段 7 | MVP 验收与发布 | IN_PROGRESS | - | typecheck、217 项 server tests、lint 和 macOS arm64 DMG/zip build 已通过；传输适配器、并发/错误矩阵、跨平台与发布包端到端仍待验收 |
 
 状态只允许使用：`TODO`、`IN_PROGRESS`、`BLOCKED`、`DONE`。阶段状态发生变化时，应同步更新本表和 `roadmap.md`。
 

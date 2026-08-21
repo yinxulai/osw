@@ -17,19 +17,21 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableQueueModel } from './sortable-queue-model'
 import { QueueModelRow } from './queue-model-row'
 import { queueModelMetricKey, type QueueModelMetrics } from '../lib/model-metrics'
-import type { ProviderModelRoute, Provider, ProviderHealth } from '@common/schemas'
+import type { ProviderModelRoute, Provider, ProviderHealth, ProviderModelHealth } from '@common/schemas'
 
 export type ProviderMap = Record<string, Provider>
 export type HealthMap = Record<string, ProviderHealth>
+export type ProviderModelHealthMap = Record<string, ProviderModelHealth>
 
 interface QueueListCardProps {
   models: ProviderModelRoute[]
   providers: ProviderMap
   health: HealthMap
+  providerModelHealth: ProviderModelHealthMap
   modelMetrics: Record<string, QueueModelMetrics>
   mode: 'auto' | 'manual'
   manualModelId: string
-  isCooling: (providerId: string) => boolean
+  isCooling: (providerId: string, providerModelId: string) => boolean
   onModeChange: (mode: 'auto' | 'manual') => void
   onSelectManualModel: (model: ProviderModelRoute) => void
   onToggleEnabled: (model: ProviderModelRoute, enabled: boolean) => void
@@ -42,6 +44,7 @@ export function QueueListCard(props: QueueListCardProps) {
     models,
     providers,
     health,
+    providerModelHealth,
     modelMetrics,
     mode,
     manualModelId,
@@ -58,7 +61,7 @@ export function QueueListCard(props: QueueListCardProps) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
   const enabledCount = models.filter(model => model.enabled).length
-  const coolingCount = models.filter(model => isCooling(model.providerId)).length
+  const coolingCount = models.filter(model => isCooling(model.providerId, model.id)).length
 
   return (
     <Card className="overflow-hidden">
@@ -104,7 +107,7 @@ export function QueueListCard(props: QueueListCardProps) {
                   <span className="text-right">状态</span>
                 </div>
                 {models.map(model => {
-                  const cooling = isCooling(model.providerId)
+                  const cooling = isCooling(model.providerId, model.id)
                   const selected = mode === 'manual' && manualModelId === model.id
 
                   return (
@@ -114,6 +117,7 @@ export function QueueListCard(props: QueueListCardProps) {
                           model={model}
                           provider={providers[model.providerId]}
                           providerHealth={health[model.providerId]}
+                          providerModelHealth={providerModelHealth[model.id]}
                           metrics={modelMetrics[queueModelMetricKey(model.providerId, model.modelName)]}
                           mode={mode}
                           selected={selected}

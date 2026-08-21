@@ -8,6 +8,7 @@ import { createStore } from './create-store'
 import type {
   Provider,
   ProviderHealth,
+  ProviderModelHealth,
   LogicalModel,
   ProxyServerStatus,
   Settings,
@@ -16,6 +17,7 @@ import type {
 export interface AppState {
   // 健康状态
   health: Record<string, ProviderHealth>
+  providerModelHealth: Record<string, ProviderModelHealth>
   healthLoading: boolean
 
   // 代理生命周期
@@ -44,6 +46,7 @@ const initialState: AppState = {
   providers: [],
   providersLoading: false,
   health: {},
+  providerModelHealth: {},
   healthLoading: false,
   logicalModels: [],
   logicalModelsLoading: false,

@@ -11,6 +11,7 @@ module.exports = {
   artifactName: 'One-Switch-${version}-${os}-${arch}.${ext}',
   files: [
     'dist',
+    'drizzle',
     '!dist/**/*.map',
   ],
   // electron-updater 使用 GitHub Releases 作为更新源。

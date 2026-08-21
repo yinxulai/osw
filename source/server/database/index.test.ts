@@ -81,7 +81,7 @@ describe('database lifecycle', () => {
       .all()
       .map(row => (row as { name: string }).name)
 
-    expect(tables).toEqual([...expectedTables].sort())
+    expect(tables).toEqual(['__drizzle_migrations', ...expectedTables].sort())
     expect(client.prepare('SELECT id, name FROM logical_models').all()).toEqual([
       { id: 'default', name: 'default' },
     ])
@@ -134,7 +134,7 @@ describe('database lifecycle', () => {
       expect.arrayContaining(['providerModelId', 'providerName', 'providerModelName', 'url', 'httpStatus', 'retryable']),
     )
     expect(indexes.map(index => (index as { name: string }).name)).toEqual(
-      expect.arrayContaining(['idx_scheduling_policies_route', 'sqlite_autoindex_request_attempts_2']),
+      expect.arrayContaining(['idx_scheduling_policies_route', 'idx_request_attempts_request_order']),
     )
   })
 })

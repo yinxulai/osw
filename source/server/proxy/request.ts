@@ -24,7 +24,7 @@ export function validateLogicalModel(requestBody: Buffer): string | null {
   return null
 }
 
-export function rewriteRequestModel(requestBody: Buffer, upstreamModelId: string): Buffer {
+export function rewriteRequestModel(requestBody: Buffer, providerModelName: string): Buffer {
   if (requestBody.length === 0) return requestBody
 
   try {
@@ -33,7 +33,7 @@ export function rewriteRequestModel(requestBody: Buffer, upstreamModelId: string
       throw new Error('Request body must be a JSON object')
     }
 
-    return Buffer.from(JSON.stringify({ ...payload, model: upstreamModelId }))
+    return Buffer.from(JSON.stringify({ ...payload, model: providerModelName }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Request body must be a JSON object') {
       throw error

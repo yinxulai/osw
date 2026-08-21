@@ -9,15 +9,17 @@ import { startServer, stopServer } from './index'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
 
+const secrets = new Map<string, string>()
 const secretStore: KeychainApi = {
-  set: async () => undefined,
-  get: async () => null,
-  delete: async () => undefined,
+  set: async (reference, value) => { secrets.set(reference, value) },
+  get: async reference => secrets.get(reference) ?? null,
+  delete: async reference => { secrets.delete(reference) },
 }
 
 let temporaryDirectory: string
 
 beforeEach(() => {
+  secrets.clear()
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'one-switch-server-'))
 })
 
@@ -122,6 +124,30 @@ describe('server lifecycle', () => {
       data: { logicalModelId: 'secondary', manualModelId: null },
     })
   })
+
+  it('enforces local Bearer authentication on management and proxy requests', async () => {
+    const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
+    await startServer({
+      dataDir: temporaryDirectory,
+      secretStore,
+      runtimeProfile: createTestRuntimeProfile(proxyPort, managementPort),
+    })
+
+    const managementUrl = `http://127.0.0.1:${managementPort}/api/local-auth`
+    const proxyUrl = `http://127.0.0.1:${proxyPort}/v1/models`
+    const generated = await post(`${managementUrl}/generate`) as { data: { token: string } }
+    const originalToken = generated.data.token
+
+    expect((await fetch(proxyUrl)).status).toBe(401)
+    expect((await fetch(proxyUrl, { headers: { Authorization: 'Bearer wrong' } })).status).toBe(401)
+    expect((await fetch(proxyUrl, { headers: { Authorization: `Bearer ${originalToken}` } })).status).toBe(200)
+    expect(await postWithStatus(`${managementUrl}/status`)).toBe(401)
+    expect(await post(`${managementUrl}/status`, {}, originalToken)).toMatchObject({ success: true, data: { enabled: true } })
+
+    const rotated = await post(`${managementUrl}/rotate`, {}, originalToken) as { data: { token: string } }
+    expect(await postWithStatus(`${managementUrl}/status`, originalToken)).toBe(401)
+    expect(await postWithStatus(`${managementUrl}/status`, rotated.data.token)).toBe(200)
+  })
 })
 
 function createTestRuntimeProfile(proxyPort: number, managementPort: number): RuntimeProfile {
@@ -134,13 +160,22 @@ function createTestRuntimeProfile(proxyPort: number, managementPort: number): Ru
   }
 }
 
-async function post(url: string, body: unknown = {}): Promise<unknown> {
+async function post(url: string, body: unknown = {}, token?: string): Promise<unknown> {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Connection: 'close' },
+    headers: { 'Content-Type': 'application/json', Connection: 'close', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   })
   return response.json()
+}
+
+async function postWithStatus(url: string, token?: string): Promise<number> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Connection: 'close', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: '{}',
+  })
+  return response.status
 }
 
 function getAvailablePort(): Promise<number> {

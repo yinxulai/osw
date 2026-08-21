@@ -7,7 +7,7 @@ import type {
   ApiResponse,
   Provider,
   ProviderEndpoint,
-  ProviderHealth,
+  HealthSnapshot,
   LogicalModel,
   ProviderModel,
   ProviderModelRoute,
@@ -166,7 +166,7 @@ export const providerModelApi = {
   create: (data: ProviderModelCreateInput) => request<ProviderModelView>('/provider-model/create', data),
   update: (id: string, updates: ProviderModelUpdateInput) =>
     request<ProviderModelView>('/provider-model/update', { id, ...updates }),
-  queue: () => request<ProviderModelRoute[]>('/provider-model/queue', {}),
+  queue: (logicalModelId = 'default') => request<ProviderModelRoute[]>('/provider-model/queue', { logicalModelId }),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
 }
 
@@ -204,7 +204,7 @@ export const queueApi = {
 // ========== Health ==========
 
 export const healthApi = {
-  list: () => request<ProviderHealth[]>('/health/list'),
+  list: () => request<HealthSnapshot>('/health/list'),
 }
 
 // ========== Proxy Lifecycle ==========

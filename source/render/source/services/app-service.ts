@@ -57,8 +57,9 @@ class AppService {
     if (!silent) appStore.setState({ healthLoading: true })
     const result = await healthApi.list()
     if (result.success) {
-      const healthMap = Object.fromEntries(result.data.map(h => [h.providerId, h]))
-      appStore.setState({ health: healthMap, healthLoading: false, lastError: null })
+      const health = Object.fromEntries(result.data.providers.map(item => [item.providerId, item]))
+      const providerModelHealth = Object.fromEntries(result.data.providerModels.map(item => [item.providerModelId, item]))
+      appStore.setState({ health, providerModelHealth, healthLoading: false, lastError: null })
     } else {
       appStore.setState({ healthLoading: false, lastError: result.errorMessage })
     }
