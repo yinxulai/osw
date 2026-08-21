@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import http from 'node:http'
-import { sendUpstreamRequest } from './transport'
+import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 
 describe('transport', () => {
   it('sends a request body and exposes the response', async () => {
@@ -65,6 +65,43 @@ describe('transport', () => {
         })
       })
       expect(events).toEqual(['response:200'])
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    }
+  })
+
+  it('destroys a response after an idle period and resets on data', async () => {
+    const server = http.createServer((_req, res) => {
+      res.write('first')
+      setTimeout(() => res.end('second'), 40)
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('test server did not start')
+    const url = new URL(`http://127.0.0.1:${address.port}/test`)
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        sendUpstreamRequest(url, {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: 'GET',
+        }, Buffer.alloc(0), {
+          onResponse: response => {
+            response.once('error', error => {
+              expect(error.message).toBe('Idle timeout')
+              resolve()
+            })
+            attachResponseIdleTimeout(response, 20)
+            response.resume()
+          },
+          onError: error => {
+            if (error.message !== 'Idle timeout') reject(error)
+          },
+          onTimeout: request => request.destroy(new Error('test timeout')),
+        })
+      })
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()))
     }

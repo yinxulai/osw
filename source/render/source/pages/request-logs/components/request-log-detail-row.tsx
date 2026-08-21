@@ -117,7 +117,7 @@ function UpstreamRoute(props: UpstreamRouteProps) {
       </div>
       <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
-          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(80px,.7fr)_minmax(100px,1fr)_auto_minmax(120px,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
+          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
             <div className={cn(
               'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
               attempt.status === 'success'
@@ -126,13 +126,17 @@ function UpstreamRoute(props: UpstreamRouteProps) {
             )}>
               {index + 1}
             </div>
-            <span className="truncate font-medium">{attempt.providerName}</span>
-            <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
-            <AttemptBadge attempt={attempt} />
-            <span className="truncate font-mono text-[10px] text-muted-foreground" title={attempt.providerRequestId ?? undefined}>
-              {attempt.providerRequestId ? `请求 ID：${attempt.providerRequestId}` : '请求 ID：—'}
-            </span>
-            <div className="text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate font-medium">{attempt.providerName}</span>
+                <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
+                <AttemptBadge attempt={attempt} />
+              </div>
+              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                上游请求 ID：{attempt.providerRequestId || '-'}
+              </div>
+            </div>
+            <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
             </div>
           </button>

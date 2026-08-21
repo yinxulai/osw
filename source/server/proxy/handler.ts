@@ -13,10 +13,11 @@ import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
-import { sendUpstreamRequest } from './transport'
+import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 import { createRequestContext } from './request-context'
 import { protocolAdapters } from './protocols/registry'
 import type { ProxyObservationHooks } from './hooks'
+import { runAttemptQueue } from './attempt-runner'
 
 class ClientRequestCancelledError extends Error {
   readonly code = 'CLIENT_REQUEST_ABORTED'
@@ -96,9 +97,6 @@ export function resetManualModels(): void {
  */
 export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string, hooks: ProxyObservationHooks = {}): Promise<void> {
   const requestId = generateId('req_')
-  let attemptIndex = 0
-  let lastError: Error | null = null
-
   const protocol = detectProtocolFromPath(req.url!)
   if (!protocol) {
     console.error(
@@ -211,13 +209,11 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     console.error(`[proxy] 写入请求日志失败: ${(error as Error).message}`)
   }
 
-  for (const target of models) {
-    if (req.aborted) {
-      await finalizeRequestLog(requestId, 'cancelled', startedAt)
-      return
-    }
-    try {
-      const outcome = await attemptRequest(req, res, target, protocol, requestBody, requestId, logicalModelId, attemptIndex, hooks)
+  await runAttemptQueue<ModelWithProvider, AttemptOutcome>({
+    request: req,
+    targets: models,
+    attempt: (target, attemptIndex) => attemptRequest(req, res, target, protocol, requestBody, requestId, logicalModelId, attemptIndex, hooks),
+    onSuccess: async (target, outcome, attemptIndex) => {
 
       if (outcome.disposition === 'success') {
         console.log(
@@ -238,22 +234,22 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         })
         return
       }
-      if (outcome.disposition === 'terminal') {
+    },
+    onTerminal: async (target, outcome) => {
         console.log(
           `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await finalizeRequestContent(requestContentId, outcome)
         await finalizeRequestLog(requestId, 'failed', startedAt)
-        return
-      }
-
+    },
+    onRetry: async (target, outcome, attemptIndex) => {
       console.warn(
         `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
-      attemptIndex++
-    } catch (err) {
-      lastError = err as Error
+    },
+    onError: async (target, err, attemptIndex) => {
+      const lastError = err instanceof Error ? err : new Error(String(err))
       if (isClientRequestCancelled(err)) {
         try {
           const snapshot = resolveAttemptSnapshot(target, protocol)
@@ -274,7 +270,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           console.error(`[proxy] 写入取消请求尝试日志失败: ${(logError as Error).message}`)
         }
         await finalizeRequestLog(requestId, 'cancelled', startedAt)
-        return
+        return false
       }
       console.error(
         `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
@@ -305,26 +301,30 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         if (err instanceof RecordedAttemptError) await finalizeRequestContent(requestContentId, err.outcome)
         res.destroy(lastError)
         await finalizeRequestLog(requestId, 'failed', startedAt)
-        return
+        return false
       }
-      attemptIndex++
-    }
-  }
+      return true
+    },
+    onCancelled: async () => {
+      await finalizeRequestLog(requestId, 'cancelled', startedAt)
+    },
+    onExhausted: async lastError => {
 
-  // 所有 model 都失败了
-  if (!res.headersSent) {
-    console.error(
-      `[proxy] 所有上游 Provider 均失败: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
-    )
-    const responseBody = writeJsonError(
-      res,
-      502,
-      'ALL_PROVIDERS_FAILED',
-      lastError?.message ?? '所有上游 Provider 都失败了',
-    )
-    await finalizeLocalErrorContent(requestContentId, 502, res, responseBody)
-  }
-  await finalizeRequestLog(requestId, 'failed', startedAt)
+      if (!res.headersSent) {
+        console.error(
+          `[proxy] 所有上游 Provider 均失败: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
+        )
+        const responseBody = writeJsonError(
+          res,
+          502,
+          'ALL_PROVIDERS_FAILED',
+          lastError?.message ?? '所有上游 Provider 都失败了',
+        )
+        await finalizeLocalErrorContent(requestContentId, 502, res, responseBody)
+      }
+      await finalizeRequestLog(requestId, 'failed', startedAt)
+    },
+  })
 }
 
 interface RequestLogMetrics {
@@ -619,26 +619,15 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         }
       }
 
-      // 空闲超时检测
-      let idleTimer: NodeJS.Timeout | null = null
-      const resetIdleTimer = () => {
-        if (idleTimer) clearTimeout(idleTimer)
-        idleTimer = setTimeout(() => {
-          upstreamRes.destroy(new Error('Idle timeout'))
-        }, settings.idleTimeoutMilliseconds)
-      }
-
-      resetIdleTimer()
-
       if (disposition === 'retry') {
+        const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
         upstreamRes.on('data', chunk => {
-          resetIdleTimer()
           const chunkText = chunk.toString('utf8')
           if (settings.captureRequestContent) upstreamChunks.push(chunkText)
           errorResponse = appendLimited(errorResponse, chunkText)
         })
         upstreamRes.on('end', async () => {
-          if (idleTimer) clearTimeout(idleTimer)
+          idleTimeout.dispose()
           const body = errorResponse || null
           const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
           const attempt = await recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
@@ -646,7 +635,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
-          if (idleTimer) clearTimeout(idleTimer)
+          idleTimeout.dispose()
           if (settled) return
           void (async () => {
             const attempt = await recordAttempt('failed', statusCode, true, 'UPSTREAM_STREAM_ERROR', err.message, upstreamRequestId, errorResponse || null)
@@ -671,6 +660,8 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         return
       }
 
+      const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
+
       // 转发响应头
       if (!res.headersSent) {
         const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
@@ -685,7 +676,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       const sseConverter = converting && isStreaming ? adapter.createStreamConverter() : null
 
       upstreamRes.on('data', chunk => {
-        resetIdleTimer()
         const chunkText = chunk.toString('utf8')
         if (settings.captureRequestContent) upstreamChunks.push(chunkText)
 
@@ -724,7 +714,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       })
 
       upstreamRes.on('end', async () => {
-        if (idleTimer) clearTimeout(idleTimer)
+        idleTimeout.dispose()
 
         if (disposition === 'success' && responseBuffer) {
           if (isStreaming) {
@@ -804,7 +794,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       })
 
       upstreamRes.on('error', err => {
-        if (idleTimer) clearTimeout(idleTimer)
+        idleTimeout.dispose()
         if (settled) return
         void (async () => {
           const attempt = await recordAttempt(
