@@ -88,7 +88,7 @@ const ALL_PROTOCOLS = [
   'anthropic-messages',
 ] as const
 
-const DEVELOPMENT_REQUEST_COUNT = 30
+const DEVELOPMENT_REQUEST_COUNT = 120
 
 interface DevelopmentSeedOptions {
   allowExisting?: boolean
@@ -171,7 +171,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     }
 
     const sampleRequests = Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => {
-      const failed = index === 4 || index === 11
+      const failed = index % 11 === 4
       const provider = PROVIDER_FIXTURES[index % PROVIDER_FIXTURES.length]
       const duration = 480 + (index * 173) % 2_400
       const inputTokens = 320 + index * 47
@@ -191,7 +191,7 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         rawUsage: null,
         ttftMilliseconds: failed ? null : 110 + (index * 31) % 420,
         cacheHit: failed ? null : index % 3 === 0,
-        createdTime: timestamp - index * 3_600_000,
+        createdTime: timestamp - index * 6 * 3_600_000,
         provider,
         index,
         failed,
@@ -210,13 +210,16 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       { requestId: request.id, key: 'durationMilliseconds', value: request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp },
       { requestId: request.id, key: 'ttftMilliseconds', value: request.ttftMilliseconds ?? request.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: timestamp },
       { requestId: request.id, key: 'httpStatus', value: request.failed ? 504 : 200, unit: 'status', updatedTime: timestamp },
+      { requestId: request.id, key: 'cacheHit', value: request.cacheHit ? 1 : 0, unit: 'boolean', updatedTime: timestamp },
     ])).run()
     const usages: Array<typeof requestUsages.$inferInsert> = sampleRequests.flatMap(request => request.totalTokens == null ? [] : [
       { id: `usage_dev_${request.id}_input`, requestId: request.id, attemptId: null, type: 'inputTokens', value: request.inputTokens!, unit: 'tokens', createdTime: request.createdTime },
       { id: `usage_dev_${request.id}_output`, requestId: request.id, attemptId: null, type: 'outputTokens', value: request.outputTokens!, unit: 'tokens', createdTime: request.createdTime },
       { id: `usage_dev_${request.id}_cached`, requestId: request.id, attemptId: null, type: 'cachedInputTokens', value: request.cachedInputTokens!, unit: 'tokens', createdTime: request.createdTime },
+      ...(request.index % 4 === 0 ? [{ id: `usage_dev_${request.id}_cache_creation`, requestId: request.id, attemptId: null, type: 'cacheCreationInputTokens', value: request.cacheCreationInputTokens!, unit: 'tokens', createdTime: request.createdTime }] : []),
       { id: `usage_dev_${request.id}_total`, requestId: request.id, attemptId: null, type: 'totalTokens', value: request.totalTokens!, unit: 'tokens', createdTime: request.createdTime },
-      { id: `usage_dev_${request.id}_cost`, requestId: request.id, attemptId: null, type: 'estimatedCost', value: Number((request.totalTokens * 0.000002).toFixed(6)), unit: 'USD', createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_cost`, requestId: request.id, attemptId: null, type: 'estimatedCost', value: Number((request.totalTokens * (request.index % 3 === 0 ? 0.000003 : 0.000002)).toFixed(6)), unit: 'USD', rawValue: JSON.stringify({ currency: 'USD', source: 'development-seed' }), createdTime: request.createdTime },
+      { id: `usage_dev_${request.id}_raw`, requestId: request.id, attemptId: null, type: 'raw', value: 0, unit: 'string', rawValue: JSON.stringify({ prompt_tokens: request.inputTokens, completion_tokens: request.outputTokens, total_tokens: request.totalTokens, prompt_tokens_details: { cached_tokens: request.cachedInputTokens } }), createdTime: request.createdTime },
     ])
     if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
     transaction.insert(requestAttempts).values(sampleRequests.flatMap(request => {
@@ -248,19 +251,19 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         { ...attempt, attemptIndex: 0 },
       ]
     })).run()
-    transaction.insert(requestContents).values(sampleRequests.map(request => {
+    transaction.insert(requestContents).values(sampleRequests.flatMap(request => {
       const responseBody = request.failed
         ? JSON.stringify({ error: { type: 'upstream_timeout', message: '开发示例：上游请求超时' } })
         : JSON.stringify({ id: `chatcmpl-dev-${request.id}`, object: 'chat.completion', model: request.provider.name, choices: [{ index: 0, message: { role: 'assistant', content: '这是开发环境生成的示例响应。' }, finish_reason: 'stop' }], usage: { prompt_tokens: request.inputTokens, completion_tokens: request.outputTokens, total_tokens: request.totalTokens } })
-      return {
+      const requestContent = {
         id: `content_dev_${request.id}`,
         requestId: request.id,
         attemptId: null,
-        captureStatus: request.failed ? 'partial' : 'captured',
+        captureStatus: request.failed ? 'partial' : request.index % 7 === 0 ? 'headers-only' : request.index % 5 === 0 ? 'truncated' : 'captured',
         requestMethod: 'POST',
         requestPath: request.protocol === 'anthropic-messages' ? '/v1/messages' : '/v1/chat/completions',
-        requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]' }),
-        requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: '请生成一段开发环境示例回复。' }], temperature: 0.7, stream: false }),
+        requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]', 'x-development-batch': request.index % 2 === 0 ? 'standard' : 'extended' }),
+        requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: request.index % 3 === 0 ? '请总结这段开发环境示例内容。' : '请生成一段开发环境示例回复。' }], temperature: request.index % 2 === 0 ? 0.7 : 0.2, stream: request.index % 4 === 0 }),
         responseStatus: request.failed ? 504 : 200,
         responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-request-id': `req-${request.id}` }),
         responseBody,
@@ -268,7 +271,11 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         createdTime: request.createdTime,
         updatedTime: request.createdTime,
       }
-    })).run()
+      const attemptContents = request.index % 4 === 0
+        ? [{ ...requestContent, id: `content_dev_${request.id}_attempt`, attemptId: `att_dev_${request.id}${request.failed ? '_retry' : ''}`, captureStatus: request.failed ? 'captured' : 'partial', requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: '这是上游 attempt 级请求正文。' }], stream: true }), responseBody: JSON.stringify({ id: `attempt-${request.id}`, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: '这是 attempt 级响应。' } }] }) }]
+        : []
+      return [requestContent, ...attemptContents]
+    }).flat()).run()
   })
 
   return true
