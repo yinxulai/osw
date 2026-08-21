@@ -327,6 +327,87 @@ describe('handleProxyRequest', () => {
     }))
   })
 
+  it('stores the final local error response after all providers fail', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(503, { 'content-type': 'text/plain' })
+      res.end('provider unavailable')
+    })
+    mocks.models = [
+      model('model_failed', 'prov_failed', `${upstream.url}/v1/completions`, 'failed-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', prompt: 'Hello' }),
+    })
+    const responseBody = await response.text()
+
+    expect(response.status).toBe(502)
+    expect(JSON.parse(responseBody)).toEqual({
+      success: false,
+      errorCode: 'ALL_PROVIDERS_FAILED',
+      errorMessage: '所有上游 Provider 都失败了',
+    })
+    expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
+      captureStatus: 'captured',
+      responseStatus: 502,
+      responseBody,
+    }))
+  })
+
+  it('stores a partial retryable response before trying the next provider', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const firstChunk = 'provider partially unavailable'
+    const first = await listen((_req, res) => {
+      res.writeHead(503, { 'content-type': 'text/plain' })
+      res.write(firstChunk, () => {
+        setImmediate(() => res.socket?.destroy(new Error('stream interrupted')))
+      })
+    })
+    const second = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+    })
+    mocks.models = [
+      model('model_partial_retry', 'prov_partial_retry', `${first.url}/v1/completions`, 'partial-retry-model'),
+      model('model_retry_success', 'prov_retry_success', `${second.url}/v1/completions`, 'retry-success-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      httpStatus: 503,
+      retryable: true,
+      errorCode: 'UPSTREAM_STREAM_ERROR',
+    }))
+    const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.responseStatus === 503)?.[0]
+    expect(attemptContent).toEqual(expect.objectContaining({ captureStatus: 'partial', responseBody: firstChunk }))
+  })
+
   it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {
     configureSecretStore({
       set: async () => undefined,
@@ -742,9 +823,15 @@ describe('handleProxyRequest', () => {
     const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId === 'att_test')?.[0]
     expect(attemptContent).toEqual(expect.objectContaining({ captureStatus: 'partial', responseStatus: 200 }))
     expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({ schemaVersion: 1, chunks: [firstChunk] })
+    expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
+      captureStatus: 'partial',
+      responseStatus: 200,
+      responseBody: JSON.stringify({ schemaVersion: 1, chunks: [firstChunk] }),
+    }))
   })
 
   it('cancels the upstream request when the local client aborts', async () => {
+    mocks.captureRequestContent = true
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
@@ -785,6 +872,10 @@ describe('handleProxyRequest', () => {
     expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ status: 'cancelled' }),
+    )
+    expect(mocks.updateRequestContent).not.toHaveBeenCalledWith(
+      'content_request',
+      expect.objectContaining({ captureStatus: 'captured' }),
     )
   })
 })

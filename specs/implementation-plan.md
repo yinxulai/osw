@@ -211,6 +211,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [x] 补齐 attempt 的 Provider、ProviderModel、协议、URL、HTTP 状态、重试判断和请求 ID 快照；
 - [x] 将正文改为 request-level 或 attempt-level 独立记录，并为成功、HTTP 失败和已开始的中断流接入采集；
 - [x] 流式正文按每次传输收到或写出的原始 chunk 字符串数组保存，不聚合为消息内容，也不按 SSE 事件重新切分；
+- [x] 本地最终错误响应收敛为 request-level `captured`，已开始的流中断保留客户端视角原始 chunk 并收敛为 `partial`；
 - 新增 request logger、usage tracker、content capture hooks；
 - 接入脱敏、容量限制和流式 partial 状态。
 
@@ -290,7 +291,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | Provider 默认端点已完全切换到关系表；其余 Store 契约继续收敛 |
 | 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离的手动路由生命周期已落地 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
-| 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages 已关系化；attempt 已持久化完整写入时快照；contents 已接入核心代理链路，待补本地错误响应、管理 API 与日志详情展示 |
+| 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages 已关系化；attempt 已持久化完整写入时快照；contents 已覆盖核心代理与本地错误响应，待补管理 API 与日志详情展示 |
 | 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | ProviderEndpoint 管理、配置导入导出与模型发现已切换到关系表 |
 | 阶段 7 | MVP 验收与发布 | TODO | - | P0 全部通过后发布 |
 

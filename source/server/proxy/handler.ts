@@ -27,10 +27,13 @@ class ClientRequestCancelledError extends Error {
 }
 
 class RecordedAttemptError extends Error {
-  constructor(cause: Error) {
+  readonly outcome: AttemptOutcome
+
+  constructor(cause: Error, outcome: AttemptOutcome) {
     super(cause.message)
     this.name = 'RecordedAttemptError'
     this.cause = cause
+    this.outcome = outcome
   }
 }
 
@@ -275,6 +278,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       await markProviderFailure(target.provider.id)
       await markProviderModelFailure(target.model.id)
       if (res.headersSent) {
+        if (err instanceof RecordedAttemptError) await finalizeRequestContent(requestContentId, err.outcome)
         res.destroy(lastError)
         await finalizeRequestLog(requestId, 'failed', startedAt)
         return
@@ -288,12 +292,13 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     console.error(
       `[proxy] 所有上游 Provider 均失败: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
     )
-    writeJsonError(
+    const responseBody = writeJsonError(
       res,
       502,
       'ALL_PROVIDERS_FAILED',
       lastError?.message ?? '所有上游 Provider 都失败了',
     )
+    await finalizeLocalErrorContent(requestContentId, 502, res, responseBody)
   }
   await finalizeRequestLog(requestId, 'failed', startedAt)
 }
@@ -350,6 +355,20 @@ async function finalizeRequestContent(contentId: string | null, outcome: Attempt
       responseStatus: outcome.responseStatus ?? outcome.statusCode,
       responseHeaders: outcome.responseHeaders ?? null,
       responseBody: outcome.responseBody ?? null,
+    })
+  } catch (error) {
+    console.error(`[proxy] 更新请求正文失败: ${(error as Error).message}`)
+  }
+}
+
+async function finalizeLocalErrorContent(contentId: string | null, statusCode: number, res: ServerResponse, responseBody: string): Promise<void> {
+  if (!contentId) return
+  try {
+    await updateRequestContent(contentId, {
+      captureStatus: 'captured',
+      responseStatus: statusCode,
+      responseHeaders: JSON.stringify(redactHeaders(res.getHeaders())),
+      responseBody,
     })
   } catch (error) {
     console.error(`[proxy] 更新请求正文失败: ${(error as Error).message}`)
@@ -548,7 +567,25 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         })
         upstreamRes.on('error', err => {
           if (idleTimer) clearTimeout(idleTimer)
-          rejectAttempt(err)
+          if (settled) return
+          void (async () => {
+            const attempt = await recordAttempt('failed', statusCode, true, 'UPSTREAM_STREAM_ERROR', err.message, upstreamRequestId, errorResponse || null)
+            await recordAttemptContent({
+              attemptId: attempt?.id ?? null,
+              captureStatus: 'partial',
+              responseStatus: statusCode,
+              responseHeaders: upstreamRes.headers,
+              responseBody: serializeCapturedBody(isStreaming, upstreamChunks, errorResponse || null),
+            })
+            rejectAttempt(new RecordedAttemptError(err, {
+              disposition: 'retry',
+              statusCode,
+              durationMilliseconds: Date.now() - attemptStartedAt,
+              upstreamRequestId,
+              errorResponse: errorResponse || null,
+              captureStatus: 'partial',
+            }))
+          })()
         })
         upstreamRes.resume()
         return
@@ -707,7 +744,16 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
             responseHeaders: upstreamRes.headers,
             responseBody: serializeCapturedBody(isStreaming, upstreamChunks, responseBuffer || null),
           })
-          rejectAttempt(new RecordedAttemptError(err))
+          rejectAttempt(new RecordedAttemptError(err, {
+            disposition,
+            statusCode,
+            durationMilliseconds: Date.now() - attemptStartedAt,
+            upstreamRequestId,
+            responseStatus: statusCode,
+            responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
+            responseBody: isStreaming ? serializeStreamingChunks(downstreamChunks) : downstreamChunks.join(''),
+            captureStatus: 'partial',
+          }))
         })()
       })
     })
@@ -808,16 +854,16 @@ function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   })
 }
 
-function writeJsonError(res: ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
+function writeJsonError(res: ServerResponse, statusCode: number, errorCode: string, errorMessage: string): string {
+  const body = JSON.stringify({
+    success: false,
+    errorCode,
+    errorMessage,
+  })
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
-  res.end(
-    JSON.stringify({
-      success: false,
-      errorCode,
-      errorMessage,
-    }),
-  )
+  res.end(body)
+  return body
 }
 
 interface ExtractedUsage {
