@@ -99,13 +99,15 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   )
   let models = [...nativeModels, ...convertedModels]
 
-  // 如果有手动指定的 model，把它排到最前面
+  // 手动选择只改变本次请求的起始位置，不改变队列顺序。
   const manualModelId = getManualModel(logicalModelId)
   if (manualModelId) {
-    const manual = models.find(m => m.model.id === manualModelId)
-    if (manual) {
-      models = [manual, ...models.filter(m => m.model.id !== manualModelId)]
+    const manualIndex = models.findIndex(candidate => candidate.model.id === manualModelId)
+    if (manualIndex === -1) {
+      writeJsonError(res, 409, 'MANUAL_MODEL_UNAVAILABLE', '手动指定的 ProviderModel 当前不可用于该协议')
+      return
     }
+    models = models.slice(manualIndex)
   }
 
   if (models.length === 0) {

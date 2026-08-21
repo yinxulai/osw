@@ -149,6 +149,78 @@ describe('handleProxyRequest', () => {
     expect(firstHandler).not.toHaveBeenCalled()
   })
 
+  it('fails over forward from the manually selected position without changing queue order', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const firstHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ provider: 'first' }))
+    })
+    const secondHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(503, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: 'unavailable' }))
+    })
+    const thirdHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ provider: 'third' }))
+    })
+    const first = await listen(firstHandler)
+    const second = await listen(secondHandler)
+    const third = await listen(thirdHandler)
+    mocks.models = [
+      model('model_first', 'prov_first', `${first.url}/v1/chat/completions`, 'first-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/chat/completions`, 'second-model'),
+      model('model_third', 'prov_third', `${third.url}/v1/chat/completions`, 'third-model'),
+    ]
+    setManualModel('auto', 'model_second')
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', messages: [] }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ provider: 'third' })
+    expect(secondHandler).toHaveBeenCalledOnce()
+    expect(thirdHandler).toHaveBeenCalledOnce()
+    expect(firstHandler).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unavailable manual starting model without silently falling back', async () => {
+    const upstreamHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => res.end())
+    const upstream = await listen(upstreamHandler)
+    mocks.models = [
+      model('model_openai', 'prov_openai', `${upstream.url}/v1/chat/completions`, 'openai-model'),
+      model('model_anthropic', 'prov_anthropic', `${upstream.url}/v1/messages`, 'anthropic-model', 'anthropic-messages'),
+    ]
+    setManualModel('auto', 'model_anthropic')
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', messages: [] }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      success: false,
+      errorCode: 'MANUAL_MODEL_UNAVAILABLE',
+      errorMessage: '手动指定的 ProviderModel 当前不可用于该协议',
+    })
+    expect(upstreamHandler).not.toHaveBeenCalled()
+    expect(mocks.createRequestLog).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{ messages: [] }, '缺少 model 字段'],
     [{ model: 'other', messages: [] }, 'model 必须为 auto'],
