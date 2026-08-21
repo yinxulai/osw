@@ -28,10 +28,10 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       commit: ${{ steps.commit.outputs.commit }}
     steps:
-      - name: Check out main
+      - name: Check out release branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Set up pnpm
@@ -87,7 +87,7 @@ jobs:
           git add package.json pnpm-lock.yaml
           if ! git diff --cached --quiet; then
             git commit -m "chore(release): $VERSION"
-            git push origin HEAD:main
+            git push origin HEAD:${{ github.ref_name }}
           fi
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 

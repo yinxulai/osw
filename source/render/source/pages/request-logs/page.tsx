@@ -262,7 +262,7 @@ export function RequestLogsPage() {
                             {log.cachedInputTokens === null ? (
                               <span className="text-muted-foreground/60">—</span>
                             ) : log.cachedInputTokens > 0 ? (
-                              <Badge className="h-5 bg-emerald-500/15 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                              <Badge className="h-5 bg-foreground/10 px-1.5 text-[10px] text-foreground">
                                 {formatNumber(log.cachedInputTokens)}
                               </Badge>
                             ) : (
@@ -280,7 +280,7 @@ export function RequestLogsPage() {
                             </span>
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
-                            <span className={cn(tps !== '—' && 'text-emerald-600 dark:text-emerald-400')}>
+                            <span className={cn(tps !== '—' && 'text-foreground')}>
                               {tps}
                             </span>
                           </td>
