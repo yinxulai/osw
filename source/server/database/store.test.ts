@@ -298,6 +298,8 @@ describe('provider and model CRUD', () => {
     expect(await listProviders()).toHaveLength(0)
     expect(await listProviders(true)).toHaveLength(1)
     await expect(updateProvider('prov_missing', { name: 'x' })).rejects.toThrow('provider not found')
+    await deleteProvider(provider.id)
+    await expect(deleteProvider(provider.id)).resolves.toBeUndefined()
   })
 
   it('keeps provider setting conflict updates in place', async () => {
@@ -312,6 +314,8 @@ describe('provider and model CRUD', () => {
     const provider = await createProvider(providerInput())
     const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-a', priority: 7 })
     expect(first).toMatchObject({ endpoints: [], priority: 7, enabled: true })
+    await expect(createProviderModelRoute({ providerId: provider.id, modelName: 'model-a', priority: 8 })).rejects.toThrow()
+    await expect(createProviderModelRoute({ providerId: 'prov_missing', modelName: 'model-missing-provider', priority: 1 })).rejects.toThrow()
     const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-b', priority: 1, endpoints: [{ protocol: 'openai-completions', upstreamUrl: '', customAuthHeader: null, protocolConversionEnabled: false }] })
     const third = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-c', priority: 2, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://override.example', customAuthHeader: null, protocolConversionEnabled: false }, { protocol: 'anthropic-messages', upstreamUrl: 'https://anthropic.example', customAuthHeader: null, protocolConversionEnabled: true }] })
     expect((await getProviderModelRoute(second.id))?.endpoints[0].upstreamUrl).toBe('https://invalid.local')
@@ -375,6 +379,8 @@ describe('scheduling policies', () => {
     await deleteSchedulingPolicy(logicalA.id, model.id)
     await expect(upsertSchedulingPolicy({ logicalModelId: 'model_missing', providerModelId: model.id })).rejects.toThrow()
     await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: 'model_missing' })).rejects.toThrow()
+    await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, weight: 0 })).rejects.toThrow()
+    await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'round-robin' })).rejects.toThrow()
   })
 
   it('rejects duplicate rows at the database boundary', async () => {

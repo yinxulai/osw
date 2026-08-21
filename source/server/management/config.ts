@@ -229,10 +229,8 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     const existingModels = await listLogicalModels(false)
     const existingProviderModelRoutes = await listProviderModelRoutes(false)
     const importedPolicies = config.schedulingPolicies
-    const existingProviderNames = new Set(existingProviders.map(provider => provider.name))
     const existingProviderIds = new Set(existingProviders.map(provider => provider.id))
     const providerIdMap = new Map<string, string>()
-    const providerNames = new Set(existingProviderNames)
     const importedProviderNames = new Set<string>()
     const importedModelNames = new Set<string>()
     const importedProviderModelKeys = new Set<string>()
@@ -242,7 +240,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         throw new Error(`导入文件中存在重复供应商: ${provider.name}`)
       }
       importedProviderNames.add(provider.name)
-      providerNames.add(provider.name)
     }
 
     for (const model of config.logicalModels) {
@@ -258,7 +255,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     }
 
     // 2. 处理供应商
-    const providerNameToId = new Map<string, string>()
     const importedProviderIds = new Set<string>()
     let importedProviders = 0
 
@@ -274,7 +270,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         if (p.endpoints !== undefined) updates.upstreamUrls = JSON.stringify(p.endpoints)
         if (p.apiKey) await secretStore.set(existing.apiKeyReference, p.apiKey)
         const updated = await updateProvider(existing.id, updates)
-        providerNameToId.set(p.name, updated.id)
         if (p.id) providerIdMap.set(p.id, updated.id)
         importedProviderIds.add(updated.id)
       } else {
@@ -287,7 +282,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
           enabled: p.enabled ?? true,
           upstreamUrls: p.endpoints ? JSON.stringify(p.endpoints) : '{}',
         })
-        providerNameToId.set(p.name, created.id)
         if (p.id) providerIdMap.set(p.id, created.id)
         importedProviderIds.add(created.id)
       }
@@ -325,12 +319,11 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
     let importedProviderModels = 0
     const importedProviderModelIds = new Map<string, string>()
     for (const model of config.providerModels) {
-      const providerId = providerIdMap.get(model.providerId) ?? model.providerId
-      if (!existingProviderIds.has(model.providerId) && !providerNameToId.has(model.providerId)) {
+      const resolvedProviderId = providerIdMap.get(model.providerId) ?? model.providerId
+      if (!existingProviderIds.has(resolvedProviderId) && !importedProviderIds.has(resolvedProviderId)) {
         sendError(res, 'VALIDATION_ERROR', `ProviderModel "${model.modelName}" 引用了不存在的供应商`, 400)
         return
       }
-      const resolvedProviderId = providerNameToId.get(providerId) ?? providerId
       const key = `${resolvedProviderId}\0${model.modelName}`
       if (importedProviderModelKeys.has(key)) throw new Error(`导入文件中存在重复 ProviderModel: ${model.modelName}`)
       importedProviderModelKeys.add(key)

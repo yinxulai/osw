@@ -275,7 +275,7 @@ export const modelTestApi = {
 // ========== Config Import/Export ==========
 
 export interface ExportedConfig {
-  version: 2 | 1
+  version: 3
   exportedAt: number
   settings: Partial<Settings>
   providers: Array<{
@@ -314,21 +314,12 @@ export interface ExportedConfig {
     enabled?: boolean
     failoverEnabled?: boolean
   }>
-  upstreamModels?: Array<{
-    id?: string
-    providerName?: string
-    providerId?: string
-    upstreamModelId: string
-    endpoints?: ProviderModelRouteEndpoint[]
-    priority: number
-    enabled?: boolean
-  }>
 }
 
 export const configApi = {
   export: () => request<{ config: ExportedConfig; content: string }>('/config/export', {}),
   import: (config: ExportedConfig, mode: 'merge' | 'replace' = 'merge') =>
-    request<{ imported: { providers: number; logicalModels: number; upstreamModels: number } }>(
+    request<{ imported: { providers: number; logicalModels: number; providerModels: number } }>(
       '/config/import',
       { config, mode },
     ),
