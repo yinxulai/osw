@@ -411,7 +411,6 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const endpoint = nativeEndpoint ?? convertibleEndpoint
   if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协议 ${protocol}`)
   const endpointProtocol = endpoint.protocol
-  const converting = !nativeEndpoint
 
   const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
   const parsed = new URL(targetUrl)
@@ -515,7 +514,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         responseStatus: input.responseStatus,
         responseHeaders: input.responseHeaders ? JSON.stringify(redactHeaders(input.responseHeaders)) : null,
         responseBody: input.responseBody,
-        conversions: converting ? JSON.stringify({
+        conversions: adapter.requiresResponseConversion ? JSON.stringify({
           schemaVersion: 1,
           fromProtocol: protocol,
           toProtocol: endpointProtocol,
@@ -656,7 +655,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       // 转发响应头
       if (!res.headersSent) {
         const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
-        if (converting) {
+        if (adapter.requiresResponseConversion) {
           // 转换路径：响应体结构会变，移除上游长度限制头
           delete downstreamHeaders['content-length']
         }
@@ -664,7 +663,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       }
 
       // 协议转换流式转换器（非转换路径为透传）
-      const sseConverter = converting && isStreaming ? adapter.createStreamConverter() : null
+      const sseConverter = adapter.requiresResponseConversion && isStreaming ? adapter.createStreamConverter() : null
 
       upstreamRes.on('data', chunk => {
         const chunkText = chunk.toString('utf8')
@@ -696,7 +695,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
               if (settings.captureRequestContent) downstreamChunks.push(converted)
               res.write(converted)
             }
-          } else if (!converting || isStreaming) {
+          } else if (!adapter.requiresResponseConversion || isStreaming) {
             // 非流式转换路径先缓冲原始响应，end 时统一转换后写出
             if (settings.captureRequestContent) downstreamChunks.push(chunkText)
             res.write(chunk)
@@ -722,18 +721,12 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
         if (!res.writableEnded) {
           if (sseConverter) {
-            const tail = sseConverter.push('') + sseConverter.flush()
+            const tail = adapter.finishStream(sseConverter)
             if (tail) {
               if (settings.captureRequestContent) downstreamChunks.push(tail)
               res.write(tail)
             }
-            // OpenAI 客户端期望 [DONE] 结束标记
-            if (protocol === 'openai-completions') {
-              const done = 'data: [DONE]\n\n'
-              if (settings.captureRequestContent) downstreamChunks.push(done)
-              res.write(done)
-            }
-          } else if (converting && !isStreaming && responseBuffer) {
+          } else if (adapter.requiresResponseConversion && !isStreaming && responseBuffer) {
             try {
               const converted = adapter.convertResponse(Buffer.from(responseBuffer))
               if (settings.captureRequestContent) downstreamChunks.push(converted.toString('utf8'))
@@ -759,7 +752,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
         )
         const upstreamResponseBody = serializeCapturedBody(isStreaming, upstreamChunks, disposition === 'success' ? responseBuffer : body)
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody, convertedResponseBody: converting ? downstreamChunks.join('') : null })
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody, convertedResponseBody: adapter.requiresResponseConversion ? downstreamChunks.join('') : null })
         const downstreamResponseBody = isStreaming
           ? serializeStreamingChunks(downstreamChunks)
           : (downstreamChunks.join('') || responseBuffer || body)
@@ -776,7 +769,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           cacheCreationInputTokens,
           promptCacheHit: cachedInputTokens == null ? null : cachedInputTokens > 0,
           rawUsage,
-          upstreamProtocol: converting ? endpointProtocol : null,
+          upstreamProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
           responseStatus: statusCode,
           responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
           responseBody: downstreamResponseBody,

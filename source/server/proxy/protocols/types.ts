@@ -9,8 +9,10 @@ export interface StreamConverter {
 export interface ProtocolAdapter {
   readonly clientProtocol: Protocol
   readonly endpointProtocol: Protocol
+  readonly requiresResponseConversion: boolean
   prepareRequest(context: RequestContext, providerModelName: string): Buffer
   createStreamConverter(): StreamConverter | null
+  finishStream(converter: StreamConverter): string
   convertResponse(body: Buffer): Buffer
 }
 

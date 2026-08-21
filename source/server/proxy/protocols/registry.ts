@@ -6,7 +6,11 @@ import type { RequestContext } from '../request-context'
 import type { ProtocolAdapter, ProtocolAdapterRegistry, StreamConverter } from './types'
 
 class RegisteredProtocolAdapter implements ProtocolAdapter {
-  constructor(readonly clientProtocol: Protocol, readonly endpointProtocol: Protocol, private readonly prepare: (context: RequestContext, providerModelName: string) => Buffer) {}
+  readonly requiresResponseConversion: boolean
+
+  constructor(readonly clientProtocol: Protocol, readonly endpointProtocol: Protocol, private readonly prepare: (context: RequestContext, providerModelName: string) => Buffer) {
+    this.requiresResponseConversion = clientProtocol !== endpointProtocol
+  }
 
   prepareRequest(context: RequestContext, providerModelName: string): Buffer {
     return this.prepare(context, providerModelName)
@@ -16,6 +20,13 @@ class RegisteredProtocolAdapter implements ProtocolAdapter {
     return this.clientProtocol === this.endpointProtocol
       ? null
       : createSseConverter(this.clientProtocol, this.endpointProtocol)
+  }
+
+  finishStream(converter: StreamConverter): string {
+    const tail = converter.push('') + converter.flush()
+    return this.clientProtocol === 'openai-completions'
+      ? `${tail}data: [DONE]\n\n`
+      : tail
   }
 
   convertResponse(body: Buffer): Buffer {

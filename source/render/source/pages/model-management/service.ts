@@ -68,8 +68,8 @@ export function useModelManagementService() {
   const [fetchingModels, setFetchingModels] = useState(false)
 
   // 订阅全局轮询
-  useAppPolling('providers', 10000)
   useAppPolling('health', 5000)
+  useAppPolling('providers', 10000)
 
   const loadModels = useCallback(async () => {
     const result = await providerModelApi.list()
