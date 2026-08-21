@@ -243,38 +243,18 @@ export function useModelManagementService() {
 
   const fetchModels = useCallback(async () => {
     if (!selectedProvider) return
-    const endpointsResult = await providerApi.endpoints(selectedProvider.id)
-    if (!endpointsResult.success) {
-      toast.error(endpointsResult.errorMessage)
-      return
-    }
-    const providerEndpoints: ProviderEndpoints = Object.fromEntries(
-      endpointsResult.data.filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url]),
-    )
-
-    // 组合候选请求：启用的协议优先（覆盖地址 > 供应商默认地址）；
-    // 若一个协议都没启用，则回退到供应商配置了默认地址的所有协议。
     const enabledEntries: ProtocolEndpointEntry[] = protocolEntries.filter(entry => entry.enabled)
-    const sourceEntries: (ProtocolEndpointEntry | { protocol: Protocol })[] = enabledEntries.length > 0
-      ? enabledEntries
-      : PROTOCOL_OPTIONS
-          .map(option => ({ protocol: option.value as Protocol }))
-          .filter(option => Boolean(providerEndpoints[option.protocol]))
+    const sourceEntries = enabledEntries.length > 0 ? enabledEntries : PROTOCOL_OPTIONS
 
     const requests = sourceEntries
       .map(entry => {
+        const protocol = 'value' in entry ? entry.value : entry.protocol
         const overrideUrl = 'overrideUrl' in entry && entry.overrideUrl ? entry.upstreamUrl.trim() : ''
         return {
-          protocol: entry.protocol,
-          baseUrl: overrideUrl || providerEndpoints[entry.protocol] || '',
+          protocol,
+          ...(overrideUrl ? { baseUrl: overrideUrl } : {}),
         }
       })
-      .filter(request => request.baseUrl)
-
-    if (requests.length === 0) {
-      toast.error('没有可用的上游地址：请启用协议并填写覆盖地址，或在供应商中配置默认接口地址')
-      return
-    }
 
     setFetchingModels(true)
     try {

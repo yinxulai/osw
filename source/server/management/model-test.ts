@@ -3,7 +3,7 @@ import http from 'node:http'
 import https from 'node:https'
 import { URL } from 'node:url'
 import { z } from 'zod'
-import { listProviderModels, listProviders } from '../database/store'
+import { listProviderEndpoints, listProviderModels, listProviders } from '../database/store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { findEndpoint } from '../proxy/router'
 import { resolveUpstreamUrl } from '../proxy/request'
@@ -59,6 +59,12 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
   }))
   const providers = await listProviders()
   const providerMap = new Map(providers.map(p => [p.id, p]))
+  const providerEndpoints = new Map(
+    await Promise.all(providers.map(async provider => [
+      provider.id,
+      new Map((await listProviderEndpoints(provider.id)).filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url])),
+    ] as const)),
+  )
   const providerFilter = providerIds ? new Set(providerIds) : null
   const modelFilter = modelIds ? new Set(modelIds) : null
 
@@ -81,7 +87,8 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
     const startedAt = Date.now()
     try {
-      const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
+      const upstreamUrl = endpoint.upstreamUrl.trim() || providerEndpoints.get(provider.id)?.get(protocol) || ''
+      const targetUrl = resolveUpstreamUrl(upstreamUrl)
       const apiKey = await getSecretStore().get(provider.apiKeyReference)
       const testBody = buildTestBody(protocol, model.modelName)
       const result = await sendTestRequest(

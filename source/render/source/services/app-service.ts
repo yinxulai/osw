@@ -16,7 +16,7 @@ import {
   proxyApi,
   settingsApi,
 } from '../api'
-import type { ApiResponse, ProxyServerStatus } from '@common/schemas'
+import type { ApiResponse, Provider, ProxyServerStatus } from '@common/schemas'
 
 type PollingKey = 'proxyStatus' | 'providers' | 'health' | 'logicalModels' | 'settings'
 
@@ -24,6 +24,22 @@ interface PollingEntry {
   intervalMs: number
   timer: ReturnType<typeof setInterval> | null
   refCount: number
+}
+
+function providersAreEqual(current: Provider[], next: Provider[]): boolean {
+  if (current.length !== next.length) return false
+  return current.every((provider, index) => {
+    const candidate = next[index]
+    return provider.id === candidate.id
+      && provider.name === candidate.name
+      && provider.enabled === candidate.enabled
+      && provider.description === candidate.description
+      && provider.apiKeyReference === candidate.apiKeyReference
+      && provider.timeoutMilliseconds === candidate.timeoutMilliseconds
+      && provider.createdTime === candidate.createdTime
+      && provider.updatedTime === candidate.updatedTime
+      && provider.deletedTime === candidate.deletedTime
+  })
 }
 
 class AppService {
@@ -47,7 +63,11 @@ class AppService {
     if (!silent) appStore.setState({ providersLoading: true })
     const result = await providerApi.list()
     if (result.success) {
-      appStore.setState({ providers: result.data, providersLoading: false, lastError: null })
+      appStore.setState(current => ({
+        providers: providersAreEqual(current.providers, result.data) ? current.providers : result.data,
+        providersLoading: false,
+        lastError: null,
+      }))
     } else {
       appStore.setState({ providersLoading: false, lastError: result.errorMessage })
     }

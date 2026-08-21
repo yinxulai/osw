@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   CheckCircle2,
@@ -73,16 +73,27 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set())
   const [tasks, setTasks] = useState<TestTask[]>([])
   const [running, setRunning] = useState(false)
+  const previousOpen = useRef(false)
 
   useEffect(() => {
+    const isOpening = props.open && !previousOpen.current
+    previousOpen.current = props.open
     if (!props.open) return
-    const nextModelProtocols = Object.fromEntries(
-      enabledModels.map(model => [model.id, new Set(model.endpoints.map(endpoint => endpoint.protocol))]),
-    )
-    setSelectedModelProtocols(nextModelProtocols)
-    setSelectedProviderIds(new Set(availableProviders.map(provider => provider.id)))
-    setTasks([])
-    setRunning(false)
+
+    setSelectedModelProtocols(current => {
+      if (isOpening) return {}
+      return Object.fromEntries(enabledModels.map(model => [
+        model.id,
+        new Set([...current[model.id] ?? []].filter(protocol => model.endpoints.some(endpoint => endpoint.protocol === protocol))),
+      ]))
+    })
+    setSelectedProviderIds(current => isOpening
+      ? new Set()
+      : new Set([...current].filter(providerId => availableProviders.some(provider => provider.id === providerId))))
+    if (isOpening) {
+      setTasks([])
+      setRunning(false)
+    }
   }, [props.open, enabledModels, availableProviders])
 
   const plannedTasks = useMemo<TestTask[]>(() => enabledModels.flatMap(model => {
@@ -129,6 +140,24 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
       else next.add(providerId)
       return next
     })
+    clearTasks()
+  }
+
+  const allTasksSelected = enabledModels.length > 0
+    && enabledModels.every(model => selectedProviderIds.has(model.providerId)
+      && model.endpoints.every(endpoint => selectedModelProtocols[model.id]?.has(endpoint.protocol)))
+
+  const toggleAll = () => {
+    if (running) return
+    if (allTasksSelected) {
+      setSelectedProviderIds(new Set())
+      setSelectedModelProtocols(Object.fromEntries(enabledModels.map(model => [model.id, new Set<Protocol>()])))
+    } else {
+      setSelectedProviderIds(new Set(availableProviders.map(provider => provider.id)))
+      setSelectedModelProtocols(Object.fromEntries(
+        enabledModels.map(model => [model.id, new Set(model.endpoints.map(endpoint => endpoint.protocol))]),
+      ))
+    }
     clearTasks()
   }
 
@@ -181,7 +210,12 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
           <aside className="border-b border-border/30 bg-muted/10 p-3 lg:border-b-0 lg:border-r lg:border-r-border/30">
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="text-[11px] font-medium text-foreground">待测模型</div>
-              <div className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedProviderIds.size}/{availableProviders.length}</div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" disabled={running || enabledModels.length === 0} onClick={toggleAll}>
+                  {allTasksSelected ? '取消全选' : '全选'}
+                </Button>
+                <div className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{selectedProviderIds.size}/{availableProviders.length}</div>
+              </div>
             </div>
             <div className="space-y-3">
               {availableProviders.map(provider => {
