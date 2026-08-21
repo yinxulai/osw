@@ -1,12 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
-import type { RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, listAttemptsByRequest, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
+import { sendError, sendSuccess } from './response'
+import type { RequestLog, RequestLogEntry } from '@common/schemas'
+import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,
+  '/api/request-log/detail': handleRequestLogDetail,
   '/api/request-log/prune': handlePruneRequestLogs,
 }
 
@@ -19,6 +20,21 @@ const ListRequestLogsSchema = z.object({
 })
 
 const PruneRequestLogsSchema = z.object({ retentionDays: z.number().int().positive() })
+const RequestLogDetailSchema = z.object({ id: z.string().startsWith('req_') })
+
+async function handleRequestLogDetail(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { id } = RequestLogDetailSchema.parse(body ?? {})
+  const log = await getRequestLog(id)
+  if (!log) {
+    sendError(res, 'RESOURCE_NOT_FOUND', `请求日志不存在: ${id}`, 404)
+    return
+  }
+  const [entry, contents] = await Promise.all([
+    mapRequestLogEntry(log),
+    listRequestContents(id),
+  ])
+  sendSuccess(res, { ...entry, contents })
+}
 
 async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { retentionDays } = PruneRequestLogsSchema.parse(body ?? {})
@@ -35,9 +51,15 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
     countRequestLogs(filter),
   ])
   const entries: RequestLogEntry[] = await Promise.all(
-    logs.map(async log => {
-      const attempts = await listAttemptsByRequest(log.id)
-      return {
+    logs.map(mapRequestLogEntry),
+  )
+
+  sendSuccess(res, { logs: entries, total })
+}
+
+async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
+  const attempts = await listAttemptsByRequest(log.id)
+  return {
         id: log.id,
         logicalModelId: log.logicalModelId,
         protocol: log.protocol,
@@ -57,6 +79,7 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
         attempts: attempts
           .sort((a, b) => a.attemptIndex - b.attemptIndex)
           .map(a => ({
+            id: a.id,
             attemptIndex: a.attemptIndex,
             status: a.status,
             providerId: a.providerId,
@@ -74,9 +97,5 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
             durationMilliseconds: a.durationMilliseconds,
             createdTime: a.createdTime,
           })),
-      }
-    }),
-  )
-
-  sendSuccess(res, { logs: entries, total })
+  }
 }

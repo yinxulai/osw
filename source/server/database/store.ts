@@ -764,6 +764,11 @@ export async function listRequestLogs(limit = 50, offset = 0, filter?: RequestLo
   return rows.map(mapRequestLog)
 }
 
+export async function getRequestLog(id: string): Promise<RequestLog | null> {
+  const row = getDb().select().from(requestLogs).where(eq(requestLogs.id, id)).get()
+  return row ? mapRequestLog(row) : null
+}
+
 export async function countRequestLogs(filter?: RequestLogFilter): Promise<number> {
   const conditions = requestLogFilterConditions(filter)
   const row = getDb()

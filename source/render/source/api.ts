@@ -18,6 +18,7 @@ import type {
   ProxyServerStatus,
   LogEntry,
   RequestLogEntry,
+  RequestLogDetail,
   AnalyticsRange,
   AnalyticsSummary,
 } from '@common/schemas'
@@ -238,6 +239,7 @@ export type ListRequestLogsParams = {
 export const requestLogApi = {
   list: (params: ListRequestLogsParams = {}) =>
     request<{ logs: RequestLogEntry[]; total: number }>('/request-log/list', params),
+  detail: (id: string) => request<RequestLogDetail>('/request-log/detail', { id }),
   prune: (retentionDays: number) =>
     request<{ deleted: number }>('/request-log/prune', { retentionDays }),
 }

@@ -27,6 +27,7 @@ import {
   getSettings,
   getStatsSummary,
   getProviderModelRoute,
+  getRequestLog,
   listAttemptsByRequest,
   listLogicalModels,
   listProviderHealth,
@@ -560,6 +561,8 @@ describe('request logs and analytics', () => {
     expect(await listRequestLogs(10)).toEqual([expect.objectContaining({ totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })])
     expect(await countRequestLogs({ providerId: provider.id })).toBe(1)
     expect(await countRequestLogs({ status: 'cancelled' })).toBe(0)
+    expect(await getRequestLog(log.id)).toEqual(expect.objectContaining({ id: log.id, status: 'success' }))
+    expect(await getRequestLog('req_missing')).toBeNull()
   })
 
   it('supports empty and invalid prune inputs and removes old dependent rows', async () => {

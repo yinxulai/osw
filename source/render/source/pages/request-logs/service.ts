@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestLogApi, providerApi } from '@/api'
 import { useLogicalModels, useAppPolling } from '@/services/app-hooks'
 import { useAsyncFn } from '@/services/use-async'
-import type { Provider, RequestLogEntry } from '@common/schemas'
+import type { Provider, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 
 export const PAGE_SIZE = 20
 
@@ -18,6 +18,9 @@ export function useRequestLogsService() {
   const [total, setTotal] = useState(0)
   const [providers, setProviders] = useState<Provider[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [details, setDetails] = useState<Record<string, RequestLogDetail>>({})
+  const [detailLoadingIds, setDetailLoadingIds] = useState<Record<string, boolean>>({})
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
   const pageRef = useRef(1)
   const filterRef = useRef<RequestLogFilter>({ providerId: 'all', protocol: 'all', status: 'all' })
 
@@ -76,13 +79,32 @@ export function useRequestLogsService() {
     return logicalModels.find(m => m.id === id)?.name ?? id
   }, [logicalModels])
 
+  const loadDetail = useCallback(async (id: string) => {
+    if (details[id] || detailLoadingIds[id]) return
+    setDetailLoadingIds(current => ({ ...current, [id]: true }))
+    setDetailErrors(current => ({ ...current, [id]: '' }))
+    try {
+      const result = await requestLogApi.detail(id)
+      if (!result.success) throw new Error(result.errorMessage)
+      setDetails(current => ({ ...current, [id]: result.data }))
+    } catch (error) {
+      setDetailErrors(current => ({ ...current, [id]: (error as Error).message }))
+    } finally {
+      setDetailLoadingIds(current => ({ ...current, [id]: false }))
+    }
+  }, [detailLoadingIds, details])
+
   return {
     logs,
     total,
     providers,
     loading,
     refreshing,
+    details,
+    detailLoadingIds,
+    detailErrors,
     getModelName,
+    loadDetail,
     refresh,
     setFilter,
   }

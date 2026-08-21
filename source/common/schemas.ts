@@ -284,6 +284,7 @@ export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 // ========== 请求日志条目（含 attempt + providerName，用于列表展示） ==========
 
 export const RequestLogEntryAttemptSchema = z.object({
+  id: z.string().startsWith('att_'),
   attemptIndex: z.number().int().nonnegative(),
   status: RequestStatusSchema,
   providerId: z.string(),
@@ -323,6 +324,11 @@ export const RequestLogEntrySchema = z.object({
   attempts: z.array(RequestLogEntryAttemptSchema),
 })
 export type RequestLogEntry = z.infer<typeof RequestLogEntrySchema>
+
+export const RequestLogDetailSchema = RequestLogEntrySchema.extend({
+  contents: z.array(RequestContentSchema),
+})
+export type RequestLogDetail = z.infer<typeof RequestLogDetailSchema>
 
 // ========== 运行日志条目 ==========
 

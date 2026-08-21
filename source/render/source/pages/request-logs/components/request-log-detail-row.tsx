@@ -1,6 +1,6 @@
 import * as React from 'react'
-import { Braces, CheckCircle2, Copy, ExternalLink, Gauge, Route, XCircle } from 'lucide-react'
-import type { RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
+import { AlertCircle, Braces, CheckCircle2, Copy, ExternalLink, FileText, Gauge, LoaderCircle, Route, XCircle } from 'lucide-react'
+import type { RequestContent, RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,8 +21,10 @@ import {
 } from '../lib/format'
 
 interface RequestLogDetailRowProps {
-  log: RequestLogEntry
+  log: RequestLogEntry | RequestLogDetail
   modelName: string
+  detailLoading: boolean
+  detailError: string | null
 }
 
 interface StatusBadgeProps {
@@ -38,6 +40,25 @@ interface MetricCardProps {
   value: string
   hint?: string
   accent?: boolean
+}
+
+interface ContentValueButtonProps {
+  label: string
+  value: string | null
+}
+
+interface RequestContentsProps {
+  contents: RequestContent[] | null
+  attempts: RequestLogEntryAttempt[]
+  loading: boolean
+  error: string | null
+}
+
+const captureStatusLabels: Record<RequestContent['captureStatus'], string> = {
+  captured: '已采集',
+  partial: '部分采集',
+  disabled: '采集已关闭',
+  failed: '采集失败',
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -208,9 +229,96 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
   )
 }
 
+function ContentValueButton(props: ContentValueButtonProps) {
+  const [open, setOpen] = React.useState(false)
+  if (!props.value) return null
+
+  return (
+    <>
+      <button
+        type="button"
+        className="text-[10px] text-muted-foreground hover:text-foreground"
+        onClick={event => {
+          event.stopPropagation()
+          setOpen(true)
+        }}
+      >
+        {props.label}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80vh] max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{props.label}</DialogTitle>
+            <DialogDescription>正文按采集时的原始字符串展示。</DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">{props.value}</pre>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function RequestContents(props: RequestContentsProps) {
+  return (
+    <section className="mt-3 overflow-hidden rounded-lg bg-inset">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium">
+          <FileText size={12} />
+          正文记录
+        </div>
+        {props.contents && <span className="text-[10px] text-muted-foreground">{props.contents.length} 个视角</span>}
+      </div>
+      {props.loading ? (
+        <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-muted-foreground">
+          <LoaderCircle size={14} className="animate-spin" />
+          正在加载正文记录
+        </div>
+      ) : props.error ? (
+        <div className="flex items-center justify-center gap-2 px-4 py-8 text-xs text-red-600 dark:text-red-400">
+          <AlertCircle size={14} />
+          {props.error}
+        </div>
+      ) : props.contents && props.contents.length > 0 ? (
+        <div className="divide-y divide-border">
+          {props.contents.map(content => {
+            const attempt = content.attemptId
+              ? props.attempts.find(candidate => candidate.id === content.attemptId)
+              : null
+            const label = content.attemptId == null
+              ? '客户端视角'
+              : `上游尝试 ${attempt ? attempt.attemptIndex + 1 : content.attemptId}`
+            return (
+              <div key={content.id} className="grid gap-2 px-3 py-2.5 text-xs md:grid-cols-[minmax(140px,.4fr)_minmax(0,1fr)_auto] md:items-center">
+                <div>
+                  <div className="font-medium">{label}</div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">{captureStatusLabels[content.captureStatus]}</div>
+                </div>
+                <div className="min-w-0 font-mono text-[10px] text-muted-foreground">
+                  <div className="truncate">{content.requestMethod} {content.requestPath}</div>
+                  <div>{content.responseStatus == null ? '无响应状态' : `HTTP ${content.responseStatus}`}</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 md:justify-end">
+                  <ContentValueButton label="请求头" value={content.requestHeaders} />
+                  <ContentValueButton label="请求正文" value={content.requestBody} />
+                  <ContentValueButton label="响应头" value={content.responseHeaders} />
+                  <ContentValueButton label="响应正文" value={content.responseBody} />
+                  <ContentValueButton label="转换记录" value={content.conversions} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="px-4 py-8 text-center text-xs text-muted-foreground">该请求没有正文记录</div>
+      )}
+    </section>
+  )
+}
+
 export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const { log, modelName } = props
   const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
+  const contents = 'contents' in log ? log.contents : null
 
   return (
     <tr className="bg-muted/20">
@@ -275,6 +383,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
               totalTokens={log.totalTokens}
             />
           </div>
+          <RequestContents contents={contents} attempts={log.attempts} loading={props.detailLoading} error={props.detailError} />
         </div>
       </td>
     </tr>

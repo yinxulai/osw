@@ -4,6 +4,7 @@ import { calculateQueueModelMetrics, queueModelMetricKey } from './model-metrics
 
 function attempt(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogEntryAttempt {
   return {
+    id: 'att_test',
     attemptIndex: 0,
     status: 'success',
     providerId: 'prov_primary',

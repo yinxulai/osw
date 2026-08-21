@@ -33,7 +33,7 @@ type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
 type RequestLogsFilter = { providerId: string; protocol: string; status: StatusFilter }
 
 export function RequestLogsPage() {
-  const { logs, total, providers, loading, refreshing, getModelName, refresh, setFilter } = useRequestLogsService()
+  const { logs, total, providers, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter } = useRequestLogsService()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [providerFilter, setProviderFilter] = useState<string>('all')
@@ -69,7 +69,11 @@ export function RequestLogsPage() {
   }
 
   const toggleExpand = (id: string) => {
-    setExpandedId(prev => (prev === id ? null : id))
+    setExpandedId(prev => {
+      const next = prev === id ? null : id
+      if (next) void loadDetail(next)
+      return next
+    })
   }
 
   return (
@@ -247,7 +251,14 @@ export function RequestLogsPage() {
                             {formatDuration(log.totalDurationMilliseconds)}
                           </td>
                         </tr>
-                        {expanded && <RequestLogDetailRow log={log} modelName={getModelName(log.logicalModelId)} />}
+                        {expanded && (
+                          <RequestLogDetailRow
+                            log={details[log.id] ?? log}
+                            modelName={getModelName(log.logicalModelId)}
+                            detailLoading={detailLoadingIds[log.id] ?? false}
+                            detailError={detailErrors[log.id] || null}
+                          />
+                        )}
                       </Fragment>
                     )
                   })
