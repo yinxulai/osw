@@ -25,22 +25,22 @@
 
 #### 1. 基础代理验证
 
-- [ ] 启动应用后，本地端口可访问
-- [ ] 所有工具统一配置 Base URL 为 `http://127.0.0.1:port`，无需按协议区分
-- [ ] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应 ProviderModel
-- [ ] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应 ProviderModel
-- [ ] Gemini 工具请求 `/v1beta/models/*`，代理自动识别为 gemini 协议并透传到当前逻辑模型的对应 ProviderModel
-- [ ] 请求 `/v1/models` 返回唯一启用的 `auto`，不透传到上游
-- [ ] 请求体 `model` 缺失或不为 `auto` 时返回明确的模型参数错误
-- [ ] 流式请求能持续返回 SSE 数据，不被代理缓冲破坏
+- [x] 启动应用后，本地端口可访问
+- [x] 所有工具统一配置 Base URL 为 `http://127.0.0.1:port`，无需按协议区分
+- [x] OpenAI 工具请求 `/v1/chat/completions`，代理自动识别为 openai 协议并透传到当前逻辑模型的对应 ProviderModel
+- [x] Anthropic 工具请求 `/v1/messages`，代理自动识别为 anthropic 协议并透传到当前逻辑模型的对应 ProviderModel
+- 暂不支持：Gemini `/v1beta/models/*` 协议代理
+- [x] 请求 `/v1/models` 返回唯一启用的 `auto`，不透传到上游
+- [x] 请求体 `model` 缺失或不为 `auto` 时返回明确的模型参数错误
+- [x] 流式请求能持续返回 SSE 数据，不被代理缓冲破坏
 - [ ] 多工具并发请求时，日志记录和健康状态更新无错乱
 
 #### 2. 自动切换队列验证
 
-- [ ] 队列中只有 openai 协议的项；通过 anthropic 协议请求时，返回"当前协议下无可用 ProviderModel"
-- [ ] 队列中同时有 openai 和 anthropic 的项；通过 openai 请求时只尝试 openai 项，通过 anthropic 请求时只尝试 anthropic 项
-- [ ] 请求体中 `model` 字段为 `auto` 时，转发到远端后被替换为当前队列项的 `modelName`；缺失或其他值按模型参数错误拒绝
-- [ ] 队列第一项失败（不可达），自动切换到第二项并成功返回
+- [x] 队列中只有 openai 协议的项；通过 anthropic 协议请求时，返回"当前协议下无可用 ProviderModel"
+- [x] 队列中同时有 openai 和 anthropic 的项；通过 openai 请求时只尝试 openai 项，通过 anthropic 请求时只尝试 anthropic 项
+- [x] 请求体中 `model` 字段为 `auto` 时，转发到远端后被替换为当前队列项的 `modelName`；缺失或其他值按模型参数错误拒绝
+- [x] 队列第一项失败（不可达），自动切换到第二项并成功返回
 
 #### 3. 错误分类与自动切换验证
 
@@ -64,21 +64,21 @@
 
 #### 6. 健康状态验证
 
-- [ ] 连续失败达到阈值后供应商进入冷却，后续请求跳过它
+- [x] 连续失败达到阈值后供应商进入冷却，后续请求跳过它
 - [ ] Provider 级 401/403、端点级认证失败和明确的 Provider 网络故障更新 Provider 健康；模型不存在/模型级 4xx 更新 ProviderModel 健康
 - [ ] 429 的健康归属按错误响应可判定范围记录：Provider 明确限流时更新 Provider，否则更新 ProviderModel
-- [ ] 冷却结束后，新请求允许再次尝试该供应商
-- [ ] 成功请求后连续失败计数重置
+- [x] 冷却结束后，新请求允许再次尝试该供应商
+- [x] 成功请求后连续失败计数重置
 
 #### 7. 安全与隐私验证
 
-- [ ] 服务默认只监听 `127.0.0.1`
+- [x] 服务默认只监听 `127.0.0.1`
 - [ ] 代理服务和管理服务分别执行 Host 头校验，拒绝不允许的 Host，覆盖 DNS rebinding 测试
 - [ ] 若启用本地 Bearer Token，代理和管理 API 按明确配置边界校验 Token；Token 只存系统密钥环，并覆盖生成、轮换、删除和失效测试
 - [ ] 导出配置时 API Key 已脱敏
 - [ ] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
-- [ ] 关闭应用后代理端口释放
-- [ ] 开机自启设置生效
+- [x] 关闭应用后代理端口释放
+- [x] 开机自启设置生效
 
 #### 8. 跨平台验证
 

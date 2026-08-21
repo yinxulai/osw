@@ -11,7 +11,7 @@ export interface ModelWithProvider {
 /**
  * 获取可用的 upstream model 列表（全局共享队列），按优先级排序，过滤掉冷却中的 provider
  */
-export async function getAvailableModels(logicalModelId = 'model_default'): Promise<ModelWithProvider[]> {
+export async function getAvailableModels(logicalModelId = 'auto'): Promise<ModelWithProvider[]> {
   const models = await listProviderModelsForLogicalModel(logicalModelId)
 
   const result: ModelWithProvider[] = []

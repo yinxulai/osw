@@ -126,7 +126,7 @@ function writeModelsResponse(res: http.ServerResponse): void {
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({
     object: 'list',
-    data: [{ id: 'default', object: 'model', created: 0, owned_by: 'one-switch' }],
+    data: [{ id: 'auto', object: 'model', created: 0, owned_by: 'one-switch' }],
   }))
 }
 

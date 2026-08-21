@@ -45,7 +45,12 @@ describe('server lifecycle', () => {
       success: true,
       data: { running: true, port: proxyPort },
     })
-    expect((await fetch(proxyUrl)).status).toBe(200)
+    const modelsResponse = await fetch(proxyUrl)
+    expect(modelsResponse.status).toBe(200)
+    expect(await modelsResponse.json()).toEqual({
+      object: 'list',
+      data: [{ id: 'auto', object: 'model', created: 0, owned_by: 'one-switch' }],
+    })
 
     expect(await post(`${managementUrl}/stop`)).toMatchObject({
       success: true,

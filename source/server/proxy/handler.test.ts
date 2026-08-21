@@ -98,6 +98,33 @@ function convertibleModel(id: string, providerId: string, upstreamUrl: string, u
 }
 
 describe('handleProxyRequest', () => {
+  it.each([
+    [{ messages: [] }, '缺少 model 字段'],
+    [{ model: 'other', messages: [] }, 'model 必须为 auto'],
+  ])('rejects invalid logical model input before contacting upstream: %s', async (body, expectedMessage) => {
+    const upstreamHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => res.end())
+    const upstream = await listen(upstreamHandler)
+    mocks.models = [model('model_first', 'prov_first', `${upstream.url}/v1/chat/completions`, 'first-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      errorCode: 'INVALID_MODEL',
+      errorMessage: expectedMessage,
+    })
+    expect(upstreamHandler).not.toHaveBeenCalled()
+    expect(mocks.createRequestLog).not.toHaveBeenCalled()
+  })
+
   it('discards a retryable response before forwarding the next successful response', async () => {
     configureSecretStore({
       set: async () => undefined,
@@ -124,12 +151,12 @@ describe('handleProxyRequest', () => {
     ]
 
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
     const response = await fetch(`${proxy.url}/v1/completions?client=value`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', prompt: 'Hello' }),
+      body: JSON.stringify({ model: 'auto', prompt: 'Hello' }),
     })
 
     expect(response.status).toBe(200)
@@ -165,13 +192,13 @@ describe('handleProxyRequest', () => {
       ),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/messages?beta=true`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+      body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16 }),
     })
 
     expect(response.status).toBe(200)
@@ -201,13 +228,13 @@ describe('handleProxyRequest', () => {
       model('model_chat', 'prov_chat', `${upstream.url}/v1/chat/completions`, 'chat-model'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [] }),
+      body: JSON.stringify({ model: 'auto', messages: [] }),
     })
     await response.json()
 
@@ -254,13 +281,13 @@ describe('handleProxyRequest', () => {
       model('model_anthropic_usage', 'prov_anthropic_usage', `${upstream.url}/v1/messages`, 'claude-model', 'anthropic-messages'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+      body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16 }),
     })
     await response.json()
 
@@ -301,13 +328,13 @@ describe('handleProxyRequest', () => {
       model('model_responses', 'prov_responses', `${upstream.url}/v1/responses`, 'responses-model', 'openai-responses'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/responses`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', input: 'Hello', stream: true }),
+      body: JSON.stringify({ model: 'auto', input: 'Hello', stream: true }),
     })
     await response.text()
 
@@ -353,13 +380,13 @@ describe('handleProxyRequest', () => {
       convertibleModel('model_conv', 'prov_conv', `${upstream.url}/v1/chat/completions`, 'upstream-model', 'openai-completions'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', system: 'sys', max_tokens: 32, messages: [{ role: 'user', content: 'hi' }] }),
+      body: JSON.stringify({ model: 'auto', system: 'sys', max_tokens: 32, messages: [{ role: 'user', content: 'hi' }] }),
     })
 
     expect(response.status).toBe(200)
@@ -389,13 +416,13 @@ describe('handleProxyRequest', () => {
       model('model_native', 'prov_native', `${upstream.url}/v1/chat/completions`, 'native-model', 'openai-completions'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+      body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16 }),
     })
 
     expect(response.status).toBe(503)
@@ -422,13 +449,13 @@ describe('handleProxyRequest', () => {
     entry.model.endpoints.push({ protocol: 'anthropic-messages', upstreamUrl: `${native.url}/v1/messages`, customAuthHeader: null, protocolConversionEnabled: false })
     mocks.models = [entry]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16 }),
+      body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16 }),
     })
 
     expect(response.status).toBe(200)
@@ -457,13 +484,13 @@ describe('handleProxyRequest', () => {
       convertibleModel('model_stream_conv', 'prov_stream_conv', `${upstream.url}/v1/chat/completions`, 'stream-model', 'openai-completions'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const response = await fetch(`${proxy.url}/v1/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'client-model', messages: [], max_tokens: 16, stream: true }),
+      body: JSON.stringify({ model: 'auto', messages: [], max_tokens: 16, stream: true }),
     })
 
     expect(response.status).toBe(200)
@@ -506,7 +533,7 @@ describe('handleProxyRequest', () => {
       model('model_cancel', 'prov_cancel', `${upstream.url}/v1/responses`, 'cancel-model', 'openai-responses'),
     ]
     const proxy = await listen((req, res) => {
-      void handleProxyRequest(req, res, 'model_default')
+      void handleProxyRequest(req, res, 'auto')
     })
 
     const client = http.request(`${proxy.url}/v1/responses`, {
@@ -514,7 +541,7 @@ describe('handleProxyRequest', () => {
       headers: { 'content-type': 'application/json' },
     })
     client.on('error', () => undefined)
-    client.end(JSON.stringify({ model: 'client-model', input: 'Hello', stream: true }))
+    client.end(JSON.stringify({ model: 'auto', input: 'Hello', stream: true }))
     await requestReceived
     client.destroy()
 

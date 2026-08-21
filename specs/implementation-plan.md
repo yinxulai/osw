@@ -19,7 +19,7 @@ v0.3 MVP 完成后必须具备：
 - Provider、ProviderModel、端点绑定和协议转换器分层建模；
 - 按当前逻辑模型绑定关系进行协议路由和故障切换；
 - 请求日志、指标、用量、尝试和正文分层记录；
-- OpenAI、Anthropic、Gemini 基础协议代理能力；
+- OpenAI、Anthropic 基础协议代理能力（Gemini 暂不支持）；
 - 管理 API、控制台和验收测试全部切换到新领域模型。
 
 ## 3. 实施原则
@@ -183,7 +183,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - 新增 `proxy/transport.ts`；
 - 新增 `proxy/request-context.ts`；
 - 新增 `proxy/protocols/types.ts`；
-- 抽取 OpenAI Completions、OpenAI Responses、Anthropic Messages、Gemini Adapter；
+- 抽取 OpenAI Completions、OpenAI Responses、Anthropic Messages Adapter；
 - 将现有转换逻辑迁移到适配器或转换器注册表；
 - 将超时、客户端中止、SSE 和响应头处理下沉到传输层。
 
@@ -262,7 +262,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 ### 阶段 7 工作项
 
 - 执行完整 typecheck、server test、lint 和 build；
-- 执行 OpenAI、Anthropic、Gemini 代理场景；
+- 执行 OpenAI、Anthropic 代理场景（Gemini 暂不支持）；
 - 执行自动切换、手动切换、健康冷却和流式边界场景；
 - 执行 Host 校验、Token、密钥脱敏和正文隐私验收；
 - 删除旧迁移、旧 API、旧术语和旧文档残留；
@@ -287,7 +287,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
 | 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `auto` 幂等初始化已落地 |
 | 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | Provider 默认端点已完全切换到关系表；其余 Store 契约继续收敛 |
-| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由与 Provider/ProviderModel 双层冷却已落地 |
+| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、`model=auto` 校验和模型发现已落地 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
 | 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages、attempts 已关系化，contents 仍待完善 |
 | 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | ProviderEndpoint 管理、配置导入导出与模型发现已切换到关系表 |

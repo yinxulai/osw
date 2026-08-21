@@ -9,7 +9,7 @@ import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogSt
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
-import { resolveUpstreamUrl, rewriteRequestModel, injectUsageParams } from './request'
+import { resolveUpstreamUrl, validateLogicalModel, rewriteRequestModel, injectUsageParams } from './request'
 import { classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
@@ -79,6 +79,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
+  const requestBody = await readRequestBody(req)
+  if (req.aborted) return
+  const modelValidationError = validateLogicalModel(requestBody, logicalModelId)
+  if (modelValidationError) {
+    writeJsonError(res, 400, 'INVALID_MODEL', modelValidationError)
+    return
+  }
+
   // 获取当前逻辑模型绑定的可用 models：原生协议候选优先，其后是开启了协议转换的候选
   const availableModels = await getAvailableModels(logicalModelId)
   const nativeModels = availableModels.filter(m => findEndpoint(m.model, protocol))
@@ -110,9 +118,6 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
-  // 收集请求体（用于重试时重发）
-  const requestBody = await readRequestBody(req)
-  if (req.aborted) return
   const startedAt = Date.now()
 
   // 先创建请求日志（占位状态），供各 attempt 作为外键引用，结束时再更新为最终状态
