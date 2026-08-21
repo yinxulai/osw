@@ -162,7 +162,7 @@ export function RequestLogsPage() {
             }}
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           />
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-foreground/75">
             共 {total} 条
           </span>
         </div>
@@ -178,7 +178,7 @@ export function RequestLogsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-border bg-muted/40 text-left text-muted-foreground">
+                <tr className="border-b border-border bg-muted/40 text-left text-foreground/75">
                   <th className="w-8 px-2.5 py-2 font-medium" />
                   <th className="px-2.5 py-2 font-medium">状态</th>
                   <th className="px-2.5 py-2 font-medium">时间</th>
@@ -241,13 +241,13 @@ export function RequestLogsPage() {
                             expanded && 'bg-muted/20',
                           )}
                         >
-                          <td className="px-2.5 py-2 text-muted-foreground">
+                          <td className="px-2.5 py-2 text-foreground/70">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </td>
                           <td className="px-2.5 py-2">
                             <RequestStatusBadge status={log.status} />
                           </td>
-                          <td className="px-2.5 py-2 font-mono text-muted-foreground whitespace-nowrap">
+                          <td className="px-2.5 py-2 font-mono text-foreground/75 whitespace-nowrap">
                             {formatTime(log.createdTime)}
                           </td>
                           <td className="px-2.5 py-2 max-w-35 truncate font-medium">
@@ -266,7 +266,7 @@ export function RequestLogsPage() {
                                 {formatNumber(log.cachedInputTokens)}
                               </Badge>
                             ) : (
-                              <span className="font-medium text-muted-foreground">MISS</span>
+                              <span className="font-medium text-foreground/70">MISS</span>
                             )}
                           </td>
                           <td className="px-2.5 py-2 text-center font-mono">
@@ -305,7 +305,7 @@ export function RequestLogsPage() {
           </div>
         </div>}
         {!loading && total > PAGE_SIZE && (
-          <div className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+          <div className="mt-3 flex items-center justify-end gap-2 text-xs text-foreground/75">
             <span>
               第 {page} / {totalPages} 页
             </span>

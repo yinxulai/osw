@@ -19,7 +19,6 @@ interface RequestLogDetailRowProps {
   detailLoading: boolean
   detailError: string | null
 }
-
 interface StatusBadgeProps {
   status: string
 }
@@ -61,6 +60,15 @@ interface ConversionRecord {
 interface ContentSectionProps {
   label: string
   value: string
+}
+
+function formatContent(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return { value: JSON.stringify(parsed, null, 2), isJson: true }
+  } catch {
+    return { value, isJson: false }
+  }
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -179,7 +187,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
         )}
       </div>
       {rawUsage ? (
-        <pre className="whitespace-pre-wrap break-all p-3 font-mono text-[11px] leading-5 text-muted-foreground">{rawUsage}</pre>
+        <pre className="whitespace-pre-wrap break-all p-3 font-mono text-[11px] leading-5 text-foreground/90">{rawUsage}</pre>
       ) : (
         <div className="flex min-h-28 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
           <Gauge size={18} className="opacity-50" />
@@ -195,6 +203,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
 
 function ContentSection(props: ContentSectionProps) {
   const [open, setOpen] = React.useState(true)
+  const content = formatContent(props.value)
 
   return (
     <div className="overflow-hidden rounded-md border border-border">
@@ -204,12 +213,15 @@ function ContentSection(props: ContentSectionProps) {
         aria-expanded={open}
         onClick={() => setOpen(current => !current)}
       >
-        <span>{props.label}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{props.label}</span>
+          {content.isJson && <span className="shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-muted-foreground">JSON</span>}
+        </span>
         <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} />
       </button>
       {open && (
-        <pre className="whitespace-pre-wrap break-all border-t border-border bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">
-          {props.value}
+        <pre className="whitespace-pre-wrap break-all border-t border-border bg-inset p-3 font-mono text-[11px] leading-5 text-foreground/90">
+          {content.value}
         </pre>
       )}
     </div>
