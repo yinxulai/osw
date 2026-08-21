@@ -227,7 +227,7 @@ function RequestContents(props: RequestContentsProps) {
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between border-b px-4 py-3">
           <div>
-            <h2 className="text-xs font-medium">{selectedContent ? `上游尝试 ${(props.attempts.find(attempt => attempt.id === props.selectedAttemptId)?.attemptIndex ?? 0) + 1} 正文` : '正文详情'}</h2>
+            <h2 className="text-xs font-medium">请求详情</h2>
             <p className="mt-0.5 text-[10px] text-muted-foreground">按采集时的原始字符串展示</p>
           </div>
           <button type="button" aria-label="关闭正文" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onClose}><X size={14} /></button>

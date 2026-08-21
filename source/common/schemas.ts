@@ -395,9 +395,9 @@ export const ModelStatSchema = z.object({
   requests: z.number().int().nonnegative(),
   success: z.number().int().nonnegative(),
   successRate: z.number().min(0).max(1),
-  errorRate: z.number().min(0).max(1),
   avgLatencyMs: z.number().nonnegative(),
   avgTtftMs: z.number().nonnegative().nullable(),
+  avgTps: z.number().nonnegative().nullable(),
   cacheHitRate: z.number().min(0).max(1).nullable(),
 })
 export type ModelStat = z.infer<typeof ModelStatSchema>

@@ -44,7 +44,7 @@ export function OverviewPage() {
           </div>
         </Card>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="grid grid-cols-1 gap-4">
         <Card className="p-4">
           <Skeleton className="mb-4 h-4 w-24" />
           <div className="space-y-3">
@@ -52,6 +52,12 @@ export function OverviewPage() {
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <Skeleton className="h-32 w-full" />
         </Card>
         <Card className="p-4">
           <Skeleton className="mb-4 h-4 w-24" />
@@ -81,9 +87,7 @@ export function OverviewPage() {
           <ProviderDistribution stats={data.providerStats} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-          <ModelRanking stats={data.modelStats} />
-        </div>
+        <ModelRanking stats={data.modelStats} />
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <LatencyDistribution buckets={data.latencyDistribution} />

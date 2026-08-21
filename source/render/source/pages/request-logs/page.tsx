@@ -188,6 +188,10 @@ export function RequestLogsPage() {
                     输入
                   </th>
                   <th className="px-2.5 py-2 font-medium text-center">
+                    <Database size={11} className="mr-0.5 inline" />
+                    缓存输入
+                  </th>
+                  <th className="px-2.5 py-2 font-medium text-center">
                     <ArrowDownToLine size={11} className="mr-0.5 inline" />
                     输出
                   </th>
@@ -198,10 +202,6 @@ export function RequestLogsPage() {
                   <th className="px-2.5 py-2 font-medium text-center">
                     <Zap size={11} className="mr-0.5 inline" />
                     TPS
-                  </th>
-                  <th className="px-2.5 py-2 font-medium text-center">
-                    <Database size={11} className="mr-0.5 inline" />
-                    缓存
                   </th>
                   <th className="px-2.5 py-2 font-medium text-right">耗时</th>
                 </tr>
@@ -216,9 +216,9 @@ export function RequestLogsPage() {
                       <td className="px-2.5 py-2.5"><Skeleton className="h-3 w-16" /></td>
                       <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
                       <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
-                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
-                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
                       <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-8" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
+                      <td className="px-2.5 py-2.5"><Skeleton className="mx-auto h-3 w-10" /></td>
                       <td className="px-2.5 py-2.5"><Skeleton className="ml-auto h-3 w-12" /></td>
                     </tr>
                   ))
@@ -258,6 +258,17 @@ export function RequestLogsPage() {
                               {formatNumber(log.inputTokens)}
                             </span>
                           </td>
+                          <td className="px-2.5 py-2 text-center">
+                            {log.cachedInputTokens === null ? (
+                              <span className="text-muted-foreground/60">—</span>
+                            ) : log.cachedInputTokens > 0 ? (
+                              <Badge className="h-5 bg-emerald-500/15 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                                {formatNumber(log.cachedInputTokens)}
+                              </Badge>
+                            ) : (
+                              <span className="font-medium text-muted-foreground">MISS</span>
+                            )}
+                          </td>
                           <td className="px-2.5 py-2 text-center font-mono">
                             <span className={cn(log.outputTokens != null && 'text-foreground')}>
                               {formatNumber(log.outputTokens)}
@@ -272,17 +283,6 @@ export function RequestLogsPage() {
                             <span className={cn(tps !== '—' && 'text-emerald-600 dark:text-emerald-400')}>
                               {tps}
                             </span>
-                          </td>
-                          <td className="px-2.5 py-2 text-center">
-                            {log.cachedInputTokens === null ? (
-                              <span className="text-muted-foreground/60">—</span>
-                            ) : log.cachedInputTokens > 0 ? (
-                              <Badge className="h-5 bg-emerald-500/15 px-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                                HIT · {formatNumber(log.cachedInputTokens)}
-                              </Badge>
-                            ) : (
-                              <span className="font-medium text-muted-foreground">MISS</span>
-                            )}
                           </td>
                           <td className="px-2.5 py-2 text-right font-mono">
                             {formatDuration(log.totalDurationMilliseconds)}
