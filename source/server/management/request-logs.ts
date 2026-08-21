@@ -15,8 +15,11 @@ const ListRequestLogsSchema = z.object({
   limit: z.number().int().positive().max(200).optional(),
   offset: z.number().int().nonnegative().optional(),
   providerId: z.string().optional(),
+  logicalModelId: z.string().optional(),
   protocol: z.string().optional(),
   status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
+  createdTimeFrom: z.number().int().nonnegative().optional(),
+  createdTimeTo: z.number().int().nonnegative().optional(),
 })
 
 const PruneRequestLogsSchema = z.object({ retentionDays: z.number().int().positive() })
@@ -43,9 +46,9 @@ async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse
 }
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { limit, offset, providerId, protocol, status } = ListRequestLogsSchema.parse(body ?? {})
+  const { limit, offset, providerId, logicalModelId, protocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
   const pageSize = limit ?? 50
-  const filter = { providerId, protocol, status }
+  const filter = { providerId, logicalModelId, protocol, status, createdTimeFrom, createdTimeTo }
   const [logs, total] = await Promise.all([
     listRequestLogs(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),

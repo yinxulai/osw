@@ -8,8 +8,11 @@ export const PAGE_SIZE = 20
 
 export interface RequestLogFilter {
   providerId: string
+  logicalModelId: string
   protocol: string
   status: string
+  createdTimeFrom: number | null
+  createdTimeTo: number | null
 }
 
 export function useRequestLogsService() {
@@ -22,7 +25,7 @@ export function useRequestLogsService() {
   const [detailLoadingIds, setDetailLoadingIds] = useState<Record<string, boolean>>({})
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
   const pageRef = useRef(1)
-  const filterRef = useRef<RequestLogFilter>({ providerId: 'all', protocol: 'all', status: 'all' })
+  const filterRef = useRef<RequestLogFilter>({ providerId: 'all', logicalModelId: 'all', protocol: 'all', status: 'all', createdTimeFrom: null, createdTimeTo: null })
 
   // 确保逻辑模型数据可用（用于名称映射）
   useAppPolling('logicalModels', 30000)
@@ -40,8 +43,11 @@ export function useRequestLogsService() {
       limit: PAGE_SIZE,
       offset: (target - 1) * PAGE_SIZE,
       ...(filter.providerId !== 'all' ? { providerId: filter.providerId } : {}),
+      ...(filter.logicalModelId !== 'all' ? { logicalModelId: filter.logicalModelId } : {}),
       ...(filter.protocol !== 'all' ? { protocol: filter.protocol } : {}),
       ...(filter.status !== 'all' ? { status: filter.status as 'pending' | 'success' | 'failed' | 'cancelled' } : {}),
+      ...(filter.createdTimeFrom !== null ? { createdTimeFrom: filter.createdTimeFrom } : {}),
+      ...(filter.createdTimeTo !== null ? { createdTimeTo: filter.createdTimeTo } : {}),
     })
     if (!result.success) throw new Error(result.errorMessage)
     pageRef.current = target
@@ -98,6 +104,7 @@ export function useRequestLogsService() {
     logs,
     total,
     providers,
+    logicalModels,
     loading,
     refreshing,
     details,

@@ -1049,7 +1049,13 @@ describe('handleProxyRequest', () => {
     expect(attemptContent).toEqual(expect.objectContaining({
       captureStatus: 'captured',
       responseStatus: 200,
-      conversions: JSON.stringify({ schemaVersion: 1, fromProtocol: 'anthropic-messages', toProtocol: 'openai-completions' }),
+    }))
+    expect(JSON.parse(String(attemptContent?.conversions))).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      fromProtocol: 'anthropic-messages',
+      toProtocol: 'openai-completions',
+      convertedRequestBody: JSON.stringify({ model: 'stream-model', messages: [], max_tokens: 16, stream: true, stream_options: { include_usage: true } }),
+      convertedResponseBody: expect.stringContaining('content_block_delta'),
     }))
     expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({
       schemaVersion: 1,

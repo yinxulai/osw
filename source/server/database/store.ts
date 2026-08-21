@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { ProtocolConverterSchema, ProviderModelEndpointSchema } from '@common/schemas'
 import type {
   ProviderModel,
@@ -394,8 +394,11 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
 
 export interface RequestLogFilter {
   providerId?: string
+  logicalModelId?: string
   protocol?: string
   status?: RequestStatus
+  createdTimeFrom?: number
+  createdTimeTo?: number
 }
 
 function requestLogFilterConditions(filter?: RequestLogFilter) {
@@ -406,8 +409,11 @@ function requestLogFilterConditions(filter?: RequestLogFilter) {
       sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerId = ${filter.providerId})`,
     )
   }
+  if (filter.logicalModelId) conditions.push(eq(requestLogs.logicalModelId, filter.logicalModelId))
   if (filter.protocol) conditions.push(eq(requestLogs.protocol, filter.protocol))
   if (filter.status) conditions.push(eq(requestLogs.status, filter.status))
+  if (filter.createdTimeFrom !== undefined) conditions.push(gte(requestLogs.createdTime, filter.createdTimeFrom))
+  if (filter.createdTimeTo !== undefined) conditions.push(lt(requestLogs.createdTime, filter.createdTimeTo))
   return conditions
 }
 

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertCircle, Braces, CheckCircle2, Copy, ExternalLink, FileText, Gauge, LoaderCircle, Route, XCircle } from 'lucide-react'
+import { AlertCircle, Braces, CheckCircle2, ChevronDown, Copy, FileText, Gauge, LoaderCircle, Route, X, XCircle } from 'lucide-react'
 import type { RequestContent, RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,11 @@ interface AttemptBadgeProps {
   attempt: RequestLogEntryAttempt
 }
 
+interface UpstreamRouteProps {
+  attempts: RequestLogEntryAttempt[]
+  onSelect: (attemptId: string) => void
+}
+
 interface MetricCardProps {
   label: string
   value: string
@@ -42,16 +47,23 @@ interface MetricCardProps {
   accent?: boolean
 }
 
-interface ContentValueButtonProps {
-  label: string
-  value: string | null
-}
-
 interface RequestContentsProps {
   contents: RequestContent[] | null
   attempts: RequestLogEntryAttempt[]
   loading: boolean
   error: string | null
+  selectedAttemptId: string | null
+  onClose: () => void
+}
+
+interface ConversionRecord {
+  convertedRequestBody?: string | null
+  convertedResponseBody?: string | null
+}
+
+interface ContentSectionProps {
+  label: string
+  value: string
 }
 
 const captureStatusLabels: Record<RequestContent['captureStatus'], string> = {
@@ -116,15 +128,8 @@ function ErrorResponseViewer(props: ErrorResponseViewerProps) {
 
   return (
     <>
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-500 dark:text-red-400"
-        onClick={event => {
-          event.stopPropagation()
-          setOpen(true)
-        }}
-      >
-        查看错误响应 <ExternalLink size={10} />
+      <button type="button" className="text-[10px] text-red-600 hover:text-red-500 dark:text-red-400" onClick={event => { event.stopPropagation(); setOpen(true) }}>
+        查看错误响应
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[80vh] max-w-2xl">
@@ -139,7 +144,7 @@ function ErrorResponseViewer(props: ErrorResponseViewerProps) {
   )
 }
 
-function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
+function UpstreamRoute(props: UpstreamRouteProps) {
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
       <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
@@ -151,7 +156,7 @@ function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
       </div>
       <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
-          <div key={attempt.attemptIndex} className="grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-xs">
+          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
             <div className={cn(
               'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
               attempt.status === 'success'
@@ -182,7 +187,7 @@ function UpstreamRoute(props: Pick<RequestLogEntry, 'attempts'>) {
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
             </div>
-          </div>
+          </button>
         ))}
         {props.attempts.length === 0 && (
           <div className="px-3 py-6 text-center text-xs text-muted-foreground">没有生成上游尝试记录</div>
@@ -229,37 +234,43 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
   )
 }
 
-function ContentValueButton(props: ContentValueButtonProps) {
-  const [open, setOpen] = React.useState(false)
-  if (!props.value) return null
+function ContentSection(props: ContentSectionProps) {
+  const [open, setOpen] = React.useState(true)
 
   return (
-    <>
+    <div className="overflow-hidden rounded-md border border-border">
       <button
         type="button"
-        className="text-[10px] text-muted-foreground hover:text-foreground"
-        onClick={event => {
-          event.stopPropagation()
-          setOpen(true)
-        }}
+        className="flex w-full items-center justify-between gap-3 bg-muted/30 px-3 py-2 text-left text-[11px] font-medium hover:bg-muted/50"
+        aria-expanded={open}
+        onClick={() => setOpen(current => !current)}
       >
-        {props.label}
+        <span>{props.label}</span>
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} />
       </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[80vh] max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{props.label}</DialogTitle>
-            <DialogDescription>正文按采集时的原始字符串展示。</DialogDescription>
-          </DialogHeader>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">{props.value}</pre>
-        </DialogContent>
-      </Dialog>
-    </>
+      {open && (
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-border bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">
+          {props.value}
+        </pre>
+      )}
+    </div>
   )
 }
 
 function RequestContents(props: RequestContentsProps) {
+  const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
+  const conversion = selectedContent?.conversions ? JSON.parse(selectedContent.conversions) as ConversionRecord : null
+  const drawerSections = selectedContent ? [
+    ['请求头', selectedContent.requestHeaders],
+    ['请求正文', selectedContent.requestBody],
+    ...(conversion?.convertedRequestBody ? [['转换后请求', conversion.convertedRequestBody]] : []),
+    ...(conversion?.convertedResponseBody ? [['转换后响应', conversion.convertedResponseBody]] : []),
+    ['响应头', selectedContent.responseHeaders],
+    ['响应正文', selectedContent.responseBody],
+  ] as Array<[string, string | null]> : []
+
   return (
+    <>
     <section className="mt-3 overflow-hidden rounded-lg bg-inset">
       <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
@@ -297,13 +308,7 @@ function RequestContents(props: RequestContentsProps) {
                   <div className="truncate">{content.requestMethod} {content.requestPath}</div>
                   <div>{content.responseStatus == null ? '无响应状态' : `HTTP ${content.responseStatus}`}</div>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 md:justify-end">
-                  <ContentValueButton label="请求头" value={content.requestHeaders} />
-                  <ContentValueButton label="请求正文" value={content.requestBody} />
-                  <ContentValueButton label="响应头" value={content.responseHeaders} />
-                  <ContentValueButton label="响应正文" value={content.responseBody} />
-                  <ContentValueButton label="转换记录" value={content.conversions} />
-                </div>
+                <div className="text-[10px] text-muted-foreground md:text-right">点击上游路由查看正文</div>
               </div>
             )
           })}
@@ -312,6 +317,23 @@ function RequestContents(props: RequestContentsProps) {
         <div className="px-4 py-8 text-center text-xs text-muted-foreground">该请求没有正文记录</div>
       )}
     </section>
+    <div className={cn('fixed inset-y-0 right-0 z-50 w-full max-w-xl border-l bg-card shadow-2xl transition-transform duration-200', props.selectedAttemptId ? 'translate-x-0' : 'translate-x-full')}>
+      <div className="flex h-full flex-col">
+        <div className="flex items-start justify-between border-b px-5 py-4">
+          <div>
+            <DialogTitle className="text-sm">{selectedContent ? `上游尝试 ${(props.attempts.find(attempt => attempt.id === props.selectedAttemptId)?.attemptIndex ?? 0) + 1} 正文` : '正文记录'}</DialogTitle>
+            <DialogDescription className="mt-1 text-xs">正文按采集时的原始字符串展示。</DialogDescription>
+          </div>
+          <button type="button" aria-label="关闭正文" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onClose}><X size={15} /></button>
+        </div>
+        <div className="flex-1 space-y-4 overflow-auto p-5">
+          {drawerSections.map(([label, value]) => value && <ContentSection key={label} label={label} value={value} />)}
+          {selectedContent && drawerSections.length === 0 && <div className="py-8 text-center text-xs text-muted-foreground">该尝试没有可展示的正文</div>}
+        </div>
+      </div>
+    </div>
+    {props.selectedAttemptId && <button type="button" aria-label="关闭正文" className="fixed inset-0 z-40 bg-black/30" onClick={props.onClose} />}
+    </>
   )
 }
 
@@ -319,6 +341,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const { log, modelName } = props
   const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
   const contents = 'contents' in log ? log.contents : null
+  const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
 
   return (
     <tr className="bg-muted/20">
@@ -376,14 +399,14 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
-            <UpstreamRoute attempts={log.attempts} />
+            <UpstreamRoute attempts={log.attempts} onSelect={setSelectedAttemptId} />
             <RawUsage
               rawUsage={log.rawUsage}
               cacheCreationInputTokens={log.cacheCreationInputTokens}
               totalTokens={log.totalTokens}
             />
           </div>
-          <RequestContents contents={contents} attempts={log.attempts} loading={props.detailLoading} error={props.detailError} />
+          <RequestContents contents={contents} attempts={log.attempts} loading={props.detailLoading} error={props.detailError} selectedAttemptId={selectedAttemptId} onClose={() => setSelectedAttemptId(null)} />
         </div>
       </td>
     </tr>

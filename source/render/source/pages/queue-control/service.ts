@@ -72,8 +72,7 @@ export function useQueueControlService() {
     if (initializedRef.current) return
 
     initializedRef.current = true
-    void loadModels()
-    setLoading(false)
+    void loadModels().finally(() => setLoading(false))
   }, [loadModels])
 
   // 定期静默刷新队列

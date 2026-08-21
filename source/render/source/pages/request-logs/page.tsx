@@ -30,20 +30,26 @@ import { formatTime, formatDuration, formatNumber, formatTTFT, formatTPS } from 
 
 type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
 
-type RequestLogsFilter = { providerId: string; protocol: string; status: StatusFilter }
+type RequestLogsFilter = { providerId: string; logicalModelId: string; protocol: string; status: StatusFilter; createdTimeFrom: number | null; createdTimeTo: number | null }
 
 export function RequestLogsPage() {
-  const { logs, total, providers, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter } = useRequestLogsService()
+  const { logs, total, providers, logicalModels, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter } = useRequestLogsService()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [providerFilter, setProviderFilter] = useState<string>('all')
+  const [logicalModelFilter, setLogicalModelFilter] = useState<string>('all')
   const [protocolFilter, setProtocolFilter] = useState<string>('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [page, setPage] = useState(1)
 
   const applyFilter = (next: Partial<RequestLogsFilter>) => {
     if (next.providerId !== undefined) setProviderFilter(next.providerId)
+    if (next.logicalModelId !== undefined) setLogicalModelFilter(next.logicalModelId)
     if (next.protocol !== undefined) setProtocolFilter(next.protocol)
     if (next.status !== undefined) setStatusFilter(next.status)
+    if (next.createdTimeFrom !== undefined) setFromDate(next.createdTimeFrom === null ? '' : new Date(next.createdTimeFrom).toISOString().slice(0, 10))
+    if (next.createdTimeTo !== undefined) setToDate(next.createdTimeTo === null ? '' : new Date(next.createdTimeTo - 1).toISOString().slice(0, 10))
     setPage(1)
     void setFilter(next)
   }
@@ -54,9 +60,7 @@ export function RequestLogsPage() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [providers])
 
-  const protocolOptions = useMemo(() => {
-    return Array.from(new Set(logs.map(log => log.protocol))).sort()
-  }, [logs])
+  const protocolOptions = ['openai-responses', 'openai-completions', 'anthropic-messages']
 
   const filteredLogs = logs
 
@@ -102,6 +106,17 @@ export function RequestLogsPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={logicalModelFilter} onValueChange={v => applyFilter({ logicalModelId: v })}>
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue placeholder="全部模型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部模型</SelectItem>
+              {logicalModels.map(model => (
+                <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={protocolFilter} onValueChange={v => applyFilter({ protocol: v })}>
             <SelectTrigger className="h-8 w-32 text-xs">
               <SelectValue placeholder="全部协议" />
@@ -125,6 +140,28 @@ export function RequestLogsPage() {
               <SelectItem value="cancelled">已取消</SelectItem>
             </SelectContent>
           </Select>
+          <input
+            aria-label="开始日期"
+            type="date"
+            value={fromDate}
+            onChange={event => {
+              const value = event.target.value
+              setFromDate(value)
+              applyFilter({ createdTimeFrom: value ? new Date(`${value}T00:00:00`).getTime() : null })
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          />
+          <input
+            aria-label="结束日期"
+            type="date"
+            value={toDate}
+            onChange={event => {
+              const value = event.target.value
+              setToDate(value)
+              applyFilter({ createdTimeTo: value ? new Date(`${value}T00:00:00`).getTime() + 24 * 60 * 60 * 1000 : null })
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          />
           <span className="text-xs text-muted-foreground">
             共 {total} 条
           </span>

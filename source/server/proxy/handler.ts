@@ -333,6 +333,7 @@ interface AttemptContentInput {
   responseStatus: number | null
   responseHeaders: http.IncomingHttpHeaders | null
   responseBody: string | null
+  convertedResponseBody?: string | null
 }
 
 type AttemptUsageInput = Pick<RequestLogMetrics, 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'rawUsage'>
@@ -476,7 +477,13 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         responseStatus: input.responseStatus,
         responseHeaders: input.responseHeaders ? JSON.stringify(redactHeaders(input.responseHeaders)) : null,
         responseBody: input.responseBody,
-        conversions: converting ? JSON.stringify({ schemaVersion: 1, fromProtocol: protocol, toProtocol: endpointProtocol }) : null,
+        conversions: converting ? JSON.stringify({
+          schemaVersion: 1,
+          fromProtocol: protocol,
+          toProtocol: endpointProtocol,
+          convertedRequestBody: upstreamBody.toString('utf8'),
+          convertedResponseBody: input.convertedResponseBody ?? null,
+        }) : null,
       })
     } catch (error) {
       console.error(`[proxy] 写入请求正文失败: ${(error as Error).message}`)
@@ -727,7 +734,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
         )
         const upstreamResponseBody = serializeCapturedBody(isStreaming, upstreamChunks, disposition === 'success' ? responseBuffer : body)
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody })
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody, convertedResponseBody: converting ? downstreamChunks.join('') : null })
         const downstreamResponseBody = isStreaming
           ? serializeStreamingChunks(downstreamChunks)
           : (downstreamChunks.join('') || responseBuffer || body)

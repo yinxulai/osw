@@ -135,6 +135,10 @@ class AppService {
     void this.fetchSettings(true)
   }
 
+  invalidateProxyStatus(): void {
+    void this.fetchProxyStatus(true)
+  }
+
   // ========== 轮询管理 ==========
 
   private startPolling(key: PollingKey, intervalMs: number): void {

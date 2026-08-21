@@ -231,8 +231,11 @@ export type ListRequestLogsParams = {
   limit?: number
   offset?: number
   providerId?: string
+  logicalModelId?: string
   protocol?: string
   status?: 'pending' | 'success' | 'failed' | 'cancelled'
+  createdTimeFrom?: number
+  createdTimeTo?: number
 }
 
 export const requestLogApi = {

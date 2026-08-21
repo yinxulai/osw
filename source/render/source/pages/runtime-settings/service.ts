@@ -114,6 +114,8 @@ export function useRuntimeSettingsService() {
     appActions.invalidateSettings()
     appActions.invalidateProviders()
     appActions.invalidateLogicalModels()
+    appActions.invalidateHealth()
+    appActions.invalidateProxyStatus()
   }, [appActions])
 
   const importConfig = useCallback(async (file: File) => {
