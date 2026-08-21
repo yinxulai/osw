@@ -153,20 +153,16 @@ function buildTestBody(protocol: Protocol, modelId: string): string {
       return JSON.stringify({
         model: modelId,
         messages: [{ role: 'user', content: 'Hi' }],
-        max_tokens: 10,
-        stream: false,
       })
     case 'openai-responses':
       return JSON.stringify({
         model: modelId,
         input: [{ role: 'user', content: 'Hi' }],
-        max_output_tokens: 10,
       })
     case 'anthropic-messages':
       return JSON.stringify({
         model: modelId,
         messages: [{ role: 'user', content: 'Hi' }],
-        max_tokens: 10,
       })
   }
 }
