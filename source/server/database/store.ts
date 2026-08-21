@@ -35,6 +35,7 @@ import {
   schedulingPolicies,
   settings,
 } from './schema'
+import type { ProviderModelHealthRow } from './schema'
 
 // ========== Settings Change Listeners ==========
 
@@ -463,6 +464,75 @@ export async function resetProviderHealth(providerId: string): Promise<void> {
       updatedTime: time,
     })
     .where(eq(providerHealth.providerId, providerId))
+    .run()
+}
+
+// ========== Provider Model Health ==========
+
+export async function getProviderModelHealth(providerModelId: string): Promise<ProviderModelHealthRow | undefined> {
+  return getDb()
+    .select()
+    .from(providerModelHealth)
+    .where(eq(providerModelHealth.providerModelId, providerModelId))
+    .get()
+}
+
+export async function recordProviderModelHealthSuccess(providerModelId: string): Promise<void> {
+  const time = now()
+  getDb()
+    .update(providerModelHealth)
+    .set({
+      consecutiveFailures: 0,
+      cooldownUntilTime: null,
+      lastSuccessTime: time,
+      updatedTime: time,
+    })
+    .where(eq(providerModelHealth.providerModelId, providerModelId))
+    .run()
+}
+
+export async function recordProviderModelFailure(providerModelId: string, consecutiveFailureThreshold: number, cooldownBaseSeconds: number, cooldownMaxSeconds: number): Promise<void> {
+  const db = getDb()
+  const time = now()
+  db.transaction(transaction => {
+    const current = transaction
+      .select()
+      .from(providerModelHealth)
+      .where(eq(providerModelHealth.providerModelId, providerModelId))
+      .get()
+    const consecutiveFailures = (current?.consecutiveFailures ?? 0) + 1
+    let cooldownUntilTime: number | null = null
+    if (consecutiveFailures >= consecutiveFailureThreshold) {
+      const exponent = consecutiveFailures - consecutiveFailureThreshold
+      const seconds = Math.min(cooldownBaseSeconds * Math.pow(2, exponent), cooldownMaxSeconds)
+      cooldownUntilTime = time + seconds * 1000
+    }
+
+    transaction
+      .update(providerModelHealth)
+      .set({
+        consecutiveFailures,
+        cooldownUntilTime,
+        lastFailureTime: time,
+        updatedTime: time,
+      })
+      .where(eq(providerModelHealth.providerModelId, providerModelId))
+      .run()
+  })
+}
+
+export async function resetProviderModelHealth(providerModelId: string): Promise<void> {
+  const time = now()
+  getDb()
+    .update(providerModelHealth)
+    .set({
+      consecutiveFailures: 0,
+      cooldownUntilTime: null,
+      lastSuccessTime: null,
+      lastFailureTime: null,
+      updatedTime: time,
+    })
+    .where(eq(providerModelHealth.providerModelId, providerModelId))
     .run()
 }
 

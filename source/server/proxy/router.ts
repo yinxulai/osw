@@ -1,5 +1,5 @@
 import { listProviderModelsForLogicalModel, getProvider } from '../database/store'
-import { isProviderAvailable } from './health'
+import { isProviderAvailable, isProviderModelAvailable } from './health'
 import { isConvertible } from './conversion'
 import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
 
@@ -23,6 +23,7 @@ export async function getAvailableModels(logicalModelId = 'model_default'): Prom
     if (!provider || !provider.enabled || provider.deletedTime !== null) continue
 
     if (!await isProviderAvailable(provider.id)) continue
+    if (!await isProviderModelAvailable(model.id)) continue
 
     result.push({ model, provider })
   }

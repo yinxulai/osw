@@ -20,6 +20,7 @@ import {
   getModelStats,
   getProvider,
   getProviderHealth,
+  getProviderModelHealth,
   getProviderStats,
   getRequestTrend,
   getSettings,
@@ -39,7 +40,10 @@ import {
   pruneRequestLogs,
   pruneRequestLogsBefore,
   recordHealthSuccess,
+  recordProviderModelFailure,
+  recordProviderModelHealthSuccess,
   recordProviderFailure,
+  resetProviderModelHealth,
   resetProviderHealth,
   updateLogicalModel,
   updateProvider,
@@ -409,6 +413,22 @@ describe('health and settings', () => {
     expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 0, lastSuccessTime: null, lastFailureTime: null })
     await recordProviderFailure('prov_missing', 1, 1, 1)
     expect(await listProviderHealth()).toHaveLength(1)
+  })
+
+  it('tracks provider model failures and resets model health independently', async () => {
+    const provider = await createProvider(providerInput())
+    const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-health-test', priority: 1 })
+
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null })
+    await recordProviderModelFailure(providerModel.id, 2, 10, 15)
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 1, cooldownUntilTime: null })
+    await recordProviderModelFailure(providerModel.id, 2, 10, 15)
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) })
+    await recordProviderModelHealthSuccess(providerModel.id)
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null, lastSuccessTime: expect.any(Number) })
+    await resetProviderModelHealth(providerModel.id)
+    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, lastSuccessTime: null, lastFailureTime: null })
+    await recordProviderModelFailure('model_missing', 1, 1, 1)
   })
 
   it('uses defaults, persists optional values, skips undefined, and isolates listener errors', async () => {

@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
+  markProviderModelFailure: vi.fn(),
+  markProviderModelSuccess: vi.fn(),
   createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
   updateRequestLogStatus: vi.fn(),
   pruneRequestLogs: vi.fn(),
@@ -24,6 +26,8 @@ vi.mock('./router', async importOriginal => {
 vi.mock('./health', () => ({
   markProviderFailure: mocks.markProviderFailure,
   markProviderSuccess: mocks.markProviderSuccess,
+  markProviderModelFailure: mocks.markProviderModelFailure,
+  markProviderModelSuccess: mocks.markProviderModelSuccess,
 }))
 
 vi.mock('../database/store', () => ({
@@ -137,7 +141,9 @@ describe('handleProxyRequest', () => {
     })
     expect(mocks.createRequestLog).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending' }))
     expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_first')
+    expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_first')
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
+    expect(mocks.markProviderModelSuccess).toHaveBeenCalledWith('model_second')
   })
 
   it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {
@@ -172,6 +178,7 @@ describe('handleProxyRequest', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ path: '/custom/v1/messages?fixed=true' })
     expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_anthropic')
+    expect(mocks.markProviderModelSuccess).toHaveBeenCalledWith('model_anthropic')
   })
 
   it('normalizes OpenAI chat usage without counting cached tokens twice', async () => {

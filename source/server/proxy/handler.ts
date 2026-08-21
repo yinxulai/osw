@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertibleEndpoint } from './router'
 import { convertRequestBody } from './conversion'
 import { convertResponseBody, createSseConverter } from './conversion-response'
-import { markProviderSuccess, markProviderFailure } from './health'
+import { markProviderSuccess, markProviderFailure, markProviderModelSuccess, markProviderModelFailure } from './health'
 import { getSettings, createRequestLog, createRequestAttempt, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
@@ -151,6 +151,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
           `[proxy] 透传成功: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await markProviderSuccess(target.provider.id)
+        await markProviderModelSuccess(target.model.id)
         await finalizeRequestLog(requestId, 'success', startedAt, {
           ttftMilliseconds: outcome.ttftMilliseconds ?? null,
           inputTokens: outcome.inputTokens ?? null,
@@ -175,6 +176,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await markProviderFailure(target.provider.id)
+      await markProviderModelFailure(target.model.id)
       attemptIndex++
     } catch (err) {
       lastError = err as Error
@@ -218,6 +220,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         console.error(`[proxy] 写入请求尝试日志失败: ${(logError as Error).message}`)
       }
       await markProviderFailure(target.provider.id)
+      await markProviderModelFailure(target.model.id)
       if (res.headersSent) {
         res.destroy(lastError)
         await finalizeRequestLog(requestId, 'failed', startedAt)

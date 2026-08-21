@@ -1,6 +1,54 @@
-import { describe, expect, it } from 'vitest'
-import { detectProtocolFromPath, findConvertibleEndpoint, findEndpoint } from './router'
-import type { ProviderModelRoute } from '@common/schemas'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { detectProtocolFromPath, findConvertibleEndpoint, findEndpoint, getAvailableModels } from './router'
+import type { Provider, ProviderModelRoute } from '@common/schemas'
+
+const mocks = vi.hoisted(() => ({
+  models: [] as ProviderModelRoute[],
+  provider: undefined as Provider | undefined,
+  unavailableModels: new Set<string>(),
+}))
+
+vi.mock('../database/store', () => ({
+  listProviderModelsForLogicalModel: async () => mocks.models,
+  getProvider: async () => mocks.provider,
+}))
+
+vi.mock('./health', () => ({
+  isProviderAvailable: async () => true,
+  isProviderModelAvailable: async (providerModelId: string) => !mocks.unavailableModels.has(providerModelId),
+}))
+
+afterEach(() => {
+  mocks.models = []
+  mocks.provider = undefined
+  mocks.unavailableModels.clear()
+})
+
+describe('getAvailableModels', () => {
+  it('skips only the cooled provider model while preserving siblings from the same provider', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      upstreamUrls: '{}',
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_cooled', providerId: 'prov_shared', modelName: 'cooled', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_ready', providerId: 'prov_shared', modelName: 'ready', endpoints: [], priority: 2, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+    mocks.unavailableModels.add('model_cooled')
+
+    const available = await getAvailableModels('auto')
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_ready'])
+  })
+})
 
 describe('findEndpoint', () => {
   const model: ProviderModelRoute = {
