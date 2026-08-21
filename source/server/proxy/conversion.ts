@@ -122,15 +122,19 @@ function responsesToOpenAiRequest(body: Json, model: string): Json {
     }
     const role = asString(item.role) === 'assistant' ? 'assistant' : 'user'
     const parts: Json[] = []
-    for (const part of asArray(item.content)) {
-      const record = asObject(part)
-      if (!record) continue
-      if (record.type === 'input_text' || record.type === 'output_text') {
-        const text = asString(record.text)
-        if (text) parts.push({ type: 'text', text })
-      } else if (record.type === 'input_image' && asObject(record.image_url)) {
-        const url = asString((record.image_url as Json).url)
-        if (url) parts.push({ type: 'image_url', image_url: { url } })
+    if (typeof item.content === 'string') {
+      if (item.content) parts.push({ type: 'text', text: item.content })
+    } else {
+      for (const part of asArray(item.content)) {
+        const record = asObject(part)
+        if (!record) continue
+        if (record.type === 'input_text' || record.type === 'output_text') {
+          const text = asString(record.text)
+          if (text) parts.push({ type: 'text', text })
+        } else if (record.type === 'input_image' && asObject(record.image_url)) {
+          const url = asString((record.image_url as Json).url)
+          if (url) parts.push({ type: 'image_url', image_url: { url } })
+        }
       }
     }
     if (parts.length === 1 && parts[0].type === 'text') {

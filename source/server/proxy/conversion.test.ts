@@ -206,6 +206,17 @@ describe('convertRequestBody', () => {
     const parsed = parseBody(body)
     expect(parsed.messages).toEqual([{ role: 'user', content: 'just text' }])
   })
+
+  it('preserves string content in responses message items', () => {
+    const body = convertRequestBody(
+      'openai-responses',
+      'openai-completions',
+      Buffer.from(JSON.stringify({ input: [{ role: 'user', content: 'plain text' }] })),
+      'gpt-test',
+    )
+    const parsed = parseBody(body)
+    expect(parsed.messages).toEqual([{ role: 'user', content: 'plain text' }])
+  })
 })
 
 describe('convertResponseBody', () => {
