@@ -1,5 +1,3 @@
-import type { IncomingMessage } from 'node:http'
-
 export interface AttemptRunnerResult {
   disposition: 'success' | 'retry' | 'terminal'
   statusCode: number
@@ -7,7 +5,7 @@ export interface AttemptRunnerResult {
 }
 
 export interface AttemptRunnerOptions<T, O extends AttemptRunnerResult> {
-  request: IncomingMessage
+  signal: AbortSignal
   targets: T[]
   attempt(target: T, attemptIndex: number): Promise<O>
   onSuccess(target: T, outcome: O, attemptIndex: number): Promise<void>
@@ -23,7 +21,7 @@ export async function runAttemptQueue<T, O extends AttemptRunnerResult>(options:
   let lastError: Error | null = null
 
   for (const target of options.targets) {
-    if (options.request.aborted) {
+    if (options.signal.aborted) {
       await options.onCancelled(options.targets[0], attemptIndex)
       return
     }

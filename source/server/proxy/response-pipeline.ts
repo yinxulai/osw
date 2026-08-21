@@ -1,4 +1,4 @@
-import type { IncomingHttpHeaders, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders } from 'node:http'
 import type { RawUsage } from '@common/schemas'
 import type { ProtocolAdapter, StreamConverter } from './protocols/types'
 import { createDownstreamHeaders } from './headers'
@@ -17,11 +17,17 @@ export interface ResponsePipelineResult {
   usage: ExtractedUsage
 }
 
+export interface ResponseSink {
+  readonly writableEnded: boolean
+  write(chunk: string): void
+  end(): void
+}
+
 export interface ResponsePipelineOptions {
   adapter: ProtocolAdapter
   isStreaming: boolean
   captureEnabled: boolean
-  response: ServerResponse
+  response: ResponseSink
   upstreamHeaders: IncomingHttpHeaders
   onUsage(usage: ExtractedUsage): void
   onUpstreamChunk(chunk: string): void

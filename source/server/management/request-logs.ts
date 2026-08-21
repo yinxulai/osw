@@ -23,7 +23,7 @@ const ListRequestLogsSchema = z.object({
 })
 
 const PruneRequestLogsSchema = z.object({ retentionDays: z.number().int().positive() })
-const RequestLogDetailSchema = z.object({ id: z.string().startsWith('req_') })
+const RequestLogDetailSchema = z.object({ id: z.string().trim().min(1) })
 
 async function handleRequestLogDetail(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = RequestLogDetailSchema.parse(body ?? {})

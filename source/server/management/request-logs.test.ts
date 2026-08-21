@@ -102,4 +102,33 @@ describe('request log management', () => {
       errorMessage: '请求日志不存在: req_missing',
     })
   })
+
+  it('returns details for a diagnostic request log id', async () => {
+    const log = await createRequestLog({
+      id: 'diagnostic_detail',
+      logicalModelId: 'diagnostic',
+      protocol: 'openai-responses',
+      upstreamProtocol: null,
+      status: 'failed',
+      totalDurationMilliseconds: 10,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+    const res = mockResponse()
+
+    await requestLogRoutes['/api/request-log/detail']({} as import('node:http').IncomingMessage, res, { id: log.id })
+
+    expect(res.statusCode).toBe(200)
+    expect(responseData(res)).toEqual({
+      success: true,
+      data: expect.objectContaining({ id: 'diagnostic_detail' }),
+    })
+  })
 })

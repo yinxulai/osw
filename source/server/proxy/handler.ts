@@ -13,12 +13,13 @@ import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
-import { attachDownstreamAbort, attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
-import { createRequestContext } from './request-context'
+import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
+import { createRequestContext, type RequestContext } from './request-context'
 import { protocolAdapters } from './protocols/registry'
 import { ResponsePipeline } from './response-pipeline'
 import type { ProxyObservationHooks } from './hooks'
 import { runAttemptQueue } from './attempt-runner'
+import { NodeProxyResponse, type ProxyResponse } from './proxy-response'
 
 class ClientRequestCancelledError extends Error {
   readonly code = 'CLIENT_REQUEST_ABORTED'
@@ -125,14 +126,20 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
   logicalModelId = resolvedLogicalModel.id
+  const controller = new AbortController()
+  req.once('aborted', () => controller.abort())
+  res.once('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
   const requestContext = createRequestContext({
     requestId,
     logicalModelId,
     clientProtocol: protocol,
     method: req.method ?? 'POST',
     path: req.url ?? '/',
+    headers: req.headers,
     requestBody,
-    request: req,
+    signal: controller.signal,
   })
   await hooks.onRequestStarted?.(requestContext)
 
@@ -167,6 +174,24 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
+  await executeProxyRequest({
+    context: requestContext,
+    targets: models,
+    response: new NodeProxyResponse(res),
+    hooks,
+  })
+}
+
+export interface ProxyExecutionOptions {
+  context: RequestContext
+  targets: ModelWithProvider[]
+  response: ProxyResponse
+  hooks?: ProxyObservationHooks
+}
+
+export async function executeProxyRequest(options: ProxyExecutionOptions): Promise<void> {
+  const { context, targets, response, hooks = {} } = options
+  const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
   const startedAt = Date.now()
   const settings = await getSettings()
   let requestContentId: string | null = null
@@ -195,9 +220,9 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         requestId,
         attemptId: null,
         captureStatus: 'partial',
-        requestMethod: req.method ?? 'POST',
-        requestPath: req.url ?? '/',
-        requestHeaders: JSON.stringify(redactHeaders(req.headers)),
+        requestMethod: context.method,
+        requestPath: context.path,
+        requestHeaders: JSON.stringify(redactHeaders(context.headers)),
         requestBody: requestBody.toString('utf8'),
         responseStatus: null,
         responseHeaders: null,
@@ -211,14 +236,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   await runAttemptQueue<ModelWithProvider, AttemptOutcome>({
-    request: req,
-    targets: models,
-    attempt: (target, attemptIndex) => attemptRequest(req, res, target, protocol, requestBody, requestId, logicalModelId, attemptIndex, hooks),
+    signal: context.signal,
+    targets,
+    attempt: (target, attemptIndex) => attemptRequest(context, response, target, attemptIndex, hooks),
     onSuccess: async (target, outcome, attemptIndex) => {
 
       if (outcome.disposition === 'success') {
         console.log(
-          `[proxy] 透传成功: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 透传成功: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await markProviderSuccess(target.provider.id)
         await markProviderModelSuccess(target.model.id)
@@ -238,14 +263,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     },
     onTerminal: async (target, outcome) => {
         console.log(
-          `[proxy] 请求终止(无重试): ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 请求终止(无重试): ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await finalizeRequestContent(requestContentId, outcome)
         await finalizeRequestLog(requestId, 'failed', startedAt)
     },
     onRetry: async (target, outcome, attemptIndex) => {
       console.warn(
-        `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] 上游返回可重试状态: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
     },
@@ -274,7 +299,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
         return false
       }
       console.error(
-        `[proxy] 上游请求失败: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
+        `[proxy] 上游请求失败: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
       )
       try {
         const snapshot = resolveAttemptSnapshot(target, protocol)
@@ -285,7 +310,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
             attemptIndex,
             status: 'failed',
             httpStatus: null,
-            retryable: !res.headersSent,
+            retryable: !response.headersSent,
             errorCode: 'UPSTREAM_ERROR',
             errorMessage: lastError.message,
             providerRequestId: null,
@@ -298,9 +323,9 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       }
       const recordedOutcome = err instanceof RecordedAttemptError ? err.outcome : null
       await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.errorResponse)
-      if (res.headersSent) {
+      if (response.headersSent) {
         if (err instanceof RecordedAttemptError) await finalizeRequestContent(requestContentId, err.outcome)
-        res.destroy(lastError)
+        response.destroy(lastError)
         await finalizeRequestLog(requestId, 'failed', startedAt)
         return false
       }
@@ -311,17 +336,16 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     },
     onExhausted: async lastError => {
 
-      if (!res.headersSent) {
+      if (!response.headersSent) {
         console.error(
-          `[proxy] 所有上游 Provider 均失败: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
+          `[proxy] 所有上游 Provider 均失败: ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
         )
-        const responseBody = writeJsonError(
-          res,
+        const responseBody = response.fail(
           502,
           'ALL_PROVIDERS_FAILED',
           lastError?.message ?? '所有上游 Provider 都失败了',
         )
-        await finalizeLocalErrorContent(requestContentId, 502, res, responseBody)
+        await finalizeLocalErrorContent(requestContentId, 502, response, responseBody)
       }
       await finalizeRequestLog(requestId, 'failed', startedAt)
     },
@@ -392,13 +416,13 @@ async function finalizeRequestContent(contentId: string | null, outcome: Attempt
   }
 }
 
-async function finalizeLocalErrorContent(contentId: string | null, statusCode: number, res: ServerResponse, responseBody: string): Promise<void> {
+async function finalizeLocalErrorContent(contentId: string | null, statusCode: number, response: ProxyResponse, responseBody: string): Promise<void> {
   if (!contentId) return
   try {
     await updateRequestContent(contentId, {
       captureStatus: 'captured',
       responseStatus: statusCode,
-      responseHeaders: JSON.stringify(redactHeaders(res.getHeaders())),
+      responseHeaders: JSON.stringify(redactHeaders(response.headers())),
       responseBody,
     })
   } catch (error) {
@@ -406,8 +430,9 @@ async function finalizeLocalErrorContent(contentId: string | null, statusCode: n
   }
 }
 
-async function attemptRequest(req: IncomingMessage, res: ServerResponse, target: ModelWithProvider, protocol: Protocol, requestBody: Buffer, requestId: string, logicalModelId: string, attemptIndex: number, hooks: ProxyObservationHooks): Promise<AttemptOutcome> {
+async function attemptRequest(context: RequestContext, response: ProxyResponse, target: ModelWithProvider, attemptIndex: number, hooks: ProxyObservationHooks): Promise<AttemptOutcome> {
   const { model, provider } = target
+  const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
   const settings = await getSettings()
 
   const nativeEndpoint = findEndpoint(model, protocol)
@@ -423,10 +448,10 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     requestId,
     logicalModelId,
     clientProtocol: protocol,
-    method: req.method ?? 'POST',
-    path: req.url ?? '/',
+    method: context.method,
+    path: context.path,
+    headers: context.headers,
     requestBody,
-    request: req,
     signal: controller.signal,
   })
   const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
@@ -436,7 +461,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
   const isHttps = parsed.protocol === 'https:'
 
   const headers = createUpstreamHeaders(
-    req.headers,
+    context.headers,
     createAuthHeaders(endpointProtocol, apiKey, endpoint.customAuthHeader),
     upstreamBody.length,
   )
@@ -445,7 +470,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
     hostname: parsed.hostname,
     port: parsed.port || (isHttps ? 443 : 80),
     path: parsed.pathname + parsed.search,
-    method: req.method,
+    method: context.method,
     headers,
     timeout: provider.timeoutMilliseconds,
     signal: controller.signal,
@@ -511,7 +536,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         requestId,
         attemptId: input.attemptId,
         captureStatus: input.captureStatus,
-        requestMethod: req.method ?? 'POST',
+        requestMethod: context.method,
         requestPath: parsed.pathname + parsed.search,
         requestHeaders: JSON.stringify(redactHeaders(headers, endpoint.customAuthHeader ? [endpoint.customAuthHeader] : [])),
         requestBody: upstreamBody.toString('utf8'),
@@ -553,7 +578,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       rejectCancelled()
     }
 
-    if (req.aborted || res.destroyed) {
+    if (context.signal.aborted || response.destroyed) {
       rejectCancelled()
       return
     }
@@ -571,7 +596,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       resolve(outcome)
     }
 
-    const upstreamRequest = sendUpstreamRequest(parsed, options, upstreamBody, {
+    sendUpstreamRequest(parsed, options, upstreamBody, {
       onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
@@ -629,20 +654,20 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
 
       // 转发响应头
-      if (!res.headersSent) {
+      if (!response.headersSent) {
         const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
         if (adapter.requiresResponseConversion) {
           // 转换路径：响应体结构会变，移除上游长度限制头
           delete downstreamHeaders['content-length']
         }
-        res.writeHead(statusCode, downstreamHeaders)
+        response.start(statusCode, downstreamHeaders)
       }
 
       const responsePipeline = new ResponsePipeline({
         adapter,
         isStreaming,
         captureEnabled: settings.captureRequestContent,
-        response: res,
+        response,
         upstreamHeaders: upstreamRes.headers,
         onUsage: () => undefined,
         onUpstreamChunk: () => undefined,
@@ -740,7 +765,9 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
       },
       onTimeout: request => request.destroy(new Error('Connection timeout')),
     })
-    downstreamAbort = attachDownstreamAbort(req, res, upstreamRequest, onAbort)
+    const abortListener = () => onAbort()
+    context.signal.addEventListener('abort', abortListener, { once: true })
+    downstreamAbort = { dispose: () => context.signal.removeEventListener('abort', abortListener) }
 
   })
 }

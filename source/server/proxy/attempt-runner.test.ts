@@ -5,7 +5,7 @@ describe('attempt runner', () => {
   it('continues retryable targets in order and stops on success', async () => {
     const events: string[] = []
     await runAttemptQueue<string, { disposition: 'success' | 'retry' | 'terminal'; statusCode: number }>({
-      request: { aborted: false } as never,
+      signal: new AbortController().signal,
       targets: ['first', 'second'],
       attempt: async target => {
         events.push(`attempt:${target}`)
@@ -27,7 +27,7 @@ describe('attempt runner', () => {
   it('stops when an error handler declines continuation', async () => {
     const events: string[] = []
     await runAttemptQueue<string, { disposition: 'success' | 'retry' | 'terminal'; statusCode: number }>({
-      request: { aborted: false } as never,
+      signal: new AbortController().signal,
       targets: ['only'],
       attempt: async () => { throw new Error('failed') },
       onRetry: async () => undefined,

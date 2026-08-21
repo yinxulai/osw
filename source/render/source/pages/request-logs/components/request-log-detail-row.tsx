@@ -172,7 +172,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
         )}
       </div>
       {rawUsage ? (
-        <pre className="max-h-56 overflow-auto p-3 font-mono text-[11px] leading-5 text-muted-foreground">{rawUsage}</pre>
+        <pre className="whitespace-pre-wrap break-all p-3 font-mono text-[11px] leading-5 text-muted-foreground">{rawUsage}</pre>
       ) : (
         <div className="flex min-h-28 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
           <Gauge size={18} className="opacity-50" />
@@ -201,7 +201,7 @@ function ContentSection(props: ContentSectionProps) {
         <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} />
       </button>
       {open && (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-border bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">
+        <pre className="whitespace-pre-wrap break-all border-t border-border bg-inset p-3 font-mono text-[11px] leading-5 text-muted-foreground">
           {props.value}
         </pre>
       )}

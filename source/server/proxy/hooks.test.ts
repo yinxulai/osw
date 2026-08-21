@@ -17,7 +17,6 @@ describe('proxy observation hooks', () => {
       method: 'POST',
       path: '/v1/responses',
       requestBody: Buffer.from('{}'),
-      request: {} as never,
     }))
 
     expect(calls).toEqual(['req_test:openai-responses'])

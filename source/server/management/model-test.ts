@@ -1,13 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import http from 'node:http'
-import https from 'node:https'
-import { URL } from 'node:url'
 import { z } from 'zod'
 import { listProviderEndpoints, listProviderModels, listProviders } from '../database/store'
-import { getSecretStore } from '../infrastructure/secrets/secret-store'
+import { generateId } from '@common/utils'
 import { findEndpoint } from '../proxy/router'
-import { resolveUpstreamUrl } from '../proxy/request'
-import { createAuthHeaders } from '../proxy/auth'
+import { executeProxyRequest } from '../proxy/handler'
+import { createRequestContext } from '../proxy/request-context'
+import { BufferedProxyResponse } from '../proxy/proxy-response'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { Protocol } from '@common/schemas'
@@ -87,31 +85,43 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
     const startedAt = Date.now()
     try {
-      const upstreamUrl = endpoint.upstreamUrl.trim() || providerEndpoints.get(provider.id)?.get(protocol) || ''
-      const targetUrl = resolveUpstreamUrl(upstreamUrl)
-      const apiKey = await getSecretStore().get(provider.apiKeyReference)
       const testBody = buildTestBody(protocol, model.modelName)
-      const result = await sendTestRequest(
-        targetUrl,
-        protocol,
-        apiKey,
-        endpoint.customAuthHeader ?? null,
-        testBody,
-        provider.timeoutMilliseconds,
-        controller.signal,
-      )
+      const target = {
+        model: {
+          ...model,
+          endpoints: model.endpoints.map(candidate => ({
+            ...candidate,
+            upstreamUrl: candidate.upstreamUrl.trim() || providerEndpoints.get(provider.id)?.get(candidate.protocol) || '',
+          })),
+        },
+        provider,
+      }
+      const response = new BufferedProxyResponse()
+      await executeProxyRequest({
+        context: createRequestContext({
+          requestId: generateId('diagnostic_'),
+          logicalModelId: 'diagnostic',
+          clientProtocol: protocol,
+          method: 'POST',
+          path: `/diagnostic/${protocol}`,
+          headers: {},
+          requestBody: Buffer.from(testBody),
+          signal: controller.signal,
+        }),
+        targets: [target],
+        response,
+      })
+      const success = response.statusCode >= 200 && response.statusCode < 400
 
       results.push({
         modelId: model.id,
         modelName: model.modelName,
         providerId: provider.id,
         providerName: provider.name,
-        success: result.success,
-        statusCode: result.statusCode,
+        success,
+        statusCode: response.statusCode || undefined,
         durationMilliseconds: Date.now() - startedAt,
-        errorMessage: result.errorMessage,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
+        errorMessage: success ? undefined : `HTTP ${response.statusCode || 502}`,
       })
     } catch (error) {
       if (controller.signal.aborted) return
@@ -152,89 +162,4 @@ function buildTestBody(protocol: Protocol, modelId: string): string {
         max_tokens: 10,
       })
   }
-}
-
-interface TestRequestResult {
-  success: boolean
-  statusCode?: number
-  errorMessage?: string
-  inputTokens?: number | null
-  outputTokens?: number | null
-}
-
-function sendTestRequest(targetUrl: string, protocol: Protocol, apiKey: string | null, customAuthHeader: string | null, body: string, timeout: number, signal: AbortSignal): Promise<TestRequestResult> {
-  return new Promise(resolve => {
-    const parsed = new URL(targetUrl)
-    const isHttps = parsed.protocol === 'https:'
-    const transport = isHttps ? https : http
-
-    const authHeaders = createAuthHeaders(protocol, apiKey, customAuthHeader)
-    const headers = {
-      ...authHeaders,
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-    }
-
-    const options: http.RequestOptions = {
-      hostname: parsed.hostname,
-      port: parsed.port || (isHttps ? 443 : 80),
-      path: parsed.pathname + parsed.search,
-      method: 'POST',
-      headers,
-      timeout,
-      signal,
-    }
-
-    const req = transport.request(options, res => {
-      const statusCode = res.statusCode ?? 0
-      let data = ''
-      res.on('data', chunk => { data += chunk.toString('utf8') })
-      res.on('end', () => {
-        const success = statusCode >= 200 && statusCode < 400
-        let inputTokens: number | null = null
-        let outputTokens: number | null = null
-
-        if (success && data) {
-          try {
-            const json = JSON.parse(data)
-            if (json.usage) {
-              inputTokens = json.usage.prompt_tokens ?? json.usage.input_tokens ?? null
-              outputTokens = json.usage.completion_tokens ?? json.usage.output_tokens ?? null
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        resolve({
-          success,
-          statusCode,
-          errorMessage: success ? undefined : `HTTP ${statusCode}`,
-          inputTokens,
-          outputTokens,
-        })
-      })
-    })
-
-    req.on('error', err => {
-      if (signal.aborted) {
-        resolve({
-          success: false,
-          errorMessage: '客户端已取消请求',
-        })
-        return
-      }
-      resolve({
-        success: false,
-        errorMessage: err.message,
-      })
-    })
-
-    req.on('timeout', () => {
-      req.destroy(new Error('请求超时'))
-    })
-
-    req.write(body)
-    req.end()
-  })
 }

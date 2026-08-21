@@ -10,7 +10,6 @@ function context(body: Record<string, unknown>, clientProtocol: 'openai-completi
     method: 'POST',
     path: '/v1/test',
     requestBody: Buffer.from(JSON.stringify(body)),
-    request: {} as never,
   })
 }
 
