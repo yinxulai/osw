@@ -183,7 +183,6 @@ type SchedulingPolicyInput = {
   priority?: number
   weight?: number
   enabled?: boolean
-  failoverEnabled?: boolean
 }
 
 // ========== Settings ==========
@@ -279,7 +278,7 @@ export const modelTestApi = {
 // ========== Config Import/Export ==========
 
 export interface ExportedConfig {
-  version: 3
+  schemaVersion: 3
   exportedAt: number
   settings: Partial<Settings>
   providers: Array<{
@@ -316,7 +315,6 @@ export interface ExportedConfig {
     priority: number
     weight?: number
     enabled?: boolean
-    failoverEnabled?: boolean
   }>
 }
 

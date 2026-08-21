@@ -154,7 +154,6 @@ export const schedulingPolicies = sqliteTable(
     priority: integer('priority').notNull().default(0),
     weight: integer('weight').notNull().default(100),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    failoverEnabled: integer('failoverEnabled', { mode: 'boolean' }).notNull().default(true),
     createdTime: integer('createdTime').notNull(),
     updatedTime: integer('updatedTime').notNull(),
   },

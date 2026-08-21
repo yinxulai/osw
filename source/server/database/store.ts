@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { SettingsSchema, ProviderSchema } from '@common/schemas'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { ProviderSchema } from '@common/schemas'
 import type {
   Provider,
   LogicalModel,
@@ -10,11 +10,11 @@ import type {
   ProviderModelRoute,
   ProviderModelRouteEndpoint,
   ProviderHealth,
-  Settings,
   RequestLog,
   RequestAttempt,
   RequestContent,
   RequestContentCaptureStatus,
+  RawUsage,
   RequestStatus,
   SchedulingPolicy,
 } from '@common/schemas'
@@ -36,32 +36,27 @@ import {
   requestMetrics,
   requestUsages,
   schedulingPolicies,
-  settings,
 } from './schema'
 import type { ProviderModelHealthRow } from './schema'
 
-// ========== Settings Change Listeners ==========
-
-type SettingsChangeListener = (settings: Settings) => void
-const settingsChangeListeners: SettingsChangeListener[] = []
-
-export function onSettingsChanged(listener: SettingsChangeListener): () => void {
-  settingsChangeListeners.push(listener)
-  return () => {
-    const idx = settingsChangeListeners.indexOf(listener)
-    if (idx >= 0) settingsChangeListeners.splice(idx, 1)
-  }
-}
-
-function notifySettingsChanged(newSettings: Settings): void {
-  for (const listener of settingsChangeListeners) {
-    try {
-      listener(newSettings)
-    } catch (err) {
-      console.error('[store] settings change listener error', err)
-    }
-  }
-}
+export { getSettings, onSettingsChanged, updateSettings } from './settings-store'
+export type { SettingsDefaults } from './settings-store'
+export {
+  getFailureReasons,
+  getLatencyDistribution,
+  getModelStats,
+  getProviderStats,
+  getRequestTrend,
+  getStatsSummary,
+} from './analytics-store'
+export type {
+  DailyTrendPoint,
+  FailureReasonStat,
+  LatencyBucket,
+  ModelStat,
+  ProviderStat,
+  StatsSummary,
+} from './analytics-store'
 
 // ========== Provider ==========
 
@@ -302,12 +297,12 @@ export async function listSchedulingPolicies(logicalModelId?: string): Promise<S
   const condition = logicalModelId ? eq(schedulingPolicies.logicalModelId, logicalModelId) : undefined
   return getDb().select().from(schedulingPolicies)
     .where(condition)
-    .orderBy(schedulingPolicies.priority, schedulingPolicies.weight)
+    .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
     .all()
     .map(mapSchedulingPolicy)
 }
 
-export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId' | 'providerModelId'> & Partial<Pick<SchedulingPolicy, 'strategy' | 'priority' | 'weight' | 'enabled' | 'failoverEnabled'>>
+export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId' | 'providerModelId'> & Partial<Pick<SchedulingPolicy, 'strategy' | 'priority' | 'weight' | 'enabled'>>
 
 export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput): Promise<SchedulingPolicy> {
   const time = now()
@@ -318,13 +313,12 @@ export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput)
     priority: input.priority ?? 0,
     weight: input.weight ?? 100,
     enabled: input.enabled ?? true,
-    failoverEnabled: input.failoverEnabled ?? true,
     createdTime: time,
     updatedTime: time,
   }
   getDb().insert(schedulingPolicies).values(values).onConflictDoUpdate({
     target: [schedulingPolicies.logicalModelId, schedulingPolicies.providerModelId],
-    set: { strategy: values.strategy, priority: values.priority, weight: values.weight, enabled: values.enabled, failoverEnabled: values.failoverEnabled, updatedTime: time },
+    set: { strategy: values.strategy, priority: values.priority, weight: values.weight, enabled: values.enabled, updatedTime: time },
   }).run()
   return mapSchedulingPolicy(getDb().select().from(schedulingPolicies).where(and(eq(schedulingPolicies.logicalModelId, input.logicalModelId), eq(schedulingPolicies.providerModelId, input.providerModelId))).get()!)
 }
@@ -356,7 +350,7 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
     .where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), eq(schedulingPolicies.enabled, true)))
-    .orderBy(schedulingPolicies.priority, schedulingPolicies.weight)
+    .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
     .all()
   return rows
     .filter(({ model, policy }) => (includeDeleted || model.deletedTime === null) && model.enabled && policy.enabled)
@@ -580,67 +574,6 @@ export async function resetProviderModelHealth(providerModelId: string): Promise
     .run()
 }
 
-// ========== Settings ==========
-
-export interface SettingsDefaults {
-  listenPort: number
-}
-
-const PRODUCTION_SETTINGS_DEFAULTS: SettingsDefaults = {
-  listenPort: 9300,
-}
-
-/** SettingsSchema 除 id/updatedTime 外的字段，即需要持久化的键 */
-const SETTINGS_KEYS = Object.keys(SettingsSchema.shape).filter(
-  key => key !== 'id' && key !== 'updatedTime',
-)
-
-function parseStoredValue(key: string, raw: string | undefined): unknown {
-  if (raw === undefined) return undefined
-  try {
-    return JSON.parse(raw)
-  } catch {
-    console.warn(`[store] settings key "${key}" has invalid JSON, ignoring`, raw)
-    return undefined
-  }
-}
-
-export async function getSettings(defaults = PRODUCTION_SETTINGS_DEFAULTS): Promise<Settings> {
-  const db = getDb()
-  const rows = db.select().from(settings).all()
-  const stored = new Map(rows.map(row => [row.key, row.value]))
-  const parsed: Record<string, unknown> = {}
-  for (const key of SETTINGS_KEYS) {
-    const value = parseStoredValue(key, stored.get(key))
-    if (value !== undefined) parsed[key] = value
-  }
-  return SettingsSchema.parse({
-    id: 'singleton',
-    ...parsed,
-    listenPort: parsed.listenPort ?? defaults.listenPort,
-    updatedTime: now(),
-  })
-}
-
-export async function updateSettings(
-  updates: Partial<Omit<Settings, 'id' | 'updatedTime'>>,
-): Promise<Settings> {
-  const db = getDb()
-  for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined) continue
-    db.insert(settings)
-      .values({ key, value: JSON.stringify(value), valueType: typeof value, updatedTime: now() })
-      .onConflictDoUpdate({
-        target: settings.key,
-        set: { value: JSON.stringify(value), valueType: typeof value, updatedTime: now() },
-      })
-      .run()
-  }
-  const result = await getSettings()
-  notifySettingsChanged(result)
-  return result
-}
-
 // ========== Request Log ==========
 
 type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
@@ -659,8 +592,22 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
       createdTime: time,
     })
     .run()
-  getDb().insert(requestMetrics).values({ requestId: id, key: 'durationMilliseconds', value: input.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: time }).run()
-  if (input.totalTokens != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: input.totalTokens, unit: 'tokens', createdTime: time }).run()
+  const metricValues = [
+    ['durationMilliseconds', input.totalDurationMilliseconds, 'milliseconds'],
+    ['ttftMilliseconds', input.ttftMilliseconds, 'milliseconds'],
+    ['promptCacheHit', input.promptCacheHit == null ? null : input.promptCacheHit ? 1 : 0, 'boolean'],
+    ['cacheHit', input.cacheHit == null ? null : input.cacheHit ? 1 : 0, 'boolean'],
+  ].flatMap(([key, value, unit]) => value == null ? [] : [{ requestId: id, key, value, unit, updatedTime: time }])
+  getDb().insert(requestMetrics).values(metricValues).run()
+  const usageValues = [
+    ['inputTokens', input.inputTokens],
+    ['outputTokens', input.outputTokens],
+    ['totalTokens', input.totalTokens],
+    ['cachedInputTokens', input.cachedInputTokens],
+    ['cacheCreationInputTokens', input.cacheCreationInputTokens],
+  ].flatMap(([type, value]) => value == null ? [] : [{ id: generateId('usage_'), requestId: id, attemptId: null, type, value, unit: 'tokens', createdTime: time }])
+  if (usageValues.length > 0) getDb().insert(requestUsages).values(usageValues).run()
+  if (input.rawUsage != null) getDb().insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(input.rawUsage) ?? '', createdTime: time }).run()
   return {
     id,
     logicalModelId: input.logicalModelId,
@@ -696,6 +643,71 @@ export interface RequestLogUpdate {
   cacheHit?: boolean | null
 }
 
+export interface RequestUsageSnapshot {
+  requestId: string
+  attemptId: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+  cachedInputTokens: number | null
+  cacheCreationInputTokens: number | null
+  rawUsage: RawUsage | null
+}
+
+export async function replaceRequestUsage(input: RequestUsageSnapshot): Promise<void> {
+  const time = now()
+  const scope = input.attemptId === null
+    ? and(eq(requestUsages.requestId, input.requestId), isNull(requestUsages.attemptId))
+    : and(eq(requestUsages.requestId, input.requestId), eq(requestUsages.attemptId, input.attemptId))
+  const values: Array<{ type: string; value: number; unit: string }> = []
+  for (const [type, value] of [
+    ['inputTokens', input.inputTokens],
+    ['outputTokens', input.outputTokens],
+    ['totalTokens', input.totalTokens],
+    ['cachedInputTokens', input.cachedInputTokens],
+    ['cacheCreationInputTokens', input.cacheCreationInputTokens],
+  ] as const) {
+    if (value !== null) values.push({ type, value, unit: 'tokens' })
+  }
+  if (input.rawUsage !== null) values.push({ type: 'raw', value: 0, unit: serializeRawUsage(input.rawUsage) ?? '' })
+
+  getDb().transaction(transaction => {
+    transaction.delete(requestUsages).where(scope).run()
+    if (values.length > 0) {
+      transaction.insert(requestUsages).values(values.map(value => ({
+        id: generateId('usage_'),
+        requestId: input.requestId,
+        attemptId: input.attemptId,
+        ...value,
+        createdTime: time,
+      }))).run()
+    }
+  })
+}
+
+export async function listRequestUsages(requestId: string): Promise<RequestUsageSnapshot[]> {
+  const rows = getDb().select().from(requestUsages).where(eq(requestUsages.requestId, requestId)).all()
+  const scopes = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = row.attemptId ?? 'request'
+    scopes.set(key, [...(scopes.get(key) ?? []), row])
+  }
+  return [...scopes.entries()].map(([key, usages]) => {
+    const value = (type: string) => usages.find(usage => usage.type === type)?.value ?? null
+    const raw = usages.find(usage => usage.type === 'raw')
+    return {
+      requestId,
+      attemptId: key === 'request' ? null : key,
+      inputTokens: value('inputTokens'),
+      outputTokens: value('outputTokens'),
+      totalTokens: value('totalTokens'),
+      cachedInputTokens: value('cachedInputTokens'),
+      cacheCreationInputTokens: value('cacheCreationInputTokens'),
+      rawUsage: parseRawUsage(raw?.unit),
+    }
+  })
+}
+
 export async function updateRequestLogStatus(id: string, update: RequestLogUpdate): Promise<void> {
   const db = getDb()
   const time = now()
@@ -705,10 +717,6 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     if (update.totalDurationMilliseconds !== undefined) metrics.push({ key: 'durationMilliseconds', value: update.totalDurationMilliseconds, unit: 'milliseconds' })
     const optionalMetrics: Array<[keyof RequestLogUpdate, string, string]> = [
       ['ttftMilliseconds', 'ttftMilliseconds', 'milliseconds'],
-      ['inputTokens', 'inputTokens', 'tokens'],
-      ['outputTokens', 'outputTokens', 'tokens'],
-      ['cachedInputTokens', 'cachedInputTokens', 'tokens'],
-      ['cacheCreationInputTokens', 'cacheCreationInputTokens', 'tokens'],
     ]
     for (const [field, key, unit] of optionalMetrics) {
       const value = update[field]
@@ -721,12 +729,24 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
       else if (value !== undefined) metrics.push({ key, value: value ? 1 : 0, unit: 'boolean' })
     }
     for (const metric of metrics) transaction.insert(requestMetrics).values({ requestId: id, ...metric, updatedTime: time }).onConflictDoUpdate({ target: [requestMetrics.requestId, requestMetrics.key], set: { value: metric.value, unit: metric.unit, updatedTime: time } }).run()
-    if (update.totalTokens !== undefined) {
-      transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'totalTokens'))).run()
-      if (update.totalTokens !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'totalTokens', value: update.totalTokens, unit: 'tokens', createdTime: time }).run()
+    const requestScope = and(eq(requestUsages.requestId, id), isNull(requestUsages.attemptId))
+    const usageUpdates: Array<[keyof RequestLogUpdate, string]> = [
+      ['inputTokens', 'inputTokens'],
+      ['outputTokens', 'outputTokens'],
+      ['totalTokens', 'totalTokens'],
+      ['cachedInputTokens', 'cachedInputTokens'],
+      ['cacheCreationInputTokens', 'cacheCreationInputTokens'],
+    ]
+    for (const [field, type] of usageUpdates) {
+      const value = update[field]
+      if (value === null) transaction.delete(requestUsages).where(and(requestScope, eq(requestUsages.type, type))).run()
+      else if (value !== undefined) {
+        transaction.delete(requestUsages).where(and(requestScope, eq(requestUsages.type, type))).run()
+        transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type, value: value as number, unit: 'tokens', createdTime: time }).run()
+      }
     }
     if (update.rawUsage !== undefined) {
-      transaction.delete(requestUsages).where(and(eq(requestUsages.requestId, id), eq(requestUsages.type, 'raw'))).run()
+      transaction.delete(requestUsages).where(and(requestScope, eq(requestUsages.type, 'raw'))).run()
       if (update.rawUsage !== null) transaction.insert(requestUsages).values({ id: generateId('usage_'), requestId: id, attemptId: null, type: 'raw', value: 0, unit: serializeRawUsage(update.rawUsage) ?? '', createdTime: time }).run()
     }
   })
@@ -918,264 +938,6 @@ export async function listAttemptsByRequest(requestId: string): Promise<RequestA
   return rows.map(mapRequestAttempt)
 }
 
-// ========== Analytics / Statistics ==========
-
-export interface StatsSummary {
-  totalRequests: number
-  successCount: number
-  failedCount: number
-  successRate: number
-  avgLatencyMs: number
-  totalTokens: number
-}
-
-export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
-  const db = getDb()
-  const result = db
-    .select({
-      total: sql<number>`count(*)`.as('total'),
-      success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
-      failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-      avgLatency: sql<number>`avg((SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds'))`.as('avgLatency'),
-    })
-    .from(requestLogs)
-    .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
-    .get()
-  const usageResult = db
-    .select({ tokens: sql<number>`coalesce(sum(${requestUsages.value}), 0)`.as('tokens') })
-    .from(requestUsages)
-    .innerJoin(requestLogs, eq(requestUsages.requestId, requestLogs.id))
-    .where(and(eq(requestUsages.type, 'totalTokens'), sql`${requestLogs.createdTime} >= ${sinceMs}`))
-    .get()
-  const total = result?.total ?? 0
-  const success = result?.success ?? 0
-  const failed = result?.failed ?? 0
-  return {
-    totalRequests: total,
-    successCount: success,
-    failedCount: failed,
-    successRate: total > 0 ? success / total : 0,
-    avgLatencyMs: result?.avgLatency ?? 0,
-    totalTokens: usageResult?.tokens ?? 0,
-  }
-}
-
-export interface DailyTrendPoint {
-  day: string // YYYY-MM-DD
-  requests: number
-  success: number
-  failed: number
-}
-
-export async function getRequestTrend(sinceMs: number, days: number): Promise<DailyTrendPoint[]> {
-  const db = getDb()
-  const rows = db
-    .select({
-      day: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('day'),
-      requests: sql<number>`count(*)`.as('requests'),
-      success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
-      failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-    })
-    .from(requestLogs)
-    .where(sql`${requestLogs.createdTime} >= ${sinceMs}`)
-    .groupBy(sql`day`)
-    .orderBy(sql`day`)
-    .all()
-
-  // 填充没有数据的天
-  const map = new Map(rows.map(r => [r.day, r]))
-  const result: DailyTrendPoint[] = []
-  const now = new Date()
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const key = formatLocalDate(d)
-    const row = map.get(key)
-    result.push({
-      day: key,
-      requests: row?.requests ?? 0,
-      success: row?.success ?? 0,
-      failed: row?.failed ?? 0,
-    })
-  }
-  return result
-}
-
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-export interface ProviderStat {
-  providerId: string
-  providerName: string
-  requests: number
-  success: number
-  failed: number
-  avgLatencyMs: number
-}
-
-export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]> {
-  const db = getDb()
-  // 每个请求只归属最后一次尝试的 Provider，避免故障转移导致请求量重复计算。
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
-    SELECT max(final_attempt.attemptIndex)
-    FROM request_attempts AS final_attempt
-    WHERE final_attempt.requestId = ${requestAttempts.requestId}
-  )`
-  const rows = db
-    .select({
-      providerId: requestAttempts.providerId,
-      providerName: providers.name,
-      requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
-      success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
-      failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' then ${requestAttempts.requestId} end)`.as('failed'),
-      avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
-    })
-    .from(requestAttempts)
-    .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
-    .where(and(sql`${requestAttempts.createdTime} >= ${sinceMs}`, finalAttempt))
-    .groupBy(requestAttempts.providerId)
-    .orderBy(sql`requests desc`)
-    .all()
-
-  return rows.map(r => ({
-    providerId: r.providerId,
-    providerName: r.providerName,
-    requests: r.requests ?? 0,
-    success: r.success ?? 0,
-    failed: r.failed ?? 0,
-    avgLatencyMs: r.avgLatency ?? 0,
-  }))
-}
-
-export interface ModelStat {
-  upstreamModelId: string
-  providerId: string
-  providerName: string
-  requests: number
-  success: number
-  avgLatencyMs: number
-}
-
-export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
-  const db = getDb()
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
-    SELECT max(final_attempt.attemptIndex)
-    FROM request_attempts AS final_attempt
-    WHERE final_attempt.requestId = ${requestAttempts.requestId}
-  )`
-  const rows = db
-    .select({
-      upstreamModelId: requestAttempts.providerModelName,
-      providerId: requestAttempts.providerId,
-      providerName: providers.name,
-      requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
-      success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
-      avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
-    })
-    .from(requestAttempts)
-    .innerJoin(providers, eq(requestAttempts.providerId, providers.id))
-    .where(and(sql`${requestAttempts.createdTime} >= ${sinceMs}`, finalAttempt))
-    .groupBy(requestAttempts.providerModelName, requestAttempts.providerId)
-    .orderBy(sql`requests desc`)
-    .limit(limit)
-    .all()
-
-  return rows.map(r => ({
-    upstreamModelId: r.upstreamModelId,
-    providerId: r.providerId,
-    providerName: r.providerName,
-    requests: r.requests ?? 0,
-    success: r.success ?? 0,
-    avgLatencyMs: r.avgLatency ?? 0,
-  }))
-}
-
-export interface LatencyBucket {
-  range: string
-  count: number
-}
-
-export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBucket[]> {
-  const db = getDb()
-  const buckets = [
-    { range: '< 1s', min: 0, max: 1000 },
-    { range: '1-2s', min: 1000, max: 2000 },
-    { range: '2-3s', min: 2000, max: 3000 },
-    { range: '3-5s', min: 3000, max: 5000 },
-    { range: '> 5s', min: 5000, max: Number.MAX_SAFE_INTEGER },
-  ]
-  const result: LatencyBucket[] = []
-  for (const b of buckets) {
-    const row = db
-      .select({ count: sql<number>`count(*)`.as('count') })
-      .from(requestLogs)
-      .where(sql`${requestLogs.createdTime} >= ${sinceMs} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') >= ${b.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') < ${b.max}`)
-      .get()
-    result.push({ range: b.range, count: row?.count ?? 0 })
-  }
-  return result
-}
-
-export interface FailureReasonStat {
-  reason: string
-  count: number
-}
-
-export async function getFailureReasons(sinceMs: number): Promise<FailureReasonStat[]> {
-  const db = getDb()
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (
-    SELECT max(final_attempt.attemptIndex)
-    FROM request_attempts AS final_attempt
-    WHERE final_attempt.requestId = ${requestAttempts.requestId}
-  )`
-  // 按最终失败 attempt 分类，确保原因总数与失败请求数一致。
-  const rows = db
-    .select({
-      errorCode: requestAttempts.errorCode,
-      count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count'),
-    })
-    .from(requestAttempts)
-    .where(and(
-      sql`${requestAttempts.createdTime} >= ${sinceMs}`,
-      eq(requestAttempts.status, 'failed'),
-      finalAttempt,
-    ))
-    .groupBy(requestAttempts.errorCode)
-    .orderBy(sql`count desc`)
-    .all()
-
-  // 归类到友好名称
-  const categories: Record<string, number> = {
-    '超时': 0,
-    '限流 (429)': 0,
-    '服务错误 (5xx)': 0,
-    '认证失败': 0,
-    '其他': 0,
-  }
-  for (const row of rows) {
-    const code = row.errorCode ?? 'UNKNOWN'
-    if (code.includes('TIMEOUT') || code.includes('ECONNRESET') || code.includes('ETIMEDOUT')) {
-      categories['超时'] += row.count
-    } else if (code.includes('429') || code.includes('RATE_LIMIT')) {
-      categories['限流 (429)'] += row.count
-    } else if (/Status_5\d\d/.test(code) || code.includes('UPSTREAM_ERROR') || code.includes('SERVER_ERROR')) {
-      categories['服务错误 (5xx)'] += row.count
-    } else if (code.includes('401') || code.includes('403') || code.includes('AUTH')) {
-      categories['认证失败'] += row.count
-    } else {
-      categories['其他'] += row.count
-    }
-  }
-  return Object.entries(categories)
-    .map(([reason, count]) => ({ reason, count }))
-    .filter(r => r.count > 0)
-    .sort((a, b) => b.count - a.count)
-}
-
 // ========== Row mappers ==========
 
 function mapProvider(row: typeof providers.$inferSelect): Provider {
@@ -1287,9 +1049,9 @@ function parseRawUsage(rawUsage: string | null | undefined): RequestLog['rawUsag
 
 function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
   const metrics = new Map(getDb().select().from(requestMetrics).where(eq(requestMetrics.requestId, row.id)).all().map(metric => [metric.key, metric]))
-  const usages = getDb().select().from(requestUsages).where(eq(requestUsages.requestId, row.id)).all()
+  const usages = getDb().select().from(requestUsages).where(and(eq(requestUsages.requestId, row.id), isNull(requestUsages.attemptId))).all()
   const raw = usages.find(usage => usage.type === 'raw')
-  const totalTokens = usages.find(usage => usage.type === 'totalTokens')
+  const usageValue = (type: string) => usages.find(usage => usage.type === type)?.value ?? null
   const metricValue = (key: string) => metrics.get(key)?.value ?? null
   return {
     id: row.id,
@@ -1298,11 +1060,11 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     upstreamProtocol: null,
     status: row.status as RequestStatus,
     totalDurationMilliseconds: Number(metricValue('durationMilliseconds') ?? 0),
-    totalTokens: totalTokens?.value ?? null,
-    inputTokens: metricValue('inputTokens'),
-    outputTokens: metricValue('outputTokens'),
-    cachedInputTokens: metricValue('cachedInputTokens'),
-    cacheCreationInputTokens: metricValue('cacheCreationInputTokens'),
+    totalTokens: usageValue('totalTokens'),
+    inputTokens: usageValue('inputTokens'),
+    outputTokens: usageValue('outputTokens'),
+    cachedInputTokens: usageValue('cachedInputTokens'),
+    cacheCreationInputTokens: usageValue('cacheCreationInputTokens'),
     promptCacheHit: metricValue('promptCacheHit') == null ? null : metricValue('promptCacheHit') === 1,
     rawUsage: parseRawUsage(raw?.unit),
     ttftMilliseconds: metricValue('ttftMilliseconds'),

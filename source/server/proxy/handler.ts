@@ -5,12 +5,12 @@ import { getAvailableModels, detectProtocolFromPath, findEndpoint, findConvertib
 import { convertRequestBody } from './conversion'
 import { convertResponseBody, createSseConverter } from './conversion-response'
 import { markProviderSuccess, markProviderFailure, markProviderModelSuccess, markProviderModelFailure } from './health'
-import { getSettings, createRequestLog, createRequestAttempt, createRequestContent, updateRequestContent, updateRequestLogStatus, pruneRequestLogs } from '../database/store'
+import { getSettings, listLogicalModels, createRequestLog, createRequestAttempt, createRequestContent, updateRequestContent, updateRequestLogStatus, replaceRequestUsage, pruneRequestLogs } from '../database/store'
 import { generateId } from '@common/utils'
 import type { ModelWithProvider } from './router'
 import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
 import { resolveUpstreamUrl, validateLogicalModel, rewriteRequestModel, injectUsageParams } from './request'
-import { classifyUpstreamStatus } from './response'
+import { classifyHealthFailure, classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
@@ -65,6 +65,12 @@ interface AttemptOutcome {
   captureStatus?: 'captured' | 'partial'
 }
 
+async function recordHealthFailure(target: ModelWithProvider, statusCode: number | null, responseBody?: string | null): Promise<void> {
+  const scope = classifyHealthFailure(statusCode, responseBody)
+  if (scope === 'provider') await markProviderFailure(target.provider.id)
+  if (scope === 'provider-model') await markProviderModelFailure(target.model.id)
+}
+
 const manualModelIds = new Map<string, string>()
 
 export function setManualModel(logicalModelId: string, providerModelId: string | null): void {
@@ -103,20 +109,28 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
 
   const requestBody = await readRequestBody(req)
   if (req.aborted) return
-  const modelValidationError = validateLogicalModel(requestBody, logicalModelId)
+  const modelValidationError = validateLogicalModel(requestBody)
   if (modelValidationError) {
     writeJsonError(res, 400, 'INVALID_MODEL', modelValidationError)
     return
   }
 
-  // 获取当前逻辑模型绑定的可用 models：原生协议候选优先，其后是开启了协议转换的候选
+  const requestedModel = (JSON.parse(requestBody.toString('utf8')) as { model: string }).model.trim()
+  const logicalModels = await listLogicalModels()
+  const resolvedLogicalModel = logicalModels.find(model =>
+    model.enabled && (model.id === requestedModel || model.name === requestedModel),
+  ) ?? logicalModels.find(model => model.enabled && model.name === 'default')
+  if (!resolvedLogicalModel) {
+    writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置已启用的 default 逻辑模型')
+    return
+  }
+  logicalModelId = resolvedLogicalModel.id
+
+  // 过滤当前协议可用的候选，保持 scheduling policy 返回的优先级顺序。
   const availableModels = await getAvailableModels(logicalModelId)
-  const nativeModels = availableModels.filter(m => findEndpoint(m.model, protocol))
-  const convertedModels = availableModels.filter(m =>
-    !findEndpoint(m.model, protocol)
-    && findConvertibleEndpoint(m.model, protocol),
+  let models = availableModels.filter(m =>
+    Boolean(findEndpoint(m.model, protocol) || findConvertibleEndpoint(m.model, protocol)),
   )
-  let models = [...nativeModels, ...convertedModels]
 
   // 手动选择只改变本次请求的起始位置，不改变队列顺序。
   const manualModelId = getManualModel(logicalModelId)
@@ -134,8 +148,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       availableModels.flatMap(candidate => candidate.model.endpoints.map(endpoint => endpoint.protocol)),
     )]
     const reason = availableModels.length === 0
-      ? '该逻辑模型队列没有已启用且健康的上游模型'
-      : `可用上游模型未配置 ${protocol} 协议且未开启协议转换（当前配置协议: ${configuredProtocols.join(', ') || '无'}）`
+      ? '该逻辑模型队列没有已启用且健康的供应商模型'
+      : `可用供应商模型未配置 ${protocol} 协议且未开启协议转换（当前配置协议: ${configuredProtocols.join(', ') || '无'}）`
     console.warn(
       `[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}, reason=${reason})`,
     )
@@ -225,8 +239,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       console.warn(
         `[proxy] 上游返回可重试状态: ${req.method} ${req.url} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
-      await markProviderFailure(target.provider.id)
-      await markProviderModelFailure(target.model.id)
+      await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
       attemptIndex++
     } catch (err) {
       lastError = err as Error
@@ -275,8 +288,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
       } catch (logError) {
         console.error(`[proxy] 写入请求尝试日志失败: ${(logError as Error).message}`)
       }
-      await markProviderFailure(target.provider.id)
-      await markProviderModelFailure(target.model.id)
+      const recordedOutcome = err instanceof RecordedAttemptError ? err.outcome : null
+      await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.errorResponse)
       if (res.headersSent) {
         if (err instanceof RecordedAttemptError) await finalizeRequestContent(requestContentId, err.outcome)
         res.destroy(lastError)
@@ -321,6 +334,8 @@ interface AttemptContentInput {
   responseHeaders: http.IncomingHttpHeaders | null
   responseBody: string | null
 }
+
+type AttemptUsageInput = Pick<RequestLogMetrics, 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'rawUsage'>
 
 async function finalizeRequestLog(requestId: string, status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void> {
   try {
@@ -414,9 +429,9 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
 
   const attemptStartedAt = Date.now()
   const snapshot = resolveAttemptSnapshot(target, protocol)
-  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null) => {
+  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput) => {
     try {
-      return await createRequestAttempt({
+      const attempt = await createRequestAttempt({
         requestId,
         ...snapshot,
         attemptIndex,
@@ -429,6 +444,18 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
         details: details ?? null,
         durationMilliseconds: Date.now() - attemptStartedAt,
       })
+      const hasTokens = usage?.inputTokens != null && usage?.outputTokens != null
+      await replaceRequestUsage({
+        requestId,
+        attemptId: attempt.id,
+        inputTokens: usage?.inputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        totalTokens: hasTokens ? usage!.inputTokens! + usage!.outputTokens! : null,
+        cachedInputTokens: usage?.cachedInputTokens ?? null,
+        cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+        rawUsage: usage?.rawUsage ?? null,
+      })
+      return attempt
     } catch (error) {
       console.error(`[proxy] 写入请求尝试日志失败: ${(error as Error).message}`)
       return null
@@ -697,6 +724,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
           disposition === 'success' ? undefined : `上游返回 ${statusCode}`,
           resolvedRequestId,
           body,
+          { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
         )
         const upstreamResponseBody = serializeCapturedBody(isStreaming, upstreamChunks, disposition === 'success' ? responseBuffer : body)
         await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: upstreamResponseBody })
@@ -736,6 +764,7 @@ async function attemptRequest(req: IncomingMessage, res: ServerResponse, target:
             err.message,
             upstreamRequestId,
             null,
+            { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens, rawUsage },
           )
           await recordAttemptContent({
             attemptId: attempt?.id ?? null,

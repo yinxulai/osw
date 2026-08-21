@@ -13,6 +13,7 @@ import { analyticsRoutes } from './analytics'
 import { configRoutes } from './config'
 import { modelTestRoutes } from './model-test'
 import { providerModelFetchRoutes } from './provider-models-fetch'
+import { relationRoutes } from './relations'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
 const routes: Record<string, ManagementHandler> = {
@@ -27,6 +28,7 @@ const routes: Record<string, ManagementHandler> = {
   ...configRoutes,
   ...modelTestRoutes,
   ...providerModelFetchRoutes,
+  ...relationRoutes,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {

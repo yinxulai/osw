@@ -126,7 +126,7 @@ proxy/
 
 ### `/v1/models`
 
-返回 MVP 唯一启用的逻辑模型 `auto`，方便支持模型列表拉取的工具自动发现。
+返回 MVP 唯一启用的兜底逻辑模型 `default`，方便支持模型列表拉取的工具自动发现。客户端也可以继续使用自身配置的其他模型名，未匹配的名称仍由 `default` 处理。
 
 响应格式兼容 OpenAI Models API：
 
@@ -144,27 +144,27 @@ proxy/
 }
 ```
 
-> MVP 中 `data` 数组只包含 `auto` 一项，`id` 为逻辑模型名。后续支持多逻辑模型时，再按启用状态返回多个逻辑模型。
+> MVP 中 `data` 数组只包含 `default` 一项，`id` 为逻辑模型名。模型发现结果不构成请求模型白名单；后续支持多逻辑模型时，再按启用状态返回多个逻辑模型。
 
 ## 路由策略
 
 ### 单队列模型
 
-v0.3 MVP 只接受逻辑模型 `auto`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前逻辑模型的绑定关系和客户端协议动态计算一个**自动切换候选队列**。客户端不需要指定 ProviderModel ID；请求中的 `model` 字段必须为 `auto`（缺失或其他值按协议返回模型参数错误），转发时会被替换为当前 ProviderModel 的 `modelName`。
+v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据解析后的逻辑模型绑定关系和客户端协议动态计算一个**自动切换候选队列**。请求中的 `model` 字段必须是非空字符串，但不需要等于逻辑模型 ID；当前版本没有其他逻辑模型，因此任意模型名都解析到 `default`。转发时，客户端模型名会被替换为当前 ProviderModel 的 `modelName`。
 
-- `auto` 请求只使用 `scheduling_policies` 中绑定到 `auto` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
+- 所有未匹配请求只使用 `scheduling_policies` 中绑定到 `default` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
 - 同一个 ProviderModel 可以绑定到多个逻辑模型，并在不同逻辑模型中拥有不同的优先级、权重和启用状态
 - 候选队列中的每个 ProviderModel 都通过端点绑定获得 Provider 协议、有效 URL、Provider API 模型名和所属 Provider
 - 请求来时，自动根据协议过滤队列，按顺序尝试，失败自动切换到下一个
 - 转发到上游时，`model` 字段会被替换为当前 ProviderModel 的 **modelName**
 - 支持用户手动切换到队列中的某个 ProviderModel：新请求使用新模型，正在进行的请求不中断
 
-> ProviderModel 是可复用的供应商模型实体，但调度资格和顺序由 `scheduling_policies(logicalModelId, providerModelId)` 决定；MVP 中只有绑定到 `auto`、绑定启用且存在可用端点的 ProviderModel 才进入候选池。
+> ProviderModel 是可复用的供应商模型实体，但调度资格和顺序由 `scheduling_policies(logicalModelId, providerModelId)` 决定；MVP 中只有绑定到 `default`、绑定启用且存在可用端点的 ProviderModel 才进入候选池。
 
 ### 路由步骤
 
 1. **协议识别**：根据请求 path 自动匹配协议类型
-2. **队列过滤**：从 `auto` 自动切换队列中，筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）
+2. **逻辑模型解析与队列过滤**：将未匹配的非空客户端模型名解析为 `default`，再从其自动切换队列中筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）
 3. **确定起始位置**：如果用户手动指定了当前 ProviderModel，则从该模型开始；目标已禁用、冷却或协议不匹配时返回明确错误，不静默选择其他起始项；否则从队列头部开始
 4. **顺序尝试**：按当前逻辑模型绑定行的 `priority ASC, weight DESC, createdTime ASC, providerModelId ASC` 稳定排序依次尝试；v0.3 `priority` 策略不使用权重做随机调度。不同逻辑模型分别读取自己的绑定行，因此可以拥有不同顺序
 5. **模型名替换**：每个 ProviderModel 转发前，将请求体中的 model 替换为该模型的 `modelName`

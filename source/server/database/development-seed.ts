@@ -2,7 +2,6 @@ import type { KeychainApi } from '@common/keychain'
 import { inArray } from 'drizzle-orm'
 import { getDb } from './index'
 import {
-  logicalModels,
   providerEndpoints,
   providerHealth,
   providerModelEndpoints,
@@ -69,23 +68,17 @@ const PROVIDER_FIXTURES = [
   },
 ] as const
 
-const LOGICAL_MODEL_FIXTURES = [
-  { id: 'model_dev_default', name: 'default', description: '日常对话与通用任务' },
-  { id: 'model_dev_reasoning', name: 'reasoning', description: '复杂推理与代码任务' },
-  { id: 'model_dev_fast', name: 'fast', description: '低延迟轻量请求' },
-] as const
-
 const UPSTREAM_MODEL_FIXTURES = [
-  ['model_dev_default', 'prov_dev_ark', 'doubao-seed-1-6', 'openai-completions', 1],
-  ['model_dev_default', 'prov_dev_openai', 'gpt-4.1-mini', 'openai-responses', 2],
-  ['model_dev_default', 'prov_dev_anthropic', 'claude-sonnet-4', 'anthropic-messages', 3],
-  ['model_dev_reasoning', 'prov_dev_deepseek', 'deepseek-reasoner', 'openai-completions', 1],
-  ['model_dev_reasoning', 'prov_dev_openai', 'o3', 'openai-responses', 2],
-  ['model_dev_fast', 'prov_dev_ark', 'doubao-seed-1-6-flash', 'openai-completions', 1],
-  ['model_dev_fast', 'prov_dev_deepseek', 'deepseek-chat', 'openai-completions', 2],
-  ['model_dev_default', 'prov_dev_all_protocols', 'universal-chat', 'all', 4],
-  ['model_dev_reasoning', 'prov_dev_all_protocols', 'universal-reasoner', 'all', 3],
-  ['model_dev_fast', 'prov_dev_all_protocols', 'universal-fast', 'all', 3],
+  ['default', 'prov_dev_ark', 'doubao-seed-1-6', 'openai-completions', 1],
+  ['default', 'prov_dev_openai', 'gpt-4.1-mini', 'openai-responses', 2],
+  ['default', 'prov_dev_anthropic', 'claude-sonnet-4', 'anthropic-messages', 3],
+  ['default', 'prov_dev_deepseek', 'deepseek-reasoner', 'openai-completions', 4],
+  ['default', 'prov_dev_openai', 'o3', 'openai-responses', 5],
+  ['default', 'prov_dev_ark', 'doubao-seed-1-6-flash', 'openai-completions', 6],
+  ['default', 'prov_dev_deepseek', 'deepseek-chat', 'openai-completions', 7],
+  ['default', 'prov_dev_all_protocols', 'universal-chat', 'all', 8],
+  ['default', 'prov_dev_all_protocols', 'universal-reasoner', 'all', 9],
+  ['default', 'prov_dev_all_protocols', 'universal-fast', 'all', 10],
 ] as const
 
 const ALL_PROTOCOLS = [
@@ -115,9 +108,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
   const existingHealthProviderIds = new Set(
     db.select({ id: providerHealth.providerId }).from(providerHealth).where(inArray(providerHealth.providerId, PROVIDER_FIXTURES.map(provider => provider.id))).all().map(row => row.id),
   )
-  const existingLogicalModelIds = new Set(
-    db.select({ id: logicalModels.id }).from(logicalModels).where(inArray(logicalModels.id, LOGICAL_MODEL_FIXTURES.map(model => model.id))).all().map(row => row.id),
-  )
   const existingUpstreamModelIds = new Set(
     db.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
   )
@@ -127,7 +117,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
   const hasMissingFixtures =
     existingProviderIds.size < PROVIDER_FIXTURES.length
     || existingHealthProviderIds.size < PROVIDER_FIXTURES.length
-    || existingLogicalModelIds.size < LOGICAL_MODEL_FIXTURES.length
     || existingUpstreamModelIds.size < UPSTREAM_MODEL_FIXTURES.length
     || existingRequestIds.size < 18
 
@@ -163,14 +152,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       }
     })).run()
 
-    const logicalModelsToInsert = LOGICAL_MODEL_FIXTURES.filter(model => !existingLogicalModelIds.has(model.id))
-    if (logicalModelsToInsert.length > 0) transaction.insert(logicalModels).values(logicalModelsToInsert.map(model => ({
-      ...model,
-      enabled: true,
-      createdTime: timestamp,
-      updatedTime: timestamp,
-    }))).run()
-
     const upstreamModelsToInsert = UPSTREAM_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingUpstreamModelIds.has(`model_dev_upstream_${index + 1}`))
     if (upstreamModelsToInsert.length > 0) {
       transaction.insert(providerModels).values(upstreamModelsToInsert.map(({ fixture, index }) => ({
@@ -191,20 +172,19 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
           if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
           transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_upstream_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_upstream_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, failoverEnabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_upstream_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
       }
     }
 
     const sampleRequests = Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => {
       const failed = index === 4 || index === 11
-      const logicalModel = LOGICAL_MODEL_FIXTURES[index % LOGICAL_MODEL_FIXTURES.length]
       const provider = PROVIDER_FIXTURES[index % PROVIDER_FIXTURES.length]
       const duration = 480 + (index * 173) % 2_400
       const inputTokens = 320 + index * 47
       const outputTokens = 80 + (index * 29) % 360
       return {
         id: `req_dev_${String(index + 1).padStart(2, '0')}`,
-        logicalModelId: logicalModel.id,
+        logicalModelId: 'default',
         protocol: index % 3 === 0 ? 'openai-completions' : index % 3 === 1 ? 'openai-responses' : 'anthropic-messages',
         status: failed ? 'failed' : 'success',
         totalDurationMilliseconds: duration,

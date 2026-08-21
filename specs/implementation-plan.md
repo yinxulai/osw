@@ -13,7 +13,7 @@ v0.3 是一次全新的大版本迭代，不以兼容旧源码、旧 API、旧�
 v0.3 MVP 完成后必须具备：
 
 - 全新的 16 张关系型核心表；
-- 唯一逻辑模型 `auto`；
+- 唯一逻辑模型 `default`；
 - `scheduling_policies` 作为 LogicalModel 与 ProviderModel 的绑定表；
 - 每个逻辑模型可以拥有独立的 ProviderModel 候选顺序；
 - Provider、ProviderModel、端点绑定和协议转换器分层建模；
@@ -70,7 +70,7 @@ v0.3 MVP 完成后必须具备：
 ### 阶段 0 工作项
 
 - 确认 `ProviderModel` 替代 `UpstreamModel`；
-- 确认唯一 MVP 逻辑模型为 `auto`；
+- 确认唯一 MVP 逻辑模型为 `default`；
 - 确认 `scheduling_policies` 是 LogicalModel-ProviderModel 绑定表；
 - 确认 `priority`、`weight`、绑定启用状态属于绑定关系；
 - 确认 16 张表、索引、外键、软删除和历史快照字段；
@@ -99,21 +99,21 @@ v0.3 MVP 完成后必须具备：
 - 重写 `source/server/database/index.ts` 初始化逻辑；
 - 删除旧 `upstream_models` 和旧兼容迁移函数；
 - 创建 `settings`、Provider、端点、模型、绑定、观测相关全部表；
-- 幂等初始化 `logical_models.auto`；
+- 幂等初始化 `logical_models.default`；
 - 补充唯一约束、CHECK 约束、索引和软删除规则；
 - 为 Provider 和 ProviderModel 初始化健康状态行。
 
 ### 阶段 1 交付目标（详细）
 
 - 全新数据库包含 16 张目标表；
-- `auto` 可重复初始化且不会产生重复记录；
+- `default` 可重复初始化且不会产生重复记录；
 - 同一 ProviderModel 在同一 LogicalModel 下不能重复绑定；
 - ProviderModel 不再保存全局调度顺序；
 - 初始化不读取、不改写、不迁移旧数据库表。
 
 ### 阶段 1 交付目标
 
-全新数据库包含 16 张目标表，`auto` 初始化幂等，数据库初始化测试、外键测试和约束测试全部通过。
+全新数据库包含 16 张目标表，`default` 初始化幂等，数据库初始化测试、外键测试和约束测试全部通过。
 
 ## 阶段 2：重建公共 Schema 与 Store
 
@@ -125,9 +125,9 @@ v0.3 MVP 完成后必须具备：
 
 - 更新 `source/common/schemas.ts`；
 - 重建 `source/server/database/store.ts`；
-- 实现 Provider、ProviderSetting、ProviderEndpoint CRUD；
-- 实现 ProviderModel 和 ProviderModelEndpoint CRUD；
-- 实现 ProtocolConverter CRUD；
+- [x] 实现 Provider、ProviderSetting、ProviderEndpoint CRUD；
+- [x] 实现 ProviderModel 和 ProviderModelEndpoint CRUD；
+- [x] 实现 ProtocolConverter CRUD；
 - 实现 LogicalModel 与 SchedulingPolicy 绑定管理；
 - 实现 Provider 和 ProviderModel 健康状态操作；
 - 实现 `listRouteCandidates(logicalModelId, clientProtocol)`。
@@ -144,7 +144,7 @@ v0.3 MVP 完成后必须具备：
 
 Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和健康状态，返回值均可通过 Zod Schema 校验。
 
-## 阶段 3：落地 `auto` 调度和路由
+## 阶段 3：落地 `default` 兜底调度和路由
 
 ### 阶段 3 目标
 
@@ -154,7 +154,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 - 重写 `source/server/proxy/router.ts`；
 - 更新 `source/server/proxy/server.ts` 和 handler 调用边界；
-- 校验请求体 `model` 必须为 `auto`；
+- 校验请求体 `model` 必须为非空字符串，并将未匹配模型名解析到 `default`；
 - 按绑定行的 `priority ASC, weight DESC, createdTime ASC, providerModelId ASC` 排序；
 - 按客户端协议过滤原生端点和已启用转换端点；
 - 同时应用 Provider 和 ProviderModel 健康状态；
@@ -162,9 +162,9 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 ### 阶段 3 交付目标（详细）
 
-- 未绑定到 `auto` 的 ProviderModel 永不参与 MVP 路由；
-- `/v1/models` 只返回 `auto`；
-- `model` 缺失或不是 `auto` 时返回明确错误；
+- 未绑定到 `default` 的 ProviderModel 永不参与 MVP 路由；
+- `/v1/models` 只返回 `default`；
+- `model` 缺失、空值或非字符串时返回明确错误；任意其他非空模型名由 `default` 处理；
 - 不同逻辑模型拥有不同绑定顺序的能力已由路由核心支持；
 - 自动切换、手动切换和冷却规则符合 spec。
 
@@ -207,14 +207,14 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 ### 阶段 5 工作项
 
 - 将耗时、TTFT、缓存命中迁移到 `request_metrics`；
-- 将 Token 和协议用量写入 `request_usages`；
+- [x] 将 request-level 与 attempt-level Token 和协议用量写入 `request_usages`；
 - [x] 补齐 attempt 的 Provider、ProviderModel、协议、URL、HTTP 状态、重试判断和请求 ID 快照；
 - [x] 将正文改为 request-level 或 attempt-level 独立记录，并为成功、HTTP 失败和已开始的中断流接入采集；
 - [x] 流式正文按每次传输收到或写出的原始 chunk 字符串数组保存，不聚合为消息内容，也不按 SSE 事件重新切分；
 - [x] 本地最终错误响应收敛为 request-level `captured`，已开始的流中断保留客户端视角原始 chunk 并收敛为 `partial`；
 - [x] 日志列表保持轻量，正文通过详情 API 按需读取，并在控制台按客户端与上游 attempt 视角展示；
-- 新增 request logger、usage tracker、content capture hooks；
-- 接入脱敏、容量限制和流式 partial 状态。
+- [x] 新增 request logger、usage tracker、content capture hooks；
+- [x] 接入脱敏、1 MiB 正文容量限制和流式 partial 状态。
 
 ### 阶段 5 交付目标（详细）
 
@@ -239,7 +239,8 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 - 将 `upstream-models.ts` 重命名为 ProviderModel 管理接口；
 - 删除旧 `/api/upstream-model/*` 路径；
-- 增加 Provider endpoint、ProviderModel endpoint、转换器和调度绑定管理；
+- [x] 增加 Provider endpoint、ProviderModel endpoint 和转换器独立 CRUD 管理；
+- 增加调度绑定管理；
 - 队列页面改为展示当前 LogicalModel 的绑定顺序；
 - Provider 页面拆分 Provider 设置、默认端点和 ProviderModel；
 - 请求日志和统计页面读取新的观测分层数据。
@@ -288,12 +289,12 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 | 目标 | 状态 | 完成日期 | 备注 |
 | --- | --- | --- | --- | --- |
 | 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
-| 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `auto` 幂等初始化已落地 |
-| 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | Provider 默认端点已完全切换到关系表；其余 Store 契约继续收敛 |
-| 阶段 3 | `auto` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离的手动路由生命周期已落地 |
+| 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `default` 幂等初始化已落地 |
+| 阶段 2 | 公共 Schema 与 Store | IN_PROGRESS | - | ProviderSetting、ProviderEndpoint、ProviderModelEndpoint、ProtocolConverter 独立 CRUD 已落地；其余 Store 契约继续收敛 |
+| 阶段 3 | `default` 调度和路由 | IN_PROGRESS | - | 绑定关系路由、双层冷却、模型校验、模型发现和按 LogicalModel 隔离的手动路由生命周期已落地 |
 | 阶段 4 | 协议适配器和传输层 | TODO | - | handler 只负责编排 |
-| 阶段 5 | 请求观测分层 | IN_PROGRESS | - | metrics、usages 已关系化；attempt 与 request/attempt 双视角 contents 已落盘，管理 API 和日志详情按需展示已接通 |
-| 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | ProviderEndpoint 管理、配置导入导出与模型发现已切换到关系表 |
+| 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、脱敏、容量限制、历史稳定性与按需详情均已落地并覆盖测试 |
+| 阶段 6 | 管理 API 和控制台 | IN_PROGRESS | - | 四类关系实体独立 CRUD 与连接测试入口已落地；调度绑定和剩余旧术语继续收敛 |
 | 阶段 7 | MVP 验收与发布 | TODO | - | P0 全部通过后发布 |
 
 状态只允许使用：`TODO`、`IN_PROGRESS`、`BLOCKED`、`DONE`。阶段状态发生变化时，应同步更新本表和 `roadmap.md`。

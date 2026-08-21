@@ -7,12 +7,19 @@ import {
   countRequestLogs,
   createLogicalModel,
   createProvider,
+  createProviderEndpoint,
+  createProviderModelEndpoint,
+  createProtocolConverter,
   createRequestAttempt,
   createRequestContent,
   createRequestLog,
   createProviderModelRoute,
   deleteLogicalModel,
   deleteProvider,
+  deleteProviderEndpoint,
+  deleteProviderModelEndpoint,
+  deleteProviderSetting,
+  deleteProtocolConverter,
   deleteSchedulingPolicy,
   deleteProviderModelRoute,
   getFailureReasons,
@@ -20,6 +27,10 @@ import {
   getLogicalModel,
   getModelStats,
   getProvider,
+  getProviderEndpoint,
+  getProviderModelEndpoint,
+  getProviderSetting,
+  getProtocolConverter,
   getProviderHealth,
   getProviderModelHealth,
   getProviderStats,
@@ -32,10 +43,15 @@ import {
   listLogicalModels,
   listProviderHealth,
   listProviderEndpoints,
+  listProviderModelEndpoints,
+  listProviderSettings,
+  listProtocolConverters,
   listProviderModels,
   listProviderModelsForLogicalModel,
   listProviders,
   listRequestLogs,
+  listRequestUsages,
+  MAX_CAPTURED_BODY_BYTES,
   listRequestContents,
   listSchedulingPolicies,
   listProviderModelRoutes,
@@ -50,11 +66,16 @@ import {
   resetProviderModelHealth,
   resetProviderHealth,
   replaceProviderEndpoints,
+  replaceRequestUsage,
   updateLogicalModel,
   updateProvider,
+  updateProviderEndpoint,
+  updateProviderModelEndpoint,
+  updateProtocolConverter,
   updateRequestLogStatus,
   updateRequestContent,
   updateSettings,
+  upsertProviderSetting,
   updateProviderModelRoute,
   upsertSchedulingPolicy,
 } from './store'
@@ -73,10 +94,10 @@ afterEach(async () => {
 })
 
 const providerInput = (name = 'Provider') => ({ name, apiKeyReference: `${name}-key`, timeoutMilliseconds: 10_000 })
-const logInput = (id?: string) => ({ ...(id ? { id } : {}), logicalModelId: 'auto', protocol: 'openai-completions' as const, upstreamProtocol: null, status: 'pending' as const, totalDurationMilliseconds: 1, totalTokens: null, inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, promptCacheHit: null, rawUsage: null, ttftMilliseconds: null, cacheHit: null })
+const logInput = (id?: string) => ({ ...(id ? { id } : {}), logicalModelId: 'default', protocol: 'openai-completions' as const, upstreamProtocol: null, status: 'pending' as const, totalDurationMilliseconds: 1, totalTokens: null, inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, promptCacheHit: null, rawUsage: null, ttftMilliseconds: null, cacheHit: null })
 
 function oldTimestampLog(id: string, time: number) {
-  getDb().$client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, metadata, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run(id, 'auto', 'openai-completions', 'success', null, time)
+  getDb().$client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, metadata, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run(id, 'default', 'openai-completions', 'success', null, time)
   getDb().$client.prepare('INSERT INTO request_metrics (requestId, key, value, unit, updatedTime) VALUES (?, ?, ?, ?, ?)').run(id, 'durationMilliseconds', 10, 'milliseconds', time)
 }
 
@@ -118,7 +139,7 @@ describe('store row mapping', () => {
     expect((await listProviderModelRoutes())[0].enabled).toBe(false)
   })
 
-  it('round-trips nested raw usage when request metrics are updated', async () => {
+  it('round-trips nested raw usage and token usage', async () => {
     const log = await createRequestLog({
       logicalModelId: 'model',
       protocol: 'openai-responses',
@@ -161,6 +182,9 @@ describe('store row mapping', () => {
       promptCacheHit: true,
       rawUsage,
     })
+    expect(await listRequestUsages(log.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ attemptId: null, inputTokens: 1200, outputTokens: 80, totalTokens: 1280, cachedInputTokens: 1024, cacheCreationInputTokens: 0, rawUsage }),
+    ]))
   })
 
   it('disables active upstream models when their provider is deleted', async () => {
@@ -381,8 +405,8 @@ describe('provider and model CRUD', () => {
     const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-a', priority: 99, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://route-a.example', customAuthHeader: null, protocolConversionEnabled: true }] })
     const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-b', priority: 99 })
     const time = Date.now()
-    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, 1, time, time)
-    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, failoverEnabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, 0, time, time)
+    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, time, time)
+    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, time, time)
     const views = await listProviderModels()
     expect(views.find(model => model.id === first.id)?.endpoints[0]).toMatchObject({ protocol: 'openai-completions', url: 'https://route-a.example', conversions: [] })
     expect(await listProviderModelsForLogicalModel(logical.id)).toMatchObject([{ id: second.id, priority: 10 }, { id: first.id, priority: 20 }])
@@ -400,7 +424,7 @@ describe('provider and model CRUD', () => {
     await deleteLogicalModel(model.id)
     expect(await listLogicalModels()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: model.id })]))
     expect(await listLogicalModels(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: model.id, deletedTime: expect.any(Number) })]))
-    await expect(createLogicalModel({ name: 'auto', description: '', enabled: true })).rejects.toThrow()
+    await expect(createLogicalModel({ name: 'default', description: '', enabled: true })).rejects.toThrow()
     await expect(updateLogicalModel('model_missing', { name: 'missing' })).rejects.toThrow('logical model not found')
   })
 })
@@ -412,9 +436,9 @@ describe('scheduling policies', () => {
     const logicalB = await createLogicalModel({ name: 'policy-b' })
     const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'policy-model', priority: 0 })
     const created = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id })
-    expect(created).toMatchObject({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 0, weight: 100, enabled: true, failoverEnabled: true })
-    const updated = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 4, weight: 25, enabled: false, failoverEnabled: false })
-    expect(updated).toMatchObject({ priority: 4, weight: 25, enabled: false, failoverEnabled: false, createdTime: created.createdTime })
+    expect(created).toMatchObject({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 0, weight: 100, enabled: true })
+    const updated = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 4, weight: 25, enabled: false })
+    expect(updated).toMatchObject({ priority: 4, weight: 25, enabled: false, createdTime: created.createdTime })
     expect(await listSchedulingPolicies(logicalA.id)).toEqual([expect.objectContaining({ providerModelId: model.id, priority: 4 })])
     expect(await listSchedulingPolicies(logicalB.id)).toEqual([])
     expect(await listSchedulingPolicies()).toHaveLength(1)
@@ -488,6 +512,36 @@ describe('health and settings', () => {
   })
 })
 
+describe('relation entity CRUD', () => {
+  it('manages provider settings, endpoints, model bindings, and converters independently', async () => {
+    const provider = await createProvider(providerInput('Relations'))
+    const setting = await upsertProviderSetting({ providerId: provider.id, key: 'custom.flag', value: 'true', valueType: 'boolean' })
+    expect(await listProviderSettings(provider.id)).toEqual(expect.arrayContaining([setting]))
+    expect(await getProviderSetting(provider.id, setting.key)).toEqual(setting)
+
+    const endpoint = await createProviderEndpoint({ providerId: provider.id, protocol: 'openai-responses', url: 'https://example.com/v1/responses' })
+    expect(await getProviderEndpoint(endpoint.id)).toEqual(endpoint)
+    expect(await updateProviderEndpoint(endpoint.id, { url: 'https://example.com/responses', enabled: false })).toMatchObject({ url: 'https://example.com/responses', enabled: false })
+    const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'relations-model', priority: 0 })
+    const binding = await createProviderModelEndpoint({ providerModelId: model.id, providerEndpointId: endpoint.id })
+    expect(await listProviderModelEndpoints(model.id)).toEqual([binding])
+    expect(await updateProviderModelEndpoint(binding.id, { url: 'https://example.com/model', enabled: false })).toMatchObject({ url: 'https://example.com/model', enabled: false })
+    const converter = await createProtocolConverter({ providerModelEndpointId: binding.id, clientProtocol: 'anthropic-messages' })
+    expect(await listProtocolConverters(binding.id)).toEqual([converter])
+    expect(await updateProtocolConverter(converter.id, { enabled: false })).toMatchObject({ enabled: false })
+    await deleteProtocolConverter(converter.id)
+    expect(await getProtocolConverter(converter.id)).toBeUndefined()
+    await createProtocolConverter({ providerModelEndpointId: binding.id, clientProtocol: 'anthropic-messages' })
+    await deleteProviderModelEndpoint(binding.id)
+    expect(await getProviderModelEndpoint(binding.id)).toBeUndefined()
+    expect(await listProtocolConverters(binding.id)).toEqual([])
+    await deleteProviderEndpoint(endpoint.id)
+    expect(await getProviderEndpoint(endpoint.id)).toBeUndefined()
+    await deleteProviderSetting(provider.id, setting.key)
+    expect(await getProviderSetting(provider.id, setting.key)).toBeUndefined()
+  })
+})
+
 describe('request logs and analytics', () => {
   it('stores request-level and attempt-level content with raw streaming chunks', async () => {
     const log = await createRequestLog(logInput('req_content'))
@@ -514,7 +568,7 @@ describe('request logs and analytics', () => {
       requestMethod: 'POST',
       requestPath: '/v1/chat/completions',
       requestHeaders: JSON.stringify({ authorization: '[REDACTED]' }),
-      requestBody: '{"model":"auto"}',
+      requestBody: '{"model":"default"}',
       responseStatus: null,
       responseHeaders: null,
       responseBody: null,
@@ -537,13 +591,71 @@ describe('request logs and analytics', () => {
     await updateRequestContent(attemptContent.id, { captureStatus: 'captured' })
 
     expect(await listRequestContents(log.id)).toEqual([
-      expect.objectContaining({ attemptId: null, requestBody: '{"model":"auto"}', captureStatus: 'captured' }),
+      expect.objectContaining({ attemptId: null, requestBody: '{"model":"default"}', captureStatus: 'captured' }),
       expect.objectContaining({
         attemptId: attempt.id,
         captureStatus: 'captured',
         responseBody: JSON.stringify({ schemaVersion: 1, chunks: ['data: {"delta":"a"}\n\n', 'data: [DONE]\n\n'] }),
       }),
     ])
+  })
+
+  it('limits captured bodies, keeps complete streaming chunks, and preserves partial status', async () => {
+    const log = await createRequestLog(logInput('req_content_limit'))
+    const oversizedRequest = 'x'.repeat(MAX_CAPTURED_BODY_BYTES + 1)
+    const content = await createRequestContent({
+      requestId: log.id,
+      attemptId: null,
+      captureStatus: 'captured',
+      requestMethod: 'POST',
+      requestPath: '/v1/responses',
+      requestHeaders: null,
+      requestBody: oversizedRequest,
+      responseStatus: null,
+      responseHeaders: null,
+      responseBody: null,
+      conversions: null,
+    })
+    const firstChunk = 'a'.repeat(MAX_CAPTURED_BODY_BYTES - 100)
+    const secondChunk = 'b'.repeat(200)
+    await updateRequestContent(content.id, {
+      captureStatus: 'captured',
+      responseBody: JSON.stringify({ schemaVersion: 1, chunks: [firstChunk, secondChunk] }),
+    })
+
+    const stored = (await listRequestContents(log.id))[0]
+    expect(stored.captureStatus).toBe('partial')
+    expect(Buffer.byteLength(stored.requestBody!, 'utf8')).toBe(MAX_CAPTURED_BODY_BYTES)
+    expect(JSON.parse(stored.responseBody!)).toEqual({ schemaVersion: 1, chunks: [firstChunk] })
+  })
+
+  it('stores request-level and attempt-level usage independently and replaces one scope atomically', async () => {
+    const log = await createRequestLog(logInput('req_usage'))
+    const provider = await createProvider(providerInput())
+    const attempt = await createRequestAttempt({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: 'model_usage',
+      providerName: provider.name,
+      providerModelName: 'usage-model',
+      providerProtocol: 'openai-responses',
+      providerRequestId: null,
+      url: 'https://example.com/v1/responses',
+      httpStatus: 200,
+      retryable: false,
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 1,
+    })
+    const rawUsage = { input_tokens: 12, output_tokens: 3 }
+    await replaceRequestUsage({ requestId: log.id, attemptId: null, inputTokens: 12, outputTokens: 3, totalTokens: 15, cachedInputTokens: 4, cacheCreationInputTokens: null, rawUsage })
+    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 10, outputTokens: 2, totalTokens: 12, cachedInputTokens: null, cacheCreationInputTokens: 1, rawUsage: null })
+    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 11, outputTokens: 2, totalTokens: 13, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage })
+
+    expect(await listRequestUsages(log.id)).toEqual(expect.arrayContaining([
+      { requestId: log.id, attemptId: null, inputTokens: 12, outputTokens: 3, totalTokens: 15, cachedInputTokens: 4, cacheCreationInputTokens: null, rawUsage },
+      { requestId: log.id, attemptId: attempt.id, inputTokens: 11, outputTokens: 2, totalTokens: 13, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage },
+    ]))
   })
 
   it('creates, updates, filters, counts, orders attempts, and clears nullable values', async () => {
@@ -590,9 +702,24 @@ describe('request logs and analytics', () => {
     await updateRequestLogStatus(log.id, { totalTokens: 10 })
     expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, failedCount: 1, totalTokens: 10, avgLatencyMs: 6000 })
     expect(await getModelStats(0, 0)).toHaveLength(0)
-    expect(await getModelStats(0)).toEqual([expect.objectContaining({ upstreamModelId: 'stats-model', requests: 1, avgLatencyMs: 0 })])
+    expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelName: 'stats-model', requests: 1, avgLatencyMs: 0 })])
     expect(await getFailureReasons(0)).toEqual([{ reason: '认证失败', count: 1 }])
     expect(await getProviderStats(0)).toEqual([expect.objectContaining({ providerName: 'Stats', failed: 1 })])
     expect((await getLatencyDistribution(0)).find(bucket => bucket.range === '> 5s')?.count).toBe(1)
+  })
+
+  it('keeps historical attempts and analytics stable after provider deletion', async () => {
+    const provider = await createProvider(providerInput('Historical Provider'))
+    const log = await createRequestLog({ ...logInput('req_historical'), status: 'success' })
+    const attempt = await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_historical', providerName: 'Historical Provider', providerModelName: 'historical-model', providerProtocol: 'openai-responses', providerRequestId: null, url: 'https://example.com/v1/responses', httpStatus: 200, retryable: false, attemptIndex: 0, status: 'success', durationMilliseconds: 25 })
+    await replaceRequestUsage({ requestId: log.id, attemptId: null, inputTokens: 8, outputTokens: 2, totalTokens: 10, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null })
+    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 8, outputTokens: 2, totalTokens: 10, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null })
+
+    await deleteProvider(provider.id)
+
+    expect(await listAttemptsByRequest(log.id)).toEqual([expect.objectContaining({ providerName: 'Historical Provider', providerModelName: 'historical-model' })])
+    expect(await getProviderStats(0)).toEqual([expect.objectContaining({ providerName: 'Historical Provider', requests: 1 })])
+    expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelName: 'historical-model', providerName: 'Historical Provider', requests: 1 })])
+    expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, totalTokens: 10 })
   })
 })

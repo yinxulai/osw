@@ -83,7 +83,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
         <div className="border-t border-border pt-3">
           <div className="mb-2 flex items-center justify-between">
             <div>
-              <div className="text-xs font-medium">上游模型</div>
+              <div className="text-xs font-medium">供应商模型</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
                 每个模型一行，可同时支持多个协议；拖拽调整全局队列中的相对优先级
               </div>
@@ -162,7 +162,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
         ) : (
           <div className="flex min-h-36 flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 text-center">
             <Server size={20} className="mb-2 text-muted-foreground/40" />
-            <p className="text-xs font-medium">还没有上游模型</p>
+            <p className="text-xs font-medium">还没有供应商模型</p>
             <p className="mt-1 text-[11px] text-muted-foreground">添加后即可通过本地代理调用</p>
           </div>
         )}

@@ -30,8 +30,7 @@ describe('development seed', () => {
     expect(await seedDevelopmentData(secretStore)).toBe(true)
 
     expect(await listProviders()).toHaveLength(5)
-    // 3 个夹具 + 初始化时自动创建的 default 逻辑模型
-    expect(await listLogicalModels()).toHaveLength(4)
+    expect(await listLogicalModels()).toHaveLength(1)
     const upstreamModels = await listProviderModelRoutes()
     expect(upstreamModels).toHaveLength(10)
     expect(upstreamModels.filter(model => model.endpoints.length === 3)).toHaveLength(3)
@@ -72,7 +71,7 @@ describe('development seed', () => {
 
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(false)
     expect(await listProviders()).toHaveLength(6)
-    expect(await listLogicalModels()).toHaveLength(4)
+    expect(await listLogicalModels()).toHaveLength(1)
     expect(await listProviderModelRoutes()).toHaveLength(10)
     expect(await listRequestLogs()).toHaveLength(30)
     expect(secretStore.set).toHaveBeenCalledTimes(5)

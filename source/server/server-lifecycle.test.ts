@@ -49,7 +49,7 @@ describe('server lifecycle', () => {
     expect(modelsResponse.status).toBe(200)
     expect(await modelsResponse.json()).toEqual({
       object: 'list',
-      data: [{ id: 'auto', object: 'model', created: 0, owned_by: 'one-switch' }],
+      data: [{ id: 'default', object: 'model', created: 0, owned_by: 'one-switch' }],
     })
 
     expect(await post(`${managementUrl}/stop`)).toMatchObject({
@@ -82,17 +82,17 @@ describe('server lifecycle', () => {
     await startServer(runtimeOptions)
     const queueUrl = `http://127.0.0.1:${managementPort}/api/queue`
 
-    expect(await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: 'model_auto' })).toMatchObject({
+    expect(await post(`${queueUrl}/switch`, { logicalModelId: 'default', modelId: 'model_auto' })).toMatchObject({
       success: true,
-      data: { logicalModelId: 'auto', modelId: 'model_auto' },
+      data: { logicalModelId: 'default', modelId: 'model_auto' },
     })
     expect(await post(`${queueUrl}/switch`, { logicalModelId: 'secondary', modelId: 'model_secondary' })).toMatchObject({
       success: true,
       data: { logicalModelId: 'secondary', modelId: 'model_secondary' },
     })
-    expect(await post(`${queueUrl}/status`, { logicalModelId: 'auto' })).toMatchObject({
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'default' })).toMatchObject({
       success: true,
-      data: { logicalModelId: 'auto', manualModelId: 'model_auto' },
+      data: { logicalModelId: 'default', manualModelId: 'model_auto' },
     })
     expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
       success: true,
@@ -105,7 +105,7 @@ describe('server lifecycle', () => {
       data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
     })
 
-    await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: null })
+    await post(`${queueUrl}/switch`, { logicalModelId: 'default', modelId: null })
     expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
       success: true,
       data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
@@ -113,9 +113,9 @@ describe('server lifecycle', () => {
 
     await stopServer()
     await startServer(runtimeOptions)
-    expect(await post(`${queueUrl}/status`, { logicalModelId: 'auto' })).toMatchObject({
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'default' })).toMatchObject({
       success: true,
-      data: { logicalModelId: 'auto', manualModelId: null },
+      data: { logicalModelId: 'default', manualModelId: null },
     })
     expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
       success: true,

@@ -1,4 +1,6 @@
-import { Plus, MousePointerClick } from 'lucide-react'
+import { useState } from 'react'
+import { FlaskConical, Plus, MousePointerClick } from 'lucide-react'
+import { ModelTestPanel } from '@/components/model-test-panel'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -12,16 +14,22 @@ import { ModelDialog } from './components/model-dialog'
 
 export function ModelManagementPage() {
   const service = useModelManagementService()
+  const [testPanelOpen, setTestPanelOpen] = useState(false)
 
   return (
     <PageLayout>
       <PageHeader
         title="模型管理"
-        description="集中管理供应商凭据与上游模型映射"
+        description="集中管理供应商凭据与供应商模型映射"
         actions={
-          <Button size="default" onClick={() => service.openProviderDialog()}>
-            <Plus size={14} /> 新建供应商
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="default" onClick={() => setTestPanelOpen(true)}>
+              <FlaskConical size={14} /> 连接测试
+            </Button>
+            <Button size="default" onClick={() => service.openProviderDialog()}>
+              <Plus size={14} /> 新建供应商
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -78,8 +86,8 @@ export function ModelManagementPage() {
                     title={service.providers.length > 0 ? '选择一个供应商查看详情' : '还没有供应商'}
                     description={
                       service.providers.length > 0
-                        ? '从左侧列表中选择一个供应商，即可查看和管理其上游模型与协议地址。'
-                        : '创建供应商并配置凭据后，即可添加上游模型与协议地址。'
+                        ? '从左侧列表中选择一个供应商，即可查看和管理其供应商模型与协议地址。'
+                        : '创建供应商并配置凭据后，即可添加供应商模型与协议地址。'
                     }
                     action={
                       service.providers.length === 0 ? (
@@ -129,6 +137,13 @@ export function ModelManagementPage() {
           updateProtocolEntry={service.updateProtocolEntry}
           onCancel={service.closeModelDialog}
           onSave={service.saveModel}
+        />
+
+        <ModelTestPanel
+          open={testPanelOpen}
+          onOpenChange={setTestPanelOpen}
+          models={service.models}
+          providers={service.providers}
         />
       </PageContent>
     </PageLayout>

@@ -43,7 +43,7 @@ describe('getAvailableModels', () => {
     ]
     mocks.unavailableModels.add('model_cooled')
 
-    const available = await getAvailableModels('auto')
+    const available = await getAvailableModels('default')
 
     expect(available.map(entry => entry.model.id)).toEqual(['model_ready'])
   })

@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { getSettings, listLogicalModels } from '../database/store'
+import { getSettings } from '../database/store'
 import { handleProxyRequest } from './handler'
 import type { Server } from 'node:http'
 
@@ -34,13 +34,8 @@ export function startProxyServer(options: ProxyServerOptions = {}): Promise<Serv
           return
         }
 
-        const activeModel = (await listLogicalModels()).find(model => model.enabled)
-        if (!activeModel) {
-          writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置已启用的逻辑模型')
-          return
-        }
-
-        await handleProxyRequest(req, res, activeModel.id)      } catch (error) {
+        await handleProxyRequest(req, res, 'default')
+      } catch (error) {
         if (res.headersSent) {
           res.destroy(error instanceof Error ? error : new Error(String(error)))
           return
@@ -131,7 +126,7 @@ function writeModelsResponse(res: http.ServerResponse): void {
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({
     object: 'list',
-    data: [{ id: 'auto', object: 'model', created: 0, owned_by: 'one-switch' }],
+    data: [{ id: 'default', object: 'model', created: 0, owned_by: 'one-switch' }],
   }))
 }
 

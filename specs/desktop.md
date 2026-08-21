@@ -59,7 +59,7 @@ Electron + Node + TypeScript + React/Vite
 - 拖拽调整队列顺序（优先级）
 - 顶部显示队列总览：总数量 / 可用 / 冷却 / 禁用
 
-> v0.3 MVP 只有一个名为 `auto` 的逻辑模型和一个全局 ProviderModel 候选池。多逻辑模型及独立候选池属于后续版本；当前 UI 不提供逻辑模型增删改。
+> v0.3 MVP 只有一个名为 `default` 的兜底逻辑模型和一个全局 ProviderModel 候选池。所有未匹配的非空客户端模型名都由它处理。多逻辑模型及独立候选池属于后续版本；当前 UI 不提供逻辑模型增删改。
 
 ### 请求日志页
 
@@ -89,7 +89,7 @@ Electron + Node + TypeScript + React/Vite
 3. 在自动切换队列页添加队列项（选择协议、填入远端 URL 和 Provider API 模型名、选择 Provider）
 4. 可继续添加多个队列项，拖拽调整顺序
 5. 一键复制本地 Base URL
-6. 在 AI 工具中配置 Base URL，并将 `model` 设置为 `auto`；代理转发时会替换为当前 ProviderModel 的 `modelName`
+6. 在 AI 工具中配置 Base URL；`model` 可保留工具原有的任意非空值，代理会通过 `default` 队列处理，并在转发时替换为当前 ProviderModel 的 `modelName`
 7. 发送测试请求，控制台显示尝试过程和切换路径
 
 ### 日常使用

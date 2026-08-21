@@ -75,7 +75,7 @@ export function ProviderGrid(props: ProviderGridProps) {
           <EmptyState
             icon={Server}
             title="还没有供应商"
-            description="创建供应商并配置凭据后，即可添加上游模型与协议地址。"
+            description="创建供应商并配置凭据后，即可添加供应商模型与协议地址。"
             className="min-h-36 py-6"
             embedded
           />

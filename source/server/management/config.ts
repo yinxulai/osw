@@ -77,11 +77,10 @@ interface ExportedSchedulingPolicy {
   priority: number
   weight: number
   enabled: boolean
-  failoverEnabled: boolean
 }
 
 interface ExportedConfig {
-  version: 3
+  schemaVersion: 3
   exportedAt: number
   settings: Partial<Settings>
   providers: ExportedProvider[]
@@ -102,7 +101,7 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
   ])
 
   const config: ExportedConfig = {
-    version: 3,
+    schemaVersion: 3,
     exportedAt: Date.now(),
     settings: {
       listenHost: settings.listenHost,
@@ -147,7 +146,6 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
       priority: policy.priority,
       weight: policy.weight,
       enabled: policy.enabled,
-      failoverEnabled: policy.failoverEnabled,
     })),
   }
 
@@ -158,7 +156,7 @@ async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): P
 
 const ImportConfigSchema = z.object({
   config: z.object({
-    version: z.literal(3),
+    schemaVersion: z.literal(3),
     settings: z.object({
       listenHost: z.string().optional(),
       listenPort: z.number().int().min(1).max(65535).optional(),
@@ -210,7 +208,6 @@ const ImportConfigSchema = z.object({
       priority: z.number().int(),
       weight: z.number().int().optional(),
       enabled: z.boolean().optional(),
-      failoverEnabled: z.boolean().optional(),
     })).default([]),
   }),
   mode: z.enum(['merge', 'replace']).default('merge'),
@@ -347,7 +344,6 @@ async function handleImportConfig(_req: IncomingMessage, res: ServerResponse, bo
         priority: policy.priority,
         weight: policy.weight,
         enabled: policy.enabled,
-        failoverEnabled: policy.failoverEnabled,
       })
     }
 

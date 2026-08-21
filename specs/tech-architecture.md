@@ -173,7 +173,7 @@ one-switch/
 - 提供 `detectProtocol(path): Protocol | null`
 
 **`proxy/router.ts`** — 路由引擎
-- 输入：clientProtocol + `logicalModelName`（v0.3 MVP 必须为 `auto`）
+- 输入：clientProtocol + 客户端 `model`；v0.3 MVP 将任意非空模型名解析为 `default`
 - 输出：候选 Provider 模型列表（按优先级排序，过滤禁用/冷却/额度耗尽）
 - 切换时取下一个 Provider 模型
 - 处理"该协议下无可用端点自动跳过"逻辑
@@ -251,7 +251,7 @@ one-switch/
 | `/api/provider-model/update` | 更新 Provider 模型 | id, 更新字段 | 更新后的 Provider 模型 |
 | `/api/provider-model/delete` | 删除 Provider 模型 | id | - |
 | `/api/provider-model/reorder` | 调整逻辑模型候选池顺序 | logicalModelId, providerModelId, newPriority | 更新后的绑定队列 |
-| `/api/queue/status` | 获取 `auto` 队列状态 | - | 当前手动指定的 Provider 模型 ID |
+| `/api/queue/status` | 获取 `default` 队列状态 | - | 当前手动指定的 Provider 模型 ID |
 | `/api/queue/switch` | 手动切换当前逻辑模型队列起始 Provider 模型 | modelId | 新的当前 Provider 模型 |
 | `/api/log/list` | 请求日志列表 | 分页、筛选参数 | 列表 + 总数 |
 | `/api/log/get` | 请求日志详情 | id | 日志详情 + 所有 attempt |
@@ -260,7 +260,7 @@ one-switch/
 | `/api/config/export` | 导出配置（脱敏） | - | 配置 JSON |
 | `/api/config/import` | 导入配置 | 配置 JSON | 导入结果统计 |
 
-> `/api/provider-model/list` 返回 `auto` 的 ProviderModel 候选池；v0.3 不提供多逻辑模型的独立候选池。
+> `/api/provider-model/list` 返回 `default` 的 ProviderModel 候选池；v0.3 不提供多逻辑模型的独立候选池。
 
 ### 3. 数据存储（`source/server/database/`）
 
@@ -303,7 +303,7 @@ one-switch/
 
 React + TypeScript + shadcn/ui + Tailwind + 轻量外部 Store
 
-渲染层通过管理 HTTP API 获取 Provider、健康状态、`auto` 队列、设置和请求日志；共享数据由外部 Store 缓存，selector hooks 订阅状态，轮询采用静默刷新。具体 Store 结构以现有渲染状态架构为参考，v0.3 实施时再与新 API 契约对齐。
+渲染层通过管理 HTTP API 获取 Provider、健康状态、`default` 队列、设置和请求日志；共享数据由外部 Store 缓存，selector hooks 订阅状态，轮询采用静默刷新。具体 Store 结构以现有渲染状态架构为参考，v0.3 实施时再与新 API 契约对齐。
 
 - **概览页**：服务状态、今日统计、供应商健康卡片
 - **供应商页**：列表、增删改查、测试连接、健康状态
@@ -341,6 +341,6 @@ React + TypeScript + shadcn/ui + Tailwind + 轻量外部 Store
 1. **代理服务纯 Node 化**：不依赖 Electron，可独立测试、未来抽 CLI
 2. **管理 API 走 HTTP**：React UI 和未来 CLI/Web 控制台复用同一套 API
 3. **原生 http 不引入框架**：减少依赖、完全控制流式行为
-4. **轻量外部 Store 管理共享状态**：集中缓存 Provider、健康状态、`auto` 队列和设置，避免页面重复请求与轮询闪烁
+4. **轻量外部 Store 管理共享状态**：集中缓存 Provider、健康状态、`default` 队列和设置，避免页面重复请求与轮询闪烁
 5. **shadcn/ui + Tailwind**：组件按需复制、体积小、定制灵活
 6. **Vite 统一构建**：一套配置管三个进程，开发体验好

@@ -96,7 +96,6 @@ erDiagram
     integer priority
     integer weight
     boolean enabled
-    boolean failoverEnabled
     integer createdTime
     integer updatedTime
   }
@@ -355,7 +354,7 @@ CREATE INDEX idx_provider_endpoints_protocol
 
 ### 3.5 `logical_models`
 
-v0.3 MVP 只初始化并暴露一个逻辑模型 `auto`。它是客户端统一使用的虚拟模型名，代表当前启用的 ProviderModel 自动切换池；MVP 不支持创建、删除或配置多个逻辑模型。表结构提前保留未来扩展所需的身份和生命周期字段。
+v0.3 MVP 只初始化并暴露一个逻辑模型 `default`。它是代理内部的兜底逻辑模型，代表当前启用的 ProviderModel 自动切换池；客户端请求中的任意非空模型名在没有匹配到其他逻辑模型时都由它处理，无需显式请求 `default`。MVP 不支持创建、删除或配置多个逻辑模型。表结构提前保留未来扩展所需的身份和生命周期字段。
 
 ```sql
 CREATE TABLE logical_models (
@@ -372,13 +371,13 @@ CREATE INDEX idx_logical_models_enabled ON logical_models(enabled);
 CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 ```
 
-初始化时必须幂等创建 `auto`，并保证 MVP 中不存在其他启用的逻辑模型。
+初始化时必须幂等创建 `default`，并保证 MVP 中不存在其他启用的逻辑模型。
 
 ### 3.6 `scheduling_policies`
 
 `scheduling_policies` 是 **LogicalModel 与 ProviderModel 之间的调度绑定表**，不是逻辑模型的单独全局策略配置。每一行表示一个 ProviderModel 是否加入某个逻辑模型的候选池，以及它在该候选池中的顺序和权重。因此，不同逻辑模型可以绑定相同的 ProviderModel，但为其配置不同的 `priority`、`weight` 和启用状态；ProviderModel 本身不再拥有跨逻辑模型共享的全局排序。
 
-v0.3 只支持 `strategy = priority`，并在 `auto` 初始化时为需要的 ProviderModel 创建绑定。`failoverEnabled` 是逻辑模型级行为，存储在该逻辑模型对应的策略配置中；后续若需要拆分策略元数据，应新增独立策略元数据表，而不能把绑定顺序退回 ProviderModel。MVP 不提供多逻辑模型 CRUD，P2 再开放每个逻辑模型的绑定管理。
+v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 ID 或名称时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。MVP 不提供多逻辑模型 CRUD，P2 再开放每个逻辑模型的绑定管理。
 
 ```sql
 CREATE TABLE scheduling_policies (
@@ -388,7 +387,6 @@ CREATE TABLE scheduling_policies (
   priority INTEGER NOT NULL DEFAULT 0,
   weight INTEGER NOT NULL DEFAULT 100 CHECK (weight > 0),
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-  failoverEnabled INTEGER NOT NULL DEFAULT 1 CHECK (failoverEnabled IN (0, 1)),
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
   PRIMARY KEY (logicalModelId, providerModelId)
@@ -398,7 +396,7 @@ CREATE INDEX idx_scheduling_policies_route
   ON scheduling_policies(logicalModelId, enabled, priority, weight);
 ```
 
-`failoverEnabled` 在 MVP 的 `auto` 绑定中保持一致；多逻辑模型开放后，各逻辑模型可以独立配置。`request_logs.logicalModelId` 保留请求发生时的逻辑模型标识，但不建立外键。MVP 请求的逻辑模型必须是 `auto`；路由只从 `auto` 的启用绑定中动态生成候选队列。
+`request_logs.logicalModelId` 保留实际处理请求的逻辑模型标识，但不建立外键。MVP 中请求体只要求 `model` 为非空字符串；路由先按请求模型匹配逻辑模型，未匹配时才回退到 `default` 的启用绑定。
 
 ### 3.7 `provider_models`、`provider_model_endpoints` 与 `protocol_converters`
 
@@ -573,7 +571,7 @@ CREATE INDEX idx_request_usages_attempt
   "reasoningTokens": 48,
   "providerRegion": "us-east",
   "clientModelName": "glm-5.2",
-  "logicalModelName": "auto",
+  "logicalModelName": "default",
   "providerId": "prov_123",
   "providerName": "OpenAI"
 }
@@ -890,7 +888,7 @@ Store 层应分为两部分：
 
 ## 8. 删除与历史数据规则
 
-初始化时必须幂等创建唯一启用的 `logical_models.auto` 及其 `scheduling_policies` 默认行；v0.3 MVP 不提供其他逻辑模型的创建、删除和独立策略配置。
+初始化时必须幂等创建唯一启用的 `logical_models.default` 及其 `scheduling_policies` 默认行；v0.3 MVP 不提供其他逻辑模型的创建、删除和独立策略配置。
 
 ### 配置实体
 

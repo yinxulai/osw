@@ -8,7 +8,7 @@ export function resolveUpstreamUrl(upstreamUrl: string): string {
   return parsed.toString()
 }
 
-export function validateLogicalModel(requestBody: Buffer, logicalModelId: string): string | null {
+export function validateLogicalModel(requestBody: Buffer): string | null {
   let payload: unknown
   try {
     payload = JSON.parse(requestBody.toString('utf8'))
@@ -20,7 +20,7 @@ export function validateLogicalModel(requestBody: Buffer, logicalModelId: string
   }
   const model = (payload as Record<string, unknown>).model
   if (model === undefined) return '缺少 model 字段'
-  if (model !== logicalModelId) return `model 必须为 ${logicalModelId}`
+  if (typeof model !== 'string' || model.trim().length === 0) return 'model 必须为非空字符串'
   return null
 }
 

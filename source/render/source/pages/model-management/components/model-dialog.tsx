@@ -62,7 +62,7 @@ export function ModelDialog(props: ModelDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{editingModel ? '编辑上游模型' : '添加上游模型'}</DialogTitle>
+          <DialogTitle>{editingModel ? '编辑供应商模型' : '添加供应商模型'}</DialogTitle>
           <DialogDescription>
             模型属于供应商 <span className="font-medium">{providerName}</span>，可配置多个协议接口。
           </DialogDescription>

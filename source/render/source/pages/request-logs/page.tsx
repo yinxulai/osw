@@ -80,7 +80,7 @@ export function RequestLogsPage() {
     <PageLayout>
       <PageHeader
         title="请求记录"
-        description="最近的代理请求，以及每次请求实际使用的上游模型与失败切换情况"
+        description="最近的代理请求，以及每次请求实际使用的供应商模型与失败切换情况"
         actions={
           <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={refreshing}>
             <RefreshCw size={14} className={cn('mr-1.5', refreshing && 'animate-spin')} />

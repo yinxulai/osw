@@ -32,7 +32,7 @@ describe('request log management', () => {
     const provider = await createProvider({ name: 'Provider', apiKeyReference: 'key_detail', timeoutMilliseconds: 30_000, enabled: true })
     const log = await createRequestLog({
       id: 'req_detail',
-      logicalModelId: 'auto',
+      logicalModelId: 'default',
       protocol: 'openai-responses',
       upstreamProtocol: null,
       status: 'success',

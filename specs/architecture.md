@@ -45,7 +45,7 @@ ProviderModel 通过 `provider_model_endpoints` 绑定 ProviderEndpoint，并可
 协议仅用于路由过滤，代理不解析任何协议的报文结构。
 
 ### Logical Model
-对外暴露的统一模型名，例如 `auto`、`gpt-4o`、`claude-sonnet`。客户端通过请求体中的 model 字段（各协议自行携带）指定。
+代理内部用于选择 ProviderModel 候选池的路由模型。v0.3 只有 `default`：当客户端请求中的非空 `model` 没有匹配到其他逻辑模型时，统一由 `default` 处理；客户端无需将 `model` 显式设置为 `default`。
 
 ### ProviderModel
 Provider 上的一个实际模型，是路由的最小单元。ProviderModel 不直接拥有端点数组，而是通过 `provider_model_endpoints` 绑定一个或多个 ProviderEndpoint。
@@ -57,7 +57,7 @@ ProviderModel 包含：
 - 逻辑模型与 ProviderModel 绑定中的候选队列优先级；
 - 启用状态。
 
-v0.3 MVP 只有一个逻辑模型 `auto`。ProviderModel 是可复用的供应商模型实体，是否参与某个逻辑模型的调度以及具体顺序由 `scheduling_policies` 绑定行决定。每个逻辑模型都可以绑定相同的 ProviderModel，但配置不同的优先级、权重和启用状态；多逻辑模型和独立绑定池属于后续版本。
+v0.3 MVP 只有一个兜底逻辑模型 `default`，因此所有携带非空模型名的代理请求都会进入它的候选池。ProviderModel 是可复用的供应商模型实体，是否参与某个逻辑模型的调度以及具体顺序由 `scheduling_policies` 绑定行决定。每个逻辑模型都可以绑定相同的 ProviderModel，但配置不同的优先级、权重和启用状态；多逻辑模型和独立绑定池属于后续版本。
 
 ### Route
 一次请求的路由决策结果，包含协议、候选 Provider 模型列表、尝试顺序、失败原因。

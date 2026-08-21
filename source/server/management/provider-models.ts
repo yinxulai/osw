@@ -49,7 +49,7 @@ async function handleGetProviderModel(_req: IncomingMessage, res: ServerResponse
 const CreateProviderModelSchema = z.object({
   providerId: z.string().min(1),
   modelName: z.string().min(1),
-  logicalModelId: z.string().min(1).default('auto'),
+  logicalModelId: z.string().min(1).default('default'),
   priority: z.number().int().default(0),
   enabled: z.boolean().default(true),
   endpoints: z.array(z.object({
@@ -118,7 +118,6 @@ const SchedulingPolicyUpdateSchema = z.object({
   priority: z.number().int().optional(),
   weight: z.number().int().nonnegative().optional(),
   enabled: z.boolean().optional(),
-  failoverEnabled: z.boolean().optional(),
 })
 async function handleUpdateSchedulingPolicy(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = SchedulingPolicyUpdateSchema.parse(body)

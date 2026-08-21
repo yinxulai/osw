@@ -68,7 +68,7 @@ export function QueueListCard(props: QueueListCardProps) {
             <CardTitle>优先级队列</CardTitle>
           </div>
           <CardDescription className="mt-1">
-            {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加上游模型后配置优先级和故障转移'}
+            {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加供应商模型后配置优先级和故障转移'}
             {coolingCount > 0 && <span className="text-amber-600 dark:text-amber-500"> · {coolingCount} 个冷却中</span>}
           </CardDescription>
         </div>
@@ -98,7 +98,7 @@ export function QueueListCard(props: QueueListCardProps) {
               <div className="overflow-x-auto overflow-y-hidden rounded-b-lg">
                 <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/40 bg-muted/30 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
                   <span>顺序</span>
-                  <span>供应商与上游模型</span>
+                  <span>供应商与模型</span>
                   <span>性能</span>
                   <span className="hidden lg:block">健康状态</span>
                   <span className="text-right">状态</span>
@@ -134,10 +134,10 @@ export function QueueListCard(props: QueueListCardProps) {
           <EmptyState
             icon={ListTree}
             title="队列中还没有模型"
-            description="前往模型管理添加第一个上游模型，回来后即可调整优先级和故障转移顺序。"
+            description="前往模型管理添加第一个供应商模型，回来后即可调整优先级和故障转移顺序。"
             action={onNavigateToModels && (
               <Button variant="outline" size="sm" onClick={onNavigateToModels}>
-                添加上游模型 <ArrowRight size={13} />
+                添加供应商模型 <ArrowRight size={13} />
               </Button>
             )}
             className="min-h-48 border-0 py-10"

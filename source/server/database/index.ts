@@ -47,7 +47,7 @@ function ensureSchema(db: DatabaseSync): void {
   const time = BigInt(Date.now())
   db.prepare(`INSERT OR IGNORE INTO logical_models
     (id, name, description, enabled, createdTime, updatedTime)
-    VALUES ('auto', 'auto', 'MVP automatic routing model', 1, ?, ?)`)
+    VALUES ('default', 'default', 'Default fallback routing model', 1, ?, ?)`) 
     .run(time, time)
 }
 
@@ -72,7 +72,7 @@ const INITIAL_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS provider_model_endpoints (id TEXT PRIMARY KEY, providerModelId TEXT NOT NULL REFERENCES provider_models(id), providerEndpointId TEXT NOT NULL REFERENCES provider_endpoints(id), url TEXT, enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)), createdTime INTEGER NOT NULL, updatedTime INTEGER NOT NULL, UNIQUE(providerModelId, providerEndpointId))`,
   `CREATE TABLE IF NOT EXISTS protocol_converters (id TEXT PRIMARY KEY, providerModelEndpointId TEXT NOT NULL REFERENCES provider_model_endpoints(id), clientProtocol TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)), createdTime INTEGER NOT NULL, updatedTime INTEGER NOT NULL, UNIQUE(providerModelEndpointId, clientProtocol))`,
   `CREATE TABLE IF NOT EXISTS logical_models (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)), createdTime INTEGER NOT NULL, updatedTime INTEGER NOT NULL, deletedTime INTEGER)`,
-  `CREATE TABLE IF NOT EXISTS scheduling_policies (logicalModelId TEXT NOT NULL REFERENCES logical_models(id), providerModelId TEXT NOT NULL REFERENCES provider_models(id), strategy TEXT NOT NULL DEFAULT 'priority' CHECK (strategy = 'priority'), priority INTEGER NOT NULL DEFAULT 0, weight INTEGER NOT NULL DEFAULT 100 CHECK (weight > 0), enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)), failoverEnabled INTEGER NOT NULL DEFAULT 1 CHECK (failoverEnabled IN (0,1)), createdTime INTEGER NOT NULL, updatedTime INTEGER NOT NULL, PRIMARY KEY (logicalModelId, providerModelId))`,
+  `CREATE TABLE IF NOT EXISTS scheduling_policies (logicalModelId TEXT NOT NULL REFERENCES logical_models(id), providerModelId TEXT NOT NULL REFERENCES provider_models(id), strategy TEXT NOT NULL DEFAULT 'priority' CHECK (strategy = 'priority'), priority INTEGER NOT NULL DEFAULT 0, weight INTEGER NOT NULL DEFAULT 100 CHECK (weight > 0), enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)), createdTime INTEGER NOT NULL, updatedTime INTEGER NOT NULL, PRIMARY KEY (logicalModelId, providerModelId))`,
   `CREATE TABLE IF NOT EXISTS request_logs (id TEXT PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('pending','success','failed','cancelled')), protocol TEXT NOT NULL, logicalModelId TEXT NOT NULL, metadata TEXT, createdTime INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS request_metrics (requestId TEXT NOT NULL REFERENCES request_logs(id), key TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL DEFAULT 'count', updatedTime INTEGER NOT NULL, PRIMARY KEY (requestId, key))`,
   `CREATE TABLE IF NOT EXISTS request_usages (id TEXT PRIMARY KEY, requestId TEXT NOT NULL REFERENCES request_logs(id), attemptId TEXT, type TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL DEFAULT 'count', createdTime INTEGER NOT NULL)`,

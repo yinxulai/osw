@@ -86,7 +86,6 @@ export const SchedulingPolicySchema = z.object({
   priority: z.number().int(),
   weight: z.number().int(),
   enabled: z.boolean().default(true),
-  failoverEnabled: z.boolean().default(true),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
 })
@@ -384,7 +383,7 @@ export const ProviderStatSchema = z.object({
 export type ProviderStat = z.infer<typeof ProviderStatSchema>
 
 export const ModelStatSchema = z.object({
-  upstreamModelId: z.string(),
+  providerModelName: z.string(),
   providerId: z.string(),
   providerName: z.string(),
   requests: z.number().int().nonnegative(),

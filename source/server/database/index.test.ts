@@ -42,14 +42,14 @@ describe('database lifecycle', () => {
     await expect(closeDatabase()).resolves.toBeUndefined()
   })
 
-  it('seeds the auto logical model on a fresh database', async () => {
+  it('seeds the default logical model on a fresh database', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
 
     const rows = client.prepare('SELECT id, name, enabled FROM logical_models').all()
-    expect(rows).toEqual([{ id: 'auto', name: 'auto', enabled: 1 }])
+    expect(rows).toEqual([{ id: 'default', name: 'default', enabled: 1 }])
   })
 
-  it('restores auto when a database has no logical model', async () => {
+  it('restores default when a database has no logical model', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client
     const time = Date.now()
@@ -63,10 +63,10 @@ describe('database lifecycle', () => {
     const reopened = (await initDatabase(directory)).$client
 
     const rows = reopened.prepare('SELECT id FROM logical_models ORDER BY id').all()
-    expect(rows).toEqual([{ id: 'auto' }, { id: 'custom' }])
+    expect(rows).toEqual([{ id: 'custom' }, { id: 'default' }])
   })
 
-  it('creates the v0.3 relational baseline with an idempotent auto model', async () => {
+  it('creates the v0.3 relational baseline with an idempotent default model', async () => {
     const directory = createTemporaryDirectory()
     const client = (await initDatabase(directory)).$client
     const expectedTables = [
@@ -83,7 +83,7 @@ describe('database lifecycle', () => {
 
     expect(tables).toEqual([...expectedTables].sort())
     expect(client.prepare('SELECT id, name FROM logical_models').all()).toEqual([
-      { id: 'auto', name: 'auto' },
+      { id: 'default', name: 'default' },
     ])
 
     await closeDatabase()
@@ -96,9 +96,9 @@ describe('database lifecycle', () => {
     const time = Date.now()
     client.prepare('INSERT INTO providers (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('prov_test', 'Test', time, time)
     client.prepare('INSERT INTO provider_models (id, providerId, modelName, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)').run('pm_test', 'prov_test', 'model-a', time, time)
-    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('auto', 'pm_test', 0, 100, time, time)
+    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('default', 'pm_test', 0, 100, time, time)
 
-    expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('auto', 'pm_test', time, time)).toThrow()
+    expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('default', 'pm_test', time, time)).toThrow()
     expect(() => client.prepare('INSERT INTO provider_health (providerId, updatedTime) VALUES (?, ?)').run('missing', time)).toThrow()
   })
 
@@ -114,7 +114,7 @@ describe('database lifecycle', () => {
 
   it('rejects the removed legacy request log shape', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
-    expect(() => client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run('req_old', 'auto', 'openai-completions', 'success', 1, Date.now())).toThrow()
+    expect(() => client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run('req_old', 'default', 'openai-completions', 'success', 1, Date.now())).toThrow()
   })
 
   it('creates the expected v0.3 indexes and request columns', async () => {

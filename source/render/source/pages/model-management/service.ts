@@ -315,7 +315,7 @@ export function useModelManagementService() {
 
     const result = editingModel
       ? await providerModelApi.update(editingModel.id, {
-          logicalModelId: 'auto',
+          logicalModelId: 'default',
           modelName: modelId.trim(),
           endpoints,
         })
@@ -323,7 +323,7 @@ export function useModelManagementService() {
           providerId: selectedProvider.id,
           modelName: modelId.trim(),
           endpoints,
-          logicalModelId: 'auto',
+          logicalModelId: 'default',
           priority: basePriority,
         })
 
@@ -362,7 +362,7 @@ export function useModelManagementService() {
       const update = updates.find(item => item.id === model.id)
       return update ? { ...model, priority: update.priority } : model
     }).sort((left, right) => left.priority - right.priority))
-    const results = await Promise.all(updates.map(update => providerModelApi.update(update.id, { logicalModelId: 'auto', priority: update.priority })))
+    const results = await Promise.all(updates.map(update => providerModelApi.update(update.id, { logicalModelId: 'default', priority: update.priority })))
     if (results.some(result => !result.success)) {
       toast.error('模型顺序保存失败，已恢复服务端数据')
       await reload()
