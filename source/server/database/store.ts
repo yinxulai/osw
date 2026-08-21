@@ -14,6 +14,7 @@ import type {
   RequestStatus,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
+import { CONVERTIBLE_PROTOCOLS } from '../proxy/conversion'
 import { getDb } from './index'
 import {
   providerModels,
@@ -160,7 +161,11 @@ export async function createProviderModelRoute(input: CreateProviderModelRouteIn
       if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: input.providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
       const bindingId = generateId('pme_')
       transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
-      if (endpoint.protocolConversionEnabled) transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol: endpoint.protocol, enabled: true, createdTime: time, updatedTime: time }).run()
+      if (endpoint.protocolConversionEnabled) {
+        for (const clientProtocol of CONVERTIBLE_PROTOCOLS[endpoint.protocol]) {
+          transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol, enabled: true, createdTime: time, updatedTime: time }).run()
+        }
+      }
     }
   })
   return { id, providerId: input.providerId, modelName: input.modelName, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
@@ -182,7 +187,11 @@ export async function updateProviderModelRoute(id: string, updates: Partial<Omit
         if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: existing.providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
         const bindingId = generateId('pme_')
         transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: id, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
-        if (endpoint.protocolConversionEnabled) transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol: endpoint.protocol, enabled: true, createdTime: time, updatedTime: time }).run()
+        if (endpoint.protocolConversionEnabled) {
+          for (const clientProtocol of CONVERTIBLE_PROTOCOLS[endpoint.protocol]) {
+            transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol, enabled: true, createdTime: time, updatedTime: time }).run()
+          }
+        }
       }
     }
   })

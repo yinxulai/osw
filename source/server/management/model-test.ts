@@ -75,6 +75,13 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
 
   const results: ModelTestResult[] = []
 
+  if (testableModels.length === 0) {
+    sendSuccess(res, {
+      results: [],
+    })
+    return
+  }
+
   for (const model of testableModels) {
     if (controller.signal.aborted) return
     const provider = providerMap.get(model.providerId)

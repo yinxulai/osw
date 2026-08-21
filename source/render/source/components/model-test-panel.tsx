@@ -194,13 +194,15 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
           providerIds: [task.providerId],
           modelIds: [task.modelId],
         })
-        const result = response.success ? response.data.results[0] : undefined
+        const result = response.success
+          ? response.data.results.find(item => item.modelId === task.modelId)
+          : undefined
         const succeeded = Boolean(result?.success)
         setTasks(current => current.map(item => item.id === task.id ? {
           ...item,
           status: succeeded ? 'success' : 'failed',
           result,
-          errorMessage: response.success ? result?.errorMessage ?? '没有返回测试结果' : response.errorMessage,
+          errorMessage: response.success ? result?.errorMessage ?? '未找到可测试的协议端点' : response.errorMessage,
         } : item))
       }
     }
