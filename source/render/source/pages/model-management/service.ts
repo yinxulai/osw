@@ -75,6 +75,7 @@ export function useModelManagementService() {
     const result = await providerModelApi.list()
     if (!result.success) {
       toast.error(result.errorMessage)
+      await loadModels()
       return
     }
     setModels(result.data.map(model => ({
