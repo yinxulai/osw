@@ -196,9 +196,9 @@ export const settingsApi = {
 // ========== Queue ==========
 
 export const queueApi = {
-  status: () => request<{ manualModelId: string | null }>('/queue/status'),
-  switch: (modelId: string | null) =>
-    request<{ modelId: string | null }>('/queue/switch', { modelId }),
+  status: (logicalModelId: string) => request<{ logicalModelId: string; manualModelId: string | null }>('/queue/status', { logicalModelId }),
+  switch: (logicalModelId: string, modelId: string | null) =>
+    request<{ logicalModelId: string; modelId: string | null }>('/queue/switch', { logicalModelId, modelId }),
 }
 
 // ========== Health ==========

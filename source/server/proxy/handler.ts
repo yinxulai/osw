@@ -50,15 +50,18 @@ interface AttemptOutcome {
   upstreamProtocol?: Protocol | null
 }
 
-// 手动切换状态：当前指定的 upstream model ID
-let manualModelId: string | null = null
+const manualModelIds = new Map<string, string>()
 
-export function setManualModel(modelId: string | null): void {
-  manualModelId = modelId
+export function setManualModel(logicalModelId: string, providerModelId: string | null): void {
+  if (providerModelId === null) {
+    manualModelIds.delete(logicalModelId)
+    return
+  }
+  manualModelIds.set(logicalModelId, providerModelId)
 }
 
-export function getManualModel(): string | null {
-  return manualModelId
+export function getManualModel(logicalModelId: string): string | null {
+  return manualModelIds.get(logicalModelId) ?? null
 }
 
 /**
@@ -97,6 +100,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   let models = [...nativeModels, ...convertedModels]
 
   // 如果有手动指定的 model，把它排到最前面
+  const manualModelId = getManualModel(logicalModelId)
   if (manualModelId) {
     const manual = models.find(m => m.model.id === manualModelId)
     if (manual) {

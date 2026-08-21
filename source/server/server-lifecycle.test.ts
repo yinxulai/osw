@@ -68,6 +68,42 @@ describe('server lifecycle', () => {
     })
     expect((await fetch(proxyUrl)).status).toBe(200)
   })
+
+  it('isolates manual queue selection by logical model through the management API', async () => {
+    const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
+    await initDatabase(temporaryDirectory)
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
+    await closeDatabase()
+    await startServer({
+      dataDir: temporaryDirectory,
+      secretStore,
+      runtimeProfile: createTestRuntimeProfile(proxyPort, managementPort),
+    })
+    const queueUrl = `http://127.0.0.1:${managementPort}/api/queue`
+
+    expect(await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: 'model_auto' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'auto', modelId: 'model_auto' },
+    })
+    expect(await post(`${queueUrl}/switch`, { logicalModelId: 'secondary', modelId: 'model_secondary' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'secondary', modelId: 'model_secondary' },
+    })
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'auto' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'auto', manualModelId: 'model_auto' },
+    })
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
+    })
+
+    await post(`${queueUrl}/switch`, { logicalModelId: 'auto', modelId: null })
+    expect(await post(`${queueUrl}/status`, { logicalModelId: 'secondary' })).toMatchObject({
+      success: true,
+      data: { logicalModelId: 'secondary', manualModelId: 'model_secondary' },
+    })
+  })
 })
 
 function createTestRuntimeProfile(proxyPort: number, managementPort: number): RuntimeProfile {
@@ -80,11 +116,11 @@ function createTestRuntimeProfile(proxyPort: number, managementPort: number): Ru
   }
 }
 
-async function post(url: string): Promise<unknown> {
+async function post(url: string, body: unknown = {}): Promise<unknown> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(body),
   })
   return response.json()
 }

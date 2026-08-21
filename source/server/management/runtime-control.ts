@@ -21,15 +21,17 @@ export const runtimeControlRoutes: Record<string, ManagementHandler> = {
   '/api/proxy/restart': handleProxyRestart,
 }
 
-function handleQueueStatus(_req: IncomingMessage, res: ServerResponse): void {
-  sendSuccess(res, { manualModelId: getManualModel() })
+const QueueStatusSchema = z.object({ logicalModelId: z.string().min(1) })
+function handleQueueStatus(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+  const { logicalModelId } = QueueStatusSchema.parse(body)
+  sendSuccess(res, { logicalModelId, manualModelId: getManualModel(logicalModelId) })
 }
 
-const SwitchQueueSchema = z.object({ modelId: z.string().nullable() })
+const SwitchQueueSchema = z.object({ logicalModelId: z.string().min(1), modelId: z.string().nullable() })
 function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
-  const { modelId } = SwitchQueueSchema.parse(body)
-  setManualModel(modelId)
-  sendSuccess(res, { modelId })
+  const { logicalModelId, modelId } = SwitchQueueSchema.parse(body)
+  setManualModel(logicalModelId, modelId)
+  sendSuccess(res, { logicalModelId, modelId })
 }
 
 async function handleListHealth(_req: IncomingMessage, res: ServerResponse): Promise<void> {

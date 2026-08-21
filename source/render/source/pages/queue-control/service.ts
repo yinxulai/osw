@@ -92,7 +92,7 @@ export function useQueueControlService() {
   // 队列状态 + 请求指标（本页专属数据，首次加载后静默刷新）
   const loadQueueData = useCallback(async () => {
     const [queueResult, logResult] = await Promise.all([
-      queueApi.status(),
+      queueApi.status('auto'),
       requestLogApi.list({ limit: 100 }),
     ])
     if (queueResult.success) {
@@ -127,7 +127,7 @@ export function useQueueControlService() {
 
   const changeMode = useCallback(async (nextMode: 'auto' | 'manual') => {
     if (nextMode === 'auto') {
-      const result = await queueApi.switch(null)
+      const result = await queueApi.switch('auto', null)
       if (!result.success) { toast.error(result.errorMessage); return }
       setManualModelId(null)
       setMode('auto')
@@ -135,7 +135,7 @@ export function useQueueControlService() {
     }
     const initialModelId = manualModelId ?? models.find(model => model.enabled)?.id ?? null
     if (!initialModelId) return
-    const result = await queueApi.switch(initialModelId)
+    const result = await queueApi.switch('auto', initialModelId)
     if (!result.success) { toast.error(result.errorMessage); return }
     setManualModelId(initialModelId)
     setMode('manual')
@@ -148,7 +148,7 @@ export function useQueueControlService() {
 
   const selectManualModel = useCallback(async (model: ProviderModelRoute) => {
     if (mode !== 'manual' || !model.enabled || isCooling(model.providerId)) return
-    const result = await queueApi.switch(model.id)
+    const result = await queueApi.switch('auto', model.id)
     if (!result.success) { toast.error(result.errorMessage); return }
     setManualModelId(model.id)
   }, [mode, isCooling])

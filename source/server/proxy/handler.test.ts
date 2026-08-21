@@ -38,11 +38,13 @@ vi.mock('../database/store', () => ({
   pruneRequestLogs: mocks.pruneRequestLogs,
 }))
 
-import { handleProxyRequest } from './handler'
+import { getManualModel, handleProxyRequest, setManualModel } from './handler'
 
 const servers: http.Server[] = []
 
 afterEach(async () => {
+  setManualModel('auto', null)
+  setManualModel('secondary', null)
   mocks.models = []
   vi.clearAllMocks()
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
@@ -98,6 +100,55 @@ function convertibleModel(id: string, providerId: string, upstreamUrl: string, u
 }
 
 describe('handleProxyRequest', () => {
+  it('isolates the manual starting model by logical model', () => {
+    setManualModel('auto', 'model_auto')
+    setManualModel('secondary', 'model_secondary')
+
+    expect(getManualModel('auto')).toBe('model_auto')
+    expect(getManualModel('secondary')).toBe('model_secondary')
+
+    setManualModel('auto', null)
+    expect(getManualModel('auto')).toBeNull()
+    expect(getManualModel('secondary')).toBe('model_secondary')
+  })
+
+  it('starts routing from the manually selected provider model', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const firstHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ provider: 'first' }))
+    })
+    const secondHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ provider: 'second' }))
+    })
+    const first = await listen(firstHandler)
+    const second = await listen(secondHandler)
+    mocks.models = [
+      model('model_first', 'prov_first', `${first.url}/v1/chat/completions`, 'first-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/chat/completions`, 'second-model'),
+    ]
+    setManualModel('auto', 'model_second')
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'auto')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'auto', messages: [] }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ provider: 'second' })
+    expect(secondHandler).toHaveBeenCalledOnce()
+    expect(firstHandler).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{ messages: [] }, '缺少 model 字段'],
     [{ model: 'other', messages: [] }, 'model 必须为 auto'],
