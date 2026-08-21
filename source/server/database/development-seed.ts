@@ -69,7 +69,7 @@ const PROVIDER_FIXTURES = [
   },
 ] as const
 
-const UPSTREAM_MODEL_FIXTURES = [
+const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_ark', 'doubao-seed-1-6', 'openai-completions', 1],
   ['default', 'prov_dev_openai', 'gpt-4.1-mini', 'openai-responses', 2],
   ['default', 'prov_dev_anthropic', 'claude-sonnet-4', 'anthropic-messages', 3],
@@ -109,8 +109,8 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
   const existingHealthProviderIds = new Set(
     db.select({ id: providerHealth.providerId }).from(providerHealth).where(inArray(providerHealth.providerId, PROVIDER_FIXTURES.map(provider => provider.id))).all().map(row => row.id),
   )
-  const existingUpstreamModelIds = new Set(
-    db.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, UPSTREAM_MODEL_FIXTURES.map((_, index) => `model_dev_upstream_${index + 1}`))).all().map(row => row.id),
+  const existingProviderModelIds = new Set(
+    db.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, PROVIDER_MODEL_FIXTURES.map((_, index) => `model_dev_provider_${index + 1}`))).all().map(row => row.id),
   )
 
   for (const provider of PROVIDER_FIXTURES) {
@@ -146,27 +146,27 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       }
     })).run()
 
-    const upstreamModelsToInsert = UPSTREAM_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingUpstreamModelIds.has(`model_dev_upstream_${index + 1}`))
-    if (upstreamModelsToInsert.length > 0) {
-      transaction.insert(providerModels).values(upstreamModelsToInsert.map(({ fixture, index }) => ({
-        id: `model_dev_upstream_${index + 1}`,
+    const providerModelsToInsert = PROVIDER_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingProviderModelIds.has(`model_dev_provider_${index + 1}`))
+    if (providerModelsToInsert.length > 0) {
+      transaction.insert(providerModels).values(providerModelsToInsert.map(({ fixture, index }) => ({
+        id: `model_dev_provider_${index + 1}`,
         providerId: fixture[1],
         modelName: fixture[2],
         enabled: true,
         createdTime: timestamp,
         updatedTime: timestamp,
       }))).run()
-      transaction.insert(providerModelHealth).values(upstreamModelsToInsert.map(({ index }) => ({ providerModelId: `model_dev_upstream_${index + 1}`, updatedTime: timestamp }))).run()
-      for (const { fixture, index } of upstreamModelsToInsert) {
+      transaction.insert(providerModelHealth).values(providerModelsToInsert.map(({ index }) => ({ providerModelId: `model_dev_provider_${index + 1}`, updatedTime: timestamp }))).run()
+      for (const { fixture, index } of providerModelsToInsert) {
         const protocols = fixture[3] === 'all' ? ALL_PROTOCOLS : [fixture[3]]
         for (const protocol of protocols) {
           const endpointId = `endpoint_dev_${fixture[1]}_${protocol}`
           const url = PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.endpoints[protocol as keyof typeof PROVIDER_FIXTURES[number]['endpoints']] ?? 'https://api.example.com'
           const existingEndpoint = transaction.select().from(providerEndpoints).where(inArray(providerEndpoints.id, [endpointId])).get()
           if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
-          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_upstream_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_upstream_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
       }
     }
 
@@ -220,8 +220,8 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
     ])
     if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
     transaction.insert(requestAttempts).values(sampleRequests.flatMap(request => {
-      const fixture = UPSTREAM_MODEL_FIXTURES[request.index % UPSTREAM_MODEL_FIXTURES.length]
-      const providerModelId = `model_dev_upstream_${request.index % UPSTREAM_MODEL_FIXTURES.length + 1}`
+      const fixture = PROVIDER_MODEL_FIXTURES[request.index % PROVIDER_MODEL_FIXTURES.length]
+      const providerModelId = `model_dev_provider_${request.index % PROVIDER_MODEL_FIXTURES.length + 1}`
       const attempt = {
         id: `att_dev_${request.id}`,
         requestId: request.id,

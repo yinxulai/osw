@@ -28,7 +28,7 @@ export const providerModelFetchRoutes: Record<string, ManagementHandler> = {
   '/api/provider/fetch-models': handleFetchProviderModels,
 }
 
-const FetchUpstreamModelsSchema = z.object({
+const FetchProviderModelsSchema = z.object({
   protocol: ProtocolSchema,
   providerId: z.string().optional(),
   /** 临时地址（未保存 provider 或模型级覆盖地址时使用） */
@@ -39,7 +39,7 @@ const FetchUpstreamModelsSchema = z.object({
 })
 
 async function handleFetchProviderModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const input = FetchUpstreamModelsSchema.parse(body)
+  const input = FetchProviderModelsSchema.parse(body)
   const controller = new AbortController()
   const onClientAbort = () => controller.abort()
   req.once('aborted', onClientAbort)

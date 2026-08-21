@@ -67,7 +67,7 @@ export function useQueueControlService() {
     })))
   }, [toast])
 
-  // 初始化：加载全局上游模型队列
+  // 初始化：加载 default 逻辑模型的 ProviderModel 队列
   useEffect(() => {
     if (initializedRef.current) return
 

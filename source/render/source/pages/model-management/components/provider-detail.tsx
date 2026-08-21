@@ -17,7 +17,7 @@ import { GripVertical, Pencil, Plus, Server, Trash2, KeyRound, Timer } from 'luc
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { SortableUpstreamModel } from './sortable-upstream-model'
+import { SortableProviderModel } from './sortable-provider-model'
 import { ProviderIcon } from './provider-icon'
 import { findPresetByName } from '../lib/provider-presets'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
@@ -85,7 +85,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             <div>
               <div className="text-xs font-medium">供应商模型</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                每个模型一行，可同时支持多个协议；拖拽调整全局队列中的相对优先级
+                每个模型一行，可同时支持多个协议；拖拽调整 default 逻辑模型中的相对优先级
               </div>
             </div>
             <Button variant="outline" onClick={onAddModel}>
@@ -103,7 +103,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
             <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
               <div className="overflow-hidden rounded-lg border bg-muted/35 divide-y divide-border/60">
                 {models.map(model => (
-                  <SortableUpstreamModel key={model.id} id={model.id}>
+                  <SortableProviderModel key={model.id} id={model.id}>
                     {(handleProps, dragging) => (
                       <div className={'flex items-center gap-2 px-3 py-2.5 ' + (dragging ? 'bg-muted/60' : '')}>
                         <button
@@ -154,7 +154,7 @@ export function ProviderDetail(props: ProviderDetailProps) {
                         </Button>
                       </div>
                     )}
-                  </SortableUpstreamModel>
+                  </SortableProviderModel>
                 ))}
               </div>
             </SortableContext>

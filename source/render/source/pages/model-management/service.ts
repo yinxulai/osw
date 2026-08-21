@@ -118,7 +118,7 @@ export function useModelManagementService() {
     [providers, selectedProviderId],
   )
 
-  // 切换供应商后，之前获取到的上游模型列表不再适用，清空避免误用
+  // 切换供应商后，之前获取到的远端模型列表不再适用，清空避免误用
   useEffect(() => {
     setFetchedModels([])
   }, [selectedProviderId])
@@ -379,7 +379,7 @@ export function useModelManagementService() {
     selectedModels,
     loading,
     saving: savingProvider || savingModel,
-    // Model dialog: fetched upstream models
+    // Model dialog: fetched provider models
     fetchedModels,
     fetchingModels,
     fetchModels,

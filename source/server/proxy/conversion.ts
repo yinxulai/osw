@@ -216,7 +216,7 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
 
 /**
  * 将 clientProtocol 的请求体转换为 endpointProtocol 的请求体。
- * model 字段会被替换为上游模型 ID。
+ * model 字段会被替换为 ProviderModel 的远端模型名称。
  * 不支持的转换方向抛出 Error。
  */
 export function convertRequestBody(clientProtocol: Protocol, endpointProtocol: Protocol, requestBody: Buffer, providerModelName: string): Buffer {

@@ -129,7 +129,7 @@ export const logicalModelApi = {
   remove: (id: string) => request<{ id: string }>('/logical-model/delete', { id }),
 }
 
-// ========== Upstream Model ==========
+// ========== Provider Model ==========
 
 type ProviderModelEndpointView = {
   id: string

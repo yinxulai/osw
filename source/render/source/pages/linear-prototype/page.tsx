@@ -150,7 +150,7 @@ function LinearPrototypePage() {
 
         <div className="lp-content lp-product-content">
           <section className="lp-product-heading">
-            <div><h1>模型队列</h1><p>管理上游模型的优先级、可用状态和故障转移顺序。</p></div>
+            <div><h1>模型队列</h1><p>管理 ProviderModel 的优先级、可用状态和故障转移顺序。</p></div>
             <button type="button" className="lp-pause-button"><Pause size={13} /> 暂停服务</button>
           </section>
 
@@ -181,7 +181,7 @@ function LinearPrototypePage() {
               </div>
             </header>
 
-            <div className="lp-queue-columns"><span>顺序</span><span>供应商与上游模型</span><span>协议</span><span>性能</span><span>健康状态</span><span>状态</span></div>
+            <div className="lp-queue-columns"><span>顺序</span><span>供应商与 ProviderModel</span><span>协议</span><span>性能</span><span>健康状态</span><span>状态</span></div>
             <div className="lp-queue-list">
               {queue.map(item => {
                 const selected = mode === 'manual' && manualModelId === item.id
@@ -197,7 +197,7 @@ function LinearPrototypePage() {
                 )
               })}
             </div>
-            <footer><p>{mode === 'auto' ? '请求失败时按队列顺序自动尝试下一个可用模型。' : '手动指定仅影响新请求，正在进行的请求不会中断。'}</p><button type="button">管理上游模型 <ChevronRight size={12} /></button></footer>
+            <footer><p>{mode === 'auto' ? '请求失败时按队列顺序自动尝试下一个可用模型。' : '手动指定仅影响新请求，正在进行的请求不会中断。'}</p><button type="button">管理 ProviderModel <ChevronRight size={12} /></button></footer>
           </section>
 
           <section className="lp-failover-panel">
