@@ -30,6 +30,152 @@ function formatDate(iso: string): string {
   }
 }
 
+type UpdateActionsProps = {
+  status: UpdateCheckStatus
+  hasUpdate: boolean
+  hasPreferredAsset: boolean
+  onDownload: () => void
+  onInstall: () => void
+  onOpenReleases: () => void
+}
+
+type VersionInfoProps = {
+  info: UpdateInfo | null
+}
+
+type ReleaseNotesProps = {
+  info: UpdateInfo | null
+  hasUpdate: boolean
+}
+
+type DownloadProgressProps = {
+  progress: number | null
+}
+
+function PreviewCard() {
+  return (
+    <Card className="border-border">
+      <CardHeader className="border-b border-border/60 px-4 py-4">
+        <CardTitle className="flex items-center gap-2">
+          <Package className="h-4 w-4" />
+          版本更新
+        </CardTitle>
+        <CardDescription>
+          基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 py-4">
+        <p className="text-[11px] text-muted-foreground">
+          版本更新功能仅在 Electron 桌面端可用。
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function VersionInfo(props: VersionInfoProps) {
+  const { info } = props
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      <span className="text-muted-foreground">
+        当前版本：<span className="font-medium text-foreground">v{info?.currentVersion ?? '—'}</span>
+      </span>
+      {info && (
+        <span className="text-muted-foreground">
+          最新版本：<span className="font-medium text-foreground">v{info.latestVersion}</span>
+        </span>
+      )}
+      {info?.releaseDate && (
+        <span className="text-muted-foreground">
+          发布时间：{formatDate(info.releaseDate)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function ReleaseNotes(props: ReleaseNotesProps) {
+  const { info, hasUpdate } = props
+  if (!info?.releaseNotes || !hasUpdate) return null
+  return (
+    <details className="rounded-md bg-muted/50 px-3 py-2 text-xs">
+      <summary className="cursor-pointer select-none font-medium text-foreground">
+        查看更新说明
+      </summary>
+      <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap wrap-break-word font-sans text-[11px] leading-relaxed text-muted-foreground">
+        {info.releaseNotes}
+      </pre>
+    </details>
+  )
+}
+
+function DownloadProgress(props: DownloadProgressProps) {
+  const { progress } = props
+  if (progress == null) return null
+  const percent = Math.round(progress * 100)
+  return (
+    <div className="space-y-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full bg-primary transition-all"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-muted-foreground">正在下载… {percent}%</p>
+    </div>
+  )
+}
+
+function UpdateActions(props: UpdateActionsProps) {
+  const {
+    status,
+    hasUpdate,
+    hasPreferredAsset,
+    onDownload,
+    onInstall,
+    onOpenReleases,
+  } = props
+
+  const renderUpdateAction = () => {
+    if (!hasUpdate) return null
+    if (!hasPreferredAsset) {
+      return (
+        <Button size="sm" onClick={onOpenReleases}>
+          <ExternalLink className="mr-1 h-3.5 w-3.5" />
+          前往发布页
+        </Button>
+      )
+    }
+    if (status === 'update-available') {
+      return (
+        <Button size="sm" onClick={onDownload}>
+          <Download className="mr-1 h-3.5 w-3.5" />
+          下载更新
+        </Button>
+      )
+    }
+    if (status === 'downloaded') {
+      return (
+        <Button size="sm" onClick={onInstall}>
+          <Rocket className="mr-1 h-3.5 w-3.5" />
+          立即安装
+        </Button>
+      )
+    }
+    return null
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      {renderUpdateAction()}
+      <Button size="sm" variant="ghost" onClick={onOpenReleases}>
+        <ExternalLink className="mr-1 h-3.5 w-3.5" />
+        GitHub 发布页
+      </Button>
+    </div>
+  )
+}
+
 export function UpdateCard() {
   const toast = useToast()
   const [state, setState] = useState<UpdateState>({
@@ -96,33 +242,12 @@ export function UpdateCard() {
     await updater.openReleases()
   }
 
-  if (!updater) {
-    return (
-      <Card className="border-border">
-        <CardHeader className="border-b border-border/60 px-4 py-4">
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            版本更新
-          </CardTitle>
-          <CardDescription>
-            基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-4 py-4">
-          <p className="text-[11px] text-muted-foreground">
-            版本更新功能仅在 Electron 桌面端可用。
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
+  if (!updater) return <PreviewCard />
 
   const { status, info, errorMessage, downloadProgress } = state
   const isChecking = status === 'checking'
   const isDownloading = status === 'downloading'
   const hasUpdate = status === 'update-available' || status === 'downloading' || status === 'downloaded'
-  const currentVersion = info?.currentVersion ?? '—'
-  const percent = downloadProgress != null ? Math.round(downloadProgress * 100) : 0
 
   return (
     <Card className="border-border">
@@ -152,21 +277,7 @@ export function UpdateCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3 px-4 py-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span className="text-muted-foreground">
-            当前版本：<span className="font-medium text-foreground">v{currentVersion}</span>
-          </span>
-          {info && (
-            <span className="text-muted-foreground">
-              最新版本：<span className="font-medium text-foreground">v{info.latestVersion}</span>
-            </span>
-          )}
-          {info?.releaseDate && (
-            <span className="text-muted-foreground">
-              发布时间：{formatDate(info.releaseDate)}
-            </span>
-          )}
-        </div>
+        <VersionInfo info={info} />
 
         {info?.preferredAsset && (
           <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
@@ -177,63 +288,22 @@ export function UpdateCard() {
           </div>
         )}
 
-        {info?.releaseNotes && hasUpdate && (
-          <details className="rounded-md bg-muted/50 px-3 py-2 text-xs">
-            <summary className="cursor-pointer select-none font-medium text-foreground">
-              查看更新说明
-            </summary>
-            <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap wrap-break-word font-sans text-[11px] leading-relaxed text-muted-foreground">
-              {info.releaseNotes}
-            </pre>
-          </details>
-        )}
+        <ReleaseNotes info={info} hasUpdate={hasUpdate} />
 
         {errorMessage && (
           <p className="text-[11px] text-destructive">{errorMessage}</p>
         )}
 
-        {isDownloading && (
-          <div className="space-y-1">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-muted-foreground">正在下载… {percent}%</p>
-          </div>
-        )}
+        {isDownloading && <DownloadProgress progress={downloadProgress} />}
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          {hasUpdate && info?.preferredAsset && (
-            <>
-              {status === 'update-available' && (
-                <Button size="sm" onClick={handleDownload}>
-                  <Download className="mr-1 h-3.5 w-3.5" />
-                  下载更新
-                </Button>
-              )}
-              {status === 'downloaded' && (
-                <Button size="sm" onClick={handleInstall}>
-                  <Rocket className="mr-1 h-3.5 w-3.5" />
-                  立即安装
-                </Button>
-              )}
-            </>
-          )}
-
-          {hasUpdate && !info?.preferredAsset && (
-            <Button size="sm" onClick={handleOpenReleases}>
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              前往发布页
-            </Button>
-          )}
-
-          <Button size="sm" variant="ghost" onClick={handleOpenReleases}>
-            <ExternalLink className="mr-1 h-3.5 w-3.5" />
-            GitHub 发布页
-          </Button>
-        </div>
+        <UpdateActions
+          status={status}
+          hasUpdate={hasUpdate}
+          hasPreferredAsset={Boolean(info?.preferredAsset)}
+          onDownload={handleDownload}
+          onInstall={handleInstall}
+          onOpenReleases={handleOpenReleases}
+        />
       </CardContent>
     </Card>
   )

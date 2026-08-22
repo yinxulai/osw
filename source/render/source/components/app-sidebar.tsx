@@ -41,9 +41,17 @@ const navItems: NavItem[] = [
   { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]
 
-export function AppSidebar(props: AppSidebarProps) {
-  const sections = [...new Set(navItems.map(item => item.section))]
+const navSections = navItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
+  const currentSection = sections.at(-1)
+  if (currentSection?.label === item.section) {
+    currentSection.items.push(item)
+  } else {
+    sections.push({ label: item.section, items: [item] })
+  }
+  return sections
+}, [])
 
+export function AppSidebar(props: AppSidebarProps) {
   return (
     <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
@@ -55,13 +63,13 @@ export function AppSidebar(props: AppSidebarProps) {
       </div>
 
       <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto p-1.5">
-        {sections.map(section => (
-          <section key={section}>
+        {navSections.map(section => (
+          <section key={section.label}>
             <h2 className="mb-1 flex h-2 items-center justify-start px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50 transition-[height] duration-150 group-hover/sidebar:h-5 motion-reduce:transition-none">
-              <span className="px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{section}</span>
+              <span className="px-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{section.label}</span>
             </h2>
             <div className="space-y-0.5">
-              {navItems.filter(item => item.section === section).map(item => {
+              {section.items.map(item => {
                 const ItemIcon = item.icon
                 const active = props.activePage === item.key
                 return (
