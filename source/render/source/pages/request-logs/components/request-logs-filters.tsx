@@ -38,7 +38,7 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
           {props.logicalModels.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Select value={props.protocolFilter} onValueChange={value => props.applyFilter({ protocol: value })}>
+      <Select value={props.protocolFilter} onValueChange={value => props.applyFilter({ clientProtocol: value })}>
         <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="全部协议" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">全部协议</SelectItem>

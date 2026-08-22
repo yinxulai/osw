@@ -18,7 +18,7 @@ import type { ProxyObservationHooks } from './hooks'
 export interface RequestLoggingInput {
   requestId: string
   logicalModelId: string
-  protocol: Protocol
+  clientProtocol: Protocol
   method: string
   path: string
   headers: http.IncomingHttpHeaders
@@ -34,7 +34,7 @@ export interface RequestLogMetrics {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
-  providerProtocol?: Protocol | null
+  upstreamProtocol?: Protocol | null
 }
 
 export interface RequestLogOutcome {
@@ -50,7 +50,7 @@ export interface AttemptLogSnapshot {
   providerModelId: string
   providerName: string
   providerModelName: string
-  providerProtocol: Protocol
+  upstreamProtocol: Protocol
   url: string
 }
 
@@ -66,7 +66,7 @@ export interface AttemptContentInput {
   attemptId: string | null
   captureStatus: 'captured' | 'partial'
   responseStatus: number | null
-  providerResponseHeaders: IncomingHttpHeaders | null
+  upstreamResponseHeaders: IncomingHttpHeaders | null
   clientResponseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders | null
   responseBody: string | null
   convertedResponseBody?: string | null
@@ -82,11 +82,11 @@ export interface AttemptLoggingInput {
   path: string
   requestHeaders: http.IncomingHttpHeaders
   requestBody: Buffer
-  providerRequestHeaders: http.OutgoingHttpHeaders
-  providerRequestBody: Buffer
+  upstreamRequestHeaders: http.OutgoingHttpHeaders
+  upstreamRequestBody: Buffer
   customAuthHeader?: string | null
   clientProtocol: Protocol
-  providerProtocol: Protocol
+  upstreamProtocol: Protocol
   requiresResponseConversion: boolean
   captureRequestContent: boolean
   hooks: ProxyObservationHooks
@@ -97,7 +97,7 @@ export interface RequestLogger {
   finalizeRequestLog(status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void>
   finalizeRequestContent(outcome: RequestLogOutcome): Promise<void>
   finalizeLocalErrorContent(statusCode: number, responseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, responseBody: string): Promise<void>
-  recordAttempt(status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput): Promise<{ id: string } | null>
+  recordAttempt(status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput): Promise<{ id: string } | null>
   recordAttemptContent(input: AttemptContentInput): Promise<void>
 }
 
@@ -107,8 +107,8 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
     await createRequestLog({
       id: input.requestId,
       logicalModelId: input.logicalModelId,
-      protocol: input.protocol,
-      providerProtocol: null,
+      clientProtocol: input.clientProtocol,
+      upstreamProtocol: null,
       status: 'pending',
       totalDurationMilliseconds: 0,
       totalTokens: null,
@@ -160,7 +160,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
           promptCacheHit: metrics.promptCacheHit ?? null,
           rawUsage: metrics.rawUsage ?? null,
           ttftMilliseconds: metrics.ttftMilliseconds ?? null,
-          providerProtocol: metrics.providerProtocol ?? null,
+          upstreamProtocol: metrics.upstreamProtocol ?? null,
         } : {}),
       })
       const settings = await getSettings()
@@ -204,7 +204,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
 }
 
 export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLogger, 'recordAttempt' | 'recordAttemptContent'> {
-  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, providerRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput) => {
+  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput) => {
     try {
       const attempt = await createRequestAttempt({
         requestId: input.requestId,
@@ -215,8 +215,9 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         retryable,
         errorCode: errorCode ?? null,
         errorMessage: errorMessage ?? null,
-        providerRequestId: providerRequestId ?? null,
+        upstreamRequestId: upstreamRequestId ?? null,
         details: details ?? null,
+        upstreamProtocol: input.snapshot.upstreamProtocol,
         durationMilliseconds: Date.now() - input.startedAt,
       })
       const hasTokens = usage?.inputTokens != null && usage?.outputTokens != null
@@ -238,7 +239,7 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         retryable,
         providerId: input.snapshot.providerId,
         providerModelId: input.snapshot.providerModelId,
-        providerProtocol: input.snapshot.providerProtocol,
+        upstreamProtocol: input.snapshot.upstreamProtocol,
         durationMilliseconds: Date.now() - input.startedAt,
         usage: {
           inputTokens: usage?.inputTokens ?? null,
@@ -264,8 +265,8 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         captureStatus: content.captureStatus,
         requestMethod: input.method,
         requestPath: input.path,
-        requestHeaders: JSON.stringify(redactHeaders(input.providerRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
-        requestBody: input.providerRequestBody.toString('utf8'),
+        requestHeaders: JSON.stringify(redactHeaders(input.upstreamRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
+        requestBody: input.upstreamRequestBody.toString('utf8'),
         responseStatus: content.responseStatus,
         responseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
         responseBody: content.responseBody,
@@ -275,12 +276,12 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
           requestId: input.requestId,
           attemptId: content.attemptId,
           clientProtocol: input.clientProtocol,
-          providerProtocol: input.providerProtocol,
+          upstreamProtocol: input.upstreamProtocol,
           clientRequestHeaders: JSON.stringify(redactHeaders(input.requestHeaders)),
-          providerRequestHeaders: JSON.stringify(redactHeaders(input.providerRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
-          providerResponseHeaders: content.providerResponseHeaders ? JSON.stringify(redactHeaders(content.providerResponseHeaders)) : null,
+          upstreamRequestHeaders: JSON.stringify(redactHeaders(input.upstreamRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
+          upstreamResponseHeaders: content.upstreamResponseHeaders ? JSON.stringify(redactHeaders(content.upstreamResponseHeaders)) : null,
           clientResponseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
-          requestBody: input.providerRequestBody.toString('utf8'),
+          requestBody: input.upstreamRequestBody.toString('utf8'),
           responseBody: content.convertedResponseBody ?? null,
           streaming: content.streaming ?? false,
           durationMilliseconds: Date.now() - input.startedAt,

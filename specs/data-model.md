@@ -19,10 +19,22 @@ One Switch 的配置内容会持续增加，尤其是供应商、模型端点、
 9. **数据库结构以 Drizzle schema 为唯一代码定义，由生成的 migration 在应用启动时执行；v0.3 不提供旧数据库兼容迁移。**
 10. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
 11. **表名统一为 `settings`，不再引入 `app_config` 作为数据库表名。**
+12. **领域前缀按对象边界使用：`provider*` 是配置身份，`client*` 是客户端一侧，`upstream*` 是实际远端 hop，`conversion*` 是转换事件。**
+13. **请求级协议是 `clientProtocol`；每次 attempt 和 conversion 分别保存实际的 `upstreamProtocol`。**
+
+### 1.1 术语边界
+
+`Provider` 是配置实体，不等同于运行时 upstream。一次 upstream 可能直接指向 Provider，也可能经过协议转换器、兼容层或其他中间目标。因而：
+
+- `providerId`、`providerModelId`、`providerName` 和 `providerModelName` 仅用于配置身份或历史快照；
+- `clientProtocol`、`clientRequest*` 和 `clientResponse*` 描述客户端边界；
+- `upstreamProtocol`、`upstreamRequest*` 和 `upstreamResponse*` 描述实际远端 HTTP hop；
+- `request_attempts` 只保存一次 attempt 的 upstream 事实快照；
+- `request_conversions` 保存转换前后的 client/upstream 数据，不嵌入 `request_contents`。
 
 ## 2. 数据库总览
 
-v0.3 包含以下 16 张核心表。
+v0.3 包含以下 17 张核心表。
 
 数据库启动时通过 Drizzle runtime migrator 应用 `drizzle/` 下的生成 migration，并由 `__drizzle_migrations` 记录已执行版本。`logical_models.default` 是应用 seed，不属于 schema migration；旧版本数据库检测到历史表后直接拒绝启动，需要重新初始化数据库。
 
@@ -174,7 +186,8 @@ erDiagram
   request_logs {
     text id PK
     text logicalModelId
-    text protocol
+    text clientProtocol
+    text upstreamProtocol nullable
     text status
     integer createdTime
     text metadata
@@ -223,8 +236,8 @@ erDiagram
     text providerModelId
     text providerName
     text providerModelName
-    text providerProtocol
-    text providerRequestId
+    text upstreamProtocol
+    text upstreamRequestId
     text url
     boolean retryable
     integer httpStatus
@@ -491,7 +504,8 @@ CREATE TABLE provider_model_health (
 CREATE TABLE request_logs (
   id TEXT PRIMARY KEY,
   status TEXT NOT NULL CHECK (status IN ('pending', 'success', 'failed', 'cancelled')),
-  protocol TEXT NOT NULL,
+  clientProtocol TEXT NOT NULL,
+  upstreamProtocol TEXT,
   logicalModelId TEXT NOT NULL,
   metadata TEXT,
   createdTime INTEGER NOT NULL
@@ -563,7 +577,7 @@ CREATE INDEX idx_request_usages_attempt
 
 `type` 表示标准用量名，例如 `inputTokens`、`outputTokens`、`cachedInputTokens`、`reasoningTokens`；`value` 使用 REAL，通常为非负整数。`unit` 默认是 `count`，可扩展为其他明确单位。`attemptId` 为空表示请求级汇总用量，不为空表示某次远端尝试的用量。统计时必须明确选择请求级或尝试级口径，避免重复计入。
 
-原始协议 `usage` 不直接塞入 `request_usages`：可聚合字段拆成 `request_usages` 数值行，无法稳定建模的供应商私有字段保存在对应 `request_attempts.details` 的 JSON 中；若需要完整保留原始 usage，则放入对应的 `request_contents.conversions` 或扩展的正文 envelope，并通过 `schemaVersion` 版本化。
+原始协议 `usage` 不直接塞入 `request_usages`：可聚合字段拆成 `request_usages` 数值行，无法稳定建模的 upstream 私有字段保存在对应 `request_attempts.details` 的 JSON 中；若需要完整保留原始 usage，则放入对应的 `request_conversions` 或扩展的正文 envelope，并通过 `schemaVersion` 版本化。
 
 ```json
 {
@@ -585,7 +599,8 @@ CREATE INDEX idx_request_usages_attempt
 日志表的稳定查询字段为：
 
 - `logicalModelId`；
-- `protocol`；
+- `clientProtocol`；
+- `upstreamProtocol`（可选请求级摘要，事实以 `request_attempts.upstreamProtocol` 为准）；
 - `status`；
 - `createdTime`。
 
@@ -630,7 +645,6 @@ CREATE TABLE request_contents (
   responseStatus INTEGER,
   responseHeaders TEXT,
   responseBody TEXT,
-  conversions TEXT,
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL
 );
@@ -707,7 +721,7 @@ CREATE UNIQUE INDEX idx_request_contents_attempt
 
 ### 3.13 `request_attempts`
 
-每次 Provider 尝试一行，保存故障转移顺序和统计所需字段。
+每次实际 Upstream 尝试一行，保存故障转移顺序和统计所需字段。
 
 ```sql
 CREATE TABLE request_attempts (
@@ -717,8 +731,8 @@ CREATE TABLE request_attempts (
   providerModelId TEXT NOT NULL,
   providerName TEXT NOT NULL,
   providerModelName TEXT NOT NULL,
-  providerProtocol TEXT,
-  providerRequestId TEXT,
+  upstreamProtocol TEXT,
+  upstreamRequestId TEXT,
   url TEXT NOT NULL,
   attemptIndex INTEGER NOT NULL,
   status TEXT NOT NULL,
@@ -743,7 +757,7 @@ CREATE INDEX idx_request_attempts_model_time
 
 `providerId` 和 `providerModelId` 均不建立外键：历史尝试不依赖 Provider 或 ProviderModel 的当前存在性（配置实体未来可能物理删除）。由于详情页必须在配置删除后仍能展示名称，`request_attempts` 还必须在写入时保存 `providerName`、`providerModelName` 和实际 `url` 快照；ID 仅用于关联和筛选，不得依赖当前配置反查。
 
-`httpStatus`、`retryable` 和 `providerProtocol` 是稳定的观测字段，必须使用独立列；协议私有错误正文、原始 usage 和网络诊断信息才放入 `details` JSON。
+`httpStatus`、`retryable` 和 `upstreamProtocol` 是稳定的观测字段，必须使用独立列；协议私有错误正文、原始 usage 和网络诊断信息才放入 `details` JSON。
 
 保留独立列的字段：
 
@@ -755,7 +769,7 @@ CREATE INDEX idx_request_attempts_model_time
 - `url`；
 - `attemptIndex`；
 - `status`；
-- `providerProtocol`；
+- `upstreamProtocol`；
 - `durationMilliseconds`；
 - `httpStatus`；
 - `retryable`；
@@ -952,7 +966,7 @@ Store 层应分为两部分：
 4. `source/common/schemas.ts`；
 5. `source/server/database/development-seed.ts`；
 6. `source/server/database/index.test.ts`；
-7. `source/server/database/store.test.ts`；
+7. 分域 Store 测试（`store-boundaries.test.ts`、各领域测试）；
 8. 配置导入导出逻辑；
 9. Provider、模型、路由和统计相关 SQL；
 10. 删除旧版 Drizzle 迁移文件，生成新的首发基线。

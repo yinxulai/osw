@@ -3,7 +3,7 @@ import { useRequestLogDetails } from './hooks/use-request-log-details'
 import { useRequestLogEntities } from './hooks/use-request-log-entities'
 import { useRequestLogList } from './hooks/use-request-log-list'
 
-export interface RequestLogFilter { providerId: string; logicalModelId: string; protocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
+export interface RequestLogFilter { providerId: string; logicalModelId: string; clientProtocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
 
 export function useRequestLogsService() {
   const list = useRequestLogList()

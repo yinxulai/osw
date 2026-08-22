@@ -181,9 +181,9 @@ function replaceRouteEndpoints(transaction: Transaction, modelId: string, provid
   for (const endpoint of endpoints) {
     const endpointRow = transaction.select().from(providerEndpoints).where(and(eq(providerEndpoints.providerId, providerId), eq(providerEndpoints.protocol, endpoint.protocol))).get()
     const endpointId = endpointRow?.id ?? generateId('end_')
-    if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId, protocol: endpoint.protocol, url: endpoint.upstreamUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
+    if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId, protocol: endpoint.protocol, url: endpoint.endpointUrl || 'https://invalid.local', createdTime: time, updatedTime: time }).run()
     const bindingId = generateId('pme_')
-    transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: modelId, providerEndpointId: endpointId, url: endpoint.upstreamUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
+    transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: modelId, providerEndpointId: endpointId, url: endpoint.endpointUrl || null, enabled: true, createdTime: time, updatedTime: time }).run()
     if (endpoint.protocolConversionEnabled) {
       for (const clientProtocol of CONVERTIBLE_PROTOCOLS[endpoint.protocol]) {
         transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId: bindingId, clientProtocol, enabled: true, createdTime: time, updatedTime: time }).run()
@@ -232,7 +232,7 @@ function mapProviderModelRoute(row: typeof providerModels.$inferSelect): Provide
     modelName: row.modelName,
     endpoints: endpointRows.map(({ endpoint, binding }) => ({
       protocol: endpoint.protocol as ProviderModelRouteEndpoint['protocol'],
-      upstreamUrl: binding.url ?? endpoint.url,
+      endpointUrl: binding.url ?? endpoint.url,
       customAuthHeader: null,
       protocolConversionEnabled: getDb().select().from(protocolConverters).where(eq(protocolConverters.providerModelEndpointId, binding.id)).all().some(conversion => conversion.enabled),
     })),

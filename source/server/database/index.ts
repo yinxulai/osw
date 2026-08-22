@@ -22,7 +22,6 @@ export async function initDatabase(dataDir: string): Promise<Database> {
 
   try {
     client.exec('PRAGMA journal_mode = WAL')
-    rejectLegacyDatabase(client)
     const db = drizzle({ client })
     migrate(db, { migrationsFolder: getMigrationsFolder() })
     seedDefaultLogicalModel(client)
@@ -59,14 +58,4 @@ function seedDefaultLogicalModel(db: DatabaseSync): void {
     (id, name, description, enabled, createdTime, updatedTime)
     VALUES ('default', 'default', 'Default fallback routing model', 1, ?, ?)`) 
     .run(time, time)
-}
-
-function rejectLegacyDatabase(db: DatabaseSync): void {
-  const legacyTables = ['upstream_models', 'model_bindings']
-  const found = legacyTables.filter(table =>
-    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table),
-  )
-  if (found.length > 0) {
-    throw new Error(`Incompatible database schema: legacy tables detected (${found.join(', ')}). Reinitialize the database for v0.3.`)
-  }
 }

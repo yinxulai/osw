@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDownstreamHeaders, createProviderRequestHeaders, redactHeaders } from './headers'
+import { createDownstreamHeaders, createUpstreamRequestHeaders, redactHeaders } from './headers'
 
 describe('proxy headers', () => {
   it('redacts credentials and cookies before persistence', () => {
@@ -26,7 +26,7 @@ describe('proxy headers', () => {
   })
 
   it('preserves end-to-end request headers and replaces authentication', () => {
-    const result = createProviderRequestHeaders({
+    const result = createUpstreamRequestHeaders({
       accept: 'text/event-stream',
       'content-type': 'application/json',
       'x-goog-user-project': 'billing-project',
@@ -66,7 +66,7 @@ describe('proxy headers', () => {
   })
 
   it('replaces a custom authentication header case-insensitively', () => {
-    const result = createUpstreamHeaders(
+    const result = createUpstreamRequestHeaders(
       { 'x-custom-key': 'client-key', accept: 'application/json' },
       { 'X-Custom-Key': 'provider-key' },
       0,

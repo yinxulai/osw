@@ -24,7 +24,7 @@ export function useModelData() {
       modelName: model.modelName,
       endpoints: model.endpoints.map(endpoint => ({
         protocol: endpoint.protocol,
-        upstreamUrl: endpoint.url ?? '',
+        endpointUrl: endpoint.url ?? '',
         customAuthHeader: null,
         protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
       })),

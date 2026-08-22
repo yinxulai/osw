@@ -58,8 +58,8 @@ describe('findEndpoint', () => {
     providerId: 'prov_1',
     modelName: 'upstream-1',
     endpoints: [
-      { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
-      { protocol: 'anthropic-messages', upstreamUrl: 'https://b.example.com', customAuthHeader: 'Bearer x', protocolConversionEnabled: false },
+      { protocol: 'openai-completions', endpointUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
+      { protocol: 'anthropic-messages', endpointUrl: 'https://b.example.com', customAuthHeader: 'Bearer x', protocolConversionEnabled: false },
     ],
     priority: 1,
     enabled: true,
@@ -95,7 +95,7 @@ describe('findConvertibleEndpoint', () => {
     const model: ProviderModelRoute = {
       ...base,
       endpoints: [
-        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+        { protocol: 'openai-completions', endpointUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
       ],
     }
     expect(findConvertibleEndpoint(model, 'anthropic-messages')?.protocol).toBe('openai-completions')
@@ -106,7 +106,7 @@ describe('findConvertibleEndpoint', () => {
     const model: ProviderModelRoute = {
       ...base,
       endpoints: [
-        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
+        { protocol: 'openai-completions', endpointUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: false },
       ],
     }
     expect(findConvertibleEndpoint(model, 'anthropic-messages')).toBeUndefined()
@@ -116,7 +116,7 @@ describe('findConvertibleEndpoint', () => {
     const model: ProviderModelRoute = {
       ...base,
       endpoints: [
-        { protocol: 'openai-responses', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+        { protocol: 'openai-responses', endpointUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
       ],
     }
     expect(findConvertibleEndpoint(model, 'anthropic-messages')).toBeUndefined()
@@ -127,7 +127,7 @@ describe('findConvertibleEndpoint', () => {
     const model: ProviderModelRoute = {
       ...base,
       endpoints: [
-        { protocol: 'openai-completions', upstreamUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
+        { protocol: 'openai-completions', endpointUrl: 'https://a.example.com', customAuthHeader: null, protocolConversionEnabled: true },
       ],
     }
     expect(findConvertibleEndpoint(model, 'openai-completions')).toBeUndefined()

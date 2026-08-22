@@ -9,8 +9,9 @@
 | 请求汇总 | `request_logs` | 请求身份、客户端协议、逻辑模型标识、状态和创建时间 |
 | 请求指标 | `request_metrics` | 请求级通用数值指标，如总耗时、TTFT、缓存命中 |
 | 请求用量 | `request_usages` | 请求级或 Provider 尝试级 Token/用量明细 |
-| Provider 尝试 | `request_attempts` | 每次 ProviderModel 尝试、故障转移顺序、Provider 协议和结果 |
-| 正文内容 | `request_contents` | 按需保存客户端请求/响应和每次 Provider 尝试正文 |
+| 请求尝试 | `request_attempts` | 每次候选模型尝试、故障转移顺序、upstream 协议和结果 |
+| 正文内容 | `request_contents` | 按需保存客户端请求/响应和每次 upstream 尝试正文 |
+| 协议转换 | `request_conversions` | 转换前后的客户端/upstream 协议、Header、正文和流式信息 |
 
 `request_metrics` 与 `request_usages` 不重复保存同一数值：Token、缓存 Token 和其他协议用量进入 `request_usages`；总耗时、TTFT 等请求级通用指标进入 `request_metrics`。
 
@@ -22,7 +23,8 @@
 | --- | --- | --- |
 | id | `request_logs.id` | 请求唯一 ID |
 | createdTime | `request_logs.createdTime` | Unix 毫秒时间戳 |
-| protocol | `request_logs.protocol` | 客户端协议 |
+| clientProtocol | `request_logs.clientProtocol` | 客户端协议 |
+| upstreamProtocol | `request_logs.upstreamProtocol` | 可选请求级 upstream 协议摘要 |
 | logicalModelId | `request_logs.logicalModelId` | 逻辑模型 ID |
 | status | `request_logs.status` | `pending`、`success`、`failed` 或 `cancelled` |
 | durationMilliseconds | `request_metrics` | 读取 `timing.durationMilliseconds`；未记录时为空 |
@@ -40,7 +42,7 @@
 | Token 与其他用量 | `request_usages` | 必须明确请求级或 Provider 尝试级统计口径 |
 | Provider 尝试 | `request_attempts` | 按 `attemptIndex` 排序展示 |
 | 请求/响应正文 | `request_contents` | `attemptId = NULL` 为客户端视角；非空为对应 Provider 尝试 |
-| 转换详情 | `request_contents.conversions` | 转换前后请求、响应或流事件 |
+| 转换详情 | `request_conversions` | 转换前后请求、响应或流事件；转换记录不再嵌入 `request_contents` |
 
 ## Provider 尝试视图
 
@@ -54,9 +56,9 @@
 | providerModelId | `request_attempts.providerModelId` | ProviderModel 快照标识 |
 | providerName | `request_attempts.providerName` | 写入时的 Provider 名称快照 |
 | providerModelName | `request_attempts.providerModelName` | 写入时的 ProviderModel 名称快照 |
-| providerProtocol | `request_attempts.providerProtocol` | 实际使用的 Provider 原生协议 |
-| providerRequestId | `request_attempts.providerRequestId` | Provider 返回的请求标识 |
-| httpStatus | `request_attempts.httpStatus` | Provider HTTP 状态码；网络错误时为空 |
+| upstreamProtocol | `request_attempts.upstreamProtocol` | 本次 attempt 实际使用的 upstream 协议 |
+| upstreamRequestId | `request_attempts.upstreamRequestId` | 当前 upstream 返回的请求标识 |
+| httpStatus | `request_attempts.httpStatus` | 当前 upstream HTTP 状态码；网络错误时为空 |
 | status | `request_attempts.status` | 本次尝试结果 |
 | retryable | `request_attempts.retryable` | 是否允许切换到下一个候选 |
 | durationMilliseconds | `request_attempts.durationMilliseconds` | 本次尝试耗时 |
@@ -70,8 +72,8 @@
 - 默认保留最近 N 条请求（如 1000 条），可配置
 - 支持设置保留天数，自动清理指定天数之前的请求日志；也支持在设置页立即执行清理
 - 默认不保存完整请求体和响应体；用户显式开启“记录请求内容”后才采集
-- 开启后记录客户端原始请求、最终响应，以及每次 Provider 尝试的请求/响应。
-- 发生协议转换时，额外记录转换前请求、转换后请求、转换前响应和转换后响应。
+- 开启后记录客户端原始请求、最终响应，以及每次 upstream 尝试的请求/响应。
+- 发生协议转换时，在独立的 `request_conversions` 中记录客户端与 upstream 两侧的请求 Header、响应 Header、请求正文、响应正文和流式状态。upstream 可以是供应商，也可以是协议转换器所在的中间目标。
 - 正文与请求日志索引分开存储；必须配置单请求和总数据库容量保护，超限时标记 `captureStatus` 为降级/失败并停止继续采集，不影响代理请求。
 - 日志清理依次删除 `request_contents`、`request_usages`、`request_metrics`、`request_attempts`，最后删除 `request_logs`。
 - Authorization、API Key、Cookie 等敏感请求头始终脱敏
@@ -95,7 +97,7 @@
 - 成功数 / 失败数
 - 失败切换次数
 - 各 Provider 调用次数：按 `request_attempts.providerId` 统计。
-- 各协议调用次数：客户端协议按 `request_logs.protocol` 统计，Provider 协议按 `request_attempts.providerProtocol` 统计。
+- 各协议调用次数：客户端协议按 `request_logs.clientProtocol` 统计，upstream 协议按 `request_attempts.upstreamProtocol` 统计。
 - 平均响应时间：聚合 `request_metrics` 中的 `timing.durationMilliseconds`。
 - Token 和其他用量：只聚合 `request_usages`，并明确使用请求级或 Provider 尝试级数据，避免重复计入。
 

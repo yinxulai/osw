@@ -109,7 +109,7 @@ export type LogicalModel = z.infer<typeof LogicalModelSchema>
 /** Protocol endpoint configuration for a provider model route. */
 export const ProtocolEndpointSchema = z.object({
   protocol: ProtocolSchema,
-  upstreamUrl: z.string().default(''),
+  endpointUrl: z.string().default(''),
   customAuthHeader: z.string().nullable().default(null),
   protocolConversionEnabled: z.boolean().default(false),
 })
@@ -175,9 +175,8 @@ export type RawUsage = z.infer<typeof RawUsageSchema>
 export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
-  protocol: ProtocolSchema,
-  /** 实际请求 Provider endpoint 时使用的协议；与 protocol 不同表示经过了协议转换 */
-  providerProtocol: ProtocolSchema.nullable(),
+  clientProtocol: ProtocolSchema,
+  upstreamProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
@@ -192,7 +191,7 @@ export const RequestLogSchema = z.object({
   createdTime: z.number().int(),
 })
 export type RequestLog = z.infer<typeof RequestLogSchema>
-export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'providerProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
+export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
 
 // ========== Request Attempt ==========
 
@@ -203,8 +202,8 @@ export const RequestAttemptSchema = z.object({
   providerModelId: z.string(),
   providerName: z.string(),
   providerModelName: z.string(),
-  providerProtocol: ProtocolSchema.nullable(),
-  providerRequestId: z.string().nullable(),
+  upstreamProtocol: ProtocolSchema.nullable(),
+  upstreamRequestId: z.string().nullable(),
   url: z.string(),
   attemptIndex: z.number().int().nonnegative(),
   status: RequestStatusSchema,
@@ -243,10 +242,10 @@ export const RequestConversionSchema = z.object({
   requestId: z.string().startsWith('req_'),
   attemptId: z.string().startsWith('att_'),
   clientProtocol: ProtocolSchema,
-  providerProtocol: ProtocolSchema,
+  upstreamProtocol: ProtocolSchema,
   clientRequestHeaders: z.string().nullable(),
-  providerRequestHeaders: z.string().nullable(),
-  providerResponseHeaders: z.string().nullable(),
+  upstreamRequestHeaders: z.string().nullable(),
+  upstreamResponseHeaders: z.string().nullable(),
   clientResponseHeaders: z.string().nullable(),
   requestBody: z.string().nullable(),
   responseBody: z.string().nullable(),
@@ -313,8 +312,8 @@ export const RequestLogEntryAttemptSchema = z.object({
   providerName: z.string(),
   providerModelId: z.string(),
   providerModelName: z.string(),
-  providerProtocol: ProtocolSchema.nullable(),
-  providerRequestId: z.string().nullable(),
+  upstreamProtocol: ProtocolSchema.nullable(),
+  upstreamRequestId: z.string().nullable(),
   url: z.string(),
   httpStatus: z.number().int().nullable(),
   retryable: z.boolean(),
@@ -329,8 +328,8 @@ export type RequestLogEntryAttempt = z.infer<typeof RequestLogEntryAttemptSchema
 export const RequestLogEntrySchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
-  protocol: ProtocolSchema,
-  providerProtocol: ProtocolSchema.nullable(),
+  clientProtocol: ProtocolSchema,
+  upstreamProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),

@@ -113,7 +113,7 @@ source/render/source/
 1. `request-log-store.ts` 负责 RequestLog、Attempt、Content、Usage、清理和详情查询。
 2. `provider-store.ts`、`model-store.ts`、`logical-model-store.ts` 负责 Provider、ProviderModel、端点和逻辑模型/调度关系。
 3. `settings-store.ts`、`health-store.ts`、`analytics-store.ts` 负责设置、健康和统计。
-4. 调用方已直接引用领域 store；不存在 `database/store.ts` facade 或 re-export。
+4. 调用方已直接引用分域 Store；当前工作区未发现 `database/store.ts` facade 或 re-export。
 
 ### 约束
 
@@ -124,7 +124,7 @@ source/render/source/
 
 ### 验收
 
-- `store.ts` 不再包含跨领域查询实现。
+- 不存在历史单体 `store.ts`，跨领域查询不得回归到单体实现。
 - ProviderModel/Endpoint/RequestLog 测试全部通过。
 - `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 通过。
 
@@ -299,7 +299,7 @@ page/component
 
 - [x] `source/render/source/pages/linear-prototype/` 已删除，不再作为设计演示或生产页面维护。
 - [x] 迁移期间的旧出口、旧 re-export 和旧目录已删除；当前代理入口为 `request-entry.ts`，Render API 为 `api/*.ts`。
-- [x] 清理注释、测试和 spec 中的旧术语，包括历史 `database/store.ts`、旧 handler/API 聚合出口及虚构 Electron/preload 目录。
+- [ ] 清理注释、测试和 spec 中残留的旧术语与过时状态；旧 handler/API 聚合出口及虚构 Electron/preload 目录已清理。
 - [x] `specs/server-architecture.md`、`specs/tech-architecture.md`、`specs/implementation-plan.md` 和本文已同步当前目录与状态。
 
 ## 5. 每阶段通用验收清单

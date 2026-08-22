@@ -91,12 +91,12 @@ export function attachResponseIdleTimeout(response: UpstreamResponse, timeoutMil
   return { dispose }
 }
 
-export function attachDownstreamAbort(request: http.IncomingMessage, response: http.ServerResponse, upstreamRequest: http.ClientRequest, onAbort: () => void): DownstreamAbortBinding {
+export function attachDownstreamAbort(request: http.IncomingMessage, response: http.ServerResponse, providerRequest: http.ClientRequest, onAbort: () => void): DownstreamAbortBinding {
   let disposed = false
   const abort = () => {
     if (disposed) return
     disposed = true
-    upstreamRequest.destroy(new Error('CLIENT_REQUEST_ABORTED'))
+    providerRequest.destroy(new Error('CLIENT_REQUEST_ABORTED'))
     onAbort()
   }
   const onResponseClose = () => {

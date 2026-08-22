@@ -4,12 +4,12 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：16 表数据库基线、公共 Schema、Store、关系模型管理、核心路由、请求观测和管理界面已经完成；当前主要收尾协议适配器边界和正式发布包端到端验证。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：17 表数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器基础边界、请求观测和管理界面已经完成；当前主要收尾旧文件清理、协议转换补充验收、观测 hooks 责任边界和正式发布包端到端验证。
 
 当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
-- [x] [data-model.md](./data-model.md)：16 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
-- [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（handler 编排 / transport 纯 I/O / hooks 观测订阅）的代理管线架构。
+- [x] [data-model.md](./data-model.md)：17 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages、request_conversions；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
+- [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（请求入口/尝试编排 / transport I/O / hooks 观测订阅）的代理管线架构。
 - [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
 ### 产品与设计原则（摘要）
@@ -105,12 +105,12 @@
 ### MVP（P0）：代理管线收尾
 
 - [x] 抽出基础 `proxy/transport.ts`，隔离 Node.js HTTP/HTTPS 请求调用并覆盖基础测试
-- [ ] 建立共享 request context，统一请求 ID、协议、取消信号和生命周期数据
-- [ ] 建立 ProtocolAdapter 类型与 OpenAI Completions、OpenAI Responses、Anthropic Messages adapter
-- [ ] 将模型改写、usage 注入、请求/响应转换和流式转换迁移到 adapter 或转换器注册表
-- [ ] 将超时、客户端中止、SSE 和响应头生命周期完整下沉到 transport
-- [ ] 将 attempt、usage 和正文采集改为协议无关的观测 hooks
-- [ ] 收敛 handler，使其只负责候选编排、尝试循环、错误分类和生命周期收尾
+- [x] 建立共享 request context，统一请求 ID、协议、取消信号和生命周期数据
+- [x] 建立 ProtocolAdapter 类型、注册表与 OpenAI Completions、OpenAI Responses、Anthropic Messages 适配边界
+- [x] 将模型改写、usage 注入、请求/响应转换和流式转换迁移到 adapter 或转换器注册表
+- [x] 将超时、客户端中止、SSE 和响应头生命周期下沉到 transport
+- [ ] 明确并完成 attempt、usage 和正文采集 hooks 与持久化 logger 的责任边界
+- [x] 收敛请求入口和尝试编排，使其负责候选编排、尝试循环、错误分类和生命周期收尾
 
 ### MVP（P0）：正式发布验收
 
@@ -129,16 +129,28 @@
 ### 范围
 
 - [x] 日志筛选已支持状态、逻辑模型、协议、供应商和时间范围，并保持 list/count 条件一致；请求 ID 贯穿仍待补齐
-- 冷却/熔断状态可视化：队列页展示“冷却中（剩余时间）/ 连续失败次数”徽标，让自动切换可解释
-- 配置备份/恢复：导出脱敏配置文件（密钥仅存系统密钥环，提示用户单独备份或重输）
-- Token 用量统计：按 `request_usages.type` 聚合展示今日/本周用量（不做费用预估）
-- 协议兼容转换器（详见 [protocol-conversion.md](./protocol-conversion.md)）：端点绑定级转换开关、anthropic-messages ↔ openai-completions、openai-responses → openai-completions 三个方向、流式 SSE 转换、队列页转换徽标
+- [x] 冷却/熔断状态可视化：队列页展示冷却状态与连续失败次数徽标
+- [x] 配置备份/恢复：导出脱敏配置文件，密钥仅存系统密钥环
+- [ ] Token 用量统计：按 `request_usages.type` 聚合展示今日/本周用量（基础指标已存在，产品口径与专用 UI 仍需确认）
+- [ ] 协议兼容转换器补充验收（详见 [protocol-conversion.md](./protocol-conversion.md)）：核心转换和 UI 已落地，转换候选故障切换、转换错误 400、流式转换异常及各方向发布包验收仍待补齐
 - Linux 打包与托盘体验完善
 - 更细粒度的错误切换策略配置
-- 日志导出
-- 可选本地访问 Token
+- [x] 日志导出
+- [x] 可选本地访问 Token
 
 ## P2
+
+### 修改规则模块（TODO，暂不实施）
+
+设计文档：[modification-rules.md](./modification-rules.md)
+
+- [ ] 讨论并冻结规则模型：全局规则、ProviderModel 绑定、绑定顺序、启停和失败语义
+- [ ] 讨论请求/响应执行阶段，以及协议转换前后的字段形态
+- [ ] 讨论 `User-Agent`、Header、JSON Path 和 thinking/reasoning 的首期支持范围
+- [ ] 讨论流式响应规则的处理方式，不在当前实现中默认缓冲或改写 SSE
+- [ ] 设计 `modification_rules` 与 ProviderModel 规则关联表、迁移和配置导入导出
+- [ ] 设计管理 API、规则管理菜单/编辑器和 ProviderModel 规则选择交互
+- [ ] 评审通过后再拆分数据库、代理执行引擎、管理 API、控制台和测试任务
 
 ### 范围
 

@@ -71,7 +71,7 @@ describe('development seed', () => {
     expect(await listRequestUsages(failedRequestId)).toHaveLength(0)
     expect(await listRequestContents(failedRequestId)).toHaveLength(2)
     expect(await listAttemptsByRequest(failedRequestId)).toHaveLength(2)
-    expect(new Set((await listRequestLogs()).map(request => request.protocol))).toEqual(new Set([
+    expect(new Set((await listRequestLogs()).map(request => request.clientProtocol))).toEqual(new Set([
       'openai-completions',
       'openai-responses',
       'anthropic-messages',

@@ -29,7 +29,7 @@ export interface RequestUsageSnapshot {
 export interface RequestLogFilter {
   providerId?: string
   logicalModelId?: string
-  protocol?: string
+  clientProtocol?: string
   status?: RequestStatus
   createdTimeFrom?: number
   createdTimeTo?: number
@@ -38,7 +38,7 @@ export interface RequestLogFilter {
 export async function createRequestLog(input: CreateRequestLogInput): Promise<RequestLog> {
   const id = input.id ?? generateId('req_')
   const time = now()
-  getDb().insert(requestLogs).values({ id, logicalModelId: input.logicalModelId, protocol: input.protocol, status: input.status, metadata: null, createdTime: time }).run()
+  getDb().insert(requestLogs).values({ id, logicalModelId: input.logicalModelId, clientProtocol: input.clientProtocol, upstreamProtocol: input.upstreamProtocol ?? null, status: input.status, metadata: null, createdTime: time }).run()
   const metricValues: Array<typeof requestMetrics.$inferInsert> = []
   if (input.totalDurationMilliseconds != null) metricValues.push({ requestId: id, key: 'durationMilliseconds', value: input.totalDurationMilliseconds, unit: 'milliseconds', updatedTime: time })
   if (input.ttftMilliseconds != null) metricValues.push({ requestId: id, key: 'ttftMilliseconds', value: input.ttftMilliseconds, unit: 'milliseconds', updatedTime: time })
@@ -58,8 +58,8 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
   return {
     id,
     logicalModelId: input.logicalModelId,
-    protocol: input.protocol,
-    providerProtocol: input.providerProtocol ?? null,
+    clientProtocol: input.clientProtocol,
+    upstreamProtocol: input.upstreamProtocol ?? null,
     status: input.status,
     totalDurationMilliseconds: input.totalDurationMilliseconds,
     totalTokens: input.totalTokens ?? null,
@@ -119,7 +119,10 @@ export async function listRequestUsages(requestId: string): Promise<RequestUsage
 export async function updateRequestLogStatus(id: string, update: RequestLogUpdate): Promise<void> {
   const time = now()
   getDb().transaction(transaction => {
-    if (update.status !== undefined) transaction.update(requestLogs).set({ status: update.status }).where(eq(requestLogs.id, id)).run()
+    const logUpdates: Partial<typeof requestLogs.$inferInsert> = {}
+    if (update.status !== undefined) logUpdates.status = update.status
+    if (update.upstreamProtocol !== undefined) logUpdates.upstreamProtocol = update.upstreamProtocol
+    if (Object.keys(logUpdates).length > 0) transaction.update(requestLogs).set(logUpdates).where(eq(requestLogs.id, id)).run()
     const metrics: Array<{ key: string; value: number; unit: string }> = []
     if (update.totalDurationMilliseconds !== undefined) metrics.push({ key: 'durationMilliseconds', value: update.totalDurationMilliseconds, unit: 'milliseconds' })
     for (const [field, key, unit] of [['ttftMilliseconds', 'ttftMilliseconds', 'milliseconds']] as const) {
@@ -224,7 +227,7 @@ function requestLogFilterConditions(filter?: RequestLogFilter) {
   const conditions = []
   if (filter.providerId) conditions.push(sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerId = ${filter.providerId})`)
   if (filter.logicalModelId) conditions.push(eq(requestLogs.logicalModelId, filter.logicalModelId))
-  if (filter.protocol) conditions.push(eq(requestLogs.protocol, filter.protocol))
+  if (filter.clientProtocol) conditions.push(eq(requestLogs.clientProtocol, filter.clientProtocol))
   if (filter.status) conditions.push(eq(requestLogs.status, filter.status))
   if (filter.createdTimeFrom !== undefined) conditions.push(gte(requestLogs.createdTime, filter.createdTimeFrom))
   if (filter.createdTimeTo !== undefined) conditions.push(lt(requestLogs.createdTime, filter.createdTimeTo))
@@ -269,8 +272,8 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
   return {
     id: row.id,
     logicalModelId: row.logicalModelId,
-    protocol: row.protocol as RequestLog['protocol'],
-    providerProtocol: null,
+    clientProtocol: row.clientProtocol as RequestLog['clientProtocol'],
+    upstreamProtocol: row.upstreamProtocol as RequestLog['upstreamProtocol'],
     status: row.status as RequestStatus,
     totalDurationMilliseconds: Number(metricValue('durationMilliseconds') ?? 0),
     totalTokens: usageValue('totalTokens'),
@@ -294,8 +297,8 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     providerModelId: row.providerModelId,
     providerName: row.providerName,
     providerModelName: row.providerModelName,
-    providerProtocol: row.providerProtocol as RequestAttempt['providerProtocol'],
-    providerRequestId: row.providerRequestId,
+    upstreamProtocol: row.upstreamProtocol as RequestAttempt['upstreamProtocol'],
+    upstreamRequestId: row.upstreamRequestId,
     url: row.url,
     attemptIndex: row.attemptIndex,
     status: row.status as RequestStatus,
@@ -315,10 +318,10 @@ function mapRequestConversion(row: typeof requestConversions.$inferSelect): Requ
     requestId: row.requestId,
     attemptId: row.attemptId,
     clientProtocol: row.clientProtocol as RequestConversion['clientProtocol'],
-    providerProtocol: row.providerProtocol as RequestConversion['providerProtocol'],
+    upstreamProtocol: row.upstreamProtocol as RequestConversion['upstreamProtocol'],
     clientRequestHeaders: row.clientRequestHeaders,
-    providerRequestHeaders: row.providerRequestHeaders,
-    providerResponseHeaders: row.providerResponseHeaders,
+    upstreamRequestHeaders: row.upstreamRequestHeaders,
+    upstreamResponseHeaders: row.upstreamResponseHeaders,
     clientResponseHeaders: row.clientResponseHeaders,
     requestBody: row.requestBody,
     responseBody: row.responseBody,

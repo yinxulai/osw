@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6b0bc265-7106-431f-a667-8e2bd78f3449",
+  "id": "4c25cc9d-1313-4ebe-8df6-e4df0ff397da",
   "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
+    "6b0bc265-7106-431f-a667-8e2bd78f3449"
   ],
   "ddl": [
     {
@@ -48,6 +48,10 @@
     },
     {
       "name": "request_contents",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_conversions",
       "entityType": "tables"
     },
     {
@@ -716,7 +720,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "providerProtocol",
+      "name": "upstreamProtocol",
       "entityType": "columns",
       "table": "request_attempts"
     },
@@ -726,7 +730,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "providerRequestId",
+      "name": "upstreamRequestId",
       "entityType": "columns",
       "table": "request_attempts"
     },
@@ -941,16 +945,6 @@
       "table": "request_contents"
     },
     {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "conversions",
-      "entityType": "columns",
-      "table": "request_contents"
-    },
-    {
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
@@ -978,6 +972,146 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attemptId",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientProtocol",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamProtocol",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientRequestHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamRequestHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamResponseHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientResponseHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestBody",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "responseBody",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "streaming",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "durationMilliseconds",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "request_logs"
     },
     {
@@ -996,7 +1130,17 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "protocol",
+      "name": "clientProtocol",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamProtocol",
       "entityType": "columns",
       "table": "request_logs"
     },
@@ -1441,6 +1585,36 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
+      "name": "fk_request_conversions_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        "attemptId"
+      ],
+      "tableTo": "request_attempts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_conversions_attemptId_request_attempts_id_fk",
+      "entityType": "fks",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
       "name": "fk_request_metrics_requestId_request_logs_id_fk",
       "entityType": "fks",
       "table": "request_metrics"
@@ -1608,6 +1782,15 @@
       "nameExplicit": false,
       "name": "request_contents_pk",
       "table": "request_contents",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_conversions_pk",
+      "table": "request_conversions",
       "entityType": "pks"
     },
     {
@@ -1936,6 +2119,34 @@
       "name": "idx_request_contents_attempt",
       "entityType": "indexes",
       "table": "request_contents"
+    },
+    {
+      "columns": [
+        {
+          "value": "attemptId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_conversions_attempt",
+      "entityType": "indexes",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_conversions_request",
+      "entityType": "indexes",
+      "table": "request_conversions"
     },
     {
       "columns": [

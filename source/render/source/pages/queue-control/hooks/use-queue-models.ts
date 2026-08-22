@@ -10,7 +10,7 @@ function toQueueModel(model: ProviderModelRoute): ProviderModelRoute {
     modelName: model.modelName,
     endpoints: model.endpoints.map(endpoint => ({
       protocol: endpoint.protocol,
-      upstreamUrl: endpoint.upstreamUrl,
+      endpointUrl: endpoint.endpointUrl,
       customAuthHeader: endpoint.customAuthHeader,
       protocolConversionEnabled: endpoint.protocolConversionEnabled,
     })),

@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, initDatabase } from './index'
 
@@ -102,21 +101,6 @@ describe('database lifecycle', () => {
     expect(() => client.prepare('INSERT INTO provider_health (providerId, updatedTime) VALUES (?, ?)').run('missing', time)).toThrow()
   })
 
-  it('does not migrate or read an old database', async () => {
-    const directory = createTemporaryDirectory()
-    const databasePath = path.join(directory, 'one-switch.db')
-    const legacyClient = new DatabaseSync(databasePath)
-    legacyClient.exec('CREATE TABLE upstream_models (id TEXT PRIMARY KEY)')
-    legacyClient.close()
-
-    await expect(initDatabase(directory)).rejects.toThrow(/Incompatible database schema/)
-  })
-
-  it('rejects the removed legacy request log shape', async () => {
-    const client = (await initDatabase(createTemporaryDirectory())).$client
-    expect(() => client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, totalDurationMilliseconds, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run('req_old', 'default', 'openai-completions', 'success', 1, Date.now())).toThrow()
-  })
-
   it('creates the expected v0.3 indexes and request columns', async () => {
     const client = (await initDatabase(createTemporaryDirectory())).$client
     const requestLogColumns = client.prepare('PRAGMA table_info(request_logs)').all()
@@ -125,7 +109,7 @@ describe('database lifecycle', () => {
     const indexes = client.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all()
 
     expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual([
-      'id', 'status', 'protocol', 'logicalModelId', 'metadata', 'createdTime',
+      'id', 'status', 'clientProtocol', 'upstreamProtocol', 'logicalModelId', 'metadata', 'createdTime',
     ])
     expect(settingsColumns.map(column => (column as { name: string }).name)).toEqual([
       'key', 'value', 'valueType', 'updatedTime',

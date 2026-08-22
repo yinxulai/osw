@@ -12,7 +12,7 @@ interface RequestContentsDrawerProps {
   contents: RequestContent[] | null
   conversions: RequestConversion[] | null
   clientProtocol: string
-  providerProtocol?: string | null
+  upstreamProtocol?: string | null
   loading: boolean
   error: string | null
   selectedAttemptId: string | null
@@ -29,14 +29,14 @@ export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
   const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
   const conversion = props.conversions?.find(item => item.attemptId === props.selectedAttemptId) ?? null
   const clientProtocol = conversion?.clientProtocol ?? props.clientProtocol
-  const providerProtocol = conversion?.providerProtocol ?? props.providerProtocol ?? props.clientProtocol
+  const upstreamProtocol = conversion?.upstreamProtocol ?? props.upstreamProtocol ?? props.clientProtocol
   const clientLabel = PROTOCOL_LABEL[clientProtocol] ?? clientProtocol
-  const providerLabel = PROTOCOL_LABEL[providerProtocol] ?? providerProtocol
+  const upstreamLabel = PROTOCOL_LABEL[upstreamProtocol] ?? upstreamProtocol
   const sections: Array<[string, string | null]> = selectedContent ? [
     [`客户端请求头 · ${clientLabel}`, conversion?.clientRequestHeaders ?? selectedContent.requestHeaders ?? null],
-    [`Provider 请求头 · ${providerLabel}`, conversion?.providerRequestHeaders ?? selectedContent.requestHeaders ?? null],
-    [`Provider 请求正文 · ${providerLabel}`, conversion?.requestBody ?? selectedContent.requestBody ?? null],
-    [`Provider 响应头 · ${providerLabel}`, conversion?.providerResponseHeaders ?? null],
+    [`Upstream 请求头 · ${upstreamLabel}`, conversion?.upstreamRequestHeaders ?? selectedContent.requestHeaders ?? null],
+    [`Upstream 请求正文 · ${upstreamLabel}`, conversion?.requestBody ?? selectedContent.requestBody ?? null],
+    [`Upstream 响应头 · ${upstreamLabel}`, conversion?.upstreamResponseHeaders ?? null],
     [`客户端响应头 · ${clientLabel}`, conversion?.clientResponseHeaders ?? selectedContent.responseHeaders ?? null],
     [`客户端响应正文 · ${clientLabel}`, conversion?.responseBody ?? selectedContent.responseBody ?? null],
   ] : []

@@ -16,7 +16,7 @@ const ListRequestLogsSchema = z.object({
   offset: z.number().int().nonnegative().optional(),
   providerId: z.string().optional(),
   logicalModelId: z.string().optional(),
-  protocol: z.string().optional(),
+  clientProtocol: z.string().optional(),
   status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
   createdTimeFrom: z.number().int().nonnegative().optional(),
   createdTimeTo: z.number().int().nonnegative().optional(),
@@ -47,9 +47,9 @@ async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse
 }
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { limit, offset, providerId, logicalModelId, protocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
+  const { limit, offset, providerId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
   const pageSize = limit ?? 50
-  const filter = { providerId, logicalModelId, protocol, status, createdTimeFrom, createdTimeTo }
+  const filter = { providerId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo }
   const [logs, total] = await Promise.all([
     listRequestLogs(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),
@@ -66,8 +66,8 @@ async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
   return {
         id: log.id,
         logicalModelId: log.logicalModelId,
-        protocol: log.protocol,
-        providerProtocol: log.providerProtocol,
+        clientProtocol: log.clientProtocol,
+        upstreamProtocol: log.upstreamProtocol,
         status: log.status,
         totalDurationMilliseconds: log.totalDurationMilliseconds,
         totalTokens: log.totalTokens,
@@ -90,8 +90,8 @@ async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
             providerName: a.providerName,
             providerModelId: a.providerModelId,
             providerModelName: a.providerModelName,
-            providerProtocol: a.providerProtocol,
-            providerRequestId: a.providerRequestId,
+            upstreamProtocol: a.upstreamProtocol,
+            upstreamRequestId: a.upstreamRequestId,
             url: a.url,
             httpStatus: a.httpStatus,
             retryable: a.retryable,

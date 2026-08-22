@@ -4,7 +4,7 @@ export interface ProtocolEndpointEntry {
   protocol: Protocol
   enabled: boolean
   overrideUrl: boolean
-  upstreamUrl: string
+  endpointUrl: string
   protocolConversionEnabled: boolean
 }
 
@@ -17,5 +17,5 @@ export interface ProviderEndpointEntry {
 export type ProviderEndpoints = Partial<Record<Protocol, string>>
 
 export function getEffectiveEndpointUrl(endpoint: ProviderModelRouteEndpoint): string {
-  return endpoint.upstreamUrl.trim()
+  return endpoint.endpointUrl.trim()
 }

@@ -10,7 +10,7 @@ export function useRequestLogList() {
   const [logs, setLogs] = useState<RequestLogEntry[]>([])
   const [total, setTotal] = useState(0)
   const pageRef = useRef(1)
-  const filterRef = useRef<RequestLogFilter>({ providerId: 'all', logicalModelId: 'all', protocol: 'all', status: 'all', createdTimeFrom: null, createdTimeTo: null })
+  const filterRef = useRef<RequestLogFilter>({ providerId: 'all', logicalModelId: 'all', clientProtocol: 'all', status: 'all', createdTimeFrom: null, createdTimeTo: null })
   const inFlightRef = useRef(false)
   const initializedRef = useRef(false)
 
@@ -20,7 +20,7 @@ export function useRequestLogList() {
     inFlightRef.current = true
     try {
       const filter = filterRef.current
-      const result = await requestLogApi.list({ limit: PAGE_SIZE, offset: (target - 1) * PAGE_SIZE, ...(filter.providerId !== 'all' ? { providerId: filter.providerId } : {}), ...(filter.logicalModelId !== 'all' ? { logicalModelId: filter.logicalModelId } : {}), ...(filter.protocol !== 'all' ? { protocol: filter.protocol } : {}), ...(filter.status !== 'all' ? { status: filter.status as 'pending' | 'success' | 'failed' | 'cancelled' } : {}), ...(filter.createdTimeFrom !== null ? { createdTimeFrom: filter.createdTimeFrom } : {}), ...(filter.createdTimeTo !== null ? { createdTimeTo: filter.createdTimeTo } : {}) })
+      const result = await requestLogApi.list({ limit: PAGE_SIZE, offset: (target - 1) * PAGE_SIZE, ...(filter.providerId !== 'all' ? { providerId: filter.providerId } : {}), ...(filter.logicalModelId !== 'all' ? { logicalModelId: filter.logicalModelId } : {}), ...(filter.clientProtocol !== 'all' ? { clientProtocol: filter.clientProtocol } : {}), ...(filter.status !== 'all' ? { status: filter.status as 'pending' | 'success' | 'failed' | 'cancelled' } : {}), ...(filter.createdTimeFrom !== null ? { createdTimeFrom: filter.createdTimeFrom } : {}), ...(filter.createdTimeTo !== null ? { createdTimeTo: filter.createdTimeTo } : {}) })
       if (!result.success) throw new Error(result.errorMessage)
       pageRef.current = target
       setLogs(result.data.logs)

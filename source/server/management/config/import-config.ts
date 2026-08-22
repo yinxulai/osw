@@ -76,7 +76,7 @@ export async function importConfig(body: unknown): Promise<{ imported: { provide
     if (importedProviderModelKeys.has(key)) throw new Error(`导入文件中存在重复 ProviderModel: ${model.modelName}`)
     importedProviderModelKeys.add(key)
     const existing = existingProviderModelRoutes.find(route => route.providerId === resolvedProviderId && route.modelName === model.modelName)
-    const endpoints = (model.endpoints ?? []).map(endpoint => ({ protocol: endpoint.protocol, upstreamUrl: endpoint.url ?? '', customAuthHeader: null, protocolConversionEnabled: endpoint.conversions?.some(conversion => conversion.enabled) ?? false }))
+  const endpoints = (model.endpoints ?? []).map(endpoint => ({ protocol: endpoint.protocol, endpointUrl: endpoint.url ?? '', customAuthHeader: null, protocolConversionEnabled: endpoint.conversions?.some(conversion => conversion.enabled) ?? false }))
     const imported = existing
       ? await updateProviderModelRoute(existing.id, { endpoints, enabled: model.enabled ?? true })
       : await createProviderModelRoute({ providerId: resolvedProviderId, modelName: model.modelName, endpoints, priority: config.schedulingPolicies.find(policy => policy.providerModelId === model.id)?.priority ?? 0, enabled: model.enabled ?? true })

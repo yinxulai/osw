@@ -46,7 +46,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
     modelName: model.modelName,
     endpoints: model.endpoints.map(endpoint => ({
       protocol: endpoint.protocol,
-      upstreamUrl: endpoint.url ?? '',
+      endpointUrl: endpoint.url ?? '',
       customAuthHeader: null,
       protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled),
     })),
@@ -99,7 +99,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
           ...model,
           endpoints: model.endpoints.map(candidate => ({
             ...candidate,
-            upstreamUrl: candidate.upstreamUrl.trim() || providerEndpoints.get(provider.id)?.get(candidate.protocol) || '',
+            endpointUrl: candidate.endpointUrl.trim() || providerEndpoints.get(provider.id)?.get(candidate.protocol) || '',
           })),
         },
         provider,

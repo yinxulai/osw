@@ -8,7 +8,7 @@ import { resolveUpstreamUrl } from './request'
 import { classifyHealthFailure, classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
-import { createDownstreamHeaders, createProviderRequestHeaders, redactHeaders } from './headers'
+import { createDownstreamHeaders, createUpstreamRequestHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
 import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 import { createRequestContext, type RequestContext } from './request-context'
@@ -61,7 +61,7 @@ interface AttemptOutcome {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
-  providerProtocol?: Protocol | null
+  upstreamProtocol?: Protocol | null
   responseStatus?: number
   responseHeaders?: string
   responseBody?: string | null
@@ -89,7 +89,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
   const requestLogger = await initializeRequestLogger({
     requestId,
     logicalModelId,
-    protocol,
+    clientProtocol: protocol,
     method: context.method,
     path: context.path,
     headers: context.headers,
@@ -117,7 +117,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
           cacheCreationInputTokens: outcome.cacheCreationInputTokens ?? null,
           promptCacheHit: outcome.promptCacheHit ?? null,
           rawUsage: outcome.rawUsage ?? null,
-          providerProtocol: outcome.providerProtocol ?? null,
+          upstreamProtocol: outcome.upstreamProtocol ?? null,
         })
         return
       }
@@ -149,10 +149,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
             path: context.path,
             requestHeaders: context.headers,
             requestBody,
-            providerRequestHeaders: {},
-            providerRequestBody: Buffer.alloc(0),
+            upstreamRequestHeaders: {},
+            upstreamRequestBody: Buffer.alloc(0),
             clientProtocol: protocol,
-            providerProtocol: snapshot.providerProtocol,
+            upstreamProtocol: snapshot.upstreamProtocol,
             requiresResponseConversion: false,
             captureRequestContent: false,
             hooks: {},
@@ -178,10 +178,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
             path: context.path,
             requestHeaders: context.headers,
             requestBody,
-            providerRequestHeaders: {},
-            providerRequestBody: Buffer.alloc(0),
+            upstreamRequestHeaders: {},
+            upstreamRequestBody: Buffer.alloc(0),
             clientProtocol: protocol,
-            providerProtocol: snapshot.providerProtocol,
+            upstreamProtocol: snapshot.upstreamProtocol,
             requiresResponseConversion: false,
             captureRequestContent: false,
             hooks: {},
@@ -232,7 +232,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协�?${protocol}`)
   const endpointProtocol = endpoint.protocol
 
-  const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
+  const targetUrl = resolveUpstreamUrl(endpoint.endpointUrl)
   const parsed = new URL(targetUrl)
   const controller = new AbortController()
   const requestContext = createRequestContext({
@@ -246,15 +246,15 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     signal: controller.signal,
   })
   const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
-  const providerRequestBody = adapter.prepareRequest(requestContext, model.modelName)
+  const upstreamRequestBody = adapter.prepareRequest(requestContext, model.modelName)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
 
-  const headers = createProviderRequestHeaders(
+  const headers = createUpstreamRequestHeaders(
     context.headers,
     createAuthHeaders(endpointProtocol, apiKey, endpoint.customAuthHeader),
-    providerRequestBody.length,
+    upstreamRequestBody.length,
   )
 
   const options: http.RequestOptions = {
@@ -278,11 +278,11 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     path: parsed.pathname + parsed.search,
     requestHeaders: context.headers,
     requestBody,
-    providerRequestHeaders: headers,
-    providerRequestBody,
+    upstreamRequestHeaders: headers,
+    upstreamRequestBody,
     customAuthHeader: endpoint.customAuthHeader,
     clientProtocol: protocol,
-    providerProtocol: endpointProtocol,
+    upstreamProtocol: endpointProtocol,
     requiresResponseConversion: adapter.requiresResponseConversion,
     captureRequestContent: settings.captureRequestContent,
     hooks,
@@ -322,7 +322,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       resolve(outcome)
     }
 
-    sendUpstreamRequest(parsed, options, providerRequestBody, {
+    sendUpstreamRequest(parsed, options, upstreamRequestBody, {
       onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
@@ -348,7 +348,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           const body = errorResponse || null
           const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
           const attempt = await recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
-          await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, providerResponseHeaders: upstreamRes.headers, clientResponseHeaders: null, responseBody: serializeCapturedBody(isStreaming, upstreamChunks, body), streaming: isStreaming })
+          await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, upstreamResponseHeaders: upstreamRes.headers, clientResponseHeaders: null, responseBody: serializeCapturedBody(isStreaming, upstreamChunks, body), streaming: isStreaming })
           resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
@@ -360,7 +360,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
               attemptId: attempt?.id ?? null,
               captureStatus: 'partial',
               responseStatus: statusCode,
-              providerResponseHeaders: upstreamRes.headers,
+              upstreamResponseHeaders: upstreamRes.headers,
               clientResponseHeaders: null,
               responseBody: serializeCapturedBody(isStreaming, upstreamChunks, errorResponse || null),
               streaming: isStreaming,
@@ -369,7 +369,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
               disposition: 'retry',
               statusCode,
               durationMilliseconds: Date.now() - attemptStartedAt,
-              upstreamRequestId,
+              upstreamRequestId: upstreamRequestId,
               errorResponse: errorResponse || null,
               captureStatus: 'partial',
             }))
@@ -432,7 +432,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           body,
           pipelineResult.usage,
         )
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, providerResponseHeaders: upstreamRes.headers, clientResponseHeaders: response.headers(), responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null, streaming: isStreaming })
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, upstreamResponseHeaders: upstreamRes.headers, clientResponseHeaders: response.headers(), responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null, streaming: isStreaming })
         resolveAttempt({
           disposition,
           statusCode,
@@ -442,7 +442,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           ttftMilliseconds,
           ...pipelineResult.usage,
           promptCacheHit: pipelineResult.usage.cachedInputTokens == null ? null : pipelineResult.usage.cachedInputTokens > 0,
-          providerProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
+          upstreamProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
           responseStatus: statusCode,
           responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
           responseBody: pipelineResult.downstreamBody,
@@ -468,7 +468,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
             attemptId: attempt?.id ?? null,
             captureStatus: 'partial',
             responseStatus: statusCode,
-            providerResponseHeaders: upstreamRes.headers,
+            upstreamResponseHeaders: upstreamRes.headers,
             clientResponseHeaders: response.headers(),
             responseBody: responsePipeline.partialBody(),
             streaming: isStreaming,
@@ -477,7 +477,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
             disposition,
             statusCode,
             durationMilliseconds: Date.now() - attemptStartedAt,
-            upstreamRequestId,
+            upstreamRequestId: upstreamRequestId,
             responseStatus: statusCode,
             responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
             responseBody: responsePipeline.partialBody(),

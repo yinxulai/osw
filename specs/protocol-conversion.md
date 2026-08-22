@@ -4,7 +4,7 @@
 
 现有架构默认优先原生透传：客户端协议通常应与 Provider 模型端点协议一致。对明确开启端点级转换的绑定，代理也可以提供有限的协议转换能力；未开启转换时，协议不匹配的端点不会进入候选队列。
 
-协议兼容转换器（Protocol Conversion）作为**可选能力**打破这一限制：为具体 ProviderModel 端点绑定创建并启用对应的 protocol_converter 后，代理将客户端协议的请求/响应报文转换为 Provider 端点的原生协议，包括流式 SSE 事件的实时转换。
+协议兼容转换器（Protocol Conversion）作为**可选能力**打破这一限制：为具体 ProviderModel 端点绑定创建并启用对应的 protocol_converter 后，代理将客户端协议的请求/响应报文转换为配置端点所要求的 upstream 协议，包括流式 SSE 事件的实时转换。这里的 upstream 是请求链路概念，不预设当前目标一定是供应商；Provider 仍仅表示配置实体。
 
 > 转换是尽力而为的兼容层，不是完整语义等价。不支持的字段会被丢弃或降级，文档与 UI 中必须明确提示。
 
@@ -78,10 +78,11 @@ P1 优先实现三个最高频方向：
 
 - 新增 `provider_endpoints`：Provider 按原生协议维护默认端点。
 - `provider_model_endpoints`：将 ProviderModel 绑定到 ProviderEndpoint，可选配置模型专属 `url`；为空时回退到 `provider_endpoints.url`。
-- 新增 `protocol_converters`：按 ProviderModel 端点绑定和客户端协议配置 `enabled`；目标 Provider 协议通过 `provider_model_endpoints.providerEndpointId -> provider_endpoints.protocol` 得到。
-- `request_logs.protocol` 记录客户端协议；Provider 端点协议记录在 `request_attempts.providerProtocol`，与客户端协议不同即表示发生了转换。
+- 新增 `protocol_converters`：按 ProviderModel 端点绑定和客户端协议配置 `enabled`；目标 upstream 协议通过 `provider_model_endpoints.providerEndpointId -> provider_endpoints.protocol` 得到。
+- `request_logs.clientProtocol` 记录客户端协议；本次 attempt 的 upstream 协议记录在 `request_attempts.upstreamProtocol`，与客户端协议不同即表示发生了转换。
 - 新增 `request_metrics`：按请求保存可扩展数值指标；Token 和其他用量保存到 `request_usages`。
-- `request_attempts.providerProtocol` 为 nullable，记录本次尝试实际使用的端点协议，不依赖当前端点配置推导；Provider 返回的请求标识记录在 `providerRequestId`。
+- `request_attempts.upstreamProtocol` 为 nullable，记录本次尝试实际使用的端点协议，不依赖当前端点配置推导；upstream 返回的请求标识记录在 `upstreamRequestId`。
+- `RequestConversion` 独立记录 client/upstream 两侧协议、Header、正文和流式状态，不嵌入 `request_contents`。
 
 ## UI 设计
 

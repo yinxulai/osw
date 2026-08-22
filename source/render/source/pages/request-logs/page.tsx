@@ -23,7 +23,7 @@ export function RequestLogsPage() {
   const applyFilter = (next: Partial<RequestLogsFilter>) => {
     if (next.providerId !== undefined) setProviderFilter(next.providerId)
     if (next.logicalModelId !== undefined) setLogicalModelFilter(next.logicalModelId)
-    if (next.protocol !== undefined) setProtocolFilter(next.protocol)
+    if (next.clientProtocol !== undefined) setProtocolFilter(next.clientProtocol)
     if (next.status !== undefined) setStatusFilter(next.status as StatusFilter)
     if (next.createdTimeFrom !== undefined) setFromDate(next.createdTimeFrom === null ? '' : new Date(next.createdTimeFrom).toISOString().slice(0, 10))
     if (next.createdTimeTo !== undefined) setToDate(next.createdTimeTo === null ? '' : new Date(next.createdTimeTo - 1).toISOString().slice(0, 10))

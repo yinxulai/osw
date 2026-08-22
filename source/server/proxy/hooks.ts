@@ -9,7 +9,7 @@ export interface AttemptObservation {
   retryable: boolean
   providerId: string
   providerModelId: string
-  providerProtocol: Protocol
+  upstreamProtocol: Protocol
   durationMilliseconds: number
   usage?: {
     inputTokens: number | null

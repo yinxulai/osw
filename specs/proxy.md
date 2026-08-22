@@ -17,8 +17,8 @@ flowchart TD
     C --> D[router.ts 候选解析<br/>原生协议优先 + 可转换候选]
     D --> E[手动切换起点 + 健康过滤]
     E --> F{尝试循环 handler.ts 编排}
-    F --> G[ProtocolAdapter.buildProviderRequest<br/>model 改写 / usage 注入 / 认证头]
-    G --> H[transport.ts Provider I/O<br/>连接 / 转发字节 / 空闲超时 / 中止]
+    F --> G[ProtocolAdapter.buildUpstreamRequest<br/>model 改写 / usage 注入 / 认证头]
+    G --> H[transport.ts upstream I/O<br/>连接 / 转发字节 / 空闲超时 / 中止]
     H --> I[ProtocolAdapter.createResponsePipeline<br/>透传或转换 / usage 提取]
     I -->|retry| J[health.ts 失败计数 / 冷却] --> F
     I -->|success / terminal| K[收尾：日志定稿 + 清理]
@@ -43,7 +43,7 @@ flowchart TD
 ```typescript
 interface ProtocolAdapter {
   /** 请求方向：model 改写（body 或 URL）、usage 注入参数、认证头格式 */
-  buildProviderRequest(input: ClientRequestSnapshot, target: ProviderModelTarget): BuiltRequest
+  buildUpstreamRequest(input: ClientRequestSnapshot, target: ProviderModelTarget): BuiltRequest
 
   /** 响应方向：透传或转换管线、该协议自身的 usage 提取 */
   createResponsePipeline(ctx: ResponseContext): ResponsePipeline
@@ -54,7 +54,7 @@ interface ProtocolAdapter {
 ```
 
 - 透传模式：适配器直接转发字节；
-- 转换模式：当客户端协议与 Provider 端点协议不同时，由 `protocols/conversions/` 中按 `(from, to)` 注册的转换器接管请求与响应（含流式 SSE）；
+- 转换模式：当客户端协议与 upstream 端点协议不同时，由 `protocols/conversions/` 中按 `(from, to)` 注册的转换器接管请求与响应（含流式 SSE）；
 - usage 提取归属各适配器：每个协议自己知道 usage 字段结构，不再用统一字段名猜测。
 
 ### 目录结构
@@ -154,7 +154,7 @@ v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_p
 
 - 所有未匹配请求只使用 `scheduling_policies` 中绑定到 `default` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
 - 同一个 ProviderModel 可以绑定到多个逻辑模型，并在不同逻辑模型中拥有不同的优先级、权重和启用状态
-- 候选队列中的每个 ProviderModel 都通过端点绑定获得 Provider 协议、有效 URL、Provider API 模型名和所属 Provider
+- 候选队列中的每个 ProviderModel 都通过端点绑定获得 upstream 协议、有效 URL、upstream API 模型名和所属 Provider。
 - 请求来时，自动根据协议过滤队列，按顺序尝试，失败自动切换到下一个
 - 转发到上游时，`model` 字段会被替换为当前 ProviderModel 的 **modelName**
 - 支持用户手动切换到队列中的某个 ProviderModel：新请求使用新模型，正在进行的请求不中断

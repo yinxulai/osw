@@ -6,13 +6,13 @@
 
 v0.3 是一次全新的大版本迭代，不以兼容旧源码、旧 API、旧配置或旧数据库为目标。实施过程中允许直接删除旧领域模型和旧迁移逻辑；遇到旧数据库时，应用应要求用户重新初始化，而不是隐式迁移。
 
-当前状态：规格设计已定稿，源码正在 `main` 上按全新、不兼容的 v0.3 契约实施。数据库基线、公共 Schema、Store、关系模型管理、核心路由、请求观测和管理界面已经完成；当前主要收尾代理适配器边界和正式发布包端到端验证。
+当前状态：规格设计已定稿，源码已按全新、不兼容的 v0.3 契约完成数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器基础边界、请求观测和管理界面。当前剩余工作集中在旧文件清理、观测 hooks 责任边界确认、协议转换补充验收，以及正式发布包和跨平台端到端验证。
 
 ## 2. 总体目标
 
 v0.3 MVP 完成后必须具备：
 
-- 全新的 16 张关系型核心表；
+- 全新的 17 张关系型核心表（含 `request_conversions`）；
 - 唯一逻辑模型 `default`；
 - `scheduling_policies` 作为 LogicalModel 与 ProviderModel 的绑定表；
 - 每个逻辑模型可以拥有独立的 ProviderModel 候选顺序；
@@ -24,7 +24,19 @@ v0.3 MVP 完成后必须具备：
 
 ## 3. 实施原则
 
-### 3.1 直接切换，不保留兼容层
+### 3.1 领域边界与命名规则
+
+所有字段先按数据所描述的对象归类，再决定命名；禁止根据当前实现机械地使用 `provider` 作为请求链路前缀。
+
+- `provider*` 只描述配置领域中的稳定 Provider/ProviderModel 身份和历史快照，例如 `providerId`、`providerModelId`、`providerName`、`providerModelName`。
+- `client*` 只描述客户端一侧的请求、响应和协议，例如 `clientProtocol`、`clientRequestHeaders`、`clientResponseBody`。
+- `upstream*` 描述本次实际远端 HTTP hop，包括供应商、兼容层或转换器后面的目标，例如 `upstreamProtocol`、`upstreamRequestId`、`upstreamRequestHeaders`、`upstreamResponseHeaders`。
+- `request*` 描述一次客户端请求的聚合数据；`attempt*` 描述该请求内的一次 upstream 尝试；`conversion*` 描述客户端与 upstream 之间的一次正式协议转换事件。
+- 配置实体中的 `ProviderEndpoint.protocol` 可以保留 `protocol`，因为它是端点配置属性；运行时快照必须使用 `upstreamProtocol`。
+- 顶层请求日志的协议语义是客户端协议，目标字段统一为 `clientProtocol`；一次请求可能包含多个不同的 `upstreamProtocol`，因此 upstream 协议不得放在请求级聚合字段中。
+- `RequestConversion` 独立存储在 `request_conversions`，不得嵌入 `request_contents` 或 metadata。
+
+### 3.2 直接切换，不保留兼容层
 
 以下旧内容不进入 v0.3：
 
@@ -73,9 +85,13 @@ v0.3 MVP 完成后必须具备：
 - 确认唯一 MVP 逻辑模型为 `default`；
 - 确认 `scheduling_policies` 是 LogicalModel-ProviderModel 绑定表；
 - 确认 `priority`、`weight`、绑定启用状态属于绑定关系；
-- 确认 16 张表、索引、外键、软删除和历史快照字段；
+- 确认 17 张表、索引、外键、软删除和历史快照字段；
 - 确认旧数据库直接废弃，不执行兼容迁移；
-- 确认 request-level 与 attempt-level usage 的统计口径。
+- 确认 request-level 与 attempt-level usage 的统计口径；
+- [x] 按 3.1 的边界统一公共 Schema、数据库列、Store、运行时输入输出、管理 API、UI 和测试 fixture；
+- [x] 将运行时 `providerProtocol` 改为 `upstreamProtocol`，并完成顶层请求日志 `protocol` / `providerProtocol` 到 `clientProtocol` / `upstreamProtocol` 的公共 API、存储、UI 和测试切换；
+- [x] 为 `RequestConversion` 固定 client/upstream 两侧字段，并移除所有 `request_contents.conversions` 设计残留；
+- [ ] `Provider` 仅表示配置中的供应商实体及其稳定身份，不用于泛称转换器或当前 HTTP 链路。
 
 ### 阶段 0 交付目标
 
@@ -105,7 +121,7 @@ v0.3 MVP 完成后必须具备：
 
 ### 阶段 1 交付目标（详细）
 
-- 全新数据库包含 16 张目标表；
+- 全新数据库包含 17 张目标表；
 - `default` 可重复初始化且不会产生重复记录；
 - 同一 ProviderModel 在同一 LogicalModel 下不能重复绑定；
 - ProviderModel 不再保存全局调度顺序；
@@ -113,7 +129,7 @@ v0.3 MVP 完成后必须具备：
 
 ### 阶段 1 交付目标
 
-全新数据库包含 16 张目标表，`default` 初始化幂等，数据库初始化测试、外键测试和约束测试全部通过。
+全新数据库包含 17 张目标表，`default` 初始化幂等，数据库初始化测试、外键测试和约束测试全部通过。
 
 ## 阶段 2：重建公共 Schema 与 Store
 
@@ -185,13 +201,13 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 ### 阶段 4 工作项
 
 - [x] 新增基础 `proxy/transport.ts`，隔离 `http.request` / `https.request` 调用并覆盖基础传输测试；
-- [ ] 新增 `proxy/request-context.ts`；
-- [ ] 新增 `proxy/protocols/types.ts`；
-- [ ] 抽取 OpenAI Completions、OpenAI Responses、Anthropic Messages Adapter；
-- [ ] 将模型改写、usage 注入和现有转换逻辑迁移到适配器或转换器注册表；
-- [ ] 将超时、客户端中止、SSE 和响应头生命周期完整下沉到传输层；
-- [ ] 将 attempt、usage 和 content capture 改为协议无关的观测 hooks；
-- [ ] 收敛 handler，使其只负责请求编排、候选尝试、错误分类和生命周期收尾。
+- [x] 新增 `proxy/request-context.ts`；
+- [x] 新增 `proxy/protocols/types.ts` 与注册表；
+- [x] 抽取 OpenAI Completions、OpenAI Responses、Anthropic Messages Adapter；
+- [x] 将模型改写、usage 注入和现有转换逻辑迁移到适配器或转换器注册表；
+- [x] 将超时、客户端中止、SSE 和响应头生命周期下沉到传输层；
+- [ ] 明确并完成 attempt、usage 和 content capture 的 hooks 与持久化 logger 责任边界；
+- [x] 收敛请求入口和尝试执行模块，使其负责请求编排、候选尝试、错误分类和生命周期收尾。
 
 ### 阶段 4 交付目标（详细）
 
@@ -301,11 +317,11 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 
 | 阶段 | 目标 | 状态 | 完成日期 | 备注 |
 | --- | --- | --- | --- | --- |
-| 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 16 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
-| 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 16 表基线、约束与 `default` 幂等初始化已落地 |
+| 阶段 0 | 冻结 v0.3 契约 | DONE | 2026-08-20 | 17 表、ProviderModel、SchedulingPolicy 与不兼容边界已冻结 |
+| 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 17 表基线、约束与 `default` 幂等初始化已落地 |
 | 阶段 2 | 公共 Schema 与 Store | DONE | 2026-08-21 | 关系实体 CRUD、调度策略边界、Provider/ProviderModel 双层健康读写与列表契约已落地并覆盖测试 |
 | 阶段 3 | `default` 调度和路由 | DONE | 2026-08-21 | 绑定关系路由、LogicalModel 队列边界、双层冷却、模型校验、模型发现、故障转移与健康归因矩阵、并发隔离和手动切换流式边界均已落地并覆盖测试 |
-| 阶段 4 | 协议适配器和传输层 | IN_PROGRESS | - | 基础 transport 与测试已落地；ProtocolAdapter、request context、观测 hooks 和 handler 职责收敛待完成 |
+| 阶段 4 | 协议适配器和传输层 | IN_PROGRESS | - | ProtocolAdapter、request context、transport 和请求编排已落地；hooks 与持久化 logger 的最终责任边界及转换补充验收待完成 |
 | 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、正文与原始 chunk 全量存储、脱敏、历史稳定性与按需详情均已落地并覆盖测试 |
 | 阶段 6 | 管理 API 和控制台 | DONE | 2026-08-21 | 调度绑定按 LogicalModel 查询、队列顺序调整、双层健康展示、关系实体 CRUD、配置脱敏与旧内部术语清理已落地 |
 | 阶段 7 | MVP 验收与发布 | IN_PROGRESS | - | typecheck、server tests、lint、阶段 3 P0 矩阵和 macOS arm64 DMG/zip build 已通过；代理适配器、macOS x64、Windows x64 与发布包端到端仍待验收 |

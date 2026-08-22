@@ -5,7 +5,7 @@ import {
 } from './request'
 
 describe('resolveUpstreamUrl', () => {
-  it('uses the configured upstream URL without appending the client path', () => {
+  it('uses the configured Provider endpoint URL without appending the client path', () => {
     expect(
       resolveUpstreamUrl(
         'https://api.example.com/openai/deployments/main/chat/completions?api-version=2025-01-01',

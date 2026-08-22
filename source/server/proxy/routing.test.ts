@@ -22,7 +22,7 @@ const provider: Provider = {
   enabled: true, createdTime: 0, updatedTime: 0, deletedTime: null,
 }
 function model(id: string, protocol: 'openai-completions' | 'openai-responses' | 'anthropic-messages' = 'openai-completions', conversion = false): ProviderModelRoute {
-  return { id, providerId: provider.id, modelName: `upstream-${id}`, endpoints: [{ protocol, upstreamUrl: `https://${id}.example`, customAuthHeader: null, protocolConversionEnabled: conversion }], priority: 1, enabled: true, createdTime: 0, updatedTime: 0, deletedTime: null }
+  return { id, providerId: provider.id, modelName: `upstream-${id}`, endpoints: [{ protocol, endpointUrl: `https://${id}.example`, customAuthHeader: null, protocolConversionEnabled: conversion }], priority: 1, enabled: true, createdTime: 0, updatedTime: 0, deletedTime: null }
 }
 
 afterEach(() => { mocks.models = []; mocks.manualModel = null })
@@ -52,10 +52,10 @@ describe('resolveProxyTargets', () => {
 describe('resolveAttemptSnapshot', () => {
   it('prefers a native endpoint and falls back to conversion', () => {
     const native = model('native')
-    expect(resolveAttemptSnapshot({ model: native, provider }, 'openai-completions')).toMatchObject({ providerProtocol: 'openai-completions', url: 'https://native.example' })
+    expect(resolveAttemptSnapshot({ model: native, provider }, 'openai-completions')).toMatchObject({ upstreamProtocol: 'openai-completions', url: 'https://native.example' })
 
     const converted = model('converted', 'openai-completions', true)
-    expect(resolveAttemptSnapshot({ model: converted, provider }, 'anthropic-messages')).toMatchObject({ providerProtocol: 'openai-completions', url: 'https://converted.example' })
+    expect(resolveAttemptSnapshot({ model: converted, provider }, 'anthropic-messages')).toMatchObject({ upstreamProtocol: 'openai-completions', url: 'https://converted.example' })
   })
 
   it('throws when no endpoint can serve the protocol', () => {

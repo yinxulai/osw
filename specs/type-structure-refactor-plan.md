@@ -1,6 +1,6 @@
 # 类型与结构体分类整理计划
 
-> 状态：配置 DTO 单一来源已完成，Settings 与请求领域类型待实施
+> 状态：配置 DTO 单一来源已完成；请求 DTO、Proxy 输入类型和跨端 DTO 仍待收尾，Render 全局状态目标已被 feature store 架构替代
 > 范围：`source/**/*.ts`、`source/**/*.tsx`、`specs/*.md`
 > 原则：优先拆分跨边界复用和职责混合的类型，不机械嵌套，不改变数据库表的正常列式设计。
 >
@@ -220,11 +220,10 @@ AttemptLoggingInput
 - 增加 Row ↔ domain/API mapper。
 - 保持数据库 schema 不变。
 
-### 阶段 3：Render 状态
+### 阶段 3：Render 状态（SUPERSEDED）
 
-- 让 `AppState` 组合现有领域状态。
-- 分离 loading、refreshing、mutation 和 error 语义。
-- 检查 selectors、service 和 hooks 的调用边界。
+- 原定 `AppState` 单体目标已被 `features/*/store.ts` 分域状态架构替代，不再实施 `app-store.ts`。
+- 如未来需要区分 loading、refreshing、mutation 和 error 语义，应另建独立任务，不作为本计划遗留项。
 
 ### 阶段 4：Proxy 输入与执行结果
 

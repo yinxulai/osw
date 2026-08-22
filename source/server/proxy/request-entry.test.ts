@@ -100,7 +100,7 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
       id,
       providerId,
       modelName: upstreamModelId,
-      endpoints: [{ protocol, upstreamUrl, customAuthHeader: null, protocolConversionEnabled: false }],
+      endpoints: [{ protocol, endpointUrl: upstreamUrl, customAuthHeader: null, protocolConversionEnabled: false }],
       priority: 1,
       enabled: true,
       createdTime: time,
@@ -454,7 +454,7 @@ describe('handleProxyRequest', () => {
       providerModelId: 'model_first',
       providerName: 'prov_first',
       providerModelName: 'first-model',
-      providerProtocol: 'openai-completions',
+      upstreamProtocol: 'openai-completions',
       url: `${first.url}/configured/first`,
       httpStatus: 503,
       retryable: true,
@@ -466,7 +466,7 @@ describe('handleProxyRequest', () => {
       providerModelId: 'model_second',
       providerName: 'prov_second',
       providerModelName: 'second-model',
-      providerProtocol: 'openai-completions',
+      upstreamProtocol: 'openai-completions',
       url: `${second.url}/configured/second?version=1`,
       httpStatus: 200,
       retryable: false,
@@ -929,7 +929,7 @@ describe('handleProxyRequest', () => {
     expect(payload.usage).toEqual({ input_tokens: 5, output_tokens: 2 })
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ providerProtocol: 'openai-completions' }),
+      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
     )
   })
 
@@ -977,7 +977,7 @@ describe('handleProxyRequest', () => {
       res.end(JSON.stringify({ id: 'chatcmpl_conv', choices: [{ index: 0, message: { role: 'assistant', content: 'converted' }, finish_reason: 'stop' }] }))
     })
     const entry = convertibleModel('model_pref', 'prov_pref', `${convertible.url}/v1/chat/completions`, 'conv-model', 'openai-completions')
-    entry.model.endpoints.push({ protocol: 'anthropic-messages', upstreamUrl: `${native.url}/v1/messages`, customAuthHeader: null, protocolConversionEnabled: false })
+    entry.model.endpoints.push({ protocol: 'anthropic-messages', endpointUrl: `${native.url}/v1/messages`, customAuthHeader: null, protocolConversionEnabled: false })
     mocks.models = [entry]
     const proxy = await listen((req, res) => {
       void handleProxyRequest(req, res, 'default')
@@ -995,7 +995,7 @@ describe('handleProxyRequest', () => {
     expect(payload.content).toEqual([{ type: 'text', text: 'native' }])
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ providerProtocol: null }),
+      expect.objectContaining({ upstreamProtocol: null }),
     )
   })
 
@@ -1040,7 +1040,7 @@ describe('handleProxyRequest', () => {
     expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ providerProtocol: 'openai-completions' }),
+      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
     )
     const requestContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId == null)?.[0]
     expect(requestContent).toEqual(expect.objectContaining({
@@ -1061,7 +1061,7 @@ describe('handleProxyRequest', () => {
     }))
     expect(mocks.createRequestConversion).toHaveBeenCalledWith(expect.objectContaining({
       clientProtocol: 'anthropic-messages',
-      providerProtocol: 'openai-completions',
+      upstreamProtocol: 'openai-completions',
       requestBody: expect.stringContaining('stream-model'),
       responseBody: expect.stringContaining('content_block_delta'),
     }))

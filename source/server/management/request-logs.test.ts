@@ -34,8 +34,8 @@ describe('request log management', () => {
     const log = await createRequestLog({
       id: 'req_detail',
       logicalModelId: 'default',
-      protocol: 'openai-responses',
-      providerProtocol: null,
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: null,
       status: 'success',
       totalDurationMilliseconds: 10,
       totalTokens: null,
@@ -54,8 +54,8 @@ describe('request log management', () => {
       providerModelId: 'model_detail',
       providerName: provider.name,
       providerModelName: 'detail-model',
-      providerProtocol: 'openai-responses',
-      providerRequestId: null,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
       url: 'https://example.com/v1/responses',
       httpStatus: 200,
       retryable: false,
@@ -99,7 +99,7 @@ describe('request log management', () => {
     expect(responseData(res)).toEqual({
       success: false,
       errorCode: 'RESOURCE_NOT_FOUND',
-      errorMessage: '请求日志不存�? req_missing',
+      errorMessage: '请求日志不存�? req_missing',
     })
   })
 
@@ -107,8 +107,8 @@ describe('request log management', () => {
     const log = await createRequestLog({
       id: 'diagnostic_detail',
       logicalModelId: 'diagnostic',
-      protocol: 'openai-responses',
-      providerProtocol: null,
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: null,
       status: 'failed',
       totalDurationMilliseconds: 10,
       totalTokens: null,

@@ -32,7 +32,7 @@ export interface AttemptTargetSnapshot {
   providerModelId: string
   providerName: string
   providerModelName: string
-  providerProtocol: Protocol
+  upstreamProtocol: Protocol
   url: string
 }
 
@@ -44,7 +44,7 @@ export function resolveAttemptSnapshot(target: ModelWithProvider, clientProtocol
     providerModelId: target.model.id,
     providerName: target.provider.name,
     providerModelName: target.model.modelName,
-    providerProtocol: endpoint.protocol,
-    url: endpoint.upstreamUrl,
+    upstreamProtocol: endpoint.protocol,
+    url: endpoint.endpointUrl,
   }
 }

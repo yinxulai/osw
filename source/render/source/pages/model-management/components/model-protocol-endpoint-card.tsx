@@ -52,8 +52,8 @@ export function ModelProtocolEndpointCard(props: ModelProtocolEndpointCardProps)
                   id={`model-endpoint-url-${index}`}
                   type="url"
                   className="font-mono text-xs"
-                  value={entry.upstreamUrl}
-                  onChange={event => updateProtocolEntry(index, { upstreamUrl: event.target.value })}
+                  value={entry.endpointUrl}
+                  onChange={event => updateProtocolEntry(index, { endpointUrl: event.target.value })}
                   placeholder={PROTOCOL_PLACEHOLDERS[entry.protocol]}
                 />
               </div>

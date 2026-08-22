@@ -31,8 +31,8 @@ export function useModelDialog(options: UseModelDialogOptions) {
     setProtocolEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
       return match
-        ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.upstreamUrl.trim()), upstreamUrl: match.upstreamUrl, protocolConversionEnabled: match.protocolConversionEnabled ?? false }
-        : { protocol: option.value, enabled: false, overrideUrl: false, upstreamUrl: '', protocolConversionEnabled: false }
+        ? { protocol: option.value, enabled: true, overrideUrl: Boolean(match.endpointUrl.trim()), endpointUrl: match.endpointUrl, protocolConversionEnabled: match.protocolConversionEnabled ?? false }
+        : { protocol: option.value, enabled: false, overrideUrl: false, endpointUrl: '', protocolConversionEnabled: false }
     }))
     setModelDialogOpen(true)
   }, [])
@@ -48,7 +48,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
           protocol: option.value,
           enabled: true,
           overrideUrl: false,
-          upstreamUrl: '',
+          endpointUrl: '',
           protocolConversionEnabled: false,
         }))
     setFetchingModels(true)
@@ -56,7 +56,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
       const results = await Promise.all(sourceEntries.map(entry => providerApi.fetchModels({
         protocol: entry.protocol,
         providerId: selectedProvider.id,
-        ...(entry.overrideUrl && entry.upstreamUrl.trim() ? { baseUrl: entry.upstreamUrl.trim() } : {}),
+        ...(entry.overrideUrl && entry.endpointUrl.trim() ? { baseUrl: entry.endpointUrl.trim() } : {}),
       })))
       const merged = new Map<string, FetchedProviderModel>()
       for (const result of results) {
@@ -79,7 +79,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
     if (enabledEntries.length === 0) return
     const endpoints = enabledEntries.map(entry => ({
       protocol: entry.protocol,
-      upstreamUrl: entry.overrideUrl ? entry.upstreamUrl.trim() : '',
+      endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '',
       customAuthHeader: null,
       protocolConversionEnabled: entry.protocolConversionEnabled,
     }))

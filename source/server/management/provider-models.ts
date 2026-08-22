@@ -56,7 +56,7 @@ const CreateProviderModelSchema = z.object({
   enabled: z.boolean().default(true),
   endpoints: z.array(z.object({
     protocol: ProtocolSchema,
-    upstreamUrl: z.string().default(''),
+    endpointUrl: z.string().default(''),
     customAuthHeader: z.string().nullable().default(null),
     protocolConversionEnabled: z.boolean().default(false),
   })).default([]),
@@ -81,7 +81,7 @@ const UpdateProviderModelSchema = z.object({
   enabled: z.boolean().optional(),
   endpoints: z.array(z.object({
     protocol: ProtocolSchema,
-    upstreamUrl: z.string().default(''),
+    endpointUrl: z.string().default(''),
     customAuthHeader: z.string().nullable().default(null),
     protocolConversionEnabled: z.boolean().default(false),
   })).optional(),
