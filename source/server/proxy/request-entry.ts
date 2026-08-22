@@ -63,7 +63,10 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     const reason = availableModels.length === 0
       ? '该逻辑模型队列没有已启用且健康的供应商模型'
       : `可用供应商模型未配置 ${protocol} 协议且未开启协议转换（当前配置协议: ${configuredProtocols.join(', ') || '无'}）`
-    console.warn(`[proxy] 没有可用的上游 Provider: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}, reason=${reason})`)
+    const availableTargets = availableModels.length > 0
+      ? `，已发现: ${availableModels.map(target => `${target.provider.name}/${target.model.modelName}`).join(', ')}`
+      : ''
+    console.warn(`[proxy] 没有可用的上游供应商: ${req.method} ${req.url} (protocol=${protocol}, logicalModel=${resolvedLogicalModel.name} [${logicalModelId}], requestId=${requestId}, reason=${reason}${availableTargets})`)
     writeJsonError(res, 503, 'NO_AVAILABLE_PROVIDER', `没有可用的上游 Provider：${reason}`)
     return
   }

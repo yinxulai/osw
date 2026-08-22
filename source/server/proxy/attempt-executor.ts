@@ -68,6 +68,10 @@ interface AttemptOutcome {
   captureStatus?: 'captured' | 'partial'
 }
 
+function formatTarget(target: ModelWithProvider): string {
+  return `${target.provider.name}/${target.model.modelName} [providerId=${target.provider.id}, providerModelId=${target.model.id}]`
+}
+
 async function recordHealthFailure(target: ModelWithProvider, statusCode: number | null, responseBody?: string | null): Promise<void> {
   const scope = classifyHealthFailure(statusCode, responseBody)
   if (scope === 'provider') await markProviderFailure(target.provider.id)
@@ -101,10 +105,9 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     targets,
     attempt: (target, attemptIndex) => attemptRequest(context, response, target, attemptIndex, hooks),
     onSuccess: async (target, outcome, attemptIndex) => {
-
       if (outcome.disposition === 'success') {
         console.log(
-          `[proxy] 透传成功: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 透传成功: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await markProviderSuccess(target.provider.id)
         await markProviderModelSuccess(target.model.id)
@@ -123,15 +126,15 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
       }
     },
     onTerminal: async (target, outcome) => {
-        console.log(
-          `[proxy] 请求终止(无重�?: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
-        )
-        await requestLogger.finalizeRequestContent(outcome)
-        await requestLogger.finalizeRequestLog('failed', startedAt)
+      console.log(
+        `[proxy] 请求终止（不重试）: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+      )
+      await requestLogger.finalizeRequestContent(outcome)
+      await requestLogger.finalizeRequestLog('failed', startedAt)
     },
     onRetry: async (target, outcome, attemptIndex) => {
       console.warn(
-        `[proxy] 上游返回可重试状�? ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] 上游返回可重试状态: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
     },
@@ -164,7 +167,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
         return false
       }
       console.error(
-        `[proxy] 上游请求失败: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
+        `[proxy] 上游请求失败: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
       )
       try {
         const snapshot = resolveAttemptSnapshot(target, protocol)
