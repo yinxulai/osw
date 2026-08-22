@@ -533,16 +533,66 @@ function extractUpstreamRequestId(headers: http.IncomingHttpHeaders): string | n
   return null
 }
 
-function extractRequestIdFromBody(body: string | null): string | null {
+export function extractRequestIdFromBody(body: string | null): string | null {
   if (!body) return null
+
+  // 普通 JSON 响应：兼容成功响应、错误响应以及 Provider 自己的嵌套结构。
+  const directId = parseRequestIdJson(body)
+  if (directId) return directId
+
+  // 流式响应的捕获内容是 { schemaVersion, chunks }，每个 chunk 可能包含多个 SSE event。
   try {
-    const parsed = JSON.parse(body) as Record<string, unknown>
-    for (const key of ['id', 'request_id', 'requestId']) {
-      const value = parsed[key]
-      if (typeof value === 'string' && value.trim()) return value.trim()
+    const captured = JSON.parse(body) as Record<string, unknown>
+    if (Array.isArray(captured.chunks)) {
+      for (const chunk of captured.chunks) {
+        if (typeof chunk !== 'string') continue
+        const id = extractRequestIdFromSse(chunk)
+        if (id) return id
+      }
     }
   } catch {
-    // �?JSON 错误响应没有可提取的请求 ID�?
+    // 非 JSON body 可能仍然是原始 SSE 文本，继续按 SSE 解析。
+  }
+
+  return extractRequestIdFromSse(body)
+}
+
+function parseRequestIdJson(body: string): string | null {
+  try {
+    return findRequestId(JSON.parse(body))
+  } catch {
+    return null
+  }
+}
+
+export function extractRequestIdFromSse(body: string): string | null {
+  for (const line of body.split(/\r?\n/)) {
+    const data = line.trim().replace(/^data:\s*/, '')
+    if (!data || data === '[DONE]') continue
+    const id = parseRequestIdJson(data)
+    if (id) return id
+  }
+  return null
+}
+
+function findRequestId(value: unknown, depth = 0): string | null {
+  if (depth > 8 || value === null || typeof value !== 'object') return null
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const id = findRequestId(item, depth + 1)
+      if (id) return id
+    }
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of ['request_id', 'requestId', 'id']) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  for (const child of Object.values(record)) {
+    const id = findRequestId(child, depth + 1)
+    if (id) return id
   }
   return null
 }
