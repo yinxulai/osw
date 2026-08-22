@@ -6,7 +6,7 @@
 
 v0.3 是一次全新的大版本迭代，不以兼容旧源码、旧 API、旧配置或旧数据库为目标。实施过程中允许直接删除旧领域模型和旧迁移逻辑；遇到旧数据库时，应用应要求用户重新初始化，而不是隐式迁移。
 
-当前状态：规格设计已定稿，源码已按全新、不兼容的 v0.3 契约完成数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器基础边界、请求观测和管理界面。当前剩余工作集中在旧文件清理、观测 hooks 责任边界确认、协议转换补充验收，以及正式发布包和跨平台端到端验证。
+当前状态：规格设计已定稿，源码已按全新、不兼容的 v0.3 契约完成数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面。当前剩余工作集中在协议转换补充验收、正式发布包和跨平台端到端验证。
 
 ## 2. 总体目标
 
@@ -206,7 +206,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 - [x] 抽取 OpenAI Completions、OpenAI Responses、Anthropic Messages Adapter；
 - [x] 将模型改写、usage 注入和现有转换逻辑迁移到适配器或转换器注册表；
 - [x] 将超时、客户端中止、SSE 和响应头生命周期下沉到传输层；
-- [ ] 明确并完成 attempt、usage 和 content capture 的 hooks 与持久化 logger 责任边界；
+- [x] 明确并完成 attempt、usage 和 content capture 的 hooks 与持久化 logger 责任边界；
 - [x] 收敛请求入口和尝试执行模块，使其负责请求编排、候选尝试、错误分类和生命周期收尾。
 
 ### 阶段 4 交付目标（详细）
@@ -321,7 +321,7 @@ Store 单元测试覆盖创建、更新、删除、绑定、解绑、排序和�
 | 阶段 1 | 全新数据库基线 | DONE | 2026-08-20 | 17 表基线、约束与 `default` 幂等初始化已落地 |
 | 阶段 2 | 公共 Schema 与 Store | DONE | 2026-08-21 | 关系实体 CRUD、调度策略边界、Provider/ProviderModel 双层健康读写与列表契约已落地并覆盖测试 |
 | 阶段 3 | `default` 调度和路由 | DONE | 2026-08-21 | 绑定关系路由、LogicalModel 队列边界、双层冷却、模型校验、模型发现、故障转移与健康归因矩阵、并发隔离和手动切换流式边界均已落地并覆盖测试 |
-| 阶段 4 | 协议适配器和传输层 | IN_PROGRESS | - | ProtocolAdapter、request context、transport 和请求编排已落地；hooks 与持久化 logger 的最终责任边界及转换补充验收待完成 |
+| 阶段 4 | 协议适配器和传输层 | DONE | 2026-08-22 | ProtocolAdapter、request context、transport、请求编排、观测 hooks 与持久化 logger 责任边界已落地并通过类型检查、服务器测试和 lint；发布包端到端仍归入阶段 7 |
 | 阶段 5 | 请求观测分层 | DONE | 2026-08-21 | request/attempt usage、双视角 contents、正文与原始 chunk 全量存储、脱敏、历史稳定性与按需详情均已落地并覆盖测试 |
 | 阶段 6 | 管理 API 和控制台 | DONE | 2026-08-21 | 调度绑定按 LogicalModel 查询、队列顺序调整、双层健康展示、关系实体 CRUD、配置脱敏与旧内部术语清理已落地 |
 | 阶段 7 | MVP 验收与发布 | IN_PROGRESS | - | typecheck、server tests、lint、阶段 3 P0 矩阵和 macOS arm64 DMG/zip build 已通过；代理适配器、macOS x64、Windows x64 与发布包端到端仍待验收 |

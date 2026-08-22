@@ -1,16 +1,23 @@
 # 版本规划与验收标准
 
-本文分为"设计定稿"和"功能待办"两部分。详细的源码实施阶段、阶段完成目标和发布门槛见 [implementation-plan.md](./implementation-plan.md)。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
+本文分为“设计定稿”和“功能待办”两部分。当前实现状态以本文件为最终路线图；仍在执行的工程收尾细节保留在 [implementation-plan.md](./implementation-plan.md)。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：17 表数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器基础边界、请求观测和管理界面已经完成；当前主要收尾旧文件清理、协议转换补充验收、观测 hooks 责任边界和正式发布包端到端验证。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已在 `main` 上按不兼容的新版本契约实施：17 表数据库基线、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面已经完成；当前主要收尾协议转换补充验收、跨平台和正式发布包端到端验证。
 
 当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
 - [x] [data-model.md](./data-model.md)：17 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages、request_conversions；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（请求入口/尝试编排 / transport I/O / hooks 观测订阅）的代理管线架构。
 - [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
+
+### 当前实现结论（2026-08-22）
+
+- v0.3 的数据库基线、关系模型、分域 Store、路由、协议适配器、请求观测分层、管理 API 和控制台主流程已落地。
+- 请求链路统一使用 `client*` / `upstream*` 边界：`clientProtocol` 表示客户端协议，`request_attempts.upstreamProtocol` 表示每次真实远端尝试，`request_conversions` 独立记录转换前后内容；不再使用 `providerProtocol` 表示运行时链路。
+- 完整源码验证已通过：`pnpm typecheck`、`pnpm test:server`（31 个测试文件、228 个测试）、`pnpm lint`；Vite bundling 也已通过。
+- Windows electron-builder 当前受符号链接权限限制，发布包安装验证仍未完成；该环境问题不改变源码验证结论。
 
 ### 产品与设计原则（摘要）
 
@@ -109,12 +116,12 @@
 - [x] 建立 ProtocolAdapter 类型、注册表与 OpenAI Completions、OpenAI Responses、Anthropic Messages 适配边界
 - [x] 将模型改写、usage 注入、请求/响应转换和流式转换迁移到 adapter 或转换器注册表
 - [x] 将超时、客户端中止、SSE 和响应头生命周期下沉到 transport
-- [ ] 明确并完成 attempt、usage 和正文采集 hooks 与持久化 logger 的责任边界
+- [x] 明确并完成 attempt、usage 和正文采集 hooks 与持久化 logger 的责任边界
 - [x] 收敛请求入口和尝试编排，使其负责候选编排、尝试循环、错误分类和生命周期收尾
 
 ### MVP（P0）：正式发布验收
 
-- [x] `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和当前 macOS arm64 `pnpm build` 已通过
+- [x] `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和 Vite bundling 已通过；Windows electron-builder 仍受符号链接权限限制
 - [x] 已生成 `0.3.0-beta.1` macOS arm64 DMG/zip，并通过 ad-hoc 签名校验
 - [ ] 使用全新用户数据目录完成发布包首次启动和空数据库初始化
 - [ ] 在发布包内完成 Provider 配置、OpenAI/Anthropic 请求、故障转移、日志与正文查看端到端验收

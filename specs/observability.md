@@ -6,7 +6,7 @@
 
 | 层 | 数据表 | 职责 |
 | --- | --- | --- |
-| 请求汇总 | `request_logs` | 请求身份、客户端协议、逻辑模型标识、状态和创建时间 |
+| 请求汇总 | `request_logs` | 请求身份、客户端协议、可选 upstream 协议摘要、逻辑模型标识、状态和创建时间 |
 | 请求指标 | `request_metrics` | 请求级通用数值指标，如总耗时、TTFT、缓存命中 |
 | 请求用量 | `request_usages` | 请求级或 Provider 尝试级 Token/用量明细 |
 | 请求尝试 | `request_attempts` | 每次候选模型尝试、故障转移顺序、upstream 协议和结果 |

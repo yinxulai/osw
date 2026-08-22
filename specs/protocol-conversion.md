@@ -79,7 +79,7 @@ P1 优先实现三个最高频方向：
 - 新增 `provider_endpoints`：Provider 按原生协议维护默认端点。
 - `provider_model_endpoints`：将 ProviderModel 绑定到 ProviderEndpoint，可选配置模型专属 `url`；为空时回退到 `provider_endpoints.url`。
 - 新增 `protocol_converters`：按 ProviderModel 端点绑定和客户端协议配置 `enabled`；目标 upstream 协议通过 `provider_model_endpoints.providerEndpointId -> provider_endpoints.protocol` 得到。
-- `request_logs.clientProtocol` 记录客户端协议；本次 attempt 的 upstream 协议记录在 `request_attempts.upstreamProtocol`，与客户端协议不同即表示发生了转换。
+- `request_logs.clientProtocol` 记录客户端协议；请求级 `request_logs.upstreamProtocol` 仅作为可选摘要；每次 attempt 的真实 upstream 协议必须记录在 `request_attempts.upstreamProtocol`，与客户端协议不同即表示发生了转换。
 - 新增 `request_metrics`：按请求保存可扩展数值指标；Token 和其他用量保存到 `request_usages`。
 - `request_attempts.upstreamProtocol` 为 nullable，记录本次尝试实际使用的端点协议，不依赖当前端点配置推导；upstream 返回的请求标识记录在 `upstreamRequestId`。
 - `RequestConversion` 独立记录 client/upstream 两侧协议、Header、正文和流式状态，不嵌入 `request_contents`。
