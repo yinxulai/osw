@@ -1,6 +1,6 @@
 import { generateKeyReference } from '@common/keychain'
 import type { Provider } from '@common/schemas'
-import { ImportConfigSchema } from './schemas'
+import { ConfigImportRequestSchema } from '@common/config-schemas'
 import { createProvider, deleteProvider, listProviders, replaceProviderEndpoints, updateProvider } from '../../database/provider-store'
 import { createLogicalModel, deleteLogicalModel, listLogicalModels, updateLogicalModel, upsertSchedulingPolicy } from '../../database/logical-model-store'
 import { createProviderModelRoute, deleteProviderModelRoute, listProviderModelRoutes as listRoutes, updateProviderModelRoute } from '../../database/model-store'
@@ -8,7 +8,7 @@ import { updateSettings } from '../../database/settings-store'
 import { getSecretStore } from '../../infrastructure/secrets/secret-store'
 
 export async function importConfig(body: unknown): Promise<{ imported: { providers: number; logicalModels: number; providerModels: number } }> {
-  const { config, mode } = ImportConfigSchema.parse(body)
+  const { config, mode } = ConfigImportRequestSchema.parse(body)
   const secretStore = getSecretStore()
   const existingProviders = await listProviders(false)
   const existingModels = await listLogicalModels(false)

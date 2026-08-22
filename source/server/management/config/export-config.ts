@@ -3,13 +3,13 @@ import { listProviderEndpoints, listProviders } from '../../database/provider-st
 import { listLogicalModels, listSchedulingPolicies } from '../../database/logical-model-store'
 import { listProviderModels } from '../../database/model-store'
 import { getSettings } from '../../database/settings-store'
-import type { ExportedConfig, ExportedProvider, ExportedLogicalModel } from './types'
+import type { ConfigDocument, ConfigProvider, ConfigLogicalModel } from '@common/config-schemas'
 
-export async function exportConfig(): Promise<{ config: ExportedConfig; content: string }> {
+export async function exportConfig(): Promise<{ config: ConfigDocument; content: string }> {
   const [providers, logicalModels, providerModels, schedulingPolicies, settings] = await Promise.all([
     listProviders(false), listLogicalModels(false), listProviderModels(false), listSchedulingPolicies(), getSettings(),
   ])
-  const config: ExportedConfig = {
+  const config: ConfigDocument = {
     schemaVersion: 3,
     exportedAt: Date.now(),
     settings: {
@@ -18,12 +18,12 @@ export async function exportConfig(): Promise<{ config: ExportedConfig; content:
       consecutiveFailureThreshold: settings.consecutiveFailureThreshold, idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
       autoLaunch: settings.autoLaunch,
     },
-    providers: await Promise.all(providers.map(async (p: Provider): Promise<ExportedProvider> => ({
+    providers: await Promise.all(providers.map(async (p: Provider): Promise<ConfigProvider> => ({
       id: p.id, name: p.name, timeoutMilliseconds: p.timeoutMilliseconds, enabled: p.enabled,
       apiKeyPlaceholder: '***',
       endpoints: Object.fromEntries((await listProviderEndpoints(p.id)).filter(endpoint => endpoint.enabled).map(endpoint => [endpoint.protocol, endpoint.url])),
     }))),
-    logicalModels: logicalModels.map((m: LogicalModel): ExportedLogicalModel => ({ id: m.id, name: m.name, description: m.description, enabled: m.enabled })),
+    logicalModels: logicalModels.map((m: LogicalModel): ConfigLogicalModel => ({ id: m.id, name: m.name, description: m.description, enabled: m.enabled })),
     providerModels: providerModels.map(model => ({
       id: model.id, providerId: model.providerId, modelName: model.modelName, enabled: model.enabled,
       endpoints: model.endpoints.map(endpoint => ({
