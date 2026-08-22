@@ -35,7 +35,7 @@ describe('request log management', () => {
       id: 'req_detail',
       logicalModelId: 'default',
       protocol: 'openai-responses',
-      upstreamProtocol: null,
+      providerProtocol: null,
       status: 'success',
       totalDurationMilliseconds: 10,
       totalTokens: null,
@@ -74,7 +74,6 @@ describe('request log management', () => {
       responseStatus: 200,
       responseHeaders: '{"content-type":"application/json"}',
       responseBody: '{"ok":true}',
-      conversions: null,
     })
     const res = mockResponse()
 
@@ -100,7 +99,7 @@ describe('request log management', () => {
     expect(responseData(res)).toEqual({
       success: false,
       errorCode: 'RESOURCE_NOT_FOUND',
-      errorMessage: '请求日志不存在: req_missing',
+      errorMessage: '请求日志不存�? req_missing',
     })
   })
 
@@ -109,7 +108,7 @@ describe('request log management', () => {
       id: 'diagnostic_detail',
       logicalModelId: 'diagnostic',
       protocol: 'openai-responses',
-      upstreamProtocol: null,
+      providerProtocol: null,
       status: 'failed',
       totalDurationMilliseconds: 10,
       totalTokens: null,

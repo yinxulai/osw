@@ -30,7 +30,7 @@ function log(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
     id: 'req_test',
     logicalModelId: 'model_default',
     protocol: 'openai-responses',
-    upstreamProtocol: null,
+    providerProtocol: null,
     status: 'success',
     totalDurationMilliseconds: 2_500,
     totalTokens: 120,

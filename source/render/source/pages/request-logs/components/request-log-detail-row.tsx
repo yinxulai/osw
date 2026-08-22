@@ -28,7 +28,7 @@ interface AttemptBadgeProps {
   attempt: RequestLogEntryAttempt
 }
 
-interface UpstreamRouteProps {
+interface ProviderRouteProps {
   attempts: RequestLogEntryAttempt[]
   onSelect: (attemptId: string) => void
 }
@@ -86,13 +86,13 @@ function MetricCard(props: MetricCardProps) {
   )
 }
 
-function UpstreamRoute(props: UpstreamRouteProps) {
+function ProviderRoute(props: ProviderRouteProps) {
   return (
     <section className="overflow-hidden rounded-lg bg-inset">
       <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Route size={12} />
-          上游路由
+          Provider 路由
         </div>
         <span className="text-[10px] text-muted-foreground">{props.attempts.length} 次尝试</span>
       </div>
@@ -117,7 +117,7 @@ function UpstreamRoute(props: UpstreamRouteProps) {
                 <AttemptBadge attempt={attempt} />
               </div>
               <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                上游请求 ID：{attempt.providerRequestId || '-'}
+                Provider request ID：{attempt.providerRequestId || '-'}
               </div>
             </div>
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -126,7 +126,7 @@ function UpstreamRoute(props: UpstreamRouteProps) {
           </button>
         ))}
         {props.attempts.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">没有生成上游尝试记录</div>
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">没有生成 Provider attempt 记录</div>
         )}
       </div>
     </section>
@@ -160,7 +160,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
       ) : (
         <div className="flex min-h-28 flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
           <Gauge size={18} className="opacity-50" />
-          上游响应不包含 usage 信息
+          Provider response 不包含 usage 信息
         </div>
       )}
       <div className="border-t border-border bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
@@ -172,7 +172,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
 
 export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const { log, modelName } = props
-  const providerProtocol = log.upstreamProtocol
+  const providerProtocol = log.providerProtocol
     ?? log.attempts.find(attempt => attempt.status === 'success')?.providerProtocol
     ?? log.attempts[0]?.providerProtocol
   const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
@@ -235,7 +235,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
-            <UpstreamRoute attempts={log.attempts} onSelect={setSelectedAttemptId} />
+            <ProviderRoute attempts={log.attempts} onSelect={setSelectedAttemptId} />
             <RawUsage
               rawUsage={log.rawUsage}
               cacheCreationInputTokens={log.cacheCreationInputTokens}
@@ -244,6 +244,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           </div>
           <RequestContentsDrawer
             contents={contents}
+            conversions={'conversions' in log ? log.conversions : null}
             clientProtocol={log.protocol}
             providerProtocol={providerProtocol}
             loading={props.detailLoading}

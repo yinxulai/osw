@@ -33,7 +33,7 @@ export function redactHeaders(source: IncomingHttpHeaders | OutgoingHttpHeaders,
   )
 }
 
-export function createUpstreamHeaders(source: IncomingHttpHeaders, authHeaders: Record<string, string>, contentLength: number): Record<string, string | string[]> {
+export function createProviderRequestHeaders(source: IncomingHttpHeaders, authHeaders: Record<string, string>, contentLength: number): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
   const connectionHeaders = parseConnectionHeaders(source.connection)
   const replacementAuthHeaders = new Set(Object.keys(authHeaders).map(name => name.toLowerCase()))
@@ -51,6 +51,7 @@ export function createUpstreamHeaders(source: IncomingHttpHeaders, authHeaders: 
   if (contentLength > 0) headers['content-length'] = String(contentLength)
   return headers
 }
+
 
 export function createDownstreamHeaders(source: IncomingHttpHeaders): OutgoingHttpHeaders {
   const headers: OutgoingHttpHeaders = {}

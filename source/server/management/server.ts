@@ -1,6 +1,8 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
 import { applyManagementRequestGuards } from './request-guards'
+import { normalizeError } from '../errors'
+import { sendManagementError } from './response'
 import type { Server } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
@@ -20,9 +22,8 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 9301
   const environment = options.environment ?? 'production'
-  const candidate = http.createServer(async (req, res) => {
-    if (!await applyManagementRequestGuards(req.headers, req.method, req.url, res, host, port)) return
-    await handleApiRequest(req, res, environment)
+  const candidate = http.createServer((req, res) => {
+    void handleManagementRequest(req, res, host, port, environment)
   })
 
   managementServer = candidate
@@ -45,6 +46,25 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   })
 
   return startupPromise
+}
+
+async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, host: string, port: number, environment: RuntimeEnvironment): Promise<void> {
+  try {
+    if (!await applyManagementRequestGuards(req.headers, req.method, req.url, res, host, port)) return
+    await handleApiRequest(req, res, environment)
+  } catch (error) {
+    console.error(`[management] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`, error)
+    if (res.headersSent || res.writableEnded) {
+      res.destroy(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
+    handleApiRequestError(res, error)
+  }
+}
+
+function handleApiRequestError(res: http.ServerResponse, error: unknown): void {
+  const normalized = normalizeError(error)
+  sendManagementError(res, normalized)
 }
 
 export async function stopManagementServer(): Promise<void> {

@@ -52,6 +52,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     const body = await parseJsonBody(req)
     await handler(req, res, body)
   } catch (error) {
-    handleApiError(res, error)
+    handleApiError(req, res, error)
   }
 }

@@ -176,8 +176,8 @@ export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
   protocol: ProtocolSchema,
-  /** 实际请求上游时使用的协议；与 protocol 不同表示经过了协议转换 */
-  upstreamProtocol: ProtocolSchema.nullable(),
+  /** 实际请求 Provider endpoint 时使用的协议；与 protocol 不同表示经过了协议转换 */
+  providerProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
@@ -192,7 +192,7 @@ export const RequestLogSchema = z.object({
   createdTime: z.number().int(),
 })
 export type RequestLog = z.infer<typeof RequestLogSchema>
-export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
+export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'providerProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
 
 // ========== Request Attempt ==========
 
@@ -233,11 +233,28 @@ export const RequestContentSchema = z.object({
   responseStatus: z.number().int().nullable(),
   responseHeaders: z.string().nullable(),
   responseBody: z.string().nullable(),
-  conversions: z.string().nullable(),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
 })
 export type RequestContent = z.infer<typeof RequestContentSchema>
+
+export const RequestConversionSchema = z.object({
+  id: z.string().startsWith('conversion_'),
+  requestId: z.string().startsWith('req_'),
+  attemptId: z.string().startsWith('att_'),
+  clientProtocol: ProtocolSchema,
+  providerProtocol: ProtocolSchema,
+  clientRequestHeaders: z.string().nullable(),
+  providerRequestHeaders: z.string().nullable(),
+  providerResponseHeaders: z.string().nullable(),
+  clientResponseHeaders: z.string().nullable(),
+  requestBody: z.string().nullable(),
+  responseBody: z.string().nullable(),
+  streaming: z.boolean(),
+  durationMilliseconds: z.number().int().nonnegative(),
+  createdTime: z.number().int(),
+})
+export type RequestConversion = z.infer<typeof RequestConversionSchema>
 
 // ========== API 响应结构 ==========
 
@@ -313,7 +330,7 @@ export const RequestLogEntrySchema = z.object({
   id: z.string().startsWith('req_'),
   logicalModelId: z.string(),
   protocol: ProtocolSchema,
-  upstreamProtocol: ProtocolSchema.nullable(),
+  providerProtocol: ProtocolSchema.nullable(),
   status: RequestStatusSchema,
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
@@ -332,6 +349,7 @@ export type RequestLogEntry = z.infer<typeof RequestLogEntrySchema>
 
 export const RequestLogDetailSchema = RequestLogEntrySchema.extend({
   contents: z.array(RequestContentSchema),
+  conversions: z.array(RequestConversionSchema),
 })
 export type RequestLogDetail = z.infer<typeof RequestLogDetailSchema>
 

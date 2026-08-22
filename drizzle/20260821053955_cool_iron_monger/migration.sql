@@ -126,11 +126,32 @@ CREATE TABLE `request_contents` (
 	`responseStatus` integer,
 	`responseHeaders` text,
 	`responseBody` text,
-	`conversions` text,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_request_contents_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)
 );
+--> statement-breakpoint
+CREATE TABLE `request_conversions` (
+	`id` text PRIMARY KEY,
+	`requestId` text NOT NULL,
+	`attemptId` text NOT NULL,
+	`clientProtocol` text NOT NULL,
+	`providerProtocol` text NOT NULL,
+	`clientRequestHeaders` text,
+	`providerRequestHeaders` text,
+	`providerResponseHeaders` text,
+	`clientResponseHeaders` text,
+	`requestBody` text,
+	`responseBody` text,
+	`streaming` integer DEFAULT false NOT NULL,
+	`durationMilliseconds` integer NOT NULL,
+	`createdTime` integer NOT NULL,
+	CONSTRAINT `fk_request_conversions_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`),
+	CONSTRAINT `fk_request_conversions_attemptId_request_attempts_id_fk` FOREIGN KEY (`attemptId`) REFERENCES `request_attempts`(`id`)
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_request_conversions_attempt` ON `request_conversions` (`attemptId`);--> statement-breakpoint
+CREATE INDEX `idx_request_conversions_request` ON `request_conversions` (`requestId`);
 --> statement-breakpoint
 CREATE TABLE `request_logs` (
 	`id` text PRIMARY KEY,

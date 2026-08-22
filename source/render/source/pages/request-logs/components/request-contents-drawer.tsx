@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { AlertCircle, ChevronDown, LoaderCircle, X } from 'lucide-react'
-import type { RequestContent } from '@common/schemas'
+import type { RequestContent, RequestConversion } from '@common/schemas'
 import { cn } from '@/lib/utils'
 import { PROTOCOL_LABEL } from '../lib/format'
 
@@ -10,6 +10,7 @@ interface ContentSectionProps {
 }
 interface RequestContentsDrawerProps {
   contents: RequestContent[] | null
+  conversions: RequestConversion[] | null
   clientProtocol: string
   providerProtocol?: string | null
   loading: boolean
@@ -17,8 +18,6 @@ interface RequestContentsDrawerProps {
   selectedAttemptId: string | null
   onClose: () => void
 }
-interface ConversionRecord { fromProtocol?: string | null; toProtocol?: string | null; convertedRequestBody?: string | null; convertedResponseBody?: string | null }
-
 function formatContent(value: string) { try { const parsed = JSON.parse(value) as unknown; return { value: JSON.stringify(parsed, null, 2), isJson: true } } catch { return { value, isJson: false } } }
 function ContentSection(props: ContentSectionProps) {
   const [open, setOpen] = React.useState(true)
@@ -28,16 +27,18 @@ function ContentSection(props: ContentSectionProps) {
 
 export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
   const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
-  const conversion = selectedContent?.conversions ? JSON.parse(selectedContent.conversions) as ConversionRecord : null
-  const clientProtocol = conversion?.fromProtocol ?? props.clientProtocol
-  const providerProtocol = conversion?.toProtocol ?? props.providerProtocol ?? props.clientProtocol
+  const conversion = props.conversions?.find(item => item.attemptId === props.selectedAttemptId) ?? null
+  const clientProtocol = conversion?.clientProtocol ?? props.clientProtocol
+  const providerProtocol = conversion?.providerProtocol ?? props.providerProtocol ?? props.clientProtocol
   const clientLabel = PROTOCOL_LABEL[clientProtocol] ?? clientProtocol
   const providerLabel = PROTOCOL_LABEL[providerProtocol] ?? providerProtocol
   const sections: Array<[string, string | null]> = selectedContent ? [
-    [`请求头 · 发往供应商 · ${providerLabel}`, selectedContent.requestHeaders], [`请求正文 · 发往供应商 · ${providerLabel}`, selectedContent.requestBody],
-    ...(conversion?.convertedRequestBody ? [[`转换后请求 · ${clientLabel} → ${providerLabel}`, conversion.convertedRequestBody] as [string, string]] : []),
-    ...(conversion?.convertedResponseBody ? [[`转换后响应 · ${providerLabel} → ${clientLabel}`, conversion.convertedResponseBody] as [string, string]] : []),
-    [`响应头 · 返回客户端 · ${clientLabel}`, selectedContent.responseHeaders], [`响应正文 · 返回客户端 · ${clientLabel}`, selectedContent.responseBody],
+    [`客户端请求头 · ${clientLabel}`, conversion?.clientRequestHeaders ?? selectedContent.requestHeaders ?? null],
+    [`Provider 请求头 · ${providerLabel}`, conversion?.providerRequestHeaders ?? selectedContent.requestHeaders ?? null],
+    [`Provider 请求正文 · ${providerLabel}`, conversion?.requestBody ?? selectedContent.requestBody ?? null],
+    [`Provider 响应头 · ${providerLabel}`, conversion?.providerResponseHeaders ?? null],
+    [`客户端响应头 · ${clientLabel}`, conversion?.clientResponseHeaders ?? selectedContent.responseHeaders ?? null],
+    [`客户端响应正文 · ${clientLabel}`, conversion?.responseBody ?? selectedContent.responseBody ?? null],
   ] : []
   let state
   if (props.loading) state = <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground"><LoaderCircle size={14} className="animate-spin" />正在加载正文</div>

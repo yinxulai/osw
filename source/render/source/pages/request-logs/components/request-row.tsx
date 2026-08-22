@@ -13,7 +13,7 @@ export function RequestRow(props: RequestRowProps) {
 
   const succeeded = log.status === 'success'
   const lastAttempt = log.attempts[log.attempts.length - 1]
-  const providerProtocol = log.upstreamProtocol ?? lastAttempt?.providerProtocol
+  const providerProtocol = log.providerProtocol ?? lastAttempt?.providerProtocol
 
   return (
     <div className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">

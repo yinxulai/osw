@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   createRequestLog: vi.fn(async (input: Record<string, unknown>) => ({ id: 'req_test', ...input })),
   createRequestAttempt: vi.fn(async (input: Record<string, unknown>) => ({ id: 'att_test', ...input })),
   createRequestContent: vi.fn(async (input: Record<string, unknown>) => ({ id: input.attemptId ? 'content_attempt' : 'content_request', ...input })),
+  createRequestConversion: vi.fn(),
   updateRequestContent: vi.fn(),
   updateRequestLogStatus: vi.fn(),
   replaceRequestUsage: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('../database/request-log-store', () => ({
   createRequestLog: mocks.createRequestLog,
   createRequestAttempt: mocks.createRequestAttempt,
   createRequestContent: mocks.createRequestContent,
+  createRequestConversion: mocks.createRequestConversion,
   updateRequestContent: mocks.updateRequestContent,
   updateRequestLogStatus: mocks.updateRequestLogStatus,
   replaceRequestUsage: mocks.replaceRequestUsage,
@@ -642,7 +644,7 @@ describe('handleProxyRequest', () => {
     expect(JSON.parse(responseBody)).toEqual({
       success: false,
       errorCode: 'ALL_PROVIDERS_FAILED',
-      errorMessage: '所有上游 Provider 都失败了',
+      errorMessage: '所�?Provider 都失败了',
     })
     expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
       captureStatus: 'captured',
@@ -927,7 +929,7 @@ describe('handleProxyRequest', () => {
     expect(payload.usage).toEqual({ input_tokens: 5, output_tokens: 2 })
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
+      expect.objectContaining({ providerProtocol: 'openai-completions' }),
     )
   })
 
@@ -993,7 +995,7 @@ describe('handleProxyRequest', () => {
     expect(payload.content).toEqual([{ type: 'text', text: 'native' }])
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ upstreamProtocol: null }),
+      expect.objectContaining({ providerProtocol: null }),
     )
   })
 
@@ -1038,7 +1040,7 @@ describe('handleProxyRequest', () => {
     expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
+      expect.objectContaining({ providerProtocol: 'openai-completions' }),
     )
     const requestContent = mocks.createRequestContent.mock.calls.find(([input]) => input.attemptId == null)?.[0]
     expect(requestContent).toEqual(expect.objectContaining({
@@ -1057,12 +1059,11 @@ describe('handleProxyRequest', () => {
       captureStatus: 'captured',
       responseStatus: 200,
     }))
-    expect(JSON.parse(String(attemptContent?.conversions))).toEqual(expect.objectContaining({
-      schemaVersion: 1,
-      fromProtocol: 'anthropic-messages',
-      toProtocol: 'openai-completions',
-      convertedRequestBody: JSON.stringify({ model: 'stream-model', messages: [], max_tokens: 16, stream: true, stream_options: { include_usage: true } }),
-      convertedResponseBody: expect.stringContaining('content_block_delta'),
+    expect(mocks.createRequestConversion).toHaveBeenCalledWith(expect.objectContaining({
+      clientProtocol: 'anthropic-messages',
+      providerProtocol: 'openai-completions',
+      requestBody: expect.stringContaining('stream-model'),
+      responseBody: expect.stringContaining('content_block_delta'),
     }))
     expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({
       schemaVersion: 1,

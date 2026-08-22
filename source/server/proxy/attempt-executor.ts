@@ -8,7 +8,7 @@ import { resolveUpstreamUrl } from './request'
 import { classifyHealthFailure, classifyUpstreamStatus } from './response'
 import { createAuthHeaders } from './auth'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
-import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
+import { createDownstreamHeaders, createProviderRequestHeaders, redactHeaders } from './headers'
 import type { UpstreamStatusDisposition } from './response'
 import { attachResponseIdleTimeout, sendUpstreamRequest } from './transport'
 import { createRequestContext, type RequestContext } from './request-context'
@@ -61,7 +61,7 @@ interface AttemptOutcome {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
-  upstreamProtocol?: Protocol | null
+  providerProtocol?: Protocol | null
   responseStatus?: number
   responseHeaders?: string
   responseBody?: string | null
@@ -117,21 +117,21 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
           cacheCreationInputTokens: outcome.cacheCreationInputTokens ?? null,
           promptCacheHit: outcome.promptCacheHit ?? null,
           rawUsage: outcome.rawUsage ?? null,
-          upstreamProtocol: outcome.upstreamProtocol ?? null,
+          providerProtocol: outcome.providerProtocol ?? null,
         })
         return
       }
     },
     onTerminal: async (target, outcome) => {
         console.log(
-          `[proxy] 请求终止(无重试): ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+          `[proxy] 请求终止(无重�?: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
         )
         await requestLogger.finalizeRequestContent(outcome)
         await requestLogger.finalizeRequestLog('failed', startedAt)
     },
     onRetry: async (target, outcome, attemptIndex) => {
       console.warn(
-        `[proxy] 上游返回可重试状态: ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] 上游返回可重试状�? ${context.method} ${context.path} -> ${target.provider.id}/${target.model.modelName} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
     },
@@ -149,10 +149,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
             path: context.path,
             requestHeaders: context.headers,
             requestBody,
-            upstreamHeaders: {},
-            upstreamBody: Buffer.alloc(0),
+            providerRequestHeaders: {},
+            providerRequestBody: Buffer.alloc(0),
             clientProtocol: protocol,
-            upstreamProtocol: snapshot.providerProtocol,
+            providerProtocol: snapshot.providerProtocol,
             requiresResponseConversion: false,
             captureRequestContent: false,
             hooks: {},
@@ -178,10 +178,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
             path: context.path,
             requestHeaders: context.headers,
             requestBody,
-            upstreamHeaders: {},
-            upstreamBody: Buffer.alloc(0),
+            providerRequestHeaders: {},
+            providerRequestBody: Buffer.alloc(0),
             clientProtocol: protocol,
-            upstreamProtocol: snapshot.providerProtocol,
+            providerProtocol: snapshot.providerProtocol,
             requiresResponseConversion: false,
             captureRequestContent: false,
             hooks: {},
@@ -207,12 +207,12 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
 
       if (!response.headersSent) {
         console.error(
-          `[proxy] 所有上游 Provider 均失败: ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
+          `[proxy] 所�?Provider 均失�? ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
         )
         const responseBody = response.fail(
           502,
           'ALL_PROVIDERS_FAILED',
-          lastError?.message ?? '所有上游 Provider 都失败了',
+          lastError?.message ?? '所�?Provider 都失败了',
         )
         await requestLogger.finalizeLocalErrorContent(502, response.headers(), responseBody)
       }
@@ -229,7 +229,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   const nativeEndpoint = findEndpoint(model, protocol)
   const convertibleEndpoint = nativeEndpoint ? undefined : findConvertibleEndpoint(model, protocol)
   const endpoint = nativeEndpoint ?? convertibleEndpoint
-  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协议 ${protocol}`)
+  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协�?${protocol}`)
   const endpointProtocol = endpoint.protocol
 
   const targetUrl = resolveUpstreamUrl(endpoint.upstreamUrl)
@@ -246,15 +246,15 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     signal: controller.signal,
   })
   const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
-  const upstreamBody = adapter.prepareRequest(requestContext, model.modelName)
+  const providerRequestBody = adapter.prepareRequest(requestContext, model.modelName)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
 
-  const headers = createUpstreamHeaders(
+  const headers = createProviderRequestHeaders(
     context.headers,
     createAuthHeaders(endpointProtocol, apiKey, endpoint.customAuthHeader),
-    upstreamBody.length,
+    providerRequestBody.length,
   )
 
   const options: http.RequestOptions = {
@@ -278,11 +278,11 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     path: parsed.pathname + parsed.search,
     requestHeaders: context.headers,
     requestBody,
-    upstreamHeaders: headers,
-    upstreamBody,
+    providerRequestHeaders: headers,
+    providerRequestBody,
     customAuthHeader: endpoint.customAuthHeader,
     clientProtocol: protocol,
-    upstreamProtocol: endpointProtocol,
+    providerProtocol: endpointProtocol,
     requiresResponseConversion: adapter.requiresResponseConversion,
     captureRequestContent: settings.captureRequestContent,
     hooks,
@@ -322,12 +322,12 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       resolve(outcome)
     }
 
-    sendUpstreamRequest(parsed, options, upstreamBody, {
+    sendUpstreamRequest(parsed, options, providerRequestBody, {
       onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
-      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取。
+      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取�?
       let ttftMilliseconds: number | undefined
       let errorResponse = ''
       const upstreamChunks: string[] = []
@@ -348,7 +348,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           const body = errorResponse || null
           const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(body)
           const attempt = await recordAttempt('failed', statusCode, true, `Status_${statusCode}`, `上游返回 ${statusCode}`, resolvedRequestId, body)
-          await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: serializeCapturedBody(isStreaming, upstreamChunks, body) })
+          await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, providerResponseHeaders: upstreamRes.headers, clientResponseHeaders: null, responseBody: serializeCapturedBody(isStreaming, upstreamChunks, body), streaming: isStreaming })
           resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, errorResponse: body })
         })
         upstreamRes.on('error', err => {
@@ -360,8 +360,10 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
               attemptId: attempt?.id ?? null,
               captureStatus: 'partial',
               responseStatus: statusCode,
-              responseHeaders: upstreamRes.headers,
+              providerResponseHeaders: upstreamRes.headers,
+              clientResponseHeaders: null,
               responseBody: serializeCapturedBody(isStreaming, upstreamChunks, errorResponse || null),
+              streaming: isStreaming,
             })
             rejectAttempt(new RecordedAttemptError(err, {
               disposition: 'retry',
@@ -379,7 +381,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
 
       const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
 
-      // 转发响应头
+      // 转发响应�?
       if (!response.headersSent) {
         const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
         if (adapter.requiresResponseConversion) {
@@ -403,7 +405,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       upstreamRes.on('data', chunk => {
         const chunkText = chunk.toString('utf8')
 
-        // 记录 TTFT（第一个数据块到达时间）
+        // 记录 TTFT（第一个数据块到达时间�?
         if (ttftMilliseconds === undefined) {
           ttftMilliseconds = Date.now() - attemptStartedAt
         }
@@ -430,7 +432,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           body,
           pipelineResult.usage,
         )
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, responseHeaders: upstreamRes.headers, responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null })
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, providerResponseHeaders: upstreamRes.headers, clientResponseHeaders: response.headers(), responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null, streaming: isStreaming })
         resolveAttempt({
           disposition,
           statusCode,
@@ -440,7 +442,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           ttftMilliseconds,
           ...pipelineResult.usage,
           promptCacheHit: pipelineResult.usage.cachedInputTokens == null ? null : pipelineResult.usage.cachedInputTokens > 0,
-          upstreamProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
+          providerProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
           responseStatus: statusCode,
           responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
           responseBody: pipelineResult.downstreamBody,
@@ -466,8 +468,10 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
             attemptId: attempt?.id ?? null,
             captureStatus: 'partial',
             responseStatus: statusCode,
-            responseHeaders: upstreamRes.headers,
+            providerResponseHeaders: upstreamRes.headers,
+            clientResponseHeaders: response.headers(),
             responseBody: responsePipeline.partialBody(),
+            streaming: isStreaming,
           })
           rejectAttempt(new RecordedAttemptError(err, {
             disposition,
@@ -538,7 +542,7 @@ function extractRequestIdFromBody(body: string | null): string | null {
       if (typeof value === 'string' && value.trim()) return value.trim()
     }
   } catch {
-    // 非 JSON 错误响应没有可提取的请求 ID。
+    // �?JSON 错误响应没有可提取的请求 ID�?
   }
   return null
 }

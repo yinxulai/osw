@@ -4,6 +4,7 @@ import { isAllowedHost } from '../security/host-validation'
 import { authorizeLocalRequest } from '../management/auth/service'
 import { handleProxyRequest } from './request-entry'
 import type { Server } from 'node:http'
+import { getErrorResponseMessage, isErrorCode, normalizeError } from '../errors'
 
 export interface ProxyServerStatus {
   running: boolean
@@ -46,11 +47,17 @@ export function startProxyServer(options: ProxyServerOptions = {}): Promise<Serv
 
         await handleProxyRequest(req, res, 'default')
       } catch (error) {
-        if (res.headersSent) {
-          res.destroy(error instanceof Error ? error : new Error(String(error)))
+        const normalized = normalizeError(error)
+        if (isErrorCode(normalized, 'CLIENT_REQUEST_ABORTED')) {
+          if (!res.writableEnded) res.destroy()
           return
         }
-        writeJsonError(res, 500, 'PROXY_INTERNAL_ERROR', '代理处理失败')
+        console.error(`[proxy] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} code=${normalized.code} message=${normalized.message}`)
+        if (res.headersSent || res.writableEnded) {
+          res.destroy(normalized)
+          return
+        }
+        writeJsonError(res, normalized.statusCode, normalized.code, getErrorResponseMessage(normalized, '代理处理失败'))
       }
     })
 
@@ -142,6 +149,7 @@ function writeModelsResponse(res: http.ServerResponse): void {
 }
 
 function writeJsonError(res: http.ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
+  if (res.writableEnded) return
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ success: false, errorCode, errorMessage }))

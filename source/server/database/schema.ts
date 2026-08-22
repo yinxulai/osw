@@ -232,6 +232,30 @@ export const requestAttempts = sqliteTable(
   ],
 )
 
+export const requestConversions = sqliteTable(
+  'request_conversions',
+  {
+    id: text('id').primaryKey(),
+    requestId: text('requestId').notNull().references(() => requestLogs.id),
+    attemptId: text('attemptId').notNull().references(() => requestAttempts.id),
+    clientProtocol: text('clientProtocol').notNull(),
+    providerProtocol: text('providerProtocol').notNull(),
+    clientRequestHeaders: text('clientRequestHeaders'),
+    providerRequestHeaders: text('providerRequestHeaders'),
+    providerResponseHeaders: text('providerResponseHeaders'),
+    clientResponseHeaders: text('clientResponseHeaders'),
+    requestBody: text('requestBody'),
+    responseBody: text('responseBody'),
+    streaming: integer('streaming', { mode: 'boolean' }).notNull().default(false),
+    durationMilliseconds: integer('durationMilliseconds').notNull(),
+    createdTime: integer('createdTime').notNull(),
+  },
+  table => [
+    uniqueIndex('idx_request_conversions_attempt').on(table.attemptId),
+    index('idx_request_conversions_request').on(table.requestId),
+  ],
+)
+
 export const requestContents = sqliteTable(
   'request_contents',
   {
@@ -246,7 +270,7 @@ export const requestContents = sqliteTable(
     responseStatus: integer('responseStatus'),
     responseHeaders: text('responseHeaders'),
     responseBody: text('responseBody'),
-    conversions: text('conversions'),
+
     createdTime: integer('createdTime').notNull(),
     updatedTime: integer('updatedTime').notNull(),
   },
@@ -272,3 +296,4 @@ export type RequestMetricRow = typeof requestMetrics.$inferSelect
 export type RequestUsageRow = typeof requestUsages.$inferSelect
 export type RequestAttemptRow = typeof requestAttempts.$inferSelect
 export type RequestContentRow = typeof requestContents.$inferSelect
+export type RequestConversionRow = typeof requestConversions.$inferSelect

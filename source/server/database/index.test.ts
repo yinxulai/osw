@@ -74,7 +74,7 @@ describe('database lifecycle', () => {
       'provider_models', 'provider_settings', 'provider_endpoints',
       'provider_model_endpoints', 'protocol_converters', 'logical_models',
       'scheduling_policies', 'request_logs', 'request_metrics', 'request_usages',
-      'request_attempts', 'request_contents',
+      'request_attempts', 'request_contents', 'request_conversions',
     ]
     const tables = client
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

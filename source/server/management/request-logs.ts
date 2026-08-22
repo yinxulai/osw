@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestLogs, pruneRequestLogsBefore } from '../database/request-log-store'
+import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '../database/request-log-store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,
@@ -29,14 +29,15 @@ async function handleRequestLogDetail(_req: IncomingMessage, res: ServerResponse
   const { id } = RequestLogDetailSchema.parse(body ?? {})
   const log = await getRequestLog(id)
   if (!log) {
-    sendError(res, 'RESOURCE_NOT_FOUND', `请求日志不存在: ${id}`, 404)
+    sendError(res, 'RESOURCE_NOT_FOUND', `请求日志不存�? ${id}`, 404)
     return
   }
-  const [entry, contents] = await Promise.all([
+  const [entry, contents, conversions] = await Promise.all([
     mapRequestLogEntry(log),
     listRequestContents(id),
+    listRequestConversions(id),
   ])
-  sendSuccess(res, { ...entry, contents })
+  sendSuccess(res, { ...entry, contents, conversions })
 }
 
 async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
@@ -66,7 +67,7 @@ async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
         id: log.id,
         logicalModelId: log.logicalModelId,
         protocol: log.protocol,
-        upstreamProtocol: log.upstreamProtocol,
+        providerProtocol: log.providerProtocol,
         status: log.status,
         totalDurationMilliseconds: log.totalDurationMilliseconds,
         totalTokens: log.totalTokens,

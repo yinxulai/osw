@@ -4,12 +4,13 @@ import type {
   RequestAttempt,
   RequestContent,
   RequestContentCaptureStatus,
+  RequestConversion,
   RequestLog,
   RequestStatus,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
-import { requestAttempts, requestContents, requestLogs, requestMetrics, requestUsages } from './schema'
+import { requestAttempts, requestContents, requestConversions, requestLogs, requestMetrics, requestUsages } from './schema'
 
 type RequestLogUpdate = import('@common/schemas').RequestLogUpdate
 type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
@@ -58,7 +59,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     id,
     logicalModelId: input.logicalModelId,
     protocol: input.protocol,
-    upstreamProtocol: input.upstreamProtocol ?? null,
+    providerProtocol: input.providerProtocol ?? null,
     status: input.status,
     totalDurationMilliseconds: input.totalDurationMilliseconds,
     totalTokens: input.totalTokens ?? null,
@@ -185,7 +186,7 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
 }
 
 type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime'>
-type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody' | 'conversions'>>
+type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
 
 export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
   const id = generateId('content_')
@@ -200,6 +201,18 @@ export async function updateRequestContent(id: string, input: UpdateRequestConte
 
 export async function listRequestContents(requestId: string): Promise<RequestContent[]> {
   return getDb().select().from(requestContents).where(eq(requestContents.requestId, requestId)).orderBy(requestContents.createdTime).all().map(mapRequestContent)
+}
+
+export type CreateRequestConversionInput = Omit<RequestConversion, 'id' | 'createdTime'>
+
+export async function createRequestConversion(input: CreateRequestConversionInput): Promise<RequestConversion> {
+  const conversion = { id: generateId('conversion_'), ...input, createdTime: now() }
+  getDb().insert(requestConversions).values(conversion).run()
+  return conversion
+}
+
+export async function listRequestConversions(requestId: string): Promise<RequestConversion[]> {
+  return getDb().select().from(requestConversions).where(eq(requestConversions.requestId, requestId)).orderBy(requestConversions.createdTime).all().map(mapRequestConversion)
 }
 
 export async function listAttemptsByRequest(requestId: string): Promise<RequestAttempt[]> {
@@ -227,6 +240,7 @@ function pruneRequestLogsInternal(retentionDays: number): number {
     transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
     transaction.delete(requestUsages).where(inArray(requestUsages.requestId, staleIds)).run()
     transaction.delete(requestMetrics).where(inArray(requestMetrics.requestId, staleIds)).run()
+    transaction.delete(requestConversions).where(inArray(requestConversions.requestId, staleIds)).run()
     transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
     transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()
     return staleIds.length
@@ -256,7 +270,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     id: row.id,
     logicalModelId: row.logicalModelId,
     protocol: row.protocol as RequestLog['protocol'],
-    upstreamProtocol: null,
+    providerProtocol: null,
     status: row.status as RequestStatus,
     totalDurationMilliseconds: Number(metricValue('durationMilliseconds') ?? 0),
     totalTokens: usageValue('totalTokens'),
@@ -295,6 +309,25 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
   }
 }
 
+function mapRequestConversion(row: typeof requestConversions.$inferSelect): RequestConversion {
+  return {
+    id: row.id,
+    requestId: row.requestId,
+    attemptId: row.attemptId,
+    clientProtocol: row.clientProtocol as RequestConversion['clientProtocol'],
+    providerProtocol: row.providerProtocol as RequestConversion['providerProtocol'],
+    clientRequestHeaders: row.clientRequestHeaders,
+    providerRequestHeaders: row.providerRequestHeaders,
+    providerResponseHeaders: row.providerResponseHeaders,
+    clientResponseHeaders: row.clientResponseHeaders,
+    requestBody: row.requestBody,
+    responseBody: row.responseBody,
+    streaming: row.streaming,
+    durationMilliseconds: row.durationMilliseconds,
+    createdTime: Number(row.createdTime),
+  }
+}
+
 function mapRequestContent(row: typeof requestContents.$inferSelect): RequestContent {
   return {
     id: row.id,
@@ -308,7 +341,6 @@ function mapRequestContent(row: typeof requestContents.$inferSelect): RequestCon
     responseStatus: row.responseStatus,
     responseHeaders: row.responseHeaders,
     responseBody: row.responseBody,
-    conversions: row.conversions,
     createdTime: row.createdTime,
     updatedTime: row.updatedTime,
   }

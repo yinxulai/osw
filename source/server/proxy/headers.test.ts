@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDownstreamHeaders, createUpstreamHeaders, redactHeaders } from './headers'
+import { createDownstreamHeaders, createProviderRequestHeaders, redactHeaders } from './headers'
 
 describe('proxy headers', () => {
   it('redacts credentials and cookies before persistence', () => {
@@ -26,7 +26,7 @@ describe('proxy headers', () => {
   })
 
   it('preserves end-to-end request headers and replaces authentication', () => {
-    const result = createUpstreamHeaders({
+    const result = createProviderRequestHeaders({
       accept: 'text/event-stream',
       'content-type': 'application/json',
       'x-goog-user-project': 'billing-project',

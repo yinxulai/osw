@@ -5,6 +5,7 @@ import { getSettings } from '../database/settings-store'
 import {
   createRequestAttempt,
   createRequestContent,
+  createRequestConversion,
   createRequestLog,
   pruneRequestLogs,
   replaceRequestUsage,
@@ -33,7 +34,7 @@ export interface RequestLogMetrics {
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
-  upstreamProtocol?: Protocol | null
+  providerProtocol?: Protocol | null
 }
 
 export interface RequestLogOutcome {
@@ -65,9 +66,11 @@ export interface AttemptContentInput {
   attemptId: string | null
   captureStatus: 'captured' | 'partial'
   responseStatus: number | null
-  responseHeaders: IncomingHttpHeaders | null
+  providerResponseHeaders: IncomingHttpHeaders | null
+  clientResponseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders | null
   responseBody: string | null
   convertedResponseBody?: string | null
+  streaming?: boolean
 }
 
 export interface AttemptLoggingInput {
@@ -79,11 +82,11 @@ export interface AttemptLoggingInput {
   path: string
   requestHeaders: http.IncomingHttpHeaders
   requestBody: Buffer
-  upstreamHeaders: http.OutgoingHttpHeaders
-  upstreamBody: Buffer
+  providerRequestHeaders: http.OutgoingHttpHeaders
+  providerRequestBody: Buffer
   customAuthHeader?: string | null
   clientProtocol: Protocol
-  upstreamProtocol: Protocol
+  providerProtocol: Protocol
   requiresResponseConversion: boolean
   captureRequestContent: boolean
   hooks: ProxyObservationHooks
@@ -105,7 +108,7 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
       id: input.requestId,
       logicalModelId: input.logicalModelId,
       protocol: input.protocol,
-      upstreamProtocol: null,
+      providerProtocol: null,
       status: 'pending',
       totalDurationMilliseconds: 0,
       totalTokens: null,
@@ -130,7 +133,6 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
         responseStatus: null,
         responseHeaders: null,
         responseBody: null,
-        conversions: null,
       })
       requestContentId = content.id
     }
@@ -158,7 +160,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
           promptCacheHit: metrics.promptCacheHit ?? null,
           rawUsage: metrics.rawUsage ?? null,
           ttftMilliseconds: metrics.ttftMilliseconds ?? null,
-          upstreamProtocol: metrics.upstreamProtocol ?? null,
+          providerProtocol: metrics.providerProtocol ?? null,
         } : {}),
       })
       const settings = await getSettings()
@@ -262,19 +264,28 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         captureStatus: content.captureStatus,
         requestMethod: input.method,
         requestPath: input.path,
-        requestHeaders: JSON.stringify(redactHeaders(input.upstreamHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
-        requestBody: input.upstreamBody.toString('utf8'),
+        requestHeaders: JSON.stringify(redactHeaders(input.providerRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
+        requestBody: input.providerRequestBody.toString('utf8'),
         responseStatus: content.responseStatus,
-        responseHeaders: content.responseHeaders ? JSON.stringify(redactHeaders(content.responseHeaders)) : null,
+        responseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
         responseBody: content.responseBody,
-        conversions: input.requiresResponseConversion ? JSON.stringify({
-          schemaVersion: 1,
-          fromProtocol: input.clientProtocol,
-          toProtocol: input.upstreamProtocol,
-          convertedRequestBody: input.upstreamBody.toString('utf8'),
-          convertedResponseBody: content.convertedResponseBody ?? null,
-        }) : null,
       })
+      if (input.requiresResponseConversion && content.attemptId) {
+        await createRequestConversion({
+          requestId: input.requestId,
+          attemptId: content.attemptId,
+          clientProtocol: input.clientProtocol,
+          providerProtocol: input.providerProtocol,
+          clientRequestHeaders: JSON.stringify(redactHeaders(input.requestHeaders)),
+          providerRequestHeaders: JSON.stringify(redactHeaders(input.providerRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
+          providerResponseHeaders: content.providerResponseHeaders ? JSON.stringify(redactHeaders(content.providerResponseHeaders)) : null,
+          clientResponseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
+          requestBody: input.providerRequestBody.toString('utf8'),
+          responseBody: content.convertedResponseBody ?? null,
+          streaming: content.streaming ?? false,
+          durationMilliseconds: Date.now() - input.startedAt,
+        })
+      }
       await input.hooks.onContentCaptured?.({
         requestId: input.requestId,
         attemptId: content.attemptId,

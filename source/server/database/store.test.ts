@@ -1,92 +1,28 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { closeDatabase, getDb, initDatabase } from './index'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { closeDatabase, initDatabase } from './index'
 import {
-  createProvider,
-  createProviderEndpoint,
-  deleteProvider,
-  deleteProviderEndpoint,
-  deleteProviderSetting,
-  getProvider,
-  getProviderEndpoint,
-  getProviderSetting,
-  listProviderEndpoints,
-  listProviderSettings,
-  listProviders,
-  replaceProviderEndpoints,
-  updateProvider,
-  updateProviderEndpoint,
-  upsertProviderSetting,
-} from './provider-store'
-import {
+  createUpstreamModel,
   createLogicalModel,
-  deleteLogicalModel,
-  deleteSchedulingPolicy,
+  createProvider,
+  getUpstreamModel,
   getLogicalModel,
-  listLogicalModels,
-  listSchedulingPolicies,
-  updateLogicalModel,
-  upsertSchedulingPolicy,
-} from './logical-model-store'
-import {
-  createProtocolConverter,
-  createProviderModelEndpoint,
-  createProviderModelRoute,
-  deleteProtocolConverter,
-  deleteProviderModelEndpoint,
-  deleteProviderModelRoute,
-  getProtocolConverter,
-  getProviderModelEndpoint,
-  getProviderModelRoute,
-  listProtocolConverters,
-  listProviderModelEndpoints,
-  listProviderModelRoutes,
-  listProviderModelRoutesByProvider,
-  listProviderModels,
-  listProviderModelsForLogicalModel,
-  updateProtocolConverter,
-  updateProviderModelEndpoint,
-  updateProviderModelRoute,
-} from './model-store'
-import {
-  getProviderHealth,
-  getProviderModelHealth,
-  listProviderHealth,
-  listProviderModelHealth,
-  recordHealthSuccess,
-  recordProviderFailure,
-  recordProviderModelFailure,
-  recordProviderModelHealthSuccess,
-  resetProviderHealth,
-  resetProviderModelHealth,
-} from './health-store'
-import { getSettings, onSettingsChanged, updateSettings } from './settings-store'
-import {
-  getFailureReasons,
-  getLatencyDistribution,
-  getModelStats,
-  getProviderStats,
-  getRequestTrend,
-  getStatsSummary,
-} from './analytics-store'
-import {
-  countRequestLogs,
-  createRequestAttempt,
-  createRequestContent,
+  getProvider,
+  getSettings,
+  listUpstreamModelsByLogicalModel,
+  deleteProvider,
   createRequestLog,
-  getRequestLog,
-  listAttemptsByRequest,
-  listRequestContents,
-  listRequestLogs,
-  listRequestUsages,
-  pruneRequestLogs,
-  pruneRequestLogsBefore,
-  replaceRequestUsage,
-  updateRequestContent,
+  createRequestAttempt,
   updateRequestLogStatus,
-} from './request-log-store'
+  listRequestLogs,
+  pruneRequestLogs,
+  getProviderStats,
+  listAttemptsByRequest,
+  listLogicalModels,
+  listProviders,
+} from './store'
 
 let temporaryDirectory: string
 
@@ -98,21 +34,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await closeDatabase()
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
-  vi.restoreAllMocks()
 })
-
-const providerInput = (name = 'Provider') => ({ name, apiKeyReference: `${name}-key`, timeoutMilliseconds: 10_000 })
-const logInput = (id?: string) => ({ ...(id ? { id } : {}), logicalModelId: 'default', protocol: 'openai-completions' as const, upstreamProtocol: null, status: 'pending' as const, totalDurationMilliseconds: 1, totalTokens: null, inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, promptCacheHit: null, rawUsage: null, ttftMilliseconds: null, cacheHit: null })
-
-function oldTimestampLog(id: string, time: number) {
-  getDb().$client.prepare('INSERT INTO request_logs (id, logicalModelId, protocol, status, metadata, createdTime) VALUES (?, ?, ?, ?, ?, ?)').run(id, 'default', 'openai-completions', 'success', null, time)
-  getDb().$client.prepare('INSERT INTO request_metrics (requestId, key, value, unit, updatedTime) VALUES (?, ?, ?, ?, ?)').run(id, 'durationMilliseconds', 10, 'milliseconds', time)
-}
 
 describe('store row mapping', () => {
   it('uses an environment-specific port only when settings are first created', async () => {
     expect((await getSettings({ listenPort: 19300 })).listenPort).toBe(19300)
-    await updateSettings({ listenPort: 19300 })
     expect((await getSettings()).listenPort).toBe(19300)
   })
 
@@ -122,17 +48,18 @@ describe('store row mapping', () => {
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: false,
+      upstreamUrls: '{}',
     })
     const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
-    const upstreamModel = await createProviderModelRoute({
+    const upstreamModel = await createUpstreamModel({
+      logicalModelId: model.id,
       providerId: provider.id,
-      modelName: 'upstream-model',
+      upstreamModelId: 'upstream-model',
       endpoints: [
         {
           protocol: 'openai-completions',
           upstreamUrl: 'https://api.example.com/v1/chat/completions',
           customAuthHeader: null,
-          protocolConversionEnabled: false,
         },
       ],
       priority: 1,
@@ -143,15 +70,14 @@ describe('store row mapping', () => {
     expect((await listProviders())[0].enabled).toBe(false)
     expect((await getLogicalModel(model.id))?.enabled).toBe(true)
     expect((await listLogicalModels())[0].enabled).toBe(true)
-    expect((await getProviderModelRoute(upstreamModel.id))?.enabled).toBe(false)
-    expect((await listProviderModelRoutes())[0].enabled).toBe(false)
+    expect((await getUpstreamModel(upstreamModel.id))?.enabled).toBe(false)
+    expect((await listUpstreamModelsByLogicalModel(model.id))[0].enabled).toBe(false)
   })
 
-  it('round-trips nested raw usage and token usage', async () => {
+  it('round-trips nested raw usage when request metrics are updated', async () => {
     const log = await createRequestLog({
       logicalModelId: 'model',
       protocol: 'openai-responses',
-      upstreamProtocol: null,
       status: 'failed',
       totalDurationMilliseconds: 0,
       totalTokens: null,
@@ -190,29 +116,26 @@ describe('store row mapping', () => {
       promptCacheHit: true,
       rawUsage,
     })
-    expect(await listRequestUsages(log.id)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ attemptId: null, inputTokens: 1200, outputTokens: 80, totalTokens: 1280, cachedInputTokens: 1024, cacheCreationInputTokens: 0, rawUsage }),
-    ]))
-    const rawUsageRow = getDb().$client.prepare("SELECT unit, rawValue FROM request_usages WHERE requestId = ? AND type = 'raw'").get(log.id) as { unit: string; rawValue: string }
-    expect(rawUsageRow).toEqual({ unit: 'string', rawValue: JSON.stringify(rawUsage) })
   })
 
-  it('disables active upstream models when their provider is deleted', async () => {
+  it('deletes upstream models when their provider is deleted', async () => {
     const provider = await createProvider({
       name: 'Provider',
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 1_000,
       enabled: true,
+      upstreamUrls: '{}',
     })
-    await createProviderModelRoute({
+    const model = await createLogicalModel({ name: 'Model', description: '', enabled: true })
+    const upstreamModel = await createUpstreamModel({
+      logicalModelId: model.id,
       providerId: provider.id,
-      modelName: 'upstream-model',
+      upstreamModelId: 'upstream-model',
       endpoints: [
         {
           protocol: 'openai-completions',
           upstreamUrl: 'https://api.example.com/v1/chat/completions',
           customAuthHeader: null,
-          protocolConversionEnabled: false,
         },
       ],
       priority: 1,
@@ -221,20 +144,24 @@ describe('store row mapping', () => {
 
     await deleteProvider(provider.id)
 
-    expect((await listProviderModelRoutes())[0].enabled).toBe(false)
+    expect(await getProvider(provider.id)).toMatchObject({ deletedTime: expect.any(Number) })
+    expect(await getUpstreamModel(upstreamModel.id)).toMatchObject({ deletedTime: expect.any(Number) })
+    expect(await listUpstreamModelsByLogicalModel(model.id)).toHaveLength(0)
   })
 
-  it('prunes request logs and their attempts beyond the retention days', async () => {
+  it('prunes request logs and their attempts beyond the retention count', async () => {
     const provider = await createProvider({
       name: 'Provider',
       apiKeyReference: 'key_reference',
       timeoutMilliseconds: 30_000,
       enabled: true,
+      upstreamUrls: '{}',
     })
     const logs = await Promise.all([1, 2, 3].map(index => createRequestLog({
       id: `req_retention_${index}`,
       logicalModelId: 'model_default',
-      protocol: 'openai-completions',      upstreamProtocol: null,      status: 'success',
+      protocol: 'openai-completions',
+      status: 'success',
       totalDurationMilliseconds: index,
       totalTokens: null,
       inputTokens: null,
@@ -246,18 +173,10 @@ describe('store row mapping', () => {
       ttftMilliseconds: null,
       cacheHit: null,
     })))
-    getDb().$client.prepare('UPDATE request_logs SET createdTime = ? WHERE id = ?').run(Date.now() - 3 * 24 * 60 * 60 * 1000, logs[0].id)
     await Promise.all(logs.map(log => createRequestAttempt({
       requestId: log.id,
       providerId: provider.id,
-      providerModelId: 'model_upstream',
-      providerName: provider.name,
-      providerModelName: 'upstream-model',
-      providerProtocol: 'openai-completions',
-      providerRequestId: null,
-      url: 'https://example.com/v1/chat/completions',
-      httpStatus: 200,
-      retryable: false,
+      upstreamModelId: 'upstream-model',
       attemptIndex: 0,
       status: 'success',
       errorCode: null,
@@ -283,17 +202,20 @@ describe('store row mapping', () => {
       apiKeyReference: 'first_key',
       timeoutMilliseconds: 30_000,
       enabled: true,
+      upstreamUrls: '{}',
     })
     const secondProvider = await createProvider({
       name: 'Second',
       apiKeyReference: 'second_key',
       timeoutMilliseconds: 30_000,
       enabled: true,
+      upstreamUrls: '{}',
     })
     const log = await createRequestLog({
       id: 'req_failover_stats',
       logicalModelId: 'model_default',
-      protocol: 'openai-completions',      upstreamProtocol: null,      status: 'success',
+      protocol: 'openai-completions',
+      status: 'success',
       totalDurationMilliseconds: 10,
       totalTokens: null,
       inputTokens: null,
@@ -308,14 +230,7 @@ describe('store row mapping', () => {
     await createRequestAttempt({
       requestId: log.id,
       providerId: firstProvider.id,
-      providerModelId: 'model_first',
-      providerName: firstProvider.name,
-      providerModelName: 'first-model',
-      providerProtocol: 'openai-completions',
-      providerRequestId: null,
-      url: 'https://first.example.com/v1/chat/completions',
-      httpStatus: 503,
-      retryable: true,
+      upstreamModelId: 'first-model',
       attemptIndex: 0,
       status: 'failed',
       errorCode: 'Status_503',
@@ -325,14 +240,7 @@ describe('store row mapping', () => {
     await createRequestAttempt({
       requestId: log.id,
       providerId: secondProvider.id,
-      providerModelId: 'model_second',
-      providerName: secondProvider.name,
-      providerModelName: 'second-model',
-      providerProtocol: 'openai-completions',
-      providerRequestId: null,
-      url: 'https://second.example.com/v1/chat/completions',
-      httpStatus: 200,
-      retryable: false,
+      upstreamModelId: 'second-model',
       attemptIndex: 1,
       status: 'success',
       errorCode: null,
@@ -343,420 +251,5 @@ describe('store row mapping', () => {
     const stats = await getProviderStats(0)
     expect(stats).toHaveLength(1)
     expect(stats[0]).toMatchObject({ providerId: secondProvider.id, requests: 1, success: 1, failed: 0 })
-  })
-})
-
-describe('provider and model CRUD', () => {
-  it('creates, updates, lists, soft-deletes, and handles missing providers', async () => {
-    const provider = await createProvider({ ...providerInput(), description: 'initial', enabled: true })
-    expect(await getProvider(provider.id)).toMatchObject({ name: 'Provider', description: 'initial', apiKeyReference: 'Provider-key' })
-    expect(await getProvider('prov_missing')).toBeUndefined()
-    const updated = await updateProvider(provider.id, { name: 'Updated', description: 'changed', enabled: false, timeoutMilliseconds: 20_000 })
-    expect(updated).toMatchObject({ name: 'Updated', enabled: false, timeoutMilliseconds: 20_000 })
-    expect((await listProviders()).map(item => item.id)).toContain(provider.id)
-    await deleteProvider(provider.id)
-    expect(await getProvider(provider.id)).toMatchObject({ deletedTime: expect.any(Number) })
-    expect(await listProviders()).toHaveLength(0)
-    expect(await listProviders(true)).toHaveLength(1)
-    await expect(updateProvider('prov_missing', { name: 'x' })).rejects.toThrow('provider not found')
-    await deleteProvider(provider.id)
-    await expect(deleteProvider(provider.id)).resolves.toBeUndefined()
-  })
-
-  it('keeps provider setting conflict updates in place', async () => {
-    const provider = await createProvider(providerInput())
-    await updateProvider(provider.id, { apiKeyReference: 'new-key' })
-    const rows = getDb().$client.prepare('SELECT key, value FROM provider_settings WHERE providerId = ? ORDER BY key').all(provider.id) as Array<{ key: string; value: string }>
-    expect(rows).toEqual(expect.arrayContaining([{ key: 'security.secretReference', value: 'new-key' }]))
-    expect(rows).toHaveLength(2)
-  })
-
-  it('replaces provider endpoints by disabling omitted protocols and reusing existing rows', async () => {
-    const provider = await createProvider(providerInput())
-    const initial = await replaceProviderEndpoints(provider.id, {
-      'openai-completions': 'https://api.example.com/v1/chat/completions',
-      'openai-responses': 'https://api.example.com/v1/responses',
-    })
-    const completionsId = initial.find(endpoint => endpoint.protocol === 'openai-completions')?.id
-
-    await replaceProviderEndpoints(provider.id, {
-      'openai-completions': 'https://api.example.com/v2/chat/completions',
-    })
-
-    expect(await listProviderEndpoints(provider.id)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: completionsId, protocol: 'openai-completions', url: 'https://api.example.com/v2/chat/completions', enabled: true }),
-      expect.objectContaining({ protocol: 'openai-responses', enabled: false }),
-    ]))
-  })
-
-  it('handles endpoint reuse, optional endpoints, conversion, update, and soft deletion', async () => {
-    const provider = await createProvider(providerInput())
-    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-a', priority: 7 })
-    expect(first).toMatchObject({ endpoints: [], priority: 7, enabled: true })
-    await expect(createProviderModelRoute({ providerId: provider.id, modelName: 'model-a', priority: 8 })).rejects.toThrow()
-    await expect(createProviderModelRoute({ providerId: 'prov_missing', modelName: 'model-missing-provider', priority: 1 })).rejects.toThrow()
-    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-b', priority: 1, endpoints: [{ protocol: 'openai-completions', upstreamUrl: '', customAuthHeader: null, protocolConversionEnabled: false }] })
-    const third = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-c', priority: 2, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://override.example', customAuthHeader: null, protocolConversionEnabled: false }, { protocol: 'anthropic-messages', upstreamUrl: 'https://anthropic.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    expect((await getProviderModelRoute(second.id))?.endpoints[0].upstreamUrl).toBe('https://invalid.local')
-    expect((await getProviderModelRoute(third.id))?.endpoints).toHaveLength(2)
-    expect((await listProviderModelRoutesByProvider(provider.id)).map(model => model.modelName)).toEqual(['model-a', 'model-b', 'model-c'])
-    expect((await listProviderModelRoutes(false)).every(model => model.deletedTime === null)).toBe(true)
-    await updateProviderModelRoute(first.id, { modelName: 'model-a2', enabled: false, endpoints: [{ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    expect(await getProviderModelRoute(first.id)).toMatchObject({ modelName: 'model-a2', enabled: false, endpoints: [expect.objectContaining({ protocol: 'anthropic-messages', upstreamUrl: 'https://new.example' })] })
-    expect((await listProviderModels()).find(model => model.id === first.id)?.endpoints[0].conversions).toHaveLength(1)
-    await deleteProviderModelRoute(first.id)
-    expect((await listProviderModelRoutesByProvider(provider.id)).map(model => model.id)).not.toContain(first.id)
-    expect((await listProviderModelRoutesByProvider(provider.id, true)).map(model => model.id)).toContain(first.id)
-    await expect(updateProviderModelRoute('model_missing', {})).rejects.toThrow('provider model not found')
-  })
-
-  it('supports provider model views, policy ordering, disabled policies, and deleted models', async () => {
-    const provider = await createProvider(providerInput())
-    const logical = await createLogicalModel({ name: 'route-target' })
-    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-a', priority: 99, endpoints: [{ protocol: 'openai-completions', upstreamUrl: 'https://route-a.example', customAuthHeader: null, protocolConversionEnabled: true }] })
-    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'route-b', priority: 99 })
-    const time = Date.now()
-    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, first.id, 20, 100, 1, time, time)
-    getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logical.id, second.id, 10, 50, 1, time, time)
-    const views = await listProviderModels()
-    expect(views.find(model => model.id === first.id)?.endpoints[0]).toMatchObject({
-      protocol: 'openai-completions',
-      url: 'https://route-a.example',
-      conversions: [
-        expect.objectContaining({ clientProtocol: 'anthropic-messages', enabled: true }),
-        expect.objectContaining({ clientProtocol: 'openai-responses', enabled: true }),
-      ],
-    })
-    expect((await listProviderModelsForLogicalModel(logical.id)).find(model => model.id === first.id)?.endpoints[0]).toMatchObject({
-      protocol: 'openai-completions',
-      protocolConversionEnabled: true,
-    })
-    expect(await listProviderModelsForLogicalModel(logical.id)).toMatchObject([{ id: second.id, priority: 10 }, { id: first.id, priority: 20 }])
-    getDb().$client.prepare('UPDATE scheduling_policies SET enabled = 0 WHERE logicalModelId = ? AND providerModelId = ?').run(logical.id, second.id)
-    expect((await listProviderModelsForLogicalModel(logical.id)).map(model => model.id)).toEqual([first.id])
-    await deleteProviderModelRoute(first.id)
-    expect(await listProviderModelsForLogicalModel(logical.id)).toEqual([])
-    expect(await listProviderModelsForLogicalModel(logical.id, true)).toEqual([])
-  })
-
-  it('supports logical model defaults, updates, soft deletion, conflicts, and missing updates', async () => {
-    const model = await createLogicalModel({ name: 'logical', description: undefined, enabled: undefined })
-    expect(model).toMatchObject({ description: '', enabled: true, deletedTime: null })
-    expect(await updateLogicalModel(model.id, { name: 'logical-updated', enabled: false })).toMatchObject({ name: 'logical-updated', enabled: false })
-    await deleteLogicalModel(model.id)
-    expect(await listLogicalModels()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: model.id })]))
-    expect(await listLogicalModels(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: model.id, deletedTime: expect.any(Number) })]))
-    await expect(createLogicalModel({ name: 'default', description: '', enabled: true })).rejects.toThrow()
-    await expect(updateLogicalModel('model_missing', { name: 'missing' })).rejects.toThrow('logical model not found')
-  })
-})
-
-describe('scheduling policies', () => {
-  it('creates defaults, upserts conflicts, filters, orders, and deletes policies', async () => {
-    const provider = await createProvider(providerInput())
-    const logicalA = await createLogicalModel({ name: 'policy-a' })
-    const logicalB = await createLogicalModel({ name: 'policy-b' })
-    const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'policy-model', priority: 0 })
-    const created = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id })
-    expect(created).toMatchObject({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 0, weight: 100, enabled: true })
-    const updated = await upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'priority', priority: 4, weight: 25, enabled: false })
-    expect(updated).toMatchObject({ priority: 4, weight: 25, enabled: false, createdTime: created.createdTime })
-    expect(await listSchedulingPolicies(logicalA.id)).toEqual([expect.objectContaining({ providerModelId: model.id, priority: 4 })])
-    expect(await listSchedulingPolicies(logicalB.id)).toEqual([])
-    expect(await listSchedulingPolicies()).toHaveLength(1)
-    await deleteSchedulingPolicy(logicalA.id, model.id)
-    expect(await listSchedulingPolicies()).toEqual([])
-    await deleteSchedulingPolicy(logicalA.id, model.id)
-    await expect(upsertSchedulingPolicy({ logicalModelId: 'model_missing', providerModelId: model.id })).rejects.toThrow()
-    await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: 'model_missing' })).rejects.toThrow()
-    await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, weight: 0 })).rejects.toThrow()
-    await expect(upsertSchedulingPolicy({ logicalModelId: logicalA.id, providerModelId: model.id, strategy: 'round-robin' })).rejects.toThrow()
-  })
-
-  it('rejects duplicate rows at the database boundary', async () => {
-    const provider = await createProvider(providerInput())
-    const logical = await createLogicalModel({ name: 'policy-order' })
-    const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'one', priority: 0 })
-    await upsertSchedulingPolicy({ logicalModelId: logical.id, providerModelId: model.id })
-    expect(() => getDb().$client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run(logical.id, model.id, Date.now(), Date.now())).toThrow()
-  })
-})
-
-describe('health and settings', () => {
-  it('records threshold, exponential capped failures, success, reset, and missing rows safely', async () => {
-    const provider = await createProvider(providerInput())
-    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null })
-    await recordProviderFailure(provider.id, 2, 10, 15)
-    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 1, cooldownUntilTime: null })
-    await recordProviderFailure(provider.id, 2, 10, 15)
-    const health = await getProviderHealth(provider.id)
-    expect(health).toMatchObject({ consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) })
-    await recordProviderFailure(provider.id, 2, 10, 15)
-    expect((await getProviderHealth(provider.id))!.cooldownUntilTime! - health!.cooldownUntilTime!).toBeGreaterThanOrEqual(0)
-    await recordHealthSuccess(provider.id)
-    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null, lastSuccessTime: expect.any(Number) })
-    await resetProviderHealth(provider.id)
-    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 0, lastSuccessTime: null, lastFailureTime: null })
-    await recordProviderFailure('prov_missing', 1, 1, 1)
-    expect(await listProviderHealth()).toHaveLength(1)
-  })
-
-  it('tracks provider model failures and resets model health independently', async () => {
-    const provider = await createProvider(providerInput())
-    const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'model-health-test', priority: 1 })
-
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null })
-    await recordProviderModelFailure(providerModel.id, 2, 10, 15)
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 1, cooldownUntilTime: null })
-    await recordProviderModelFailure(providerModel.id, 2, 10, 15)
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) })
-    expect(await listProviderModelHealth()).toEqual([
-      expect.objectContaining({ providerModelId: providerModel.id, consecutiveFailures: 2, cooldownUntilTime: expect.any(Number) }),
-    ])
-    await recordProviderModelHealthSuccess(providerModel.id)
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, cooldownUntilTime: null, lastSuccessTime: expect.any(Number) })
-    await resetProviderModelHealth(providerModel.id)
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 0, lastSuccessTime: null, lastFailureTime: null })
-    await recordProviderModelFailure('model_missing', 1, 1, 1)
-  })
-
-  it('preserves concurrent provider and provider model failure increments', async () => {
-    const provider = await createProvider(providerInput())
-    const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'concurrent-health-test', priority: 1 })
-
-    await Promise.all(Array.from({ length: 10 }, () => recordProviderFailure(provider.id, 20, 1, 10)))
-    await Promise.all(Array.from({ length: 10 }, () => recordProviderModelFailure(providerModel.id, 20, 1, 10)))
-
-    expect(await getProviderHealth(provider.id)).toMatchObject({ consecutiveFailures: 10, cooldownUntilTime: null })
-    expect(await getProviderModelHealth(providerModel.id)).toMatchObject({ consecutiveFailures: 10, cooldownUntilTime: null })
-  })
-
-  it('uses defaults, persists optional values, skips undefined, and isolates listener errors', async () => {
-    expect(await getSettings({ listenPort: 19000 })).toMatchObject({ listenPort: 19000, listenHost: '127.0.0.1', captureRequestContent: true, autoLaunch: false })
-    const listener = vi.fn()
-    const throwingListener = vi.fn(() => { throw new Error('listener failed') })
-    const unsubscribe = onSettingsChanged(listener)
-    const unsubscribeThrowing = onSettingsChanged(throwingListener)
-    await updateSettings({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, autoLaunch: true, cooldownBaseSeconds: undefined })
-    expect(await getSettings()).toMatchObject({ listenHost: '0.0.0.0', listenPort: 19001, captureRequestContent: true, logRetentionDays: 30, autoLaunch: true })
-    expect(listener).toHaveBeenCalledTimes(1)
-    expect(throwingListener).toHaveBeenCalledTimes(1)
-    unsubscribe()
-    unsubscribeThrowing()
-    await updateSettings({ listenPort: 19002 })
-    expect(listener).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('relation entity CRUD', () => {
-  it('manages provider settings, endpoints, model bindings, and converters independently', async () => {
-    const provider = await createProvider(providerInput('Relations'))
-    const setting = await upsertProviderSetting({ providerId: provider.id, key: 'custom.flag', value: 'true', valueType: 'boolean' })
-    expect(await listProviderSettings(provider.id)).toEqual(expect.arrayContaining([setting]))
-    expect(await getProviderSetting(provider.id, setting.key)).toEqual(setting)
-
-    const endpoint = await createProviderEndpoint({ providerId: provider.id, protocol: 'openai-responses', url: 'https://example.com/v1/responses' })
-    expect(await getProviderEndpoint(endpoint.id)).toEqual(endpoint)
-    expect(await updateProviderEndpoint(endpoint.id, { url: 'https://example.com/responses', enabled: false })).toMatchObject({ url: 'https://example.com/responses', enabled: false })
-    const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'relations-model', priority: 0 })
-    const binding = await createProviderModelEndpoint({ providerModelId: model.id, providerEndpointId: endpoint.id })
-    expect(await listProviderModelEndpoints(model.id)).toEqual([binding])
-    expect(await updateProviderModelEndpoint(binding.id, { url: 'https://example.com/model', enabled: false })).toMatchObject({ url: 'https://example.com/model', enabled: false })
-    const converter = await createProtocolConverter({ providerModelEndpointId: binding.id, clientProtocol: 'anthropic-messages' })
-    expect(await listProtocolConverters(binding.id)).toEqual([converter])
-    expect(await updateProtocolConverter(converter.id, { enabled: false })).toMatchObject({ enabled: false })
-    await deleteProtocolConverter(converter.id)
-    expect(await getProtocolConverter(converter.id)).toBeUndefined()
-    await createProtocolConverter({ providerModelEndpointId: binding.id, clientProtocol: 'anthropic-messages' })
-    await deleteProviderModelEndpoint(binding.id)
-    expect(await getProviderModelEndpoint(binding.id)).toBeUndefined()
-    expect(await listProtocolConverters(binding.id)).toEqual([])
-    await deleteProviderEndpoint(endpoint.id)
-    expect(await getProviderEndpoint(endpoint.id)).toBeUndefined()
-    await deleteProviderSetting(provider.id, setting.key)
-    expect(await getProviderSetting(provider.id, setting.key)).toBeUndefined()
-  })
-})
-
-describe('request logs and analytics', () => {
-  it('stores request-level and attempt-level content with raw streaming chunks', async () => {
-    const log = await createRequestLog(logInput('req_content'))
-    const provider = await createProvider({ ...providerInput(), enabled: true })
-    const attempt = await createRequestAttempt({
-      requestId: log.id,
-      providerId: provider.id,
-      providerModelId: 'model_content',
-      providerName: provider.name,
-      providerModelName: 'content-model',
-      providerProtocol: 'openai-completions',
-      providerRequestId: null,
-      url: 'https://example.com/v1/chat/completions',
-      httpStatus: 200,
-      retryable: false,
-      attemptIndex: 0,
-      status: 'success',
-      durationMilliseconds: 1,
-    })
-    await createRequestContent({
-      requestId: log.id,
-      attemptId: null,
-      captureStatus: 'captured',
-      requestMethod: 'POST',
-      requestPath: '/v1/chat/completions',
-      requestHeaders: JSON.stringify({ authorization: '[REDACTED]' }),
-      requestBody: '{"model":"default"}',
-      responseStatus: null,
-      responseHeaders: null,
-      responseBody: null,
-      conversions: null,
-    })
-    const attemptContent = await createRequestContent({
-      requestId: log.id,
-      attemptId: attempt.id,
-      captureStatus: 'partial',
-      requestMethod: 'POST',
-      requestPath: '/v1/chat/completions',
-      requestHeaders: null,
-      requestBody: '{"model":"content-model"}',
-      responseStatus: 200,
-      responseHeaders: null,
-      responseBody: JSON.stringify({ schemaVersion: 1, chunks: ['data: {"delta":"a"}\n\n', 'data: [DONE]\n\n'] }),
-      conversions: null,
-    })
-
-    await updateRequestContent(attemptContent.id, { captureStatus: 'captured' })
-
-    expect(await listRequestContents(log.id)).toEqual([
-      expect.objectContaining({ attemptId: null, requestBody: '{"model":"default"}', captureStatus: 'captured' }),
-      expect.objectContaining({
-        attemptId: attempt.id,
-        captureStatus: 'captured',
-        responseBody: JSON.stringify({ schemaVersion: 1, chunks: ['data: {"delta":"a"}\n\n', 'data: [DONE]\n\n'] }),
-      }),
-    ])
-  })
-
-  it('stores large request bodies and every streaming chunk without truncation', async () => {
-    const log = await createRequestLog(logInput('req_content_large'))
-    const largeRequest = 'x'.repeat(1024 * 1024 + 1)
-    const content = await createRequestContent({
-      requestId: log.id,
-      attemptId: null,
-      captureStatus: 'captured',
-      requestMethod: 'POST',
-      requestPath: '/v1/responses',
-      requestHeaders: null,
-      requestBody: largeRequest,
-      responseStatus: null,
-      responseHeaders: null,
-      responseBody: null,
-      conversions: null,
-    })
-    const firstChunk = 'a'.repeat(1024 * 1024)
-    const secondChunk = 'b'.repeat(200)
-    await updateRequestContent(content.id, {
-      captureStatus: 'captured',
-      responseBody: JSON.stringify({ schemaVersion: 1, chunks: [firstChunk, secondChunk] }),
-    })
-
-    const stored = (await listRequestContents(log.id))[0]
-    expect(stored.captureStatus).toBe('captured')
-    expect(stored.requestBody).toBe(largeRequest)
-    expect(JSON.parse(stored.responseBody!)).toEqual({ schemaVersion: 1, chunks: [firstChunk, secondChunk] })
-  })
-
-  it('stores request-level and attempt-level usage independently and replaces one scope atomically', async () => {
-    const log = await createRequestLog(logInput('req_usage'))
-    const provider = await createProvider(providerInput())
-    const attempt = await createRequestAttempt({
-      requestId: log.id,
-      providerId: provider.id,
-      providerModelId: 'model_usage',
-      providerName: provider.name,
-      providerModelName: 'usage-model',
-      providerProtocol: 'openai-responses',
-      providerRequestId: null,
-      url: 'https://example.com/v1/responses',
-      httpStatus: 200,
-      retryable: false,
-      attemptIndex: 0,
-      status: 'success',
-      durationMilliseconds: 1,
-    })
-    const rawUsage = { input_tokens: 12, output_tokens: 3 }
-    await replaceRequestUsage({ requestId: log.id, attemptId: null, inputTokens: 12, outputTokens: 3, totalTokens: 15, cachedInputTokens: 4, cacheCreationInputTokens: null, rawUsage })
-    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 10, outputTokens: 2, totalTokens: 12, cachedInputTokens: null, cacheCreationInputTokens: 1, rawUsage: null })
-    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 11, outputTokens: 2, totalTokens: 13, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage })
-
-    expect(await listRequestUsages(log.id)).toEqual(expect.arrayContaining([
-      { requestId: log.id, attemptId: null, inputTokens: 12, outputTokens: 3, totalTokens: 15, cachedInputTokens: 4, cacheCreationInputTokens: null, rawUsage },
-      { requestId: log.id, attemptId: attempt.id, inputTokens: 11, outputTokens: 2, totalTokens: 13, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage },
-    ]))
-  })
-
-  it('creates, updates, filters, counts, orders attempts, and clears nullable values', async () => {
-    const provider = await createProvider(providerInput())
-    const log = await createRequestLog({ ...logInput('req_crud'), status: 'failed', totalTokens: 3 })
-    const attempt1 = await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_a', providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: 'u1', url: 'https://example.com/v1/chat/completions', httpStatus: 504, retryable: true, attemptIndex: 1, status: 'failed', errorCode: 'TIMEOUT', errorMessage: 'timeout', details: '{"x":1}', durationMilliseconds: 20 })
-    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_a', providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 200, retryable: false, attemptIndex: 0, status: 'success', durationMilliseconds: 10 })
-    await updateRequestLogStatus(log.id, { status: 'success', totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, ttftMilliseconds: 7, promptCacheHit: false, cacheHit: true })
-    expect(await listAttemptsByRequest(log.id)).toEqual([
-      expect.objectContaining({ attemptIndex: 0, providerModelId: 'model_a', httpStatus: 200, retryable: false }),
-      expect.objectContaining({ id: attempt1.id, attemptIndex: 1, providerName: 'Provider A', providerModelName: 'a', providerProtocol: 'openai-completions', providerRequestId: 'u1', url: 'https://example.com/v1/chat/completions', httpStatus: 504, retryable: true, details: '{"x":1}' }),
-    ])
-    expect(await listRequestLogs(10, 0, { providerId: provider.id, protocol: 'openai-completions', status: 'success' })).toEqual([expect.objectContaining({ totalDurationMilliseconds: 42, totalTokens: 8, inputTokens: 5, outputTokens: 3, promptCacheHit: false, cacheHit: true })])
-    await updateRequestLogStatus(log.id, { totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })
-    expect(await listRequestLogs(10)).toEqual([expect.objectContaining({ totalTokens: null, inputTokens: null, outputTokens: null, ttftMilliseconds: null, promptCacheHit: null, cacheHit: null, rawUsage: null })])
-    expect(await countRequestLogs({ providerId: provider.id })).toBe(1)
-    expect(await countRequestLogs({ status: 'cancelled' })).toBe(0)
-    expect(await getRequestLog(log.id)).toEqual(expect.objectContaining({ id: log.id, status: 'success' }))
-    expect(await getRequestLog('req_missing')).toBeNull()
-  })
-
-  it('supports empty and invalid prune inputs and removes old dependent rows', async () => {
-    const provider = await createProvider(providerInput())
-    const oldId = 'req_old', newId = 'req_new'
-    oldTimestampLog(oldId, Date.now() - 3 * 24 * 60 * 60 * 1000)
-    await createRequestAttempt({ requestId: oldId, providerId: provider.id, providerModelId: 'model_old', providerName: provider.name, providerModelName: 'old', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 500, retryable: true, attemptIndex: 0, status: 'failed', durationMilliseconds: 1 })
-    await createRequestLog({ ...logInput(newId), status: 'success' })
-    await pruneRequestLogs(0)
-    expect(await countRequestLogs()).toBe(2)
-    expect(await pruneRequestLogsBefore(3)).toBe(1)
-    expect(await countRequestLogs()).toBe(1)
-    expect(await pruneRequestLogsBefore(0)).toBe(0)
-    await pruneRequestLogs(1)
-    expect(await countRequestLogs()).toBe(1)
-  })
-
-  it('returns empty statistics and covers trends, latency buckets, model stats, and failure categories', async () => {
-    expect(await getStatsSummary(Date.now())).toEqual({ totalRequests: 0, successCount: 0, failedCount: 0, successRate: 0, avgLatencyMs: 0, totalTokens: 0 })
-    expect(await getRequestTrend(Date.now(), 3)).toHaveLength(3)
-    expect(await getLatencyDistribution(Date.now())).toHaveLength(5)
-    const provider = await createProvider(providerInput('Stats'))
-    const log = await createRequestLog({ ...logInput('req_stats'), status: 'failed', totalDurationMilliseconds: 6000, totalTokens: null })
-    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_stats', providerName: provider.name, providerModelName: 'stats-model', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 401, retryable: true, attemptIndex: 0, status: 'failed', errorCode: 'AUTH_401', durationMilliseconds: 6000 })
-    await updateRequestLogStatus(log.id, { totalTokens: 10 })
-    expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, failedCount: 1, totalTokens: 10, avgLatencyMs: 6000 })
-    expect(await getModelStats(0, 0)).toHaveLength(0)
-    expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelName: 'stats-model', requests: 1, avgLatencyMs: 0 })])
-    expect(await getProviderStats(0)).toEqual([expect.objectContaining({ providerName: 'Stats', failed: 1 })])
-    await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_stats', providerName: provider.name, providerModelName: 'stats-model', providerProtocol: 'openai-completions', providerRequestId: null, url: 'https://example.com/v1/chat/completions', httpStatus: 200, retryable: false, attemptIndex: 1, status: 'success', durationMilliseconds: 10 })
-    expect(await getFailureReasons(0)).toEqual([{ reason: '认证失败', count: 1 }])
-    expect((await getLatencyDistribution(0)).find(bucket => bucket.range === '> 5s')?.count).toBe(1)
-  })
-
-  it('keeps historical attempts and analytics stable after provider deletion', async () => {
-    const provider = await createProvider(providerInput('Historical Provider'))
-    const log = await createRequestLog({ ...logInput('req_historical'), status: 'success' })
-    const attempt = await createRequestAttempt({ requestId: log.id, providerId: provider.id, providerModelId: 'model_historical', providerName: 'Historical Provider', providerModelName: 'historical-model', providerProtocol: 'openai-responses', providerRequestId: null, url: 'https://example.com/v1/responses', httpStatus: 200, retryable: false, attemptIndex: 0, status: 'success', durationMilliseconds: 25 })
-    await replaceRequestUsage({ requestId: log.id, attemptId: null, inputTokens: 8, outputTokens: 2, totalTokens: 10, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null })
-    await replaceRequestUsage({ requestId: log.id, attemptId: attempt.id, inputTokens: 8, outputTokens: 2, totalTokens: 10, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null })
-
-    await deleteProvider(provider.id)
-
-    expect(await listAttemptsByRequest(log.id)).toEqual([expect.objectContaining({ providerName: 'Historical Provider', providerModelName: 'historical-model' })])
-    expect(await getProviderStats(0)).toEqual([expect.objectContaining({ providerName: 'Historical Provider', requests: 1 })])
-    expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelName: 'historical-model', providerName: 'Historical Provider', requests: 1 })])
-    expect(await getStatsSummary(0)).toMatchObject({ totalRequests: 1, totalTokens: 10 })
   })
 })

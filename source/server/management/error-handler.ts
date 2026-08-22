@@ -1,12 +1,13 @@
-import type { ServerResponse } from 'node:http'
-import { z } from 'zod'
-import { sendError } from './response'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { normalizeError } from '../errors'
+import { sendManagementError } from './response'
 
-export function handleApiError(res: ServerResponse, error: unknown): void {
-  if (error instanceof z.ZodError) {
-    sendError(res, 'VALIDATION_ERROR', error.errors.map(issue => issue.message).join('; '), 400)
+export function handleApiError(req: IncomingMessage, res: ServerResponse, error: unknown): void {
+  const normalized = normalizeError(error)
+  console.error(`[management] request failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} code=${normalized.code} message=${normalized.message}`)
+  if (res.headersSent || res.writableEnded) {
+    res.destroy(normalized)
     return
   }
-  const message = error instanceof Error ? error.message : String(error)
-  sendError(res, 'INTERNAL_ERROR', message, 500)
+  sendManagementError(res, normalized)
 }
