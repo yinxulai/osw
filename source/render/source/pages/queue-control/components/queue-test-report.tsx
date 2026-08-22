@@ -1,6 +1,6 @@
 import { Activity, FlaskConical, Loader2 } from 'lucide-react'
 import type { Protocol } from '@common/schemas'
-import type { ModelTestResult } from '@/api'
+import type { ModelTestResult } from '@/api/tools'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 

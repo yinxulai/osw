@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider, createRequestAttempt, createRequestContent, createRequestLog } from '../database/store'
+import { createProvider } from '../database/provider-store'
+import { createRequestAttempt, createRequestContent, createRequestLog } from '../database/request-log-store'
 import { requestLogRoutes } from './request-logs'
 
 function mockResponse() {

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { listProviderHealth, listProviderModelHealth } from '../database/store'
-import { getManualModel, setManualModel } from '../proxy/handler'
+import { listProviderHealth, listProviderModelHealth } from '../database/health-store'
+import { getManualModel, setManualModel } from '../proxy/manual-routing'
 import {
   getProxyServerStatus,
   restartProxyServer,

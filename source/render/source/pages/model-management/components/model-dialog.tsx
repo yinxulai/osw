@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolUrlHint } from './protocol-url-hint'
-import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS, PROTOCOL_SHORT_LABELS, CONVERTIBLE_PROTOCOLS } from '../lib/protocols'
-import type { FetchedProviderModel } from '@/api'
-import type { ProtocolEndpointEntry } from '../service'
+import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
+import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS, PROTOCOL_SHORT_LABELS } from '../lib/protocols'
+import type { FetchedProviderModel } from '@/api/providers'
+import type { ProtocolEndpointEntry } from '../hooks/types'
 
 interface ModelDialogProps {
   open: boolean

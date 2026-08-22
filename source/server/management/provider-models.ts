@@ -2,16 +2,18 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { ProtocolSchema } from '@common/schemas'
 import {
+  createProviderModelRoute,
+  deleteProviderModelRoute,
   getProviderModel,
   listProviderModels,
   listProviderModelsForLogicalModel,
-  listSchedulingPolicies,
-  createProviderModelRoute,
   updateProviderModelRoute,
-  upsertSchedulingPolicy,
+} from '../database/model-store'
+import {
   deleteSchedulingPolicy,
-  deleteProviderModelRoute,
-} from '../database/store'
+  listSchedulingPolicies,
+  upsertSchedulingPolicy,
+} from '../database/logical-model-store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 

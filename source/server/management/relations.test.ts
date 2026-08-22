@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider, createProviderModelRoute } from '../database/store'
+import { createProvider } from '../database/provider-store'
+import { createProviderModelRoute } from '../database/model-store'
 import { relationRoutes } from './relations'
 
 function mockResponse() {

@@ -1,6 +1,7 @@
-import { listProviderModelsForLogicalModel, getProvider } from '../database/store'
+import { listProviderModelsForLogicalModel } from '../database/model-store'
+import { getProvider } from '../database/provider-store'
 import { isProviderAvailable, isProviderModelAvailable } from './health'
-import { isConvertible } from './conversion'
+import { isConvertible } from '@common/protocols'
 import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
 
 export interface ModelWithProvider {

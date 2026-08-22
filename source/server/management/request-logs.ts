@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestLogs, pruneRequestLogsBefore } from '../database/store'
+import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestLogs, pruneRequestLogsBefore } from '../database/request-log-store'
 
 export const requestLogRoutes: Record<string, ManagementHandler> = {
   '/api/request-log/list': handleListRequestLogs,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { analyticsApi } from '@/api'
+import { analyticsApi } from '@/api/observability'
 import { useAsyncData } from '@/services/use-async'
 import type { AnalyticsRange } from '@common/schemas'
 

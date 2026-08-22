@@ -1,18 +1,12 @@
 import { BotMessageSquare, MessageSquareCode, Repeat, Sparkles } from 'lucide-react'
 import type { Protocol, ProviderModelRouteEndpoint } from '@common/schemas'
+import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 const PROTOCOL_META: Record<Protocol, { label: string; icon: typeof MessageSquareCode }> = {
   'openai-completions': { label: 'OpenAI Completions', icon: MessageSquareCode },
   'openai-responses': { label: 'OpenAI Responses', icon: Sparkles },
   'anthropic-messages': { label: 'Anthropic Messages', icon: BotMessageSquare },
-}
-
-/** 每个端点原生协议可接收的转换来源协议。 */
-const CONVERTIBLE_PROTOCOLS: Record<Protocol, Protocol[]> = {
-  'openai-completions': ['anthropic-messages', 'openai-responses'],
-  'openai-responses': [],
-  'anthropic-messages': ['openai-completions'],
 }
 
 interface ProtocolIconsProps {

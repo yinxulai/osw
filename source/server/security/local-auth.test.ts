@@ -3,9 +3,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { getSettings } from '../database/store'
+import { getSettings } from '../database/settings-store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
-import { authorizeLocalRequest, deleteLocalAccessToken, generateLocalAccessToken, getLocalAuthStatus, rotateLocalAccessToken } from './local-auth'
+import { authorizeLocalRequest, deleteLocalAccessToken, generateLocalAccessToken, getLocalAuthStatus, rotateLocalAccessToken } from '../management/auth/service'
 
 let temporaryDirectory: string
 let secrets: Map<string, string>

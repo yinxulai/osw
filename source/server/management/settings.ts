@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SettingsSchema } from '@common/schemas'
-import { getSettings, updateSettings } from '../database/store'
+import { getSettings, updateSettings } from '../database/settings-store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 

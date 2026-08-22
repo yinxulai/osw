@@ -10,7 +10,7 @@ import { ProtocolUrlHint } from './protocol-url-hint'
 import { ProviderIcon } from './provider-icon'
 import { PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
 import { PROTOCOL_PLACEHOLDERS, PROTOCOL_OPTIONS } from '../lib/protocols'
-import type { ProviderEndpointEntry } from '../service'
+import type { ProviderEndpointEntry } from '../hooks/types'
 
 interface ProviderDialogProps {
   open: boolean

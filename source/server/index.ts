@@ -2,9 +2,6 @@ import { ServerRuntime } from './runtime/server-runtime'
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
-import { installLogCapture } from './management/log-buffer'
-
-export { installLogCapture }
 
 export interface StartServerOptions {
   dataDir: string
@@ -28,13 +25,3 @@ export async function stopServer(): Promise<void> {
     runtime = null
   }
 }
-
-export {
-  getProxyServerStatus,
-  restartProxyServer,
-  startProxyServer,
-  stopProxyServer,
-} from './proxy/server'
-
-export { onSettingsChanged } from './database/store'
-export { getSettings } from './database/store'

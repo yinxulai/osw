@@ -8,8 +8,11 @@ const mocks = vi.hoisted(() => ({
   unavailableModels: new Set<string>(),
 }))
 
-vi.mock('../database/store', () => ({
+vi.mock('../database/model-store', () => ({
   listProviderModelsForLogicalModel: async () => mocks.models,
+}))
+
+vi.mock('../database/provider-store', () => ({
   getProvider: async () => mocks.provider,
 }))
 

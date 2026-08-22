@@ -7,7 +7,7 @@ import {
   getLogicalModel,
   listLogicalModels,
   updateLogicalModel,
-} from '../database/store'
+} from '../database/logical-model-store'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 

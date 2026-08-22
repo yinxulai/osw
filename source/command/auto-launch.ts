@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { getSettings, onSettingsChanged } from '@server/index'
+import { getSettings, onSettingsChanged } from '@server/database/settings-store'
 import type { Settings } from '@common/schemas'
 
 /**

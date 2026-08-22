@@ -4,7 +4,7 @@ import {
   getProxyServerStatus,
   startProxyServer,
   stopProxyServer,
-} from '@server/index'
+} from '@server/proxy/server'
 import type { ProxyServerStatus } from '@common/schemas'
 
 export class TrayManager {

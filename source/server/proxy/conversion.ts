@@ -1,21 +1,5 @@
 import type { Protocol } from '@common/schemas'
 
-/**
- * 协议转换注册表：端点原生协议 -> 可接收的客户端协议列表。
- * 与前端 CONVERTIBLE_PROTOCOLS 保持一致。
- */
-export const CONVERTIBLE_PROTOCOLS: Record<Protocol, Protocol[]> = {
-  'openai-completions': ['anthropic-messages', 'openai-responses'],
-  'openai-responses': [],
-  'anthropic-messages': ['openai-completions'],
-}
-
-/** 判断端点（原生协议 endpointProtocol）能否接收 clientProtocol 的请求 */
-export function isConvertible(endpointProtocol: Protocol, clientProtocol: Protocol): boolean {
-  return endpointProtocol !== clientProtocol
-    && CONVERTIBLE_PROTOCOLS[endpointProtocol]?.includes(clientProtocol) === true
-}
-
 // ========== 类型定义（宽松结构，转换时按需取字段） ==========
 
 type Json = Record<string, unknown>

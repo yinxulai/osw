@@ -948,7 +948,7 @@ Store 层应分为两部分：
 
 1. `source/server/database/schema.ts`；
 2. `source/server/database/index.ts`；
-3. `source/server/database/store.ts`；
+3. `source/server/database/provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`settings-store.ts`、`health-store.ts`、`request-log-store.ts`、`analytics-store.ts`；
 4. `source/common/schemas.ts`；
 5. `source/server/database/development-seed.ts`；
 6. `source/server/database/index.test.ts`；

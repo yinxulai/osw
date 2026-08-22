@@ -7,7 +7,9 @@ import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, getDb, initDatabase } from './index'
 import { seedDevelopmentData } from './development-seed'
 import { providerModels, requestUsages } from './schema'
-import { createProvider, getRequestLog, listAttemptsByRequest, listLogicalModels, listProviders, listRequestContents, listRequestLogs, listRequestUsages } from './store'
+import { createProvider, listProviders } from './provider-store'
+import { listLogicalModels } from './logical-model-store'
+import { getRequestLog, listAttemptsByRequest, listRequestContents, listRequestLogs, listRequestUsages } from './request-log-store'
 
 let temporaryDirectory: string
 let secretStore: KeychainApi

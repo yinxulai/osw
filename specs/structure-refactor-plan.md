@@ -1,8 +1,8 @@
 # One Switch 结构分层整理计划
 
-> 目标：整理当前系统中职责全部展平、跨领域耦合和重复状态来源的问题，在不改变产品行为、API 契约和数据库语义的前提下，逐步恢复清晰的模块边界。
+> 目标：以 v0.3 的全新、不兼容契约为前提，整理职责展平、跨领域耦合和重复状态来源，形成与当前源码一致的模块边界。
 >
-> 本计划对应当前 v0.3 收尾阶段的代码结构治理，不是新功能开发计划。实施过程中优先保持行为兼容，避免一次性大规模重写。
+> 本计划对应当前 v0.3 收尾阶段的结构治理，不是新功能开发计划。全新版本不保留兼容 facade、re-export、旧目录出口、旧 API 别名或旧领域模型；重构完成后直接删除旧出口，而不是继续维护迁移层。
 
 ## 1. 当前问题摘要
 
@@ -10,10 +10,10 @@
 
 | 优先级 | 文件/目录 | 主要问题 |
 | --- | --- | --- |
-| P0 | `source/server/proxy/handler.ts` | HTTP 入口、模型解析、路由、健康、传输、日志、重试全部混合 |
-| P0 | `source/server/database/store.ts` | ProviderModel、Endpoint、协议转换、请求日志、Usage 共用一个数据访问单体 |
-| P1 | `source/render/source/api.ts` | 所有管理 API、类型和公共请求逻辑集中在一个文件 |
-| P1 | `source/render/source/services/app-service.ts` | 全局缓存、轮询、多个领域状态和代理生命周期混合 |
+| P0 | `source/server/proxy/` | 代理入口、请求解析、路由、转换、传输、观测已拆为多个真实模块，仍需最终核对职责边界 |
+| P0 | `source/server/database/` | 持久化层已按 Provider、Model、LogicalModel、Settings、Health、Request Log、Analytics 分 store |
+| P1 | `source/render/source/api/` | 管理 API client 已按 runtime、providers、models、observability、tools 分模块 |
+| P1 | `source/render/source/features/` 与页面 hooks | 领域服务和页面 hooks 已替代旧的跨领域 app-service 目标结构；共享轮询由 `infrastructure/polling-manager.ts` 支持 |
 | P1 | `source/server/management/config.ts` | 配置导入导出、实体编排、密钥处理和数据库写入混合 |
 | P1 | `source/render/source/pages/model-management/service.ts` | Provider 与 ProviderModel 的 CRUD、弹窗和发现流程混合 |
 | P1 | `source/render/source/pages/runtime-settings/service.ts` | 设置、代理重启、日志清理、配置迁移、开发数据混合 |
@@ -26,7 +26,7 @@
 ## 2. 整理原则
 
 1. **先分职责，再移动目录**：避免只改变路径而不改变实际边界。
-2. **保留稳定外观**：初期允许旧文件作为兼容出口，内部实现逐步迁移。
+2. **全新版本直接切换**：不建立兼容 facade、re-export、旧目录出口或双读双写；调用方迁移完成后旧文件立即删除。
 3. **单向依赖**：入口层依赖业务层，业务层依赖基础设施，基础设施不反向依赖 UI 或业务模块。
 4. **一个模块一个主要变化原因**：配置、路由、传输、观测和展示不应共用同一个核心实现文件。
 5. **状态按领域归属**：Provider、Proxy、Settings、Health 等状态分别拥有来源和刷新边界。
@@ -36,84 +36,50 @@
 
 ## 3. 目标结构
 
-### 3.1 Server
+### 3.1 Server（当前实际结构）
 
 ```text
 source/server/
 ├── index.ts
-├── runtime/
+├── runtime/server-runtime.ts
 ├── management/
-│   ├── router.ts
-│   ├── request-body.ts
-│   ├── error-handler.ts
-│   ├── providers/
-│   ├── models/
-│   ├── config/
-│   ├── auth/
-│   └── ...
+│   ├── server.ts / router.ts / request-body.ts / response.ts / error-handler.ts
+│   ├── providers.ts / provider-models.ts / models.ts / settings.ts
+│   ├── relations.ts / config/ / request-logs.ts / logs.ts / analytics.ts
+│   ├── runtime-control.ts / model-test.ts / provider-models-fetch.ts
+│   ├── auth/ / request-guards.ts / environment-guard.ts
 ├── proxy/
-│   ├── handler.ts
-│   ├── request-entry.ts
-│   ├── routing.ts
-│   ├── attempt-executor.ts
-│   ├── transport.ts
-│   ├── protocol.ts
-│   ├── health.ts
-│   ├── logging.ts
-│   └── ...
-├── infrastructure/
-│   ├── database/
-│   │   ├── connection.ts
-│   │   ├── schema.ts
-│   │   ├── settings-store.ts
-│   │   ├── provider-store.ts
-│   │   ├── model-store.ts
-│   │   ├── endpoint-store.ts
-│   │   ├── routing-store.ts
-│   │   ├── health-store.ts
-│   │   ├── request-log-store.ts
-│   │   └── analytics-store.ts
-│   ├── secrets/
-│   └── security/
-└── security/                 # 迁移期间保留，完成后删除
+│   ├── server.ts / request-entry.ts / attempt-executor.ts / attempt-runner.ts
+│   ├── request-context.ts / request.ts / routing.ts / router.ts / manual-routing.ts
+│   ├── protocols/{types.ts,registry.ts}
+│   ├── conversion.ts / conversion-response.ts / response-pipeline.ts
+│   ├── transport.ts / headers.ts / auth.ts / health.ts / logging.ts / hooks.ts
+├── database/                         # 明确的 SQLite + Drizzle 持久化层
+│   ├── index.ts / schema.ts
+│   ├── provider-store.ts / model-store.ts / logical-model-store.ts
+│   ├── settings-store.ts / health-store.ts / request-log-store.ts
+│   ├── analytics-store.ts / development-seed.ts
+├── infrastructure/{secrets/,security/}
+└── security/                         # Host 校验等现有安全适配
 ```
 
-### 3.2 Render
+`database/` 保留在 `server` 下，不再虚构 `infrastructure/database/`；它是被 management、proxy、runtime 使用的明确持久化层。
+
+### 3.2 Render（当前实际结构）
 
 ```text
 source/render/source/
-├── App.tsx
-├── api/
-│   ├── client.ts
-│   ├── providers.ts
-│   ├── logical-models.ts
-│   ├── provider-models.ts
-│   ├── scheduling-policies.ts
-│   ├── queue.ts
-│   ├── proxy.ts
-│   ├── health.ts
-│   ├── settings.ts
-│   ├── logs.ts
-│   ├── request-logs.ts
-│   ├── analytics.ts
-│   ├── model-test.ts
-│   ├── config.ts
-│   └── index.ts
-├── features/
-│   ├── providers/
-│   ├── provider-models/
-│   ├── queue/
-│   ├── proxy/
-│   ├── settings/
-│   ├── request-logs/
-│   ├── analytics/
-│   └── config/
-├── infrastructure/
-│   ├── polling/
-│   └── store/
+├── App.tsx / main.tsx
+├── api/{client.ts,providers.ts,models.ts,runtime.ts,observability.ts,tools.ts}
+├── features/{health,logical-models,providers,proxy,settings}/
+├── infrastructure/{polling-manager.ts,deep-equal.ts}
+├── store/create-store.ts
+├── services/use-async.ts
 ├── components/
-└── pages/
+└── pages/{overview,model-management,queue-control,request-logs,logs,runtime-settings}/
 ```
+
+当前不存在 `source/render/source/api/index.ts`、旧的单文件 `api.ts` 或 `services/app-service.ts`；不得以这些名称描述目标或新增兼容出口。
 
 ## 4. 分阶段执行计划
 
@@ -125,11 +91,11 @@ source/render/source/
 
 ### 工作项
 
-- [ ] 记录当前 `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和 `pnpm build` 基线。
-- [ ] 列出 `handler.ts`、`store.ts`、`api.ts` 的公开导出，作为迁移清单。
-- [ ] 确认不修改数据库表语义、管理 API 路径和公共 Schema。
-- [ ] 确认旧数据库、旧 API 和 `UpstreamModel` 不重新引入。
-- [ ] 为每个 P0/P1 文件补充或确认现有测试入口。
+- [x] 核对当前 `package.json` scripts：`typecheck`、`test:server`、`lint`、`build` 及数据库脚本均已确认。
+- [x] 核对实际入口与公开边界：代理入口为 `request-entry.ts`，持久化为 `database/*-store.ts`，Render API 为 `api/*.ts`。
+- [x] 确认不重新引入旧数据库表、旧 API 路径、`UpstreamModel` 或兼容别名。
+- [x] 确认当前协议集合为 OpenAI Completions、OpenAI Responses、Anthropic Messages；Gemini 不属于当前支持范围。
+- [x] 确认现有 server、database、management、proxy、render 测试入口。
 
 ### 验收
 
@@ -140,18 +106,14 @@ source/render/source/
 
 ### 目标
 
-将 `source/server/database/store.ts` 从实现单体变成兼容出口，按领域分离真实实现。
+将数据库访问按持久化领域组织，同时保留 `source/server/database/` 作为明确的 Server 持久化层。该阶段已完成，不建立 `store.ts` 兼容出口，也不迁移到不存在的 `infrastructure/database/`。
 
-### 建议顺序
+### 已完成内容
 
-1. 抽取 `request-log-store.ts`：RequestLog、Attempt、Content、Usage、清理和详情查询。
-2. 抽取 `endpoint-store.ts`：ProviderEndpoint、ProviderModelEndpoint。
-3. 抽取 `routing-store.ts`：ProviderModel 路由、SchedulingPolicy、ProtocolConverter。
-4. 抽取 `model-store.ts`：ProviderModel 基础 CRUD 和 mapper。
-5. 保留 Provider、Health、Settings、Analytics 已有拆分。
-6. 将文件移动到 `source/server/infrastructure/database/`。
-7. 由旧 `database/store.ts` 暂时 re-export，逐个迁移调用方。
-8. 所有调用方迁移后删除兼容实现，只保留明确的领域出口。
+1. `request-log-store.ts` 负责 RequestLog、Attempt、Content、Usage、清理和详情查询。
+2. `provider-store.ts`、`model-store.ts`、`logical-model-store.ts` 负责 Provider、ProviderModel、端点和逻辑模型/调度关系。
+3. `settings-store.ts`、`health-store.ts`、`analytics-store.ts` 负责设置、健康和统计。
+4. 调用方已直接引用领域 store；不存在 `database/store.ts` facade 或 re-export。
 
 ### 约束
 
@@ -166,62 +128,63 @@ source/render/source/
 - ProviderModel/Endpoint/RequestLog 测试全部通过。
 - `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 通过。
 
-## 阶段 2：收敛代理 Handler
+## 阶段 2：收敛代理请求管线（已完成）
 
 ### 目标
 
-让 `handler.ts` 只承担一次代理请求的生命周期编排。
+让当前代理入口和尝试执行模块只承担请求生命周期编排。该阶段已完成，当前入口为 `request-entry.ts`，尝试执行为 `attempt-executor.ts` / `attempt-runner.ts`。
 
-### 目标职责
+### 当前职责
 
 ```text
-handler
+request-entry
   读取 RequestContext
+  解析 client protocol 与 logical model
   获取路由候选
+  委托 attempt-executor
+
+attempt-executor / attempt-runner
   按顺序执行 attempt
-  处理 disposition
-  结束请求生命周期
+  调用协议适配器、transport、response pipeline
+  处理 disposition、健康与观测收尾
 ```
 
-### 抽取模块
+### 当前模块
 
 - `request-entry.ts`：body 读取、请求取消、模型字段解析、LogicalModel 解析。
-- `routing.ts`：候选模型查询、协议过滤、手动模型起始位置。
-- `attempt-executor.ts`：一次 ProviderModel 尝试。
+- `routing.ts` / `router.ts`：候选模型查询、协议过滤、手动模型起始位置。
+- `attempt-executor.ts` / `attempt-runner.ts`：ProviderModel 尝试及生命周期编排。
 - `transport.ts`：纯上游 HTTP、超时、流和连接生命周期。
-- `protocol.ts`：协议识别和协议适配器调用。
-- `logging.ts`：RequestLog、Attempt、Content、Usage hooks。
+- `protocols/registry.ts`：协议适配器注册与调用边界。
+- `conversion.ts` / `conversion-response.ts`：已注册协议转换及响应/SSE 转换。
+- `logging.ts` / `hooks.ts`：RequestLog、Attempt、Content、Usage 观测 hooks。
 - `health.ts`：健康成功、失败和冷却归因。
 
-### 迁移策略
+### 完成记录
 
-- 先保持 `executeProxyRequest` 参数不变。
-- 先抽出纯函数和无状态执行器，再移动副作用。
-- 每抽出一个模块，先迁移单元测试，再删除 handler 内重复代码。
-- 不在本阶段新增协议功能。
+- [x] `request-entry.ts` 保持代理入口，`executeProxyRequest` 位于 `attempt-executor.ts`，未保留旧 `handler.ts`。
+- [x] 协议适配器、request context、传输、响应管线和观测 hooks 已有对应源码与测试。
+- [x] 不新增 Gemini 或其他未注册协议功能。
 
 ### 验收
 
-- `handler.ts` 不直接导入数据库中所有观测函数。
-- `handler.ts` 不直接构造 Node HTTP/HTTPS 请求。
-- 单次 attempt 可独立测试。
-- 网络错误、429/5xx、401、流中断、客户端取消行为保持不变。
-- 完成 `specs/proxy.md` 中 Adapter、Context、Hooks 的未完成条目。
+- [x] 旧 `handler.ts` 不存在；请求入口不直接承担 transport 和协议转换实现。
+- [x] 单次 attempt 可独立测试。
+- [x] 网络错误、429/5xx、401、流中断、客户端取消行为已有测试覆盖。
+- [ ] 发布包端到端验证仍待完成，尤其是各已注册协议转换方向。
 
-## 阶段 3：拆分 Render API 客户端
+## 阶段 3：拆分 Render API 客户端（已完成）
 
 ### 目标
 
-将 `source/render/source/api.ts` 改为按领域组织的 API client。
+将管理 API client 按领域组织到 `source/render/source/api/`。单文件 `api.ts` 已删除，不建立聚合出口。
 
 ### 工作项
 
-- [ ] 抽出 `api/client.ts`：`request<T>()`、API_BASE 和通用响应处理。
-- [ ] 按 Provider、ProviderModel、Queue、Proxy、Settings、Logs、Request Logs、Analytics、Config 等拆文件。
-- [ ] 类型与对应 API 放在同一领域文件，跨领域公共类型放入 `common/schemas.ts`。
-- [ ] 新建 `api/index.ts`，短期提供兼容 re-export。
-- [ ] 逐个将页面从 `@/api` 聚合入口迁移到领域 API。
-- [ ] 禁止基础 service 直接导入聚合 API。
+- [x] `api/client.ts` 已提供通用 `request<T>()`、运行时 API 地址和响应处理。
+- [x] 管理 API 已按 `providers.ts`、`models.ts`、`runtime.ts`、`observability.ts`、`tools.ts` 分域。
+- [x] 页面和 feature 已直接引用领域 API；不存在单文件 `source/render/source/api.ts` 或 `api/index.ts` 聚合出口。
+- [x] 跨层公共数据契约继续放在 `source/common/schemas.ts`；未新增兼容 re-export。
 
 ### 验收
 
@@ -238,12 +201,10 @@ handler
 
 ### 工作项
 
-- [ ] 将轮询引用计数、请求去重和静默刷新抽到 `infrastructure/polling/`。
-- [ ] 抽出 `proxy-service`、`provider-service`、`health-service`、`settings-service`、`logical-model-service`。
-- [ ] 各领域拥有独立 store、loading 状态、刷新和失效操作。
-- [ ] 将 `useAppActions()` 逐步替换为领域化 action hooks。
-- [ ] 将全局单一 `lastError` 改为带领域标识的错误状态。
-- [ ] 保留 `app-service.ts` 作为组合器，禁止继续添加具体业务实现。
+- [x] 共享轮询基础设施已落在 `source/render/source/infrastructure/polling-manager.ts`，而非虚构的 `infrastructure/polling/` 目录。
+- [x] Provider、Proxy、Health、Settings、Logical Models 已按 `features/*` 服务与 hooks 组织。
+- [x] 页面通过 feature hooks 和页面 hooks 组合数据；不存在 `app-service.ts`、`app-store.ts` 或 `useAppActions()` 旧单体出口。
+- [x] 轮询和缓存边界已从具体页面业务中分离；后续只需做最终回归验证。
 
 ### 依赖要求
 
@@ -268,51 +229,47 @@ page/component
 
 ### 5.1 Model Management
 
-拆为：
+当前实际 hooks 为：
 
-- `use-provider-management`
-- `use-provider-dialog`
-- `use-provider-model-management`
-- `use-model-dialog`
-- `use-model-discovery`
-- `use-model-reordering`
+- `hooks/use-provider-management.ts`
+- `hooks/use-provider-dialog.ts`
+- `hooks/use-model-management.ts`
+- `hooks/use-model-data.ts`
+- `hooks/use-model-dialog.ts`
+- `hooks/use-model-reordering.ts`
 
-页面 facade 只负责组合这些 hooks。
+`use-model-management.ts` 负责组合页面所需 hooks；当前不存在单独的 `use-provider-model-management`、`use-model-discovery` 或 `use-model-reordering` 之外的历史拆分名称。
 
 ### 5.2 Runtime Settings
 
-拆为：
+当前实际 hooks 为：
 
-- `use-settings-form`
-- `use-settings-save`
-- `use-proxy-restart`
-- `use-log-retention`
-- `use-config-transfer`
-- `use-development-seed`
+- `hooks/use-settings-form.ts`
+- `hooks/use-request-log-retention.ts`
+- `hooks/use-config-transfer.ts`
+- `hooks/use-development-seed.ts`
+
+代理重启和保存逻辑由实际 settings service/API 组合，不虚构不存在的 `use-settings-save`、`use-proxy-restart` 或 `use-log-retention` 文件。
 
 配置导入后的缓存刷新通过明确的配置变更结果或领域事件完成，不再由页面手动全量 invalidate。
 
 ### 5.3 Queue Control
 
-拆为：
+当前实际 hooks 和 selector 为：
 
-- `use-queue-models`
-- `use-queue-mode`
-- `use-queue-metrics`
-- `use-proxy-toggle`
-- `model-metrics.ts` selector/util
+- `hooks/use-queue-models.ts`
+- `hooks/use-queue-mode.ts`
+- `hooks/use-queue-metrics.ts`
+- `hooks/use-proxy-toggle.ts`
+- `hooks/use-queue-interactions.ts`
+- `hooks/use-queue-control.ts`
+- `lib/model-metrics.ts` selector/util
 
 队列页面不直接承担请求日志查询细节，指标查询或转换归入 Request Logs/Analytics feature。
 
 ### 5.4 Logs
 
-将实时轮询、过滤、导出、清空和复制从 `logs/page.tsx` 中抽出，页面只负责组合：
-
-- `use-live-logs`
-- `use-log-filter`
-- `use-log-actions`
-- `log-toolbar`
-- `log-list`
+当前由 `pages/logs/hooks/use-logs-model.ts` 承担实时轮询、过滤、导出、清空和复制相关模型；`logs/page.tsx` 负责组合页面 UI。后续若继续细拆，应以该实际 hook 为入口，不将不存在的 `use-live-logs`、`use-log-filter` 或 `use-log-actions` 写成已落地文件。
 
 ### 验收
 
@@ -325,13 +282,10 @@ page/component
 
 ### 工作项
 
-- [ ] 抽出 `request-body.ts`。
-- [ ] 抽出统一 `error-handler.ts`。
-- [ ] 抽出 development-only API guard。
-- [ ] 将配置导入导出拆为 `management/config/` 用例模块。
-- [ ] 将管理认证归入 `management/auth/`。
-- [ ] 将 Host 校验等技术安全适配归入 `infrastructure/security/`。
-- [ ] 保留 `router.ts` 作为路由注册和匹配入口。
+- [x] `request-body.ts`、`error-handler.ts`、`environment-guard.ts` 和 `request-guards.ts` 已从管理路由入口拆出。
+- [x] 配置导入导出归入 `management/config/`，管理认证归入 `management/auth/`。
+- [x] `router.ts` 仅负责管理 API 路由注册、环境限制、body 解析和错误边界。
+- [x] Host 校验实际位于 `source/server/security/host-validation.ts`；密钥适配位于 `source/server/infrastructure/secrets/`，不虚构新的安全目录。
 
 ### 验收
 
@@ -343,12 +297,10 @@ page/component
 
 ### 工作项
 
-- [ ] 确认 `linear-prototype` 是保留的设计演示还是删除对象。
-- [ ] 若保留，移动至 `render/prototypes/`，禁止引用生产 feature 状态。
-- [ ] 删除迁移期间的旧 re-export 和旧目录。
-- [ ] 清理注释、测试、spec 中过时的目录和旧术语。
-- [ ] 更新 `specs/server-architecture.md` 与实际目录。
-- [ ] 更新 `specs/tech-architecture.md`、`specs/implementation-plan.md` 和 `specs/README.md` 的链接与状态。
+- [x] `source/render/source/pages/linear-prototype/` 已删除，不再作为设计演示或生产页面维护。
+- [x] 迁移期间的旧出口、旧 re-export 和旧目录已删除；当前代理入口为 `request-entry.ts`，Render API 为 `api/*.ts`。
+- [x] 清理注释、测试和 spec 中的旧术语，包括历史 `database/store.ts`、旧 handler/API 聚合出口及虚构 Electron/preload 目录。
+- [x] `specs/server-architecture.md`、`specs/tech-architecture.md`、`specs/implementation-plan.md` 和本文已同步当前目录与状态。
 
 ## 5. 每阶段通用验收清单
 
@@ -397,15 +349,22 @@ Management Router / Security 整理
 - 不重新设计数据库表和公共领域模型。
 - 不把所有 UI 组件强行改造成 feature 目录；只有包含业务状态或业务 API 的组件才迁移。
 
-## 8. 完成定义
+## 8. 本轮完成记录与最终验证
 
-本计划完成的标准：
+### 本轮已完成
 
-1. `proxy/handler.ts` 只负责编排，不直接拥有传输、观测和健康实现。
-2. 数据库访问按 Provider、Model、Routing、Endpoint、Health、Request Logs、Analytics 等领域分离。
-3. Render API 不再是一个包含所有业务的单文件。
-4. 全局状态和轮询基础设施与具体业务服务分离。
-5. 页面 service 只负责本页面组合，不承担多个领域的完整生命周期。
-6. Management Router、配置迁移和安全适配边界清晰。
-7. 结构重构后 `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和 `pnpm build` 全部通过。
-8. `specs/server-architecture.md`、`specs/tech-architecture.md` 和本计划与实际代码结构一致。
+- 核对 `source/` 实际结构与 `package.json` scripts；文档不再引用不存在的 `handler.ts`、`api/index.ts`、旧 `app-service` 或 `infrastructure/database`。
+- 明确 v0.3 全新版本不保留兼容 facade、re-export、旧目录出口、旧 API 别名、旧领域模型或双读双写。
+- 明确 `source/server/management/`、`source/server/proxy/`、`source/render/source/` 三个运行域，以及 `source/server/database/` 的持久化职责。
+- 标记数据库分域、Proxy 请求管线、Render API 分域和 Render feature/hooks 等已落地工作项完成。
+- 校正文档中的协议范围和协议转换描述：当前仅支持 OpenAI Completions、OpenAI Responses、Anthropic Messages；Gemini 尚未实现，协议转换通过 `proxy/protocols/`、`conversion.ts` 和 `conversion-response.ts` 的已注册方向提供，不宣称 OpenAPI 已完成。
+
+### 最终验证记录
+
+- [x] `pnpm typecheck`、`pnpm lint`、`pnpm test:server` 已通过，共 239 tests。
+- [x] Vite bundling 已通过。
+- [x] `electron-builder` 已尝试，但因 Windows 当前用户没有符号链接权限而失败。
+- [ ] UI 回归和发布包验证仍待人工完成，包括全新用户数据目录、Windows 安装、托盘/控制台以及发布包协议端到端验证。
+- [x] 已按源码路由注册表和实际目录完成文档核对；文档更新不代替 UI/发布包人工验证。
+
+本计划不再以“保留兼容出口”作为完成条件；最终标准是旧出口不存在、源码结构与本文及相关架构文档一致。

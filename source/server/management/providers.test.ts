@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider, getProvider, listProviders } from '../database/store'
+import { createProvider, getProvider, listProviders } from '../database/provider-store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { deleteProviderAndSecret, providerRoutes } from './providers'
 

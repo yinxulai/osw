@@ -3,8 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider } from '../database/store'
-import { configRoutes } from './config'
+import { createProvider } from '../database/provider-store'
+import { configRoutes } from './config/routes'
 
 function mockResponse() {
   return { statusCode: 0, setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse

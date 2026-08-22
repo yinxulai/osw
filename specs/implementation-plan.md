@@ -124,7 +124,7 @@ v0.3 MVP 完成后必须具备：
 ### 阶段 2 工作项
 
 - 更新 `source/common/schemas.ts`；
-- 重建 `source/server/database/store.ts`；
+- 按领域实现 `source/server/database/provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`settings-store.ts`、`health-store.ts`、`request-log-store.ts` 和 `analytics-store.ts`；不再创建历史单体 `database/store.ts`。
 - [x] 实现 Provider、ProviderSetting、ProviderEndpoint CRUD；
 - [x] 实现 ProviderModel 和 ProviderModelEndpoint CRUD；
 - [x] 实现 ProtocolConverter CRUD；

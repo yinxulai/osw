@@ -9,9 +9,9 @@ import {
   listProviderEndpoints,
   listProviders,
   replaceProviderEndpoints,
-  resetProviderHealth,
   updateProvider,
-} from '../database/store'
+} from '../database/provider-store'
+import { resetProviderHealth } from '../database/health-store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'

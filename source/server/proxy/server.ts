@@ -1,8 +1,8 @@
 import http from 'node:http'
-import { getSettings } from '../database/store'
+import { getSettings } from '../database/settings-store'
 import { isAllowedHost } from '../security/host-validation'
-import { authorizeLocalRequest } from '../security/local-auth'
-import { handleProxyRequest } from './handler'
+import { authorizeLocalRequest } from '../management/auth/service'
+import { handleProxyRequest } from './request-entry'
 import type { Server } from 'node:http'
 
 export interface ProxyServerStatus {

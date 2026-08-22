@@ -2,7 +2,7 @@
 
 ## 设计目标
 
-`source/server` 是一个本地模块化服务，同时服务于 Electron、CLI 和测试。当前阶段优先让代码按能力聚合、职责清楚，不为尚未出现的复杂度预设完整的领域驱动目录。
+`source/server` 是一个本地模块化服务，当前由 Electron 主进程使用，并服务于测试。当前阶段优先让代码按能力聚合、职责清楚，不为尚未出现的复杂度预设完整的领域驱动目录。
 
 遵循四条规则：
 
@@ -20,45 +20,39 @@ Server 分为四块：
 | `runtime` | 进程级组装与生命周期 | ServerRuntime、管理服务与代理服务的启动、停止和失败回滚 |
 | `management` | 配置管理能力和管理 API | Provider、LogicalModel、ProviderModel、Endpoint、Settings 的管理入口 |
 | `proxy` | 模型请求代理能力 | 协议识别、路由、转发、认证、健康冷却、重试和请求日志 |
-| `infrastructure` | 共享技术实现 | SQLite、Keychain，以及未来可复用的系统适配器 |
+| `database` | 持久化层 | SQLite、Drizzle schema、按领域拆分的 store |
+| `infrastructure` / `security` | 系统技术适配 | Keychain、Host validation，以及未来可复用的系统适配器 |
 
 健康冷却当前只服务于代理切换，因此属于 `proxy`，不单独建立 `reliability`。RequestLog 和 Attempt 由代理请求产生，也先归入 `proxy`。只有当它们形成独立生命周期或被多个能力共同使用时，才提升为一级模块。
 
-## 目标目录
+## 当前实际目录
 
 ```text
 source/server/
-├── index.ts                         # 对 Electron / CLI 的稳定公开入口
-├── runtime/
-│   ├── server-runtime.ts            # 进程生命周期和资源回滚
-│   └── server-runtime.test.ts
+├── index.ts
+├── runtime/server-runtime.ts
 ├── management/
-│   ├── server.ts                    # 管理 HTTP 监听器
-│   ├── router.ts                    # 管理 API 路由和通用请求处理
-│   ├── providers.ts                 # Provider 管理与密钥协调
-│   ├── models.ts                    # LogicalModel 管理
-│   ├── provider-models.ts           # ProviderModel 管理
-│   ├── settings.ts                  # 全局标准设置管理
+│   ├── server.ts / router.ts / request-body.ts / response.ts / error-handler.ts
+│   ├── providers.ts / models.ts / provider-models.ts / settings.ts
+│   ├── relations.ts / config/ / request-logs.ts / logs.ts / analytics.ts
+│   ├── runtime-control.ts / model-test.ts / provider-models-fetch.ts
+│   └── auth/ / request-guards.ts / environment-guard.ts
 ├── proxy/
-│   ├── server.ts                    # 代理监听器和 /v1/models
-│   ├── handler.ts                   # 一次代理请求的流程编排
-│   ├── router.ts                    # 当前逻辑模型的候选 ProviderModel 选择
-│   ├── health.ts                    # 健康状态和冷却策略
-│   ├── transport.ts                 # 远端请求和流式传输
-│   ├── protocol.ts                  # 协议识别和请求改写规则
-│   ├── logging.ts                   # RequestLog 和 Attempt
-│   ├── auth.ts
-│   └── headers.ts
-└── infrastructure/
-    ├── database/
-    │   ├── index.ts                 # node:sqlite 连接、Drizzle migration 与 seed
-    │   ├── schema.ts                # Drizzle 表定义
-    │   └── store.ts                 # 数据访问层（Drizzle 查询）
-    └── secrets/
-        └── secret-store.ts          # Keychain 适配
+│   ├── server.ts / request-entry.ts / attempt-executor.ts / attempt-runner.ts
+│   ├── request-context.ts / request.ts / routing.ts / router.ts / manual-routing.ts
+│   ├── protocols/{types.ts,registry.ts}
+│   ├── conversion.ts / conversion-response.ts / response-pipeline.ts
+│   └── transport.ts / headers.ts / auth.ts / health.ts / logging.ts / hooks.ts
+├── database/                         # SQLite + Drizzle 持久化层
+│   ├── index.ts / schema.ts
+│   ├── provider-store.ts / model-store.ts / logical-model-store.ts
+│   ├── settings-store.ts / health-store.ts / request-log-store.ts
+│   └── analytics-store.ts / development-seed.ts
+├── infrastructure/{secrets/,security/}
+└── security/                          # Host validation 等安全适配
 ```
 
-这是演进目标，不要求提前创建空文件。当前职责仍然简单时保留单文件；只有出现第二个变化原因、文件明显过长或测试需要独立替换时再拆分。
+当前不存在 `proxy/handler.ts`、`source/server/api/` 或 `infrastructure/database/`。`request-entry.ts` 是代理请求入口，`database/` 是明确的持久化层；不新增仅为目录对称服务的空文件。
 
 ## 依赖方向
 
@@ -67,7 +61,9 @@ flowchart TD
   Electron[Electron / CLI] --> Runtime[runtime]
   Runtime --> Management[management]
   Runtime --> Proxy[proxy]
-  Management --> Infrastructure[infrastructure]
+  Management --> Database[database 持久化层]
+  Proxy --> Database
+  Management --> Infrastructure[infrastructure / security]
   Proxy --> Infrastructure
   Management --> ProxyControl[proxy lifecycle API]
 ```
@@ -90,7 +86,7 @@ POST /api/provider/create
   -> management/router.ts
   -> management/providers.ts
   -> infrastructure/secrets/secret-store.ts
-  -> infrastructure/database/store.ts
+  -> database/provider-store.ts
   -> HTTP response
 ```
 
@@ -101,18 +97,21 @@ POST /api/provider/create
 ```text
 Client request
   -> proxy/server.ts
-  -> proxy/handler.ts
-  -> proxy/protocol.ts
-  -> proxy/router.ts
-  -> proxy/health.ts
-  -> proxy/transport.ts
-  -> proxy/logging.ts
+  -> proxy/request-entry.ts
+  -> proxy/request-context.ts / request.ts
+  -> proxy/router.ts + routing.ts + health.ts
+  -> proxy/attempt-executor.ts / attempt-runner.ts
+  -> proxy/protocols/registry.ts
+  -> proxy/transport.ts / response-pipeline.ts
+  -> proxy/logging.ts + database/request-log-store.ts
   -> Client response
 ```
 
-`handler.ts` 只编排步骤。协议判断、候选选择、冷却计算、上游 I/O 和日志写入分别由相邻文件拥有。
+`request-entry.ts` 负责入口解析，`attempt-executor.ts` 负责编排候选尝试；协议注册、协议转换、传输、响应管线和观测分别由对应模块负责。当前协议范围以 `source/common/schemas.ts` 为准，不包含 Gemini。
 
 ## 生命周期
+
+`source/server/index.ts` 是对外生命周期入口，仅负责持有和转交唯一的 `ServerRuntime` 实例；实际的数据库、management、proxy 启停顺序、失败回滚和资源释放由 `source/server/runtime/server-runtime.ts` 编排。
 
 ```mermaid
 stateDiagram-v2
@@ -130,16 +129,14 @@ stateDiagram-v2
 - 停止操作保持幂等。
 - 两个监听器均为实例，由 `ServerRuntime` 持有，不使用模块级可变状态。
 
-## 实施说明
+## 实施状态
 
-重构直接按目标结构落地：
+1. [已完成] `runtime/server-runtime.ts` 持有管理服务、代理服务和数据库生命周期。
+2. [已完成] 管理 API 按 Provider、LogicalModel、ProviderModel、关系、配置、日志、分析和运行时控制分域，统一由 `management/router.ts` 注册。
+3. [已完成] 代理入口、请求上下文、路由、尝试执行、协议适配器注册表、协议转换、传输、响应管线、健康和观测已拆为实际模块。
+4. [已完成] SQLite 代码保留在 `database/`，并按 Provider、Model、LogicalModel、Settings、Health、Request Log、Analytics 拆分 store；不使用 `infrastructure/database/store.ts`。
+5. [已完成] Render 端通过 `api/*.ts`、`features/*`、页面 hooks 和 `infrastructure/polling-manager.ts` 分域；不保留单体 API 或 app-service 兼容出口。
+6. [已完成] v0.3 不保留兼容 facade、re-export、旧 API 别名、旧领域名称或双读双写。
+7. [已完成（源码/构建验证）] `typecheck`、`lint`、`test:server` 通过，共 239 tests；Vite bundling 通过。`electron-builder` 在 Windows 当前用户缺少符号链接权限时失败，因此 UI 回归与发布包验证仍待人工完成。
 
-1. [已完成] 建立 `runtime` 目录。
-2. [已完成] 健康逻辑和密钥实现归入 `proxy`、`infrastructure`。
-3. [已完成] 管理 API 按 Provider、Model、ProviderModel、Settings 拆入 `management`。
-4. 将 `proxy/handler.ts` 中的上游 HTTP 逻辑拆为 `transport.ts`（详见 [proxy.md](./proxy.md) 管线架构）。
-5. SQLite 代码归入 `infrastructure/database`，按配置和请求日志拆 store。
-6. ManagementServer、ProxyServer 实例化并交给 Runtime 持有。
-7. 用依赖检查规则禁止跨模块访问内部实现。
-
-每一步完成后运行 `pnpm test:server` 和 `pnpm typecheck`。
+验证命令以根目录 `package.json` 的 scripts 为准；文档更新不代替最终验证执行。

@@ -3,17 +3,16 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, initDatabase } from './index'
+import { createProvider } from './provider-store'
+import { getFailureReasons, getStatsSummary } from './analytics-store'
 import {
-  createProvider,
   createRequestAttempt,
   createRequestLog,
-  getFailureReasons,
   getRequestLog,
-  getStatsSummary,
   listRequestUsages,
   replaceRequestUsage,
   updateRequestLogStatus,
-} from './store'
+} from './request-log-store'
 
 let temporaryDirectory: string
 

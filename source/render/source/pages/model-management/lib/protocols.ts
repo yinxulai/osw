@@ -31,13 +31,3 @@ export const PROTOCOL_SHORT_LABELS: Record<Protocol, string> = {
   'openai-responses': 'Responses',
   'anthropic-messages': 'Anthropic',
 }
-
-/**
- * 每个端点原生协议可接收的转换来源协议（客户端协议）。
- * 与服务端 conversion 注册表保持一致；无条目表示暂不支持转换。
- */
-export const CONVERTIBLE_PROTOCOLS: Record<Protocol, Protocol[]> = {
-  'openai-completions': ['anthropic-messages', 'openai-responses'],
-  'openai-responses': [],
-  'anthropic-messages': ['openai-completions'],
-}

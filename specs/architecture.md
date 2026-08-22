@@ -12,9 +12,8 @@ flowchart LR
    Lifecycle --> Proxy
    Proxy --> Store
    Proxy --> Router[协议识别、路由与故障切换]
-   Router --> OpenAI[OpenAI 供应商]
-   Router --> Anthropic[Anthropic 供应商]
-   Router --> Gemini[Gemini 供应商]
+   Router --> OpenAI[OpenAI Completions / Responses 供应商]
+   Router --> Anthropic[Anthropic Messages 供应商]
 ```
 
 管理服务与代理服务是两个独立的 HTTP 监听器。两者共享应用级配置和密钥存储，但代理可以单独启动、停止或重启，管理服务在此过程中持续可用。
@@ -37,8 +36,7 @@ ProviderModel 通过 `provider_model_endpoints` 绑定 ProviderEndpoint，并可
 |------|----------|
 | OpenAI | `/v1/chat/completions`、`/v1/completions`、`/v1/embeddings` |
 | Anthropic | `/v1/messages` |
-| Gemini | `/v1beta/models/*` |
-| Custom | 用户自定义路径匹配规则 |
+| Custom | 当前未实现；协议枚举以 `source/common/schemas.ts` 为准 |
 
 > `/v1/models` 不作为上游透传路径，而是代理自身提供的本地服务接口。
 
@@ -68,14 +66,10 @@ v0.3 MVP 只有一个兜底逻辑模型 `default`，因此所有携带非空模�
 ### Health State
 Provider 级别的健康状态，包含连续失败次数、冷却截止时间、最近成功时间。
 
-## 同协议最小转换原则
+## 协议路由与转换原则
 
-1. 不做 OpenAI、Anthropic、Gemini 之间的报文格式转换；响应体始终逐块透传。
-2. 代理只做同协议路由所需的最小请求转换：
-   - 根据请求 path 识别协议
-   - OpenAI / Anthropic 将请求体中的 `model` 替换为 ProviderModel 的 `modelName`
-   - Gemini 保留原生 body，在 URL 中替换模型 ID，并保留 `generateContent` / `streamGenerateContent` 动作及 `alt=sse` 等查询参数
-   - 注入 Provider 认证头，并安全透传端到端 header
-3. 每个 `provider_endpoints` 配置的是 Provider 按原生协议提供的默认 URL；`provider_model_endpoints.url` 非空时作为该 ProviderModel 绑定的 URL，否则回退到 ProviderEndpoint 的 `url`。OpenAI / Anthropic 直接使用该地址；Gemini 以该地址为基准替换模型和请求动作。
-4. 路由过滤：请求通过某客户端协议进入时，只考虑当前逻辑模型已绑定且存在对应原生端点或已启用协议转换绑定的 ProviderModel。
-5. 每个请求从当前 LogicalModel 的 `scheduling_policies` 绑定集合动态生成候选队列；OpenAI、Anthropic 等不同协议的 ProviderModel 可以同时存在，但只有当前逻辑模型中原生匹配或明确启用转换的绑定才会进入当前请求的候选。
+1. 当前支持的客户端/上游协议只有 `openai-completions`、`openai-responses`、`anthropic-messages`；Gemini 尚未实现，不应写入当前能力矩阵。
+2. 同协议请求只做最小请求处理：根据 path 识别协议、将请求体中的 `model` 替换为 ProviderModel 的 `modelName`、注入认证头并安全透传端到端 header。
+3. 协议转换不是全协议自动互转，而是由 ProviderModel endpoint 上显式启用的 ProtocolConverter/转换绑定控制。当前注册的方向以 `source/server/proxy/protocols/registry.ts` 为准，包括 OpenAI Completions ↔ Anthropic Messages、OpenAI Responses → OpenAI Completions，以及各协议直连；未注册方向必须拒绝。
+4. 已启用转换时，请求由 `conversion.ts` 改写，响应及 SSE 由 `conversion-response.ts` 处理；转换可能改变响应格式，不能概括为“始终逐块透传”。
+5. 每个 `provider_endpoints` 配置 Provider 的原生协议 URL；`provider_model_endpoints.url` 非空时覆盖默认 URL。路由只考虑当前 LogicalModel 的 `scheduling_policies` 绑定、健康状态和协议原生匹配/显式转换匹配的候选。

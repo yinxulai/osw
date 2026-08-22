@@ -9,7 +9,7 @@ import { OverviewPage } from './pages/overview/page'
 import { RuntimeSettingsPage } from './pages/runtime-settings/page'
 import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
-import { useProxyStatus, useAppPolling } from './services/app-hooks'
+import { useProxyStatus } from './features/proxy/hooks'
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>('queue')
@@ -22,8 +22,7 @@ function App() {
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const proxyStatus = useProxyStatus()
 
-  // 全局代理状态轮询（5秒），后台静默刷新不触发 loading
-  useAppPolling('proxyStatus', 5000)
+  // useProxyStatus 自身负责全局代理状态轮询
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')

@@ -12,8 +12,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
-import { modelTestApi, type ModelTestResult } from '@/api'
-import { CONVERTIBLE_PROTOCOLS } from '@/pages/model-management/lib/protocols'
+import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
+import { modelTestApi, type ModelTestResult } from '@/api/tools'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

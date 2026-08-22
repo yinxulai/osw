@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Protocol } from '@common/schemas'
-import { convertRequestBody, isConvertible, CONVERTIBLE_PROTOCOLS } from './conversion'
+import { CONVERTIBLE_PROTOCOLS, isConvertible } from '@common/protocols'
+import { convertRequestBody } from './conversion'
 import { convertResponseBody, createSseConverter, parseSseIncremental, serializeSseEvent } from './conversion-response'
 
 function request(protocol: Protocol, body: Record<string, unknown>): Buffer {

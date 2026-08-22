@@ -10,7 +10,7 @@ import {
   getModelStats,
   getLatencyDistribution,
   getFailureReasons,
-} from '../database/store'
+} from '../database/analytics-store'
 
 export const analyticsRoutes: Record<string, ManagementHandler> = {
   '/api/analytics/summary': handleAnalyticsSummary,
