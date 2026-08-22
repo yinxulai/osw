@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Braces, CheckCircle2, Copy, Gauge, Route, XCircle } from 'lucide-react'
+import { Braces, CheckCircle2, ChevronRight, Copy, Gauge, Route, XCircle } from 'lucide-react'
 import type { RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -94,11 +94,20 @@ function ProviderRoute(props: ProviderRouteProps) {
           <Route size={12} />
           Provider 路由
         </div>
-        <span className="text-[10px] text-muted-foreground">{props.attempts.length} 次尝试</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">点击查看详情</span>
+          <span className="text-[10px] text-muted-foreground">{props.attempts.length} 次尝试</span>
+        </div>
       </div>
       <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
-          <button type="button" key={attempt.attemptIndex} className="grid w-full grid-cols-[24px_minmax(0,1fr)_auto] gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40" onClick={() => props.onSelect(attempt.id)}>
+          <button
+            type="button"
+            key={attempt.attemptIndex}
+            aria-label={`查看第 ${index + 1} 次 Provider 路由详情`}
+            className="group grid w-full grid-cols-[24px_minmax(0,1fr)_auto_14px] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+            onClick={() => props.onSelect(attempt.id)}
+          >
             <div className={cn(
               'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
               attempt.status === 'success'
@@ -123,6 +132,7 @@ function ProviderRoute(props: ProviderRouteProps) {
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
             </div>
+            <ChevronRight size={14} className="text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground group-focus-visible:text-foreground" />
           </button>
         ))}
         {props.attempts.length === 0 && (
@@ -133,7 +143,7 @@ function ProviderRoute(props: ProviderRouteProps) {
   )
 }
 
-function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputTokens' | 'totalTokens'>) {
+function RawUsage(props: Pick<RequestLogEntry, 'rawUsage'>) {
   const rawUsage = props.rawUsage ? JSON.stringify(props.rawUsage, null, 2) : null
 
   return (
@@ -163,9 +173,6 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage' | 'cacheCreationInputT
           Provider response 不包含 usage 信息
         </div>
       )}
-      <div className="border-t border-border bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
-        缓存写入 {formatNumber(props.cacheCreationInputTokens)} · 总 Token {formatNumber(props.totalTokens)}
-      </div>
     </section>
   )
 }
@@ -236,11 +243,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
             <ProviderRoute attempts={log.attempts} onSelect={setSelectedAttemptId} />
-            <RawUsage
-              rawUsage={log.rawUsage}
-              cacheCreationInputTokens={log.cacheCreationInputTokens}
-              totalTokens={log.totalTokens}
-            />
+            <RawUsage rawUsage={log.rawUsage} />
           </div>
           <RequestContentsDrawer
             contents={contents}
