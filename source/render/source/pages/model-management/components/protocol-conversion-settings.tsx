@@ -28,7 +28,7 @@ export function ProtocolConversionSettings(props: ProtocolConversionSettingsProp
           onCheckedChange={checked => updateProtocolEntry(index, { protocolConversionEnabled: checked })}
         />
       </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         开启后，此端点可接收其他协议的请求并自动转换（兼容层，部分参数可能丢失）
       </p>
       {entry.protocolConversionEnabled && (
@@ -42,7 +42,7 @@ export function ProtocolConversionSettings(props: ProtocolConversionSettingsProp
               {PROTOCOL_SHORT_LABELS[from]} → {PROTOCOL_SHORT_LABELS[entry.protocol]}
             </span>
           ))}
-          <p className="w-full text-[10px] leading-relaxed text-muted-foreground/80">
+          <p className="w-full text-[11px] leading-relaxed text-muted-foreground/80">
             原生请求优先；转换请求仅在没有原生候选时使用
           </p>
         </div>

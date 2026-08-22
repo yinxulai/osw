@@ -47,7 +47,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
             onChange={handleFileChange}
           />
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           导出的配置文件不包含 API Key。导入时需在文件中手动添加{' '}
           <code className="rounded bg-muted px-1">apiKey</code> 字段。
         </p>

@@ -41,7 +41,7 @@ export function ProviderFields(props: ProviderFieldsProps) {
               placeholder={editingProviderId ? '留空表示不修改' : '可选，例如 sk-...'}
             />
           </div>
-          <p className="text-[11px] text-muted-foreground">仅保存在本机；无需鉴权的上游可以留空。</p>
+          <p className="text-xs text-muted-foreground">仅保存在本机；无需鉴权的上游可以留空。</p>
         </div>
 
         <div className="space-y-1.5">

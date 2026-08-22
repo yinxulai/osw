@@ -24,8 +24,8 @@ export function GeneralCard(props: GeneralCardProps) {
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 py-1">
             <div className="space-y-0.5">
-              <Label htmlFor="theme-mode" className="text-xs">主题</Label>
-              <p className="text-[11px] text-muted-foreground">选择应用的颜色主题</p>
+              <Label htmlFor="theme-mode" className="text-sm">主题</Label>
+              <p className="text-xs text-muted-foreground">选择应用的颜色主题</p>
             </div>
             <Select value={themeMode} onValueChange={value => onThemeModeChange(value as ThemeMode)}>
               <SelectTrigger id="theme-mode" className="w-36" aria-label="主题模式">
@@ -40,8 +40,8 @@ export function GeneralCard(props: GeneralCardProps) {
           </div>
           <div className="flex items-center justify-between gap-4 py-1">
             <div className="space-y-0.5">
-              <Label htmlFor="auto-launch" className="text-xs">开机自启</Label>
-              <p className="text-[11px] text-muted-foreground">登录系统时自动启动并隐藏到托盘</p>
+              <Label htmlFor="auto-launch" className="text-sm">开机自启</Label>
+              <p className="text-xs text-muted-foreground">登录系统时自动启动并隐藏到托盘</p>
             </div>
             <Switch
               id="auto-launch"

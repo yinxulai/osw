@@ -67,7 +67,7 @@ export function RequestRow(props: RequestRowProps) {
           </div>
         )}
         {log.attempts.length === 1 && (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             耗时 {formatDuration(log.totalDurationMilliseconds)}
             {log.totalTokens != null ? ` · ${log.totalTokens} tokens` : ''}
           </div>

@@ -10,8 +10,8 @@ export function ProtocolUrlHint(props: ProtocolUrlHintProps) {
   const examples = PROTOCOL_EXAMPLES[protocol]
   return (
     <div className="rounded-md bg-muted/50 px-3 py-2">
-      <p className="text-[11px] text-muted-foreground">
-        完整接口地址需包含协议、主机、路径，指向该模型真实的 <span className="font-mono text-[10px]">{protocol}</span> 端点。
+      <p className="text-xs text-muted-foreground">
+        完整接口地址需包含协议、主机、路径，指向该模型真实的 <span className="font-mono text-[11px]">{protocol}</span> 端点。
       </p>
       <div className="mt-1.5 space-y-0.5">
         {examples.map(example => (

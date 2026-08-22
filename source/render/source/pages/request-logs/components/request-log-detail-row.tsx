@@ -110,8 +110,8 @@ function ProviderRoute(props: ProviderRouteProps) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate font-medium">{attempt.providerName}</span>
-                <span className="truncate font-mono text-[11px] text-muted-foreground">{attempt.providerModelName}</span>
-                <span className="font-mono text-[10px] text-muted-foreground">
+                <span className="truncate font-mono text-xs text-muted-foreground">{attempt.providerModelName}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">
                   {PROTOCOL_LABEL[attempt.upstreamProtocol ?? ''] ?? attempt.upstreamProtocol ?? '协议未知'}
                 </span>
                 <AttemptBadge attempt={attempt} />
@@ -190,7 +190,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                 <span className="text-sm font-medium">请求执行详情</span>
                 <RequestStatusBadge status={log.status} />
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <span>{modelName}</span><span>·</span>
                 <span>
                   请求协议：{PROTOCOL_LABEL[log.clientProtocol] ?? log.clientProtocol}
