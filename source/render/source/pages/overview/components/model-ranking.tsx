@@ -1,7 +1,9 @@
 import type { ModelStat } from '@common/schemas'
+import { tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardSectionHeader } from '@/components/card-section-header'
+import { Card, CardContent } from '@/components/ui/card'
 import { formatLatency } from '../lib/format'
 
 interface ModelRankingProps {
@@ -13,24 +15,21 @@ export function ModelRanking(props: ModelRankingProps) {
 
   return (
     <Card className="w-full">
-      <CardHeader className="pb-1.5">
-        <CardTitle className="text-sm">模型使用排行</CardTitle>
-        <CardDescription>按请求数排序</CardDescription>
-      </CardHeader>
-      <CardContent className="pt-1">
-        <div className="overflow-x-auto -mx-4">
+      <CardSectionHeader title="模型使用排行" description="按请求量排序" compact />
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead>
-              <tr className="border-y border-border text-muted-foreground">
-                <th className="text-left font-medium py-2 px-4 w-8">#</th>
-                <th className="text-left font-medium py-2">模型</th>
-                <th className="text-left font-medium py-2">Provider</th>
-                <th className="text-right font-medium py-2 pr-4">请求数</th>
-                <th className="text-right font-medium py-2">平均延迟</th>
-                <th className="text-right font-medium py-2">平均 TTFT</th>
-                <th className="text-right font-medium py-2">平均 TPS</th>
-                <th className="text-right font-medium py-2">缓存命中率</th>
-                <th className="text-right font-medium py-2 pr-4">成功率</th>
+            <thead className={tableHeaderClass}>
+              <tr>
+                <th className={cn(tableHeaderCellClass, 'w-8 px-4')}>#</th>
+                <th className={tableHeaderCellClass}>模型</th>
+                <th className={tableHeaderCellClass}>Provider</th>
+                <th className={cn(tableHeaderCellClass, 'text-right')}>请求数</th>
+                <th className={cn(tableHeaderCellClass, 'text-right')}>平均延迟</th>
+                <th className={cn(tableHeaderCellClass, 'text-right')}>平均 TTFT</th>
+                <th className={cn(tableHeaderCellClass, 'text-right')}>平均 TPS</th>
+                <th className={cn(tableHeaderCellClass, 'text-right')}>缓存命中率</th>
+                <th className={cn(tableHeaderCellClass, 'px-4 text-right')}>成功率</th>
               </tr>
             </thead>
             <tbody>
@@ -39,8 +38,8 @@ export function ModelRanking(props: ModelRankingProps) {
                   <td colSpan={9} className="py-6 text-center text-muted-foreground">暂无数据</td>
                 </tr>
               ) : stats.map((m, idx) => (
-                <tr key={`${m.providerId}-${m.providerModelName}`} className="border-b border-border last:border-0">
-                  <td className="py-2 px-4">
+                <tr key={`${m.providerId}-${m.providerModelName}`} className={tableRowClass}>
+                  <td className={cn(tableCellClass, 'px-4')}>
                     <span className={cn(
                       'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium',
                       idx < 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
@@ -48,14 +47,14 @@ export function ModelRanking(props: ModelRankingProps) {
                       {idx + 1}
                     </span>
                   </td>
-                  <td className="py-2 font-medium">{m.providerModelName}</td>
-                  <td className="py-2 text-muted-foreground">{m.providerName}</td>
-                  <td className="py-2 text-right pr-4 tabular-nums">{m.requests.toLocaleString()}</td>
-                  <td className="py-2 text-right tabular-nums">{formatLatency(m.avgLatencyMs)}</td>
-                  <td className="py-2 text-right tabular-nums">{m.avgTtftMs == null ? '—' : formatLatency(m.avgTtftMs)}</td>
-                  <td className="py-2 text-right tabular-nums">{m.avgTps == null ? '—' : m.avgTps.toFixed(1)}</td>
-                  <td className="py-2 text-right tabular-nums">{m.cacheHitRate == null ? '—' : `${(m.cacheHitRate * 100).toFixed(1)}%`}</td>
-                  <td className="py-2 text-right pr-4">
+                  <td className={cn(tableCellClass, 'font-medium')}>{m.providerModelName}</td>
+                  <td className={cn(tableCellClass, 'text-muted-foreground')}>{m.providerName}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.requests.toLocaleString()}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatLatency(m.avgLatencyMs)}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.avgTtftMs == null ? '—' : formatLatency(m.avgTtftMs)}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.avgTps == null ? '—' : m.avgTps.toFixed(1)}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.cacheHitRate == null ? '—' : `${(m.cacheHitRate * 100).toFixed(1)}%`}</td>
+                  <td className={cn(tableCellClass, 'px-4 text-right')}>
                     <Badge variant={m.successRate >= 0.95 ? 'success' : m.successRate >= 0.8 ? 'warning' : 'destructive'} className="font-normal h-5 px-1.5 text-[11px]">
                       {(m.successRate * 100).toFixed(1)}%
                     </Badge>

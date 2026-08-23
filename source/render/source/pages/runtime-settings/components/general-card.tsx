@@ -1,4 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { SettingsCardHeader } from './settings-card-header'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -16,10 +17,7 @@ export function GeneralCard(props: GeneralCardProps) {
 
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
-        <CardTitle>通用</CardTitle>
-        <CardDescription>应用行为相关设置</CardDescription>
-      </CardHeader>
+      <SettingsCardHeader title="通用" description="应用行为相关设置" />
       <CardContent className="px-4 py-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 py-1">

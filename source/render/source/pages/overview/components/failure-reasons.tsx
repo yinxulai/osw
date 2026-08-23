@@ -1,6 +1,7 @@
 import type { FailureReasonStat } from '@common/schemas'
 import { cn } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardSectionHeader } from '@/components/card-section-header'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface FailureReasonsProps {
   reasons: FailureReasonStat[]
@@ -25,12 +26,11 @@ export function FailureReasons(props: FailureReasonsProps) {
 
   return (
     <Card className="min-w-[320px]">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">错误分布</CardTitle>
-        <CardDescription>
-          共 {failedCount.toLocaleString()} 次失败 · 失败率 {failureRate}%
-        </CardDescription>
-      </CardHeader>
+      <CardSectionHeader
+        title="错误分布"
+        description={`共 ${failedCount.toLocaleString()} 次失败 · 失败率 ${failureRate}%`}
+        compact
+      />
       <CardContent className="pt-0">
         {reasons.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">

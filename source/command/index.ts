@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,6 +41,7 @@ let win: BrowserWindow | null = null
 let trayManager: TrayManager | null = null
 let autoLaunchManager: AutoLaunchManager | null = null
 let updaterManager: UpdaterManager | null = null
+let fatalErrorShown = false
 
 // Windows 任务栏图标依赖 AppUserModelID；必须在创建任何窗口前设置，
 // 否则系统会把进程归到默认 Electron 应用，导致显示默认图标。
@@ -68,11 +69,61 @@ function registerUpdaterIpc() {
 
 registerUpdaterIpc()
 
+function reportFatalError(error: unknown, title = 'One Switch 运行失败'): void {
+  if (fatalErrorShown) return
+  fatalErrorShown = true
+
+  const detail = formatError(error)
+  console.error(`[one-switch] ${title}`, detail)
+
+  const showDialog = () => {
+    dialog.showErrorBox(title, `${detail}\n\n应用将退出，请检查日志后重试。`)
+  }
+
+  if (app.isReady()) {
+    showDialog()
+    app.quit()
+  } else {
+    void app.whenReady().then(() => {
+      showDialog()
+      app.quit()
+    })
+  }
+}
+
+process.on('uncaughtException', error => {
+  reportFatalError(error)
+})
+
+process.on('unhandledRejection', reason => {
+  reportFatalError(reason)
+})
+
 function formatUptime(): string {
   const seconds = Math.floor(process.uptime())
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
   return minutes > 0 ? `${minutes}m ${remainingSeconds}s` : `${remainingSeconds}s`
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return error.stack ?? error.message
+  return String(error)
+}
+
+function showStartupError(error: unknown): void {
+  if (fatalErrorShown) return
+  fatalErrorShown = true
+
+  const detail = formatError(error)
+  console.error('[one-switch] startup failed', detail)
+
+  // 启动阶段还没有可用的渲染窗口，必须使用原生对话框告知用户，
+  // 否则 app.quit() 会让应用看起来像是“启动后直接关闭”。
+  dialog.showErrorBox(
+    'One Switch 启动失败',
+    `应用无法完成启动，请检查日志后重试。\n\n${detail}`,
+  )
 }
 
 function logStartupBanner() {
@@ -197,11 +248,25 @@ function createWindow() {
     ]))
   }
 
+  win.webContents.once('did-fail-load', (_event, errorCode, errorDescription) => {
+    showStartupError(new Error(`主界面加载失败 (${errorCode})：${errorDescription}`))
+    void stopServer().catch(stopError => {
+      console.error('[one-switch] failed to stop server after renderer load failure', formatError(stopError))
+    })
+    app.quit()
+  })
+
   if (isDevelopment) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL!)
+    void win.loadURL(process.env.VITE_DEV_SERVER_URL!).catch(error => {
+      showStartupError(error)
+      app.quit()
+    })
     win.webContents.openDevTools()
   } else {
-    win.loadFile(path.join(process.env.DIST!, 'render', 'index.html'))
+    void win.loadFile(path.join(process.env.DIST!, 'render', 'index.html')).catch(error => {
+      showStartupError(error)
+      app.quit()
+    })
   }
 }
 
@@ -220,12 +285,21 @@ app.whenReady().then(async () => {
     })
     console.log('[one-switch] server started successfully')
   } catch (error) {
-    console.error('[one-switch] failed to start server', error)
+    showStartupError(error)
     app.quit()
     return
   }
 
-  createWindow()
+  try {
+    createWindow()
+  } catch (error) {
+    showStartupError(error)
+    await stopServer().catch(stopError => {
+      console.error('[one-switch] failed to stop server after startup failure', formatError(stopError))
+    })
+    app.quit()
+    return
+  }
 
   // 初始化系统托盘
   try {

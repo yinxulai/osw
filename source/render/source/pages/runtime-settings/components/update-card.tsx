@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Download, ExternalLink, Package, RefreshCw, Rocket } from 'lucide-react'
+import { CardSectionHeader } from '@/components/card-section-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,15 +56,11 @@ type DownloadProgressProps = {
 function PreviewCard() {
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
-        <CardTitle className="flex items-center gap-2">
-          <Package className="h-4 w-4" />
-          版本更新
-        </CardTitle>
-        <CardDescription>
-          基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
-        </CardDescription>
-      </CardHeader>
+      <CardSectionHeader
+        bordered
+        title={<span className="flex items-center gap-2"><Package className="h-4 w-4" />版本更新</span>}
+        description="基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级"
+      />
       <CardContent className="px-4 py-4">
         <p className="text-[11px] text-muted-foreground">
           版本更新功能仅在 Electron 桌面端可用。

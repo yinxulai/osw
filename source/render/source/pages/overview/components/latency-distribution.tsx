@@ -1,6 +1,7 @@
 import type { LatencyBucket } from '@common/schemas'
 import { cn } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardSectionHeader } from '@/components/card-section-header'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface LatencyDistributionProps {
   buckets: LatencyBucket[]
@@ -10,11 +11,8 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
   const { buckets } = props
 
   return (
-    <Card className="min-w-[280px]">
-      <CardHeader className="pb-1.5">
-        <CardTitle className="text-sm">延迟分布</CardTitle>
-        <CardDescription>响应时间区间占比</CardDescription>
-      </CardHeader>
+    <Card className="min-w-70">
+      <CardSectionHeader title="延迟分布" description="请求耗时区间" compact />
       <CardContent className="space-y-2 pt-1">
         {buckets.map(l => (
           <div key={l.range} className="flex items-center gap-2">

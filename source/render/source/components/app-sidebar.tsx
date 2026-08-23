@@ -6,13 +6,14 @@ import {
   Moon,
   ListOrdered,
   ScrollText,
+  SlidersHorizontal,
   Sun,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-export type PageKey = 'queue' | 'providers' | 'overview' | 'requests' | 'settings' | 'logs'
+export type PageKey = 'queue' | 'providers' | 'rules' | 'overview' | 'requests' | 'settings' | 'logs'
 export type Theme = 'light' | 'dark'
 export type ThemeMode = 'system' | Theme
 
@@ -35,6 +36,7 @@ interface AppSidebarProps {
 const navItems: NavItem[] = [
   { key: 'queue', label: '模型队列', icon: ListOrdered, section: '主要' },
   { key: 'providers', label: '模型管理', icon: Database, section: '主要' },
+  { key: 'rules', label: '修改规则', icon: SlidersHorizontal, section: '主要' },
   { key: 'overview', label: '统计分析', icon: ChartColumnIncreasing, section: '数据' },
   { key: 'requests', label: '请求记录', icon: ClipboardList, section: '数据' },
   { key: 'logs', label: '运行日志', icon: ScrollText, section: '系统' },

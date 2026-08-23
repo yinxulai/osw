@@ -24,6 +24,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
         actions={
           <Button
             variant={proxyRunning ? 'secondary' : 'default'}
+            size="sm"
             aria-label={proxyRunning ? '暂停服务' : '启动服务'}
             onClick={() => void service.toggleProxy()}
           >

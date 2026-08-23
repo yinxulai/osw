@@ -1,4 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { SettingsCardHeader } from './settings-card-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '@common/schemas'
@@ -13,10 +14,7 @@ export function FailoverCard(props: FailoverCardProps) {
 
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
-        <CardTitle>故障转移</CardTitle>
-        <CardDescription>这些设置对后续请求生效</CardDescription>
-      </CardHeader>
+      <SettingsCardHeader title="故障转移" description="这些设置对后续请求生效" />
       <CardContent className="grid gap-3 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label htmlFor="failure-threshold" className="text-xs">连续失败阈值</Label>

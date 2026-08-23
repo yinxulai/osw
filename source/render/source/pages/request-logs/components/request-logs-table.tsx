@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, Clock, Database, Zap } from 'lucide-react'
 import type { RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import { tableCellClass, tableHeaderCellClass, tableHeaderClass, TableFrame } from '@/components/table-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -50,33 +51,33 @@ export function CachedTokensCell(props: CachedTokensCellProps) {
 
 function RequestLogsTableHeader() {
   return (
-    <thead>
-      <tr className="border-b border-border bg-muted/40 text-left text-foreground/75">
-        <th className="w-8 px-2.5 py-2 font-medium" />
-        <th className="px-2.5 py-2 font-medium">状态</th>
-        <th className="px-2.5 py-2 font-medium">时间</th>
-        <th className="px-2.5 py-2 font-medium">队列</th>
-        <th className="px-2.5 py-2 text-center font-medium">
+    <thead className={tableHeaderClass}>
+      <tr>
+        <th className={cn(tableHeaderCellClass, 'w-8')} />
+        <th className={tableHeaderCellClass}>状态</th>
+        <th className={tableHeaderCellClass}>时间</th>
+        <th className={tableHeaderCellClass}>队列</th>
+        <th className={cn(tableHeaderCellClass, 'text-center')}>
           <ArrowUpFromLine size={11} className="mr-0.5 inline" />
           输入
         </th>
-        <th className="px-2.5 py-2 text-center font-medium">
+        <th className={cn(tableHeaderCellClass, 'text-center')}>
           <Database size={11} className="mr-0.5 inline" />
           缓存输入
         </th>
-        <th className="px-2.5 py-2 text-center font-medium">
+        <th className={cn(tableHeaderCellClass, 'text-center')}>
           <ArrowDownToLine size={11} className="mr-0.5 inline" />
           输出
         </th>
-        <th className="px-2.5 py-2 text-center font-medium">
+        <th className={cn(tableHeaderCellClass, 'text-center')}>
           <Clock size={11} className="mr-0.5 inline" />
           TTFT
         </th>
-        <th className="px-2.5 py-2 text-center font-medium">
+        <th className={cn(tableHeaderCellClass, 'text-center')}>
           <Zap size={11} className="mr-0.5 inline" />
           TPS
         </th>
-        <th className="px-2.5 py-2 text-right font-medium">耗时</th>
+        <th className={cn(tableHeaderCellClass, 'text-right')}>耗时</th>
       </tr>
     </thead>
   )
@@ -128,42 +129,42 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
       <tr
         onClick={() => props.toggleExpand(props.log.id)}
         className={cn(
-          'cursor-pointer border-b border-border last:border-b-0 transition-colors hover:bg-muted/30',
+          'cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-muted/20',
           props.expanded && 'bg-muted/20',
         )}
       >
-        <td className="px-2.5 py-2 text-foreground/70">
+        <td className={cn(tableCellClass, 'text-foreground/70')}>
           {props.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </td>
-        <td className="px-2.5 py-2">
+        <td className={tableCellClass}>
           <RequestStatusBadge status={props.log.status} />
         </td>
-        <td className="whitespace-nowrap px-2.5 py-2 font-mono text-foreground/75">
+        <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-foreground/75')}>
           {formatTime(props.log.createdTime)}
         </td>
-        <td className="max-w-35 truncate px-2.5 py-2 font-medium">{props.modelName}</td>
-        <td className="px-2.5 py-2 text-center font-mono">
+        <td className={cn(tableCellClass, 'max-w-35 truncate font-medium')}>{props.modelName}</td>
+        <td className={cn(tableCellClass, 'text-center font-mono')}>
           <span className={cn(props.log.inputTokens != null && 'text-foreground')}>
             {formatNumber(props.log.inputTokens)}
           </span>
         </td>
-        <td className="px-2.5 py-2 text-center">
+        <td className={cn(tableCellClass, 'text-center')}>
           <CachedTokensCell value={props.log.cachedInputTokens} />
         </td>
-        <td className="px-2.5 py-2 text-center font-mono">
+        <td className={cn(tableCellClass, 'text-center font-mono')}>
           <span className={cn(props.log.outputTokens != null && 'text-foreground')}>
             {formatNumber(props.log.outputTokens)}
           </span>
         </td>
-        <td className="px-2.5 py-2 text-center font-mono">
+        <td className={cn(tableCellClass, 'text-center font-mono')}>
           <span className={cn(props.log.ttftMilliseconds != null && 'text-foreground')}>
             {formatTTFT(props.log.ttftMilliseconds)}
           </span>
         </td>
-        <td className="px-2.5 py-2 text-center font-mono">
+        <td className={cn(tableCellClass, 'text-center font-mono')}>
           <span className={cn(tps !== '—' && 'text-foreground')}>{tps}</span>
         </td>
-        <td className="px-2.5 py-2 text-right font-mono">
+        <td className={cn(tableCellClass, 'text-right font-mono')}>
           {formatDuration(props.log.totalDurationMilliseconds)}
         </td>
       </tr>
@@ -208,13 +209,13 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <TableFrame>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <RequestLogsTableHeader />
           <tbody>{body}</tbody>
         </table>
       </div>
-    </div>
+    </TableFrame>
   )
 }

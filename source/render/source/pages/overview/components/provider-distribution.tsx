@@ -1,6 +1,7 @@
 import type { ProviderStat } from '@common/schemas'
 import { cn } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CardSectionHeader } from '@/components/card-section-header'
+import { Card, CardContent } from '@/components/ui/card'
 import { getProviderColor } from '../lib/format'
 
 interface ProviderDistributionProps {
@@ -11,11 +12,8 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
   const { stats } = props
 
   return (
-    <Card className="min-w-[280px]">
-      <CardHeader className="pb-1.5">
-        <CardTitle className="text-sm">供应商分布</CardTitle>
-        <CardDescription>按请求量占比</CardDescription>
-      </CardHeader>
+    <Card className="min-w-70">
+      <CardSectionHeader title="供应商分布" description="按请求量统计" compact />
       <CardContent className="space-y-2.5 pt-1">
         {stats.length === 0 ? (
           <div className="text-xs text-muted-foreground py-4 text-center">暂无数据</div>

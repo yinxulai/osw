@@ -1,4 +1,5 @@
 import type { LogEntry } from '@common/schemas'
+import { tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass, TableFrame } from '@/components/table-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -32,7 +33,7 @@ function formatTimestamp(timestamp: number) {
 
 function renderLoadingRows() {
   return Array.from({ length: 10 }).map((_, index) => (
-    <tr key={index} className="border-b border-border last:border-0">
+    <tr key={index} className={tableRowClass}>
       <td className="px-3 py-2.5">
         <Skeleton className="h-3 w-28" />
       </td>
@@ -58,16 +59,16 @@ function renderEmptyRow() {
 
 function renderLogRows(logs: LogEntry[]) {
   return logs.map(log => (
-    <tr key={log.id} className="border-b border-border align-top last:border-0 hover:bg-muted/25">
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-muted-foreground">
+    <tr key={log.id} className={cn(tableRowClass, 'align-top')}>
+      <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-muted-foreground')}>
         {formatTimestamp(log.timestamp)}
       </td>
-      <td className="px-3 py-2">
+      <td className={tableCellClass}>
         <Badge variant="outline" className={cn('h-5 px-1.5 font-mono text-[10px]', LEVEL_STYLE[log.level])}>
           {LEVEL_LABEL[log.level]}
         </Badge>
       </td>
-      <td className="whitespace-pre-wrap break-all px-3 py-2 font-mono leading-5">{log.message}</td>
+      <td className={cn(tableCellClass, 'whitespace-pre-wrap break-all font-mono leading-5')}>{log.message}</td>
     </tr>
   ))
 }
@@ -84,19 +85,19 @@ export function LogsTable(props: LogsTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <TableFrame>
       <div className="max-h-[calc(100vh-190px)] overflow-auto">
         <table className="w-full table-fixed text-xs">
-          <thead className="sticky top-0 z-10 bg-muted/95 text-left text-muted-foreground backdrop-blur-sm">
-            <tr className="border-b border-border">
-              <th className="w-40 px-3 py-2 font-medium">时间</th>
-              <th className="w-20 px-3 py-2 font-medium">级别</th>
-              <th className="px-3 py-2 font-medium">消息</th>
+          <thead className={cn('sticky top-0 z-10 bg-card/95 backdrop-blur-sm', tableHeaderClass)}>
+            <tr>
+              <th className={cn(tableHeaderCellClass, 'w-40')}>时间</th>
+              <th className={cn(tableHeaderCellClass, 'w-20')}>级别</th>
+              <th className={tableHeaderCellClass}>消息</th>
             </tr>
           </thead>
           <tbody>{renderTableBody()}</tbody>
         </table>
       </div>
-    </div>
+    </TableFrame>
   )
 }

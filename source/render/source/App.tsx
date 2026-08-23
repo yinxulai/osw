@@ -10,6 +10,7 @@ import { OverviewPage } from './pages/overview/page'
 import { RuntimeSettingsPage } from './pages/runtime-settings/page'
 import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
+import { ModificationRulesPage } from './pages/modification-rules/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
 function App() {
@@ -60,6 +61,7 @@ function App() {
         >
           {activePage === 'queue' && <QueueControlPage onNavigateToModels={() => setActivePage('providers')} />}
           {activePage === 'providers' && <ModelManagementPage />}
+          {activePage === 'rules' && <ModificationRulesPage />}
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}

@@ -18,10 +18,10 @@ export function ModelManagementPage() {
 
   const renderHeaderActions = () => (
     <div className="flex items-center gap-2">
-      <Button variant="outline" size="default" onClick={() => setTestPanelOpen(true)}>
+      <Button variant="outline" size="sm" onClick={() => setTestPanelOpen(true)}>
         <FlaskConical size={14} /> 连接测试
       </Button>
-      <Button size="default" onClick={() => service.openProviderDialog()}>
+      <Button size="sm" onClick={() => service.openProviderDialog()}>
         <Plus size={14} /> 新建供应商
       </Button>
     </div>

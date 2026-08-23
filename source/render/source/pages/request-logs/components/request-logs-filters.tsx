@@ -1,3 +1,5 @@
+import { FilterBar } from '@/components/filter-bar'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { RequestLogFilter } from '../service'
 
@@ -23,7 +25,7 @@ function toDateInput(timestamp: number | null, endDate = false) {
 
 export function RequestLogsFilters(props: RequestLogsFiltersProps) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
+    <FilterBar className="mb-3">
       <Select value={props.filter.providerId} onValueChange={value => props.applyFilter({ providerId: value })}>
         <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="全部渠道" /></SelectTrigger>
         <SelectContent>
@@ -55,15 +57,15 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
           <SelectItem value="cancelled">已取消</SelectItem>
         </SelectContent>
       </Select>
-      <input aria-label="开始日期" type="date" value={toDateInput(props.filter.createdTimeFrom)} onChange={event => {
+      <Input aria-label="开始日期" type="date" value={toDateInput(props.filter.createdTimeFrom)} onChange={event => {
         const value = event.target.value
         props.applyFilter({ createdTimeFrom: value ? new Date(`${value}T00:00:00`).getTime() : null })
-      }} className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
-      <input aria-label="结束日期" type="date" value={toDateInput(props.filter.createdTimeTo, true)} onChange={event => {
+      }} className="h-8 w-36 text-xs" />
+      <Input aria-label="结束日期" type="date" value={toDateInput(props.filter.createdTimeTo, true)} onChange={event => {
         const value = event.target.value
         props.applyFilter({ createdTimeTo: value ? new Date(`${value}T00:00:00`).getTime() + 24 * 60 * 60 * 1000 : null })
-      }} className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
-      <span className="text-xs text-foreground/75">共 {props.total} 条</span>
-    </div>
+      }} className="h-8 w-36 text-xs" />
+      <span className="text-xs text-muted-foreground">共 {props.total} 条</span>
+    </FilterBar>
   )
 }

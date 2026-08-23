@@ -1,7 +1,8 @@
 import { useRef } from 'react'
 import { Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SettingsCardHeader } from './settings-card-header'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface DataManagementCardProps {
   onExport: () => void
@@ -22,10 +23,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
 
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
-        <CardTitle>数据管理</CardTitle>
-        <CardDescription>导出或导入配置，API Key 将被脱敏导出</CardDescription>
-      </CardHeader>
+      <SettingsCardHeader title="数据管理" description="导出或导入配置，API Key 将被脱敏导出" />
       <CardContent className="px-4 py-4">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onExport}>

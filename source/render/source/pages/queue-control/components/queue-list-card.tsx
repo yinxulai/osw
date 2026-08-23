@@ -10,6 +10,7 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowRight, ListTree, RefreshCw, Target } from 'lucide-react'
+import { TableHeaderSurface } from '@/components/table-primitives'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -96,13 +97,13 @@ export function QueueListCard(props: QueueListCardProps) {
   )
 
   const renderTableHeader = () => (
-    <div className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center border-b border-border/60 bg-muted/30 px-4 text-[10px] font-medium text-muted-foreground lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
-      <span>顺序</span>
-      <span>供应商与模型</span>
-      <span>性能</span>
-      <span className="hidden lg:block">健康状态</span>
-      <span className="text-right">状态</span>
-    </div>
+    <TableHeaderSurface className="grid min-h-8 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center px-4 lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]">
+      <span className="px-3 py-2">顺序</span>
+      <span className="px-3 py-2">供应商与模型</span>
+      <span className="px-3 py-2">性能</span>
+      <span className="hidden px-3 py-2 lg:block">健康状态</span>
+      <span className="px-3 py-2 text-right">状态</span>
+    </TableHeaderSurface>
   )
 
   const renderQueueTable = () => (

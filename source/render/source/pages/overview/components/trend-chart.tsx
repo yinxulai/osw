@@ -1,5 +1,6 @@
 import type { AnalyticsRange, DailyTrendPoint } from '@common/schemas'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { CardSectionHeader } from '@/components/card-section-header'
 import { formatDayLabel } from '../lib/format'
 
 interface TrendChartProps {
@@ -14,10 +15,7 @@ export function TrendChart(props: TrendChartProps) {
 
   return (
     <Card className="min-w-0 w-full">
-      <CardHeader className="pb-1.5">
-        <CardTitle className="text-sm">请求量趋势</CardTitle>
-        <CardDescription>每日请求数</CardDescription>
-      </CardHeader>
+      <CardSectionHeader title="请求量趋势" description="每日请求数" compact />
       <CardContent className="min-w-0 overflow-hidden">
         <div className="h-40 flex min-w-0 items-end gap-0.5 pt-2 sm:gap-1">
           {trend.map(d => (
