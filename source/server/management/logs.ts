@@ -16,7 +16,7 @@ const ListLogsSchema = z.object({ after: z.number().int().nonnegative().optional
 function handleListLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
   const { after, limit } = ListLogsSchema.parse(body)
   const logs: LogEntry[] = listLogs({ after, limit })
-  sendSuccess(res, { logs, latestId: logs.length > 0 ? logs[logs.length - 1].id : (after ?? 0) })
+  sendSuccess(res, { logs, latestId: logs.length > 0 ? logs[0].id : (after ?? 0) })
 }
 
 function handleExportLogs(_req: IncomingMessage, res: ServerResponse): void {

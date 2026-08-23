@@ -79,7 +79,7 @@ export function listLogs(options?: ListLogsOptions): LogEntry[] {
   const after = options?.after ?? 0
   const limit = options?.limit ?? 500
   const filtered = after > 0 ? entries.filter(entry => entry.id > after) : entries
-  return filtered.slice(-limit)
+  return filtered.slice(-limit).reverse()
 }
 
 export function clearLogs(): void {
