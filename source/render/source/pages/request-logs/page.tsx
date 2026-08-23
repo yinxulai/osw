@@ -1,35 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { ChevronLeft, ChevronRight, RefreshCw, ScrollText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { EmptyState } from '@/components/ui/empty-state'
-import { RequestLogsFilters, type RequestLogsFilter, type StatusFilter } from './components/request-logs-filters'
+import { RequestLogsFilters } from './components/request-logs-filters'
 import { RequestLogsTable } from './components/request-logs-table'
-import { PAGE_SIZE } from './hooks/use-request-log-list'
+import { PAGE_SIZE } from './queries'
 import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
-  const { logs, total, providers, logicalModels, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter } = useRequestLogsService()
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [providerFilter, setProviderFilter] = useState<string>('all')
-  const [logicalModelFilter, setLogicalModelFilter] = useState<string>('all')
-  const [protocolFilter, setProtocolFilter] = useState<string>('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [page, setPage] = useState(1)
-
-  const applyFilter = (next: Partial<RequestLogsFilter>) => {
-    if (next.providerId !== undefined) setProviderFilter(next.providerId)
-    if (next.logicalModelId !== undefined) setLogicalModelFilter(next.logicalModelId)
-    if (next.clientProtocol !== undefined) setProtocolFilter(next.clientProtocol)
-    if (next.status !== undefined) setStatusFilter(next.status as StatusFilter)
-    if (next.createdTimeFrom !== undefined) setFromDate(next.createdTimeFrom === null ? '' : new Date(next.createdTimeFrom).toISOString().slice(0, 10))
-    if (next.createdTimeTo !== undefined) setToDate(next.createdTimeTo === null ? '' : new Date(next.createdTimeTo - 1).toISOString().slice(0, 10))
-    setPage(1)
-    void setFilter(next)
-  }
+  const { logs, total, providers, logicalModels, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const providerOptions = useMemo(() => {
     return providers
@@ -39,18 +20,13 @@ export function RequestLogsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  const goToPage = (next: number) => {
+  const handlePageChange = (next: number) => {
     const clamped = Math.min(Math.max(1, next), totalPages)
-    setPage(clamped)
-    void refresh(clamped)
+    goToPage(clamped)
   }
 
   const toggleExpand = (id: string) => {
-    setExpandedId(prev => {
-      const next = prev === id ? null : id
-      if (next) void loadDetail(next)
-      return next
-    })
+    loadDetail(expandedId === id ? null : id)
   }
 
   return (
@@ -67,18 +43,11 @@ export function RequestLogsPage() {
       />
       <PageContent>
         <RequestLogsFilters
-          providerFilter={providerFilter}
-          logicalModelFilter={logicalModelFilter}
-          protocolFilter={protocolFilter}
-          statusFilter={statusFilter}
-          fromDate={fromDate}
-          toDate={toDate}
+          filter={filter}
           providerOptions={providerOptions}
           logicalModels={logicalModels}
           total={total}
-          applyFilter={applyFilter}
-          setFromDate={setFromDate}
-          setToDate={setToDate}
+          applyFilter={setFilter}
         />
         {!loading && logs.length === 0 ? (
           <EmptyState
@@ -107,7 +76,7 @@ export function RequestLogsPage() {
               size="sm"
               className="h-7 px-2"
               disabled={page <= 1}
-              onClick={() => goToPage(page - 1)}
+              onClick={() => handlePageChange(page - 1)}
             >
               <ChevronLeft size={14} />
             </Button>
@@ -116,7 +85,7 @@ export function RequestLogsPage() {
               size="sm"
               className="h-7 px-2"
               disabled={page >= totalPages}
-              onClick={() => goToPage(page + 1)}
+              onClick={() => handlePageChange(page + 1)}
             >
               <ChevronRight size={14} />
             </Button>

@@ -23,7 +23,7 @@ class RegisteredProtocolAdapter implements ProtocolAdapter {
   }
 
   finishStream(converter: StreamConverter): string {
-    const tail = converter.push('') + converter.flush()
+    const tail = converter.push('') + converter.flush() + (converter.finish?.() ?? '')
     return this.clientProtocol === 'openai-completions'
       ? `${tail}data: [DONE]\n\n`
       : tail

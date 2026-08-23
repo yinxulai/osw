@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { providerModelApi } from '@/api/models'
-import { useToast } from '@/components/ui/toast'
+import { useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { ProviderModelRoute } from '@common/schemas'
+import { queueKeys, useQueueModelsQuery } from '../queries'
 
 function toQueueModel(model: ProviderModelRoute): ProviderModelRoute {
   return {
@@ -23,44 +23,11 @@ function toQueueModel(model: ProviderModelRoute): ProviderModelRoute {
 }
 
 export function useQueueModels() {
-  const toast = useToast()
-  const [models, setModels] = useState<ProviderModelRoute[]>([])
-  const [loading, setLoading] = useState(true)
-  const initializedRef = useRef(false)
-  const inflightRef = useRef(false)
-
-  const loadModels = useCallback(async () => {
-    if (inflightRef.current) return false
-    inflightRef.current = true
-    try {
-      const result = await providerModelApi.queue('default')
-      if (!result.success) {
-        toast.error(result.errorMessage)
-        return false
-      }
-      setModels(result.data.map(toQueueModel))
-      return true
-    } finally {
-      inflightRef.current = false
-    }
-  }, [toast])
-
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true
-      void loadModels().finally(() => setLoading(false))
-    }
-    const timer = window.setInterval(() => void loadModels(), 30000)
-    return () => window.clearInterval(timer)
-  }, [loadModels])
-
-  const updateModels = useCallback((update: (models: ProviderModelRoute[]) => ProviderModelRoute[]) => {
-    setModels(update)
-  }, [])
-
-  const updateEnabledModel = useCallback((id: string, enabled: boolean) => {
-    setModels(current => current.map(model => model.id === id ? { ...model, enabled } : model))
-  }, [])
-
-  return { models, loading, loadModels, updateModels, updateEnabledModel }
+  const client = useQueryClient()
+  const query = useQueueModelsQuery()
+  const models = (query.data ?? []).map(toQueueModel)
+  const loadModels = useCallback(async () => { const result = await query.refetch(); return !result.isError }, [query])
+  const updateModels = useCallback((update: (models: ProviderModelRoute[]) => ProviderModelRoute[]) => client.setQueryData<ProviderModelRoute[]>(queueKeys.models, current => update(current ?? [])), [client])
+  const updateEnabledModel = useCallback((id: string, enabled: boolean) => updateModels(current => current.map(model => model.id === id ? { ...model, enabled } : model)), [updateModels])
+  return { models, loading: query.isPending, loadModels, updateModels, updateEnabledModel }
 }

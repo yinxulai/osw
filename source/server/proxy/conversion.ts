@@ -37,27 +37,30 @@ function contentToOpenAiText(content: unknown): string {
 }
 
 function contentToOpenAiParts(content: unknown): Json[] {
-  if (typeof content === 'string') {
-    return content ? [{ type: 'text', text: content }] : []
-  }
+  if (typeof content === 'string') return content ? [{ type: 'text', text: content }] : []
   const parts: Json[] = []
   for (const block of asArray(content)) {
     const record = asObject(block)
     if (!record) continue
     if (record.type === 'text') {
       const text = asString(record.text)
-      if (text) parts.push({ type: 'text', text })
+      if (text) parts.push({ type: 'text', text, ...(record.cache_control ? { cache_control: record.cache_control } : {}) })
     } else if (record.type === 'image' && asObject(record.source)) {
       const source = record.source as Json
       if (source.type === 'base64' && asString(source.media_type) && asString(source.data)) {
-        parts.push({
-          type: 'image_url',
-          image_url: { url: `data:${source.media_type};base64,${source.data}` },
-        })
+        parts.push({ type: 'image_url', image_url: { url: `data:${source.media_type};base64,${source.data}` } })
+      } else if (source.type === 'url' && asString(source.url)) {
+        parts.push({ type: 'image_url', image_url: { url: source.url } })
       }
     }
   }
   return parts
+}
+
+function anthropicToolToOpenAi(tool: Json): Json | null {
+  const name = asString(tool.name)
+  if (!name) return null
+  return { type: 'function', function: { name, description: asString(tool.description) ?? '', parameters: asObject(tool.input_schema) ?? { type: 'object', properties: {} } } }
 }
 
 function anthropicToOpenAiRequest(body: Json, model: string): Json {
@@ -70,14 +73,31 @@ function anthropicToOpenAiRequest(body: Json, model: string): Json {
     if (!message) continue
     const role = asString(message.role) === 'assistant' ? 'assistant' : 'user'
     const parts = contentToOpenAiParts(message.content)
-    if (parts.length === 1 && parts[0].type === 'text') {
-      messages.push({ role, content: parts[0].text })
-    } else if (parts.length > 0) {
-      messages.push({ role, content: parts })
+    const toolCalls = parts.length === 0 ? asArray(message.content).flatMap(block => {
+      const record = asObject(block)
+      if (record?.type !== 'tool_use' || !asString(record.name)) return []
+      return [{ id: asString(record.id) ?? '', type: 'function', function: { name: record.name, arguments: JSON.stringify(asObject(record.input) ?? {}) } }]
+    }) : []
+    if (toolCalls.length > 0) messages.push({ role: 'assistant', content: null, tool_calls: toolCalls })
+    else if (parts.length === 1 && parts[0].type === 'text') messages.push({ role, content: parts[0].text })
+    else if (parts.length > 0) messages.push({ role, content: parts })
+  }
+
+  for (const raw of asArray(body.messages)) {
+    const message = asObject(raw)
+    if (!message || message.role !== 'user') continue
+    for (const block of asArray(message.content)) {
+      const record = asObject(block)
+      if (record?.type === 'tool_result') messages.push({ role: 'tool', tool_call_id: asString(record.tool_use_id) ?? '', content: contentToOpenAiText(record.content) })
     }
   }
 
   const result: Json = { model, messages }
+  const tools = asArray(body.tools).map(tool => anthropicToolToOpenAi(asObject(tool) ?? {})).filter((tool): tool is Json => tool !== null)
+  if (tools.length > 0) result.tools = tools
+  const choice = asObject(body.tool_choice)
+  if (choice?.type === 'auto' || choice?.type === 'any') result.tool_choice = choice.type === 'any' ? 'required' : 'auto'
+  else if (choice?.type === 'tool' && asString(choice.name)) result.tool_choice = { type: 'function', function: { name: choice.name } }
 
   const maxTokens = asNumber(body.max_tokens)
   if (maxTokens !== undefined) result.max_tokens = maxTokens
@@ -118,6 +138,10 @@ function responsesToOpenAiRequest(body: Json, model: string): Json {
         } else if (record.type === 'input_image' && asObject(record.image_url)) {
           const url = asString((record.image_url as Json).url)
           if (url) parts.push({ type: 'image_url', image_url: { url } })
+        } else if (record.type === 'function_call_output') {
+          messages.push({ role: 'tool', tool_call_id: asString(record.call_id) ?? '', content: asString(record.output) ?? '' })
+        } else if (record.type === 'function_call') {
+          messages.push({ role: 'assistant', content: null, tool_calls: [{ id: asString(record.call_id) ?? '', type: 'function', function: { name: asString(record.name) ?? '', arguments: asString(record.arguments) ?? '{}' } }] })
         }
       }
     }
@@ -159,6 +183,15 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
     }
 
     const content: Json[] = []
+    for (const rawCall of asArray(message.tool_calls)) {
+      const call = asObject(rawCall)
+      const fn = asObject(call?.function)
+      if (fn && asString(fn.name)) content.push({ type: 'tool_use', id: asString(call?.id) ?? '', name: fn.name, input: (() => { try { return JSON.parse(asString(fn.arguments) ?? '{}') } catch { return {} } })() })
+    }
+    if (role === 'tool') {
+      messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: asString(message.tool_call_id) ?? '', content: asString(message.content) ?? '' }] })
+      continue
+    }
     if (typeof message.content === 'string') {
       if (message.content) content.push({ type: 'text', text: message.content })
     } else {
@@ -171,12 +204,8 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
         } else if (record.type === 'image_url' && asObject(record.image_url)) {
           const url = asString((record.image_url as Json).url) ?? ''
           const match = /^data:([^;]+);base64,(.+)$/.exec(url)
-          if (match) {
-            content.push({
-              type: 'image',
-              source: { type: 'base64', media_type: match[1], data: match[2] },
-            })
-          }
+          if (match) content.push({ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } })
+          else if (url) content.push({ type: 'image', source: { type: 'url', url } })
         }
       }
     }
@@ -196,6 +225,16 @@ function openAiToAnthropicRequest(body: Json, model: string): Json {
   if (topP !== undefined) result.top_p = topP
   if (body.stream === true) result.stream = true
   if (body.stop) result.stop_sequences = body.stop
+  const tools: Json[] = asArray(body.tools).map(raw => {
+    const tool = asObject(raw)
+    const fn = asObject(tool?.function)
+    return fn && asString(fn.name) ? { name: fn.name, description: asString(fn.description) ?? '', input_schema: asObject(fn.parameters) ?? { type: 'object', properties: {} } } : null
+  }).filter(tool => tool !== null)
+  if (tools.length > 0) result.tools = tools
+  const choice = body.tool_choice
+  if (choice === 'auto' || choice === 'none') result.tool_choice = { type: choice === 'none' ? 'none' : 'auto' }
+  else if (choice === 'required') result.tool_choice = { type: 'any' }
+  else if (asObject(choice)?.type === 'function' && asString(asObject(asObject(choice)?.function)?.name)) result.tool_choice = { type: 'tool', name: asString(asObject(asObject(choice)?.function)?.name) }
 
   return result
 }

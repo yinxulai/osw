@@ -335,38 +335,50 @@ describe('SSE conversion', () => {
     expect(serializeSseEvent({ data: '2' })).toBe('data: 2\n\n')
   })
 
-  it('converts openai chunks to anthropic events', () => {
+  it('converts openai chunks to the Anthropic message lifecycle', () => {
     const converter = createSseConverter('anthropic-messages', 'openai-completions')
     const out = converter.push(
-      'data: {"choices":[{"delta":{"content":"he"}}]}\n\n'
-      + 'data: {"choices":[{"delta":{"content":"y"}}]}\n\n'
-      + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":2}}\n\n',
-    )
-    const events = out.split('\n\n').filter(Boolean)
-    expect(events).toHaveLength(3)
-    expect(JSON.parse(events[0].replace('data: ', ''))).toEqual({
-      type: 'content_block_delta',
-      delta: { type: 'text_delta', text: 'he' },
-    })
-    expect(JSON.parse(events[2].replace('data: ', '')).usage).toEqual({
-      input_tokens: 2,
-      output_tokens: 2,
-    })
+      'data: {"id":"chat-1","model":"gpt-test","choices":[{"delta":{"content":"hi"}}]}\n\n'
+      + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":2}}\n\n'
+      + 'data: [DONE]\n\n',
+    ) + (converter.finish?.() ?? '')
+    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    expect(events.map(event => event.type)).toEqual([
+      'message_start', 'content_block_start', 'content_block_delta',
+      'content_block_stop', 'message_delta', 'message_stop',
+    ])
+    expect(events[0].message).toMatchObject({ id: 'chat-1', model: 'gpt-test', role: 'assistant' })
+    expect(events[2].delta).toEqual({ type: 'text_delta', text: 'hi' })
+    expect(events[4].usage).toEqual({ input_tokens: 2, output_tokens: 2 })
   })
 
-  it('converts anthropic events to openai chunks and appends DONE on flush', () => {
+  it('converts streaming OpenAI tool calls to Anthropic tool_use blocks', () => {
+    const converter = createSseConverter('anthropic-messages', 'openai-completions')
+    const chunks = [
+      { id: 'chat-2', choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'lookup' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{\"q\":' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '\"x\"}' } }] }, finish_reason: 'tool_calls' }] },
+    ]
+    const out = chunks.map(chunk => converter.push(`data: ${JSON.stringify(chunk)}\n\n`)).join('') + (converter.finish?.() ?? '')
+    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    expect(events.find(event => event.type === 'content_block_start').content_block).toMatchObject({ type: 'tool_use', id: 'call-1', name: 'lookup' })
+    expect(events.filter(event => event.type === 'content_block_delta').map(event => event.delta.partial_json)).toEqual(['{\"q\":', '\"x\"}'])
+    expect(events.at(-1).type).toBe('message_stop')
+  })
+
+  it('converts Anthropic lifecycle and tool deltas to OpenAI chunks', () => {
     const converter = createSseConverter('openai-completions', 'anthropic-messages')
     const out = converter.push(
-      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"yo"}}\n\n'
-      + 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":1,"output_tokens":1}}\n\n',
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude-test"}}\n\n'
+      + 'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call-1","name":"lookup"}}\n\n'
+      + 'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":"}}\n\n'
+      + 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":1,"output_tokens":2}}\n\n',
     )
-    const events = out.split('\n\n').filter(Boolean)
-    expect(events).toHaveLength(2)
-    expect(JSON.parse(events[0].replace('data: ', '')).choices[0].delta.content).toBe('yo')
-    expect(JSON.parse(events[1].replace('data: ', '')).usage).toEqual({
-      prompt_tokens: 1,
-      completion_tokens: 1,
-    })
+    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    expect(events[0].choices[0].delta).toEqual({ role: 'assistant' })
+    expect(events[1].choices[0].delta.tool_calls[0]).toMatchObject({ id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '' } })
+    expect(events[2].choices[0].delta.tool_calls[0].function.arguments).toBe('{\"q\":')
+    expect(events[3].choices[0].finish_reason).toBe('tool_calls')
   })
 
   it('passes through when protocols match', () => {
@@ -380,16 +392,17 @@ describe('SSE conversion', () => {
     expect(converter.push('data: {"choices":[{"delta":{"con')).toBe('')
     const out = converter.push('tent":"hi"}}]}\n\n')
     const events = out.split('\n\n').filter(Boolean)
-    expect(events).toHaveLength(1)
-    expect(JSON.parse(events[0].replace('data: ', ''))).toEqual({
+    expect(events).toHaveLength(3)
+    expect(JSON.parse(events[2].replace('data: ', ''))).toEqual({
       type: 'content_block_delta',
+      index: 0,
       delta: { type: 'text_delta', text: 'hi' },
     })
   })
 
-  it('passes through non-JSON events like [DONE]', () => {
+  it('consumes OpenAI DONE when producing Anthropic events', () => {
     const converter = createSseConverter('anthropic-messages', 'openai-completions')
-    expect(converter.push('data: [DONE]\n\n')).toBe('data: [DONE]\n\n')
+    expect(converter.push('data: [DONE]\n\n')).toBe('')
   })
 
   it('flushes a trailing event without a blank line', () => {
@@ -400,8 +413,10 @@ describe('SSE conversion', () => {
     const partial = createSseConverter('anthropic-messages', 'openai-completions')
     partial.push('data: {"choices":[{"delta":{"content":"end"}}]}')
     const tail = partial.flush()
-    expect(JSON.parse(tail.replace('data: ', ''))).toEqual({
+    const tailEvents = tail.split('\n\n').filter(Boolean)
+    expect(JSON.parse(tailEvents[2].replace('data: ', ''))).toEqual({
       type: 'content_block_delta',
+      index: 0,
       delta: { type: 'text_delta', text: 'end' },
     })
   })
@@ -422,5 +437,56 @@ describe('SSE conversion', () => {
       type: 'response.completed',
       response: { usage: { prompt_tokens: 4, completion_tokens: 1 } },
     })
+  })
+})
+
+describe('tool and edge-case conversions', () => {
+  it('maps Anthropic tools and tool results to OpenAI messages', () => {
+    const parsed = parseBody(convertRequestBody('anthropic-messages', 'openai-completions', request('anthropic-messages', {
+      messages: [
+        { role: 'assistant', content: [{ type: 'tool_use', id: 'call-1', name: 'weather', input: { city: 'Paris' } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-1', content: 'sunny' }] },
+      ],
+      tools: [{ name: 'weather', description: 'get weather', input_schema: { type: 'object', properties: { city: { type: 'string' } } } }],
+      tool_choice: { type: 'tool', name: 'weather' },
+    }), 'gpt-test'))
+    expect(parsed.tools).toEqual([{ type: 'function', function: { name: 'weather', description: 'get weather', parameters: { type: 'object', properties: { city: { type: 'string' } } } } }])
+    expect(parsed.tool_choice).toEqual({ type: 'function', function: { name: 'weather' } })
+    expect(parsed.messages).toEqual([
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'weather', arguments: '{"city":"Paris"}' } }] },
+      { role: 'tool', tool_call_id: 'call-1', content: 'sunny' },
+    ])
+  })
+
+  it('maps OpenAI tool calls, tool messages, and remote images to Anthropic', () => {
+    const parsed = parseBody(convertRequestBody('openai-completions', 'anthropic-messages', request('openai-completions', {
+      messages: [
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call-2', type: 'function', function: { name: 'lookup', arguments: '{"q":"x"}' } }] },
+        { role: 'tool', tool_call_id: 'call-2', content: 'result' },
+        { role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.com/a.png' } }] },
+      ],
+    }), 'claude-test'))
+    expect(parsed.messages).toEqual([
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'call-2', name: 'lookup', input: { q: 'x' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-2', content: 'result' }] },
+      { role: 'user', content: [{ type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } }] },
+    ])
+  })
+
+  it('maps tool calls in non-streaming responses both ways', () => {
+    const anthropic = parseBody(convertResponseBody('anthropic-messages', 'openai-completions', Buffer.from(JSON.stringify({
+      id: 'chat-1', choices: [{ message: { content: null, tool_calls: [{ id: 'call-3', function: { name: 'lookup', arguments: '{"q":"x"}' } }] }, finish_reason: 'tool_calls' }],
+    }))))
+    expect(anthropic.content).toEqual([{ type: 'tool_use', id: 'call-3', name: 'lookup', input: { q: 'x' } }])
+    const openai = parseBody(convertResponseBody('openai-completions', 'anthropic-messages', Buffer.from(JSON.stringify({
+      content: [{ type: 'tool_use', id: 'call-4', name: 'lookup', input: { q: 'x' } }], stop_reason: 'tool_use',
+    }))))
+    expect(openai.choices).toEqual([{ index: 0, message: { role: 'assistant', content: null, tool_calls: [{ id: 'call-4', type: 'function', function: { name: 'lookup', arguments: '{"q":"x"}' } }] }, finish_reason: 'tool_calls' }])
+  })
+
+  it('parses CRLF SSE, comments, and fields without a space', () => {
+    expect(parseSseIncremental(': keepalive\r\nevent:message\r\ndata:{"ok":true}\r\n\r\n')).toEqual([
+      [{ event: 'message', data: '{"ok":true}' }], '',
+    ])
   })
 })

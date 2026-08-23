@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
-import { useStoreSelector } from '@/store/create-store'
-import { logicalModelsService } from './service'
-import { logicalModelsStore } from './store'
-export function useLogicalModels() { useEffect(() => logicalModelsService.subscribe(), []); return useStoreSelector(logicalModelsStore, s => s.data) }
-export const useLogicalModelsLoading = () => useStoreSelector(logicalModelsStore, s => s.loading)
-export const useLogicalModelsError = () => useStoreSelector(logicalModelsStore, s => s.error)
-export const useLogicalModelsActions = () => logicalModelsActions
-const logicalModelsActions = { refresh: logicalModelsService.refresh }
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { logicalModelApi } from '@/api/models'
+import { unwrap } from '@/api/unwrap'
+
+export const logicalModelKeys = { all: ['logical-models'] as const }
+const useLogicalModelsQuery = () => useQuery({ queryKey: logicalModelKeys.all, queryFn: () => unwrap(logicalModelApi.list()), refetchInterval: 30_000 })
+export function useLogicalModels() { return useLogicalModelsQuery().data ?? [] }
+export function useLogicalModelsLoading() { return useLogicalModelsQuery().isPending }
+export function useLogicalModelsError() { return useLogicalModelsQuery().error?.message ?? null }
+export function useLogicalModelsActions() { const client = useQueryClient(); return { refresh: () => { void client.invalidateQueries({ queryKey: logicalModelKeys.all }) } } }

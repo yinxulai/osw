@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { providerModelApi } from '@/api/models'
 import { useToast } from '@/components/ui/toast'
+import { useUpdateQueueModelMutation } from '../queries'
 import { useHealth } from '@/features/health/hooks'
 import { useProviders } from '@/features/providers/hooks'
 import type { ProviderModelRoute } from '@common/schemas'
@@ -12,6 +12,7 @@ import { useQueueModels } from './use-queue-models'
 
 export function useQueueControl() {
   const toast = useToast()
+  const updateModelMutation = useUpdateQueueModelMutation()
   const providers = useProviders()
   const healthState = useHealth()
   const health = healthState.providers
@@ -33,11 +34,12 @@ export function useQueueControl() {
   )
 
   const updateEnabled = useCallback(async (model: ProviderModelRoute, enabled: boolean) => {
-    const result = await providerModelApi.update(model.id, { enabled })
-    if (!result.success) { toast.error(result.errorMessage); return }
-    modelsState.updateEnabledModel(model.id, result.data.enabled)
-    if (!enabled && queueMode.manualModelId === model.id) await queueMode.changeMode('auto')
-  }, [modelsState.updateEnabledModel, queueMode.changeMode, queueMode.manualModelId, toast])
+    try {
+      const updated = await updateModelMutation.mutateAsync({ id: model.id, enabled })
+      modelsState.updateEnabledModel(model.id, updated.enabled)
+      if (!enabled && queueMode.manualModelId === model.id) await queueMode.changeMode('auto')
+    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
+  }, [modelsState.updateEnabledModel, queueMode.changeMode, queueMode.manualModelId, toast, updateModelMutation])
 
   const reload = useCallback(async () => {
     await Promise.all([

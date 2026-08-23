@@ -1033,11 +1033,15 @@ describe('handleProxyRequest', () => {
       if (!data || data === '[DONE]') return data ?? null
       return JSON.parse(data)
     })
-    expect(parsed[0]).toEqual({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'he' } })
-    expect(parsed[1]).toEqual({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'y' } })
-    expect(parsed[2]).toEqual({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 3, output_tokens: 2 } })
-    expect(parsed[3]).toBe('[DONE]')
-    expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+    expect(parsed.map(event => event?.type ?? event)).toEqual([
+      'message_start', 'content_block_start', 'content_block_delta',
+      'content_block_delta', 'content_block_stop', 'message_delta',
+      'message_stop',
+    ])
+    expect(parsed[2]).toMatchObject({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'he' } })
+    expect(parsed[3]).toMatchObject({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'y' } })
+    expect(parsed[5]).toMatchObject({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 3, output_tokens: 2 } })
+    expect(text.trimEnd().endsWith('data: [DONE]')).toBe(false)
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({ upstreamProtocol: 'openai-completions' }),
@@ -1075,14 +1079,14 @@ describe('handleProxyRequest', () => {
     })
     const requestUpdate = mocks.updateRequestContent.mock.calls.find(([id]) => id === 'content_request')?.[1]
     expect(requestUpdate).toEqual(expect.objectContaining({ captureStatus: 'captured', responseStatus: 200 }))
-    expect(JSON.parse(String(requestUpdate?.responseBody))).toEqual({
-      schemaVersion: 1,
-      chunks: [
-        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"he"}}\n\n',
-        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"y"}}\n\n',
-        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":3,"output_tokens":2}}\n\ndata: [DONE]\n\n',
-      ],
-    })
+    const convertedCapture = JSON.parse(String(requestUpdate?.responseBody)) as { schemaVersion: number; chunks: string[] }
+    expect(convertedCapture.schemaVersion).toBe(1)
+    const convertedEvents = convertedCapture.chunks.join('').split('\n\n').filter(Boolean).map(event => JSON.parse(event.replace('data: ', '')))
+    expect(convertedEvents.map(event => event.type)).toEqual([
+      'message_start', 'content_block_start', 'content_block_delta',
+      'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop',
+    ])
+    expect(convertedEvents[5]).toMatchObject({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 3, output_tokens: 2 } })
   })
 
   it('stores received raw chunks as partial when an upstream stream is interrupted', async () => {

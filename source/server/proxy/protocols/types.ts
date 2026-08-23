@@ -4,6 +4,7 @@ import type { RequestContext } from '../request-context'
 export interface StreamConverter {
   push(chunk: string): string
   flush(): string
+  finish?(): string
 }
 
 export interface ProtocolAdapter {

@@ -56,38 +56,91 @@ function openAiResponseToAnthropic(body: Json): Json {
   const choices = asArray(body.choices)
   const first = asObject(choices[0])
   const message = asObject(first?.message)
-  const text = asString(message?.content) ?? ''
-  const usage = openAiUsageToAnthropic(asObject(body.usage))
-
-  return {
-    id: asString(body.id) ?? '',
-    type: 'message',
-    role: 'assistant',
-    model: asString(body.model) ?? '',
-    content: text ? [{ type: 'text', text }] : [],
-    stop_reason: openAiFinishToAnthropicStop(asString(first?.finish_reason)),
-    ...(usage ? { usage } : {}),
+  const content: Json[] = []
+  const text = asString(message?.content)
+  if (text) content.push({ type: 'text', text })
+  for (const rawCall of asArray(message?.tool_calls)) {
+    const call = asObject(rawCall)
+    const fn = asObject(call?.function)
+    if (fn && asString(fn.name)) {
+      let input: unknown = {}
+      try { input = JSON.parse(asString(fn.arguments) ?? '{}') } catch { /* preserve malformed arguments as empty input */ }
+      content.push({ type: 'tool_use', id: asString(call?.id) ?? '', name: fn.name, input })
+    }
   }
+  const usage = openAiUsageToAnthropic(asObject(body.usage))
+  return { id: asString(body.id) ?? '', type: 'message', role: 'assistant', model: asString(body.model) ?? '', content, stop_reason: content.some(block => block.type === 'tool_use') ? 'tool_use' : openAiFinishToAnthropicStop(asString(first?.finish_reason)), ...(usage ? { usage } : {}) }
 }
 
-function openAiChunkToAnthropicEvents(chunk: Json): Json[] {
+interface OpenAiToAnthropicState {
+  started: boolean
+  textBlock: boolean
+  toolBlocks: Set<number>
+  stopped: boolean
+  stopReason?: string
+  usage?: Json
+  id: string
+  model: string
+}
+
+function openAiChunkToAnthropicEvents(chunk: Json, state: OpenAiToAnthropicState): Json[] {
   const events: Json[] = []
   const choices = asArray(chunk.choices)
-  const delta = asObject(asObject(choices[0])?.delta)
+  const first = asObject(choices[0])
+  const delta = asObject(first?.delta)
+  const id = asString(chunk.id) ?? state.id
+  const model = asString(chunk.model) ?? state.model
+  state.id = id
+  state.model = model
+
+  if (!state.started && (id || model || delta?.content || delta?.tool_calls || first?.finish_reason || chunk.usage)) {
+    state.started = true
+    events.push({ type: 'message_start', message: { id, type: 'message', role: 'assistant', model, content: [], stop_reason: null, usage: { input_tokens: 0, output_tokens: 0 } } })
+  }
+
   const text = asString(delta?.content)
-
   if (text) {
-    events.push({
-      type: 'content_block_delta',
-      delta: { type: 'text_delta', text },
-    })
+    if (!state.textBlock) {
+      state.textBlock = true
+      events.push({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
+    }
+    events.push({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })
   }
 
+  for (const rawCall of asArray(delta?.tool_calls)) {
+    const call = asObject(rawCall)
+    const index = asNumber(call?.index) ?? 0
+    const fn = asObject(call?.function)
+    if (!state.toolBlocks.has(index)) {
+      state.toolBlocks.add(index)
+      events.push({ type: 'content_block_start', index, content_block: { type: 'tool_use', id: asString(call?.id) ?? '', name: asString(fn?.name) ?? '', input: {} } })
+    }
+    const argumentsDelta = asString(fn?.arguments)
+    if (argumentsDelta) events.push({ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: argumentsDelta } })
+  }
+
+  const finish = asString(first?.finish_reason)
+  if (finish) state.stopReason = openAiFinishToAnthropicStop(finish)
   const usage = openAiUsageToAnthropic(asObject(chunk.usage))
-  if (usage) {
-    events.push({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage })
+  if (usage) state.usage = usage
+  if ((usage || finish) && !state.stopped && usage) {
+    state.stopped = true
+    if (state.textBlock) events.push({ type: 'content_block_stop', index: 0 })
+    for (const index of state.toolBlocks) events.push({ type: 'content_block_stop', index })
+    events.push({ type: 'message_delta', delta: { stop_reason: state.stopReason ?? 'end_turn', stop_sequence: null }, usage })
+    events.push({ type: 'message_stop' })
   }
+  return events
+}
 
+function finishOpenAiToAnthropic(state: OpenAiToAnthropicState): Json[] {
+  if (!state.started || state.stopped) return []
+  state.stopped = true
+  const events: Json[] = []
+  if (state.textBlock) events.push({ type: 'content_block_stop', index: 0 })
+  for (const index of state.toolBlocks) events.push({ type: 'content_block_stop', index })
+  events.push({ type: 'message_delta', delta: { stop_reason: state.stopReason ?? 'end_turn', stop_sequence: null }, ...(state.usage ? { usage: state.usage } : {}) })
+  events.push({ type: 'message_stop' })
   return events
 }
 
@@ -170,52 +223,51 @@ function anthropicStopToOpenAiFinish(stop: string | undefined): string {
 }
 
 function anthropicResponseToOpenAi(body: Json): Json {
-  const text = anthropicContentToText(body.content)
+  const content = asArray(body.content)
+  const text = anthropicContentToText(content)
+  const toolCalls = content.flatMap(raw => {
+    const block = asObject(raw)
+    return block?.type === 'tool_use' ? [{ id: asString(block.id) ?? '', type: 'function', function: { name: asString(block.name) ?? '', arguments: JSON.stringify(asObject(block.input) ?? {}) } }] : []
+  })
   const usage = anthropicUsageToOpenAi(asObject(body.usage))
-
-  return {
-    id: asString(body.id) ?? '',
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model: asString(body.model) ?? '',
-    choices: [
-      {
-        index: 0,
-        message: { role: 'assistant', content: text },
-        finish_reason: anthropicStopToOpenAiFinish(asString(body.stop_reason)),
-      },
-    ],
-    ...(usage ? { usage } : {}),
-  }
+  return { id: asString(body.id) ?? '', object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: asString(body.model) ?? '', choices: [{ index: 0, message: { role: 'assistant', content: text || null, ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}) }, finish_reason: toolCalls.length > 0 ? 'tool_calls' : anthropicStopToOpenAiFinish(asString(body.stop_reason)) }], ...(usage ? { usage } : {}) }
 }
 
-function anthropicEventToOpenAiChunks(event: Json): Json[] {
-  const chunks: Json[] = []
+interface AnthropicToOpenAiState {
+  id: string
+  model: string
+  toolCalls: Map<number, { id: string; name: string }>
+  started: boolean
+}
 
-  if (event.type === 'content_block_delta') {
-    const delta = asObject(event.delta)
-    const text = delta?.type === 'text_delta' ? asString(delta.text) : undefined
-    if (text) {
-      chunks.push({
-        id: '',
-        object: 'chat.completion.chunk',
-        choices: [{ index: 0, delta: { content: text }, finish_reason: null }],
-      })
+function anthropicEventToOpenAiChunks(event: Json, state: AnthropicToOpenAiState): Json[] {
+  const chunks: Json[] = []
+  const message = asObject(event.message)
+  if (event.type === 'message_start') {
+    state.started = true
+    state.id = asString(message?.id) ?? state.id
+    state.model = asString(message?.model) ?? state.model
+    chunks.push({ id: state.id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: state.model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })
+  } else if (event.type === 'content_block_start') {
+    const block = asObject(event.content_block)
+    const index = asNumber(event.index) ?? 0
+    if (block?.type === 'tool_use') {
+      const id = asString(block.id) ?? ''
+      const name = asString(block.name) ?? ''
+      state.toolCalls.set(index, { id, name })
+      chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: { tool_calls: [{ index, id, type: 'function', function: { name, arguments: '' } }] }, finish_reason: null }] })
     }
+  } else if (event.type === 'content_block_delta') {
+    const delta = asObject(event.delta)
+    const index = asNumber(event.index) ?? 0
+    const text = delta?.type === 'text_delta' ? asString(delta.text) : undefined
+    const partialJson = delta?.type === 'input_json_delta' ? asString(delta.partial_json) : undefined
+    if (text) chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })
+    if (partialJson) chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: { tool_calls: [{ index, function: { arguments: partialJson } }] }, finish_reason: null }] })
   } else if (event.type === 'message_delta') {
     const usage = anthropicUsageToOpenAi(asObject(event.usage))
-    chunks.push({
-      id: '',
-      object: 'chat.completion.chunk',
-      choices: [{
-        index: 0,
-        delta: {},
-        finish_reason: anthropicStopToOpenAiFinish(asString(asObject(event.delta)?.stop_reason)),
-      }],
-      ...(usage ? { usage } : {}),
-    })
+    chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: {}, finish_reason: anthropicStopToOpenAiFinish(asString(asObject(event.delta)?.stop_reason)) }], ...(usage ? { usage } : {}) })
   }
-
   return chunks
 }
 
@@ -230,22 +282,24 @@ export interface SseEvent {
 export function parseSseIncremental(buffer: string): [SseEvent[], string] {
   const events: SseEvent[] = []
   let rest = buffer
-
+  const boundary = /\r?\n\r?\n/
   for (;;) {
-    const index = rest.indexOf('\n\n')
-    if (index === -1) break
-    const raw = rest.slice(0, index)
-    rest = rest.slice(index + 2)
-
+    const match = boundary.exec(rest)
+    if (!match || match.index < 0) break
+    const raw = rest.slice(0, match.index)
+    rest = rest.slice(match.index + match[0].length)
     let eventName: string | undefined
     const dataLines: string[] = []
-    for (const line of raw.split('\n')) {
-      if (line.startsWith('event:')) eventName = line.slice(6).trim()
-      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line || line.startsWith(':')) continue
+      const separator = line.indexOf(':')
+      const field = separator < 0 ? line : line.slice(0, separator)
+      const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '')
+      if (field === 'event') eventName = value
+      else if (field === 'data') dataLines.push(value)
     }
     if (dataLines.length > 0) events.push({ event: eventName, data: dataLines.join('\n') })
   }
-
   return [events, rest]
 }
 
@@ -289,23 +343,27 @@ export function createSseConverter(clientProtocol: Protocol, endpointProtocol: P
   }
 
   let buffer = ''
+  const openAiState: OpenAiToAnthropicState = { started: false, textBlock: false, toolBlocks: new Set(), stopped: false, id: '', model: '' }
+  const anthropicState: AnthropicToOpenAiState = { id: '', model: '', toolCalls: new Map(), started: false }
 
   const convertEvent = (event: SseEvent): string => {
     let payload: Json
     try {
       payload = JSON.parse(event.data) as Json
     } catch {
-      // 非 JSON 事件（如 [DONE]）直接透传
-      return serializeSseEvent(event)
+      // OpenAI 的 [DONE] 只作为流结束信号，不应暴露为 Anthropic JSON 事件。
+      return event.data.trim() === '[DONE]' && endpointProtocol === 'openai-completions' && clientProtocol === 'anthropic-messages'
+        ? ''
+        : serializeSseEvent(event)
     }
 
     let outputs: Json[] = []
     if (endpointProtocol === 'openai-completions' && clientProtocol === 'anthropic-messages') {
-      outputs = openAiChunkToAnthropicEvents(payload)
+      outputs = openAiChunkToAnthropicEvents(payload, openAiState)
     } else if (endpointProtocol === 'openai-completions' && clientProtocol === 'openai-responses') {
       outputs = openAiChunkToResponsesEvents(payload)
     } else if (endpointProtocol === 'anthropic-messages' && clientProtocol === 'openai-completions') {
-      outputs = anthropicEventToOpenAiChunks(payload)
+      outputs = anthropicEventToOpenAiChunks(payload, anthropicState)
     }
 
     let out = ''
@@ -331,7 +389,18 @@ export function createSseConverter(clientProtocol: Protocol, endpointProtocol: P
         .split('\n')
         .map(line => (line.startsWith('data:') ? line.slice(5).trim() : line))
         .join('\n')
-      return convertEvent({ data: stripped })
+      let out = stripped.trim() ? convertEvent({ data: stripped }) : ''
+      if (endpointProtocol === 'openai-completions' && clientProtocol === 'anthropic-messages') {
+        for (const item of finishOpenAiToAnthropic(openAiState)) out += serializeSseEvent({ data: JSON.stringify(item) })
+      }
+      return out
+    },
+    finish: () => {
+      let out = ''
+      if (endpointProtocol === 'openai-completions' && clientProtocol === 'anthropic-messages') {
+        for (const item of finishOpenAiToAnthropic(openAiState)) out += serializeSseEvent({ data: JSON.stringify(item) })
+      }
+      return out
     },
   }
 }

@@ -1,76 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsApi } from '@/api/runtime'
+import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
-import { useAsyncFn } from '@/services/use-async'
-import { useSettings, useSettingsActions, useSettingsLoading } from '@/features/settings/hooks'
+import { settingsKeys, useSettings, useSettingsLoading } from '@/features/settings/hooks'
 import { useProxyStatus, useProxyActions } from '@/features/proxy/hooks'
-import type { Settings } from '@common/schemas'
+import { useRuntimeSettingsUiStore } from '../store'
 
 export function useSettingsForm() {
   const toast = useToast()
+  const client = useQueryClient()
   const globalSettings = useSettings()
-  const settingsActions = useSettingsActions()
   const proxyActions = useProxyActions()
   const proxyStatus = useProxyStatus()
   const settingsLoading = useSettingsLoading()
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saved, setSaved] = useState(false)
-  const initializedRef = useRef(false)
+  const settings = useRuntimeSettingsUiStore(state => state.draft)
+  const saved = useRuntimeSettingsUiStore(state => state.saved)
+  const hydrate = useRuntimeSettingsUiStore(state => state.hydrate)
+  const updateField = useRuntimeSettingsUiStore(state => state.updateField)
+  const setSaved = useRuntimeSettingsUiStore(state => state.setSaved)
 
-  useEffect(() => {
-    if (initializedRef.current || settingsLoading || !globalSettings) return
-    initializedRef.current = true
-    setSettings(globalSettings)
-    setLoading(false)
-  }, [globalSettings, settingsLoading])
+  useEffect(() => { if (!settings && globalSettings) hydrate(globalSettings) }, [globalSettings, hydrate, settings])
 
-  const hydrate = useCallback((nextSettings: Settings) => {
-    initializedRef.current = true
-    setSettings(nextSettings)
-    setLoading(false)
-  }, [])
-
-  const updateField = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setSettings(prev => prev ? { ...prev, [key]: value } : null)
-  }, [])
-
-  const saveSettings = useCallback(async () => {
-    if (!settings) return
-    const previousListenHost = proxyStatus?.host ?? settings.listenHost
-    const previousListenPort = proxyStatus?.port ?? settings.listenPort
-    setSaved(false)
-    const result = await settingsApi.update({
-      listenHost: settings.listenHost,
-      listenPort: settings.listenPort,
-      logRetentionDays: settings.logRetentionDays,
-      captureRequestContent: settings.captureRequestContent,
-      cooldownBaseSeconds: settings.cooldownBaseSeconds,
-      cooldownMaxSeconds: settings.cooldownMaxSeconds,
-      consecutiveFailureThreshold: settings.consecutiveFailureThreshold,
-      idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
-      autoLaunch: settings.autoLaunch,
-    })
-    if (!result.success) {
-      toast.error(result.errorMessage)
-      return
-    }
-    const needsRestart = previousListenHost !== result.data.listenHost || previousListenPort !== result.data.listenPort
-    if (needsRestart) {
-      const restartResult = await proxyActions.restart()
-      if (!restartResult.success) {
-        toast.error(`设置已保存，但代理重启失败：${restartResult.errorMessage}`)
-        return
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!settings) throw new Error('设置尚未加载')
+      const previousListenHost = proxyStatus?.host ?? settings.listenHost
+      const previousListenPort = proxyStatus?.port ?? settings.listenPort
+      const updated = await unwrap(settingsApi.update({ listenHost: settings.listenHost, listenPort: settings.listenPort, logRetentionDays: settings.logRetentionDays, captureRequestContent: settings.captureRequestContent, cooldownBaseSeconds: settings.cooldownBaseSeconds, cooldownMaxSeconds: settings.cooldownMaxSeconds, consecutiveFailureThreshold: settings.consecutiveFailureThreshold, idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds, autoLaunch: settings.autoLaunch }))
+      if (previousListenHost !== updated.listenHost || previousListenPort !== updated.listenPort) {
+        const restart = await proxyActions.restart()
+        if (!restart.success) throw new Error(`设置已保存，但代理重启失败：${restart.errorMessage}`)
       }
-    }
-    setSettings(result.data)
-    settingsActions.refresh()
-    setSaved(true)
-    toast.success('设置已保存')
-    window.setTimeout(() => setSaved(false), 2000)
-  }, [proxyActions, proxyStatus, settings, settingsActions, toast])
-
-  const { loading: saving, run: runSaveSettings } = useAsyncFn(saveSettings)
-
-  return { settings, proxyStatus, loading, saving, saved, updateField, hydrate, saveSettings: runSaveSettings }
+      return updated
+    },
+    onSuccess: updated => { client.setQueryData(settingsKeys.all, updated); hydrate(updated); setSaved(true); toast.success('设置已保存'); window.setTimeout(() => setSaved(false), 2000) },
+    onError: error => toast.error(error.message),
+  })
+  const saveSettings = useCallback(async () => { setSaved(false); await mutation.mutateAsync().catch(() => undefined) }, [mutation, setSaved])
+  return { settings, proxyStatus, loading: settingsLoading && !settings, saving: mutation.isPending, saved, updateField, hydrate, saveSettings }
 }

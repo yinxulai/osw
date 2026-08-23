@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
-import { useStoreSelector } from '@/store/create-store'
-import { providersService } from './service'
-import { providersStore } from './store'
-export function useProviders() { useEffect(() => providersService.subscribe(), []); return useStoreSelector(providersStore, s => s.data) }
-export const useProvidersLoading = () => useStoreSelector(providersStore, s => s.loading)
-export const useProvidersError = () => useStoreSelector(providersStore, s => s.error)
-export const useProvidersActions = () => providersActions
-const providersActions = { refresh: providersService.refresh }
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { providerApi } from '@/api/providers'
+import { unwrap } from '@/api/unwrap'
+
+export const providerKeys = { all: ['providers'] as const }
+const useProvidersQuery = () => useQuery({ queryKey: providerKeys.all, queryFn: () => unwrap(providerApi.list()), refetchInterval: 10_000 })
+export function useProviders() { return useProvidersQuery().data ?? [] }
+export function useProvidersLoading() { return useProvidersQuery().isPending }
+export function useProvidersError() { return useProvidersQuery().error?.message ?? null }
+export function useProvidersActions() { const client = useQueryClient(); return { refresh: () => { void client.invalidateQueries({ queryKey: providerKeys.all }) } } }

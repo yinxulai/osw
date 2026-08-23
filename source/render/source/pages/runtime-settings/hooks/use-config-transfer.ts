@@ -1,12 +1,13 @@
 import { useCallback } from 'react'
-import { settingsApi } from '@/api/runtime'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { configApi } from '@/api/tools'
+import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
-import { useSettingsActions } from '@/features/settings/hooks'
-import { useProvidersActions } from '@/features/providers/hooks'
-import { useLogicalModelsActions } from '@/features/logical-models/hooks'
-import { useHealthActions } from '@/features/health/hooks'
-import { useProxyActions } from '@/features/proxy/hooks'
+import { settingsKeys } from '@/features/settings/hooks'
+import { providerKeys } from '@/features/providers/hooks'
+import { logicalModelKeys } from '@/features/logical-models/hooks'
+import { healthKeys } from '@/features/health/hooks'
+import { proxyKeys } from '@/features/proxy/hooks'
 import type { Settings } from '@common/schemas'
 
 interface ConfigTransferOptions {
@@ -16,54 +17,20 @@ interface ConfigTransferOptions {
 export function useConfigTransfer(options: ConfigTransferOptions) {
   const { hydrateSettings } = options
   const toast = useToast()
-  const settingsActions = useSettingsActions()
-  const providersActions = useProvidersActions()
-  const logicalModelsActions = useLogicalModelsActions()
-  const healthActions = useHealthActions()
-  const proxyActions = useProxyActions()
-
+  const client = useQueryClient()
   const reload = useCallback(async () => {
-    settingsActions.refresh()
-    providersActions.refresh()
-    logicalModelsActions.refresh()
-    healthActions.refresh()
-    proxyActions.refresh()
-  }, [healthActions, logicalModelsActions, providersActions, proxyActions, settingsActions])
-
+    await Promise.all([settingsKeys.all, providerKeys.all, logicalModelKeys.all, healthKeys.all, proxyKeys.status].map(queryKey => client.invalidateQueries({ queryKey })))
+    const settings = client.getQueryData<Settings>(settingsKeys.all)
+    if (settings) hydrateSettings(settings)
+  }, [client, hydrateSettings])
+  const exportMutation = useMutation({ mutationFn: () => unwrap(configApi.export()) })
+  const importMutation = useMutation({ mutationFn: async (file: File) => unwrap(configApi.import(JSON.parse(await file.text()), 'merge')), onSuccess: async data => { toast.success(`导入成功：${data.imported.providers} 个供应商 / ${data.imported.providerModels} 个供应商模型`); await reload() }, onError: error => toast.error(`导入失败：${error.message}`) })
   const exportConfig = useCallback(async () => {
-    const result = await configApi.export()
-    if (!result.success) {
-      toast.error(`导出失败：${result.errorMessage}`)
-      return
-    }
-    const blob = new Blob([result.data.content], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `one-switch-config-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast.success('配置已导出')
-  }, [toast])
-
-  const importConfig = useCallback(async (file: File) => {
     try {
-      const config = JSON.parse(await file.text())
-      const result = await configApi.import(config, 'merge')
-      if (!result.success) {
-        toast.error(`导入失败：${result.errorMessage}`)
-        return
-      }
-      toast.success(`导入成功：${result.data.imported.providers} 个供应商 / ${result.data.imported.providerModels} 个供应商模型`)
-      await reload()
-      const settingsResult = await settingsApi.get()
-      if (settingsResult.success) hydrateSettings(settingsResult.data)
-    } catch (err) {
-      toast.error(`导入失败：${err instanceof Error ? err.message : String(err)}`)
-    }
-  }, [hydrateSettings, reload, toast])
-
+      const data = await exportMutation.mutateAsync()
+      const blob = new Blob([data.content], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `one-switch-config-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); toast.success('配置已导出')
+    } catch (error) { toast.error(`导出失败：${error instanceof Error ? error.message : String(error)}`) }
+  }, [exportMutation, toast])
+  const importConfig = useCallback(async (file: File) => { await importMutation.mutateAsync(file).catch(() => undefined) }, [importMutation])
   return { reload, exportConfig, importConfig }
 }

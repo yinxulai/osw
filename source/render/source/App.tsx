@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
 import { AppLayout } from '@/components/layout'
-import { AppSidebar, type PageKey, type Theme, type ThemeMode } from '@/components/app-sidebar'
+import { AppSidebar, type Theme } from '@/components/app-sidebar'
+import { useAppUiStore } from '@/store/app-ui-store'
 import { QueueControlPage } from './pages/queue-control/page'
 import { ModelManagementPage } from './pages/model-management/page'
 import { OverviewPage } from './pages/overview/page'
@@ -12,13 +13,10 @@ import { RequestLogsPage } from './pages/request-logs/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
 function App() {
-  const [activePage, setActivePage] = useState<PageKey>('queue')
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'dark'
-    const saved = localStorage.getItem('theme')
-    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved
-    return 'system'
-  })
+  const activePage = useAppUiStore(state => state.activePage)
+  const setActivePage = useAppUiStore(state => state.setActivePage)
+  const themeMode = useAppUiStore(state => state.themeMode)
+  const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const proxyStatus = useProxyStatus()
 
@@ -41,10 +39,9 @@ function App() {
     } else {
       root.classList.remove('dark')
     }
-    localStorage.setItem('theme', themeMode)
-  }, [theme, themeMode])
+  }, [theme])
 
-  const toggleTheme = () => setThemeMode(current => current === 'dark' ? 'light' : 'dark')
+  const toggleTheme = () => setThemeMode(theme === 'dark' ? 'light' : 'dark')
 
   return (
     <ToastProvider>

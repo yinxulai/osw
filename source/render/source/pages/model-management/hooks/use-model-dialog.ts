@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { providerApi } from '@/api/providers'
 import { providerModelApi } from '@/api/models'
+import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
-import { useAsyncFn } from '@/services/use-async'
 import type { FetchedProviderModel } from '@/api/providers'
 import type { ProviderModelRoute } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
@@ -72,27 +73,14 @@ export function useModelDialog(options: UseModelDialogOptions) {
     setProtocolEntries(current => current.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
   }, [])
 
-  const saveModel = useCallback(async () => {
-    if (!selectedProvider) { toast.error('请先选择一个供应商'); return }
-    if (!modelId.trim()) return
+  const saveMutation = useMutation({ mutationFn: async () => {
+    if (!selectedProvider) throw new Error('请先选择一个供应商')
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
-    if (enabledEntries.length === 0) return
-    const endpoints = enabledEntries.map(entry => ({
-      protocol: entry.protocol,
-      endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '',
-      customAuthHeader: null,
-      protocolConversionEnabled: entry.protocolConversionEnabled,
-    }))
+    if (!modelId.trim() || enabledEntries.length === 0) throw new Error('请填写模型并启用至少一个协议')
+    const endpoints = enabledEntries.map(entry => ({ protocol: entry.protocol, endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '', customAuthHeader: null, protocolConversionEnabled: entry.protocolConversionEnabled }))
     const priority = editingModel ? editingModel.priority : (models.length ? Math.max(...models.map(model => model.priority)) + 1 : 1)
-    const result = editingModel
-      ? await providerModelApi.update(editingModel.id, { logicalModelId: 'default', modelName: modelId.trim(), endpoints })
-      : await providerModelApi.create({ providerId: selectedProvider.id, modelName: modelId.trim(), endpoints, logicalModelId: 'default', priority })
-    if (!result.success) { toast.error(result.errorMessage); await reload(); return }
-    setModelDialogOpen(false)
-    toast.success(editingModel ? '模型已更新' : '模型已添加')
-    await reload()
-  }, [editingModel, modelId, models, protocolEntries, reload, selectedProvider, toast])
-
-  const { loading: savingModel, run: runSaveModel } = useAsyncFn(saveModel)
-  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, fetchingModels, fetchModels, setModelId, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel: runSaveModel, savingModel }
+    return editingModel ? unwrap(providerModelApi.update(editingModel.id, { logicalModelId: 'default', modelName: modelId.trim(), endpoints })) : unwrap(providerModelApi.create({ providerId: selectedProvider.id, modelName: modelId.trim(), endpoints, logicalModelId: 'default', priority }))
+  }, onSuccess: async () => { setModelDialogOpen(false); toast.success(editingModel ? '模型已更新' : '模型已添加'); await reload() }, onError: error => toast.error(error.message) })
+  const saveModel = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
+  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, fetchingModels, fetchModels, setModelId, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
 }

@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { providerApi } from '@/api/providers'
+import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
-import { useAsyncFn } from '@/services/use-async'
 import type { Provider } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
 import type { ProviderPreset } from '../lib/provider-presets'
@@ -59,38 +60,13 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
     setProviderEndpointEntries(current => current.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
   }, [])
 
-  const saveProvider = useCallback(async () => {
-    if (!providerName.trim()) return
-    const endpoints: Record<string, string> = Object.fromEntries(
-      providerEndpointEntries
-        .filter(entry => entry.enabled)
-        .map(entry => [entry.protocol, entry.url.trim()])
-        .filter(([, value]) => value),
-    )
-    const result = editingProviderId
-      ? await providerApi.update(editingProviderId, {
-          name: providerName.trim(),
-          timeoutMilliseconds: Number(timeout),
-          endpoints,
-          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-        })
-      : await providerApi.create({
-          name: providerName.trim(),
-          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-          timeoutMilliseconds: Number(timeout),
-          endpoints,
-        })
-    if (!result.success) {
-      toast.error(result.errorMessage)
-      return
-    }
-    setProviderDialogOpen(false)
-    selectProvider(result.data.id)
-    toast.success(editingProviderId ? '供应商已更新' : '供应商已添加')
-    await reload()
-  }, [apiKey, editingProviderId, providerEndpointEntries, providerName, reload, selectProvider, timeout, toast])
-
-  const { loading: savingProvider, run: runSaveProvider } = useAsyncFn(saveProvider)
+  const saveMutation = useMutation({ mutationFn: async () => {
+    if (!providerName.trim()) throw new Error('请输入供应商名称')
+    const endpoints: Record<string, string> = Object.fromEntries(providerEndpointEntries.filter(entry => entry.enabled).map(entry => [entry.protocol, entry.url.trim()]).filter(([, value]) => value))
+    const payload = { name: providerName.trim(), timeoutMilliseconds: Number(timeout), endpoints, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }
+    return editingProviderId ? unwrap(providerApi.update(editingProviderId, payload)) : unwrap(providerApi.create(payload))
+  }, onSuccess: async provider => { setProviderDialogOpen(false); selectProvider(provider.id); toast.success(editingProviderId ? '供应商已更新' : '供应商已添加'); await reload() }, onError: error => toast.error(error.message) })
+  const saveProvider = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
 
   return {
     providerDialogOpen,
@@ -107,7 +83,7 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
     openProviderDialog,
     closeProviderDialog,
     applyPreset,
-    saveProvider: runSaveProvider,
-    savingProvider,
+    saveProvider,
+    savingProvider: saveMutation.isPending,
   }
 }

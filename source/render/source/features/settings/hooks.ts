@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
-import { useStoreSelector } from '@/store/create-store'
-import { settingsService } from './service'
-import { settingsStore } from './store'
-export function useSettings() { useEffect(() => settingsService.subscribe(), []); return useStoreSelector(settingsStore, s => s.data) }
-export const useSettingsLoading = () => useStoreSelector(settingsStore, s => s.loading)
-export const useSettingsError = () => useStoreSelector(settingsStore, s => s.error)
-export const useSettingsActions = () => settingsActions
-const settingsActions = { refresh: settingsService.refresh }
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { settingsApi } from '@/api/runtime'
+import { unwrap } from '@/api/unwrap'
+
+export const settingsKeys = { all: ['settings'] as const }
+const useSettingsQuery = () => useQuery({ queryKey: settingsKeys.all, queryFn: () => unwrap(settingsApi.get()), staleTime: 30_000 })
+export function useSettings() { return useSettingsQuery().data ?? null }
+export function useSettingsLoading() { return useSettingsQuery().isPending }
+export function useSettingsError() { return useSettingsQuery().error?.message ?? null }
+export function useSettingsActions() { const client = useQueryClient(); return { refresh: () => { void client.invalidateQueries({ queryKey: settingsKeys.all }) } } }
