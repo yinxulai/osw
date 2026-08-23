@@ -14,6 +14,7 @@ import { modelTestRoutes } from './model-test'
 import { providerModelFetchRoutes } from './provider-models-fetch'
 import { relationRoutes } from './relations'
 import { localAuthRoutes } from './auth/routes'
+import { modificationRuleRoutes } from './modification-rules'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 import { parseJsonBody } from './request-body'
 import { handleApiError } from './error-handler'
@@ -33,6 +34,7 @@ const routes: Record<string, ManagementHandler> = {
   ...providerModelFetchRoutes,
   ...relationRoutes,
   ...localAuthRoutes,
+  ...modificationRuleRoutes,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {

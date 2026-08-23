@@ -8,6 +8,14 @@ type ProviderModelUpdateInput = { logicalModelId?: string; modelName?: string; e
 type ProviderModelCreateInput = { providerId: string; modelName: string; logicalModelId?: string; priority?: number; enabled?: boolean; endpoints?: ProviderModelRouteEndpoint[] }
 type SchedulingPolicyInput = { logicalModelId: string; providerModelId: string; strategy?: string; priority?: number; weight?: number; enabled?: boolean }
 
+export const modificationRuleApi = {
+  list: () => request<import('@common/schemas').ModificationRule[]>('/modification-rule/list'),
+  get: (id: string) => request<import('@common/schemas').ModificationRule>('/modification-rule/get', { id }),
+  create: (data: Omit<import('@common/schemas').ModificationRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<import('@common/schemas').ModificationRule>('/modification-rule/create', data),
+  update: (id: string, updates: Partial<import('@common/schemas').ModificationRule>) => request<import('@common/schemas').ModificationRule>('/modification-rule/update', { id, ...updates }),
+  remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/modification-rule/delete', { id }),
+}
+
 export const logicalModelApi = {
   list: () => request<LogicalModel[]>('/logical-model/list'),
   get: (id: string) => request<LogicalModel>('/logical-model/get', { id }),
@@ -23,6 +31,8 @@ export const providerModelApi = {
   update: (id: string, updates: ProviderModelUpdateInput) => request<ProviderModelView>('/provider-model/update', { id, ...updates }),
   queue: (logicalModelId = 'default') => request<ProviderModelRoute[]>('/provider-model/queue', { logicalModelId }),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
+  modificationRules: (providerModelId: string) => request<import('@common/schemas').ProviderModelModificationRule[]>('/modification-rule/bindings', { providerModelId }),
+  replaceModificationRules: (providerModelId: string, bindings: Array<{ ruleId: string; priority: number; enabled: boolean }>) => request<import('@common/schemas').ProviderModelModificationRule[]>('/modification-rule/replace-bindings', { providerModelId, bindings }),
 }
 
 export const schedulingPolicyApi = {

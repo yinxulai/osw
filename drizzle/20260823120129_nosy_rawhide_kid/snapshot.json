@@ -1,0 +1,2591 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "6c53d427-6bd9-4bf1-94be-cac9e043c814",
+  "prevIds": [
+    "4c25cc9d-1313-4ebe-8df6-e4df0ff397da"
+  ],
+  "ddl": [
+    {
+      "name": "logical_models",
+      "entityType": "tables"
+    },
+    {
+      "name": "modification_rules",
+      "entityType": "tables"
+    },
+    {
+      "name": "protocol_converters",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_endpoints",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_health",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_model_endpoints",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_model_health",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_model_modification_rules",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_models",
+      "entityType": "tables"
+    },
+    {
+      "name": "provider_settings",
+      "entityType": "tables"
+    },
+    {
+      "name": "providers",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_attempts",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_contents",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_conversions",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_logs",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_metrics",
+      "entityType": "tables"
+    },
+    {
+      "name": "request_usages",
+      "entityType": "tables"
+    },
+    {
+      "name": "scheduling_policies",
+      "entityType": "tables"
+    },
+    {
+      "name": "settings",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deletedTime",
+      "entityType": "columns",
+      "table": "logical_models"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stage",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "schemaVersion",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "match",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "actions",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deletedTime",
+      "entityType": "columns",
+      "table": "modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelEndpointId",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientProtocol",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "protocol_converters"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "protocol",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "consecutiveFailures",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cooldownUntilTime",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lastSuccessTime",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lastFailureTime",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_health"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelId",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerEndpointId",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelId",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "consecutiveFailures",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cooldownUntilTime",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lastSuccessTime",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lastFailureTime",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_model_health"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelId",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ruleId",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "modelName",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deletedTime",
+      "entityType": "columns",
+      "table": "provider_models"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "provider_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "provider_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "provider_settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'string'",
+      "generated": null,
+      "name": "valueType",
+      "entityType": "columns",
+      "table": "provider_settings"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "provider_settings"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "deletedTime",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerId",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelId",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerName",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelName",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamProtocol",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamRequestId",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "httpStatus",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "retryable",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attemptIndex",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "durationMilliseconds",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "errorCode",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "errorMessage",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "details",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_attempts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attemptId",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "captureStatus",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestMethod",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestPath",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestHeaders",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestBody",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "responseStatus",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "responseHeaders",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "responseBody",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "request_contents"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attemptId",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientProtocol",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamProtocol",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientRequestHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamRequestHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamResponseHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientResponseHeaders",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestBody",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "responseBody",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "streaming",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "durationMilliseconds",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_conversions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientProtocol",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "upstreamProtocol",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "logicalModelId",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_metrics"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "request_metrics"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "request_metrics"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'count'",
+      "generated": null,
+      "name": "unit",
+      "entityType": "columns",
+      "table": "request_metrics"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "request_metrics"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requestId",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attemptId",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'count'",
+      "generated": null,
+      "name": "unit",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "rawValue",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "request_usages"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "logicalModelId",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "providerModelId",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'priority'",
+      "generated": null,
+      "name": "strategy",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "priority",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "100",
+      "generated": null,
+      "name": "weight",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "scheduling_policies"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'string'",
+      "generated": null,
+      "name": "valueType",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "settings"
+    },
+    {
+      "columns": [
+        "providerModelEndpointId"
+      ],
+      "tableTo": "provider_model_endpoints",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_protocol_converters_providerModelEndpointId_provider_model_endpoints_id_fk",
+      "entityType": "fks",
+      "table": "protocol_converters"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "tableTo": "providers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_endpoints_providerId_providers_id_fk",
+      "entityType": "fks",
+      "table": "provider_endpoints"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "tableTo": "providers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_health_providerId_providers_id_fk",
+      "entityType": "fks",
+      "table": "provider_health"
+    },
+    {
+      "columns": [
+        "providerModelId"
+      ],
+      "tableTo": "provider_models",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_model_endpoints_providerModelId_provider_models_id_fk",
+      "entityType": "fks",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "columns": [
+        "providerEndpointId"
+      ],
+      "tableTo": "provider_endpoints",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_model_endpoints_providerEndpointId_provider_endpoints_id_fk",
+      "entityType": "fks",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "columns": [
+        "providerModelId"
+      ],
+      "tableTo": "provider_models",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_model_health_providerModelId_provider_models_id_fk",
+      "entityType": "fks",
+      "table": "provider_model_health"
+    },
+    {
+      "columns": [
+        "providerModelId"
+      ],
+      "tableTo": "provider_models",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_model_modification_rules_providerModelId_provider_models_id_fk",
+      "entityType": "fks",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "columns": [
+        "ruleId"
+      ],
+      "tableTo": "modification_rules",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_model_modification_rules_ruleId_modification_rules_id_fk",
+      "entityType": "fks",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "tableTo": "providers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_models_providerId_providers_id_fk",
+      "entityType": "fks",
+      "table": "provider_models"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "tableTo": "providers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_provider_settings_providerId_providers_id_fk",
+      "entityType": "fks",
+      "table": "provider_settings"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_attempts_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_attempts"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_contents_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_contents"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_conversions_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        "attemptId"
+      ],
+      "tableTo": "request_attempts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_conversions_attemptId_request_attempts_id_fk",
+      "entityType": "fks",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_metrics_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_metrics"
+    },
+    {
+      "columns": [
+        "requestId"
+      ],
+      "tableTo": "request_logs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_request_usages_requestId_request_logs_id_fk",
+      "entityType": "fks",
+      "table": "request_usages"
+    },
+    {
+      "columns": [
+        "logicalModelId"
+      ],
+      "tableTo": "logical_models",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_scheduling_policies_logicalModelId_logical_models_id_fk",
+      "entityType": "fks",
+      "table": "scheduling_policies"
+    },
+    {
+      "columns": [
+        "providerModelId"
+      ],
+      "tableTo": "provider_models",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_scheduling_policies_providerModelId_provider_models_id_fk",
+      "entityType": "fks",
+      "table": "scheduling_policies"
+    },
+    {
+      "columns": [
+        "providerModelId",
+        "ruleId"
+      ],
+      "nameExplicit": false,
+      "name": "provider_model_modification_rules_pk",
+      "entityType": "pks",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "columns": [
+        "providerId",
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "provider_settings_pk",
+      "entityType": "pks",
+      "table": "provider_settings"
+    },
+    {
+      "columns": [
+        "requestId",
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "request_metrics_pk",
+      "entityType": "pks",
+      "table": "request_metrics"
+    },
+    {
+      "columns": [
+        "logicalModelId",
+        "providerModelId"
+      ],
+      "nameExplicit": false,
+      "name": "scheduling_policies_pk",
+      "entityType": "pks",
+      "table": "scheduling_policies"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "logical_models_pk",
+      "table": "logical_models",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "modification_rules_pk",
+      "table": "modification_rules",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "protocol_converters_pk",
+      "table": "protocol_converters",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "provider_endpoints_pk",
+      "table": "provider_endpoints",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "providerId"
+      ],
+      "nameExplicit": false,
+      "name": "provider_health_pk",
+      "table": "provider_health",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "provider_model_endpoints_pk",
+      "table": "provider_model_endpoints",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "providerModelId"
+      ],
+      "nameExplicit": false,
+      "name": "provider_model_health_pk",
+      "table": "provider_model_health",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "provider_models_pk",
+      "table": "provider_models",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "providers_pk",
+      "table": "providers",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_attempts_pk",
+      "table": "request_attempts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_contents_pk",
+      "table": "request_contents",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_conversions_pk",
+      "table": "request_conversions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_logs_pk",
+      "table": "request_logs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "request_usages_pk",
+      "table": "request_usages",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "settings_pk",
+      "table": "settings",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_logical_models_enabled",
+      "entityType": "indexes",
+      "table": "logical_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "deletedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_logical_models_deleted_time",
+      "entityType": "indexes",
+      "table": "logical_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_modification_rules_enabled",
+      "entityType": "indexes",
+      "table": "modification_rules"
+    },
+    {
+      "columns": [
+        {
+          "value": "stage",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_modification_rules_stage",
+      "entityType": "indexes",
+      "table": "modification_rules"
+    },
+    {
+      "columns": [
+        {
+          "value": "deletedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_modification_rules_deleted_time",
+      "entityType": "indexes",
+      "table": "modification_rules"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerModelEndpointId",
+          "isExpression": false
+        },
+        {
+          "value": "clientProtocol",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_protocol_converters_unique",
+      "entityType": "indexes",
+      "table": "protocol_converters"
+    },
+    {
+      "columns": [
+        {
+          "value": "clientProtocol",
+          "isExpression": false
+        },
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_protocol_converters_protocol",
+      "entityType": "indexes",
+      "table": "protocol_converters"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerId",
+          "isExpression": false
+        },
+        {
+          "value": "protocol",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_endpoints_provider_protocol",
+      "entityType": "indexes",
+      "table": "provider_endpoints"
+    },
+    {
+      "columns": [
+        {
+          "value": "protocol",
+          "isExpression": false
+        },
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_endpoints_protocol",
+      "entityType": "indexes",
+      "table": "provider_endpoints"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerModelId",
+          "isExpression": false
+        },
+        {
+          "value": "providerEndpointId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_model_endpoints_unique",
+      "entityType": "indexes",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerEndpointId",
+          "isExpression": false
+        },
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_model_endpoints_provider_endpoint",
+      "entityType": "indexes",
+      "table": "provider_model_endpoints"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerModelId",
+          "isExpression": false
+        },
+        {
+          "value": "priority",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_model_modification_rule_priority",
+      "entityType": "indexes",
+      "table": "provider_model_modification_rules"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerId",
+          "isExpression": false
+        },
+        {
+          "value": "modelName",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "deletedTime IS NULL",
+      "origin": "manual",
+      "name": "idx_provider_models_provider_model_active",
+      "entityType": "indexes",
+      "table": "provider_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerId",
+          "isExpression": false
+        },
+        {
+          "value": "enabled",
+          "isExpression": false
+        },
+        {
+          "value": "deletedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_models_enabled",
+      "entityType": "indexes",
+      "table": "provider_models"
+    },
+    {
+      "columns": [
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_provider_settings_key",
+      "entityType": "indexes",
+      "table": "provider_settings"
+    },
+    {
+      "columns": [
+        {
+          "value": "enabled",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_providers_enabled",
+      "entityType": "indexes",
+      "table": "providers"
+    },
+    {
+      "columns": [
+        {
+          "value": "deletedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_providers_deleted_time",
+      "entityType": "indexes",
+      "table": "providers"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        },
+        {
+          "value": "attemptIndex",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_attempts_request_order",
+      "entityType": "indexes",
+      "table": "request_attempts"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerId",
+          "isExpression": false
+        },
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_attempts_provider_time",
+      "entityType": "indexes",
+      "table": "request_attempts"
+    },
+    {
+      "columns": [
+        {
+          "value": "providerModelId",
+          "isExpression": false
+        },
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_attempts_model_time",
+      "entityType": "indexes",
+      "table": "request_attempts"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "attemptId IS NULL",
+      "origin": "manual",
+      "name": "idx_request_contents_request_level",
+      "entityType": "indexes",
+      "table": "request_contents"
+    },
+    {
+      "columns": [
+        {
+          "value": "attemptId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "attemptId IS NOT NULL",
+      "origin": "manual",
+      "name": "idx_request_contents_attempt",
+      "entityType": "indexes",
+      "table": "request_contents"
+    },
+    {
+      "columns": [
+        {
+          "value": "attemptId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_conversions_attempt",
+      "entityType": "indexes",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_conversions_request",
+      "entityType": "indexes",
+      "table": "request_conversions"
+    },
+    {
+      "columns": [
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_logs_created_time",
+      "entityType": "indexes",
+      "table": "request_logs"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_logs_status",
+      "entityType": "indexes",
+      "table": "request_logs"
+    },
+    {
+      "columns": [
+        {
+          "value": "logicalModelId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_logs_logical_model",
+      "entityType": "indexes",
+      "table": "request_logs"
+    },
+    {
+      "columns": [
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_metrics_key",
+      "entityType": "indexes",
+      "table": "request_metrics"
+    },
+    {
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false
+        },
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_usages_type_time",
+      "entityType": "indexes",
+      "table": "request_usages"
+    },
+    {
+      "columns": [
+        {
+          "value": "requestId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_usages_request",
+      "entityType": "indexes",
+      "table": "request_usages"
+    },
+    {
+      "columns": [
+        {
+          "value": "attemptId",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_usages_attempt",
+      "entityType": "indexes",
+      "table": "request_usages"
+    },
+    {
+      "columns": [
+        {
+          "value": "logicalModelId",
+          "isExpression": false
+        },
+        {
+          "value": "enabled",
+          "isExpression": false
+        },
+        {
+          "value": "priority",
+          "isExpression": false
+        },
+        {
+          "value": "weight",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_scheduling_policies_route",
+      "entityType": "indexes",
+      "table": "scheduling_policies"
+    },
+    {
+      "columns": [
+        {
+          "value": "updatedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_settings_updated_time",
+      "entityType": "indexes",
+      "table": "settings"
+    },
+    {
+      "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "logical_models_name_unique",
+      "entityType": "uniques",
+      "table": "logical_models"
+    }
+  ],
+  "renames": []
+}

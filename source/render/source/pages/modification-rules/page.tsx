@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Beaker, Plus, ShieldCheck } from 'lucide-react'
+import { modificationRuleApi } from '@/api/models'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -7,6 +8,28 @@ import { RuleEditorDialog } from './components/rule-editor-dialog'
 import { RuleStats } from './components/rule-stats'
 import { RulesTable } from './components/rules-table'
 import { initialRules, type ModificationRule, type RuleStatusFilter } from './types'
+import type { ModificationRule as ApiModificationRule, Protocol } from '@common/schemas'
+
+const protocolLabels: Record<Protocol, string> = { 'openai-completions': 'OpenAI Completions', 'openai-responses': 'OpenAI Responses', 'anthropic-messages': 'Anthropic Messages' }
+const protocolValues = Object.fromEntries(Object.entries(protocolLabels).map(([value, label]) => [label, value])) as Record<string, Protocol>
+function toUiRule(rule: ApiModificationRule): ModificationRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: false, stage: rule.stage, protocols: rule.match.clientProtocols.map(item => protocolLabels[item]), actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, type: action.type, target: 'name' in action ? action.name : action.path, value: 'value' in action && typeof action.value === 'string' ? action.value : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined })), boundProviders: 0, updatedAt: new Date(rule.updatedTime).toLocaleString() } }
+function toApiRule(rule: ModificationRule): Omit<ApiModificationRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
+  return {
+    name: rule.name,
+    description: rule.description,
+    enabled: rule.enabled,
+    stage: rule.stage,
+    schemaVersion: 1,
+    source: 'user',
+    match: { clientProtocols: rule.protocols.map(item => protocolValues[item]), upstreamProtocols: [] },
+    actions: rule.actions.map(action => {
+      if (action.type === 'header-remove' || action.type === 'json-delete') return action.type === 'header-remove' ? { type: action.type, name: action.target } : { type: action.type, path: action.target }
+      if (action.type === 'header-set' || action.type === 'header-append') return { type: action.type, name: action.target, value: action.value ?? '' }
+      if (action.type === 'json-set') return { type: action.type, path: action.target, value: action.value ?? '' }
+      return { type: action.type, path: action.target, search: action.value ?? '', replacement: action.replacement ?? '' }
+    }),
+    }
+}
 
 function createRule(): ModificationRule {
   const id = `rule-${Date.now()}`
@@ -26,9 +49,11 @@ function createRule(): ModificationRule {
 
 export function ModificationRulesPage() {
   const toast = useToast()
-  const [rules, setRules] = useState(initialRules)
-  const [editingRuleId, setEditingRuleId] = useState(initialRules[0].id)
+  const [rules, setRules] = useState<ModificationRule[]>([])
+  const [editingRuleId, setEditingRuleId] = useState('')
   const [draft, setDraft] = useState<ModificationRule>(initialRules[0])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { void modificationRuleApi.list().then(result => { if (result.success) { const next = result.data.map(toUiRule); setRules(next); if (next[0]) { setEditingRuleId(next[0].id); setDraft(next[0]) } } setLoading(false) }) }, [])
   const [editorOpen, setEditorOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<RuleStatusFilter>('all')
@@ -60,13 +85,7 @@ export function ModificationRulesPage() {
     editRule(next)
   }
 
-  const saveRule = () => {
-    const next = { ...draft, updatedAt: '刚刚' }
-    setRules(current => current.map(rule => rule.id === next.id ? next : rule))
-    setDraft(next)
-    setEditorOpen(false)
-    toast.success('界面草稿已更新，当前仅保存在页面内存中')
-  }
+  const saveRule = () => { void (async () => { const result = draft.id.startsWith('rule-') && draft.updatedAt === '尚未保存' ? await modificationRuleApi.create(toApiRule(draft)) : await modificationRuleApi.update(draft.id, toApiRule(draft)); if (!result.success) { toast.error(result.errorMessage); return }; const next = toUiRule(result.data); setRules(current => current.some(rule => rule.id === next.id) ? current.map(rule => rule.id === next.id ? next : rule) : [next, ...current]); setDraft(next); setEditingRuleId(next.id); setEditorOpen(false); toast.success('修改规则已保存') })() }
 
   const duplicateRule = (source: ModificationRule = draft) => {
     const copy: ModificationRule = {
@@ -82,13 +101,7 @@ export function ModificationRulesPage() {
     editRule(copy)
   }
 
-  const deleteRule = (target: ModificationRule = draft) => {
-    setRules(current => current.filter(rule => rule.id !== target.id))
-    setEditorOpen(false)
-    toast.info(target.boundProviders > 0
-      ? `已从界面草稿中删除；真实实现时将先确认 ${target.boundProviders} 个供应商配置`
-      : '已从界面草稿中删除')
-  }
+  const deleteRule = (target: ModificationRule = draft) => { void (async () => { const result = await modificationRuleApi.remove(target.id); if (!result.success) { toast.error(result.errorMessage); return }; setRules(current => current.filter(rule => rule.id !== target.id)); setEditorOpen(false); toast.success('修改规则已删除，已有绑定将保留但不再执行') })() }
 
   return (
     <PageLayout>
@@ -105,6 +118,7 @@ export function ModificationRulesPage() {
         )}
       />
       <PageContent>
+        {loading && <div className="text-xs text-muted-foreground">正在加载修改规则…</div>}
         <div className="flex items-center gap-2 rounded-lg bg-info/8 px-3 py-2 text-[11px] text-muted-foreground">
           <ShieldCheck className="size-3.5 shrink-0 text-info" />
           全局规则自动应用到所有匹配请求；普通规则需要在供应商管理中添加后才会生效。
@@ -119,7 +133,7 @@ export function ModificationRulesPage() {
           onEdit={editRule}
           onDuplicate={duplicateRule}
           onDelete={deleteRule}
-          onToggle={(rule, enabled) => setRules(current => current.map(item => item.id === rule.id ? { ...item, enabled } : item))}
+          onToggle={(rule, enabled) => { setRules(current => current.map(item => item.id === rule.id ? { ...item, enabled } : item)); void modificationRuleApi.update(rule.id, toApiRule({ ...rule, enabled })) }}
         />
         <RuleEditorDialog
           open={editorOpen}

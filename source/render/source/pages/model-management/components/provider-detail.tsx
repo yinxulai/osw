@@ -2,7 +2,6 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProviderDetailHeader } from './provider-detail-header'
 import { ProviderModelList } from './provider-model-list'
-import { ProviderRuleBindings } from './provider-rule-bindings'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
 
 interface ProviderDetailProps {
@@ -39,7 +38,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
           onRemoveModel={onRemoveModel}
           onDragEnd={onDragEnd}
         />
-        <ProviderRuleBindings />
       </CardContent>
     </Card>
   )

@@ -1,6 +1,6 @@
 export type RuleStage = 'request' | 'response'
 export type RuleStatusFilter = 'all' | 'enabled' | 'disabled'
-export type RuleActionType = 'header-set' | 'header-remove' | 'json-set' | 'json-delete' | 'json-replace'
+export type RuleActionType = 'header-set' | 'header-append' | 'header-remove' | 'json-set' | 'json-delete' | 'json-replace'
 
 export interface RuleAction {
   id: string

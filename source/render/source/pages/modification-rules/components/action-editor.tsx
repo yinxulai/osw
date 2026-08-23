@@ -7,6 +7,7 @@ import type { RuleAction, RuleActionType } from '../types'
 
 const actionLabels: Record<RuleActionType, string> = {
   'header-set': '设置 Header',
+  'header-append': '追加 Header',
   'header-remove': '删除 Header',
   'json-set': '设置 JSON 值',
   'json-delete': '删除 JSON 路径',

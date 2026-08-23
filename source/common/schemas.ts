@@ -9,6 +9,36 @@ export const ProtocolSchema = z.enum([
 ])
 export type Protocol = z.infer<typeof ProtocolSchema>
 
+export const RuleStageSchema = z.enum(['request', 'response'])
+export type RuleStage = z.infer<typeof RuleStageSchema>
+
+const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
+export const ModificationRuleMatchSchema = z.object({
+  clientProtocols: z.array(ProtocolSchema).max(3).default([]),
+  upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
+  path: z.string().max(512).optional(),
+  logicalModelId: z.string().max(200).optional(),
+  providerModelId: z.string().max(200).optional(),
+})
+export type ModificationRuleMatch = z.infer<typeof ModificationRuleMatchSchema>
+export const ModificationRuleActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  z.object({ type: z.literal('header-append'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  z.object({ type: z.literal('header-remove'), name: z.string().min(1).max(128) }),
+  z.object({ type: z.literal('json-set'), path: z.string().min(3).max(512), value: JsonValueSchema }),
+  z.object({ type: z.literal('json-delete'), path: z.string().min(3).max(512) }),
+  z.object({ type: z.literal('json-replace'), path: z.string().min(3).max(512), search: z.string().max(4096), replacement: z.string().max(4096) }),
+])
+export type ModificationRuleAction = z.infer<typeof ModificationRuleActionSchema>
+export const ModificationRuleSchema = z.object({
+  id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
+  stage: RuleStageSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: ModificationRuleMatchSchema.default({}),
+  actions: z.array(ModificationRuleActionSchema).min(1).max(50), createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
+})
+export type ModificationRule = z.infer<typeof ModificationRuleSchema>
+export const ProviderModelModificationRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int() })
+export type ProviderModelModificationRule = z.infer<typeof ProviderModelModificationRuleSchema>
+
 export const RequestStatusSchema = z.enum(['pending', 'success', 'failed', 'cancelled'])
 export type RequestStatus = z.infer<typeof RequestStatusSchema>
 

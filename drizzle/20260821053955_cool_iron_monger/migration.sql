@@ -1,8 +1,8 @@
 CREATE TABLE `logical_models` (
 	`id` text PRIMARY KEY,
 	`name` text NOT NULL UNIQUE,
-	`description` text DEFAULT '' NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	`deletedTime` integer
@@ -10,9 +10,9 @@ CREATE TABLE `logical_models` (
 --> statement-breakpoint
 CREATE TABLE `protocol_converters` (
 	`id` text PRIMARY KEY,
-	`providerModelEndpointId` text NOT NULL,
-	`clientProtocol` text NOT NULL,
 	`enabled` integer DEFAULT false NOT NULL,
+	`clientProtocol` text NOT NULL,
+	`providerModelEndpointId` text NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_protocol_converters_providerModelEndpointId_provider_model_endpoints_id_fk` FOREIGN KEY (`providerModelEndpointId`) REFERENCES `provider_model_endpoints`(`id`)
@@ -20,10 +20,10 @@ CREATE TABLE `protocol_converters` (
 --> statement-breakpoint
 CREATE TABLE `provider_endpoints` (
 	`id` text PRIMARY KEY,
-	`providerId` text NOT NULL,
-	`protocol` text NOT NULL,
 	`url` text NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
+	`protocol` text NOT NULL,
+	`providerId` text NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_provider_endpoints_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
@@ -31,20 +31,20 @@ CREATE TABLE `provider_endpoints` (
 --> statement-breakpoint
 CREATE TABLE `provider_health` (
 	`providerId` text PRIMARY KEY,
-	`consecutiveFailures` integer DEFAULT 0 NOT NULL,
-	`cooldownUntilTime` integer,
-	`lastSuccessTime` integer,
 	`lastFailureTime` integer,
+	`lastSuccessTime` integer,
+	`cooldownUntilTime` integer,
+	`consecutiveFailures` integer DEFAULT 0 NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_provider_health_providerId_providers_id_fk` FOREIGN KEY (`providerId`) REFERENCES `providers`(`id`)
 );
 --> statement-breakpoint
 CREATE TABLE `provider_model_endpoints` (
 	`id` text PRIMARY KEY,
-	`providerModelId` text NOT NULL,
-	`providerEndpointId` text NOT NULL,
 	`url` text,
 	`enabled` integer DEFAULT true NOT NULL,
+	`providerModelId` text NOT NULL,
+	`providerEndpointId` text NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_provider_model_endpoints_providerModelId_provider_models_id_fk` FOREIGN KEY (`providerModelId`) REFERENCES `provider_models`(`id`),
@@ -53,19 +53,19 @@ CREATE TABLE `provider_model_endpoints` (
 --> statement-breakpoint
 CREATE TABLE `provider_model_health` (
 	`providerModelId` text PRIMARY KEY,
-	`consecutiveFailures` integer DEFAULT 0 NOT NULL,
-	`cooldownUntilTime` integer,
-	`lastSuccessTime` integer,
 	`lastFailureTime` integer,
+	`lastSuccessTime` integer,
+	`cooldownUntilTime` integer,
+	`consecutiveFailures` integer DEFAULT 0 NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_provider_model_health_providerModelId_provider_models_id_fk` FOREIGN KEY (`providerModelId`) REFERENCES `provider_models`(`id`)
 );
 --> statement-breakpoint
 CREATE TABLE `provider_models` (
 	`id` text PRIMARY KEY,
-	`providerId` text NOT NULL,
-	`modelName` text NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
+	`modelName` text NOT NULL,
+	`providerId` text NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	`deletedTime` integer,
@@ -85,8 +85,8 @@ CREATE TABLE `provider_settings` (
 CREATE TABLE `providers` (
 	`id` text PRIMARY KEY,
 	`name` text NOT NULL,
-	`description` text DEFAULT '' NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	`deletedTime` integer
@@ -94,22 +94,22 @@ CREATE TABLE `providers` (
 --> statement-breakpoint
 CREATE TABLE `request_attempts` (
 	`id` text PRIMARY KEY,
+	`url` text NOT NULL,
+	`status` text NOT NULL,
+	`retryable` integer DEFAULT false NOT NULL,
+	`httpStatus` integer,
 	`requestId` text NOT NULL,
 	`providerId` text NOT NULL,
 	`providerModelId` text NOT NULL,
+	`attemptIndex` integer NOT NULL,
 	`providerName` text NOT NULL,
 	`providerModelName` text NOT NULL,
 	`upstreamProtocol` text,
 	`upstreamRequestId` text,
-	`url` text NOT NULL,
-	`status` text NOT NULL,
-	`httpStatus` integer,
-	`retryable` integer DEFAULT false NOT NULL,
-	`attemptIndex` integer NOT NULL,
 	`durationMilliseconds` integer NOT NULL,
+	`details` text,
 	`errorCode` text,
 	`errorMessage` text,
-	`details` text,
 	`createdTime` integer NOT NULL,
 	CONSTRAINT `fk_request_attempts_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)
 );
@@ -156,9 +156,9 @@ CREATE INDEX `idx_request_conversions_request` ON `request_conversions` (`reques
 CREATE TABLE `request_logs` (
 	`id` text PRIMARY KEY,
 	`status` text NOT NULL,
+	`logicalModelId` text NOT NULL,
 	`clientProtocol` text NOT NULL,
 	`upstreamProtocol` text,
-	`logicalModelId` text NOT NULL,
 	`metadata` text,
 	`createdTime` integer NOT NULL
 );

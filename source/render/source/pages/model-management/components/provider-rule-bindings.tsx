@@ -1,31 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { GripVertical, Plus, ScrollText, Trash2 } from 'lucide-react'
+import { modificationRuleApi, providerModelApi } from '@/api/models'
+import type { ModificationRule } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-interface BoundRule {
-  id: string
-  name: string
-  stage: 'request' | 'response'
-  enabled: boolean
-}
+interface BoundRule { id: string; name: string; stage: 'request' | 'response'; enabled: boolean }
 
-const availableRules: BoundRule[] = [
-  { id: 'rule-reasoning', name: '兼容 reasoning 参数', stage: 'request', enabled: true },
-  { id: 'rule-metadata', name: '补充请求元数据', stage: 'request', enabled: true },
-  { id: 'rule-response', name: '清理响应扩展字段', stage: 'response', enabled: true },
-]
-
-export function ProviderRuleBindings() {
-  const [rules, setRules] = useState<BoundRule[]>([availableRules[0]])
+export function ProviderRuleBindings({ providerModelId }: { providerModelId: string }) {
+  const [availableRules, setAvailableRules] = useState<ModificationRule[]>([])
+  const [rules, setRules] = useState<BoundRule[]>([])
   const [selectedRuleId, setSelectedRuleId] = useState('')
+  useEffect(() => { void Promise.all([modificationRuleApi.list(), providerModelApi.modificationRules(providerModelId)]).then(([allResponse, bindingsResponse]) => { if (!allResponse.success || !bindingsResponse.success) return; const all = allResponse.data; const bindings = bindingsResponse.data; setAvailableRules(all); setRules(bindings.map(binding => { const rule = all.find(item => item.id === binding.ruleId); return rule ? { id: rule.id, name: rule.name, stage: rule.stage, enabled: binding.enabled } : null }).filter((item): item is BoundRule => item !== null)) }) }, [providerModelId])
+  const persist = (next: BoundRule[]) => { setRules(next); void providerModelApi.replaceModificationRules(providerModelId, next.map((rule, priority) => ({ ruleId: rule.id, priority, enabled: rule.enabled }))) }
 
   const addRule = () => {
     const selected = availableRules.find(rule => rule.id === selectedRuleId)
     if (!selected || rules.some(rule => rule.id === selected.id)) return
-    setRules(current => [...current, selected])
+    persist([...rules, { id: selected.id, name: selected.name, stage: selected.stage, enabled: true }])
     setSelectedRuleId('')
   }
 
@@ -75,14 +69,14 @@ export function ProviderRuleBindings() {
               </Badge>
               <Switch
                 checked={rule.enabled}
-                onCheckedChange={enabled => setRules(current => current.map(item => item.id === rule.id ? { ...item, enabled } : item))}
+                onCheckedChange={enabled => persist(rules.map(item => item.id === rule.id ? { ...item, enabled } : item))}
                 aria-label={`${rule.name}绑定状态`}
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => setRules(current => current.filter(item => item.id !== rule.id))}
+                onClick={() => persist(rules.filter(item => item.id !== rule.id))}
                 aria-label={`移除 ${rule.name}`}
                 className="text-muted-foreground hover:text-destructive"
               >

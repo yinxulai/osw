@@ -1,5 +1,6 @@
 import { GripVertical, KeyRound, Pencil, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ProviderRuleBindings } from './provider-rule-bindings'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolIcons } from '@/components/protocol-icons'
 import { SortableProviderModel } from './sortable-provider-model'
@@ -19,7 +20,8 @@ export function ProviderModelRow(props: ProviderModelRowProps) {
   return (
     <SortableProviderModel id={model.id}>
       {(handleProps, dragging) => (
-        <div className={'flex items-center gap-2 px-3 py-2.5 ' + (dragging ? 'bg-muted/60' : '')}>
+        <div className={'px-3 py-2.5 ' + (dragging ? 'bg-muted/60' : '')}>
+          <div className="flex items-center gap-2">
           <button
             aria-label={`拖动 ${model.modelName}`}
             className="cursor-grab touch-none text-muted-foreground/50"
@@ -65,6 +67,8 @@ export function ProviderModelRow(props: ProviderModelRowProps) {
           >
             <Trash2 size={13} />
           </Button>
+          </div>
+          <ProviderRuleBindings providerModelId={model.id} />
         </div>
       )}
     </SortableProviderModel>

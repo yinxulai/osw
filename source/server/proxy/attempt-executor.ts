@@ -18,6 +18,8 @@ import type { ProxyObservationHooks } from './hooks'
 import { runAttemptQueue } from './attempt-runner'
 import type { ProxyResponse } from './proxy-response'
 import { resolveAttemptSnapshot } from './routing'
+import { listRulesForProviderModel } from '../database/modification-rule-store'
+import { applyModificationRules, ModificationError } from './modification-engine'
 import { createAttemptLogger, initializeRequestLogger } from './logging'
 
 class ClientRequestCancelledError extends Error {
@@ -140,6 +142,12 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     },
     onError: async (target, err, attemptIndex) => {
       const lastError = err instanceof Error ? err : new Error(String(err))
+      if (err instanceof ModificationError) {
+        console.error(`[proxy] 修改规则执行失败: requestId=${requestId}, providerModelId=${target.model.id}, ruleId=${err.ruleId ?? 'unknown'}, error=${err.message}`)
+        if (!response.headersSent) response.fail(422, err.code, err.message)
+        await requestLogger.finalizeRequestLog('failed', startedAt)
+        return false
+      }
       if (isClientRequestCancelled(err)) {
         try {
           const snapshot = resolveAttemptSnapshot(target, protocol)
@@ -259,13 +267,15 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     createAuthHeaders(endpointProtocol, apiKey, endpoint.customAuthHeader),
     upstreamRequestBody.length,
   )
+  const rules = await listRulesForProviderModel(model.id)
+  const modified = applyModificationRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol, logicalModelId, providerModelId: model.id, path: context.path })
 
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
     port: parsed.port || (isHttps ? 443 : 80),
     path: parsed.pathname + parsed.search,
     method: context.method,
-    headers,
+    headers: modified.headers,
     timeout: provider.timeoutMilliseconds,
     signal: controller.signal,
   }
@@ -281,8 +291,8 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     path: parsed.pathname + parsed.search,
     requestHeaders: context.headers,
     requestBody,
-    upstreamRequestHeaders: headers,
-    upstreamRequestBody,
+    upstreamRequestHeaders: modified.headers,
+    upstreamRequestBody: modified.body,
     customAuthHeader: endpoint.customAuthHeader,
     clientProtocol: protocol,
     upstreamProtocol: endpointProtocol,
@@ -325,7 +335,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       resolve(outcome)
     }
 
-    sendUpstreamRequest(parsed, options, upstreamRequestBody, {
+    sendUpstreamRequest(parsed, options, modified.body, {
       onResponse: upstreamRes => {
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
