@@ -1,8 +1,9 @@
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { ProxyToggleButton } from '@/components/proxy-toggle-button'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Circle, Plug, Play } from 'lucide-react'
+import { Plug } from 'lucide-react'
 import { useQueueControlService } from './service'
 import { QueueListCard } from './components/queue-list-card'
 import { QueueSummary } from './components/queue-summary'
@@ -29,18 +30,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
                 <Plug size={13} /> 接入配置
               </Button>
             )}
-            <Button
-              variant={proxyRunning ? 'secondary' : 'default'}
-              aria-label={proxyRunning ? '暂停服务' : '启动服务'}
-              onClick={() => void service.toggleProxy()}
-            >
-              {proxyRunning ? (
-                <Circle size={8} className="fill-success text-success motion-safe:animate-pulse motion-reduce:animate-none" />
-              ) : (
-                <Play size={13} />
-              )}
-              {proxyRunning ? '运行中' : '启动服务'}
-            </Button>
+            <ProxyToggleButton running={proxyRunning} onToggle={service.toggleProxy} />
           </div>
         )}
       />

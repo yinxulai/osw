@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Check,
-  Circle,
   ClipboardCheck,
   Copy,
-  ExternalLink,
   KeyRound,
   Plug,
   Server,
   Settings2,
 } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
+import { ProxyToggleButton } from '@/components/proxy-toggle-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,7 +43,7 @@ function useCopyValue() {
   return { copiedKey, copy }
 }
 
-export function AccessConfigPage(props: AccessConfigPageProps) {
+export function AccessConfigPage(_props: AccessConfigPageProps) {
   const toast = useToast()
   const proxyStatus = useProxyStatus()
   const { toggleProxy } = useProxyToggle()
@@ -67,16 +66,7 @@ export function AccessConfigPage(props: AccessConfigPageProps) {
       <PageHeader
         title="接入配置"
         description="查看本地代理地址，并将 One Switch 接入你的 AI 客户端"
-        actions={(
-          <Button
-            variant={proxyRunning ? 'secondary' : 'default'}
-            aria-label={proxyRunning ? '暂停服务' : '启动服务'}
-            onClick={() => void toggleProxy()}
-          >
-            {proxyRunning ? <Circle size={8} className="fill-success text-success motion-safe:animate-pulse motion-reduce:animate-none" /> : <Server size={13} />}
-            {proxyRunning ? '运行中' : '启动服务'}
-          </Button>
-        )}
+        actions={<ProxyToggleButton running={proxyRunning} onToggle={toggleProxy} />}
       />
 
       <PageContent>
@@ -155,12 +145,22 @@ export function AccessConfigPage(props: AccessConfigPageProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2"><Settings2 size={15} className="text-primary" />下一步</CardTitle>
-              <CardDescription>从这里快速完成模型和监听配置</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Settings2 size={15} className="text-primary" />使用说明</CardTitle>
+              <CardDescription>按以下方式配置客户端和上游模型</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {props.onNavigateToModels && <Button variant="outline" size="sm" onClick={props.onNavigateToModels}>配置上游模型 <ExternalLink /></Button>}
-              {props.onNavigateToSettings && <Button variant="outline" size="sm" onClick={props.onNavigateToSettings}>调整监听设置 <ExternalLink /></Button>}
+            <CardContent className="space-y-2.5 text-xs">
+              <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">1</span>
+                <p className="leading-5">将上方地址填入客户端的 Base URL，协议按客户端支持情况选择。</p>
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">2</span>
+                <p className="leading-5">模型 ID 可以填写任意值，所有模型请求都会路由到 <code className="rounded bg-muted px-1 font-mono">default</code> 默认队列。</p>
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">3</span>
+                <p className="leading-5">本地服务无需 API Key 鉴权；上游供应商的 API Key 请在模型管理中配置。</p>
+              </div>
             </CardContent>
           </Card>
         </div>

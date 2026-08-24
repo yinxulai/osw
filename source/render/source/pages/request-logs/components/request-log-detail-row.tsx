@@ -12,7 +12,7 @@ import {
   formatTPS,
   formatTTFT,
 } from '../lib/format'
-import { RequestContentsDrawer } from './request-contents-drawer'
+import { RequestContentsSheet } from './request-contents-sheet'
 
 interface RequestLogDetailRowProps {
   log: RequestLogEntry | RequestLogDetail
@@ -266,7 +266,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             <ProviderRoute attempts={log.attempts} onSelect={setSelectedAttemptId} />
             <RawUsage rawUsage={log.rawUsage} />
           </div>
-          <RequestContentsDrawer
+          <RequestContentsSheet
             contents={contents}
             conversions={'conversions' in log ? log.conversions : null}
               clientProtocol={log.clientProtocol}

@@ -188,14 +188,14 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
   return attempt
 }
 
-type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime'>
+type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'modificationRuleIds'> & Partial<Pick<RequestContent, 'modificationRuleIds'>>
 type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
 
 export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
   const id = generateId('content_')
   const time = now()
-  getDb().insert(requestContents).values({ id, ...input, createdTime: time, updatedTime: time }).run()
-  return { id, ...input, createdTime: time, updatedTime: time }
+  getDb().insert(requestContents).values({ id, ...input, modificationRuleIds: JSON.stringify(input.modificationRuleIds ?? []), createdTime: time, updatedTime: time }).run()
+  return { id, ...input, modificationRuleIds: input.modificationRuleIds ?? [], createdTime: time, updatedTime: time }
 }
 
 export async function updateRequestContent(id: string, input: UpdateRequestContentInput): Promise<void> {
@@ -331,6 +331,15 @@ function mapRequestConversion(row: typeof requestConversions.$inferSelect): Requ
   }
 }
 
+function parseStringArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) && parsed.every(item => typeof item === 'string') ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function mapRequestContent(row: typeof requestContents.$inferSelect): RequestContent {
   return {
     id: row.id,
@@ -344,6 +353,7 @@ function mapRequestContent(row: typeof requestContents.$inferSelect): RequestCon
     responseStatus: row.responseStatus,
     responseHeaders: row.responseHeaders,
     responseBody: row.responseBody,
+    modificationRuleIds: row.modificationRuleIds ? parseStringArray(row.modificationRuleIds) : [],
     createdTime: row.createdTime,
     updatedTime: row.updatedTime,
   }

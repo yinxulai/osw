@@ -126,6 +126,7 @@ CREATE TABLE `request_contents` (
 	`responseStatus` integer,
 	`responseHeaders` text,
 	`responseBody` text,
+	`modificationRuleIds` text,
 	`createdTime` integer NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `fk_request_contents_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)

@@ -456,7 +456,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
 
   return (
     <Dialog open={props.open} onOpenChange={open => !running && props.onOpenChange(open)}>
-      <DialogContent className="flex h-[min(760px,90vh)] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[min(760px,90vh)] w-[calc(100%-2rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="bg-muted/15 px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><FlaskConical size={15} /></div>

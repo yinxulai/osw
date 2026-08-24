@@ -84,6 +84,7 @@ export interface AttemptLoggingInput {
   requestBody: Buffer
   upstreamRequestHeaders: http.OutgoingHttpHeaders
   upstreamRequestBody: Buffer
+  modificationRuleIds?: string[]
   customAuthHeader?: string | null
   clientProtocol: Protocol
   upstreamProtocol: Protocol
@@ -267,6 +268,7 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         requestPath: input.path,
         requestHeaders: JSON.stringify(redactHeaders(input.upstreamRequestHeaders, input.customAuthHeader ? [input.customAuthHeader] : [])),
         requestBody: input.upstreamRequestBody.toString('utf8'),
+        modificationRuleIds: input.modificationRuleIds ?? [],
         responseStatus: content.responseStatus,
         responseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
         responseBody: content.responseBody,
