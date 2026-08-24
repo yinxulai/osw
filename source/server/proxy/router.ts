@@ -10,12 +10,15 @@ export interface ModelWithProvider {
 }
 
 /**
- * 获取逻辑模型绑定的可用 ProviderModel 列表，按优先级排序并过滤冷却中的 Provider。
+ * 获取逻辑模型绑定的 ProviderModel 列表，按数据库返回的队列顺序排列。
+ * 过滤禁用或删除的配置，并优先返回健康模型；若健康模型为零，则返回
+ * 全部有效配置，让调度器按队列顺序逐个重试。
  */
 export async function getAvailableModels(logicalModelId = 'default'): Promise<ModelWithProvider[]> {
   const models = await listProviderModelsForLogicalModel(logicalModelId)
 
-  const result: ModelWithProvider[] = []
+  const allModels: ModelWithProvider[] = []
+  const availableModels: ModelWithProvider[] = []
 
   for (const model of models) {
     if (!model.enabled) continue
@@ -23,13 +26,15 @@ export async function getAvailableModels(logicalModelId = 'default'): Promise<Mo
     const provider = await getProvider(model.providerId)
     if (!provider || !provider.enabled || provider.deletedTime !== null) continue
 
+    const candidate = { model, provider }
+    allModels.push(candidate)
+
     if (!await isProviderAvailable(provider.id)) continue
     if (!await isProviderModelAvailable(model.id)) continue
-
-    result.push({ model, provider })
+    availableModels.push(candidate)
   }
 
-  return result
+  return availableModels.length > 0 ? availableModels : allModels
 }
 
 /**

@@ -50,6 +50,30 @@ describe('getAvailableModels', () => {
 
     expect(available.map(entry => entry.model.id)).toEqual(['model_ready'])
   })
+
+  it('returns the full queue in order when every model is unavailable', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_first', providerId: 'prov_shared', modelName: 'first', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_second', providerId: 'prov_shared', modelName: 'second', endpoints: [], priority: 2, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+    mocks.unavailableModels.add('model_first')
+    mocks.unavailableModels.add('model_second')
+
+    const available = await getAvailableModels('default')
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_first', 'model_second'])
+  })
 })
 
 describe('findEndpoint', () => {
