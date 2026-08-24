@@ -101,12 +101,19 @@ function ProviderRoute(props: ProviderRouteProps) {
       </div>
       <div className="divide-y divide-border">
         {props.attempts.map((attempt, index) => (
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             key={attempt.attemptIndex}
             aria-label={`查看第 ${index + 1} 次 Provider 路由详情`}
             className="group grid w-full grid-cols-[24px_minmax(0,1fr)_auto_14px] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
             onClick={() => props.onSelect(attempt.id)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                props.onSelect(attempt.id)
+              }
+            }}
           >
             <div className={cn(
               'flex size-6 items-center justify-center font-mono text-[10px]',
@@ -125,15 +132,29 @@ function ProviderRoute(props: ProviderRouteProps) {
                 </span>
                 <AttemptBadge attempt={attempt} />
               </div>
-              <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                Upstream request ID：{attempt.upstreamRequestId || '-'}
+              <div className="mt-1 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
+                <span className="break-all">Upstream request ID：{attempt.upstreamRequestId || '-'}</span>
+                {attempt.upstreamRequestId && (
+                  <button
+                    type="button"
+                    aria-label="复制 Upstream request ID"
+                    title="复制 Upstream request ID"
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    onClick={event => {
+                      event.stopPropagation()
+                      void navigator.clipboard.writeText(attempt.upstreamRequestId ?? '')
+                    }}
+                  >
+                    <Copy size={11} />
+                  </button>
+                )}
               </div>
             </div>
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
             </div>
             <ChevronRight size={14} className="text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground group-focus-visible:text-foreground" />
-          </button>
+          </div>
         ))}
         {props.attempts.length === 0 && (
           <div className="px-3 py-6 text-center text-xs text-muted-foreground">没有生成 Provider attempt 记录</div>

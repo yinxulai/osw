@@ -46,19 +46,19 @@ export function ActionEditor(props: ActionEditorProps) {
 
           return (
             <div key={action.id} className="rounded-lg bg-muted/45 p-2.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background text-[10px] font-medium text-muted-foreground">{index + 1}</span>
                 <Select value={action.stage} onValueChange={value => updateAction(action.id, { stage: value as 'request' | 'response' })} disabled={props.readOnly}>
                   <SelectTrigger className="h-7 w-20 bg-background px-2.5 text-[11px]" aria-label={`动作 ${index + 1} 阶段`}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="request">请求</SelectItem><SelectItem value="response">响应</SelectItem></SelectContent>
+                  <SelectContent className="min-w-24 text-xs"><SelectItem className="text-xs" value="request">请求</SelectItem><SelectItem className="text-xs" value="response">响应</SelectItem></SelectContent>
                 </Select>
                 <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })} disabled={props.readOnly}>
-                  <SelectTrigger className="h-7 w-28 bg-background px-2.5 text-[11px]" aria-label={`动作 ${index + 1} 目标`}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="header">Header</SelectItem><SelectItem value="body">Body</SelectItem></SelectContent>
+                  <SelectTrigger className="h-7 w-24 bg-background px-2 text-xs" aria-label={`动作 ${index + 1} 目标`}><SelectValue /></SelectTrigger>
+                  <SelectContent className="min-w-24 text-xs"><SelectItem className="text-xs" value="header">Header</SelectItem><SelectItem className="text-xs" value="body">Body</SelectItem></SelectContent>
                 </Select>
                 <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })} disabled={props.readOnly}>
-                  <SelectTrigger className="h-7 flex-1 bg-background px-2.5 text-[11px]" aria-label={`动作 ${index + 1} 操作`}><SelectValue /></SelectTrigger>
-                  <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{operationLabels[operation]}</SelectItem>)}</SelectContent>
+                  <SelectTrigger className="h-7 w-20 bg-background px-2 text-xs" aria-label={`动作 ${index + 1} 操作`}><SelectValue /></SelectTrigger>
+                  <SelectContent className="min-w-20 text-xs">{operations.map(operation => <SelectItem className="text-xs" key={operation} value={operation}>{operationLabels[operation]}</SelectItem>)}</SelectContent>
                 </Select>
                 <div className="flex items-center">
                   <Button
@@ -75,8 +75,8 @@ export function ActionEditor(props: ActionEditorProps) {
                 </div>
               </div>
 
-              <div className="mt-2.5 grid gap-2.5 pl-7 md:grid-cols-2">
-                <div className="space-y-1 md:col-span-2">
+              <div className="mt-2.5 grid gap-2.5 pl-7 sm:grid-cols-2">
+                <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor={`${action.id}-target`} className="text-[11px]">
                     {isHeader ? 'Header 名称' : 'Body 路径'}
                   </Label>

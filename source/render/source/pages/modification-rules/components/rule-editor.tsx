@@ -24,18 +24,16 @@ export function RuleEditor(props: RuleEditorProps) {
   return (
     <div className="space-y-5 px-5 py-4">
       <section className="space-y-2.5">
-        <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
-          <div className="space-y-1">
-            <Label htmlFor="rule-name" className="text-[11px]">规则名称</Label>
-            <Input id="rule-name" className="h-8" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" disabled={props.readOnly} />
-          </div>
-          <div className="flex items-end text-[11px] text-muted-foreground">
-            请求和响应阶段可在每个动作中分别设置
-          </div>
+        <div className="space-y-1">
+          <Label htmlFor="rule-name" className="text-[11px]">规则名称</Label>
+          <Input id="rule-name" className="h-8 text-xs" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" disabled={props.readOnly} />
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          请求和响应阶段可在每个动作中分别设置
+        </p>
         <div className="space-y-1">
           <Label htmlFor="rule-description" className="text-[11px]">说明 <span className="font-normal text-muted-foreground">（可选）</span></Label>
-          <Input id="rule-description" className="h-8" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" disabled={props.readOnly} />
+          <Input id="rule-description" className="h-8 text-xs" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" disabled={props.readOnly} />
         </div>
       </section>
 

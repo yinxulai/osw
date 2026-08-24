@@ -33,7 +33,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     <Sheet open={props.open} onOpenChange={open => open ? props.onOpenChange(true) : cancel()}>
       <SheetContent
         side="right"
-        className="w-[calc(100vw-1rem)]! max-w-300! gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
+        className="w-140! max-w-140! gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
         onPointerDownOutside={event => event.preventDefault()}
       >
         <SheetHeader className="shrink-0 bg-card px-6 py-5 pr-14">

@@ -28,7 +28,7 @@ export function RulesTable(props: RulesTableProps) {
       <div className="flex flex-col gap-3 bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle>规则列表</CardTitle>
-          <CardDescription>全局规则自动生效，普通规则需要在供应商管理中添加。</CardDescription>
+          <CardDescription>启用后的全局规则自动应用；普通规则需要在供应商管理中添加。</CardDescription>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative w-full sm:w-56">
