@@ -35,7 +35,7 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
   return rows.map(mapProviderModelView)
 }
 
-export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false): Promise<ProviderModelRoute[]> {
+export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false, includeDisabled = false): Promise<ProviderModelRoute[]> {
   const rows = getDb().select({ model: providerModels, policy: schedulingPolicies })
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
@@ -43,7 +43,7 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
     .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
     .all()
   return rows
-    .filter(({ model, policy }) => (includeDeleted || model.deletedTime === null) && model.enabled && policy.enabled)
+    .filter(({ model, policy }) => (includeDeleted || model.deletedTime === null) && (includeDisabled || model.enabled) && policy.enabled)
     .map(({ model, policy }) => ({ ...mapProviderModelRoute(model), priority: policy.priority }))
 }
 

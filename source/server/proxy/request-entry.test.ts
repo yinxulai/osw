@@ -25,7 +25,9 @@ vi.mock('./router', async importOriginal => {
   const original = await importOriginal<typeof import('./router')>()
   return {
     ...original,
-    getAvailableModels: async () => mocks.models,
+    getAvailableModels: async (_logicalModelId: string, options: { manualModelId?: string | null } = {}) => options.manualModelId
+      ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
+      : mocks.models,
   }
 })
 
@@ -176,7 +178,7 @@ describe('handleProxyRequest', () => {
     expect(firstHandler).not.toHaveBeenCalled()
   })
 
-  it('fails over forward from the manually selected position without changing queue order', async () => {
+  it('does not fall back when the manually selected model fails', async () => {
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
@@ -213,10 +215,9 @@ describe('handleProxyRequest', () => {
       body: JSON.stringify({ model: 'default', messages: [] }),
     })
 
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ provider: 'third' })
+    expect(response.status).toBe(502)
     expect(secondHandler).toHaveBeenCalledOnce()
-    expect(thirdHandler).toHaveBeenCalledOnce()
+    expect(thirdHandler).not.toHaveBeenCalled()
     expect(firstHandler).not.toHaveBeenCalled()
   })
 

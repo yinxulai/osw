@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { closeDatabase, getDb, initDatabase } from './index'
+import { listProviderModelsForLogicalModel } from './model-store'
 
 const temporaryDirectories: string[] = []
 
@@ -99,6 +100,19 @@ describe('database lifecycle', () => {
 
     expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('default', 'pm_test', time, time)).toThrow()
     expect(() => client.prepare('INSERT INTO provider_health (providerId, updatedTime) VALUES (?, ?)').run('missing', time)).toThrow()
+  })
+
+  it('keeps disabled models in management queue while excluding them from scheduling', async () => {
+    const client = (await initDatabase(createTemporaryDirectory())).$client
+    const time = Date.now()
+    client.prepare('INSERT INTO providers (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('prov_test', 'Test', time, time)
+    client.prepare('INSERT INTO provider_models (id, providerId, modelName, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('pm_disabled', 'prov_test', 'model-disabled', 0, time, time)
+    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('default', 'pm_disabled', 0, 100, time, time)
+
+    await expect(listProviderModelsForLogicalModel('default')).resolves.toEqual([])
+    await expect(listProviderModelsForLogicalModel('default', false, true)).resolves.toMatchObject([
+      { id: 'pm_disabled', enabled: false, priority: 0 },
+    ])
   })
 
   it('creates the expected v0.3 indexes and request columns', async () => {

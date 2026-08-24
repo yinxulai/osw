@@ -14,17 +14,16 @@ export interface ProxyTargets {
 }
 
 export async function resolveProxyTargets(logicalModelId: string, protocol: Protocol): Promise<ProxyTargets> {
-  const availableModels = await getAvailableModels(logicalModelId)
-  let targets = availableModels.filter(candidate =>
+  const manualModelId = getManualModel(logicalModelId)
+  const availableModels = await getAvailableModels(logicalModelId, { manualModelId })
+  const targets = availableModels.filter(candidate =>
     Boolean(findEndpoint(candidate.model, protocol) || findConvertibleEndpoint(candidate.model, protocol)),
   )
-  const manualModelId = getManualModel(logicalModelId)
-  if (manualModelId) {
-    const manualIndex = targets.findIndex(candidate => candidate.model.id === manualModelId)
-    if (manualIndex === -1) return { availableModels, targets: [], manualModelUnavailable: true }
-    targets = targets.slice(manualIndex)
+  return {
+    targets,
+    availableModels,
+    manualModelUnavailable: manualModelId !== null && targets.length === 0,
   }
-  return { availableModels, targets, manualModelUnavailable: false }
 }
 
 export interface AttemptTargetSnapshot {

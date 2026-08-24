@@ -89,7 +89,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
         'grid min-h-14 min-w-xl grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_7.5rem] items-center gap-x-0 overflow-hidden border-l-2 border-l-transparent px-4 py-2.5 lg:min-w-176 lg:grid-cols-[4rem_minmax(14rem,1.4fr)_minmax(9rem,1fr)_minmax(8rem,.9fr)_7.5rem]',
         tableRowClass,
         props.selected && 'rounded-md border-l-primary bg-primary/5',
-        props.mode === 'manual' && model.enabled && !props.cooling && 'cursor-pointer',
+        props.mode === 'manual' && 'cursor-pointer',
         props.dragging && 'rounded-md bg-muted/60',
       )}
     >

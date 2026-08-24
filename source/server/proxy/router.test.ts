@@ -5,6 +5,7 @@ import type { Provider, ProviderModelRoute } from '@common/schemas'
 const mocks = vi.hoisted(() => ({
   models: [] as ProviderModelRoute[],
   provider: undefined as Provider | undefined,
+  unavailableProviders: new Set<string>(),
   unavailableModels: new Set<string>(),
 }))
 
@@ -17,13 +18,14 @@ vi.mock('../database/provider-store', () => ({
 }))
 
 vi.mock('./health', () => ({
-  isProviderAvailable: async () => true,
+  isProviderAvailable: async (providerId: string) => !mocks.unavailableProviders.has(providerId),
   isProviderModelAvailable: async (providerModelId: string) => !mocks.unavailableModels.has(providerModelId),
 }))
 
 afterEach(() => {
   mocks.models = []
   mocks.provider = undefined
+  mocks.unavailableProviders.clear()
   mocks.unavailableModels.clear()
 })
 
@@ -73,6 +75,40 @@ describe('getAvailableModels', () => {
     const available = await getAvailableModels('default')
 
     expect(available.map(entry => entry.model.id)).toEqual(['model_first', 'model_second'])
+  })
+
+  it('excludes disabled models from automatic routing', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared', name: 'Shared Provider', apiKeyReference: 'shared-key', timeoutMilliseconds: 1_000,
+      enabled: true, createdTime: time, updatedTime: time, deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_disabled', providerId: 'prov_shared', modelName: 'disabled', endpoints: [], priority: 1, enabled: false, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_ready', providerId: 'prov_shared', modelName: 'ready', endpoints: [], priority: 2, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+
+    const available = await getAvailableModels('default')
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_ready'])
+  })
+
+  it('forces the manually selected model despite disabled and cooling states', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared', name: 'Shared Provider', apiKeyReference: 'shared-key', timeoutMilliseconds: 1_000,
+      enabled: false, createdTime: time, updatedTime: time, deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_other', providerId: 'prov_shared', modelName: 'other', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_manual', providerId: 'prov_shared', modelName: 'manual', endpoints: [], priority: 2, enabled: false, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+    mocks.unavailableProviders.add('prov_shared')
+    mocks.unavailableModels.add('model_manual')
+
+    const available = await getAvailableModels('default', { manualModelId: 'model_manual' })
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_manual'])
   })
 })
 

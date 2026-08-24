@@ -218,7 +218,6 @@ one-switch/
 | `/api/analytics/summary` | 统计分析汇总 |
 | `/api/model-test/run` | 模型测试 |
 | `/api/config/export`、`/api/config/import`、`/api/config/seed-development` | 配置导出、导入、开发数据种子 |
-| `/api/local-auth/status`、`/api/local-auth/generate`、`/api/local-auth/rotate`、`/api/local-auth/delete` | 本地认证状态与凭据管理 |
 
 通配符 `*` 表示表中同一资源下实际存在的 `list`、`get`、`create`、`update`、`delete` 或 `upsert` 路径；所有路由均由 `router.ts` 合并注册，未提供旧版兼容别名。
 
@@ -264,7 +263,7 @@ React 18 + TypeScript + shadcn/ui + Tailwind。渲染层通过 `source/render/so
 - **模型路由页**：Provider 模型列表、端点管理、拖拽排序
 - **请求日志页**：列表、筛选、详情（尝试过程时间线）
 - **请求内容查看器**：使用 Drawer 或 Dialog 查看完整请求/响应，协议转换时展示转换前后内容
-- **设置页**：端口、开机自启、访问 Token、日志保留条数、日志保留天数、按天立即清理、请求内容记录、导入导出、关于
+- **设置页**：端口、开机自启、日志保留条数、日志保留天数、按天立即清理、请求内容记录、导入导出、关于
 
 ## 构建与打包
 

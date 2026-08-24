@@ -204,7 +204,6 @@ export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   listenHost: z.string().default('127.0.0.1'),
   listenPort: z.number().int().min(1).max(65535).default(9300),
-  accessTokenReference: z.string().nullable().default(null),
   logRetentionDays: z.number().int().positive().default(30),
   captureRequestContent: z.boolean().default(true),
   cooldownBaseSeconds: z.number().int().positive().default(30),

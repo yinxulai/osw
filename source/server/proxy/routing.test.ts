@@ -7,7 +7,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./router', () => ({
-  getAvailableModels: async () => mocks.models,
+  getAvailableModels: async (_logicalModelId: string, options: { manualModelId?: string | null } = {}) => options.manualModelId
+    ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
+    : mocks.models,
   findEndpoint: (model: ProviderModelRoute, protocol: string) => model.endpoints.find(endpoint => endpoint.protocol === protocol),
   findConvertibleEndpoint: (model: ProviderModelRoute, protocol: string) => model.endpoints.find(endpoint => endpoint.protocolConversionEnabled && endpoint.protocol !== protocol),
 }))
@@ -35,11 +37,11 @@ describe('resolveProxyTargets', () => {
     expect(result.manualModelUnavailable).toBe(false)
   })
 
-  it('starts at the manually selected model without silently falling back', async () => {
+  it('only uses the manually selected model without fallback', async () => {
     mocks.models = [{ model: model('a'), provider }, { model: model('b'), provider }, { model: model('c'), provider }]
     mocks.manualModel = 'b'
     const result = await resolveProxyTargets('logical', 'openai-completions')
-    expect(result.targets.map(target => target.model.id)).toEqual(['b', 'c'])
+    expect(result.targets.map(target => target.model.id)).toEqual(['b'])
   })
 
   it('rejects an unavailable manual model', async () => {

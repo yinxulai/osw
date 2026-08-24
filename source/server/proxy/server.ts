@@ -1,7 +1,6 @@
 import http from 'node:http'
 import { getSettings } from '../database/settings-store'
 import { isAllowedHost } from '../security/host-validation'
-import { authorizeLocalRequest } from '../management/auth/service'
 import { handleProxyRequest } from './request-entry'
 import type { Server } from 'node:http'
 import { getErrorResponseMessage, isErrorCode, normalizeError } from '../errors'
@@ -32,10 +31,6 @@ export function startProxyServer(options: ProxyServerOptions = {}): Promise<Serv
       try {
         if (!isAllowedHost(req.headers.host, settings.listenHost, listenPort)) {
           writeJsonError(res, 403, 'INVALID_HOST', 'Host 不被允许')
-          return
-        }
-        if (!await authorizeLocalRequest(req.headers)) {
-          writeJsonError(res, 401, 'UNAUTHORIZED', '需要有效的本地访问 Token')
           return
         }
         const url = new URL(req.url!, 'http://localhost')
@@ -134,7 +129,17 @@ function listen(server: Server, host: string, port: number): Promise<Server> {
 }
 
 function close(server: Server): Promise<void> {
+  // `close()` waits for existing keep-alive/active connections. The proxy is
+  // explicitly stopped by the user, so force those connections out first;
+  // otherwise a later start can remain blocked by the old listener.
+  server.closeIdleConnections?.()
+  server.closeAllConnections?.()
+
   return new Promise((resolve, reject) => {
+    if (!server.listening) {
+      resolve()
+      return
+    }
     server.close(error => error ? reject(error) : resolve())
   })
 }

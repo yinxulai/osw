@@ -74,7 +74,6 @@ Electron + Node + TypeScript + React/Vite
 
 - 监听地址与端口
 - 开机自启
-- 本地访问 Token（可选）
 - 日志保留条数和保留天数
 - 按天数立即清理历史日志
 - 配置导入 / 导出

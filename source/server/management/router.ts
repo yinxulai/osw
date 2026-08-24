@@ -13,7 +13,6 @@ import { configRoutes } from './config/routes'
 import { modelTestRoutes } from './model-test'
 import { providerModelFetchRoutes } from './provider-models-fetch'
 import { relationRoutes } from './relations'
-import { localAuthRoutes } from './auth/routes'
 import { modificationRuleRoutes } from './modification-rules'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 import { parseJsonBody } from './request-body'
@@ -33,7 +32,6 @@ const routes: Record<string, ManagementHandler> = {
   ...modelTestRoutes,
   ...providerModelFetchRoutes,
   ...relationRoutes,
-  ...localAuthRoutes,
   ...modificationRuleRoutes,
 }
 

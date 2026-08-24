@@ -83,6 +83,13 @@ describe('server lifecycle', () => {
     })
     await expect(fetch(proxyUrl)).rejects.toThrow()
 
+    // The normal UI flow is stop -> start (not only the restart endpoint).
+    expect(await post(`${managementUrl}/start`)).toMatchObject({
+      success: true,
+      data: { running: true, port: proxyPort },
+    })
+    expect((await fetch(proxyUrl)).status).toBe(200)
+
     expect(await post(`${managementUrl}/restart`)).toMatchObject({
       success: true,
       data: { running: true, port: proxyPort },
@@ -144,29 +151,6 @@ describe('server lifecycle', () => {
     })
   })
 
-  it('enforces local Bearer authentication on management and proxy requests', async () => {
-    const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
-    await startServer({
-      dataDir: temporaryDirectory,
-      secretStore,
-      runtimeProfile: createTestRuntimeProfile(proxyPort, managementPort),
-    })
-
-    const managementUrl = `http://127.0.0.1:${managementPort}/api/local-auth`
-    const proxyUrl = `http://127.0.0.1:${proxyPort}/v1/models`
-    const generated = await post(`${managementUrl}/generate`) as { data: { token: string } }
-    const originalToken = generated.data.token
-
-    expect((await fetch(proxyUrl)).status).toBe(401)
-    expect((await fetch(proxyUrl, { headers: { Authorization: 'Bearer wrong' } })).status).toBe(401)
-    expect((await fetch(proxyUrl, { headers: { Authorization: `Bearer ${originalToken}` } })).status).toBe(200)
-    expect(await postWithStatus(`${managementUrl}/status`)).toBe(401)
-    expect(await post(`${managementUrl}/status`, {}, originalToken)).toMatchObject({ success: true, data: { enabled: true } })
-
-    const rotated = await post(`${managementUrl}/rotate`, {}, originalToken) as { data: { token: string } }
-    expect(await postWithStatus(`${managementUrl}/status`, originalToken)).toBe(401)
-    expect(await postWithStatus(`${managementUrl}/status`, rotated.data.token)).toBe(200)
-  })
 })
 
 function createTestRuntimeProfile(proxyPort: number, managementPort: number): RuntimeProfile {
@@ -179,22 +163,13 @@ function createTestRuntimeProfile(proxyPort: number, managementPort: number): Ru
   }
 }
 
-async function post(url: string, body: unknown = {}, token?: string): Promise<unknown> {
+async function post(url: string, body: unknown = {}): Promise<unknown> {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Connection: 'close', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', Connection: 'close' },
     body: JSON.stringify(body),
   })
   return response.json()
-}
-
-async function postWithStatus(url: string, token?: string): Promise<number> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Connection: 'close', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: '{}',
-  })
-  return response.status
 }
 
 function getAvailablePort(): Promise<number> {

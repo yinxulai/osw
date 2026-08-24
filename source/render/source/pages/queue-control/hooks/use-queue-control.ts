@@ -37,9 +37,8 @@ export function useQueueControl() {
     try {
       const updated = await updateModelMutation.mutateAsync({ id: model.id, enabled })
       modelsState.updateEnabledModel(model.id, updated.enabled)
-      if (!enabled && queueMode.manualModelId === model.id) await queueMode.changeMode('auto')
     } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
-  }, [modelsState.updateEnabledModel, queueMode.changeMode, queueMode.manualModelId, toast, updateModelMutation])
+  }, [modelsState.updateEnabledModel, toast, updateModelMutation])
 
   const reload = useCallback(async () => {
     await Promise.all([

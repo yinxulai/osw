@@ -1,18 +1,13 @@
 import type { IncomingHttpHeaders, ServerResponse } from 'node:http'
 import { isAllowedHost } from '../security/host-validation'
-import { authorizeLocalRequest } from './auth/service'
 import { sendError } from './response'
 
 export async function applyManagementRequestGuards(headers: IncomingHttpHeaders, method: string | undefined, url: string | undefined, res: ServerResponse, host: string, port: number): Promise<boolean> {
+  setCorsHeaders(res)
   if (!isAllowedHost(headers.host, host, port)) {
     sendError(res, 'HOST_NOT_ALLOWED', 'Host 不被允许', 403)
     return false
   }
-  if (!await authorizeLocalRequest(headers)) {
-    sendError(res, 'AUTH_REQUIRED', '需要有效的本地访问 Token', 401)
-    return false
-  }
-  setCorsHeaders(res)
   if (method === 'OPTIONS') {
     res.statusCode = 204
     res.end()

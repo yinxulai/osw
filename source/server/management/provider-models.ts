@@ -37,7 +37,7 @@ async function handleListProviderModels(_req: IncomingMessage, res: ServerRespon
 
 async function handleListProviderModelQueue(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = z.object({ logicalModelId: z.string().min(1).default('default'), includeDeleted: z.boolean().optional() }).parse(body)
-  sendSuccess(res, await listProviderModelsForLogicalModel(input.logicalModelId, input.includeDeleted ?? false))
+  sendSuccess(res, await listProviderModelsForLogicalModel(input.logicalModelId, input.includeDeleted ?? false, true))
 }
 
 const GetProviderModelSchema = z.object({ id: z.string().min(1) })

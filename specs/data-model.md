@@ -281,7 +281,6 @@ routing.cooldownMaxSeconds
 routing.consecutiveFailureThreshold
 logging.retentionDays
 logging.captureRequestContent
-security.accessTokenReference
 desktop.autoLaunch
 ui.theme
 ui.visibleColumns
