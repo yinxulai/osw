@@ -23,6 +23,20 @@ export const ModificationRuleMatchSchema = z.object({
   providerModelId: z.string().max(200).optional(),
 })
 export type ModificationRuleMatch = z.infer<typeof ModificationRuleMatchSchema>
+export const RequestModificationTestCaseSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().min(1).max(100),
+  stage: RuleStageSchema.default('request'),
+  body: z.string().max(2 * 1024 * 1024),
+  headers: z.string().max(64 * 1024),
+  clientProtocol: ProtocolSchema.default('openai-completions'),
+  upstreamProtocol: ProtocolSchema.default('openai-completions'),
+  logicalModelId: z.string().max(200).default('default'),
+  providerModelId: z.string().max(200).default('test-model'),
+  path: z.string().max(512).default('/v1/chat/completions'),
+  streaming: z.boolean().default(false),
+})
+export type RequestModificationTestCase = z.infer<typeof RequestModificationTestCaseSchema>
 const ModificationRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
 export const ModificationRuleActionSchema = z.discriminatedUnion('type', [
   ModificationRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
@@ -36,7 +50,9 @@ export type ModificationRuleAction = z.infer<typeof ModificationRuleActionSchema
 export const ModificationRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
   scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: ModificationRuleMatchSchema.default({}),
-  actions: z.array(ModificationRuleActionSchema).min(1).max(50), createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
+  actions: z.array(ModificationRuleActionSchema).min(1).max(50),
+  testCases: z.array(RequestModificationTestCaseSchema).max(50).default([]),
+  createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
 })
 export type ModificationRule = z.infer<typeof ModificationRuleSchema>
 export const ProviderModelModificationRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int() })

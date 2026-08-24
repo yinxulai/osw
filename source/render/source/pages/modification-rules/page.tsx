@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Beaker, Plus, ShieldCheck } from 'lucide-react'
+import { Plus, ShieldCheck } from 'lucide-react'
 import { modificationRuleApi } from '@/api/models'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import {
@@ -22,7 +22,7 @@ import type { ModificationRule as ApiModificationRule, Protocol } from '@common/
 
 const protocolLabels: Record<Protocol, string> = { 'openai-completions': 'OpenAI Completions', 'openai-responses': 'OpenAI Responses', 'anthropic-messages': 'Anthropic Messages' }
 const protocolValues = Object.fromEntries(Object.entries(protocolLabels).map(([value, label]) => [label, value])) as Record<string, Protocol>
-function toUiRule(rule: ApiModificationRule): ModificationRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', protocols: rule.match.clientProtocols.map(item => protocolLabels[item]), match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols, path: rule.match.path, logicalModelId: rule.match.logicalModelId, providerModelId: rule.match.providerModelId }, actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, stage: action.stage, target: action.type.startsWith('header-') ? 'header' : 'body', operation: action.type.endsWith('set') ? 'set' : action.type.endsWith('append') ? 'append' : action.type.endsWith('remove') || action.type.endsWith('delete') ? 'remove' : 'replace', path: 'name' in action ? action.name : action.path, value: 'value' in action && typeof action.value === 'string' ? action.value : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined, regex: 'regex' in action ? action.regex : undefined })), boundProviders: 0, updatedAt: new Date(rule.updatedTime).toLocaleString() } }
+function toUiRule(rule: ApiModificationRule): ModificationRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', protocols: rule.match.clientProtocols.map(item => protocolLabels[item]), match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols, path: rule.match.path, logicalModelId: rule.match.logicalModelId, providerModelId: rule.match.providerModelId }, actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, stage: action.stage, target: action.type.startsWith('header-') ? 'header' : 'body', operation: action.type.endsWith('set') ? 'set' : action.type.endsWith('append') ? 'append' : action.type.endsWith('remove') || action.type.endsWith('delete') ? 'remove' : 'replace', path: 'name' in action ? action.name : action.path, value: 'value' in action && typeof action.value === 'string' ? action.value : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined, regex: 'regex' in action ? action.regex : undefined })), testCases: rule.testCases.map(testCase => ({ ...testCase })), boundProviders: 0, updatedAt: new Date(rule.updatedTime).toLocaleString() } }
 function toApiRule(rule: ModificationRule): Omit<ApiModificationRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
   return {
     name: rule.name,
@@ -41,7 +41,8 @@ function toApiRule(rule: ModificationRule): Omit<ApiModificationRule, 'id' | 'cr
       if (action.operation === 'replace') return { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false }
       return { type: 'body-set', stage: action.stage, path: action.path, value: action.value ?? '' }
     }),
-    }
+    testCases: rule.testCases,
+  }
 }
 
 function createRule(): ModificationRule {
@@ -55,6 +56,7 @@ function createRule(): ModificationRule {
     protocols: [],
     match: { clientProtocols: [], upstreamProtocols: [] },
     actions: [{ id: `${id}-action`, stage: 'request', target: 'header', operation: 'set', path: '', value: '' }],
+    testCases: [],
     boundProviders: 0,
     updatedAt: '尚未保存',
   }
@@ -109,6 +111,7 @@ export function ModificationRulesPage() {
       boundProviders: 0,
       updatedAt: '尚未保存',
       actions: source.actions.map((action, index) => ({ ...action, id: `action-${Date.now()}-${index}` })),
+      testCases: source.testCases.map((testCase, index) => ({ ...testCase, id: `test-${Date.now()}-${index}` })),
     }
     editRule(copy)
   }
@@ -122,9 +125,6 @@ export function ModificationRulesPage() {
         description="集中维护全局请求与响应修改规则"
         actions={(
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => toast.info('当前为界面预览，尚未接入执行逻辑')}>
-              <Beaker /> 界面预览
-            </Button>
             <Button type="button" onClick={addRule}><Plus /> 新建规则</Button>
           </div>
         )}

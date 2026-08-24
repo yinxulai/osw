@@ -1,4 +1,4 @@
-import type { LogicalModel, Protocol, ProviderModel, ProviderModelRoute, ProviderModelRouteEndpoint, SchedulingPolicy } from '@common/schemas'
+import type { LogicalModel, Protocol, ProviderModel, ProviderModelRoute, ProviderModelRouteEndpoint, RequestModificationTestCase, SchedulingPolicy } from '@common/schemas'
 import { request } from './client'
 
 type CreateLogicalModelInput = { name: string; description?: string; enabled?: boolean }
@@ -15,6 +15,7 @@ export const modificationRuleApi = {
   create: (data: Omit<import('@common/schemas').ModificationRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<import('@common/schemas').ModificationRule>('/modification-rule/create', data),
   update: (id: string, updates: Partial<import('@common/schemas').ModificationRule>) => request<import('@common/schemas').ModificationRule>('/modification-rule/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/modification-rule/delete', { id }),
+  test: (rule: import('@common/schemas').ModificationRule, testCase: RequestModificationTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[] }>('/modification-rule/test', { rule, testCase }),
 }
 
 export const logicalModelApi = {

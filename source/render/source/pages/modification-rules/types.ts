@@ -1,3 +1,5 @@
+import type { Protocol } from '@common/schemas'
+
 export type RuleStage = 'request' | 'response'
 export type RuleStatusFilter = 'all' | 'enabled' | 'disabled'
 export type RuleActionTarget = 'header' | 'body'
@@ -14,6 +16,20 @@ export interface RuleAction {
   regex?: boolean
 }
 
+export interface RuleTestCase {
+  id: string
+  name: string
+  stage: RuleStage
+  body: string
+  headers: string
+  clientProtocol: Protocol
+  upstreamProtocol: Protocol
+  logicalModelId: string
+  providerModelId: string
+  path: string
+  streaming: boolean
+}
+
 export interface ModificationRule {
   id: string
   name: string
@@ -23,6 +39,7 @@ export interface ModificationRule {
   protocols: string[]
   match: { clientProtocols: string[]; upstreamProtocols: string[]; path?: string; logicalModelId?: string; providerModelId?: string }
   actions: RuleAction[]
+  testCases: RuleTestCase[]
   boundProviders: number
   updatedAt: string
 }
@@ -45,6 +62,7 @@ export const initialRules: ModificationRule[] = [
     actions: [
       { id: 'action-ua', stage: 'request', target: 'header', operation: 'set', path: 'User-Agent', value: 'One-Switch/0.3' },
     ],
+    testCases: [],
     boundProviders: 0,
     updatedAt: '刚刚',
   },
@@ -60,6 +78,7 @@ export const initialRules: ModificationRule[] = [
       { id: 'action-reasoning', stage: 'request', target: 'body', operation: 'remove', path: '$.reasoning_effort' },
       { id: 'action-thinking', stage: 'request', target: 'body', operation: 'remove', path: '$.thinking' },
     ],
+    testCases: [],
     boundProviders: 3,
     updatedAt: '昨天',
   },
@@ -75,6 +94,7 @@ export const initialRules: ModificationRule[] = [
       { id: 'action-source', stage: 'request', target: 'body', operation: 'set', path: '$.metadata.source', value: 'one-switch' },
       { id: 'action-cache', stage: 'request', target: 'header', operation: 'set', path: 'X-Client-Cache', value: 'enabled' },
     ],
+    testCases: [],
     boundProviders: 1,
     updatedAt: '3 天前',
   },
@@ -89,6 +109,7 @@ export const initialRules: ModificationRule[] = [
     actions: [
       { id: 'action-provider-meta', stage: 'response', target: 'body', operation: 'remove', path: '$.provider_metadata' },
     ],
+    testCases: [],
     boundProviders: 2,
     updatedAt: '1 周前',
   },

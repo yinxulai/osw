@@ -23,6 +23,7 @@ function rule(actions: readonly ModificationRuleAction[], overrides: Partial<Mod
     source: 'user',
     match: { clientProtocols: [], upstreamProtocols: [] },
     actions: [...actions],
+    testCases: [],
     createdTime: 1,
     updatedTime: 1,
     deletedTime: null,

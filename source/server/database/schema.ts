@@ -115,13 +115,13 @@ export const providerModelEndpoints = sqliteTable(
   ],
 )
 
-export const modificationRules = sqliteTable('modification_rules', {
-  id: text('id').primaryKey(), name: text('name').notNull(), description: text('description').notNull().default(''), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), scope: text('scope').notNull().default('model'), schemaVersion: integer('schemaVersion').notNull().default(1), source: text('source').notNull().default('user'), match: text('match').notNull(), actions: text('actions').notNull(), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
-}, table => [index('idx_modification_rules_enabled').on(table.enabled), index('idx_modification_rules_deleted_time').on(table.deletedTime)])
+export const requestModificationRules = sqliteTable('request_modification_rules', {
+  id: text('id').primaryKey(), name: text('name').notNull(), description: text('description').notNull().default(''), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), scope: text('scope').notNull().default('model'), schemaVersion: integer('schemaVersion').notNull().default(1), source: text('source').notNull().default('user'), match: text('match').notNull(), actions: text('actions').notNull(), testCases: text('testCases').notNull().default('[]'), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
+}, table => [index('idx_request_modification_rules_enabled').on(table.enabled), index('idx_request_modification_rules_scope').on(table.scope), index('idx_request_modification_rules_deleted_time').on(table.deletedTime)])
 
-export const providerModelModificationRules = sqliteTable('provider_model_modification_rules', {
-  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), ruleId: text('ruleId').notNull().references(() => modificationRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),
-}, table => [primaryKey({ columns: [table.providerModelId, table.ruleId] }), uniqueIndex('idx_model_modification_rule_priority').on(table.providerModelId, table.priority)])
+export const providerModelRequestModificationRules = sqliteTable('provider_model_request_modification_rules', {
+  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), requestModificationRuleId: text('requestModificationRuleId').notNull().references(() => requestModificationRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),
+}, table => [primaryKey({ columns: [table.providerModelId, table.requestModificationRuleId] }), uniqueIndex('idx_provider_model_request_modification_rule_priority').on(table.providerModelId, table.priority)])
 
 export const protocolConverters = sqliteTable(
   'protocol_converters',
