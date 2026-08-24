@@ -16,6 +16,7 @@ let managementServer: Server | null = null
 let startupPromise: Promise<Server> | null = null
 
 export function startManagementServer(options: ManagementServerOptions = {}): Promise<Server> {
+  console.log(`[management-lifecycle] start requested host=${options.host ?? '127.0.0.1'} port=${options.port ?? 9301} listening=${managementServer?.listening ?? false} startupPending=${Boolean(startupPromise)}`)
   if (managementServer?.listening) return Promise.resolve(managementServer)
   if (startupPromise) return startupPromise
 
@@ -29,6 +30,7 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   managementServer = candidate
   startupPromise = new Promise((resolve, reject) => {
     const handleError = (error: Error) => {
+      console.error(`[management-lifecycle] listen error host=${host} port=${port}`, error)
       candidate.off('listening', handleListening)
       if (managementServer === candidate) managementServer = null
       startupPromise = null
@@ -49,9 +51,14 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
 }
 
 async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, host: string, port: number, environment: RuntimeEnvironment): Promise<void> {
+  console.log(`[management] request begin ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
   try {
-    if (!await applyManagementRequestGuards(req.headers, req.method, req.url, res, host, port)) return
+    if (!await applyManagementRequestGuards(req.headers, req.method, req.url, res, host, port)) {
+      console.warn(`[management] request rejected by guard ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`)
+      return
+    }
     await handleApiRequest(req, res, environment)
+    console.log(`[management] request completed ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} status=${res.statusCode}`)
   } catch (error) {
     console.error(`[management] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`, error)
     if (res.headersSent || res.writableEnded) {
@@ -68,11 +75,19 @@ function handleApiRequestError(res: http.ServerResponse, error: unknown): void {
 }
 
 export async function stopManagementServer(): Promise<void> {
+  console.log(`[management-lifecycle] stop requested listening=${managementServer?.listening ?? false} startupPending=${Boolean(startupPromise)}`)
   if (startupPromise) await startupPromise
   const activeServer = managementServer
   managementServer = null
-  if (!activeServer?.listening) return
+  if (!activeServer?.listening) {
+    console.log('[management-lifecycle] stop skipped: server is not listening')
+    return
+  }
+  console.log('[management-lifecycle] closing management server')
+  activeServer.closeIdleConnections?.()
+  activeServer.closeAllConnections?.()
   await new Promise<void>((resolve, reject) => {
     activeServer.close(error => error ? reject(error) : resolve())
   })
+  console.log('[management-lifecycle] stop completed')
 }

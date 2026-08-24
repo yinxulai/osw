@@ -1,9 +1,6 @@
-import http from 'node:http'
-import { getSettings } from '../database/settings-store'
-import { isAllowedHost } from '../security/host-validation'
-import { handleProxyRequest } from './request-entry'
 import type { Server } from 'node:http'
-import { getErrorResponseMessage, isErrorCode, normalizeError } from '../errors'
+import { getSettings } from '../database/settings-store'
+import { ProxyRuntime } from './proxy-runtime'
 
 export interface ProxyServerStatus {
   running: boolean
@@ -11,151 +8,57 @@ export interface ProxyServerStatus {
   port: number
 }
 
-let proxyServer: Server | null = null
-let proxyStartupPromise: Promise<Server> | null = null
-let lifecyclePromise: Promise<void> = Promise.resolve()
-
 export interface ProxyServerOptions {
+  host?: string
   port?: number
 }
 
-export function startProxyServer(options: ProxyServerOptions = {}): Promise<Server> {
-  if (proxyServer?.listening) return Promise.resolve(proxyServer)
-  if (proxyStartupPromise) return proxyStartupPromise
+let proxyRuntime: ProxyRuntime | null = null
 
-  let candidate: Server | null = null
-  const startup = (async () => {
-    const settings = await getSettings()
-    const listenPort = options.port ?? settings.listenPort
-    candidate = http.createServer(async (req, res) => {
-      try {
-        if (!isAllowedHost(req.headers.host, settings.listenHost, listenPort)) {
-          writeJsonError(res, 403, 'INVALID_HOST', 'Host 不被允许')
-          return
-        }
-        const url = new URL(req.url!, 'http://localhost')
-
-        if (url.pathname === '/v1/models') {
-          await writeModelsResponse(res)
-          return
-        }
-
-        await handleProxyRequest(req, res, 'default')
-      } catch (error) {
-        const normalized = normalizeError(error)
-        if (isErrorCode(normalized, 'CLIENT_REQUEST_ABORTED')) {
-          if (!res.writableEnded) res.destroy()
-          return
-        }
-        console.error(`[proxy] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} code=${normalized.code} message=${normalized.message}`)
-        if (res.headersSent || res.writableEnded) {
-          res.destroy(normalized)
-          return
-        }
-        writeJsonError(res, normalized.statusCode, normalized.code, getErrorResponseMessage(normalized, '代理处理失败'))
-      }
-    })
-
-    proxyServer = candidate
-    const server = await listen(candidate, settings.listenHost, listenPort)
-    console.log(`[one-switch] proxy server listening on ${settings.listenHost}:${listenPort}`)
-    return server
-  })()
-
-  proxyStartupPromise = startup
-    .then(server => {
-      proxyStartupPromise = null
-      return server
-    })
-    .catch(error => {
-      if (proxyServer === candidate) proxyServer = null
-      proxyStartupPromise = null
-      throw error
-    })
-
-  return proxyStartupPromise
+export async function startProxyServer(options: ProxyServerOptions = {}): Promise<Server> {
+  const runtime = getOrCreateRuntime(options)
+  await runtime.start(resolveEndpoint(runtime, options))
+  return getServer(runtime)
 }
 
-export function stopProxyServer(): Promise<void> {
-  return runLifecycleOperation(async () => {
-    if (proxyStartupPromise) await proxyStartupPromise
-    const activeServer = proxyServer
-    proxyServer = null
-    if (activeServer?.listening) await close(activeServer)
-  })
+export async function stopProxyServer(): Promise<void> {
+  if (!proxyRuntime) return
+  await proxyRuntime.stop()
 }
 
-export function restartProxyServer(): Promise<Server> {
-  let restartedServer: Server | null = null
-  return runLifecycleOperation(async () => {
-    if (proxyStartupPromise) await proxyStartupPromise
-    const activeServer = proxyServer
-    proxyServer = null
-    if (activeServer?.listening) await close(activeServer)
-    restartedServer = await startProxyServer()
-  }).then(() => restartedServer!)
+export async function restartProxyServer(options: ProxyServerOptions = {}): Promise<Server> {
+  const runtime = getOrCreateRuntime(options)
+  await runtime.restart(resolveEndpoint(runtime, options))
+  return getServer(runtime)
 }
 
 export async function getProxyServerStatus(): Promise<ProxyServerStatus> {
-  const settings = await getSettings()
-  const address = proxyServer?.address()
+  if (!proxyRuntime) {
+    const settings = await getSettings()
+    return { running: false, host: settings.listenHost, port: settings.listenPort }
+  }
+  return proxyRuntime.getStatus()
+}
+
+function getOrCreateRuntime(options: ProxyServerOptions): ProxyRuntime {
+  if (proxyRuntime) return proxyRuntime
+  if (options.host === undefined && options.port === undefined) {
+    throw new Error('Proxy runtime endpoint must be provided before the first start')
+  }
+  proxyRuntime = new ProxyRuntime({ host: options.host ?? '127.0.0.1', port: options.port! })
+  return proxyRuntime
+}
+
+function resolveEndpoint(runtime: ProxyRuntime, options: ProxyServerOptions): { host: string; port: number } {
+  const current = runtime.getStatus()
   return {
-    running: proxyServer?.listening ?? false,
-    host: settings.listenHost,
-    port: address && typeof address !== 'string' ? address.port : settings.listenPort,
+    host: options.host ?? current.host,
+    port: options.port ?? current.port,
   }
 }
 
-function runLifecycleOperation(operation: () => Promise<void>): Promise<void> {
-  const result = lifecyclePromise.then(operation, operation)
-  lifecyclePromise = result.catch(() => undefined)
-  return result
-}
-
-function listen(server: Server, host: string, port: number): Promise<Server> {
-  return new Promise((resolve, reject) => {
-    const handleError = (error: Error) => {
-      server.off('listening', handleListening)
-      reject(error)
-    }
-    const handleListening = () => {
-      server.off('error', handleError)
-      resolve(server)
-    }
-    server.once('error', handleError)
-    server.once('listening', handleListening)
-    server.listen(port, host)
-  })
-}
-
-function close(server: Server): Promise<void> {
-  // `close()` waits for existing keep-alive/active connections. The proxy is
-  // explicitly stopped by the user, so force those connections out first;
-  // otherwise a later start can remain blocked by the old listener.
-  server.closeIdleConnections?.()
-  server.closeAllConnections?.()
-
-  return new Promise((resolve, reject) => {
-    if (!server.listening) {
-      resolve()
-      return
-    }
-    server.close(error => error ? reject(error) : resolve())
-  })
-}
-
-function writeModelsResponse(res: http.ServerResponse): void {
-  res.statusCode = 200
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify({
-    object: 'list',
-    data: [{ id: 'default', object: 'model', created: 0, owned_by: 'one-switch' }],
-  }))
-}
-
-function writeJsonError(res: http.ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
-  if (res.writableEnded) return
-  res.statusCode = statusCode
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify({ success: false, errorCode, errorMessage }))
+function getServer(runtime: ProxyRuntime): Server {
+  const server = runtime.getServer()
+  if (!server) throw new Error('Proxy runtime is not running')
+  return server
 }

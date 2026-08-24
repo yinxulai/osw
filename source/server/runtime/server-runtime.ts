@@ -2,7 +2,7 @@ import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
 import { closeDatabase, initDatabase } from '../database'
-import { getSettings, updateSettings } from '../database/settings-store'
+import { configureSettingsDefaults, getSettings } from '../database/settings-store'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { installLogCapture } from '../management/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
@@ -35,28 +35,35 @@ export class ServerRuntime {
     if (this.state === 'stopping') throw new Error('Server runtime is stopping')
 
     this.state = 'starting'
+    console.log(`[runtime] start begin state=${this.state} dataDir=${this.options.dataDir} profile=${JSON.stringify(this.options.runtimeProfile)}`)
     try {
       resetManualModels()
       configureSecretStore(this.options.secretStore)
+      configureSettingsDefaults({ listenPort: this.options.runtimeProfile.proxyPort })
       installLogCapture()
       await initDatabase(this.options.dataDir)
-      const settings = await getSettings({ listenPort: this.options.runtimeProfile.proxyPort })
-      if (
-        this.options.runtimeProfile.environment === 'development' &&
-        settings.listenPort !== this.options.runtimeProfile.proxyPort
-      ) {
-        await updateSettings({ listenPort: this.options.runtimeProfile.proxyPort })
-      }
+      console.log('[runtime] database initialized')
+      const settings = await getSettings()
+      console.log(`[runtime] resolved proxy endpoint host=${settings.listenHost} port=${settings.listenPort} profileDefaultPort=${this.options.runtimeProfile.proxyPort}`)
+      console.log(`[runtime] starting management server host=${this.options.managementHost ?? '127.0.0.1'} port=${this.options.runtimeProfile.managementPort}`)
       this.managementServer = await startManagementServer({
         host: this.options.managementHost,
         port: this.options.runtimeProfile.managementPort,
         environment: this.options.runtimeProfile.environment,
       })
-      await startProxyServer({ port: this.options.runtimeProfile.proxyPort })
+      console.log(`[runtime] management server started listening=${this.managementServer.listening}`)
+      console.log(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)
+      await startProxyServer({ host: settings.listenHost, port: settings.listenPort })
       this.state = 'running'
+      console.log(`[runtime] start completed state=${this.state}`)
       return this.managementServer
     } catch (error) {
-      await this.stopResources()
+      console.error(`[runtime] start failed state=${this.state}`, error)
+      try {
+        await this.stopResources()
+      } catch (cleanupError) {
+        console.error('[runtime] start cleanup failed', cleanupError)
+      }
       this.state = 'stopped'
       throw error
     }
@@ -68,15 +75,19 @@ export class ServerRuntime {
     if (this.state === 'stopping') return
 
     this.state = 'stopping'
+    console.log(`[runtime] stop begin state=${this.state}`)
     try {
       await this.stopResources()
     } finally {
       this.state = 'stopped'
+      console.log(`[runtime] stop completed state=${this.state}`)
     }
   }
 
   private async stopResources(): Promise<void> {
+    console.log('[runtime] stopping proxy and management resources')
     const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
+    console.log(`[runtime] resource stop results=${results.map(result => result.status).join(',')}`)
     await closeDatabase()
     this.managementServer = null
 

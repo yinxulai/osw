@@ -29,8 +29,16 @@ export interface SettingsDefaults {
   listenPort: number
 }
 
-const PRODUCTION_SETTINGS_DEFAULTS: SettingsDefaults = {
+let settingsDefaults: SettingsDefaults = {
   listenPort: 9300,
+}
+
+/**
+ * 配置当前运行环境的设置默认值。默认值只填补数据库中不存在的字段，
+ * 已持久化的用户设置始终具有更高优先级。
+ */
+export function configureSettingsDefaults(defaults: SettingsDefaults): void {
+  settingsDefaults = { ...defaults }
 }
 
 /** SettingsSchema 除 id/updatedTime 外的字段，即需要持久化的键 */
@@ -48,7 +56,7 @@ function parseStoredValue(key: string, raw: string | undefined): unknown {
   }
 }
 
-export async function getSettings(defaults = PRODUCTION_SETTINGS_DEFAULTS): Promise<Settings> {
+export async function getSettings(): Promise<Settings> {
   const db = getDb()
   const rows = db.select().from(settings).all()
   const stored = new Map(rows.map(row => [row.key, row.value]))
@@ -60,7 +68,7 @@ export async function getSettings(defaults = PRODUCTION_SETTINGS_DEFAULTS): Prom
   return SettingsSchema.parse({
     id: 'singleton',
     ...parsed,
-    listenPort: parsed.listenPort ?? defaults.listenPort,
+    listenPort: parsed.listenPort ?? settingsDefaults.listenPort,
     updatedTime: now(),
   })
 }

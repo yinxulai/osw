@@ -51,7 +51,7 @@ describe('server lifecycle', () => {
   it('keeps management available while the proxy is stopped and restarted', async () => {
     const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
     await initDatabase(temporaryDirectory)
-    await updateSettings({ listenHost: '127.0.0.1', listenPort: 9300 })
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
     await closeDatabase()
     await startServer({
       dataDir: temporaryDirectory,
@@ -95,6 +95,14 @@ describe('server lifecycle', () => {
       data: { running: true, port: proxyPort },
     })
     expect((await fetch(proxyUrl)).status).toBe(200)
+
+    const newProxyPort = await getAvailablePort()
+    await post(`http://127.0.0.1:${managementPort}/api/settings/update`, { listenPort: newProxyPort })
+    expect(await post(`${managementUrl}/restart`)).toMatchObject({
+      success: true,
+      data: { running: true, port: newProxyPort },
+    })
+    expect((await fetch(`http://127.0.0.1:${newProxyPort}/v1/models`)).status).toBe(200)
   })
 
   it('isolates manual queue selection by logical model through the management API', async () => {

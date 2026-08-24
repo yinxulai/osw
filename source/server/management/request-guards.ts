@@ -4,15 +4,18 @@ import { sendError } from './response'
 
 export async function applyManagementRequestGuards(headers: IncomingHttpHeaders, method: string | undefined, url: string | undefined, res: ServerResponse, host: string, port: number): Promise<boolean> {
   setCorsHeaders(res)
+
   if (!isAllowedHost(headers.host, host, port)) {
     sendError(res, 'HOST_NOT_ALLOWED', 'Host 不被允许', 403)
     return false
   }
+
   if (method === 'OPTIONS') {
     res.statusCode = 204
     res.end()
     return false
   }
+  
   const pathname = new URL(url!, 'http://localhost').pathname
   if (!pathname.startsWith('/api/')) {
     sendError(res, 'RESOURCE_NOT_FOUND', '管理 API 路径不存在', 404)

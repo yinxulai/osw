@@ -249,8 +249,8 @@ export function UpdateCard() {
   return (
     <Card className="border-border">
       <CardHeader className="border-b border-border/60">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               版本更新
@@ -259,7 +259,7 @@ export function UpdateCard() {
               基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
             <StatusBadge status={status} />
             <Button
               size="sm"

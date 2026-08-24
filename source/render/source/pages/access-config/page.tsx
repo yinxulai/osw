@@ -88,7 +88,7 @@ export function AccessConfigPage(props: AccessConfigPageProps) {
               </div>
               <div>
                 <CardTitle>本地代理服务</CardTitle>
-                <CardDescription className="mt-0.5">所有客户端通过同一个本地入口访问模型队列</CardDescription>
+                <CardDescription className="mt-0.5">所有模型请求都会进入 default 默认队列，并由队列转发到上游</CardDescription>
               </div>
             </div>
             <Badge variant={proxyRunning ? 'success' : 'muted'}>
@@ -144,12 +144,12 @@ export function AccessConfigPage(props: AccessConfigPageProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2"><KeyRound size={15} className="text-primary" />客户端配置</CardTitle>
-              <CardDescription>客户端要求 API Key 时填写任意非空占位值即可</CardDescription>
+              <CardDescription>本地服务无需 API Key 鉴权；客户端若强制要求填写，可使用任意值</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"><span className="text-muted-foreground">模型名</span><code className="font-mono">default</code></div>
+              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"><span className="text-muted-foreground">模型名</span><code className="font-mono">任意模型 ID</code></div>
               <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"><span className="text-muted-foreground">OpenAI Base URL</span><code className="font-mono">{baseUrl || '服务启动后显示'}</code></div>
-              <div className="flex items-start gap-2 pt-1 text-[11px] leading-5 text-muted-foreground"><ClipboardCheck size={13} className="mt-0.5 shrink-0 text-success" />真实上游 API Key 由 One Switch 按供应商配置注入，不需要复制到客户端。</div>
+              <div className="flex items-start gap-2 pt-1 text-[11px] leading-5 text-muted-foreground"><ClipboardCheck size={13} className="mt-0.5 shrink-0 text-success" />所有模型请求都会路由到 default 默认队列，因此这里配置任意模型 ID 都可以；真实上游 API Key 由 One Switch 按供应商配置注入。</div>
             </CardContent>
           </Card>
 

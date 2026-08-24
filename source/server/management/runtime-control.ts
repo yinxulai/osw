@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { getSettings } from '../database/settings-store'
 import { listProviderHealth, listProviderModelHealth } from '../database/health-store'
 import { getManualModel, setManualModel } from '../proxy/manual-routing'
 import {
@@ -44,16 +45,23 @@ async function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): Pr
 }
 
 async function handleProxyStart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  console.log('[management] /api/proxy/start begin')
   await startProxyServer()
-  sendSuccess(res, await getProxyServerStatus())
+  const status = await getProxyServerStatus()
+  console.log(`[management] /api/proxy/start success status=${JSON.stringify(status)}`)
+  sendSuccess(res, status)
 }
 
 async function handleProxyStop(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  console.log('[management] /api/proxy/stop begin')
   await stopProxyServer()
-  sendSuccess(res, await getProxyServerStatus())
+  const status = await getProxyServerStatus()
+  console.log(`[management] /api/proxy/stop success status=${JSON.stringify(status)}`)
+  sendSuccess(res, status)
 }
 
 async function handleProxyRestart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  await restartProxyServer()
+  const settings = await getSettings()
+  await restartProxyServer({ host: settings.listenHost, port: settings.listenPort })
   sendSuccess(res, await getProxyServerStatus())
 }
