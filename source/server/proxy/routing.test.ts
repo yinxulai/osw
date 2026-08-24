@@ -5,9 +5,10 @@ const mocks = vi.hoisted(() => ({
   models: [] as Array<{ model: ProviderModelRoute; provider: Provider }>,
   manualModel: null as string | null,
 }))
+type ManualModelOptions = { manualModelId?: string | null }
 
 vi.mock('./router', () => ({
-  getAvailableModels: async (_logicalModelId: string, options: { manualModelId?: string | null } = {}) => options.manualModelId
+  getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId
     ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
     : mocks.models,
   findEndpoint: (model: ProviderModelRoute, protocol: string) => model.endpoints.find(endpoint => endpoint.protocol === protocol),

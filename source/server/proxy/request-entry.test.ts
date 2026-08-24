@@ -25,7 +25,7 @@ vi.mock('./router', async importOriginal => {
   const original = await importOriginal<typeof import('./router')>()
   return {
     ...original,
-    getAvailableModels: async (_logicalModelId: string, options: { manualModelId?: string | null } = {}) => options.manualModelId
+    getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId
       ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
       : mocks.models,
   }
@@ -64,6 +64,7 @@ import { handleProxyRequest } from './request-entry'
 import { getManualModel, setManualModel } from './manual-routing'
 
 const servers: http.Server[] = []
+type ManualModelOptions = { manualModelId?: string | null }
 
 afterEach(async () => {
   setManualModel('default', null)
