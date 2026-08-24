@@ -21,27 +21,32 @@ export function RuleEditor(props: RuleEditorProps) {
   }
 
   return (
-    <div className="space-y-5 px-5 py-4">
-      <section className="space-y-2.5">
-        <div className="space-y-1">
-          <Label htmlFor="rule-name" className="text-[11px]">规则名称</Label>
-          <Input id="rule-name" className="h-8 text-xs" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" />
+    <div className="space-y-6 px-6 py-5">
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight">基本信息</h3>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          请求和响应阶段可在每个动作中分别设置
-        </p>
-        <div className="space-y-1">
-          <Label htmlFor="rule-description" className="text-[11px]">说明 <span className="font-normal text-muted-foreground">（可选）</span></Label>
-          <Input id="rule-description" className="h-8 text-xs" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" />
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rule-name" className="text-[11px]">规则名称</Label>
+            <Input id="rule-name" className="h-8 bg-background text-xs" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rule-description" className="text-[11px]">说明 <span className="font-normal text-muted-foreground">（可选）</span></Label>
+            <Input id="rule-description" className="h-8 bg-background text-xs" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" />
+          </div>
         </div>
       </section>
 
-      <section className="space-y-2.5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-xs font-semibold">适用协议</h3>
-          <p className="text-[11px] text-muted-foreground">不选择 = 全部协议</p>
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">适用协议</h3>
+            <p className="mt-1 text-[11px] text-muted-foreground">不选择时，这条规则适用于全部协议。</p>
+          </div>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{rule.protocols.length ? `${rule.protocols.length} 个已选` : '全部'}</span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {protocolOptions.map(protocol => {
             const selected = rule.protocols.includes(protocol)
             return (
@@ -51,17 +56,11 @@ export function RuleEditor(props: RuleEditorProps) {
                 aria-pressed={selected}
                 onClick={() => toggleProtocol(protocol)}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-muted hover:text-foreground',
+                  'inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-[11px] font-medium transition-colors hover:bg-muted hover:text-foreground',
                   selected && 'border-primary/60 bg-primary/8 text-foreground',
                 )}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'flex size-3.5 shrink-0 items-center justify-center rounded-full border border-muted-foreground/55 bg-background',
-                    selected && 'border-primary bg-primary',
-                  )}
-                >
+                <span aria-hidden="true" className={cn('flex size-3.5 shrink-0 items-center justify-center rounded-full border border-muted-foreground/55 bg-background', selected && 'border-primary bg-primary')}>
                   {selected && <span className="size-1.5 rounded-full bg-primary-foreground" />}
                 </span>
                 {protocol}
