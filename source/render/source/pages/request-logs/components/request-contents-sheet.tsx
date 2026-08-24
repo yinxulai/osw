@@ -35,8 +35,7 @@ function ContentSection(props: ContentSectionProps) {
   return <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-md bg-inset"><CollapsibleTrigger className="flex w-full items-center justify-between gap-3 bg-muted/30 px-3 py-2.5 text-left text-xs font-medium hover:bg-muted/50"><span className="flex min-w-0 items-center gap-2"><span className="truncate">{props.label}</span>{content.isJson && <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground">JSON</span>}</span><ChevronDown size={15} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} /></CollapsibleTrigger><CollapsibleContent><pre className="whitespace-pre-wrap break-all bg-inset p-3 font-mono text-xs leading-5 text-foreground/90">{content.value}</pre></CollapsibleContent></Collapsible>
 }
 function AppliedRules(props: AppliedRulesProps) {
-  if (props.ruleIds.length === 0) return null
-  return <section className="rounded-lg bg-info/8 px-3 py-2.5"><div className="text-xs font-medium">已应用修改器</div><div className="mt-1 flex flex-wrap gap-1.5">{props.ruleIds.map(id => <span key={id} className="rounded bg-info/15 px-1.5 py-0.5 font-mono text-[10px] text-info">{id}</span>)}</div></section>
+  return <section className="rounded-lg bg-info/8 px-3 py-2.5"><div className="text-xs font-medium">已应用修改器</div>{props.ruleIds.length > 0 ? <div className="mt-1 flex flex-wrap gap-1.5">{props.ruleIds.map(id => <span key={id} className="rounded bg-info/15 px-1.5 py-0.5 font-mono text-[10px] text-info">{id}</span>)}</div> : <div className="mt-1 text-xs text-muted-foreground">未应用修改器</div>}</section>
 }
 function RequestStage(props: RequestStageProps) {
   const sections = props.sections.filter(([, value]) => value)
@@ -78,7 +77,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   let state
   if (props.loading) state = <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><LoaderCircle size={15} className="animate-spin" />正在加载正文</div>
   else if (props.error) state = <div className="flex items-center justify-center gap-2 py-8 text-sm text-red-600 dark:text-red-400"><AlertCircle size={15} />{props.error}</div>
-  else if (selectedContent || clientContent) state = <><AppliedRules ruleIds={selectedContent?.modificationRuleIds ?? []} />{stages.map(stage => <RequestStage key={stage.title} {...stage} />)}</>
+  else if (selectedContent || clientContent) state = <>{stages.slice(0, 1).map(stage => <RequestStage key={stage.title} {...stage} />)}<AppliedRules ruleIds={selectedContent?.modificationRuleIds ?? []} />{stages.slice(1).map(stage => <RequestStage key={stage.title} {...stage} />)}</>
   else if (props.selectedAttemptId) state = <div className="py-8 text-center text-sm text-muted-foreground">该尝试没有正文记录</div>
   else state = null
   return <Sheet open={Boolean(props.selectedAttemptId)} onOpenChange={open => !open && props.onClose()}><SheetContent side="right" className="w-full max-w-3xl! gap-0 border-0 bg-card p-0 shadow-none"><SheetHeader className="shrink-0 px-4 py-3.5 pr-12"><SheetTitle className="text-sm">请求详情</SheetTitle><SheetDescription className="text-xs">按请求链路和采集时的原始字符串展示</SheetDescription></SheetHeader><div className="flex-1 space-y-3 overflow-auto px-4 pb-4">{state}</div></SheetContent></Sheet>

@@ -43,9 +43,13 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
   const [deleteTestCaseId, setDeleteTestCaseId] = useState<string>()
 
   const updateTestCases = (testCases: RuleTestCase[]) => props.onChange({ ...props.rule, testCases })
+  const defaultTestInput = (stage: RuleTestCase['stage']) => stage === 'response'
+    ? { body: '{\n  "id": "response-demo",\n  "choices": [{ "message": { "role": "assistant", "content": "hello" } }]\n}', headers: '{\n  "content-type": "application/json",\n  "x-upstream-status": "200"\n}' }
+    : { body: '{\n  "model": "demo",\n  "messages": [{ "role": "user", "content": "hello" }]\n}', headers: '{\n  "content-type": "application/json"\n}' }
   const addTestCase = () => {
     const id = `test-${Date.now()}`
-    const testCase: RuleTestCase = { id, name: `测试用例 ${props.rule.testCases.length + 1}`, stage: 'request', body: '{\n  "model": "demo",\n  "messages": [{ "role": "user", "content": "hello" }]\n}', headers: '{\n  "content-type": "application/json"\n}', clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', logicalModelId: 'default', providerModelId: 'test-model', path: '/v1/chat/completions', streaming: false }
+    const input = defaultTestInput('request')
+    const testCase: RuleTestCase = { id, name: `测试用例 ${props.rule.testCases.length + 1}`, stage: 'request', ...input, clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', logicalModelId: 'default', providerModelId: 'test-model', path: '/v1/chat/completions', streaming: false }
     updateTestCases([...props.rule.testCases, testCase])
   }
   const updateTestCase = (id: string, patch: Partial<RuleTestCase>) => {
@@ -141,11 +145,11 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-path`} className="text-[11px]">请求路径</Label><input id={`${testCase.id}-path`} className="h-7 w-full rounded-md border-0 bg-background px-2 font-mono text-xs ring-1 ring-foreground/10" value={testCase.path} onChange={event => updateTestCase(testCase.id, { path: event.target.value })} /></div>
-                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-stage`} className="text-[11px]">测试阶段</Label><select id={`${testCase.id}-stage`} className="h-7 w-full rounded-md border-0 bg-background px-2 text-xs ring-1 ring-foreground/10" value={testCase.stage} onChange={event => updateTestCase(testCase.id, { stage: event.target.value as RuleTestCase['stage'] })}><option value="request">请求</option><option value="response">响应</option></select></div>
+                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-stage`} className="text-[11px]">测试阶段</Label><select id={`${testCase.id}-stage`} className="h-7 w-full rounded-md border-0 bg-background px-2 text-xs ring-1 ring-foreground/10" value={testCase.stage} onChange={event => { const stage = event.target.value as RuleTestCase['stage']; const input = defaultTestInput(stage); updateTestCase(testCase.id, { stage, ...input }) }}><option value="request">请求</option><option value="response">响应</option></select></div>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-body`} className="text-[11px]">请求 Body（JSON）</Label><Textarea id={`${testCase.id}-body`} value={testCase.body} onChange={event => updateTestCase(testCase.id, { body: event.target.value })} className="min-h-32 font-mono text-xs" /></div>
-                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-headers`} className="text-[11px]">请求 Headers（JSON）</Label><Textarea id={`${testCase.id}-headers`} value={testCase.headers} onChange={event => updateTestCase(testCase.id, { headers: event.target.value })} className="min-h-32 font-mono text-xs" /></div>
+                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-body`} className="text-[11px]">{testCase.stage === 'response' ? '响应 Body' : '请求 Body'}（JSON）</Label><Textarea id={`${testCase.id}-body`} value={testCase.body} onChange={event => updateTestCase(testCase.id, { body: event.target.value })} className="min-h-32 font-mono text-xs" /></div>
+                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-headers`} className="text-[11px]">{testCase.stage === 'response' ? '响应 Headers' : '请求 Headers'}（JSON）</Label><Textarea id={`${testCase.id}-headers`} value={testCase.headers} onChange={event => updateTestCase(testCase.id, { headers: event.target.value })} className="min-h-32 font-mono text-xs" /></div>
                           </div>
                           {result && (
                             <div className="space-y-2 rounded-md bg-muted/45 p-2.5 text-[11px]">
