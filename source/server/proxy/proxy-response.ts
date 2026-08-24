@@ -47,6 +47,7 @@ export class BufferedProxyResponse implements ProxyResponse {
   get destroyed(): boolean { return this.failure !== null }
   get statusCode(): number { return this.status }
   get body(): string { return this.chunks.join('') }
+  get failureMessage(): string | undefined { return this.failure?.message }
 
   start(statusCode: number, headers: OutgoingHttpHeaders): void {
     if (this.headersSent) return

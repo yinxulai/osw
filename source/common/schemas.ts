@@ -11,6 +11,8 @@ export type Protocol = z.infer<typeof ProtocolSchema>
 
 export const RuleStageSchema = z.enum(['request', 'response'])
 export type RuleStage = z.infer<typeof RuleStageSchema>
+export const RuleScopeSchema = z.enum(['global', 'model']).default('model')
+export type RuleScope = z.infer<typeof RuleScopeSchema>
 
 const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
 export const ModificationRuleMatchSchema = z.object({
@@ -21,18 +23,19 @@ export const ModificationRuleMatchSchema = z.object({
   providerModelId: z.string().max(200).optional(),
 })
 export type ModificationRuleMatch = z.infer<typeof ModificationRuleMatchSchema>
+const ModificationRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
 export const ModificationRuleActionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
-  z.object({ type: z.literal('header-append'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
-  z.object({ type: z.literal('header-remove'), name: z.string().min(1).max(128) }),
-  z.object({ type: z.literal('json-set'), path: z.string().min(3).max(512), value: JsonValueSchema }),
-  z.object({ type: z.literal('json-delete'), path: z.string().min(3).max(512) }),
-  z.object({ type: z.literal('json-replace'), path: z.string().min(3).max(512), search: z.string().max(4096), replacement: z.string().max(4096) }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-append'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-remove'), name: z.string().min(1).max(128) }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-set'), path: z.string().min(3).max(512), value: JsonValueSchema }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-delete'), path: z.string().min(3).max(512) }),
+  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-replace'), path: z.string().min(3).max(512), search: z.string().max(4096), replacement: z.string().max(4096), regex: z.boolean().default(false) }),
 ])
 export type ModificationRuleAction = z.infer<typeof ModificationRuleActionSchema>
 export const ModificationRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
-  stage: RuleStageSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: ModificationRuleMatchSchema.default({}),
+  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: ModificationRuleMatchSchema.default({}),
   actions: z.array(ModificationRuleActionSchema).min(1).max(50), createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
 })
 export type ModificationRule = z.infer<typeof ModificationRuleSchema>

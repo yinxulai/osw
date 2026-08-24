@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { FetchedModelPicker } from './fetched-model-picker'
 import { ModelProtocolEndpointCard } from './model-protocol-endpoint-card'
+import { ProviderRuleBindings } from './provider-rule-bindings'
 import type { FetchedProviderModel } from '@/api/providers'
 import type { ProtocolEndpointEntry } from '../hooks/types'
 
@@ -57,7 +58,10 @@ export function ModelDialog(props: ModelDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        onPointerDownOutside={event => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{editingModel ? '编辑供应商模型' : '添加供应商模型'}</DialogTitle>
           <DialogDescription>
@@ -120,6 +124,8 @@ export function ModelDialog(props: ModelDialogProps) {
               />
             ))}
           </div>
+
+          {editingModel && <ProviderRuleBindings providerModelId={editingModel.id} embedded />}
         </div>
 
         <DialogFooter>

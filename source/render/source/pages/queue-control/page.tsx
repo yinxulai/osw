@@ -24,7 +24,6 @@ export function QueueControlPage(props: QueueControlPageProps) {
         actions={
           <Button
             variant={proxyRunning ? 'secondary' : 'default'}
-            size="sm"
             aria-label={proxyRunning ? '暂停服务' : '启动服务'}
             onClick={() => void service.toggleProxy()}
           >
@@ -79,6 +78,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
               modelMetrics={service.modelMetrics}
               mode={service.mode}
               manualModelId={service.manualModelId ?? ''}
+              switchingMode={service.switchingMode}
               isCooling={service.isCooling}
               onModeChange={mode => void service.changeMode(mode)}
               onSelectManualModel={service.selectManualModel}

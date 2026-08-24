@@ -36,9 +36,9 @@ interface AppSidebarProps {
 const navItems: NavItem[] = [
   { key: 'queue', label: '模型队列', icon: ListOrdered, section: '主要' },
   { key: 'providers', label: '模型管理', icon: Database, section: '主要' },
-  { key: 'rules', label: '修改规则', icon: SlidersHorizontal, section: '主要' },
   { key: 'overview', label: '统计分析', icon: ChartColumnIncreasing, section: '数据' },
   { key: 'requests', label: '请求记录', icon: ClipboardList, section: '数据' },
+  { key: 'rules', label: '请求修改', icon: SlidersHorizontal, section: '高级' },
   { key: 'logs', label: '运行日志', icon: ScrollText, section: '系统' },
   { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]

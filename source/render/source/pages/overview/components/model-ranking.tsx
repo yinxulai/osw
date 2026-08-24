@@ -35,7 +35,9 @@ export function ModelRanking(props: ModelRankingProps) {
             <tbody>
               {stats.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-muted-foreground">暂无数据</td>
+                  <td colSpan={9} className="py-10 text-center text-muted-foreground">
+                    暂无模型请求数据
+                  </td>
                 </tr>
               ) : stats.map((m, idx) => (
                 <tr key={`${m.providerId}-${m.providerModelName}`} className={tableRowClass}>

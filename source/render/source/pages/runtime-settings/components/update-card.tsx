@@ -248,7 +248,7 @@ export function UpdateCard() {
 
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
+      <CardHeader className="border-b border-border/60">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">

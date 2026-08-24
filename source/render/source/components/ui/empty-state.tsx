@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { cn } from '@/lib/utils'
 
 interface EmptyStateProps {
@@ -11,24 +12,27 @@ interface EmptyStateProps {
   embedded?: boolean
 }
 
+/** Compatibility wrapper built from the official shadcn Empty primitives. */
 export function EmptyState(props: EmptyStateProps) {
   const { icon: Icon, title, description, action, className, embedded = false } = props
 
   return (
-    <div className={cn(
-      'flex flex-col items-center justify-center px-6 text-center',
+    <Empty className={cn(
+      'flex-none px-6',
       embedded ? 'min-h-32 py-8' : 'min-h-44 py-10',
       className,
     )}>
-      <div className={cn(
-        'mb-3 flex size-9 items-center justify-center text-muted-foreground/60',
-        embedded && 'size-8',
-      )}>
-        <Icon size={embedded ? 24 : 30} strokeWidth={1.5} />
-      </div>
-      <div className="text-sm font-medium">{title}</div>
-      {description && <div className="mt-1.5 max-w-sm text-sm leading-5 text-muted-foreground">{description}</div>}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
+      <EmptyHeader>
+        <EmptyMedia variant="default" className={cn(
+          'mb-0 text-muted-foreground/60 [&_svg:not([class*="size-"])]:size-auto',
+          embedded ? 'size-8' : 'size-9',
+        )}>
+          <Icon size={embedded ? 24 : 30} strokeWidth={1.5} />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        {description && <EmptyDescription className="mt-0 max-w-sm leading-5">{description}</EmptyDescription>}
+      </EmptyHeader>
+      {action && <EmptyContent className="mt-0">{action}</EmptyContent>}
+    </Empty>
   )
 }

@@ -76,7 +76,7 @@ function AttemptBadge(props: AttemptBadgeProps) {
 
 function MetricCard(props: MetricCardProps) {
   return (
-    <div className="rounded-lg bg-inset px-3 py-2.5">
+    <div className="rounded-lg border border-border/60 bg-inset px-3 py-2.5">
       <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{props.label}</div>
       <div className={cn('mt-1 font-mono text-base font-medium tabular-nums', props.accent && 'text-foreground')}>
         {props.value}
@@ -88,7 +88,7 @@ function MetricCard(props: MetricCardProps) {
 
 function ProviderRoute(props: ProviderRouteProps) {
   return (
-    <section className="overflow-hidden rounded-lg bg-inset">
+    <section className="overflow-hidden rounded-lg border border-border/70 bg-inset">
       <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Route size={12} />
@@ -109,7 +109,7 @@ function ProviderRoute(props: ProviderRouteProps) {
             onClick={() => props.onSelect(attempt.id)}
           >
             <div className={cn(
-              'flex size-6 items-center justify-center rounded-full font-mono text-[10px]',
+              'flex size-6 items-center justify-center font-mono text-[10px]',
               attempt.status === 'success'
                 ? 'bg-emerald-500/15 text-emerald-600'
                 : 'bg-red-500/15 text-red-600',
@@ -147,7 +147,7 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage'>) {
   const rawUsage = props.rawUsage ? JSON.stringify(props.rawUsage, null, 2) : null
 
   return (
-    <section className="overflow-hidden rounded-lg bg-inset">
+    <section className="overflow-hidden rounded-lg border border-border/70 bg-inset">
       <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium">
           <Braces size={12} />
@@ -190,7 +190,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
     <tr className="bg-muted/20">
       <td colSpan={10} className="border-b border-border p-0">
         <div className="bg-card px-5 py-4">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
             <div>
               <div className="flex items-center gap-2">
                 <Route size={14} className="text-primary" />

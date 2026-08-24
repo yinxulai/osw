@@ -1,6 +1,8 @@
 import * as React from 'react'
-import { AlertCircle, ChevronDown, LoaderCircle, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, LoaderCircle } from 'lucide-react'
 import type { RequestContent, RequestConversion } from '@common/schemas'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { PROTOCOL_LABEL } from '../lib/format'
 
@@ -27,12 +29,12 @@ function formatContent(value: string) { try { const parsed = JSON.parse(value) a
 function ContentSection(props: ContentSectionProps) {
   const [open, setOpen] = React.useState(true)
   const content = formatContent(props.value)
-  return <div className="overflow-hidden rounded-md bg-inset"><button type="button" className="flex w-full items-center justify-between gap-3 bg-muted/30 px-3 py-2.5 text-left text-xs font-medium hover:bg-muted/50" aria-expanded={open} onClick={() => setOpen(value => !value)}><span className="flex min-w-0 items-center gap-2"><span className="truncate">{props.label}</span>{content.isJson && <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground">JSON</span>}</span><ChevronDown size={15} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} /></button>{open && <pre className="whitespace-pre-wrap break-all bg-inset p-3 font-mono text-xs leading-5 text-foreground/90">{content.value}</pre>}</div>
+  return <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-md bg-inset"><CollapsibleTrigger className="flex w-full items-center justify-between gap-3 bg-muted/30 px-3 py-2.5 text-left text-xs font-medium hover:bg-muted/50"><span className="flex min-w-0 items-center gap-2"><span className="truncate">{props.label}</span>{content.isJson && <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground">JSON</span>}</span><ChevronDown size={15} className={cn('shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} /></CollapsibleTrigger><CollapsibleContent><pre className="whitespace-pre-wrap break-all bg-inset p-3 font-mono text-xs leading-5 text-foreground/90">{content.value}</pre></CollapsibleContent></Collapsible>
 }
 function RequestStage(props: RequestStageProps) {
   const sections = props.sections.filter(([, value]) => value)
   if (sections.length === 0) return null
-  return <section className="overflow-hidden rounded-lg bg-muted/20"><div className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium"><span>{props.title}</span><span className="font-mono text-xs text-muted-foreground">· {PROTOCOL_LABEL[props.protocol] ?? props.protocol}</span></div><div className="space-y-2 px-2 pb-2">{sections.map(([label, value]) => <ContentSection key={label} label={label} value={value!} />)}</div></section>
+  return <section className="overflow-hidden rounded-lg border border-border/70 bg-muted/20"><div className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5 text-sm font-medium"><span>{props.title}</span><span className="font-mono text-xs text-muted-foreground">· {PROTOCOL_LABEL[props.protocol] ?? props.protocol}</span></div><div className="space-y-2 px-2 pb-2 pt-2">{sections.map(([label, value]) => <ContentSection key={label} label={label} value={value!} />)}</div></section>
 }
 
 export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
@@ -72,5 +74,5 @@ export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
   else if (selectedContent || clientContent) state = stages.map(stage => <RequestStage key={stage.title} {...stage} />)
   else if (props.selectedAttemptId) state = <div className="py-8 text-center text-sm text-muted-foreground">该尝试没有正文记录</div>
   else state = null
-  return <><div className={cn('fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-card transition-transform duration-200', props.selectedAttemptId ? 'translate-x-0' : 'translate-x-full')}><div className="flex h-full flex-col"><div className="flex items-start justify-between px-4 py-3.5"><div><h2 className="text-sm font-medium">请求详情</h2><p className="mt-0.5 text-xs text-muted-foreground">按请求链路和采集时的原始字符串展示</p></div><button type="button" aria-label="关闭正文" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onClose}><X size={15} /></button></div><div className="flex-1 space-y-3 overflow-auto px-4 pb-4">{state}</div></div></div>{props.selectedAttemptId && <button type="button" aria-label="关闭正文" className="fixed inset-0 z-40 bg-black/30" onClick={props.onClose} />}</>
+  return <Sheet open={Boolean(props.selectedAttemptId)} onOpenChange={open => !open && props.onClose()}><SheetContent side="right" className="w-full max-w-3xl! gap-0 border-0 bg-card p-0 shadow-none"><SheetHeader className="shrink-0 px-4 py-3.5 pr-12"><SheetTitle className="text-sm">请求详情</SheetTitle><SheetDescription className="text-xs">按请求链路和采集时的原始字符串展示</SheetDescription></SheetHeader><div className="flex-1 space-y-3 overflow-auto px-4 pb-4">{state}</div></SheetContent></Sheet>
 }

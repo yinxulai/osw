@@ -34,8 +34,8 @@ export function FailureReasons(props: FailureReasonsProps) {
       <CardContent className="pt-0">
         {reasons.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <div className="text-2xl">✓</div>
-            <div className="mt-1 text-xs">暂无错误记录</div>
+            <div className="text-2xl text-success">✓</div>
+            <div className="mt-1 text-xs">当前时间范围内暂无失败请求</div>
           </div>
         ) : (
           <div className="space-y-3">

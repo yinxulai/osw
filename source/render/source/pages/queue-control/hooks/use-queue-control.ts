@@ -58,6 +58,7 @@ export function useQueueControl() {
     proxyStatus: proxy.proxyStatus,
     manualModelId: queueMode.manualModelId,
     mode: queueMode.mode,
+    switchingMode: queueMode.switchingMode,
     copied: interactions.copied,
     loading: modelsState.loading,
     proxyBaseUrl: proxy.proxyBaseUrl,

@@ -32,6 +32,7 @@ interface QueueListCardProps {
   modelMetrics: Record<string, QueueModelMetrics>
   mode: 'auto' | 'manual'
   manualModelId: string
+  switchingMode: boolean
   isCooling: (providerId: string, providerModelId: string) => boolean
   onModeChange: (mode: 'auto' | 'manual') => void
   onSelectManualModel: (model: ProviderModelRoute) => void
@@ -49,6 +50,7 @@ export function QueueListCard(props: QueueListCardProps) {
     modelMetrics,
     mode,
     manualModelId,
+    switchingMode,
     isCooling,
     onModeChange,
     onSelectManualModel,
@@ -70,8 +72,8 @@ export function QueueListCard(props: QueueListCardProps) {
   const coolingCount = rows.filter(row => row.cooling).length
 
   const renderHeader = () => (
-    <CardHeader className="gap-4 pb-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-      <div>
+    <CardHeader className="flex-row items-center justify-between gap-4 pb-4">
+      <div className="min-w-0">
         <div className="flex items-center gap-2">
           <CardTitle>优先级队列</CardTitle>
         </div>
@@ -83,15 +85,14 @@ export function QueueListCard(props: QueueListCardProps) {
       <div className="flex items-center gap-2">
         <Tabs value={mode} onValueChange={value => onModeChange(value as 'auto' | 'manual')}>
           <TabsList className="h-7">
-            <TabsTrigger value="auto" className="h-6 px-2.5 text-[11px]">
-              <RefreshCw size={12} /> 自动转移
+            <TabsTrigger value="auto" disabled={switchingMode} className="h-6 px-2.5 text-[11px]">
+              <RefreshCw size={12} className={switchingMode ? 'animate-spin' : undefined} /> 自动转移
             </TabsTrigger>
-            <TabsTrigger value="manual" className="h-6 px-2.5 text-[11px]">
+            <TabsTrigger value="manual" disabled={switchingMode} className="h-6 px-2.5 text-[11px]">
               <Target size={12} /> 手动指定
             </TabsTrigger>
           </TabsList>
         </Tabs>
-
       </div>
     </CardHeader>
   )

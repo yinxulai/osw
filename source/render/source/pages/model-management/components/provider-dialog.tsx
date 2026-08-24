@@ -49,7 +49,10 @@ export function ProviderDialog(props: ProviderDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent
+        className="sm:max-w-2xl"
+        onPointerDownOutside={event => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{editingProviderId ? '编辑供应商' : '新建供应商'}</DialogTitle>
           <DialogDescription>API Key 可选；本地或测试集群等无需鉴权的上游可以留空。</DialogDescription>

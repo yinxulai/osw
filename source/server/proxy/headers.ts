@@ -1,5 +1,7 @@
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
 
+export type HeaderMap = Record<string, string | string[] | undefined>
+
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
   'keep-alive',
@@ -53,8 +55,8 @@ export function createUpstreamRequestHeaders(source: IncomingHttpHeaders, authHe
 }
 
 
-export function createDownstreamHeaders(source: IncomingHttpHeaders): OutgoingHttpHeaders {
-  const headers: OutgoingHttpHeaders = {}
+export function createDownstreamHeaders(source: IncomingHttpHeaders): HeaderMap {
+  const headers: HeaderMap = {}
   const connectionHeaders = parseConnectionHeaders(source.connection)
 
   for (const [name, value] of Object.entries(source)) {

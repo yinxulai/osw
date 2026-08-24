@@ -18,8 +18,8 @@ export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
   const iconColor = findPresetByName(provider.name)?.color
 
   return (
-    <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-      <div className="flex items-start gap-3">
+    <CardHeader className="flex-row justify-between gap-3 pb-2">
+      <div className="flex min-w-0 items-start gap-3">
         <div
           className="flex h-9 w-9 items-center justify-center rounded-md"
           style={{

@@ -41,7 +41,7 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
 
   return (
     <Card className="border-border">
-      <CardHeader className="border-b border-border/60 px-4 py-4">
+      <CardHeader className="border-b border-border/60">
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">

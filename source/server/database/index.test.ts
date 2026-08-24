@@ -109,7 +109,7 @@ describe('database lifecycle', () => {
     const indexes = client.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all()
 
     expect(requestLogColumns.map(column => (column as { name: string }).name)).toEqual([
-      'id', 'status', 'clientProtocol', 'upstreamProtocol', 'logicalModelId', 'metadata', 'createdTime',
+      'id', 'status', 'logicalModelId', 'clientProtocol', 'upstreamProtocol', 'metadata', 'createdTime',
     ])
     expect(settingsColumns.map(column => (column as { name: string }).name)).toEqual([
       'key', 'value', 'valueType', 'updatedTime',

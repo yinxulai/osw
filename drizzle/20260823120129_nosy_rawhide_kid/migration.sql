@@ -1,9 +1,9 @@
 CREATE TABLE `modification_rules` (
 	`id` text PRIMARY KEY,
 	`name` text NOT NULL,
-	`stage` text NOT NULL,
 	`source` text DEFAULT 'user' NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
+	`scope` text DEFAULT 'model' NOT NULL,
 	`description` text DEFAULT '' NOT NULL,
 	`schemaVersion` integer DEFAULT 1 NOT NULL,
 	`match` text NOT NULL,
@@ -26,6 +26,6 @@ CREATE TABLE `provider_model_modification_rules` (
 );
 --> statement-breakpoint
 CREATE INDEX `idx_modification_rules_enabled` ON `modification_rules` (`enabled`);--> statement-breakpoint
-CREATE INDEX `idx_modification_rules_stage` ON `modification_rules` (`stage`);--> statement-breakpoint
+CREATE INDEX `idx_modification_rules_scope` ON `modification_rules` (`scope`);--> statement-breakpoint
 CREATE INDEX `idx_modification_rules_deleted_time` ON `modification_rules` (`deletedTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_model_modification_rule_priority` ON `provider_model_modification_rules` (`providerModelId`,`priority`);

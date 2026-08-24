@@ -18,7 +18,11 @@ export function TrendChart(props: TrendChartProps) {
       <CardSectionHeader title="请求量趋势" description="每日请求数" compact />
       <CardContent className="min-w-0 overflow-hidden">
         <div className="h-40 flex min-w-0 items-end gap-0.5 pt-2 sm:gap-1">
-          {trend.map(d => (
+          {trend.length === 0 ? (
+            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+              暂无请求数据，产生代理请求后将显示趋势
+            </div>
+          ) : trend.map(d => (
             <div key={d.day} className="flex min-w-0 flex-1 flex-col items-center gap-1">
               <div className="w-full flex flex-col-reverse h-32 gap-0.5">
                 <div

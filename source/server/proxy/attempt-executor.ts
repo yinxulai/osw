@@ -394,22 +394,29 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
 
       const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
 
-      // 转发响应�?
-      if (!response.headersSent) {
-        const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
-        if (adapter.requiresResponseConversion) {
-          // 转换路径：响应体结构会变，移除上游长度限制头
-          delete downstreamHeaders['content-length']
-        }
-        response.start(statusCode, downstreamHeaders)
-      }
+      const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
+      if (adapter.requiresResponseConversion || !isStreaming) delete downstreamHeaders['content-length']
+      if (isStreaming && !response.headersSent) response.start(statusCode, downstreamHeaders)
 
       const responsePipeline = new ResponsePipeline({
         adapter,
         isStreaming,
         captureEnabled: settings.captureRequestContent,
         response,
-        upstreamHeaders: upstreamRes.headers,
+        upstreamHeaders: downstreamHeaders,
+        onStart: headers => { if (!response.headersSent) response.start(statusCode, headers) },
+        transformResponse: !isStreaming ? (body, headers) => {
+          const modifiedResponse = applyModificationRules(body, headers, rules, {
+            stage: 'response',
+            clientProtocol: protocol,
+            upstreamProtocol: endpointProtocol,
+            logicalModelId,
+            providerModelId: model.id,
+            path: context.path,
+            streaming: false,
+          })
+          return { body: modifiedResponse.body, headers: modifiedResponse.headers }
+        } : undefined,
         onUsage: () => undefined,
         onUpstreamChunk: () => undefined,
         onDownstreamChunk: () => undefined,

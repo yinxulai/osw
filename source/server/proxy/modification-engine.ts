@@ -23,29 +23,28 @@ export interface ModificationResult {
   skippedRuleIds: string[]
 }
 
+type HeaderAction = Extract<ModificationRuleAction, { type: `header-${string}` }>
+type BodyAction = Extract<ModificationRuleAction, { type: `body-${string}` }>
+
 export class ModificationError extends Error {
   readonly code = 'MODIFICATION_RULE_FAILED'
   constructor(message: string, readonly ruleId?: string) { super(message) }
 }
 
-export function applyModificationRules(
-  body: Buffer,
-  headers: Record<string, string | string[] | undefined>,
-  rules: readonly ModificationRule[],
-  context: ModificationContext,
-): ModificationResult {
+export function applyModificationRules(body: Buffer, headers: Record<string, string | string[] | undefined>, rules: readonly ModificationRule[], context: ModificationContext): ModificationResult {
   let currentBody = Buffer.from(body)
   const currentHeaders = { ...headers }
   const appliedRuleIds: string[] = []
   const skippedRuleIds: string[] = []
   for (const rule of rules) {
-    if (!rule.enabled || rule.deletedTime !== null || rule.stage !== context.stage) { skippedRuleIds.push(rule.id); continue }
-    if (!matches(rule, context)) { skippedRuleIds.push(rule.id); continue }
+    if (!rule.enabled || rule.deletedTime !== null) { skippedRuleIds.push(rule.id); continue }
+    const actions = rule.actions.filter(action => action.stage === context.stage)
+    if (actions.length === 0 || !matches(rule, context)) { skippedRuleIds.push(rule.id); continue }
     if (context.stage === 'response' && context.streaming) { skippedRuleIds.push(rule.id); continue }
-    if (rule.actions.length > MAX_ACTIONS) throw new ModificationError('规则动作数量超过限制', rule.id)
-    for (const action of rule.actions) {
+    if (actions.length > MAX_ACTIONS) throw new ModificationError('规则动作数量超过限制', rule.id)
+    for (const action of actions) {
       if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as Extract<ModificationRuleAction, { type: `header-${string}` }>, rule.id)
-      else currentBody = Buffer.from(applyJson(currentBody, action as Extract<ModificationRuleAction, { type: `json-${string}` }>, rule.id))
+      else currentBody = Buffer.from(applyBody(currentBody, action as Extract<ModificationRuleAction, { type: `body-${string}` }>, rule.id))
       if (currentBody.length > MAX_BODY_BYTES) throw new ModificationError('修改后的 Body 超过限制', rule.id)
     }
     appliedRuleIds.push(rule.id)
@@ -64,7 +63,7 @@ function matches(rule: ModificationRule, context: ModificationContext): boolean 
   return true
 }
 
-function applyHeader(headers: Record<string, string | string[] | undefined>, action: Extract<ModificationRuleAction, { type: `header-${string}` }>, ruleId: string): void {
+function applyHeader(headers: Record<string, string | string[] | undefined>, action: HeaderAction, ruleId: string): void {
   const name = action.name
   if (PROTECTED_HEADERS.has(name.toLowerCase())) throw new ModificationError(`禁止修改受保护 Header: ${name}`, ruleId)
   const existingKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase()) ?? name
@@ -76,15 +75,15 @@ function applyHeader(headers: Record<string, string | string[] | undefined>, act
   } else headers[existingKey] = action.value
 }
 
-function applyJson(body: Buffer, action: Extract<ModificationRuleAction, { type: `json-${string}` }>, ruleId: string): Buffer {
+function applyBody(body: Buffer, action: BodyAction, ruleId: string): Buffer {
   let value: unknown
   try { value = JSON.parse(body.toString('utf8')) } catch { throw new ModificationError('Body 不是有效 JSON', ruleId) }
-  if (action.type === 'json-replace' && action.search.length === 0) throw new ModificationError('JSON 替换内容不能为空', ruleId)
+  if (action.type === 'body-replace' && action.search.length === 0) throw new ModificationError('Body 替换内容不能为空', ruleId)
   const segments = parsePath(action.path, ruleId)
-  if (segments.length > 12) throw new ModificationError('JSON Path 深度超过限制', ruleId)
-  if (action.type === 'json-set') setPath(value, segments, action.value, ruleId)
-  else if (action.type === 'json-delete') deletePath(value, segments, ruleId)
-  else replacePath(value, segments, action.search ?? '', action.replacement ?? '', ruleId)
+  if (segments.length > 12) throw new ModificationError('Body 路径深度超过限制', ruleId)
+  if (action.type === 'body-set') setPath(value, segments, action.value, ruleId)
+  else if (action.type === 'body-delete') deletePath(value, segments, ruleId)
+  else replacePath(value, segments, action.search ?? '', action.replacement ?? '', action.regex ?? false, ruleId)
   return Buffer.from(JSON.stringify(value))
 }
 
@@ -108,12 +107,24 @@ function setPath(root: unknown, segments: string[], value: unknown, ruleId: stri
 function deletePath(root: unknown, segments: string[], ruleId: string): void {
   const parent = getParent(root, segments, ruleId); delete parent[segments[segments.length - 1]]
 }
-function replacePath(root: unknown, segments: string[], search: string, replacement: string, ruleId: string): void {
+function replacePath(root: unknown, segments: string[], search: string, replacement: string, regex: boolean, ruleId: string): void {
   const parent = getParent(root, segments, ruleId); const key = segments[segments.length - 1]; const target = parent[key]
   if (typeof target !== 'string') throw new ModificationError('JSON 替换目标必须是字符串', ruleId)
-  const count = target.split(search).length - 1
-  if (count > MAX_REPLACEMENTS) throw new ModificationError('替换次数超过限制', ruleId)
-  parent[key] = target.split(search).join(replacement)
+  try {
+    if (regex) {
+      const pattern = new RegExp(search, 'g')
+      const matches = target.match(pattern)?.length ?? 0
+      if (matches > MAX_REPLACEMENTS) throw new ModificationError('替换次数超过限制', ruleId)
+      parent[key] = target.replace(pattern, replacement)
+    } else {
+      const count = target.split(search).length - 1
+      if (count > MAX_REPLACEMENTS) throw new ModificationError('替换次数超过限制', ruleId)
+      parent[key] = target.split(search).join(replacement)
+    }
+  } catch (error) {
+    if (error instanceof ModificationError) throw error
+    throw new ModificationError(`正则表达式无效: ${search}`, ruleId)
+  }
 }
 function getParent(root: unknown, segments: string[], ruleId: string): Record<string, unknown> {
   let current: unknown = root

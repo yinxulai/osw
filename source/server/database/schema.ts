@@ -116,8 +116,8 @@ export const providerModelEndpoints = sqliteTable(
 )
 
 export const modificationRules = sqliteTable('modification_rules', {
-  id: text('id').primaryKey(), name: text('name').notNull(), description: text('description').notNull().default(''), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), stage: text('stage').notNull(), schemaVersion: integer('schemaVersion').notNull().default(1), source: text('source').notNull().default('user'), match: text('match').notNull(), actions: text('actions').notNull(), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
-}, table => [index('idx_modification_rules_enabled').on(table.enabled), index('idx_modification_rules_stage').on(table.stage), index('idx_modification_rules_deleted_time').on(table.deletedTime)])
+  id: text('id').primaryKey(), name: text('name').notNull(), description: text('description').notNull().default(''), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), scope: text('scope').notNull().default('model'), schemaVersion: integer('schemaVersion').notNull().default(1), source: text('source').notNull().default('user'), match: text('match').notNull(), actions: text('actions').notNull(), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
+}, table => [index('idx_modification_rules_enabled').on(table.enabled), index('idx_modification_rules_deleted_time').on(table.deletedTime)])
 
 export const providerModelModificationRules = sqliteTable('provider_model_modification_rules', {
   providerModelId: text('providerModelId').notNull().references(() => providerModels.id), ruleId: text('ruleId').notNull().references(() => modificationRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),

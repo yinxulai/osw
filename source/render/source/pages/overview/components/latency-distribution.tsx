@@ -14,7 +14,11 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
     <Card className="min-w-70">
       <CardSectionHeader title="延迟分布" description="请求耗时区间" compact />
       <CardContent className="space-y-2 pt-1">
-        {buckets.map(l => (
+        {buckets.length === 0 ? (
+          <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+            暂无延迟数据
+          </div>
+        ) : buckets.map(l => (
           <div key={l.range} className="flex items-center gap-2">
             <div className="w-10 text-[11px] text-muted-foreground shrink-0">{l.range}</div>
             <div className="flex-1 relative h-5 bg-muted rounded-sm overflow-hidden">

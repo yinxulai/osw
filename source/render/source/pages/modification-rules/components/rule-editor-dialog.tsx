@@ -1,12 +1,13 @@
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
 import type { ModificationRule } from '../types'
 
@@ -26,33 +27,38 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     if (props.dirty) props.onReset()
     close()
   }
+  const readOnly = props.rule.builtin === true
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent
-        overlayClassName="bg-black/30"
-        className="inset-y-0 left-auto right-0 top-0 flex h-dvh w-full max-w-2xl translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-card text-card-foreground p-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:rounded-none"
+    <Sheet open={props.open} onOpenChange={open => open ? props.onOpenChange(true) : cancel()}>
+      <SheetContent
+        side="right"
+        className="w-[calc(100vw-1rem)]! max-w-300! gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
+        onPointerDownOutside={event => event.preventDefault()}
       >
-        <DialogHeader className="shrink-0 px-5 py-4 pr-14">
-          <DialogTitle>编辑修改规则</DialogTitle>
-          <DialogDescription className="text-xs">配置规则作用范围、匹配协议和修改动作。</DialogDescription>
-        </DialogHeader>
+        <SheetHeader className="shrink-0 bg-card px-6 py-5 pr-14">
+          <SheetTitle className="text-base">{props.rule.updatedAt === '尚未保存' ? '新建请求修改' : '编辑请求修改'}</SheetTitle>
+          <SheetDescription className="text-xs">定义请求或响应中的字段转换。{readOnly && ' 系统内置规则仅供查看。'}</SheetDescription>
+        </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-background/60">
           <RuleEditor
             rule={props.rule}
-            dirty={props.dirty}
             onChange={props.onChange}
+            readOnly={readOnly}
           />
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 bg-card px-5 py-3">
-          <Button type="button" variant="ghost" size="sm" onClick={cancel}>关闭</Button>
-          <Button type="button" size="sm" onClick={props.onSave} disabled={!props.dirty}>
-            <Save /> 保存规则
+        <div className="flex shrink-0 items-center justify-end gap-2 bg-card px-6 py-4">
+          {props.dirty && <span className="mr-auto text-xs text-warning">未保存</span>}
+          <SheetClose asChild>
+            <Button type="button" variant="ghost" size="sm">取消</Button>
+          </SheetClose>
+          <Button type="button" size="sm" onClick={props.onSave} disabled={readOnly || !props.dirty}>
+            <Save /> 保存
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

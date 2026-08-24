@@ -36,8 +36,8 @@ export function ProxyConfigCard(props: ProxyConfigCardProps) {
 
   return (
     <Card className="bg-card">
-      <CardHeader className="gap-3 p-4 pb-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-        <div className="flex items-start gap-2.5">
+      <CardHeader className="flex-row justify-between gap-3 pb-3">
+        <div className="flex min-w-0 items-start gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Server size={16} />
           </div>

@@ -147,7 +147,7 @@
 
 ## P2
 
-### 修改规则模块（TODO，暂不实施）
+### 请求修改模块
 
 设计文档：[modification-rules.md](./modification-rules.md)
 

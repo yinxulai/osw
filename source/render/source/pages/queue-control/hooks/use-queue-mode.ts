@@ -24,15 +24,19 @@ export function useQueueMode(models: ProviderModelRoute[], health: HealthMap, pr
   }, [health, providerModelHealth])
 
   const changeMode = useCallback(async (nextMode: 'auto' | 'manual') => {
+    if (mutation.isPending || nextMode === mode) return
     const initialModelId = nextMode === 'auto' ? null : manualModelId ?? models.find(model => model.enabled)?.id ?? null
-    if (nextMode === 'manual' && !initialModelId) return
+    if (nextMode === 'manual' && !initialModelId) {
+      toast.error('请先启用一个模型，再切换到手动指定模式')
+      return
+    }
     try { await mutation.mutateAsync(initialModelId) } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
-  }, [manualModelId, models, mutation, toast])
+  }, [manualModelId, mode, models, mutation, toast])
 
   const selectManualModel = useCallback(async (model: ProviderModelRoute) => {
-    if (mode !== 'manual' || !model.enabled || isCooling(model.providerId, model.id)) return
+    if (mutation.isPending || mode !== 'manual' || !model.enabled || isCooling(model.providerId, model.id)) return
     try { await mutation.mutateAsync(model.id) } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
   }, [isCooling, mode, mutation, toast])
 
-  return { mode, manualModelId, isCooling, changeMode, selectManualModel, refresh }
+  return { mode, manualModelId, switchingMode: mutation.isPending, isCooling, changeMode, selectManualModel, refresh }
 }

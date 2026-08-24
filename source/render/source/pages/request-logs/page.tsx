@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, ScrollText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
-import { EmptyState } from '@/components/ui/empty-state'
 import { RequestLogsFilters } from './components/request-logs-filters'
 import { RequestLogsTable } from './components/request-logs-table'
 import { PAGE_SIZE } from './queries'
@@ -35,8 +34,8 @@ export function RequestLogsPage() {
         title="请求记录"
         description="最近的代理请求，以及每次请求实际使用的供应商模型与失败切换情况"
         actions={
-          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={refreshing}>
-            <RefreshCw size={14} className={cn('mr-1.5', refreshing && 'animate-spin')} />
+          <Button variant="outline" onClick={() => void refresh()} disabled={refreshing}>
+            <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
             刷新
           </Button>
         }
@@ -49,14 +48,7 @@ export function RequestLogsPage() {
           total={total}
           applyFilter={setFilter}
         />
-        {!loading && logs.length === 0 ? (
-          <EmptyState
-            icon={ScrollText}
-            title="暂无请求记录"
-            description="通过本地代理发起请求后，这里会记录实际使用的模型、耗时、缓存与故障切换详情。"
-            className="min-h-64"
-          />
-        ) : <RequestLogsTable
+        <RequestLogsTable
           logs={logs}
           loading={loading}
           expandedId={expandedId}
@@ -65,7 +57,7 @@ export function RequestLogsPage() {
           detailErrors={detailErrors}
           getModelName={getModelName}
           toggleExpand={toggleExpand}
-        />}
+        />
         {!loading && total > PAGE_SIZE && (
           <div className="mt-3 flex items-center justify-end gap-2 text-xs text-foreground/75">
             <span>

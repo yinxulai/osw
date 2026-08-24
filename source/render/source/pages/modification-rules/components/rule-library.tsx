@@ -70,7 +70,7 @@ export function RuleLibrary(props: RuleLibraryProps) {
                   <div className="flex items-start gap-2.5">
                     <span className={cn(
                       'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md',
-                      rule.stage === 'request' ? 'bg-info/12 text-info' : 'bg-warning/12 text-warning',
+                      rule.actions.some(action => action.stage === 'request') ? 'bg-info/12 text-info' : 'bg-warning/12 text-warning',
                     )}>
                       <SlidersHorizontal className="size-3.5" />
                     </span>
@@ -80,7 +80,7 @@ export function RuleLibrary(props: RuleLibraryProps) {
                         {!rule.enabled && <Badge variant="muted" className="px-1.5 py-0 text-[9px]">停用</Badge>}
                       </span>
                       <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <span>{rule.stage === 'request' ? '请求' : '响应'}</span>
+                        <span>{rule.actions.some(action => action.stage === 'request') ? '请求' : ''}{rule.actions.some(action => action.stage === 'request') && rule.actions.some(action => action.stage === 'response') ? ' / ' : ''}{rule.actions.some(action => action.stage === 'response') ? '响应' : ''}</span>
                         <span>·</span>
                         <span>{rule.actions.length} 个动作</span>
                         <span>·</span>

@@ -48,7 +48,7 @@ describe('ResponsePipeline', () => {
   })
 
   it('does not write after the downstream response has ended', () => {
-    const { pipeline, response } = setup()
+    const { pipeline, response } = setup({ isStreaming: true })
     pipeline.push('first', true)
     response.end()
     pipeline.push('second', true)

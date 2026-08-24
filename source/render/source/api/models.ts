@@ -6,6 +6,7 @@ type ProviderModelEndpointView = { id: string; url: string | null; enabled: bool
 type ProviderModelView = ProviderModel & { endpoints: ProviderModelEndpointView[] }
 type ProviderModelUpdateInput = { logicalModelId?: string; modelName?: string; enabled?: boolean; priority?: number; endpoints?: ProviderModelRouteEndpoint[] }
 type ProviderModelCreateInput = { providerId: string; modelName: string; logicalModelId?: string; priority?: number; enabled?: boolean; endpoints?: ProviderModelRouteEndpoint[] }
+type ModificationRuleBindingInput = { ruleId: string; priority: number; enabled: boolean }
 type SchedulingPolicyInput = { logicalModelId: string; providerModelId: string; strategy?: string; priority?: number; weight?: number; enabled?: boolean }
 
 export const modificationRuleApi = {
@@ -32,7 +33,7 @@ export const providerModelApi = {
   queue: (logicalModelId = 'default') => request<ProviderModelRoute[]>('/provider-model/queue', { logicalModelId }),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
   modificationRules: (providerModelId: string) => request<import('@common/schemas').ProviderModelModificationRule[]>('/modification-rule/bindings', { providerModelId }),
-  replaceModificationRules: (providerModelId: string, bindings: Array<{ ruleId: string; priority: number; enabled: boolean }>) => request<import('@common/schemas').ProviderModelModificationRule[]>('/modification-rule/replace-bindings', { providerModelId, bindings }),
+  replaceModificationRules: (providerModelId: string, bindings: ModificationRuleBindingInput[]) => request<import('@common/schemas').ProviderModelModificationRule[]>('/modification-rule/replace-bindings', { providerModelId, bindings }),
 }
 
 export const schedulingPolicyApi = {

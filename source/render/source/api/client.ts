@@ -3,12 +3,17 @@ import { getRuntimeProfile } from '@common/runtime-profile'
 
 const API_BASE = getRuntimeProfile(import.meta.env.DEV ? 'development' : 'production').managementApiUrl
 
-export async function request<T>(path: string, body: unknown = {}): Promise<ApiResponse<T>> {
+interface RequestOptions {
+  signal?: AbortSignal
+}
+
+export async function request<T>(path: string, body: unknown = {}, options: RequestOptions = {}): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: options.signal,
     })
     const contentType = response.headers.get('content-type') ?? ''
     if (!contentType.includes('application/json')) {

@@ -1,6 +1,5 @@
 import { GripVertical, KeyRound, Pencil, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ProviderRuleBindings } from './provider-rule-bindings'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolIcons } from '@/components/protocol-icons'
 import { SortableProviderModel } from './sortable-provider-model'
@@ -68,7 +67,6 @@ export function ProviderModelRow(props: ProviderModelRowProps) {
             <Trash2 size={13} />
           </Button>
           </div>
-          <ProviderRuleBindings providerModelId={model.id} />
         </div>
       )}
     </SortableProviderModel>

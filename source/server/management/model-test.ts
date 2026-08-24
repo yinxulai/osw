@@ -107,12 +107,15 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
       const response = new BufferedProxyResponse()
       await executeProxyRequest({
         context: createRequestContext({
-          requestId: generateId('diagnostic_'),
+          requestId: generateId('req_'),
           logicalModelId: 'diagnostic',
           clientProtocol: protocol,
           method: 'POST',
           path: `/diagnostic/${protocol}`,
-          headers: {},
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+          },
           requestBody: Buffer.from(testBody),
           signal: controller.signal,
         }),
@@ -129,7 +132,7 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
         success,
         statusCode: response.statusCode || undefined,
         durationMilliseconds: Date.now() - startedAt,
-        errorMessage: success ? undefined : `HTTP ${response.statusCode || 502}`,
+        errorMessage: success ? undefined : getDiagnosticError(response),
       })
     } catch (error) {
       if (controller.signal.aborted) return
@@ -146,6 +149,18 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
   }
 
   if (!controller.signal.aborted) sendSuccess(res, { results })
+}
+
+function getDiagnosticError(response: BufferedProxyResponse): string {
+  if (response.failureMessage) return response.failureMessage
+  try {
+    const body = JSON.parse(response.body) as { errorMessage?: unknown; error?: { message?: unknown } }
+    if (typeof body.errorMessage === 'string' && body.errorMessage.trim()) return body.errorMessage
+    if (typeof body.error?.message === 'string' && body.error.message.trim()) return body.error.message
+  } catch {
+    // Non-JSON upstream responses fall back to their HTTP status.
+  }
+  return `HTTP ${response.statusCode || 502}`
 }
 
 function buildTestBody(protocol: Protocol, modelId: string): string {

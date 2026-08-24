@@ -16,7 +16,9 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
       <CardSectionHeader title="供应商分布" description="按请求量统计" compact />
       <CardContent className="space-y-2.5 pt-1">
         {stats.length === 0 ? (
-          <div className="text-xs text-muted-foreground py-4 text-center">暂无数据</div>
+          <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+            暂无供应商请求数据
+          </div>
         ) : stats.map((p, idx) => (
           <div key={p.providerId}>
             <div className="flex justify-between text-xs mb-1">

@@ -18,7 +18,11 @@ export interface ModelTestResult {
 export interface ModelTestFilters { providerIds?: string[]; modelIds?: string[] }
 
 export const modelTestApi = {
-  run: (protocol: Protocol, filters: ModelTestFilters = {}) => request<{ results: ModelTestResult[] }>('/model-test/run', { protocol, ...filters }),
+  run: (protocol: Protocol, filters: ModelTestFilters = {}, signal?: AbortSignal) => request<{ results: ModelTestResult[] }>(
+    '/model-test/run',
+    { protocol, ...filters },
+    { signal },
+  ),
 }
 
 export const configApi = {

@@ -1,9 +1,7 @@
-import { BarChart3 } from 'lucide-react'
 import type { AnalyticsRange } from '@common/schemas'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Card } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useOverviewService } from './service'
 import { StatsGrid } from './components/stats-grid'
@@ -14,7 +12,7 @@ import { LatencyDistribution } from './components/latency-distribution'
 import { FailureReasons } from './components/failure-reasons'
 
 export function OverviewPage() {
-  const { timeRange, setTimeRange, data, loading, hasData } = useOverviewService()
+  const { timeRange, setTimeRange, data, loading } = useOverviewService()
 
   const renderLoading = () => (
     <div className="space-y-4">
@@ -67,15 +65,6 @@ export function OverviewPage() {
     </div>
   )
 
-  const renderEmpty = () => (
-    <EmptyState
-      icon={BarChart3}
-      title="暂无统计数据"
-      description="代理请求产生后，这里会显示请求量、成功率、延迟与模型分布。"
-      className="min-h-72"
-    />
-  )
-
   const renderContent = () => {
     if (!data) return null
     return (
@@ -103,7 +92,6 @@ export function OverviewPage() {
 
   const renderBody = () => {
     if (loading) return renderLoading()
-    if (!hasData) return renderEmpty()
     return renderContent()
   }
 

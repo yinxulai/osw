@@ -1,7 +1,6 @@
-import type { IncomingHttpHeaders } from 'node:http'
 import type { RawUsage } from '@common/schemas'
 import type { ProtocolAdapter, StreamConverter } from './protocols/types'
-import { createDownstreamHeaders } from './headers'
+import type { HeaderMap } from './headers'
 
 export interface ExtractedUsage {
   inputTokens: number | null
@@ -28,7 +27,9 @@ export interface ResponsePipelineOptions {
   isStreaming: boolean
   captureEnabled: boolean
   response: ResponseSink
-  upstreamHeaders: IncomingHttpHeaders
+  upstreamHeaders: HeaderMap
+  onStart?(headers: HeaderMap): void
+  transformResponse?(body: Buffer, headers: HeaderMap): { body: Buffer; headers: HeaderMap }
   onUsage(usage: ExtractedUsage): void
   onUpstreamChunk(chunk: string): void
   onDownstreamChunk(chunk: string): void
@@ -66,7 +67,7 @@ export class ResponsePipeline {
       if (converted) this.writeDownstream(converted)
       return
     }
-    if (!this.options.adapter.requiresResponseConversion || this.options.isStreaming) {
+    if (this.options.isStreaming) {
       this.writeDownstream(text)
     }
   }
@@ -80,16 +81,34 @@ export class ResponsePipeline {
       }
     }
 
+    let finalBody: Buffer<ArrayBufferLike> = this.responseBuffer ? Buffer.from(this.responseBuffer) : Buffer.from(errorBody ?? '')
+    let finalHeaders: HeaderMap = { ...this.options.upstreamHeaders }
     if (!this.options.response.writableEnded) {
       if (this.streamConverter) {
         const tail = this.options.adapter.finishStream(this.streamConverter)
         if (tail) this.writeDownstream(tail)
       } else if (this.options.adapter.requiresResponseConversion && !this.options.isStreaming && this.responseBuffer) {
         try {
-          this.writeDownstream(this.options.adapter.convertResponse(Buffer.from(this.responseBuffer)).toString('utf8'))
+          finalBody = this.options.adapter.convertResponse(finalBody)
         } catch {
-          this.writeDownstream(this.responseBuffer)
+          finalBody = Buffer.from(this.responseBuffer)
         }
+        if (this.options.transformResponse && successful) {
+          const transformed = this.options.transformResponse(finalBody, finalHeaders)
+          finalBody = transformed.body
+          finalHeaders = transformed.headers
+        }
+        this.options.onStart?.(finalHeaders)
+        this.writeDownstream(finalBody.toString('utf8'))
+      } else if (!this.options.isStreaming && successful && this.options.transformResponse) {
+        const transformed = this.options.transformResponse(finalBody, finalHeaders)
+        finalBody = transformed.body
+        finalHeaders = transformed.headers
+        this.options.onStart?.(finalHeaders)
+        this.writeDownstream(finalBody.toString('utf8'))
+      } else {
+        this.options.onStart?.(finalHeaders)
+        if (this.options.adapter.requiresResponseConversion || !this.options.isStreaming) this.writeDownstream(finalBody.toString('utf8'))
       }
       this.options.response.end()
     }
@@ -100,7 +119,7 @@ export class ResponsePipeline {
         : (successful ? this.responseBuffer : errorBody),
       downstreamBody: this.options.isStreaming
         ? serializeStreamingChunks(this.downstreamChunks)
-        : (this.downstreamChunks.join('') || this.responseBuffer || errorBody || null),
+        : (this.downstreamChunks.join('') || (successful ? finalBody.toString('utf8') : errorBody) || null),
       usage: this.usage,
     }
   }
@@ -116,7 +135,7 @@ export class ResponsePipeline {
   }
 
   downstreamHeaders(): string {
-    return JSON.stringify(createDownstreamHeaders(this.options.upstreamHeaders))
+    return JSON.stringify(this.options.upstreamHeaders)
   }
 
   private writeDownstream(chunk: string): void {

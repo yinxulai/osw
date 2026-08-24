@@ -9,6 +9,7 @@ import {
   Play,
   Repeat,
   RotateCcw,
+  Square,
   XCircle,
 } from 'lucide-react'
 import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
@@ -31,7 +32,7 @@ interface ModelTestPanelProps {
   providers: Provider[]
 }
 
-type TestTaskStatus = 'queued' | 'running' | 'success' | 'failed'
+type TestTaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
 
 interface TestTask {
   id: string
@@ -59,6 +60,7 @@ const TASK_STATUS_LABELS: Record<TestTaskStatus, string> = {
   running: '请求中',
   success: '通过',
   failed: '失败',
+  cancelled: '已取消',
 }
 
 function getTestableProtocols(model: ProviderModelRoute): Protocol[] {
@@ -118,6 +120,7 @@ function TaskStatus(props: TaskStatusProps) {
   if (status === 'running') return <Loader2 size={15} className="animate-spin text-primary" />
   if (status === 'success') return <CheckCircle2 size={15} className="text-emerald-600" />
   if (status === 'failed') return <XCircle size={15} className="text-red-600" />
+  if (status === 'cancelled') return <Square size={13} className="text-muted-foreground" />
   return <Circle size={15} className="text-muted-foreground/35" />
 }
 
@@ -167,7 +170,7 @@ function ModelSelection(props: ModelSelectionProps) {
   }), [props.availableProviders, props.enabledModels, props.selectedModelProtocols, props.selectedProviderIds])
 
   return (
-    <aside className="border-b border-border/30 bg-muted/10 p-3 lg:border-b-0 lg:border-r lg:border-r-border/30">
+    <aside className="min-h-0 overflow-y-auto bg-muted/20 p-3 lg:bg-muted/10">
       <div className="mb-3 flex items-center justify-between px-1">
         <div className="text-[11px] font-medium text-foreground">待测模型</div>
         <div className="flex items-center gap-2">
@@ -236,6 +239,7 @@ function ModelSelection(props: ModelSelectionProps) {
 }
 
 interface TestProgressProps {
+  cancelledCount: number
   failureCount: number
   progress: number
   running: boolean
@@ -255,9 +259,10 @@ function TestProgress(props: TestProgressProps) {
     <div className="border-b border-border/30 px-4 py-3">
       <div className="flex items-center justify-between text-[10px]">
         <div className="flex items-center gap-3">
-          <span className="font-medium">{props.running ? '测试进行中' : props.failureCount > 0 ? '测试完成，存在异常' : '全部测试通过'}</span>
+          <span className="font-medium">{props.running ? '测试进行中' : props.failureCount > 0 ? '测试完成，存在异常' : props.cancelledCount > 0 ? '测试已取消' : '全部测试通过'}</span>
           <span className="text-emerald-600">通过 {props.successCount}</span>
           <span className={props.failureCount > 0 ? 'text-red-600' : 'text-muted-foreground'}>失败 {props.failureCount}</span>
+          {props.cancelledCount > 0 && <span className="text-muted-foreground">取消 {props.cancelledCount}</span>}
         </div>
         <span className="font-mono text-muted-foreground">{props.progress}%</span>
       </div>
@@ -274,7 +279,7 @@ function TestTaskRow(props: TestTaskRowProps) {
       <TaskStatus status={task.status} />
       <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-medium">{task.providerName}</span><span className="truncate font-mono text-[10px] text-muted-foreground">{task.modelName}</span></div></div>
       <div className="min-w-0 text-[11px] text-muted-foreground"><span className={cn('truncate', task.converted && 'text-amber-700 dark:text-amber-300')}>{PROTOCOL_LABELS[task.protocol]}{task.converted ? '（转换）' : ''}</span></div>
-      <div className={cn('text-[10px] font-medium', task.status === 'success' && 'text-emerald-600', task.status === 'failed' && 'text-red-600', task.status === 'running' && 'text-primary')}>{TASK_STATUS_LABELS[task.status]}</div>
+      <div className={cn('text-[10px] font-medium', task.status === 'success' && 'text-emerald-600', task.status === 'failed' && 'text-red-600', task.status === 'running' && 'text-primary', task.status === 'cancelled' && 'text-muted-foreground')}>{TASK_STATUS_LABELS[task.status]}</div>
       <div className="text-[10px] text-muted-foreground md:text-right">{responseSummary}{task.result?.success && <span className="ml-1 font-mono">↓{task.result.outputTokens ?? '—'}</span>}</div>
       {task.errorMessage && <div className="col-span-full ml-9 wrap-break-word rounded-md bg-red-500/[0.07] px-2.5 py-2 font-mono text-[10px] text-red-600 dark:text-red-400">{task.errorMessage}</div>}
     </div>
@@ -304,6 +309,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   const [tasks, setTasks] = useState<TestTask[]>([])
   const [running, setRunning] = useState(false)
   const previousOpen = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const isOpening = props.open && !previousOpen.current
@@ -344,9 +350,10 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   }), [enabledModels, props.providers, selectedModelProtocols, selectedProviderIds])
 
   const visibleTasks = tasks.length > 0 ? tasks : plannedTasks
-  const completedCount = tasks.filter(task => task.status === 'success' || task.status === 'failed').length
+  const completedCount = tasks.filter(task => task.status === 'success' || task.status === 'failed' || task.status === 'cancelled').length
   const successCount = tasks.filter(task => task.status === 'success').length
   const failureCount = tasks.filter(task => task.status === 'failed').length
+  const cancelledCount = tasks.filter(task => task.status === 'cancelled').length
   const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100)
 
   const clearTasks = () => setTasks([])
@@ -395,51 +402,74 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   const runTests = async () => {
     if (plannedTasks.length === 0 || running) return
     const pendingTasks = plannedTasks.map(task => ({ ...task }))
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     setTasks(pendingTasks)
     setRunning(true)
     let nextIndex = 0
 
     const worker = async () => {
-      while (nextIndex < pendingTasks.length) {
+      while (!controller.signal.aborted && nextIndex < pendingTasks.length) {
         const task = pendingTasks[nextIndex++]
         setTasks(current => current.map(item => item.id === task.id ? { ...item, status: 'running' } : item))
-        const response = await modelTestApi.run(task.protocol, {
-          providerIds: [task.providerId],
-          modelIds: [task.modelId],
-        })
-        const result = response.success
-          ? response.data.results.find(item => item.modelId === task.modelId)
-          : undefined
-        const succeeded = Boolean(result?.success)
-        setTasks(current => current.map(item => item.id === task.id ? {
-          ...item,
-          status: succeeded ? 'success' : 'failed',
-          result,
-          errorMessage: response.success ? result?.errorMessage ?? '未找到可测试的协议端点' : response.errorMessage,
-        } : item))
+        try {
+          const response = await modelTestApi.run(task.protocol, {
+            providerIds: [task.providerId],
+            modelIds: [task.modelId],
+          }, controller.signal)
+          if (controller.signal.aborted) break
+          const result = response.success
+            ? response.data.results.find(item => item.modelId === task.modelId)
+            : undefined
+          const succeeded = Boolean(result?.success)
+          setTasks(current => current.map(item => item.id === task.id ? {
+            ...item,
+            status: succeeded ? 'success' : 'failed',
+            result,
+            errorMessage: response.success ? result?.errorMessage ?? '未找到可测试的协议端点，请刷新模型配置后重试' : response.errorMessage,
+          } : item))
+        } catch (error) {
+          if (controller.signal.aborted) break
+          setTasks(current => current.map(item => item.id === task.id ? {
+            ...item,
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : '诊断请求失败',
+          } : item))
+        }
       }
     }
 
-    await Promise.all(Array.from({ length: Math.min(TEST_CONCURRENCY, pendingTasks.length) }, () => worker()))
-    setRunning(false)
+    try {
+      await Promise.all(Array.from({ length: Math.min(TEST_CONCURRENCY, pendingTasks.length) }, () => worker()))
+    } finally {
+      if (controller.signal.aborted) {
+        setTasks(current => current.map(task => task.status === 'queued' || task.status === 'running'
+          ? { ...task, status: 'cancelled', errorMessage: undefined }
+          : task))
+      }
+      if (abortControllerRef.current === controller) abortControllerRef.current = null
+      setRunning(false)
+    }
   }
+
+  const cancelTests = () => abortControllerRef.current?.abort()
 
   return (
     <Dialog open={props.open} onOpenChange={open => !running && props.onOpenChange(open)}>
-      <DialogContent className="flex max-h-[86vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b border-border/30 px-5 py-4 pr-14">
+      <DialogContent className="flex h-[min(760px,90vh)] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="bg-muted/15 px-5 py-4 pr-14">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-primary"><FlaskConical size={15} /></div>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><FlaskConical size={15} /></div>
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-sm">
                 渠道诊断
               </DialogTitle>
-              <DialogDescription className="mt-1 text-[11px]">验证供应商模型的协议兼容性与连通性</DialogDescription>
+              <DialogDescription className="mt-1 text-[11px]">向选中的上游发送最小真实请求，验证连通性和协议兼容性；测试可能产生少量费用。</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
           <ModelSelection
             allTasksSelected={allTasksSelected}
             availableProviders={availableProviders}
@@ -462,16 +492,22 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="rounded-md bg-muted/60 px-2 py-1 font-mono text-[10px] tabular-nums text-muted-foreground">{plannedTasks.length} 项</span>
                   {tasks.length > 0 && !running && <Button variant="ghost" size="icon-sm" title="清除结果" onClick={clearTasks}><RotateCcw size={13} /></Button>}
-                  <Button size="sm" disabled={plannedTasks.length === 0 || running} onClick={() => void runTests()}>
-                    {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-                    {running ? `${completedCount}/${tasks.length}` : '运行测试'}
-                  </Button>
+                  {running ? (
+                    <Button variant="secondary" size="sm" onClick={cancelTests}>
+                      <Square size={11} fill="currentColor" /> 停止测试
+                    </Button>
+                  ) : (
+                    <Button size="sm" disabled={plannedTasks.length === 0} onClick={() => void runTests()}>
+                      <Play size={12} /> 运行测试
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
 
             {(running || tasks.length > 0) && (
               <TestProgress
+                cancelledCount={cancelledCount}
                 failureCount={failureCount}
                 progress={progress}
                 running={running}

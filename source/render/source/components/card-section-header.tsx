@@ -19,15 +19,15 @@ export function CardSectionHeader(props: CardSectionHeaderProps) {
       className={cn(
         compact ? 'pb-1.5' : 'pb-3',
         bordered && 'border-b border-border/60 px-4 py-4',
-        actions && 'sm:flex-row sm:items-start sm:justify-between sm:space-y-0',
+        actions && 'flex flex-row items-start justify-between gap-3',
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && <div className="shrink-0 self-start">{actions}</div>}
     </CardHeader>
   )
 }

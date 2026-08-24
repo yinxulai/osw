@@ -20,4 +20,12 @@ export default [
       },
     },
   },
+  {
+    files: ['source/render/source/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'peculiar/func-param-destructuring': 'off',
+      'peculiar/func-param-inline-object-type': 'off',
+      'peculiar/func-signature-linebreak': 'off',
+    },
+  },
 ]

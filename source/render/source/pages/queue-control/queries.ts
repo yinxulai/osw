@@ -18,7 +18,13 @@ export const useQueueModeQuery = () => useQuery({ queryKey: queueKeys.mode, quer
 export const useQueueMetricsQuery = () => useQuery({ queryKey: queueKeys.metrics, queryFn: () => unwrap(requestLogApi.list({ limit: 100 })).then(data => calculateQueueModelMetrics(data.logs)), refetchInterval: 5_000 })
 export function useSwitchQueueMutation() {
   const client = useQueryClient()
-  return useMutation({ mutationFn: (modelId: string | null) => unwrap(queueApi.switch('default', modelId)), onSuccess: data => client.setQueryData(queueKeys.mode, data) })
+  return useMutation({
+    mutationFn: (modelId: string | null) => unwrap(queueApi.switch('default', modelId)),
+    onSuccess: data => client.setQueryData(queueKeys.mode, {
+      logicalModelId: data.logicalModelId,
+      manualModelId: data.modelId,
+    }),
+  })
 }
 
 export function useUpdateQueueModelMutation() {

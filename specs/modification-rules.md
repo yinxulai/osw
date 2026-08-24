@@ -1,4 +1,4 @@
-# 修改规则设计（TODO）
+# 请求修改设计
 
 > **状态：TODO，暂不实施。**
 >
@@ -39,7 +39,7 @@ One Switch 当前主要负责协议识别、ProviderModel 路由、故障切换�
 
 | 术语 | 定义 |
 | --- | --- |
-| 修改规则 | 全局管理的可复用规则实体，包含匹配条件和一个或多个动作 |
+| 请求修改 | 全局管理的可复用规则实体，包含匹配条件和一个或多个请求/响应动作 |
 | 动作 | 规则执行时对 Header、JSON Body 或协议字段进行的一次具体修改 |
 | 规则链 | 某个 ProviderModel 绑定的有序规则集合 |
 | 客户端原始请求 | 客户端发送的原始请求，只采集和展示，不由修改器修改 |
@@ -187,7 +187,8 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 | `name` | 规则名称 |
 | `description` | 规则描述 |
 | `enabled` | 全局启用状态 |
-| `stage` | `request` 或 `response` |
+| `scope` | `global` 或 `model`，决定是否自动应用及模型窗口是否可编辑 |
+| `actions` | 有序动作列表；每个动作通过 `stage` 指定 `request` 或 `response` |
 | `match` | 受限匹配条件 JSON |
 | `actions` | 有序动作 JSON |
 | `createdTime` | Unix 毫秒 |
