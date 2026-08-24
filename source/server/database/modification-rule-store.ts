@@ -3,19 +3,15 @@ import { ModificationRuleSchema, ProviderModelModificationRuleSchema, type Modif
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import { modificationRules, providerModelModificationRules, providerModels } from './schema'
-import { BUILTIN_MODIFICATION_RULES, getBuiltinModificationRule } from './builtin-modification-rules'
 
 function parseRule(row: typeof modificationRules.$inferSelect): ModificationRule { return ModificationRuleSchema.parse({ ...row, match: JSON.parse(row.match), actions: JSON.parse(row.actions) }) }
 function parseBinding(row: typeof providerModelModificationRules.$inferSelect): ProviderModelModificationRule { return ProviderModelModificationRuleSchema.parse(row) }
 
 export async function listModificationRules(includeDeleted = false): Promise<ModificationRule[]> {
   const rows = getDb().select().from(modificationRules).where(includeDeleted ? undefined : isNull(modificationRules.deletedTime)).orderBy(asc(modificationRules.name)).all()
-  const databaseRules = rows.map(parseRule).filter(rule => !getBuiltinModificationRule(rule.id))
-  return [...BUILTIN_MODIFICATION_RULES, ...(includeDeleted ? databaseRules : databaseRules)].sort((left, right) => left.name.localeCompare(right.name))
+  return rows.map(parseRule)
 }
 export async function getModificationRule(id: string): Promise<ModificationRule | undefined> {
-  const builtin = getBuiltinModificationRule(id)
-  if (builtin) return builtin
   const row = getDb().select().from(modificationRules).where(eq(modificationRules.id, id)).get()
   return row ? parseRule(row) : undefined
 }
@@ -24,7 +20,6 @@ export async function createModificationRule(input: Omit<ModificationRule, 'id' 
   getDb().insert(modificationRules).values({ ...rule, match: JSON.stringify(rule.match), actions: JSON.stringify(rule.actions) }).run(); return rule
 }
 export async function updateModificationRule(id: string, updates: Partial<Omit<ModificationRule, 'id' | 'createdTime'>>): Promise<ModificationRule> {
-  if (getBuiltinModificationRule(id)) throw new Error('内置请求修改由系统管理，不能编辑')
   const existing = await getModificationRule(id); if (!existing) throw new Error(`modification rule not found: ${id}`)
   const rule = ModificationRuleSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
   getDb().update(modificationRules).set({ name: rule.name, description: rule.description, enabled: rule.enabled, scope: rule.scope, schemaVersion: rule.schemaVersion, source: rule.source, match: JSON.stringify(rule.match), actions: JSON.stringify(rule.actions), updatedTime: rule.updatedTime, deletedTime: rule.deletedTime }).where(eq(modificationRules.id, id)).run(); return rule
@@ -33,7 +28,6 @@ export async function countProviderModelsUsingRule(ruleId: string): Promise<numb
   return getDb().select({ providerModelId: providerModelModificationRules.providerModelId }).from(providerModelModificationRules).where(eq(providerModelModificationRules.ruleId, ruleId)).all().length
 }
 export async function deleteModificationRule(id: string): Promise<{ id: string; affectedProviderModelCount: number }> {
-  if (getBuiltinModificationRule(id)) throw new Error('内置请求修改由系统管理，不能删除')
   const affectedProviderModelCount = await countProviderModelsUsingRule(id)
   const updatedTime = now()
   getDb().transaction(tx => {
@@ -56,8 +50,8 @@ export async function listRulesForProviderModel(providerModelId: string): Promis
     const db = getDb()
     const globalRows = db.select().from(modificationRules).where(and(eq(modificationRules.scope, 'global'), eq(modificationRules.enabled, true), isNull(modificationRules.deletedTime))).orderBy(asc(modificationRules.createdTime)).all()
     const boundRows = db.select({ rule: modificationRules, bindingEnabled: providerModelModificationRules.enabled }).from(providerModelModificationRules).innerJoin(modificationRules, eq(providerModelModificationRules.ruleId, modificationRules.id)).where(and(eq(providerModelModificationRules.providerModelId, providerModelId), eq(providerModelModificationRules.enabled, true), eq(modificationRules.enabled, true), isNull(modificationRules.deletedTime))).orderBy(asc(providerModelModificationRules.priority)).all()
-    const databaseRules = [...globalRows.map(parseRule), ...boundRows.map(row => parseRule(row.rule))].filter(rule => !getBuiltinModificationRule(rule.id))
-    return [...BUILTIN_MODIFICATION_RULES, ...databaseRules]
+    const databaseRules = [...globalRows.map(parseRule), ...boundRows.map(row => parseRule(row.rule))]
+    return databaseRules
   } catch (error) {
     if (error instanceof Error && error.message === 'Database not initialized') return []
     throw error

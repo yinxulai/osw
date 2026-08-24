@@ -20,7 +20,6 @@ export interface ModificationRule {
   description: string
   enabled: boolean
   global: boolean
-  builtin?: boolean
   protocols: string[]
   match: { clientProtocols: string[]; upstreamProtocols: string[]; path?: string; logicalModelId?: string; providerModelId?: string }
   actions: RuleAction[]

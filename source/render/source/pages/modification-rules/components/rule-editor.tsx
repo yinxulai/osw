@@ -7,7 +7,6 @@ import { protocolOptions, type ModificationRule } from '../types'
 interface RuleEditorProps {
   rule: ModificationRule
   onChange: (rule: ModificationRule) => void
-  readOnly?: boolean
 }
 
 export function RuleEditor(props: RuleEditorProps) {
@@ -26,14 +25,14 @@ export function RuleEditor(props: RuleEditorProps) {
       <section className="space-y-2.5">
         <div className="space-y-1">
           <Label htmlFor="rule-name" className="text-[11px]">规则名称</Label>
-          <Input id="rule-name" className="h-8 text-xs" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" disabled={props.readOnly} />
+          <Input id="rule-name" className="h-8 text-xs" value={rule.name} onChange={event => update({ name: event.target.value })} placeholder="例如：移除不兼容参数" />
         </div>
         <p className="text-[11px] text-muted-foreground">
           请求和响应阶段可在每个动作中分别设置
         </p>
         <div className="space-y-1">
           <Label htmlFor="rule-description" className="text-[11px]">说明 <span className="font-normal text-muted-foreground">（可选）</span></Label>
-          <Input id="rule-description" className="h-8 text-xs" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" disabled={props.readOnly} />
+          <Input id="rule-description" className="h-8 text-xs" value={rule.description} onChange={event => update({ description: event.target.value })} placeholder="说明这条规则解决什么兼容问题" />
         </div>
       </section>
 
@@ -51,7 +50,6 @@ export function RuleEditor(props: RuleEditorProps) {
                 type="button"
                 aria-pressed={selected}
                 onClick={() => toggleProtocol(protocol)}
-                disabled={props.readOnly}
                 className={cn(
                   'inline-flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-muted hover:text-foreground',
                   selected && 'border-primary/60 bg-primary/8 text-foreground',
@@ -73,7 +71,7 @@ export function RuleEditor(props: RuleEditorProps) {
         </div>
       </section>
 
-      <ActionEditor actions={rule.actions} onChange={actions => update({ actions })} readOnly={props.readOnly} />
+      <ActionEditor actions={rule.actions} onChange={actions => update({ actions })} />
     </div>
   )
 }

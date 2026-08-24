@@ -27,8 +27,6 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     if (props.dirty) props.onReset()
     close()
   }
-  const readOnly = props.rule.builtin === true
-
   return (
     <Sheet open={props.open} onOpenChange={open => open ? props.onOpenChange(true) : cancel()}>
       <SheetContent
@@ -38,14 +36,13 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       >
         <SheetHeader className="shrink-0 bg-card px-6 py-5 pr-14">
           <SheetTitle className="text-base">{props.rule.updatedAt === '尚未保存' ? '新建请求修改' : '编辑请求修改'}</SheetTitle>
-          <SheetDescription className="text-xs">定义请求或响应中的字段转换。{readOnly && ' 系统内置规则仅供查看。'}</SheetDescription>
+          <SheetDescription className="text-xs">定义请求或响应中的字段转换。</SheetDescription>
         </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-background/60">
           <RuleEditor
             rule={props.rule}
             onChange={props.onChange}
-            readOnly={readOnly}
           />
         </div>
 
@@ -54,7 +51,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
           <SheetClose asChild>
             <Button type="button" variant="ghost" size="sm">取消</Button>
           </SheetClose>
-          <Button type="button" size="sm" onClick={props.onSave} disabled={readOnly || !props.dirty}>
+          <Button type="button" size="sm" onClick={props.onSave} disabled={!props.dirty}>
             <Save /> 保存
           </Button>
         </div>

@@ -101,7 +101,6 @@ export function RulesTable(props: RulesTableProps) {
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={rule.enabled}
-                      disabled={rule.builtin}
                       onCheckedChange={enabled => props.onToggle(rule, enabled)}
                       aria-label={`${rule.name}启用状态`}
                     />
@@ -110,9 +109,9 @@ export function RulesTable(props: RulesTableProps) {
                 </TableCell>
                 <TableCell className="px-4 py-2.5">
                   <div className="flex justify-end gap-0.5">
-                    <Button variant="ghost" size="icon-sm" onClick={() => props.onEdit(rule)} title={rule.builtin ? '查看内置规则' : '编辑规则'}><Pencil /></Button>
+                    <Button variant="ghost" size="icon-sm" onClick={() => props.onEdit(rule)} title="编辑规则"><Pencil /></Button>
                     <Button variant="ghost" size="icon-sm" onClick={() => props.onDuplicate(rule)} title="复制规则"><Copy /></Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => props.onDelete(rule)} title={rule.builtin ? '内置规则不可删除' : '删除规则'} disabled={rule.builtin} className="text-muted-foreground hover:text-destructive"><Trash2 /></Button>
+                    <Button variant="ghost" size="icon-sm" onClick={() => props.onDelete(rule)} title="删除规则" className="text-muted-foreground hover:text-destructive"><Trash2 /></Button>
                   </div>
                 </TableCell>
               </TableRow>
