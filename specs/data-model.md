@@ -710,10 +710,10 @@ CREATE UNIQUE INDEX idx_request_contents_attempt
 
 安全与容量约束：
 
-- 默认关闭正文采集，只有用户在设置中显式开启后才记录；
+- 默认开启正文采集，用户可在设置中显式关闭；关闭后不再记录新正文，但不会自动删除已有内容；
 - 日志清理支持按保留天数执行，并同时删除请求正文、正文中的尝试内容、尝试记录和请求汇总；
-- API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏；
-- 本地工具默认不限制正文大小；开启记录后完整保存已接收的请求和响应内容；
+- API Key、Authorization、Cookie、Set-Cookie 等敏感请求头必须脱敏，正文自身不视为已脱敏；
+- 本地工具不限制正文大小，完整读取并保存已接收的请求和响应内容，以支持超长上下文和大体积请求；由此产生的内存与存储占用属于明确设计取舍；
 - 流式响应记录已接收的事件/文本片段，不阻塞代理转发，不因日志写入失败影响请求；
 - 流式响应按 transport 每次收到或写出的原始 chunk 字符串数组保存，不聚合为统一消息正文，也不重新按 SSE 事件切分；
 - 清理请求日志时，依次删除 `request_contents`、`request_usages`、`request_metrics`、`request_attempts`，最后删除 `request_logs`；
