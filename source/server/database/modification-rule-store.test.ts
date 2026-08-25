@@ -29,7 +29,9 @@ afterEach(async () => {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
 })
 
-function makeRule(overrides: Partial<Record<string, unknown>> = {}) {
+type RuleInput = Parameters<typeof createRequestRewriteRule>[0]
+
+function makeRule(overrides: Partial<RuleInput> = {}): RuleInput {
   return {
     name: 'Inject x-trace-id',
     description: 'add request trace id',

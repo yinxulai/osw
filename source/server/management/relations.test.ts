@@ -33,26 +33,26 @@ describe('relation management', () => {
     const provider = await createProvider({ name: 'Relations', apiKeyReference: 'key_relations', timeoutMilliseconds: 30_000 })
     const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'relations-model', priority: 0 })
     const endpointResponse = mockResponse()
-    await relationRoutes['/api/relation/provider-endpoint/create']({} as import('node:http').IncomingMessage, endpointResponse, {
+    await relationRoutes.invoke('/api/relation/provider-endpoint/create', endpointResponse, {
       providerId: provider.id,
       protocol: 'openai-responses',
       url: 'https://example.com/v1/responses',
     })
     const endpoint = responseData(endpointResponse) as { id: string }
     const bindingResponse = mockResponse()
-    await relationRoutes['/api/relation/provider-model-endpoint/create']({} as import('node:http').IncomingMessage, bindingResponse, {
+    await relationRoutes.invoke('/api/relation/provider-model-endpoint/create', bindingResponse, {
       providerModelId: model.id,
       providerEndpointId: endpoint.id,
     })
     const binding = responseData(bindingResponse) as { id: string }
     const converterResponse = mockResponse()
-    await relationRoutes['/api/relation/protocol-converter/create']({} as import('node:http').IncomingMessage, converterResponse, {
+    await relationRoutes.invoke('/api/relation/protocol-converter/create', converterResponse, {
       providerModelEndpointId: binding.id,
       clientProtocol: 'anthropic-messages',
     })
     const converter = responseData(converterResponse) as { id: string; enabled: boolean }
     const listResponse = mockResponse()
-    await relationRoutes['/api/relation/protocol-converter/list']({} as import('node:http').IncomingMessage, listResponse, {
+    await relationRoutes.invoke('/api/relation/protocol-converter/list', listResponse, {
       providerModelEndpointId: binding.id,
     })
 

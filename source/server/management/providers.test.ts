@@ -48,7 +48,7 @@ describe('provider management', () => {
 
   it('creates a provider without an API key for local or test clusters', async () => {
     const res = mockResponse()
-    await providerRoutes['/api/provider/create']({} as import('node:http').IncomingMessage, res, {
+    await providerRoutes.invoke('/api/provider/create', res, {
       name: 'Local Cluster',
     })
 
@@ -60,7 +60,7 @@ describe('provider management', () => {
 
   it('stores the API key when one is provided', async () => {
     const res = mockResponse()
-    await providerRoutes['/api/provider/create']({} as import('node:http').IncomingMessage, res, {
+    await providerRoutes.invoke('/api/provider/create', res, {
       name: 'OpenAI',
       apiKey: 'sk-test',
     })

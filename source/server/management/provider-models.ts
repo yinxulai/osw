@@ -14,20 +14,20 @@ import {
   listSchedulingPolicies,
   upsertSchedulingPolicy,
 } from '../database/logical-model-store'
+import { HttpRouter } from '../http-router'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 
-export const providerModelRoutes: Record<string, ManagementHandler> = {
-  '/api/provider-model/list': handleListProviderModels,
-  '/api/provider-model/queue': handleListProviderModelQueue,
-  '/api/provider-model/get': handleGetProviderModel,
-  '/api/provider-model/create': handleCreateProviderModel,
-  '/api/provider-model/update': handleUpdateProviderModel,
-  '/api/provider-model/delete': handleDeleteProviderModel,
-  '/api/scheduling-policy/list': handleListSchedulingPolicies,
-  '/api/scheduling-policy/update': handleUpdateSchedulingPolicy,
-  '/api/scheduling-policy/delete': handleDeleteSchedulingPolicy,
-}
+export const providerModelRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/provider-model/list', handleListProviderModels)
+  .post('/api/provider-model/queue', handleListProviderModelQueue)
+  .post('/api/provider-model/get', handleGetProviderModel)
+  .post('/api/provider-model/create', handleCreateProviderModel)
+  .post('/api/provider-model/update', handleUpdateProviderModel)
+  .post('/api/provider-model/delete', handleDeleteProviderModel)
+  .post('/api/scheduling-policy/list', handleListSchedulingPolicies)
+  .post('/api/scheduling-policy/update', handleUpdateSchedulingPolicy)
+  .post('/api/scheduling-policy/delete', handleDeleteSchedulingPolicy)
 
 const ListProviderModelsSchema = z.object({ includeDeleted: z.boolean().optional() }).default({})
 async function handleListProviderModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

@@ -4,12 +4,12 @@ import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
 import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '../database/request-log-store'
+import { HttpRouter } from '../http-router'
 
-export const requestLogRoutes: Record<string, ManagementHandler> = {
-  '/api/request-log/list': handleListRequestLogs,
-  '/api/request-log/detail': handleRequestLogDetail,
-  '/api/request-log/prune': handlePruneRequestLogs,
-}
+export const requestLogRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/request-log/list', handleListRequestLogs)
+  .post('/api/request-log/detail', handleRequestLogDetail)
+  .post('/api/request-log/prune', handlePruneRequestLogs)
 
 const ListRequestLogsSchema = z.object({
   limit: z.number().int().positive().max(200).optional(),

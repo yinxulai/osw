@@ -77,7 +77,7 @@ describe('request log management', () => {
     })
     const res = mockResponse()
 
-    await requestLogRoutes['/api/request-log/detail']({} as import('node:http').IncomingMessage, res, { id: log.id })
+    await requestLogRoutes.invoke('/api/request-log/detail', res, { id: log.id })
 
     expect(res.statusCode).toBe(200)
     expect(responseData(res)).toEqual({
@@ -93,7 +93,7 @@ describe('request log management', () => {
   it('returns not found for a missing request log', async () => {
     const res = mockResponse()
 
-    await requestLogRoutes['/api/request-log/detail']({} as import('node:http').IncomingMessage, res, { id: 'req_missing' })
+    await requestLogRoutes.invoke('/api/request-log/detail', res, { id: 'req_missing' })
 
     expect(res.statusCode).toBe(404)
     expect(responseData(res)).toEqual({
@@ -123,7 +123,7 @@ describe('request log management', () => {
     })
     const res = mockResponse()
 
-    await requestLogRoutes['/api/request-log/detail']({} as import('node:http').IncomingMessage, res, { id: log.id })
+    await requestLogRoutes.invoke('/api/request-log/detail', res, { id: log.id })
 
     expect(res.statusCode).toBe(200)
     expect(responseData(res)).toEqual({

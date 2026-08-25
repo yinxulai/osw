@@ -30,30 +30,30 @@ afterEach(async () => {
 describe('logical model routes', () => {
   it('creates, lists, gets, updates and deletes a logical model', async () => {
     const createRes = mockResponse()
-    await modelRoutes['/api/logical-model/create']({} as import('node:http').IncomingMessage, createRes, { name: 'dev-model', description: 'for tests' })
+    await modelRoutes.invoke('/api/logical-model/create', createRes, { name: 'dev-model', description: 'for tests' })
     const created = responseData(createRes).data as { id: string; name: string }
     expect(created.name).toBe('dev-model')
 
     const listRes = mockResponse()
-    await modelRoutes['/api/logical-model/list']({} as import('node:http').IncomingMessage, listRes, {})
+    await modelRoutes.invoke('/api/logical-model/list', listRes)
     expect(responseData(listRes).data).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
 
     const getRes = mockResponse()
-    await modelRoutes['/api/logical-model/get']({} as import('node:http').IncomingMessage, getRes, { id: created.id })
+    await modelRoutes.invoke('/api/logical-model/get', getRes, { id: created.id })
     expect(responseData(getRes).data).toMatchObject({ id: created.id, name: 'dev-model' })
 
     const updateRes = mockResponse()
-    await modelRoutes['/api/logical-model/update']({} as import('node:http').IncomingMessage, updateRes, { id: created.id, description: 'updated', enabled: false })
+    await modelRoutes.invoke('/api/logical-model/update', updateRes, { id: created.id, description: 'updated', enabled: false })
     expect(responseData(updateRes).data).toMatchObject({ id: created.id, description: 'updated', enabled: false })
 
     const deleteRes = mockResponse()
-    await modelRoutes['/api/logical-model/delete']({} as import('node:http').IncomingMessage, deleteRes, { id: created.id })
+    await modelRoutes.invoke('/api/logical-model/delete', deleteRes, { id: created.id })
     expect(responseData(deleteRes).data).toEqual({ id: created.id })
   })
 
   it('returns not found for a missing logical model id', async () => {
     const res = mockResponse()
-    await modelRoutes['/api/logical-model/get']({} as import('node:http').IncomingMessage, res, { id: 'missing_model' })
+    await modelRoutes.invoke('/api/logical-model/get', res, { id: 'missing_model' })
     expect(res.statusCode).toBe(404)
     expect(responseData(res)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
   })

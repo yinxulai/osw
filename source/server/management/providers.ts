@@ -13,18 +13,18 @@ import {
 } from '../database/provider-store'
 import { resetProviderHealth } from '../database/health-store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
+import { HttpRouter } from '../http-router'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 
-export const providerRoutes: Record<string, ManagementHandler> = {
-  '/api/provider/list': handleListProviders,
-  '/api/provider/get': handleGetProvider,
-  '/api/provider/endpoints': handleListProviderEndpoints,
-  '/api/provider/create': handleCreateProvider,
-  '/api/provider/update': handleUpdateProvider,
-  '/api/provider/delete': handleDeleteProvider,
-  '/api/provider/reset-health': handleResetProviderHealth,
-}
+export const providerRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/provider/list', handleListProviders)
+  .post('/api/provider/get', handleGetProvider)
+  .post('/api/provider/endpoints', handleListProviderEndpoints)
+  .post('/api/provider/create', handleCreateProvider)
+  .post('/api/provider/update', handleUpdateProvider)
+  .post('/api/provider/delete', handleDeleteProvider)
+  .post('/api/provider/reset-health', handleResetProviderHealth)
 
 async function handleListProviders(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendSuccess(res, await listProviders())

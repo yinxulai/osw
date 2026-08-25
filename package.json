@@ -17,7 +17,9 @@
     "db:generate": "node scripts/db.mjs generate",
     "db:migrate": "node scripts/db.mjs migrate",
     "db:studio": "node scripts/db.mjs studio",
+    "test": "node scripts/test.mjs",
     "test:server": "node scripts/test.mjs",
+    "test:coverage": "node scripts/test.mjs --coverage",
     "typecheck": "node scripts/typecheck.mjs"
   },
   "dependencies": {

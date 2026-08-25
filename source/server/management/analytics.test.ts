@@ -29,6 +29,34 @@ afterEach(async () => {
 })
 
 describe('analytics route', () => {
+  it('uses the default range and returns zero percentages when there is no data', async () => {
+    const res = mockResponse()
+
+    await analyticsRoutes.invoke('/api/analytics/summary', res, {})
+
+    const payload = responseData(res) as {
+      success: boolean
+      data: {
+        providerStats: Array<{ percent: number }>
+        latencyDistribution: Array<{ count: number; percent: number }>
+        failureReasons: Array<{ percent: number }>
+      }
+    }
+
+    expect(payload.success).toBe(true)
+    expect(payload.data.providerStats).toEqual([])
+    expect(payload.data.latencyDistribution).toHaveLength(5)
+    expect(payload.data.latencyDistribution.every(bucket => bucket.count === 0 && bucket.percent === 0)).toBe(true)
+    expect(payload.data.failureReasons).toEqual([])
+  })
+
+  it('rejects an unsupported analytics range', async () => {
+    const res = mockResponse()
+
+    await expect(analyticsRoutes.invoke('/api/analytics/summary', res, { range: '90d' })).rejects.toThrow()
+    expect(res.end).not.toHaveBeenCalled()
+  })
+
   it('returns summary, trend, provider stats and failure reasons for a time range', async () => {
     const provider = await createProvider({ name: 'Analytics Provider', apiKeyReference: 'key_analytics', timeoutMilliseconds: 30_000, enabled: true })
     const successLog = await createRequestLog({
@@ -102,7 +130,7 @@ describe('analytics route', () => {
     })
 
     const res = mockResponse()
-    await analyticsRoutes['/api/analytics/summary']({} as import('node:http').IncomingMessage, res, { range: '7d' })
+    await analyticsRoutes.invoke('/api/analytics/summary', res, { range: '7d' })
 
     const payload = responseData(res) as {
       success: boolean

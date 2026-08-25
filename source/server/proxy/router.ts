@@ -3,6 +3,7 @@ import { getProvider } from '../database/provider-store'
 import { isProviderAvailable, isProviderModelAvailable } from './health'
 import { isConvertible } from '@common/protocols'
 import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
+import { HttpRouter } from '../http-router'
 
 export interface ModelWithProvider {
   model: ProviderModelRoute
@@ -67,16 +68,17 @@ export function findConvertibleEndpoint(model: ProviderModelRoute, clientProtoco
  * 从请求路径中检测协议类型
  */
 export function detectProtocolFromPath(pathname: string): Protocol | null {
-  const rawPath = pathname.split('?', 1)[0]
-  const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath
-
-  if (path === '/v1/chat/completions' || path === '/chat/completions') {
-    return 'openai-completions'
-  }
-  if (path === '/v1/completions' || path === '/completions') return 'openai-completions'
-  if (path === '/v1/embeddings' || path === '/embeddings') return 'openai-completions'
-  if (path === '/v1/responses' || path === '/responses') return 'openai-responses'
-  if (path === '/v1/messages' || path === '/messages') return 'anthropic-messages'
-
-  return null
+  return protocolRouter.match('POST', pathname)?.handler ?? null
 }
+
+const protocolRouter = new HttpRouter<Protocol>()
+  .post('/v1/chat/completions', 'openai-completions')
+  .post('/chat/completions', 'openai-completions')
+  .post('/v1/completions', 'openai-completions')
+  .post('/completions', 'openai-completions')
+  .post('/v1/embeddings', 'openai-completions')
+  .post('/embeddings', 'openai-completions')
+  .post('/v1/responses', 'openai-responses')
+  .post('/responses', 'openai-responses')
+  .post('/v1/messages', 'anthropic-messages')
+  .post('/messages', 'anthropic-messages')

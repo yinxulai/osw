@@ -3,11 +3,11 @@ import { SettingsSchema } from '@common/schemas'
 import { getSettings, updateSettings } from '../database/settings-store'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
+import { HttpRouter } from '../http-router'
 
-export const settingsRoutes: Record<string, ManagementHandler> = {
-  '/api/settings/get': handleGetSettings,
-  '/api/settings/update': handleUpdateSettings,
-}
+export const settingsRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/settings/get', handleGetSettings)
+  .post('/api/settings/update', handleUpdateSettings)
 
 async function handleGetSettings(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendSuccess(res, await getSettings())

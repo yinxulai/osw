@@ -11,10 +11,10 @@ import {
   getLatencyDistribution,
   getFailureReasons,
 } from '../database/analytics-store'
+import { HttpRouter } from '../http-router'
 
-export const analyticsRoutes: Record<string, ManagementHandler> = {
-  '/api/analytics/summary': handleAnalyticsSummary,
-}
+export const analyticsRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/analytics/summary', handleAnalyticsSummary)
 
 const AnalyticsSummaryRequestSchema = z.object({
   range: AnalyticsRangeSchema.optional().default('7d'),

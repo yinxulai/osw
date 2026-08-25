@@ -10,14 +10,14 @@ import {
 } from '../database/logical-model-store'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
+import { HttpRouter } from '../http-router'
 
-export const modelRoutes: Record<string, ManagementHandler> = {
-  '/api/logical-model/list': handleListLogicalModels,
-  '/api/logical-model/get': handleGetLogicalModel,
-  '/api/logical-model/create': handleCreateLogicalModel,
-  '/api/logical-model/update': handleUpdateLogicalModel,
-  '/api/logical-model/delete': handleDeleteLogicalModel,
-}
+export const modelRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/logical-model/list', handleListLogicalModels)
+  .post('/api/logical-model/get', handleGetLogicalModel)
+  .post('/api/logical-model/create', handleCreateLogicalModel)
+  .post('/api/logical-model/update', handleUpdateLogicalModel)
+  .post('/api/logical-model/delete', handleDeleteLogicalModel)
 
 async function handleListLogicalModels(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendSuccess(res, await listLogicalModels())

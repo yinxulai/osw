@@ -11,16 +11,16 @@ import {
 } from '../proxy/server'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
+import { HttpRouter } from '../http-router'
 
-export const runtimeControlRoutes: Record<string, ManagementHandler> = {
-  '/api/queue/status': handleQueueStatus,
-  '/api/queue/switch': handleQueueSwitch,
-  '/api/health/list': handleListHealth,
-  '/api/proxy/status': handleProxyStatus,
-  '/api/proxy/start': handleProxyStart,
-  '/api/proxy/stop': handleProxyStop,
-  '/api/proxy/restart': handleProxyRestart,
-}
+export const runtimeControlRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/queue/status', handleQueueStatus)
+  .post('/api/queue/switch', handleQueueSwitch)
+  .post('/api/health/list', handleListHealth)
+  .post('/api/proxy/status', handleProxyStatus)
+  .post('/api/proxy/start', handleProxyStart)
+  .post('/api/proxy/stop', handleProxyStop)
+  .post('/api/proxy/restart', handleProxyRestart)
 
 const QueueStatusSchema = z.object({ logicalModelId: z.string().min(1) })
 function handleQueueStatus(_req: IncomingMessage, res: ServerResponse, body: unknown): void {

@@ -5,6 +5,7 @@ import { seedDevelopmentData } from '../../database/development-seed'
 import { getSecretStore } from '../../infrastructure/secrets/secret-store'
 import { exportConfig } from './export-config'
 import { importConfig } from './import-config'
+import { HttpRouter } from '../../http-router'
 
 async function handleExportConfig(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendSuccess(res, await exportConfig())
@@ -24,8 +25,7 @@ async function handleSeedDevelopment(_req: IncomingMessage, res: ServerResponse)
   sendSuccess(res, { inserted })
 }
 
-export const configRoutes: Record<string, ManagementHandler> = {
-  '/api/config/export': handleExportConfig,
-  '/api/config/import': handleImportConfig,
-  '/api/config/seed-development': handleSeedDevelopment,
-}
+export const configRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/config/export', handleExportConfig)
+  .post('/api/config/import', handleImportConfig)
+  .post('/api/config/seed-development', handleSeedDevelopment)

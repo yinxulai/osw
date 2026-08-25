@@ -7,6 +7,7 @@ export default [
       'dist/**',
       'node_modules/**',
       'release/**',
+      'coverage/**',
     ],
   },
   ...peculiar.configs['flat/strict'],

@@ -1,6 +1,3 @@
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { logRoutes } from './logs'
 import { clearLogs, installLogCapture, listLogs } from './log-buffer'
@@ -24,22 +21,22 @@ describe('log routes', () => {
     clearLogs()
   })
 
-  it('lists, exports and clears the in-memory log buffer', () => {
+  it('lists, exports and clears the in-memory log buffer', async () => {
     console.info('hello from logs route test')
 
     const listRes = mockResponse()
-    logRoutes['/api/logs/list']({} as import('node:http').IncomingMessage, listRes, { limit: 50 })
+    await logRoutes.invoke('/api/logs/list', listRes, { limit: 50 })
     const listPayload = responseData(listRes) as { data: { logs: Array<{ message: string }>; latestId: number } }
     expect(listPayload.data.logs.length).toBeGreaterThan(0)
     expect(listPayload.data.logs[0].message).toContain('hello from logs route test')
 
     const exportRes = mockResponse()
-    logRoutes['/api/logs/export']({} as import('node:http').IncomingMessage, exportRes, {})
+    await logRoutes.invoke('/api/logs/export', exportRes)
     const exportPayload = responseData(exportRes) as { data: { content: string } }
     expect(exportPayload.data.content).toContain('hello from logs route test')
 
     const clearRes = mockResponse()
-    logRoutes['/api/logs/clear']({} as import('node:http').IncomingMessage, clearRes, {})
+    await logRoutes.invoke('/api/logs/clear', clearRes)
     expect(responseData(clearRes)).toEqual({ success: true, data: { cleared: true } })
     expect(listLogs()).toEqual([])
   })

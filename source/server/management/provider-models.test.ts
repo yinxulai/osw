@@ -34,7 +34,7 @@ describe('provider model routes', () => {
     const logicalModel = await createLogicalModel({ name: 'routing-model', description: 'route tests' })
 
     const createRes = mockResponse()
-    await providerModelRoutes['/api/provider-model/create']({} as import('node:http').IncomingMessage, createRes, {
+    await providerModelRoutes.invoke('/api/provider-model/create', createRes, {
       providerId: provider.id,
       modelName: 'super-fast-model',
       logicalModelId: logicalModel.id,
@@ -45,11 +45,11 @@ describe('provider model routes', () => {
     expect(created.id).toMatch(/^model_/)
 
     const listPoliciesRes = mockResponse()
-    await providerModelRoutes['/api/scheduling-policy/list']({} as import('node:http').IncomingMessage, listPoliciesRes, { logicalModelId: logicalModel.id })
+    await providerModelRoutes.invoke('/api/scheduling-policy/list', listPoliciesRes, { logicalModelId: logicalModel.id })
     expect(responseData(listPoliciesRes).data).toEqual(expect.arrayContaining([expect.objectContaining({ providerModelId: created.id, logicalModelId: logicalModel.id, priority: 7 })]))
 
     const updateRes = mockResponse()
-    await providerModelRoutes['/api/scheduling-policy/update']({} as import('node:http').IncomingMessage, updateRes, {
+    await providerModelRoutes.invoke('/api/scheduling-policy/update', updateRes, {
       logicalModelId: logicalModel.id,
       providerModelId: created.id,
       priority: 11,
@@ -59,7 +59,7 @@ describe('provider model routes', () => {
     expect(responseData(updateRes).data).toMatchObject({ logicalModelId: logicalModel.id, providerModelId: created.id, priority: 11, weight: 80 })
 
     const deleteRes = mockResponse()
-    await providerModelRoutes['/api/scheduling-policy/delete']({} as import('node:http').IncomingMessage, deleteRes, { logicalModelId: logicalModel.id, providerModelId: created.id })
+    await providerModelRoutes.invoke('/api/scheduling-policy/delete', deleteRes, { logicalModelId: logicalModel.id, providerModelId: created.id })
     expect(responseData(deleteRes).data).toMatchObject({ logicalModelId: logicalModel.id, providerModelId: created.id })
   })
 })

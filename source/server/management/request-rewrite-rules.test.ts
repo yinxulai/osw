@@ -6,7 +6,7 @@ import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '../database/provider-store'
 import { createProviderModelRoute } from '../database/model-store'
 import { createRequestRewriteRule } from '../database/modification-rule-store'
-import { requestRewriteRuleRoutes } from './modification-rules'
+import { requestRewriteRuleRoutes } from './request-rewrite-rules'
 
 function mockResponse() {
   return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
@@ -35,14 +35,14 @@ describe('request rewrite rule routes', () => {
     const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'rule-model', priority: 0 })
 
     const createRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/create']({} as import('node:http').IncomingMessage, createRes, {
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/create', createRes, {
       name: 'default header',
       description: 'tests something',
       enabled: true,
       scope: 'global',
       schemaVersion: 1,
       source: 'user',
-      match: { clientProtocols: ['openai-responses'] },
+      match: { clientProtocols: ['openai-responses'], upstreamProtocols: [] },
       actions: [{ type: 'header-set', stage: 'request', name: 'x-created', value: 'created' }],
       testCases: [],
     })
@@ -50,11 +50,11 @@ describe('request rewrite rule routes', () => {
     expect(created.id).toMatch(/^rule_/)
 
     const getRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/get']({} as import('node:http').IncomingMessage, getRes, { id: created.id })
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/get', getRes, { id: created.id })
     expect(responseData(getRes).data).toMatchObject({ id: created.id, name: 'default header' })
 
     const updateRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/update']({} as import('node:http').IncomingMessage, updateRes, {
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/update', updateRes, {
       id: created.id,
       description: 'updated description',
       enabled: true,
@@ -77,13 +77,10 @@ describe('request rewrite rule routes', () => {
       match: { clientProtocols: ['openai-responses'], upstreamProtocols: ['openai-responses'], path: '/v1/responses' },
       actions: [{ type: 'header-set', stage: 'request', name: 'x-test-header', value: 'enabled' }],
       testCases: [],
-      createdTime: Date.now(),
-      updatedTime: Date.now(),
-      deletedTime: null,
     })
 
     const testRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/test']({} as import('node:http').IncomingMessage, testRes, {
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', testRes, {
       rule: {
         ...rule,
         name: 'add custom header',
@@ -92,12 +89,9 @@ describe('request rewrite rule routes', () => {
         scope: 'model',
         schemaVersion: 1,
         source: 'user',
-        match: { clientProtocols: ['openai-responses'] },
+        match: { clientProtocols: ['openai-responses'], upstreamProtocols: [] },
         actions: [{ type: 'header-set', stage: 'request', name: 'x-updated', value: 'updated' }],
         testCases: [],
-        createdTime: Date.now(),
-        updatedTime: Date.now(),
-        deletedTime: null,
       },
       testCase: {
         stage: 'request',
@@ -124,23 +118,20 @@ describe('request rewrite rule routes', () => {
       scope: 'model',
       schemaVersion: 1,
       source: 'user',
-      match: { clientProtocols: ['openai-responses'] },
+      match: { clientProtocols: ['openai-responses'], upstreamProtocols: [] },
       actions: [{ type: 'header-set', stage: 'request', name: 'x-bind', value: 'rule' }],
       testCases: [],
-      createdTime: Date.now(),
-      updatedTime: Date.now(),
-      deletedTime: null,
     })
 
     const replaceRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/replace-bindings']({} as import('node:http').IncomingMessage, replaceRes, {
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/replace-bindings', replaceRes, {
       providerModelId: providerModel.id,
       bindings: [{ ruleId: rule.id, priority: 1, enabled: true }],
     })
     expect(responseData(replaceRes).data).toEqual([expect.objectContaining({ ruleId: rule.id, priority: 1, enabled: true })])
 
     const listRes = mockResponse()
-    await requestRewriteRuleRoutes['/api/request-rewrite-rule/bindings']({} as import('node:http').IncomingMessage, listRes, { providerModelId: providerModel.id })
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/bindings', listRes, { providerModelId: providerModel.id })
     expect(responseData(listRes).data).toEqual([expect.objectContaining({ ruleId: rule.id })])
   })
 })

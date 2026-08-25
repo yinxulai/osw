@@ -6,6 +6,7 @@ import { ProtocolSchema, type Protocol } from '@common/schemas'
 import { getProvider, listProviderEndpoints } from '../database/provider-store'
 import { getSecretStore } from '../infrastructure/secrets/secret-store'
 import { createAuthHeaders } from '../proxy/auth'
+import { HttpRouter } from '../http-router'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 
@@ -24,9 +25,8 @@ export interface FetchProviderModelsResult {
   attempts: { url: string; statusCode?: number; error?: string }[]
 }
 
-export const providerModelFetchRoutes: Record<string, ManagementHandler> = {
-  '/api/provider/fetch-models': handleFetchProviderModels,
-}
+export const providerModelFetchRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/provider/fetch-models', handleFetchProviderModels)
 
 const FetchProviderModelsSchema = z.object({
   protocol: ProtocolSchema,

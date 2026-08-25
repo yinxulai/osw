@@ -85,6 +85,17 @@ jobs:
       - name: Run server tests
         run: pnpm test:server
 
+      - name: Run coverage
+        run: pnpm test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-coverage
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: Build application
     needs: [typecheck, test]

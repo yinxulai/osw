@@ -4,12 +4,12 @@ import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { LogEntry } from '@common/schemas'
 import { clearLogs, exportLogs, listLogs } from './log-buffer'
+import { HttpRouter } from '../http-router'
 
-export const logRoutes: Record<string, ManagementHandler> = {
-  '/api/logs/list': handleListLogs,
-  '/api/logs/export': handleExportLogs,
-  '/api/logs/clear': handleClearLogs,
-}
+export const logRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/logs/list', handleListLogs)
+  .post('/api/logs/export', handleExportLogs)
+  .post('/api/logs/clear', handleClearLogs)
 
 const ListLogsSchema = z.object({ after: z.number().int().nonnegative().optional(), limit: z.number().int().positive().max(2000).optional() })
 

@@ -7,6 +7,7 @@ import { findConvertibleEndpoint, findEndpoint } from '../proxy/router'
 import { executeProxyRequest } from '../proxy/attempt-executor'
 import { createRequestContext } from '../proxy/request-context'
 import { BufferedProxyResponse } from '../proxy/proxy-response'
+import { HttpRouter } from '../http-router'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { Protocol } from '@common/schemas'
@@ -30,9 +31,8 @@ export interface ModelTestResult {
   outputTokens?: number | null
 }
 
-export const modelTestRoutes: Record<string, ManagementHandler> = {
-  '/api/model-test/run': handleTestModels,
-}
+export const modelTestRoutes = new HttpRouter<ManagementHandler>()
+  .post('/api/model-test/run', handleTestModels)
 
 async function handleTestModels(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { protocol, providerIds, modelIds } = TestModelsSchema.parse(body)
