@@ -50,4 +50,4 @@
 |------|------|
 | macOS | `~/Library/Application Support/One Switch/` |
 | Windows | `%APPDATA%\One Switch\` |
-| Linux | `~/.config/one-switch/` |
+| Linux | `~/.config/One Switch/` |

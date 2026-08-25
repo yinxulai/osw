@@ -190,40 +190,12 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Prepare release body
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-        run: |
-          if gh release view "$TAG" --json body --jq '.body' > existing-release-body.md 2>/dev/null; then
-            cp existing-release-body.md release-body.md
-          else
-            cat > release-body.md <<'EOF'
-            ## macOS 安装说明
-
-            macOS 版本使用 ad-hoc 代码签名，但没有 Apple Developer ID 证书，因此无法提交 Apple 公证。首次打开时，macOS 会提示无法验证开发者。
-
-            1. 将 One Switch 拖入“应用程序”。
-            2. 首次打开失败后，进入“系统设置” > “隐私与安全”。
-            3. 在安全性区域点击“仍要打开”，再次确认“打开”。
-
-            下载后可用同目录的 `.dmg.sha256` 文件校验安装包完整性：
-
-            ```shell
-            shasum -a 256 -c One\ Switch-*.dmg.sha256
-            ```
-
-            除非未来使用 Apple Developer Program 的 Developer ID 证书并完成公证，否则无法消除这一次系统确认。
-            EOF
-          fi
-
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: One Switch ${{ needs.prepare.outputs.tag }}
-          body_path: release-body.md
+          body_path: .github/release-body.md
           generate_release_notes: true
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
