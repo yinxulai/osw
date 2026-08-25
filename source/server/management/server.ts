@@ -24,7 +24,7 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   const port = options.port ?? 9301
   const environment = options.environment ?? 'production'
   const candidate = http.createServer((req, res) => {
-    void handleManagementRequest(req, res, host, port, environment)
+    void handleManagementRequest(req, res, environment)
   })
 
   managementServer = candidate
@@ -50,10 +50,10 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   return startupPromise
 }
 
-async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, host: string, port: number, environment: RuntimeEnvironment): Promise<void> {
+async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, environment: RuntimeEnvironment): Promise<void> {
   console.log(`[management] request begin ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
   try {
-    if (!await applyManagementRequestGuards(req.headers, req.method, req.url, res, host, port)) {
+    if (!await applyManagementRequestGuards(req.method, req.url, res)) {
       console.warn(`[management] request rejected by guard ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`)
       return
     }

@@ -14,14 +14,7 @@ describe('management request guards', () => {
   it('handles CORS preflight without authentication', async () => {
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(
-      { host: '127.0.0.1:19301', origin: 'http://localhost:5173' },
-      'OPTIONS',
-      '/api/provider/list',
-      response,
-      '127.0.0.1',
-      19301,
-    )
+    const accepted = await applyManagementRequestGuards('OPTIONS', '/api/provider/list', response)
 
     expect(accepted).toBe(false)
     expect(response.statusCode).toBe(204)
@@ -31,20 +24,30 @@ describe('management request guards', () => {
     expect(response.end).toHaveBeenCalledOnce()
   })
 
-  it('includes CORS headers in rejected requests', async () => {
+  it('rejects non-API paths with CORS headers', async () => {
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(
-      { host: 'example.com:19301' },
-      'POST',
-      '/api/provider/list',
-      response,
-      '127.0.0.1',
-      19301,
-    )
+    const accepted = await applyManagementRequestGuards('POST', '/not-an-api-path', response)
 
     expect(accepted).toBe(false)
-    expect(response.statusCode).toBe(403)
+    expect(response.statusCode).toBe(404)
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', '*')
+  })
+
+  it('rejects non-POST methods on API paths', async () => {
+    const response = mockResponse()
+
+    const accepted = await applyManagementRequestGuards('GET', '/api/provider/list', response)
+
+    expect(accepted).toBe(false)
+    expect(response.statusCode).toBe(405)
+  })
+
+  it('accepts POST requests on API paths', async () => {
+    const response = mockResponse()
+
+    const accepted = await applyManagementRequestGuards('POST', '/api/provider/list', response)
+
+    expect(accepted).toBe(true)
   })
 })

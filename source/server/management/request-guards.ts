@@ -1,14 +1,8 @@
-import type { IncomingHttpHeaders, ServerResponse } from 'node:http'
-import { isAllowedHost } from '../security/host-validation'
+import type { ServerResponse } from 'node:http'
 import { sendError } from './response'
 
-export async function applyManagementRequestGuards(headers: IncomingHttpHeaders, method: string | undefined, url: string | undefined, res: ServerResponse, host: string, port: number): Promise<boolean> {
+export async function applyManagementRequestGuards(method: string | undefined, url: string | undefined, res: ServerResponse): Promise<boolean> {
   setCorsHeaders(res)
-
-  if (!isAllowedHost(headers.host, host, port)) {
-    sendError(res, 'HOST_NOT_ALLOWED', 'Host 不被允许', 403)
-    return false
-  }
 
   if (method === 'OPTIONS') {
     res.statusCode = 204

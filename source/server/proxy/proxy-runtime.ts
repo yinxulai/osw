@@ -1,6 +1,5 @@
 import type { Server } from 'node:http'
 import http from 'node:http'
-import { isAllowedHost } from '../security/host-validation'
 import { handleProxyRequest } from './request-entry'
 import { getErrorResponseMessage, isErrorCode, normalizeError } from '../errors'
 
@@ -97,10 +96,6 @@ export class ProxyRuntime {
   private createServer(endpoint: ProxyEndpoint): Server {
     return http.createServer(async (req, res) => {
       try {
-        if (!isAllowedHost(req.headers.host, endpoint.host, endpoint.port)) {
-          writeJsonError(res, 403, 'INVALID_HOST', 'Host 不被允许')
-          return
-        }
         const url = new URL(req.url!, 'http://localhost')
         if (url.pathname === '/v1/models') {
           writeModelsResponse(res)
