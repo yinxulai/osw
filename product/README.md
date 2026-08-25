@@ -12,7 +12,6 @@
 
 | 文档 | 内容 |
 |------|------|
-| [product.md](./product.md) | 产品定位、目标用户、核心价值、非目标 |
 | [architecture.md](./architecture.md) | 系统架构、核心概念、零协议转换原则 |
 | [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
 | [protocol-conversion.md](./protocol-conversion.md) | 协议兼容转换器：转换开关、转换矩阵、流式转换、UI 展示 |
@@ -23,5 +22,4 @@
 | [observability.md](./observability.md) | 日志、用量统计、健康状态、冷却 |
 | [modification-rules.md](./modification-rules.md) | 请求与响应修改设计 |
 | [tech-architecture.md](./tech-architecture.md) | 技术架构、框架选型、项目结构、核心模块设计 |
-| [implementation-plan.md](./implementation-plan.md) | v0.3 实施阶段、完成目标、阶段门槛与发布计划 |
 | [roadmap.md](./roadmap.md) | MVP / P1 / P2 版本规划与验收标准 |

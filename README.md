@@ -205,7 +205,7 @@ pnpm run release:win   # 构建 Windows arm64 与 x64 安装包
 pnpm run release:linux # 构建 Linux arm64 与 x64 安装包
 ```
 
-技术栈包括 Electron、React、TypeScript、Vite、Drizzle ORM 和 SQLite。更详细的设计与行为约定见 [规格文档](./specs/README.md)。
+技术栈包括 Electron、React、TypeScript、Vite、Drizzle ORM 和 SQLite。更详细的设计与行为约定见 [规格文档](./product/README.md)。
 
 ## 当前边界
 

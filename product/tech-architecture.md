@@ -68,7 +68,7 @@ one-switch/
 ├── tsconfig.json
 ├── tailwind.config.js
 ├── postcss.config.js
-├── specs/                          # 产品规格文档
+├── product/                      # 产品规格文档
 ├── source/
 │   ├── server/                     # 核心主体：runtime + management + proxy + database
 │   │   ├── index.ts                # 外部生命周期入口

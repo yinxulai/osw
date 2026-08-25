@@ -1,6 +1,6 @@
 # 版本规划与验收标准
 
-本文分为“设计定稿”和“功能待办”两部分。当前实现状态以本文件为最终路线图；仍在执行的工程收尾细节保留在 [implementation-plan.md](./implementation-plan.md)。新版本按定稿 specs 从头实施，不以兼容旧代码为目标。
+本文分为“设计定稿”和“功能待办”两部分。当前实现状态以本文件为最终路线图；仍在执行的工程收尾细节以当前 `main` 分支工程待办为准。新版本按定稿 product 目录从头实施，不以兼容旧代码为目标。
 
 ## 一、设计定稿（已完成）
 
@@ -10,7 +10,7 @@
 
 - [x] [data-model.md](./data-model.md)：17 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_metrics、request_usages、request_conversions；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy.md)：协议适配器（ProtocolAdapter）+ 共享骨架（请求入口/尝试编排 / transport I/O / hooks 观测订阅）的代理管线架构。
-- [x] [product.md](./product.md)、[protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
+- [x] [protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)。
 
 ### 当前实现结论（2026-08-22）
 
