@@ -69,6 +69,7 @@
     "@typescript-eslint/parser": "^8.67.0",
     "@typescript-eslint/utils": "^8.67.0",
     "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "4.1.10",
     "@yinxulai/eslint-plugin-peculiar": "^1.0.6",
     "drizzle-kit": "1.0.0-rc.4",
     "electron": "^37.0.0",

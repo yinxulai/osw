@@ -48,6 +48,7 @@ export function installLogCapture(): void {
   installed = true
 
   const originalLog = console.log.bind(console)
+  const originalInfo = console.info.bind(console)
   const originalWarn = console.warn.bind(console)
   const originalError = console.error.bind(console)
   const originalDebug = console.debug.bind(console)
@@ -55,6 +56,10 @@ export function installLogCapture(): void {
   console.log = (...args: unknown[]) => {
     push('info', args)
     originalLog(...args)
+  }
+  console.info = (...args: unknown[]) => {
+    push('info', args)
+    originalInfo(...args)
   }
   console.warn = (...args: unknown[]) => {
     push('warn', args)
