@@ -8,18 +8,18 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { ModificationRule, RuleStatusFilter } from '../types'
+import type { RequestRewriteRule, RuleStatusFilter } from '../types'
 
 interface RulesTableProps {
-  rules: ModificationRule[]
+  rules: RequestRewriteRule[]
   search: string
   statusFilter: RuleStatusFilter
   onSearchChange: (value: string) => void
   onStatusFilterChange: (value: RuleStatusFilter) => void
-  onEdit: (rule: ModificationRule) => void
-  onDuplicate: (rule: ModificationRule) => void
-  onDelete: (rule: ModificationRule) => void
-  onToggle: (rule: ModificationRule, enabled: boolean) => void
+  onEdit: (rule: RequestRewriteRule) => void
+  onDuplicate: (rule: RequestRewriteRule) => void
+  onDelete: (rule: RequestRewriteRule) => void
+  onToggle: (rule: RequestRewriteRule, enabled: boolean) => void
 }
 
 export function RulesTable(props: RulesTableProps) {

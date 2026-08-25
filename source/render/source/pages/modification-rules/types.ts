@@ -30,7 +30,7 @@ export interface RuleTestCase {
   streaming: boolean
 }
 
-export interface ModificationRule {
+export interface RequestRewriteRule {
   id: string
   name: string
   description: string
@@ -50,7 +50,7 @@ export const protocolOptions = [
   'Anthropic Messages',
 ] as const
 
-export const initialRules: ModificationRule[] = [
+export const initialRules: RequestRewriteRule[] = [
   {
     id: 'rule-user-agent',
     name: '统一客户端标识',

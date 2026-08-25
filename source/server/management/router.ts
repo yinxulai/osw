@@ -13,7 +13,7 @@ import { configRoutes } from './config/routes'
 import { modelTestRoutes } from './model-test'
 import { providerModelFetchRoutes } from './provider-models-fetch'
 import { relationRoutes } from './relations'
-import { modificationRuleRoutes } from './modification-rules'
+import { requestRewriteRuleRoutes } from './modification-rules'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 import { parseJsonBody } from './request-body'
 import { handleApiError } from './error-handler'
@@ -32,7 +32,7 @@ const routes: Record<string, ManagementHandler> = {
   ...modelTestRoutes,
   ...providerModelFetchRoutes,
   ...relationRoutes,
-  ...modificationRuleRoutes,
+  ...requestRewriteRuleRoutes,
 }
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {

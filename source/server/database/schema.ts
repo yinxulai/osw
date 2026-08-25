@@ -115,13 +115,13 @@ export const providerModelEndpoints = sqliteTable(
   ],
 )
 
-export const requestModificationRules = sqliteTable('request_modification_rules', {
+export const requestRewriteRules = sqliteTable('request_rewrite_rules', {
   id: text('id').primaryKey(), name: text('name').notNull(), description: text('description').notNull().default(''), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), scope: text('scope').notNull().default('model'), schemaVersion: integer('schemaVersion').notNull().default(1), source: text('source').notNull().default('user'), match: text('match').notNull(), actions: text('actions').notNull(), testCases: text('testCases').notNull().default('[]'), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
-}, table => [index('idx_request_modification_rules_enabled').on(table.enabled), index('idx_request_modification_rules_scope').on(table.scope), index('idx_request_modification_rules_deleted_time').on(table.deletedTime)])
+}, table => [index('idx_request_rewrite_rules_enabled').on(table.enabled), index('idx_request_rewrite_rules_scope').on(table.scope), index('idx_request_rewrite_rules_deleted_time').on(table.deletedTime)])
 
-export const providerModelRequestModificationRules = sqliteTable('provider_model_request_modification_rules', {
-  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), requestModificationRuleId: text('requestModificationRuleId').notNull().references(() => requestModificationRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),
-}, table => [primaryKey({ columns: [table.providerModelId, table.requestModificationRuleId] }), uniqueIndex('idx_provider_model_request_modification_rule_priority').on(table.providerModelId, table.priority)])
+export const providerModelRequestRewriteRules = sqliteTable('provider_model_request_rewrite_rules', {
+  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), requestRewriteRuleId: text('requestRewriteRuleId').notNull().references(() => requestRewriteRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),
+}, table => [primaryKey({ columns: [table.providerModelId, table.requestRewriteRuleId] }), uniqueIndex('idx_provider_model_request_rewrite_rule_priority').on(table.providerModelId, table.priority)])
 
 export const protocolConverters = sqliteTable(
   'protocol_converters',

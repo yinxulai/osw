@@ -1,9 +1,9 @@
 import { Globe2, Link2, Power, ScrollText } from 'lucide-react'
 import { MetricGrid } from '@/components/metric-grid'
-import type { ModificationRule } from '../types'
+import type { RequestRewriteRule } from '../types'
 
 interface RuleStatsProps {
-  rules: ModificationRule[]
+  rules: RequestRewriteRule[]
 }
 
 export function RuleStats(props: RuleStatsProps) {

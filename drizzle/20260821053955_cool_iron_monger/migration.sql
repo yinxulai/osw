@@ -167,8 +167,8 @@ CREATE TABLE `request_logs` (
 CREATE TABLE `request_metrics` (
 	`requestId` text NOT NULL,
 	`key` text NOT NULL,
-	`value` real NOT NULL,
 	`unit` text DEFAULT 'count' NOT NULL,
+	`value` real NOT NULL,
 	`updatedTime` integer NOT NULL,
 	CONSTRAINT `request_metrics_pk` PRIMARY KEY(`requestId`, `key`),
 	CONSTRAINT `fk_request_metrics_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)
@@ -176,12 +176,12 @@ CREATE TABLE `request_metrics` (
 --> statement-breakpoint
 CREATE TABLE `request_usages` (
 	`id` text PRIMARY KEY,
-	`requestId` text NOT NULL,
-	`attemptId` text,
 	`type` text NOT NULL,
 	`unit` text DEFAULT 'count' NOT NULL,
 	`value` real NOT NULL,
 	`rawValue` text,
+	`requestId` text NOT NULL,
+	`attemptId` text,
 	`createdTime` integer NOT NULL,
 	CONSTRAINT `fk_request_usages_requestId_request_logs_id_fk` FOREIGN KEY (`requestId`) REFERENCES `request_logs`(`id`)
 );

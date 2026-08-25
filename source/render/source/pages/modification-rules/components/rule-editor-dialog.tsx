@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react'
-import { modificationRuleApi } from '@/api/models'
+import { requestRewriteRuleApi } from '@/api/models'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -16,8 +16,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
-import type { ModificationRule, RuleTestCase } from '../types'
-import type { ModificationRule as ApiModificationRule } from '@common/schemas'
+import type { RequestRewriteRule, RuleTestCase } from '../types'
+import type { RequestRewriteRule as ApiRequestRewriteRule } from '@common/schemas'
 
 interface RuleTestResult {
   body: string
@@ -28,10 +28,10 @@ interface RuleTestResult {
 
 interface RuleEditorDialogProps {
   open: boolean
-  rule: ModificationRule
+  rule: RequestRewriteRule
   dirty: boolean
   onOpenChange: (open: boolean) => void
-  onChange: (rule: ModificationRule) => void
+  onChange: (rule: RequestRewriteRule) => void
   onSave: () => void
   onReset: () => void
 }
@@ -66,7 +66,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
 
   const runTest = (testCase: RuleTestCase) => {
     setTestingId(testCase.id)
-    const rule: ApiModificationRule = {
+    const rule: ApiRequestRewriteRule = {
       id: props.rule.id,
       name: props.rule.name,
       description: props.rule.description,
@@ -74,7 +74,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       scope: props.rule.global ? 'global' : 'model',
       schemaVersion: 1,
       source: 'user',
-      match: { clientProtocols: props.rule.match.clientProtocols as ApiModificationRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiModificationRule['match']['upstreamProtocols'], path: props.rule.match.path, logicalModelId: props.rule.match.logicalModelId, providerModelId: props.rule.match.providerModelId },
+      match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'], path: props.rule.match.path, logicalModelId: props.rule.match.logicalModelId, providerModelId: props.rule.match.providerModelId },
       testCases: [],
       actions: props.rule.actions.map(action => action.target === 'header'
         ? action.operation === 'remove' ? { type: 'header-remove', stage: action.stage, name: action.path } : { type: action.operation === 'append' ? 'header-append' : 'header-set', stage: action.stage, name: action.path, value: action.value ?? '' }
@@ -83,7 +83,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       updatedTime: 0,
       deletedTime: null,
     }
-    void modificationRuleApi.test(rule, testCase).then(response => {
+    void requestRewriteRuleApi.test(rule, testCase).then(response => {
       if (!response.success) toast.error(response.errorMessage)
       else setTestResults(results => ({ ...results, [testCase.id]: response.data }))
       setTestingId(undefined)

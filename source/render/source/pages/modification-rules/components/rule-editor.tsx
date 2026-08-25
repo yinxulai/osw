@@ -2,16 +2,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { ActionEditor } from './action-editor'
-import { protocolOptions, type ModificationRule } from '../types'
+import { protocolOptions, type RequestRewriteRule } from '../types'
 
 interface RuleEditorProps {
-  rule: ModificationRule
-  onChange: (rule: ModificationRule) => void
+  rule: RequestRewriteRule
+  onChange: (rule: RequestRewriteRule) => void
 }
 
 export function RuleEditor(props: RuleEditorProps) {
   const { rule } = props
-  const update = (patch: Partial<ModificationRule>) => props.onChange({ ...rule, ...patch })
+  const update = (patch: Partial<RequestRewriteRule>) => props.onChange({ ...rule, ...patch })
 
   const toggleProtocol = (protocol: string) => {
     const protocols = rule.protocols.includes(protocol)

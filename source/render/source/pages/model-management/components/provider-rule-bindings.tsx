@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GripVertical, Plus, ScrollText, Search, Trash2 } from 'lucide-react'
-import { modificationRuleApi, providerModelApi } from '@/api/models'
-import type { ModificationRule } from '@common/schemas'
+import { providerModelApi, requestRewriteRuleApi } from '@/api/models'
+import type { RequestRewriteRule } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -20,7 +20,7 @@ interface ProviderRuleBindingsProps {
 export function ProviderRuleBindings(props: ProviderRuleBindingsProps) {
   const { providerModelId, embedded = false } = props
   const toast = useToast()
-  const [availableRules, setAvailableRules] = useState<ModificationRule[]>([])
+  const [availableRules, setAvailableRules] = useState<RequestRewriteRule[]>([])
   const [rules, setRules] = useState<BoundRule[]>([])
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([])
@@ -31,7 +31,7 @@ export function ProviderRuleBindings(props: ProviderRuleBindingsProps) {
     let cancelled = false
     setLoading(true)
     setLoadError('')
-    void Promise.all([modificationRuleApi.list(), providerModelApi.modificationRules(providerModelId)]).then(([allResponse, bindingsResponse]) => {
+    void Promise.all([requestRewriteRuleApi.list(), providerModelApi.requestRewriteRules(providerModelId)]).then(([allResponse, bindingsResponse]) => {
       if (cancelled) return
       if (!allResponse.success || !bindingsResponse.success) {
         const message = !allResponse.success
@@ -59,7 +59,7 @@ export function ProviderRuleBindings(props: ProviderRuleBindingsProps) {
     })
     return () => { cancelled = true }
   }, [providerModelId, toast])
-  const persist = (next: BoundRule[]) => { setRules(next); void providerModelApi.replaceModificationRules(providerModelId, next.filter(rule => !rule.global).map((rule, priority) => ({ ruleId: rule.id, priority, enabled: rule.enabled }))) }
+  const persist = (next: BoundRule[]) => { setRules(next); void providerModelApi.replaceRequestRewriteRules(providerModelId, next.filter(rule => !rule.global).map((rule, priority) => ({ ruleId: rule.id, priority, enabled: rule.enabled }))) }
 
   const filteredRules = useMemo(() => {
     const keyword = ruleSearch.trim().toLocaleLowerCase()

@@ -1,5 +1,5 @@
 import type { Protocol } from '@common/schemas'
-import type { ModificationRule, ModificationRuleAction } from '@common/schemas'
+import type { RequestRewriteRule, RequestRewriteRuleAction } from '@common/schemas'
 
 const PROTECTED_HEADERS = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding'])
 const MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -23,15 +23,15 @@ export interface ModificationResult {
   skippedRuleIds: string[]
 }
 
-type HeaderAction = Extract<ModificationRuleAction, { type: `header-${string}` }>
-type BodyAction = Extract<ModificationRuleAction, { type: `body-${string}` }>
+type HeaderAction = Extract<RequestRewriteRuleAction, { type: `header-${string}` }>
+type BodyAction = Extract<RequestRewriteRuleAction, { type: `body-${string}` }>
 
 export class ModificationError extends Error {
   readonly code = 'MODIFICATION_RULE_FAILED'
   constructor(message: string, readonly ruleId?: string) { super(message) }
 }
 
-export function applyModificationRules(body: Buffer, headers: Record<string, string | string[] | undefined>, rules: readonly ModificationRule[], context: ModificationContext): ModificationResult {
+export function applyModificationRules(body: Buffer, headers: Record<string, string | string[] | undefined>, rules: readonly RequestRewriteRule[], context: ModificationContext): ModificationResult {
   let currentBody = Buffer.from(body)
   const currentHeaders = { ...headers }
   const appliedRuleIds: string[] = []
@@ -43,8 +43,8 @@ export function applyModificationRules(body: Buffer, headers: Record<string, str
     if (context.stage === 'response' && context.streaming) { skippedRuleIds.push(rule.id); continue }
     if (actions.length > MAX_ACTIONS) throw new ModificationError('规则动作数量超过限制', rule.id)
     for (const action of actions) {
-      if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as Extract<ModificationRuleAction, { type: `header-${string}` }>, rule.id)
-      else currentBody = Buffer.from(applyBody(currentBody, action as Extract<ModificationRuleAction, { type: `body-${string}` }>, rule.id))
+      if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as Extract<RequestRewriteRuleAction, { type: `header-${string}` }>, rule.id)
+      else currentBody = Buffer.from(applyBody(currentBody, action as Extract<RequestRewriteRuleAction, { type: `body-${string}` }>, rule.id))
       if (currentBody.length > MAX_BODY_BYTES) throw new ModificationError('修改后的 Body 超过限制', rule.id)
     }
     appliedRuleIds.push(rule.id)
@@ -53,7 +53,7 @@ export function applyModificationRules(body: Buffer, headers: Record<string, str
   return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds }
 }
 
-function matches(rule: ModificationRule, context: ModificationContext): boolean {
+function matches(rule: RequestRewriteRule, context: ModificationContext): boolean {
   const match = rule.match
   if (match.clientProtocols?.length && !match.clientProtocols.includes(context.clientProtocol)) return false
   if (match.upstreamProtocols?.length && !match.upstreamProtocols.includes(context.upstreamProtocol)) return false

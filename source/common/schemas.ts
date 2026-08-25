@@ -15,14 +15,14 @@ export const RuleScopeSchema = z.enum(['global', 'model']).default('model')
 export type RuleScope = z.infer<typeof RuleScopeSchema>
 
 const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
-export const ModificationRuleMatchSchema = z.object({
+export const RequestRewriteRuleMatchSchema = z.object({
   clientProtocols: z.array(ProtocolSchema).max(3).default([]),
   upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
   path: z.string().max(512).optional(),
   logicalModelId: z.string().max(200).optional(),
   providerModelId: z.string().max(200).optional(),
 })
-export type ModificationRuleMatch = z.infer<typeof ModificationRuleMatchSchema>
+export type RequestRewriteRuleMatch = z.infer<typeof RequestRewriteRuleMatchSchema>
 export const RequestModificationTestCaseSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
@@ -37,26 +37,26 @@ export const RequestModificationTestCaseSchema = z.object({
   streaming: z.boolean().default(false),
 })
 export type RequestModificationTestCase = z.infer<typeof RequestModificationTestCaseSchema>
-const ModificationRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
-export const ModificationRuleActionSchema = z.discriminatedUnion('type', [
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-append'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('header-remove'), name: z.string().min(1).max(128) }),
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-set'), path: z.string().min(3).max(512), value: JsonValueSchema }),
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-delete'), path: z.string().min(3).max(512) }),
-  ModificationRuleActionBaseSchema.extend({ type: z.literal('body-replace'), path: z.string().min(3).max(512), search: z.string().max(4096), replacement: z.string().max(4096), regex: z.boolean().default(false) }),
+const RequestRewriteRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
+export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-append'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-remove'), name: z.string().min(1).max(128) }),
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('body-set'), path: z.string().min(3).max(512), value: JsonValueSchema }),
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('body-delete'), path: z.string().min(3).max(512) }),
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('body-replace'), path: z.string().min(3).max(512), search: z.string().max(4096), replacement: z.string().max(4096), regex: z.boolean().default(false) }),
 ])
-export type ModificationRuleAction = z.infer<typeof ModificationRuleActionSchema>
-export const ModificationRuleSchema = z.object({
+export type RequestRewriteRuleAction = z.infer<typeof RequestRewriteRuleActionSchema>
+export const RequestRewriteRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
-  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: ModificationRuleMatchSchema.default({}),
-  actions: z.array(ModificationRuleActionSchema).min(1).max(50),
+  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default({}),
+  actions: z.array(RequestRewriteRuleActionSchema).min(1).max(50),
   testCases: z.array(RequestModificationTestCaseSchema).max(50).default([]),
   createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
 })
-export type ModificationRule = z.infer<typeof ModificationRuleSchema>
-export const ProviderModelModificationRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int() })
-export type ProviderModelModificationRule = z.infer<typeof ProviderModelModificationRuleSchema>
+export type RequestRewriteRule = z.infer<typeof RequestRewriteRuleSchema>
+export const ProviderModelRequestRewriteRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int() })
+export type ProviderModelRequestRewriteRule = z.infer<typeof ProviderModelRequestRewriteRuleSchema>
 
 export const RequestStatusSchema = z.enum(['pending', 'success', 'failed', 'cancelled'])
 export type RequestStatus = z.infer<typeof RequestStatusSchema>

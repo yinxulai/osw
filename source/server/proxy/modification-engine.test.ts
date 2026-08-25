@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ModificationRule, ModificationRuleAction, RuleStage } from '@common/schemas'
+import type { RequestRewriteRule, RequestRewriteRuleAction, RuleStage } from '@common/schemas'
 import { applyModificationRules, ModificationError } from './modification-engine'
 
 const context = (stage: RuleStage = 'request', overrides: Partial<Parameters<typeof applyModificationRules>[3]> = {}) => ({
@@ -12,7 +12,7 @@ const context = (stage: RuleStage = 'request', overrides: Partial<Parameters<typ
   ...overrides,
 })
 
-function rule(actions: readonly ModificationRuleAction[], overrides: Partial<ModificationRule> = {}): ModificationRule {
+function rule(actions: readonly RequestRewriteRuleAction[], overrides: Partial<RequestRewriteRule> = {}): RequestRewriteRule {
   return {
     id: 'rule-test',
     name: '测试请求修改',
@@ -31,10 +31,10 @@ function rule(actions: readonly ModificationRuleAction[], overrides: Partial<Mod
   }
 }
 
-const requestHeader = (type: 'header-set' | 'header-append' | 'header-remove', name = 'x-test', value = 'value'): ModificationRuleAction =>
+const requestHeader = (type: 'header-set' | 'header-append' | 'header-remove', name = 'x-test', value = 'value'): RequestRewriteRuleAction =>
   type === 'header-remove' ? { type, stage: 'request', name } : { type, stage: 'request', name, value }
 
-const jsonAction = (action: Record<string, unknown>, stage: RuleStage = 'request') => ({ ...action, stage }) as ModificationRuleAction
+const jsonAction = (action: Record<string, unknown>, stage: RuleStage = 'request') => ({ ...action, stage }) as RequestRewriteRuleAction
 
 function body(value: unknown): Buffer {
   return Buffer.from(JSON.stringify(value))

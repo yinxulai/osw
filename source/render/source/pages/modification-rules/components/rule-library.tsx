@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import type { ModificationRule, RuleStatusFilter } from '../types'
+import type { RequestRewriteRule, RuleStatusFilter } from '../types'
 
 interface RuleLibraryProps {
-  rules: ModificationRule[]
+  rules: RequestRewriteRule[]
   selectedRuleId: string
   search: string
   statusFilter: RuleStatusFilter
