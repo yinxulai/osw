@@ -220,8 +220,8 @@ export function UpdateCard() {
 
   const handleDownload = async () => {
     if (!updater) return
-    const file = await updater.download()
-    if (!file) {
+    const ok = await updater.download()
+    if (!ok) {
       toast.error(state.errorMessage ?? '下载失败')
     } else {
       toast.success('安装包已下载完成')

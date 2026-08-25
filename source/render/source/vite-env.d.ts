@@ -36,7 +36,7 @@ interface UpdateState {
 interface UpdaterAPI {
   getState: () => Promise<UpdateState>
   check: () => Promise<UpdateState>
-  download: () => Promise<string | null>
+  download: () => Promise<boolean>
   install: () => Promise<void>
   openReleases: () => Promise<void>
   onStateChanged: (callback: (state: UpdateState) => void) => () => void

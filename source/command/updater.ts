@@ -195,27 +195,27 @@ export class UpdaterManager {
     return this.state
   }
 
-  async downloadUpdate(): Promise<string | null> {
-    if (this.state.status === 'downloading') return null
+  async downloadUpdate(): Promise<boolean> {
+    if (this.state.status === 'downloading') return false
     if (this.state.status !== 'update-available') {
       this.setState({
         status: 'error',
         errorMessage: '当前没有可下载的更新',
       })
-      return null
+      return false
     }
     try {
       this.setState({ status: 'downloading', downloadProgress: 0, errorMessage: null })
       await autoUpdater.downloadUpdate()
-      // 下载完成由 update-downloaded 事件处理
-      return null
+      // 下载成功由 update-downloaded 事件把 status 置为 downloaded；这里返回 true 表示已开始并完成下载
+      return true
     } catch (error) {
       this.setState({
         status: 'error',
         errorMessage: error instanceof Error ? error.message : String(error),
         downloadProgress: null,
       })
-      return null
+      return false
     }
   }
 

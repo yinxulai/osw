@@ -36,7 +36,7 @@ export interface UpdateState {
 const updaterApi = {
   getState: (): Promise<UpdateState> => ipcRenderer.invoke('updater:get-state'),
   check: (): Promise<UpdateState> => ipcRenderer.invoke('updater:check'),
-  download: (): Promise<string | null> => ipcRenderer.invoke('updater:download'),
+  download: (): Promise<boolean> => ipcRenderer.invoke('updater:download'),
   install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
   openReleases: (): Promise<void> => ipcRenderer.invoke('updater:open-releases'),
   onStateChanged: (callback: (state: UpdateState) => void) => {
