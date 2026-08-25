@@ -57,8 +57,10 @@ jobs:
             exit 1
           fi
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists."
-            exit 1
+            echo "Tag v$VERSION already exists; this workflow will update the existing release instead of failing."
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
@@ -179,8 +181,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+          git tag -fa "$TAG" -m "Release $TAG"
+          git push --force origin "$TAG"
 
       - name: Download installers
         uses: actions/download-artifact@v4
@@ -188,12 +190,16 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: One Switch ${{ needs.prepare.outputs.tag }}
-          body: |
+      - name: Prepare release body
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --json body --jq '.body' > existing-release-body.md 2>/dev/null; then
+            cp existing-release-body.md release-body.md
+          else
+            cat > release-body.md <<'EOF'
             ## macOS 安装说明
 
             macOS 版本使用 ad-hoc 代码签名，但没有 Apple Developer ID 证书，因此无法提交 Apple 公证。首次打开时，macOS 会提示无法验证开发者。
@@ -209,7 +215,17 @@ jobs:
             ```
 
             除非未来使用 Apple Developer Program 的 Developer ID 证书并完成公证，否则无法消除这一次系统确认。
+            EOF
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: One Switch ${{ needs.prepare.outputs.tag }}
+          body_path: release-body.md
           generate_release_notes: true
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
+          overwrite_files: true
           files: artifacts/**/*
