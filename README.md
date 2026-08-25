@@ -33,8 +33,6 @@
 | 协议 | 本地路径 | 常见上游 |
 | --- | --- | --- |
 | OpenAI Chat Completions | `/v1/chat/completions` | OpenAI、DeepSeek、OpenRouter、Ollama 及其他 OpenAI 兼容服务 |
-| OpenAI Completions | `/v1/completions` | OpenAI 兼容的传统 Completions 服务 |
-| OpenAI Embeddings | `/v1/embeddings` | OpenAI 兼容的 Embeddings 服务 |
 | OpenAI Responses | `/v1/responses` | OpenAI Responses API 兼容服务 |
 | Anthropic Messages | `/v1/messages` | Anthropic Claude 及兼容服务 |
 
