@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import { Download, ExternalLink, Package, RefreshCw, Rocket } from 'lucide-react'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { Button } from '@/components/ui/button'
@@ -93,15 +94,20 @@ function VersionInfo(props: VersionInfoProps) {
 
 function ReleaseNotes(props: ReleaseNotesProps) {
   const { info, hasUpdate } = props
-  if (!info?.releaseNotes || !hasUpdate) return null
+  const notes = hasUpdate ? info?.releaseNotes : undefined
+  if (!notes) return null
+  // GitHub Releases 的 release notes 是 HTML，需要用 dangerouslySetInnerHTML 渲染
+  // 而非把标签当纯文本输出；渲染前用 DOMPurify 净化以防 XSS。
+  const sanitizedNotes = DOMPurify.sanitize(notes)
   return (
     <details className="rounded-md bg-muted/50 px-3 py-2 text-xs">
       <summary className="cursor-pointer select-none font-medium text-foreground">
         查看更新说明
       </summary>
-      <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap wrap-break-word font-sans text-[11px] leading-relaxed text-muted-foreground">
-        {info.releaseNotes}
-      </pre>
+      <div
+        className="release-notes mt-2 max-h-48 overflow-y-auto rounded-sm text-[11px] leading-relaxed text-muted-foreground"
+        dangerouslySetInnerHTML={{ __html: sanitizedNotes }}
+      />
     </details>
   )
 }

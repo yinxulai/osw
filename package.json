@@ -1,7 +1,7 @@
 {
   "name": "one-switch",
   "private": true,
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.5",
   "author": "yinxulai <yinxulai@hotmail.com>",
   "type": "module",
   "main": "dist/command/index.js",
@@ -44,6 +44,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "dompurify": "^3.4.14",
     "drizzle-orm": "1.0.0-rc.4",
     "electron-updater": "^6.8.9",
     "embla-carousel-react": "^8.6.0",
