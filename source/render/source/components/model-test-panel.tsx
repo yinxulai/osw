@@ -426,7 +426,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
             ...item,
             status: succeeded ? 'success' : 'failed',
             result,
-            errorMessage: response.success ? result?.errorMessage ?? '未找到可测试的协议端点，请刷新模型配置后重试' : response.errorMessage,
+            errorMessage: response.success ? result ? result.errorMessage : '未找到可测试的协议端点，请刷新模型配置后重试' : response.errorMessage,
           } : item))
         } catch (error) {
           if (controller.signal.aborted) break
