@@ -77,7 +77,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   let state
   if (props.loading) state = <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><LoaderCircle size={15} className="animate-spin" />正在加载正文</div>
   else if (props.error) state = <div className="flex items-center justify-center gap-2 py-8 text-sm text-red-600 dark:text-red-400"><AlertCircle size={15} />{props.error}</div>
-  else if (selectedContent || clientContent) state = <>{stages.slice(0, 1).map(stage => <RequestStage key={stage.title} {...stage} />)}<AppliedRules ruleIds={selectedContent?.modificationRuleIds ?? []} />{stages.slice(1).map(stage => <RequestStage key={stage.title} {...stage} />)}</>
+  else if (selectedContent || clientContent) state = <>{stages.slice(0, 1).map(stage => <RequestStage key={stage.title} {...stage} />)}<AppliedRules ruleIds={selectedContent?.requestRewriteRuleIds ?? []} />{stages.slice(1).map(stage => <RequestStage key={stage.title} {...stage} />)}</>
   else if (props.selectedAttemptId) state = <div className="py-8 text-center text-sm text-muted-foreground">该尝试没有正文记录</div>
   else state = null
   return <Sheet open={Boolean(props.selectedAttemptId)} onOpenChange={open => !open && props.onClose()}><SheetContent side="right" className="w-full max-w-3xl! gap-0 border-0 bg-card p-0 shadow-none"><SheetHeader className="shrink-0 px-4 py-3.5 pr-12"><SheetTitle className="text-sm">请求详情</SheetTitle><SheetDescription className="text-xs">按请求链路和采集时的原始字符串展示</SheetDescription></SheetHeader><div className="flex-1 space-y-3 overflow-auto px-4 pb-4">{state}</div></SheetContent></Sheet>

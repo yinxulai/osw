@@ -279,7 +279,7 @@ export const requestContents = sqliteTable(
     responseStatus: integer('responseStatus'),
     responseHeaders: text('responseHeaders'),
     responseBody: text('responseBody'),
-    modificationRuleIds: text('modificationRuleIds'),
+    requestRewriteRuleIds: text('requestRewriteRuleIds'),
 
     createdTime: integer('createdTime').notNull(),
     updatedTime: integer('updatedTime').notNull(),

@@ -280,7 +280,7 @@ export const RequestContentSchema = z.object({
   responseStatus: z.number().int().nullable(),
   responseHeaders: z.string().nullable(),
   responseBody: z.string().nullable(),
-  modificationRuleIds: z.array(z.string()).default([]),
+  requestRewriteRuleIds: z.array(z.string()).default([]),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
 })

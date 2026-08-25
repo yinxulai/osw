@@ -188,14 +188,14 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
   return attempt
 }
 
-type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'modificationRuleIds'> & Partial<Pick<RequestContent, 'modificationRuleIds'>>
+type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'requestRewriteRuleIds'> & Partial<Pick<RequestContent, 'requestRewriteRuleIds'>>
 type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
 
 export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
   const id = generateId('content_')
   const time = now()
-  getDb().insert(requestContents).values({ id, ...input, modificationRuleIds: JSON.stringify(input.modificationRuleIds ?? []), createdTime: time, updatedTime: time }).run()
-  return { id, ...input, modificationRuleIds: input.modificationRuleIds ?? [], createdTime: time, updatedTime: time }
+  getDb().insert(requestContents).values({ id, ...input, requestRewriteRuleIds: JSON.stringify(input.requestRewriteRuleIds ?? []), createdTime: time, updatedTime: time }).run()
+  return { id, ...input, requestRewriteRuleIds: input.requestRewriteRuleIds ?? [], createdTime: time, updatedTime: time }
 }
 
 export async function updateRequestContent(id: string, input: UpdateRequestContentInput): Promise<void> {
@@ -353,7 +353,7 @@ function mapRequestContent(row: typeof requestContents.$inferSelect): RequestCon
     responseStatus: row.responseStatus,
     responseHeaders: row.responseHeaders,
     responseBody: row.responseBody,
-    modificationRuleIds: row.modificationRuleIds ? parseStringArray(row.modificationRuleIds) : [],
+    requestRewriteRuleIds: row.requestRewriteRuleIds ? parseStringArray(row.requestRewriteRuleIds) : [],
     createdTime: row.createdTime,
     updatedTime: row.updatedTime,
   }
