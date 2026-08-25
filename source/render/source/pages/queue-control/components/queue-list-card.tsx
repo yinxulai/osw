@@ -125,7 +125,7 @@ export function QueueListCard(props: QueueListCardProps) {
                   provider={providers[row.model.providerId]}
                   providerHealth={health[row.model.providerId]}
                   providerModelHealth={providerModelHealth[row.model.id]}
-                  metrics={modelMetrics[queueModelMetricKey(row.model.providerId, row.model.modelName)]}
+                  metrics={modelMetrics[queueModelMetricKey(row.model.providerId, row.model.id)]}
                   mode={mode}
                   selected={row.selected}
                   cooling={row.cooling}
