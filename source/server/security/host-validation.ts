@@ -19,7 +19,15 @@ export function isAllowedHost(hostHeader: string | undefined, listenHost: string
 
   const allowedHosts = new Set(LOOPBACK_HOSTS)
   const normalizedListenHost = normalizeHost(listenHost)
-  if (normalizedListenHost && normalizedListenHost !== '0.0.0.0' && normalizedListenHost !== '::') allowedHosts.add(normalizedListenHost)
+  if (normalizedListenHost && normalizedListenHost !== '0.0.0.0' && normalizedListenHost !== '::') {
+    allowedHosts.add(normalizedListenHost)
+  }
+  // 当监听 0.0.0.0 / ::（所有网卡）时，属于用户显式选择暴露到网络，
+  // 接受任意合法的 Host 头，把网络访问控制交给用户（防火墙 / listenHost 选择）。
+  if (normalizedListenHost === '0.0.0.0' || normalizedListenHost === '::') {
+    return true
+  }
+
   return allowedHosts.has(hostname)
 }
 

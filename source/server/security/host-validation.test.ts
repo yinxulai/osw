@@ -29,8 +29,10 @@ describe('isAllowedHost', () => {
     expect(isAllowedHost(host, '127.0.0.1', 9300)).toBe(false)
   })
 
-  it('does not treat a wildcard listener as an allowed Host value', () => {
-    expect(isAllowedHost('0.0.0.0:9300', '0.0.0.0', 9300)).toBe(false)
+  it('treats a wildcard listener as an explicit expose-all choice', () => {
+    expect(isAllowedHost('0.0.0.0:9300', '0.0.0.0', 9300)).toBe(true)
+    expect(isAllowedHost('192.0.2.5:9300', '::', 9300)).toBe(true)
     expect(isAllowedHost('localhost:9300', '0.0.0.0', 9300)).toBe(true)
+    expect(isAllowedHost('attacker.example:9300', '0.0.0.0', 9300)).toBe(true)
   })
 })
