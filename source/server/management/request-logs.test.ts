@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '../database/provider-store'
@@ -8,10 +9,10 @@ import { createRequestAttempt, createRequestContent, createRequestLog } from '..
 import { requestLogRoutes } from './request-logs'
 
 function mockResponse() {
-  return { setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
+  return { setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
 }
 
-function responseData(res: import('node:http').ServerResponse): unknown {
+function responseData(res: ServerResponse): unknown {
   const body = vi.mocked(res.end).mock.calls[0]?.[0]
   return JSON.parse(String(body))
 }

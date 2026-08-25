@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider, listProviders } from '../database/provider-store'
@@ -11,10 +12,10 @@ import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { configRoutes } from './config/routes'
 
 function mockResponse() {
-  return { statusCode: 0, setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
+  return { statusCode: 0, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
 }
 
-function responsePayload(response: import('node:http').ServerResponse): Record<string, unknown> {
+function responsePayload(response: ServerResponse): Record<string, unknown> {
   return JSON.parse(String(vi.mocked(response.end).mock.calls[0][0])) as Record<string, unknown>
 }
 

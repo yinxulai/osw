@@ -2,6 +2,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModelWithProvider } from './router'
+import type * as RouterModule from './router'
 import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 
 const mocks = vi.hoisted(() => ({
@@ -22,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./router', async importOriginal => {
-  const original = await importOriginal<typeof import('./router')>()
+  const original = await importOriginal<typeof RouterModule>()
   return {
     ...original,
     getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId

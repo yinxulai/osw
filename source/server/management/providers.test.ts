@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
@@ -9,7 +10,7 @@ import { configureSecretStore } from '../infrastructure/secrets/secret-store'
 import { deleteProviderAndSecret, providerRoutes } from './providers'
 
 function mockResponse() {
-  return { setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
+  return { setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
 }
 
 let temporaryDirectory: string

@@ -1,4 +1,4 @@
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import { HttpRouter } from './http-router'
 
@@ -54,7 +54,7 @@ describe('HttpRouter method matching', () => {
         response.end(JSON.stringify({ method: request.method, body }))
       })
     const response = { end: vi.fn() } as unknown as ServerResponse
-    const request = { method: 'POST' } as unknown as import('node:http').IncomingMessage
+    const request = { method: 'POST' } as unknown as IncomingMessage
 
     await router.invoke('/echo', response, { value: 'custom' }, request)
 

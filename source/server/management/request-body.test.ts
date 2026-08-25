@@ -1,15 +1,16 @@
 import { EventEmitter } from 'node:events'
+import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { parseJsonBody } from './request-body'
 
 type RequestEvent = { type: 'data' | 'end' | 'error' | 'aborted'; value?: unknown }
 
-function request(events: RequestEvent[]): import('node:http').IncomingMessage {
+function request(events: RequestEvent[]): IncomingMessage {
   const emitter = new EventEmitter()
   queueMicrotask(() => {
     for (const item of events) emitter.emit(item.type, item.value)
   })
-  return emitter as unknown as import('node:http').IncomingMessage
+  return emitter as unknown as IncomingMessage
 }
 
 describe('parseJsonBody', () => {

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { closeDatabase, initDatabase } from './index'
+import { closeDatabase, getDb, initDatabase } from './index'
 import { createProvider } from './provider-store'
 import { getFailureReasons, getStatsSummary } from './analytics-store'
 import {
@@ -185,7 +185,7 @@ describe('analytics boundaries', () => {
     const oldTime = Date.now() - 10_000
     const outsideRow = await getRequestLog(outsideWindow.id)
     expect(outsideRow).toBeTruthy()
-    const database = (await import('./index')).getDb()
+    const database = getDb()
     database.$client.prepare('UPDATE request_logs SET createdTime = ? WHERE id = ?').run(oldTime, outsideWindow.id)
 
     await createRequestAttempt({ requestId: inWindow.id, providerId: provider.id, providerModelId: 'model_a', providerName: provider.name, providerModelName: 'model-a', upstreamProtocol: 'openai-completions', upstreamRequestId: null, url: 'https://example.com/a', httpStatus: 503, retryable: true, attemptIndex: 0, status: 'failed', errorCode: 'Status_503', durationMilliseconds: 5 })

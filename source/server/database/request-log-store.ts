@@ -6,13 +6,13 @@ import type {
   RequestContentCaptureStatus,
   RequestConversion,
   RequestLog,
+  RequestLogUpdate,
   RequestStatus,
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import { requestAttempts, requestContents, requestConversions, requestLogs, requestMetrics, requestUsages } from './schema'
 
-type RequestLogUpdate = import('@common/schemas').RequestLogUpdate
 type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
 
 export interface RequestUsageSnapshot {

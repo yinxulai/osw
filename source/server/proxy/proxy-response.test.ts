@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import { BufferedProxyResponse, NodeProxyResponse, asIncomingHeaders } from './proxy-response'
 
@@ -13,7 +14,7 @@ function mockServerResponse() {
     getHeaders: vi.fn(() => ({ 'x-request-id': 'request-1' })),
     setHeader: vi.fn(),
     statusCode: 200,
-  } as unknown as import('node:http').ServerResponse
+  } as unknown as ServerResponse
 }
 
 describe('BufferedProxyResponse', () => {

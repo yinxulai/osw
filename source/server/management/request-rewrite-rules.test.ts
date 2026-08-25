@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '../database/provider-store'
@@ -9,10 +10,10 @@ import { createRequestRewriteRule } from '../database/modification-rule-store'
 import { requestRewriteRuleRoutes } from './request-rewrite-rules'
 
 function mockResponse() {
-  return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as import('node:http').ServerResponse
+  return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
 }
 
-function responseData(response: import('node:http').ServerResponse): Record<string, unknown> {
+function responseData(response: ServerResponse): Record<string, unknown> {
   const body = vi.mocked(response.end).mock.calls[0]?.[0]
   return JSON.parse(String(body)) as Record<string, unknown>
 }

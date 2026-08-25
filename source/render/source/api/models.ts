@@ -1,4 +1,4 @@
-import type { LogicalModel, Protocol, ProviderModel, ProviderModelRoute, ProviderModelRouteEndpoint, RequestModificationTestCase, SchedulingPolicy } from '@common/schemas'
+import type { LogicalModel, Protocol, ProviderModel, ProviderModelRequestRewriteRule, ProviderModelRoute, ProviderModelRouteEndpoint, RequestModificationTestCase, RequestRewriteRule, SchedulingPolicy } from '@common/schemas'
 import { request } from './client'
 
 type CreateLogicalModelInput = { name: string; description?: string; enabled?: boolean }
@@ -10,12 +10,12 @@ type RequestRewriteRuleBindingInput = { ruleId: string; priority: number; enable
 type SchedulingPolicyInput = { logicalModelId: string; providerModelId: string; strategy?: string; priority?: number; weight?: number; enabled?: boolean }
 
 export const requestRewriteRuleApi = {
-  list: () => request<import('@common/schemas').RequestRewriteRule[]>('/api/request-rewrite-rule/list'),
-  get: (id: string) => request<import('@common/schemas').RequestRewriteRule>('/api/request-rewrite-rule/get', { id }),
-  create: (data: Omit<import('@common/schemas').RequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<import('@common/schemas').RequestRewriteRule>('/api/request-rewrite-rule/create', data),
-  update: (id: string, updates: Partial<import('@common/schemas').RequestRewriteRule>) => request<import('@common/schemas').RequestRewriteRule>('/api/request-rewrite-rule/update', { id, ...updates }),
-  remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/api/request-rewrite-rule/delete', { id }),
-  test: (rule: import('@common/schemas').RequestRewriteRule, testCase: RequestModificationTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[] }>('/api/request-rewrite-rule/test', { rule, testCase }),
+  list: () => request<RequestRewriteRule[]>('/request-rewrite-rule/list'),
+  get: (id: string) => request<RequestRewriteRule>('/request-rewrite-rule/get', { id }),
+  create: (data: Omit<RequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<RequestRewriteRule>('/request-rewrite-rule/create', data),
+  update: (id: string, updates: Partial<RequestRewriteRule>) => request<RequestRewriteRule>('/request-rewrite-rule/update', { id, ...updates }),
+  remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/request-rewrite-rule/delete', { id }),
+  test: (rule: RequestRewriteRule, testCase: RequestModificationTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[] }>('/request-rewrite-rule/test', { rule, testCase }),
 }
 
 export const logicalModelApi = {
@@ -33,8 +33,8 @@ export const providerModelApi = {
   update: (id: string, updates: ProviderModelUpdateInput) => request<ProviderModelView>('/provider-model/update', { id, ...updates }),
   queue: (logicalModelId = 'default') => request<ProviderModelRoute[]>('/provider-model/queue', { logicalModelId }),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
-  requestRewriteRules: (providerModelId: string) => request<import('@common/schemas').ProviderModelRequestRewriteRule[]>('/api/request-rewrite-rule/bindings', { providerModelId }),
-  replaceRequestRewriteRules: (providerModelId: string, bindings: RequestRewriteRuleBindingInput[]) => request<import('@common/schemas').ProviderModelRequestRewriteRule[]>('/api/request-rewrite-rule/replace-bindings', { providerModelId, bindings }),
+  requestRewriteRules: (providerModelId: string) => request<ProviderModelRequestRewriteRule[]>('/request-rewrite-rule/bindings', { providerModelId }),
+  replaceRequestRewriteRules: (providerModelId: string, bindings: RequestRewriteRuleBindingInput[]) => request<ProviderModelRequestRewriteRule[]>('/request-rewrite-rule/replace-bindings', { providerModelId, bindings }),
 }
 
 export const schedulingPolicyApi = {
