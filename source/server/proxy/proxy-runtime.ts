@@ -39,7 +39,7 @@ export class ProxyRuntime {
       if (this.state === 'running') return
       this.endpoint = endpoint
       this.state = 'starting'
-      const candidate = this.createServer(endpoint)
+      const candidate = this.createServer()
       try {
         await listen(candidate, endpoint)
         this.server = candidate
@@ -74,7 +74,7 @@ export class ProxyRuntime {
       }
       this.endpoint = endpoint
       this.state = 'starting'
-      const candidate = this.createServer(endpoint)
+      const candidate = this.createServer()
       try {
         await listen(candidate, endpoint)
         this.server = candidate
@@ -93,7 +93,7 @@ export class ProxyRuntime {
     return result
   }
 
-  private createServer(endpoint: ProxyEndpoint): Server {
+  private createServer(): Server {
     return http.createServer(async (req, res) => {
       try {
         const url = new URL(req.url!, 'http://localhost')
