@@ -31,6 +31,7 @@ export interface ResponsePipelineOptions {
   onStart?(headers: HeaderMap): void
   transformResponse?(body: Buffer, headers: HeaderMap): { body: Buffer; headers: HeaderMap }
   onUsage(usage: ExtractedUsage): void
+  onFirstOutput?(): void
   onUpstreamChunk(chunk: string): void
   onDownstreamChunk(chunk: string): void
 }
@@ -41,6 +42,7 @@ export class ResponsePipeline {
   private readonly downstreamChunks: string[] = []
   private readonly streamConverter: StreamConverter | null
   private usage: ExtractedUsage = emptyUsage()
+  private firstOutputReported = false
 
   constructor(private readonly options: ResponsePipelineOptions) {
     this.streamConverter = options.adapter.requiresResponseConversion && options.isStreaming
@@ -161,6 +163,10 @@ export class ResponsePipeline {
   private consumeJson(body: string): void {
     try {
       const data = JSON.parse(body) as Record<string, unknown>
+      if (!this.firstOutputReported && hasOutput(data)) {
+        this.firstOutputReported = true
+        this.options.onFirstOutput?.()
+      }
       const usage = extractTokenUsage(data)
       this.usage = mergeUsage(this.usage, usage)
       this.options.onUsage(usage)
@@ -172,6 +178,29 @@ export class ResponsePipeline {
 
 function emptyUsage(): ExtractedUsage {
   return { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null }
+}
+
+/** Only count an actual generated delta, not role-only, usage, or [DONE] events. */
+function hasOutput(data: Record<string, unknown>): boolean {
+  const choices = Array.isArray(data.choices) ? data.choices : []
+  for (const choice of choices) {
+    const record = asRecord(choice)
+    const delta = asRecord(record?.delta)
+    const message = asRecord(record?.message)
+    if (hasValue(delta?.content) || hasValue(delta?.tool_calls) || hasValue(delta?.function_call) || hasValue(delta?.refusal)
+      || hasValue(record?.text) || hasValue(message?.content)) return true
+  }
+
+  const type = typeof data.type === 'string' ? data.type : ''
+  return type === 'response.output_text.delta'
+    || type === 'response.reasoning_summary_text.delta'
+    || type === 'response.function_call_arguments.delta'
+    || type === 'content_block_delta'
+}
+
+function hasValue(value: unknown): boolean {
+  if (typeof value === 'string') return value.length > 0
+  return value !== null && value !== undefined
 }
 
 function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {

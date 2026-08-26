@@ -41,9 +41,10 @@ export function calculateQueueModelMetrics(logs: RequestLogEntry[]): Record<stri
       accumulator.ttftCount += 1
     }
 
-    const generationMilliseconds = log.ttftMilliseconds != null && log.ttftMilliseconds < log.totalDurationMilliseconds
-      ? log.totalDurationMilliseconds - log.ttftMilliseconds
-      : log.totalDurationMilliseconds
+    const successfulAttemptDuration = successfulAttempt.durationMilliseconds
+    const generationMilliseconds = log.ttftMilliseconds != null && log.ttftMilliseconds < successfulAttemptDuration
+      ? successfulAttemptDuration - log.ttftMilliseconds
+      : successfulAttemptDuration
     if (log.outputTokens != null && log.outputTokens > 0 && generationMilliseconds > 0) {
       accumulator.tpsTotal += log.outputTokens * 1000 / generationMilliseconds
       accumulator.tpsCount += 1

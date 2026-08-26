@@ -200,10 +200,11 @@ function RawUsage(props: Pick<RequestLogEntry, 'rawUsage'>) {
 
 export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const { log, modelName } = props
+  const successfulAttempt = log.attempts.find(attempt => attempt.status === 'success')
   const upstreamProtocol = log.upstreamProtocol
-    ?? log.attempts.find(attempt => attempt.status === 'success')?.upstreamProtocol
+    ?? successfulAttempt?.upstreamProtocol
     ?? log.attempts[0]?.upstreamProtocol
-  const tps = formatTPS(log.outputTokens, log.totalDurationMilliseconds, log.ttftMilliseconds)
+  const tps = formatTPS(log.outputTokens, successfulAttempt?.durationMilliseconds ?? log.totalDurationMilliseconds, log.ttftMilliseconds)
   const contents = 'contents' in log ? log.contents : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
 

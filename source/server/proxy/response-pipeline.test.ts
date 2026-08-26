@@ -40,6 +40,15 @@ describe('ResponsePipeline', () => {
     expect(response.writableEnded).toBe(true)
   })
 
+  it('reports TTFT only for the first meaningful OpenAI output delta', () => {
+    const onFirstOutput = vi.fn()
+    const { pipeline } = setup({ isStreaming: true, onFirstOutput })
+    pipeline.push('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n', true)
+    expect(onFirstOutput).not.toHaveBeenCalled()
+    pipeline.push('data: {"choices":[{"delta":{"content":"hello"}}]}\n\n', true)
+    expect(onFirstOutput).toHaveBeenCalledOnce()
+  })
+
   it('falls back to the original body when response conversion fails', () => {
     const { pipeline, response } = setup({ adapter: makeAdapter({ requiresResponseConversion: true, convertResponse: () => { throw new Error('bad response') } }) })
     pipeline.push('{"ok":true}', true)

@@ -59,7 +59,7 @@ describe('calculateQueueModelMetrics', () => {
 
     expect(metrics[queueModelMetricKey('prov_backup', 'model-b')]).toEqual({
       sampleCount: 1,
-      avgTps: 10,
+      avgTps: 13.333333333333334,
       avgTtftMilliseconds: 500,
     })
   })
@@ -77,7 +77,7 @@ describe('calculateQueueModelMetrics', () => {
 
     expect(metrics[queueModelMetricKey('prov_primary', 'model-a')]).toEqual({
       sampleCount: 2,
-      avgTps: 10,
+      avgTps: 13.333333333333334,
       avgTtftMilliseconds: 500,
     })
   })

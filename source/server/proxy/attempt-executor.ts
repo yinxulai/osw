@@ -403,6 +403,11 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
         adapter,
         isStreaming,
         captureEnabled: settings.captureRequestContent,
+        onFirstOutput: () => {
+          if (isStreaming && ttftMilliseconds === undefined) {
+            ttftMilliseconds = Date.now() - attemptStartedAt
+          }
+        },
         response,
         upstreamHeaders: downstreamHeaders,
         onStart: headers => { if (!response.headersSent) response.start(statusCode, headers) },
@@ -426,10 +431,6 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       upstreamRes.on('data', chunk => {
         const chunkText = chunk.toString('utf8')
 
-        // 记录 TTFT（第一个数据块到达时间�?
-        if (ttftMilliseconds === undefined) {
-          ttftMilliseconds = Date.now() - attemptStartedAt
-        }
 
         if (disposition !== 'success') {
           errorResponse = appendLimited(errorResponse, chunk.toString('utf8'))

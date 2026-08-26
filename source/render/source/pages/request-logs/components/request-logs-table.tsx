@@ -118,9 +118,10 @@ function RequestLogsLoadingRows() {
 }
 
 function RequestLogTableRow(props: RequestLogTableRowProps) {
+  const successfulAttempt = props.log.attempts.find(attempt => attempt.status === 'success')
   const tps = formatTPS(
     props.log.outputTokens,
-    props.log.totalDurationMilliseconds,
+    successfulAttempt?.durationMilliseconds ?? props.log.totalDurationMilliseconds,
     props.log.ttftMilliseconds,
   )
 
