@@ -301,13 +301,13 @@ describe('handleProxyRequest', () => {
     const firstResponse = await fetch(`${proxy.url}/v1/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'default', prompt: 'first request' }),
+      body: JSON.stringify({ model: 'default', prompt: 'first request', stream: true }),
     })
     setManualModel('default', 'model_second')
     const secondResponse = await fetch(`${proxy.url}/v1/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'default', prompt: 'second request' }),
+      body: JSON.stringify({ model: 'default', prompt: 'second request', stream: true }),
     })
     finishFirstStream?.()
 
