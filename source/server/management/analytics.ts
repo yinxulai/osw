@@ -66,7 +66,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     success: m.success,
     avgLatencyMs: m.avgLatencyMs,
     avgTtftMs: m.avgTtftMs,
-    avgTps: m.successDurationMs > 0 && m.outputTokens > 0 ? m.outputTokens / (m.successDurationMs / 1000) : null,
+    avgTps: m.successGenerationDurationMs > 0 && m.outputTokens > 0 ? m.outputTokens / (m.successGenerationDurationMs / 1000) : null,
     successRate: m.requests > 0 ? m.success / m.requests : 0,
     cacheHitRate: m.inputTokens > 0 ? m.cachedInputTokens / m.inputTokens : null,
   }))

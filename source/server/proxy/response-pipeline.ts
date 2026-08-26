@@ -163,7 +163,7 @@ export class ResponsePipeline {
   private consumeJson(body: string): void {
     try {
       const data = JSON.parse(body) as Record<string, unknown>
-      if (!this.firstOutputReported && hasOutput(data)) {
+      if (this.options.isStreaming && !this.firstOutputReported && hasOutput(data)) {
         this.firstOutputReported = true
         this.options.onFirstOutput?.()
       }
@@ -192,10 +192,17 @@ function hasOutput(data: Record<string, unknown>): boolean {
   }
 
   const type = typeof data.type === 'string' ? data.type : ''
-  return type === 'response.output_text.delta'
-    || type === 'response.reasoning_summary_text.delta'
-    || type === 'response.function_call_arguments.delta'
-    || type === 'content_block_delta'
+  if (type === 'content_block_delta') {
+    const delta = asRecord(data.delta)
+    return delta?.type === 'text_delta' && hasValue(delta.text)
+  }
+  if (type === 'response.output_text.delta' || type === 'response.reasoning_summary_text.delta') {
+    return hasValue(data.delta)
+  }
+  if (type === 'response.function_call_arguments.delta') {
+    return hasValue(data.delta)
+  }
+  return false
 }
 
 function hasValue(value: unknown): boolean {

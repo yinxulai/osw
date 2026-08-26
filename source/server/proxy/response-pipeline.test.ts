@@ -49,6 +49,30 @@ describe('ResponsePipeline', () => {
     expect(onFirstOutput).toHaveBeenCalledOnce()
   })
 
+  it('recognizes text output for Anthropic and Responses streams only', () => {
+    const anthropicOutput = vi.fn()
+    const anthropic = setup({ isStreaming: true, onFirstOutput: anthropicOutput, adapter: makeAdapter({ clientProtocol: 'anthropic-messages', endpointProtocol: 'anthropic-messages' }) })
+    anthropic.pipeline.push('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n', true)
+    expect(anthropicOutput).not.toHaveBeenCalled()
+    anthropic.pipeline.push('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}\n\n', true)
+    expect(anthropicOutput).toHaveBeenCalledOnce()
+
+    const responsesOutput = vi.fn()
+    const responses = setup({ isStreaming: true, onFirstOutput: responsesOutput, adapter: makeAdapter({ clientProtocol: 'openai-responses', endpointProtocol: 'openai-responses' }) })
+    responses.pipeline.push('data: {"type":"response.created"}\n\n', true)
+    expect(responsesOutput).not.toHaveBeenCalled()
+    responses.pipeline.push('data: {"type":"response.output_text.delta","delta":"hello"}\n\n', true)
+    expect(responsesOutput).toHaveBeenCalledOnce()
+  })
+
+  it('does not report TTFT for non-streaming JSON', () => {
+    const onFirstOutput = vi.fn()
+    const { pipeline } = setup({ onFirstOutput })
+    pipeline.push('{"choices":[{"message":{"content":"hello"}}]}', true)
+    pipeline.finish(true, null)
+    expect(onFirstOutput).not.toHaveBeenCalled()
+  })
+
   it('falls back to the original body when response conversion fails', () => {
     const { pipeline, response } = setup({ adapter: makeAdapter({ requiresResponseConversion: true, convertResponse: () => { throw new Error('bad response') } }) })
     pipeline.push('{"ok":true}', true)

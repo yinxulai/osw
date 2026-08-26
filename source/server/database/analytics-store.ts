@@ -99,7 +99,7 @@ export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]>
   return rows.map(row => ({ providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
 }
 
-export interface ModelStat { providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number; avgTtftMs: number | null; cachedInputTokens: number; inputTokens: number; outputTokens: number; successDurationMs: number }
+export interface ModelStat { providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number; avgTtftMs: number | null; cachedInputTokens: number; inputTokens: number; outputTokens: number; successGenerationDurationMs: number }
 
 export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
   const finalAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId})`
@@ -114,9 +114,9 @@ export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelS
     cachedInputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'cachedInputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('cachedInputTokens'),
     inputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'inputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('inputTokens'),
     outputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'outputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('outputTokens'),
-    successDurationMs: sql<number>`sum(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} else 0 end)`.as('successDurationMs'),
+    successGenerationDurationMs: sql<number>`sum(case when ${requestAttempts.status} = 'success' then max(${requestAttempts.durationMilliseconds} - coalesce((SELECT value FROM request_metrics ttft WHERE ttft.requestId = ${requestAttempts.requestId} AND ttft.key = 'ttftMilliseconds'), 0), 0) else 0 end)`.as('successGenerationDurationMs'),
   }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, finalAttempt)).groupBy(requestAttempts.providerModelName, requestAttempts.providerId, requestAttempts.providerName).orderBy(sql`requests desc`).limit(limit).all()
-  return rows.map(row => ({ providerModelName: row.providerModelName, providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0, avgTtftMs: row.avgTtft ?? null, cachedInputTokens: row.cachedInputTokens ?? 0, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, successDurationMs: row.successDurationMs ?? 0 }))
+  return rows.map(row => ({ providerModelName: row.providerModelName, providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0, avgTtftMs: row.avgTtft ?? null, cachedInputTokens: row.cachedInputTokens ?? 0, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, successGenerationDurationMs: row.successGenerationDurationMs ?? 0 }))
 }
 
 export interface LatencyBucket { range: string; count: number }

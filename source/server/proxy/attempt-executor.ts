@@ -348,7 +348,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const upstreamRequestId = extractUpstreamRequestId(upstreamRes.headers)
 
       const contentType = String(upstreamRes.headers['content-type'] ?? '')
-      const isStreaming = contentType.includes('text/event-stream')
+      const isStreaming = isStreamingRequest(requestBody) && contentType.includes('text/event-stream')
 
       if (disposition === 'retry') {
         const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
@@ -522,6 +522,15 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     downstreamAbort = { dispose: () => context.signal.removeEventListener('abort', abortListener) }
 
   })
+}
+
+function isStreamingRequest(requestBody: Buffer): boolean {
+  try {
+    const payload = JSON.parse(requestBody.toString('utf8')) as Record<string, unknown>
+    return payload !== null && !Array.isArray(payload) && typeof payload === 'object' && payload.stream === true
+  } catch {
+    return false
+  }
 }
 
 function serializeStreamingChunks(chunks: string[]): string {
