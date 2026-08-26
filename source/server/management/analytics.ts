@@ -6,6 +6,7 @@ import { AnalyticsRangeSchema, type AnalyticsRange, type AnalyticsSummary } from
 import {
   getStatsSummary,
   getRequestTrend,
+  getIntradayTrend,
   getProviderStats,
   getModelStats,
   getLatencyDistribution,
@@ -35,22 +36,14 @@ function resolveSinceMs(range: AnalyticsRange): number {
   }
 }
 
-function resolveDays(range: AnalyticsRange): number {
-  switch (range) {
-    case 'today': return 1
-    case '7d': return 7
-    case '30d': return 30
-  }
-}
-
 async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { range } = AnalyticsSummaryRequestSchema.parse(body ?? {})
   const sinceMs = resolveSinceMs(range)
-  const days = resolveDays(range)
 
-  const [summary, trend, providerStats, modelStats, latencyDistribution, failureReasons] = await Promise.all([
+  const trend = range === 'today' ? await getIntradayTrend(sinceMs) : await getRequestTrend(sinceMs)
+
+  const [summary, providerStats, modelStats, latencyDistribution, failureReasons] = await Promise.all([
     getStatsSummary(sinceMs),
-    getRequestTrend(sinceMs, days),
     getProviderStats(sinceMs),
     getModelStats(sinceMs, 10),
     getLatencyDistribution(sinceMs),

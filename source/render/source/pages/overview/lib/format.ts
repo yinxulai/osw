@@ -12,13 +12,21 @@ export function formatTokens(tokens: number): string {
 }
 
 export function formatDayLabel(day: string, range: AnalyticsRange): string {
+  // 今日粒度下 label 为 HH:mm（15 分钟槽，仅对整点时刻显示标签避免拥挤）
+  if (range === 'today') {
+    if (day.endsWith(':00')) return day
+    return ''
+  }
   const d = new Date(day)
-  if (range === 'today') return '今日'
   if (range === '7d') {
     const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
     return weekdays[d.getDay()]
   }
   return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+export function formatTrendDescription(range: AnalyticsRange): string {
+  return range === 'today' ? '15 分钟粒度请求数' : '每日请求数'
 }
 
 export const PROVIDER_COLORS = [

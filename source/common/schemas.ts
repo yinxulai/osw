@@ -436,7 +436,7 @@ export const StatsSummarySchema = z.object({
 export type StatsSummary = z.infer<typeof StatsSummarySchema>
 
 export const DailyTrendPointSchema = z.object({
-  day: z.string(),
+  label: z.string(),
   requests: z.number().int().nonnegative(),
   success: z.number().int().nonnegative(),
   failed: z.number().int().nonnegative(),

@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 interface FailureReasonsProps {
   reasons: FailureReasonStat[]
   failedCount: number
-  successRate: number
+  totalRequests: number
 }
 
 const ERROR_COLORS = [
@@ -21,8 +21,8 @@ const ERROR_COLORS = [
 ]
 
 export function FailureReasons(props: FailureReasonsProps) {
-  const { reasons, failedCount, successRate } = props
-  const failureRate = ((1 - successRate) * 100).toFixed(2)
+  const { reasons, failedCount, totalRequests } = props
+  const failureRate = totalRequests > 0 ? ((failedCount / totalRequests) * 100).toFixed(2) : '0.00'
 
   return (
     <Card className="min-w-[320px]">

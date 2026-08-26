@@ -36,30 +36,52 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
   return { totalRequests: total, successCount: success, failedCount: failed, successRate: total > 0 ? success / total : 0, avgLatencyMs: result?.avgLatency ?? 0, totalTokens: usageResult?.tokens ?? 0 }
 }
 
-export interface DailyTrendPoint { day: string; requests: number; success: number; failed: number }
+export interface DailyTrendPoint { label: string; requests: number; success: number; failed: number }
 
-export async function getRequestTrend(sinceMs: number, days: number): Promise<DailyTrendPoint[]> {
+export async function getRequestTrend(sinceMs: number): Promise<DailyTrendPoint[]> {
   const rows = getDb().select({
-    day: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('day'),
+    label: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('label'),
     requests: sql<number>`count(*)`.as('requests'),
     success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
     failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`day`).orderBy(sql`day`).all()
-  const map = new Map(rows.map(row => [row.day, row]))
-  const result: DailyTrendPoint[] = []
-  const current = new Date()
-  for (let index = days - 1; index >= 0; index--) {
-    const date = new Date(current)
-    date.setDate(date.getDate() - index)
-    const day = formatLocalDate(date)
-    const row = map.get(day)
-    result.push({ day, requests: row?.requests ?? 0, success: row?.success ?? 0, failed: row?.failed ?? 0 })
+  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`label`).orderBy(sql`label`).all()
+  return rows.map(row => ({ label: row.label, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0 }))
+}
+
+export interface IntradayTrendPoint { label: string; startMs: number; requests: number; success: number; failed: number }
+
+export async function getIntradayTrend(sinceMs: number): Promise<IntradayTrendPoint[]> {
+  const intervalMs = 15 * 60 * 1000
+  const rows = getDb().select({
+    bucket: sql<number>`floor((${requestLogs.createdTime} - ${sinceMs}) / ${intervalMs})`.as('bucket'),
+    requests: sql<number>`count(*)`.as('requests'),
+    success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
+    failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
+  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`bucket`).all()
+  const map = new Map(rows.map(row => [row.bucket, row]))
+  const nowFloor = Math.floor(Date.now() / intervalMs) * intervalMs
+  const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
+  const slots = Math.floor((nowFloor - sinceFloor) / intervalMs) + 1
+  const result: IntradayTrendPoint[] = []
+  for (let bucket = 0; bucket < slots; bucket++) {
+    const startMs = sinceFloor + bucket * intervalMs
+    const row = map.get(bucket)
+    result.push({
+      label: formatIntradayLabel(startMs),
+      startMs,
+      requests: row?.requests ?? 0,
+      success: row?.success ?? 0,
+      failed: row?.failed ?? 0,
+    })
   }
   return result
 }
 
-function formatLocalDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+function formatIntradayLabel(startMs: number): string {
+  const d = new Date(startMs)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 export interface ProviderStat { providerId: string; providerName: string; requests: number; success: number; failed: number; avgLatencyMs: number }

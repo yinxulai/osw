@@ -153,4 +153,34 @@ describe('analytics route', () => {
     ]))
     expect(payload.data.failureReasons).toEqual(expect.arrayContaining([expect.objectContaining({ reason: '限流 (429)' })]))
   })
+
+  it('returns 15-minute intraday trend for the today range', async () => {
+    await createRequestLog({
+      logicalModelId: 'default',
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: 'openai-responses',
+      status: 'success',
+      totalDurationMilliseconds: 1500,
+      totalTokens: 120,
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      promptCacheHit: false,
+      rawUsage: null,
+      ttftMilliseconds: 100,
+      cacheHit: false,
+    })
+
+    const res = mockResponse()
+    await analyticsRoutes.invoke('/api/analytics/summary', res, { range: 'today' })
+
+    const payload = responseData(res) as { data: { trend: Array<{ label: string; requests: number }> }; success: boolean }
+
+    expect(payload.success).toBe(true)
+    expect(payload.data.trend.length).toBeGreaterThanOrEqual(1)
+    expect(payload.data.trend.length).toBeLessThanOrEqual(96)
+    expect(payload.data.trend[0].label).toMatch(/^\d{2}:\d{2}$/)
+    expect(payload.data.trend.reduce((total, point) => total + point.requests, 0)).toBe(1)
+  })
 })

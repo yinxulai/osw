@@ -83,7 +83,7 @@ export function OverviewPage() {
           <FailureReasons
             reasons={data.failureReasons}
             failedCount={data.summary.failedCount}
-            successRate={data.summary.successRate}
+            totalRequests={data.summary.totalRequests}
           />
         </div>
       </>
