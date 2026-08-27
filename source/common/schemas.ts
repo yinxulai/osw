@@ -242,6 +242,18 @@ export const RequestLogSchema = z.object({
 export type RequestLog = z.infer<typeof RequestLogSchema>
 export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'reasoningTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
 
+export const RequestAttributeValueTypeSchema = z.enum(['string', 'number', 'boolean', 'json'])
+export type RequestAttributeValueType = z.infer<typeof RequestAttributeValueTypeSchema>
+
+export const RequestAttributeSchema = z.object({
+  requestId: z.string().startsWith('req_'),
+  key: z.string().min(1).max(128),
+  value: z.string().max(4096),
+  valueType: RequestAttributeValueTypeSchema,
+  createdTime: z.number().int(),
+})
+export type RequestAttribute = z.infer<typeof RequestAttributeSchema>
+
 // ========== Request Attempt ==========
 
 export const RequestAttemptSchema = z.object({
@@ -486,6 +498,17 @@ export const FailureReasonStatSchema = z.object({
 })
 export type FailureReasonStat = z.infer<typeof FailureReasonStatSchema>
 
+export const RequestSourceStatSchema = z.object({
+  source: z.string(),
+  category: z.string(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  avgLatencyMs: z.number().nonnegative(),
+})
+export type RequestSourceStat = z.infer<typeof RequestSourceStatSchema>
+
 export const AnalyticsSummarySchema = z.object({
   summary: StatsSummarySchema,
   trend: z.array(DailyTrendPointSchema),
@@ -493,5 +516,6 @@ export const AnalyticsSummarySchema = z.object({
   modelStats: z.array(ModelStatSchema),
   latencyDistribution: z.array(LatencyBucketSchema),
   failureReasons: z.array(FailureReasonStatSchema),
+  sourceStats: z.array(RequestSourceStatSchema),
 })
 export type AnalyticsSummary = z.infer<typeof AnalyticsSummarySchema>

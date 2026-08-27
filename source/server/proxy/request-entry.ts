@@ -8,6 +8,7 @@ import { createRequestContext } from './request-context'
 import { validateLogicalModel } from './request'
 import { resolveProxyTargets } from './routing'
 import { detectProtocolFromPath } from './router'
+import { extractRequestAttributes } from './request-attributes'
 
 export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string, hooks: ProxyObservationHooks = {}): Promise<void> {
   const requestId = generateId('req_')
@@ -48,6 +49,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     method: req.method ?? 'POST',
     path: req.url ?? '/',
     headers: req.headers,
+    attributes: extractRequestAttributes(req.headers),
     requestBody,
     signal: controller.signal,
   })

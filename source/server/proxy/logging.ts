@@ -1,6 +1,6 @@
 import type http from 'node:http'
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
-import type { Protocol, RawUsage, RequestStatus } from '@common/schemas'
+import type { Protocol, RawUsage, RequestAttribute, RequestStatus } from '@common/schemas'
 import { getSettings } from '../database/settings-store'
 import {
   createRequestAttempt,
@@ -22,6 +22,7 @@ export interface RequestLoggingInput {
   method: string
   path: string
   headers: http.IncomingHttpHeaders
+  attributes?: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
   requestBody: Buffer
   captureRequestContent: boolean
 }
@@ -124,6 +125,7 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
       rawUsage: null,
       ttftMilliseconds: null,
       cacheHit: null,
+      attributes: input.attributes,
     })
     if (input.captureRequestContent) {
       const content = await createRequestContent({

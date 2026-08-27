@@ -100,6 +100,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     method: context.method,
     path: context.path,
     headers: context.headers,
+    attributes: context.attributes,
     requestBody,
     captureRequestContent: settings.captureRequestContent,
   })

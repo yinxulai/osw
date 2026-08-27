@@ -73,7 +73,7 @@ describe('database lifecycle', () => {
       'settings', 'providers', 'provider_health', 'provider_model_health',
       'provider_models', 'provider_settings', 'provider_endpoints',
       'provider_model_endpoints', 'protocol_converters', 'logical_models', 'request_rewrite_rules', 'provider_model_request_rewrite_rules',
-      'scheduling_policies', 'request_logs', 'request_metrics', 'request_usages',
+      'scheduling_policies', 'request_logs', 'request_metrics', 'request_attributes', 'request_usages',
       'request_attempts', 'request_contents', 'request_conversions',
     ]
     const tables = client
@@ -132,7 +132,7 @@ describe('database lifecycle', () => {
       expect.arrayContaining(['providerModelId', 'providerName', 'providerModelName', 'url', 'httpStatus', 'retryable']),
     )
     expect(indexes.map(index => (index as { name: string }).name)).toEqual(
-      expect.arrayContaining(['idx_scheduling_policies_route', 'idx_request_attempts_request_order']),
+      expect.arrayContaining(['idx_scheduling_policies_route', 'idx_request_attempts_request_order', 'idx_request_attributes_key_value']),
     )
   })
 })

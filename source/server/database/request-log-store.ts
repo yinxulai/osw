@@ -2,6 +2,8 @@ import { and, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import type {
   RawUsage,
   RequestAttempt,
+  RequestAttribute,
+  RequestAttributeValueType,
   RequestContent,
   RequestContentCaptureStatus,
   RequestConversion,
@@ -11,9 +13,9 @@ import type {
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { getDb } from './index'
-import { requestAttempts, requestContents, requestConversions, requestLogs, requestMetrics, requestUsages } from './schema'
+import { requestAttributes, requestAttempts, requestContents, requestConversions, requestLogs, requestMetrics, requestUsages } from './schema'
 
-type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime' | 'reasoningTokens'> & { id?: string; reasoningTokens?: number | null }
+type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime' | 'reasoningTokens'> & { id?: string; reasoningTokens?: number | null; attributes?: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>> }
 
 export interface RequestUsageSnapshot {
   requestId: string
@@ -46,6 +48,9 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
   if (input.promptCacheHit != null) metricValues.push({ requestId: id, key: 'promptCacheHit', value: input.promptCacheHit ? 1 : 0, unit: 'boolean', updatedTime: time })
   if (input.cacheHit != null) metricValues.push({ requestId: id, key: 'cacheHit', value: input.cacheHit ? 1 : 0, unit: 'boolean', updatedTime: time })
   if (metricValues.length > 0) getDb().insert(requestMetrics).values(metricValues).run()
+  if (input.attributes && input.attributes.length > 0) {
+    getDb().insert(requestAttributes).values(input.attributes.map(attribute => ({ ...attribute, requestId: id, createdTime: time }))).run()
+  }
   await replaceRequestUsage({
     requestId: id,
     attemptId: null,
@@ -76,6 +81,18 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     cacheHit: input.cacheHit ?? null,
     createdTime: time,
   }
+}
+
+export async function listRequestAttributes(requestId: string): Promise<RequestAttribute[]> {
+  return getDb().select().from(requestAttributes).where(eq(requestAttributes.requestId, requestId)).orderBy(requestAttributes.key).all().map(row => ({ ...row, valueType: row.valueType as RequestAttributeValueType, createdTime: Number(row.createdTime) }))
+}
+
+export async function replaceRequestAttributes(requestId: string, attributes: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>): Promise<void> {
+  const time = now()
+  getDb().transaction(transaction => {
+    transaction.delete(requestAttributes).where(eq(requestAttributes.requestId, requestId)).run()
+    if (attributes.length > 0) transaction.insert(requestAttributes).values(attributes.map(attribute => ({ ...attribute, requestId, createdTime: time }))).run()
+  })
 }
 
 export async function replaceRequestUsage(input: RequestUsageSnapshot): Promise<void> {
@@ -249,6 +266,7 @@ function pruneRequestLogsInternal(retentionDays: number): number {
     transaction.delete(requestContents).where(inArray(requestContents.requestId, staleIds)).run()
     transaction.delete(requestUsages).where(inArray(requestUsages.requestId, staleIds)).run()
     transaction.delete(requestMetrics).where(inArray(requestMetrics.requestId, staleIds)).run()
+    transaction.delete(requestAttributes).where(inArray(requestAttributes.requestId, staleIds)).run()
     transaction.delete(requestConversions).where(inArray(requestConversions.requestId, staleIds)).run()
     transaction.delete(requestAttempts).where(inArray(requestAttempts.requestId, staleIds)).run()
     transaction.delete(requestLogs).where(inArray(requestLogs.id, staleIds)).run()

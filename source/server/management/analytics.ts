@@ -11,6 +11,7 @@ import {
   getModelStats,
   getLatencyDistribution,
   getFailureReasons,
+  getRequestSourceStats,
 } from '../database/analytics-store'
 import { HttpRouter } from '../http-router'
 
@@ -42,12 +43,13 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
 
   const trend = range === 'today' ? await getIntradayUsageTrend(sinceMs) : await getUsageTrend(sinceMs)
 
-  const [summary, providerStats, modelStats, latencyDistribution, failureReasons] = await Promise.all([
+  const [summary, providerStats, modelStats, latencyDistribution, failureReasons, sourceStats] = await Promise.all([
     getStatsSummary(sinceMs),
     getProviderStats(sinceMs),
     getModelStats(sinceMs, 10),
     getLatencyDistribution(sinceMs),
     getFailureReasons(sinceMs),
+    getRequestSourceStats(sinceMs),
   ])
 
   const totalRequests = summary.totalRequests
@@ -88,6 +90,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     modelStats: modelStatsWithRate,
     latencyDistribution: latencyWithPercent,
     failureReasons: failureWithPercent,
+    sourceStats,
   }
 
   sendSuccess(res, response)

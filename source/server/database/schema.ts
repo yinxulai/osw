@@ -197,6 +197,22 @@ export const requestMetrics = sqliteTable(
   table => [primaryKey({ columns: [table.requestId, table.key] }), index('idx_request_metrics_key').on(table.key)],
 )
 
+export const requestAttributes = sqliteTable(
+  'request_attributes',
+  {
+    requestId: text('requestId').notNull().references(() => requestLogs.id),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    valueType: text('valueType').notNull().default('string'),
+    createdTime: integer('createdTime').notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.requestId, table.key] }),
+    index('idx_request_attributes_key_value').on(table.key, table.value),
+    index('idx_request_attributes_created_time').on(table.createdTime),
+  ],
+)
+
 export const requestUsages = sqliteTable(
   'request_usages',
   {
@@ -303,6 +319,7 @@ export type ProtocolConverterRow = typeof protocolConverters.$inferSelect
 export type SchedulingPolicyRow = typeof schedulingPolicies.$inferSelect
 export type RequestLogRow = typeof requestLogs.$inferSelect
 export type RequestMetricRow = typeof requestMetrics.$inferSelect
+export type RequestAttributeRow = typeof requestAttributes.$inferSelect
 export type RequestUsageRow = typeof requestUsages.$inferSelect
 export type RequestAttemptRow = typeof requestAttempts.$inferSelect
 export type RequestContentRow = typeof requestContents.$inferSelect

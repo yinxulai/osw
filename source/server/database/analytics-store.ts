@@ -1,5 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
-import type { RequestStatus } from '@common/schemas'
+import type { RequestSourceStat, RequestStatus } from '@common/schemas'
 import { getDb } from './index'
 import { requestAttempts, requestLogs, requestUsages } from './schema'
 
@@ -82,6 +82,19 @@ function formatIntradayLabel(startMs: number): string {
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
+}
+
+export async function getRequestSourceStats(sinceMs: number, limit = 20): Promise<RequestSourceStat[]> {
+  const rows = getDb().select({
+    source: sql<string>`coalesce((SELECT value FROM request_attributes source_attr WHERE source_attr.requestId = ${requestLogs.id} AND source_attr.key = 'request.source' LIMIT 1), 'unknown')`.as('source'),
+    category: sql<string>`coalesce((SELECT value FROM request_attributes category_attr WHERE category_attr.requestId = ${requestLogs.id} AND category_attr.key = 'client.category' LIMIT 1), 'unknown')`.as('category'),
+    requests: sql<number>`count(*)`.as('requests'),
+    success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
+    failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
+    totalTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.requestId = ${requestLogs.id} AND usage.attemptId IS NULL AND usage.type = 'totalTokens')), 0)`.as('totalTokens'),
+    avgLatency: sql<number>`coalesce(avg((SELECT metric.value FROM request_metrics metric WHERE metric.requestId = ${requestLogs.id} AND metric.key = 'durationMilliseconds')), 0)`.as('avgLatency'),
+  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`source`, sql`category`).orderBy(sql`requests desc`).limit(limit).all()
+  return rows.map(row => ({ source: row.source, category: row.category, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, totalTokens: row.totalTokens ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
 }
 
 export interface ProviderStat { providerId: string; providerName: string; requests: number; success: number; failed: number; avgLatencyMs: number }
