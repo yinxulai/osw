@@ -140,6 +140,7 @@
 - [x] 配置备份/恢复：导出脱敏配置文件，密钥仅存系统密钥环
 - [ ] Token 用量统计：按 `request_usages.type` 聚合展示今日/本周用量（基础指标已存在，产品口径与专用 UI 仍需确认）
 - [ ] 协议兼容转换器补充验收（详见 [protocol-conversion.md](./protocol-conversion.md)）：核心转换和 UI 已落地，转换候选故障切换、转换错误 400、流式转换异常及各方向发布包验收仍待补齐
+- [ ] Responses API WebSocket 传输（设计详见 [websocket-transport.md](./websocket-transport.md)）：`/v1/responses` 的 `upgrade` 握手、WS→WS 透传中继、上游不支持时回 426 由客户端降级 HTTP、连接级日志与健康冷却；WS↔HTTP/SSE 桥接为 P2 可选项
 - Linux 打包与托盘体验完善
 - 更细粒度的错误切换策略配置
 - [x] 日志导出
