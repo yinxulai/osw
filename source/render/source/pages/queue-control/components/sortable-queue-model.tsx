@@ -10,7 +10,10 @@ interface SortableQueueModelProps {
 
 export function SortableQueueModel(props: SortableQueueModelProps) {
   const { id, children } = props
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    animateLayoutChanges: ({ isSorting }) => isSorting,
+  })
   return (
     <div
       ref={setNodeRef}

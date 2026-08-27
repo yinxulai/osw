@@ -36,45 +36,36 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
   return { totalRequests: total, successCount: success, failedCount: failed, successRate: total > 0 ? success / total : 0, avgLatencyMs: result?.avgLatency ?? 0, totalTokens: usageResult?.tokens ?? 0 }
 }
 
-export interface DailyTrendPoint { label: string; requests: number; success: number; failed: number }
+export interface DailyTrendPoint { label: string; inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheCreationInputTokens: number; reasoningTokens: number }
 
-export async function getRequestTrend(sinceMs: number): Promise<DailyTrendPoint[]> {
-  const rows = getDb().select({
-    label: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('label'),
-    requests: sql<number>`count(*)`.as('requests'),
-    success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
-    failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`label`).orderBy(sql`label`).all()
-  return rows.map(row => ({ label: row.label, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0 }))
+const usageTrendSelect = {
+  inputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'inputTokens' then ${requestUsages.value} else 0 end), 0)`.as('inputTokens'),
+  outputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'outputTokens' then ${requestUsages.value} else 0 end), 0)`.as('outputTokens'),
+  cachedInputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'cachedInputTokens' then ${requestUsages.value} else 0 end), 0)`.as('cachedInputTokens'),
+  cacheCreationInputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'cacheCreationInputTokens' then ${requestUsages.value} else 0 end), 0)`.as('cacheCreationInputTokens'),
+  reasoningTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'reasoningTokens' then ${requestUsages.value} else 0 end), 0)`.as('reasoningTokens'),
 }
 
-export interface IntradayTrendPoint { label: string; startMs: number; requests: number; success: number; failed: number }
+export async function getUsageTrend(sinceMs: number): Promise<DailyTrendPoint[]> {
+  const rows = getDb().select({ label: sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`.as('label'), ...usageTrendSelect }).from(requestLogs).leftJoin(requestUsages, and(eq(requestUsages.requestId, requestLogs.id), isNull(requestUsages.attemptId))).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`label`).orderBy(sql`label`).all()
+  return rows.map(normalizeTrendPoint)
+}
 
-export async function getIntradayTrend(sinceMs: number): Promise<IntradayTrendPoint[]> {
+export async function getIntradayUsageTrend(sinceMs: number): Promise<DailyTrendPoint[]> {
   const intervalMs = 15 * 60 * 1000
-  const rows = getDb().select({
-    bucket: sql<number>`floor((${requestLogs.createdTime} - ${sinceMs}) / ${intervalMs})`.as('bucket'),
-    requests: sql<number>`count(*)`.as('requests'),
-    success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
-    failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
-  }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`bucket`).all()
+  const rows = getDb().select({ bucket: sql<number>`floor((${requestLogs.createdTime} - ${sinceMs}) / ${intervalMs})`.as('bucket'), ...usageTrendSelect }).from(requestLogs).leftJoin(requestUsages, and(eq(requestUsages.requestId, requestLogs.id), isNull(requestUsages.attemptId))).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`bucket`).all()
   const map = new Map(rows.map(row => [row.bucket, row]))
   const nowFloor = Math.floor(Date.now() / intervalMs) * intervalMs
   const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
   const slots = Math.floor((nowFloor - sinceFloor) / intervalMs) + 1
-  const result: IntradayTrendPoint[] = []
-  for (let bucket = 0; bucket < slots; bucket++) {
-    const startMs = sinceFloor + bucket * intervalMs
+  return Array.from({ length: slots }, (_, bucket) => {
     const row = map.get(bucket)
-    result.push({
-      label: formatIntradayLabel(startMs),
-      startMs,
-      requests: row?.requests ?? 0,
-      success: row?.success ?? 0,
-      failed: row?.failed ?? 0,
-    })
-  }
-  return result
+    return normalizeTrendPoint({ label: formatIntradayLabel(sinceFloor + bucket * intervalMs), ...row })
+  })
+}
+
+function normalizeTrendPoint(row: { label: string; inputTokens?: number | null; outputTokens?: number | null; cachedInputTokens?: number | null; cacheCreationInputTokens?: number | null; reasoningTokens?: number | null }): DailyTrendPoint {
+  return { label: row.label, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, cachedInputTokens: row.cachedInputTokens ?? 0, cacheCreationInputTokens: row.cacheCreationInputTokens ?? 0, reasoningTokens: row.reasoningTokens ?? 0 }
 }
 
 function formatIntradayLabel(startMs: number): string {

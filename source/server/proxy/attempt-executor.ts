@@ -59,6 +59,7 @@ interface AttemptOutcome {
   ttftMilliseconds?: number
   inputTokens?: number | null
   outputTokens?: number | null
+  reasoningTokens?: number | null
   cachedInputTokens?: number | null
   cacheCreationInputTokens?: number | null
   promptCacheHit?: boolean | null
@@ -120,6 +121,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
           outputTokens: outcome.outputTokens ?? null,
           cachedInputTokens: outcome.cachedInputTokens ?? null,
           cacheCreationInputTokens: outcome.cacheCreationInputTokens ?? null,
+          reasoningTokens: outcome.reasoningTokens ?? null,
           promptCacheHit: outcome.promptCacheHit ?? null,
           rawUsage: outcome.rawUsage ?? null,
           upstreamProtocol: outcome.upstreamProtocol ?? null,

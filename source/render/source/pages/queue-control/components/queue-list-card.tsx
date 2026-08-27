@@ -10,6 +10,7 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowRight, ListTree, RefreshCw, Target } from 'lucide-react'
+import { useMemo } from 'react'
 import { TableHeaderSurface } from '@/components/table-primitives'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -63,6 +64,7 @@ export function QueueListCard(props: QueueListCardProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+  const itemIds = useMemo(() => models.map(model => model.id), [models])
   const rows = models.map(model => ({
     model,
     cooling: isCooling(model.providerId, model.id),
@@ -114,7 +116,7 @@ export function QueueListCard(props: QueueListCardProps) {
       modifiers={[restrictToVerticalAxis, restrictToParentElement]}
       onDragEnd={event => void onDragEnd(event)}
     >
-      <SortableContext items={models.map(model => model.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         <div className="overflow-x-auto overflow-y-hidden rounded-b-lg">
           {renderTableHeader()}
           {rows.map(row => (

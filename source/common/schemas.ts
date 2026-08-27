@@ -231,6 +231,7 @@ export const RequestLogSchema = z.object({
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
   cachedInputTokens: z.number().int().nonnegative().nullable(),
+  reasoningTokens: z.number().int().nonnegative().nullable().optional(),
   cacheCreationInputTokens: z.number().int().nonnegative().nullable(),
   promptCacheHit: z.boolean().nullable(),
   rawUsage: RawUsageSchema.nullable(),
@@ -239,7 +240,7 @@ export const RequestLogSchema = z.object({
   createdTime: z.number().int(),
 })
 export type RequestLog = z.infer<typeof RequestLogSchema>
-export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
+export type RequestLogUpdate = Partial<Pick<RequestLog, 'status' | 'upstreamProtocol' | 'totalDurationMilliseconds' | 'totalTokens' | 'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens' | 'reasoningTokens' | 'promptCacheHit' | 'rawUsage' | 'ttftMilliseconds' | 'cacheHit'>>
 
 // ========== Request Attempt ==========
 
@@ -383,6 +384,7 @@ export const RequestLogEntrySchema = z.object({
   totalDurationMilliseconds: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative().nullable(),
   inputTokens: z.number().int().nonnegative().nullable(),
+  reasoningTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
   cachedInputTokens: z.number().int().nonnegative().nullable(),
   cacheCreationInputTokens: z.number().int().nonnegative().nullable(),
@@ -437,9 +439,11 @@ export type StatsSummary = z.infer<typeof StatsSummarySchema>
 
 export const DailyTrendPointSchema = z.object({
   label: z.string(),
-  requests: z.number().int().nonnegative(),
-  success: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cachedInputTokens: z.number().int().nonnegative(),
+  cacheCreationInputTokens: z.number().int().nonnegative(),
+  reasoningTokens: z.number().int().nonnegative(),
 })
 export type DailyTrendPoint = z.infer<typeof DailyTrendPointSchema>
 

@@ -5,8 +5,8 @@ import { sendSuccess } from './response'
 import { AnalyticsRangeSchema, type AnalyticsRange, type AnalyticsSummary } from '@common/schemas'
 import {
   getStatsSummary,
-  getRequestTrend,
-  getIntradayTrend,
+  getUsageTrend,
+  getIntradayUsageTrend,
   getProviderStats,
   getModelStats,
   getLatencyDistribution,
@@ -40,7 +40,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
   const { range } = AnalyticsSummaryRequestSchema.parse(body ?? {})
   const sinceMs = resolveSinceMs(range)
 
-  const trend = range === 'today' ? await getIntradayTrend(sinceMs) : await getRequestTrend(sinceMs)
+  const trend = range === 'today' ? await getIntradayUsageTrend(sinceMs) : await getUsageTrend(sinceMs)
 
   const [summary, providerStats, modelStats, latencyDistribution, failureReasons] = await Promise.all([
     getStatsSummary(sinceMs),

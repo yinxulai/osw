@@ -30,6 +30,12 @@ describe('ResponsePipeline', () => {
     expect(onUsage).toHaveBeenCalledOnce()
   })
 
+  it('extracts reasoning tokens from provider usage details', () => {
+    const { pipeline } = setup()
+    pipeline.push('{"usage":{"prompt_tokens":12,"completion_tokens":7,"completion_tokens_details":{"reasoning_tokens":3}}}', true)
+    expect(pipeline.finish(true, null).usage.reasoningTokens).toBe(3)
+  })
+
   it('parses split SSE lines, ignores DONE, and serializes captured chunks', () => {
     const { pipeline, response } = setup({ isStreaming: true })
     pipeline.push('data: {"usage":{"prompt_tokens":3}}\n\n', true)

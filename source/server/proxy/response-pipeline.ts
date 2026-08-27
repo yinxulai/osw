@@ -5,6 +5,7 @@ import type { HeaderMap } from './headers'
 export interface ExtractedUsage {
   inputTokens: number | null
   outputTokens: number | null
+  reasoningTokens: number | null
   cachedInputTokens: number | null
   cacheCreationInputTokens: number | null
   rawUsage: RawUsage | null
@@ -177,7 +178,7 @@ export class ResponsePipeline {
 }
 
 function emptyUsage(): ExtractedUsage {
-  return { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null }
+  return { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, reasoningTokens: null, rawUsage: null }
 }
 
 /** Only count an actual generated delta, not role-only, usage, or [DONE] events. */
@@ -227,6 +228,7 @@ function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {
     outputTokens: firstNumber(rawUsage?.completion_tokens, rawUsage?.output_tokens, rawUsage?.total_output_tokens, rawUsage?.candidatesTokenCount, data.output_tokens, data.completion_tokens),
     cachedInputTokens: firstNumber(asRecord(rawUsage?.prompt_tokens_details)?.cached_tokens, asRecord(rawUsage?.input_tokens_details)?.cached_tokens, rawUsage?.cache_read_input_tokens, rawUsage?.cached_input_tokens, rawUsage?.cache_read_tokens, rawUsage?.cachedContentTokenCount),
     cacheCreationInputTokens: firstNumber(rawUsage?.cache_creation_input_tokens, rawUsage?.cache_creation_tokens, rawUsage?.cached_creation_input_tokens, sumNumbers(cacheCreation?.ephemeral_5m_input_tokens, cacheCreation?.ephemeral_1h_input_tokens)),
+    reasoningTokens: firstNumber(asRecord(rawUsage?.completion_tokens_details)?.reasoning_tokens, asRecord(rawUsage?.output_tokens_details)?.reasoning_tokens, rawUsage?.reasoning_tokens),
     rawUsage,
   }
 }
@@ -237,6 +239,7 @@ function mergeUsage(current: ExtractedUsage, incoming: ExtractedUsage): Extracte
     outputTokens: incoming.outputTokens ?? current.outputTokens,
     cachedInputTokens: incoming.cachedInputTokens ?? current.cachedInputTokens,
     cacheCreationInputTokens: incoming.cacheCreationInputTokens ?? current.cacheCreationInputTokens,
+    reasoningTokens: incoming.reasoningTokens ?? current.reasoningTokens,
     rawUsage: mergeRawUsage(current.rawUsage, incoming.rawUsage),
   }
 }

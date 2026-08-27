@@ -3,13 +3,16 @@ import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { CardSectionHeader } from '@/components/card-section-header'
-import { formatTrendDescription } from '../lib/format'
+import { formatTokens, formatTrendDescription } from '../lib/format'
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const chartConfig = {
-  success: { label: '成功' },
-  failed: { label: '失败' },
+  inputTokens: { label: '输入', color: 'hsl(var(--success))' },
+  outputTokens: { label: '输出', color: '#0891b2' },
+  reasoningTokens: { label: '思考', color: '#64748b' },
+  cachedInputTokens: { label: '缓存读取', color: '#14b8a6' },
+  cacheCreationInputTokens: { label: '缓存写入', color: '#f59e0b' },
 } satisfies ChartConfig
 
 interface TrendChartProps {
@@ -46,6 +49,17 @@ interface TrendTooltipProps {
   range: AnalyticsRange
 }
 
+// Tooltip 按阅读顺序展示；柱状图按从底到顶反向排列，使输入位于最上层。
+const USAGE_ITEMS = [
+  ['inputTokens', '输入'],
+  ['cachedInputTokens', '缓存读取'],
+  ['cacheCreationInputTokens', '缓存写入'],
+  ['outputTokens', '输出'],
+  ['reasoningTokens', '思考'],
+] as const
+
+const STACK_ITEMS = [...USAGE_ITEMS].reverse()
+
 function TrendTooltip(props: TrendTooltipProps) {
   const { active, label, payload, range } = props
   if (!active || !label || !payload?.length) return null
@@ -56,26 +70,12 @@ function TrendTooltip(props: TrendTooltipProps) {
     <div className="rounded-lg bg-muted px-3 py-2 text-xs">
       <div className="font-medium">{formatTooltipLabel(label, range)}</div>
       <div className="mt-1.5 grid gap-1">
-        <div className="flex items-center justify-between gap-6">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-2 rounded-[2px] bg-success" />
-            成功
-          </span>
-          <span className="font-mono font-medium tabular-nums">{point.success}</span>
-        </div>
-        {point.failed > 0 && (
-          <div className="flex items-center justify-between gap-6">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="size-2 rounded-[2px] bg-destructive" />
-              失败
-            </span>
-            <span className="font-mono font-medium tabular-nums">{point.failed}</span>
+        {USAGE_ITEMS.map(([key, label]) => (
+          <div key={key} className="flex items-center justify-between gap-6">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-mono font-medium tabular-nums">{formatTokens(point[key])}</span>
           </div>
-        )}
-        <div className="mt-0.5 flex items-center justify-between gap-6 border-t border-border/50 pt-1">
-          <span className="text-muted-foreground">合计</span>
-          <span className="font-mono font-medium tabular-nums">{point.requests}</span>
-        </div>
+        ))}
       </div>
     </div>
   )
@@ -86,11 +86,11 @@ export function TrendChart(props: TrendChartProps) {
 
   return (
     <Card className="min-w-0 w-full">
-      <CardSectionHeader title="请求量趋势" description={formatTrendDescription(range)} compact />
+      <CardSectionHeader title="Token 使用量趋势" description={formatTrendDescription(range)} compact />
       <CardContent className="min-w-0">
         {trend.length === 0 ? (
           <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">
-            暂无请求数据，产生代理请求后将显示趋势
+            暂无使用量数据，产生代理请求后将显示趋势
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-44 w-full">
@@ -110,11 +110,13 @@ export function TrendChart(props: TrendChartProps) {
                 axisLine={false}
                 width={40}
                 allowDecimals={false}
+                tickFormatter={value => formatTokens(Number(value))}
                 fontSize={11}
               />
               <Tooltip content={<TrendTooltip range={range} />} />
-              <Bar dataKey="success" stackId="total" fill="var(--color-success)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="failed" stackId="total" fill="var(--color-destructive)" radius={[3, 3, 0, 0]} />
+              {STACK_ITEMS.map(([key], index) => (
+                <Bar key={key} dataKey={key} stackId="usage" fill={`var(--color-${key})`} radius={index === STACK_ITEMS.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+              ))}
             </BarChart>
           </ChartContainer>
         )}

@@ -175,12 +175,12 @@ describe('analytics route', () => {
     const res = mockResponse()
     await analyticsRoutes.invoke('/api/analytics/summary', res, { range: 'today' })
 
-    const payload = responseData(res) as { data: { trend: Array<{ label: string; requests: number }> }; success: boolean }
+    const payload = responseData(res) as { data: { trend: Array<{ label: string; inputTokens: number }> }; success: boolean }
 
     expect(payload.success).toBe(true)
     expect(payload.data.trend.length).toBeGreaterThanOrEqual(1)
     expect(payload.data.trend.length).toBeLessThanOrEqual(96)
     expect(payload.data.trend[0].label).toMatch(/^\d{2}:\d{2}$/)
-    expect(payload.data.trend.reduce((total, point) => total + point.requests, 0)).toBe(1)
+    expect(payload.data.trend.reduce((total, point) => total + point.inputTokens, 0)).toBe(100)
   })
 })

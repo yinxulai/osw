@@ -255,6 +255,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             <MetricCard label="输出速度" value={tps === '—' ? '—' : `${tps} t/s`} accent={tps !== '—'} />
             <MetricCard label="输入 Token" value={formatNumber(log.inputTokens)} />
             <MetricCard label="输出 Token" value={formatNumber(log.outputTokens)} />
+            <MetricCard label="思考 Token" value={formatNumber(log.reasoningTokens)} />
             <MetricCard
               label="缓存读取"
               value={formatNumber(log.cachedInputTokens)}

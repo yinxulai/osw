@@ -13,7 +13,7 @@ import { generateId, now } from '@common/utils'
 import { getDb } from './index'
 import { requestAttempts, requestContents, requestConversions, requestLogs, requestMetrics, requestUsages } from './schema'
 
-type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime'> & { id?: string }
+type CreateRequestLogInput = Omit<RequestLog, 'id' | 'createdTime' | 'reasoningTokens'> & { id?: string; reasoningTokens?: number | null }
 
 export interface RequestUsageSnapshot {
   requestId: string
@@ -23,6 +23,7 @@ export interface RequestUsageSnapshot {
   totalTokens: number | null
   cachedInputTokens: number | null
   cacheCreationInputTokens: number | null
+  reasoningTokens?: number | null
   rawUsage: RawUsage | null
 }
 
@@ -50,6 +51,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     attemptId: null,
     inputTokens: input.inputTokens ?? null,
     outputTokens: input.outputTokens ?? null,
+    reasoningTokens: input.reasoningTokens ?? null,
     totalTokens: input.totalTokens ?? null,
     cachedInputTokens: input.cachedInputTokens ?? null,
     cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
@@ -65,6 +67,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     totalTokens: input.totalTokens ?? null,
     inputTokens: input.inputTokens ?? null,
     outputTokens: input.outputTokens ?? null,
+    reasoningTokens: input.reasoningTokens ?? null,
     cachedInputTokens: input.cachedInputTokens ?? null,
     cacheCreationInputTokens: input.cacheCreationInputTokens ?? null,
     promptCacheHit: input.promptCacheHit ?? null,
@@ -81,14 +84,16 @@ export async function replaceRequestUsage(input: RequestUsageSnapshot): Promise<
     ? and(eq(requestUsages.requestId, input.requestId), isNull(requestUsages.attemptId))
     : and(eq(requestUsages.requestId, input.requestId), eq(requestUsages.attemptId, input.attemptId))
   const values: Array<{ type: string; value: number; unit: string; rawValue?: string | null }> = []
-  for (const [type, value] of [
+  const tokenValues: Array<readonly [string, number | null]> = [
     ['inputTokens', input.inputTokens],
     ['outputTokens', input.outputTokens],
+    ['reasoningTokens', input.reasoningTokens ?? null],
     ['totalTokens', input.totalTokens],
     ['cachedInputTokens', input.cachedInputTokens],
     ['cacheCreationInputTokens', input.cacheCreationInputTokens],
-  ] as const) {
-    if (value !== null) values.push({ type, value, unit: 'tokens' })
+  ]
+  for (const [type, value] of tokenValues) {
+    if (value != null) values.push({ type, value, unit: 'tokens' })
   }
   if (input.rawUsage !== null) values.push({ type: 'raw', value: 0, unit: 'string', rawValue: serializeRawUsage(input.rawUsage) })
   getDb().transaction(transaction => {
@@ -108,6 +113,7 @@ export async function listRequestUsages(requestId: string): Promise<RequestUsage
       attemptId: key === 'request' ? null : key,
       inputTokens: value('inputTokens'),
       outputTokens: value('outputTokens'),
+      reasoningTokens: value('reasoningTokens'),
       totalTokens: value('totalTokens'),
       cachedInputTokens: value('cachedInputTokens'),
       cacheCreationInputTokens: value('cacheCreationInputTokens'),
@@ -137,7 +143,7 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
     }
     for (const metric of metrics) transaction.insert(requestMetrics).values({ requestId: id, ...metric, updatedTime: time }).onConflictDoUpdate({ target: [requestMetrics.requestId, requestMetrics.key], set: { value: metric.value, unit: metric.unit, updatedTime: time } }).run()
     const requestScope = and(eq(requestUsages.requestId, id), isNull(requestUsages.attemptId))
-    for (const [field, type] of [['inputTokens', 'inputTokens'], ['outputTokens', 'outputTokens'], ['totalTokens', 'totalTokens'], ['cachedInputTokens', 'cachedInputTokens'], ['cacheCreationInputTokens', 'cacheCreationInputTokens']] as const) {
+    for (const [field, type] of [['inputTokens', 'inputTokens'], ['outputTokens', 'outputTokens'], ['totalTokens', 'totalTokens'], ['cachedInputTokens', 'cachedInputTokens'], ['cacheCreationInputTokens', 'cacheCreationInputTokens'], ['reasoningTokens', 'reasoningTokens']] as const) {
       const value = update[field]
       if (value === null) transaction.delete(requestUsages).where(and(requestScope, eq(requestUsages.type, type))).run()
       else if (value !== undefined) {
@@ -278,6 +284,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     totalDurationMilliseconds: Number(metricValue('durationMilliseconds') ?? 0),
     totalTokens: usageValue('totalTokens'),
     inputTokens: usageValue('inputTokens'),
+    reasoningTokens: usageValue('reasoningTokens'),
     outputTokens: usageValue('outputTokens'),
     cachedInputTokens: usageValue('cachedInputTokens'),
     cacheCreationInputTokens: usageValue('cacheCreationInputTokens'),

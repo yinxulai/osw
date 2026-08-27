@@ -14,6 +14,7 @@ export interface AttemptObservation {
   usage?: {
     inputTokens: number | null
     outputTokens: number | null
+    reasoningTokens: number | null
     cachedInputTokens: number | null
     cacheCreationInputTokens: number | null
     rawUsage: RawUsage | null

@@ -36,6 +36,7 @@ function log(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
     totalTokens: 120,
     inputTokens: 100,
     outputTokens: 20,
+    reasoningTokens: null,
     cachedInputTokens: null,
     cacheCreationInputTokens: null,
     promptCacheHit: null,

@@ -73,6 +73,7 @@ async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
         totalTokens: log.totalTokens,
         inputTokens: log.inputTokens,
         outputTokens: log.outputTokens,
+        reasoningTokens: log.reasoningTokens ?? null,
         cachedInputTokens: log.cachedInputTokens,
         cacheCreationInputTokens: log.cacheCreationInputTokens,
         promptCacheHit: log.promptCacheHit,

@@ -32,6 +32,7 @@ export interface RequestLogMetrics {
   outputTokens?: number | null
   cachedInputTokens?: number | null
   cacheCreationInputTokens?: number | null
+  reasoningTokens?: number | null
   promptCacheHit?: boolean | null
   rawUsage?: RawUsage | null
   upstreamProtocol?: Protocol | null
@@ -57,6 +58,7 @@ export interface AttemptLogSnapshot {
 export interface AttemptUsageInput {
   inputTokens?: number | null
   outputTokens?: number | null
+  reasoningTokens?: number | null
   cachedInputTokens?: number | null
   cacheCreationInputTokens?: number | null
   rawUsage?: RawUsage | null
@@ -115,6 +117,7 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
       totalTokens: null,
       inputTokens: null,
       outputTokens: null,
+      reasoningTokens: null,
       cachedInputTokens: null,
       cacheCreationInputTokens: null,
       promptCacheHit: null,
@@ -156,6 +159,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
           totalTokens: hasTokens ? metrics.inputTokens! + metrics.outputTokens! : null,
           inputTokens: metrics.inputTokens ?? null,
           outputTokens: metrics.outputTokens ?? null,
+          reasoningTokens: metrics.reasoningTokens ?? null,
           cachedInputTokens: metrics.cachedInputTokens ?? null,
           cacheCreationInputTokens: metrics.cacheCreationInputTokens ?? null,
           promptCacheHit: metrics.promptCacheHit ?? null,
@@ -227,6 +231,7 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         attemptId: attempt.id,
         inputTokens: usage?.inputTokens ?? null,
         outputTokens: usage?.outputTokens ?? null,
+        reasoningTokens: usage?.reasoningTokens ?? null,
         totalTokens: hasTokens ? usage!.inputTokens! + usage!.outputTokens! : null,
         cachedInputTokens: usage?.cachedInputTokens ?? null,
         cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
@@ -243,6 +248,7 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         upstreamProtocol: input.snapshot.upstreamProtocol,
         durationMilliseconds: Date.now() - input.startedAt,
         usage: {
+          reasoningTokens: usage?.reasoningTokens ?? null,
           inputTokens: usage?.inputTokens ?? null,
           outputTokens: usage?.outputTokens ?? null,
           cachedInputTokens: usage?.cachedInputTokens ?? null,
