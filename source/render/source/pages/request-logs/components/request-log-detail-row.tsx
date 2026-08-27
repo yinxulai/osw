@@ -204,7 +204,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const upstreamProtocol = log.upstreamProtocol
     ?? successfulAttempt?.upstreamProtocol
     ?? log.attempts[0]?.upstreamProtocol
-  const tps = formatTPS(log.outputTokens, successfulAttempt?.durationMilliseconds ?? log.totalDurationMilliseconds, log.ttftMilliseconds)
+  const tps = formatTPS(log.outputTokens, successfulAttempt?.durationMilliseconds ?? log.totalDurationMilliseconds)
   const contents = 'contents' in log ? log.contents : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
 

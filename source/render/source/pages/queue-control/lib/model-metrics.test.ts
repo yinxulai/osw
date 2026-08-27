@@ -50,7 +50,7 @@ function log(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
 }
 
 describe('calculateQueueModelMetrics', () => {
-  it('attributes metrics to the successful failover target and uses output tokens for TPS', () => {
+  it('attributes metrics to the successful failover target and uses total duration for TPS', () => {
     const metrics = calculateQueueModelMetrics([log({
       attempts: [
         attempt({ status: 'failed', providerId: 'prov_primary', providerModelId: 'model-a' }),
@@ -60,7 +60,7 @@ describe('calculateQueueModelMetrics', () => {
 
     expect(metrics[queueModelMetricKey('prov_backup', 'model-b')]).toEqual({
       sampleCount: 1,
-      avgTps: 13.333333333333334,
+      avgTps: 10,
       avgTtftMilliseconds: 500,
     })
   })
@@ -78,7 +78,7 @@ describe('calculateQueueModelMetrics', () => {
 
     expect(metrics[queueModelMetricKey('prov_primary', 'model-a')]).toEqual({
       sampleCount: 2,
-      avgTps: 13.333333333333334,
+      avgTps: 10,
       avgTtftMilliseconds: 500,
     })
   })

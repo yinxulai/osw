@@ -33,11 +33,8 @@ export function formatNumber(n: number | null | undefined): string {
   return String(n)
 }
 
-export function formatTPS(outputTokens: number | null | undefined, totalMs: number, ttftMs: number | null | undefined): string {
-  if (outputTokens == null || outputTokens <= 0) return '—'
-  // 用生成时间 = 总时间 - TTFT，如果没有 TTFT 就用总时间
-  const generationMs = ttftMs != null && ttftMs < totalMs ? totalMs - ttftMs : totalMs
-  if (generationMs <= 0) return '—'
-  const tps = (outputTokens / generationMs) * 1000
+export function formatTPS(outputTokens: number | null | undefined, totalMs: number): string {
+  if (outputTokens == null || outputTokens <= 0 || totalMs <= 0) return '—'
+  const tps = (outputTokens / totalMs) * 1000
   return tps >= 10 ? `${Math.round(tps)}` : tps.toFixed(1)
 }

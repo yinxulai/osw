@@ -122,7 +122,6 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
   const tps = formatTPS(
     props.log.outputTokens,
     successfulAttempt?.durationMilliseconds ?? props.log.totalDurationMilliseconds,
-    props.log.ttftMilliseconds,
   )
 
   return (
