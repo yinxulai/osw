@@ -54,6 +54,7 @@ export function useQueueControl() {
     health,
     providerModelHealth,
     modelMetrics: metrics.modelMetrics,
+    summaryMetrics: metrics.summaryMetrics,
     proxyStatus: proxy.proxyStatus,
     manualModelId: queueMode.manualModelId,
     mode: queueMode.mode,

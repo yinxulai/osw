@@ -64,7 +64,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
           </div>
         ) : (
           <>
-            <QueueSummary models={service.models} isCooling={service.isCooling} />
+            <QueueSummary models={service.models} summaryMetrics={service.summaryMetrics} />
 
             <QueueListCard
               models={service.models}
