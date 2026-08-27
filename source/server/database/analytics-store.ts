@@ -38,6 +38,15 @@ export async function getStatsSummary(sinceMs: number): Promise<StatsSummary> {
 
 export interface DailyTrendPoint { label: string; inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheCreationInputTokens: number; reasoningTokens: number }
 
+type TrendPointRow = {
+  label: string
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cachedInputTokens?: number | null
+  cacheCreationInputTokens?: number | null
+  reasoningTokens?: number | null
+}
+
 const usageTrendSelect = {
   inputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'inputTokens' then ${requestUsages.value} else 0 end), 0)`.as('inputTokens'),
   outputTokens: sql<number>`coalesce(sum(case when ${requestUsages.type} = 'outputTokens' then ${requestUsages.value} else 0 end), 0)`.as('outputTokens'),
@@ -64,7 +73,7 @@ export async function getIntradayUsageTrend(sinceMs: number): Promise<DailyTrend
   })
 }
 
-function normalizeTrendPoint(row: { label: string; inputTokens?: number | null; outputTokens?: number | null; cachedInputTokens?: number | null; cacheCreationInputTokens?: number | null; reasoningTokens?: number | null }): DailyTrendPoint {
+function normalizeTrendPoint(row: TrendPointRow): DailyTrendPoint {
   return { label: row.label, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, cachedInputTokens: row.cachedInputTokens ?? 0, cacheCreationInputTokens: row.cacheCreationInputTokens ?? 0, reasoningTokens: row.reasoningTokens ?? 0 }
 }
 
