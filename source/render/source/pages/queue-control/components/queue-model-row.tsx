@@ -31,6 +31,14 @@ interface QueueModelRowProps {
   onToggleEnabled: (enabled: boolean) => void
 }
 
+type HealthSource = 'model' | 'provider-fallback' | 'none'
+
+export interface QueueModelHealthDisplay {
+  source: HealthSource
+  consecutiveFailures: number
+  lastSuccessTime: number | null
+}
+
 function formatRelativeTime(timestamp: number | null | undefined): string {
   if (!timestamp) return '—'
   const difference = Date.now() - timestamp
@@ -50,16 +58,51 @@ function formatAverageTtft(milliseconds: number | null | undefined): string {
   return `${(milliseconds / 1000).toFixed(2)}s`
 }
 
+function hasHealthSignal(health: ProviderHealth | ProviderModelHealth | undefined): boolean {
+  if (!health) return false
+  return Boolean(
+    health.consecutiveFailures > 0
+    || health.lastSuccessTime
+    || health.lastFailureTime
+    || health.cooldownUntilTime,
+  )
+}
+
+export function resolveQueueModelHealthDisplay(props: Pick<QueueModelRowProps, 'providerHealth' | 'providerModelHealth'>): QueueModelHealthDisplay {
+  if (hasHealthSignal(props.providerModelHealth)) {
+    return {
+      source: 'model',
+      consecutiveFailures: props.providerModelHealth?.consecutiveFailures ?? 0,
+      lastSuccessTime: props.providerModelHealth?.lastSuccessTime ?? null,
+    }
+  }
+
+  if (hasHealthSignal(props.providerHealth)) {
+    return {
+      source: 'provider-fallback',
+      consecutiveFailures: props.providerHealth?.consecutiveFailures ?? 0,
+      lastSuccessTime: props.providerHealth?.lastSuccessTime ?? null,
+    }
+  }
+
+  return {
+    source: 'none',
+    consecutiveFailures: 0,
+    lastSuccessTime: null,
+  }
+}
+
 function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth' | 'providerModelHealth'>) {
-  const health = props.providerModelHealth?.consecutiveFailures ? props.providerModelHealth : props.providerHealth
-  const failures = health?.consecutiveFailures ?? 0
-  const lastSuccessTime = health?.lastSuccessTime
+  const healthDisplay = resolveQueueModelHealthDisplay(props)
+  const failures = healthDisplay.consecutiveFailures
+  const lastSuccessTime = healthDisplay.lastSuccessTime
+  const isProviderFallback = healthDisplay.source === 'provider-fallback'
 
   if (failures > 0) {
     return (
       <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500">
         <AlertTriangle size={11} />
-        连续失败 {failures} 次
+        {isProviderFallback ? '供应商连续失败' : '连续失败'} {failures} 次
       </span>
     )
   }
@@ -67,7 +110,7 @@ function ModelHealth(props: Pick<QueueModelRowProps, 'providerHealth' | 'provide
     return (
       <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
         <CheckCircle2 size={11} />
-        最后成功 {formatRelativeTime(lastSuccessTime)}
+        {isProviderFallback ? '供应商最后成功' : '最后成功'} {formatRelativeTime(lastSuccessTime)}
       </span>
     )
   }
