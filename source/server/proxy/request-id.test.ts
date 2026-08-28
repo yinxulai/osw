@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractRequestIdFromBody, extractRequestIdFromSse } from './attempt-executor'
+import { extractRequestIdFromBody, extractRequestIdFromSse } from './execution/attempt-executor'
 
 describe('upstream request id extraction', () => {
   it('extracts a top-level request id from JSON', () => {

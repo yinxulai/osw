@@ -8,13 +8,13 @@ import {
   listProviderModels,
   listProviderModelsForLogicalModel,
   updateProviderModelRoute,
-} from '../database/model-store'
+} from '@server/database/model-store'
 import {
   deleteSchedulingPolicy,
   listSchedulingPolicies,
   upsertSchedulingPolicy,
-} from '../database/logical-model-store'
-import { HttpRouter } from '../http-router'
+} from '@server/database/logical-model-store'
+import { HttpRouter } from '@server/http-router'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 

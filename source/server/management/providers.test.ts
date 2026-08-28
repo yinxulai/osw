@@ -5,8 +5,8 @@ import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider, getProvider, listProviders } from '../database/provider-store'
-import { configureSecretStore } from '../infrastructure/secrets/secret-store'
+import { createProvider, getProvider, listProviders } from '@server/database/provider-store'
+import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { deleteProviderAndSecret, providerRoutes } from './providers'
 
 function mockResponse() {

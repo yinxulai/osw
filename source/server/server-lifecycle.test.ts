@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabase, initDatabase } from './database'
 import { updateSettings } from './database/settings-store'
 import { startServer, stopServer } from './index'
-import { getProxyServerStatus, startProxyServer, stopProxyServer } from './proxy/server'
+import { getProxyServerStatus, startProxyServer, stopProxyServer } from './proxy/runtime/server'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
 

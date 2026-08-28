@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http'
-import { AppError } from '../errors'
+import { AppError } from '@server/errors'
 
 export async function parseJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -24,7 +24,7 @@ export async function parseJsonBody(req: IncomingMessage): Promise<unknown> {
       try {
         resolve(JSON.parse(raw))
       } catch (error) {
-        reject(new AppError('INVALID_JSON', 400, '请求体不是有效 JSON', { cause: error }))
+        reject(new AppError('INVALID_JSON', 400, '请求体不是有�?JSON', { cause: error }))
       }
     })
     req.on('aborted', () => fail(new Error('CLIENT_REQUEST_ABORTED')))

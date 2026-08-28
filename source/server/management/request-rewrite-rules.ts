@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema } from '@common/schemas'
 import { createRequestRewriteRule, deleteRequestRewriteRule, getRequestRewriteRule, listProviderModelRequestRewriteRules, listRequestRewriteRules, replaceProviderModelRequestRewriteRuleBindings, updateRequestRewriteRule } from '../database/modification-rule-store'
-import { applyModificationRules } from '../proxy/modification-engine'
+import { applyModificationRules } from '../proxy/modification/modification-engine'
 import { HttpRouter } from '../http-router'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'

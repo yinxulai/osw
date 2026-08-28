@@ -18,7 +18,7 @@ import type { RuntimeEnvironment } from '@common/runtime-profile'
 import { parseJsonBody } from './request-body'
 import { handleApiError } from './error-handler'
 import { isManagementPathAllowed, rejectDisallowedEnvironmentPath } from './environment-guard'
-import { HttpRouter } from '../http-router'
+import { HttpRouter } from '@server/http-router'
 
 const router = new HttpRouter<ManagementHandler>()
   .mount(providerRoutes)
@@ -45,7 +45,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
   const route = router.match(req.method, url.pathname)
 
   if (!route) {
-    sendError(res, 'NOT_FOUND', `API 路径不存在: ${url.pathname}`, 404)
+    sendError(res, 'NOT_FOUND', `API 路径不存�? ${url.pathname}`, 404)
     return
   }
 

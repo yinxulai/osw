@@ -4,7 +4,7 @@ import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
 import type { LogEntry } from '@common/schemas'
 import { clearLogs, exportLogs, listLogs } from './log-buffer'
-import { HttpRouter } from '../http-router'
+import { HttpRouter } from '@server/http-router'
 
 export const logRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/logs/list', handleListLogs)

@@ -7,5 +7,5 @@ export function isManagementPathAllowed(pathname: string, environment: RuntimeEn
 }
 
 export function rejectDisallowedEnvironmentPath(res: ServerResponse, pathname: string): void {
-  sendError(res, 'NOT_FOUND', `API 路径不存在: ${pathname}`, 404)
+  sendError(res, 'NOT_FOUND', `API 路径不存�? ${pathname}`, 404)
 }

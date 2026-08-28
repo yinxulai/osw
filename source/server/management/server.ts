@@ -1,7 +1,7 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
 import { applyManagementRequestGuards } from './request-guards'
-import { normalizeError } from '../errors'
+import { normalizeError } from '@server/errors'
 import { sendManagementError } from './response'
 import type { Server } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'

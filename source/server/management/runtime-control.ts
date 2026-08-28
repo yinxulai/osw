@@ -1,17 +1,17 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { getSettings } from '../database/settings-store'
-import { listProviderHealth, listProviderModelHealth } from '../database/health-store'
-import { getManualModel, setManualModel } from '../proxy/manual-routing'
+import { getSettings } from '@server/database/settings-store'
+import { listProviderHealth, listProviderModelHealth } from '@server/database/health-store'
+import { getManualModel, setManualModel } from '../proxy/routing/manual-routing'
 import {
   getProxyServerStatus,
   restartProxyServer,
   startProxyServer,
   stopProxyServer,
-} from '../proxy/server'
+} from '../proxy/runtime/server'
 import type { ManagementHandler } from './response'
 import { sendSuccess } from './response'
-import { HttpRouter } from '../http-router'
+import { HttpRouter } from '@server/http-router'
 
 export const runtimeControlRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/queue/status', handleQueueStatus)

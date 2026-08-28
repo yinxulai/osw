@@ -12,8 +12,8 @@ import {
   getLatencyDistribution,
   getFailureReasons,
   getRequestSourceStats,
-} from '../database/analytics-store'
-import { HttpRouter } from '../http-router'
+} from '@server/database/analytics-store'
+import { HttpRouter } from '@server/http-router'
 
 export const analyticsRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/analytics/summary', handleAnalyticsSummary)

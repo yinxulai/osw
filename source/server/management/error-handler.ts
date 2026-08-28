@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { normalizeError } from '../errors'
+import { normalizeError } from '@server/errors'
 import { sendManagementError } from './response'
 
 export function handleApiError(req: IncomingMessage, res: ServerResponse, error: unknown): void {

@@ -11,7 +11,7 @@ import {
   listProviderSettings,
   updateProviderEndpoint,
   upsertProviderSetting,
-} from '../database/provider-store'
+} from '@server/database/provider-store'
 import {
   createProtocolConverter,
   createProviderModelEndpoint,
@@ -23,8 +23,8 @@ import {
   listProviderModelEndpoints,
   updateProtocolConverter,
   updateProviderModelEndpoint,
-} from '../database/model-store'
-import { HttpRouter } from '../http-router'
+} from '@server/database/model-store'
+import { HttpRouter } from '@server/http-router'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 

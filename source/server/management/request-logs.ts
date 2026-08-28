@@ -3,8 +3,8 @@ import { z } from 'zod'
 import type { ManagementHandler } from './response'
 import { sendError, sendSuccess } from './response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '../database/request-log-store'
-import { HttpRouter } from '../http-router'
+import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '@server/database/request-log-store'
+import { HttpRouter } from '@server/http-router'
 
 export const requestLogRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/request-log/list', handleListRequestLogs)

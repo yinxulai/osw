@@ -2,12 +2,12 @@ import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
 import { closeDatabase, initDatabase } from '../database'
-import { configureSettingsDefaults, getSettings } from '../database/settings-store'
-import { configureSecretStore } from '../infrastructure/secrets/secret-store'
+import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
+import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { installLogCapture } from '../management/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
-import { resetManualModels } from '../proxy/manual-routing'
-import { startProxyServer, stopProxyServer } from '../proxy/server'
+import { resetManualModels } from '../proxy/routing/manual-routing'
+import { startProxyServer, stopProxyServer } from '../proxy/runtime/server'
 
 export interface ServerRuntimeOptions {
   dataDir: string

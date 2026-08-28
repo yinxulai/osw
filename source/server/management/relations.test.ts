@@ -4,8 +4,8 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider } from '../database/provider-store'
-import { createProviderModelRoute } from '../database/model-store'
+import { createProvider } from '@server/database/provider-store'
+import { createProviderModelRoute } from '@server/database/model-store'
 import { relationRoutes } from './relations'
 
 function mockResponse() {

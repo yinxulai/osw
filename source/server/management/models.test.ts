@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createLogicalModel } from '../database/logical-model-store'
+import { createLogicalModel } from '@server/database/logical-model-store'
 import { modelRoutes } from './models'
 
 function mockResponse() {

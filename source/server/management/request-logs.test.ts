@@ -4,8 +4,8 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { createProvider } from '../database/provider-store'
-import { createRequestAttempt, createRequestContent, createRequestLog } from '../database/request-log-store'
+import { createProvider } from '@server/database/provider-store'
+import { createRequestAttempt, createRequestContent, createRequestLog } from '@server/database/request-log-store'
 import { requestLogRoutes } from './request-logs'
 
 function mockResponse() {
@@ -100,7 +100,7 @@ describe('request log management', () => {
     expect(responseData(res)).toEqual({
       success: false,
       errorCode: 'RESOURCE_NOT_FOUND',
-      errorMessage: '请求日志不存�? req_missing',
+      errorMessage: '请求日志不存�? req_missing',
     })
   })
 
