@@ -47,9 +47,11 @@ const baseNavItems: NavItem[] = [
   { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]
 
+const orchestratorNavItem: NavItem = { key: 'orchestrator', label: '流程编排', icon: GitBranchPlus, section: '高级' }
+
 export function AppSidebar(props: AppSidebarProps) {
-  const navItems = props.showOrchestrator
-    ? [...baseNavItems.slice(0, 5), { key: 'orchestrator', label: '流程编排', icon: GitBranchPlus, section: '高级' }, ...baseNavItems.slice(5)]
+  const navItems: NavItem[] = props.showOrchestrator
+    ? [...baseNavItems.slice(0, 5), orchestratorNavItem, ...baseNavItems.slice(5)]
     : baseNavItems
   const navSections = navItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)

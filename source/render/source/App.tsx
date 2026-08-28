@@ -22,6 +22,7 @@ function App() {
   const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const proxyStatus = useProxyStatus()
+  const isOrchestratorVisible = import.meta.env.DEV
 
   // useProxyStatus 自身负责全局代理状态轮询
 
@@ -44,6 +45,12 @@ function App() {
     }
   }, [theme])
 
+  useEffect(() => {
+    if (!isOrchestratorVisible && activePage === 'orchestrator') {
+      setActivePage('queue')
+    }
+  }, [activePage, isOrchestratorVisible, setActivePage])
+
   const toggleTheme = () => setThemeMode(theme === 'dark' ? 'light' : 'dark')
 
   return (
@@ -56,6 +63,7 @@ function App() {
               theme={theme}
               proxyRunning={proxyStatus?.running ?? false}
               proxyPort={proxyStatus?.port}
+              showOrchestrator={isOrchestratorVisible}
               onNavigate={setActivePage}
               onToggleTheme={toggleTheme}
             />
@@ -75,7 +83,7 @@ function App() {
             />
           )}
           {activePage === 'rules' && <ModificationRulesPage />}
-          {activePage === 'orchestrator' && <WorkflowOrchestratorPage />}
+          {isOrchestratorVisible && activePage === 'orchestrator' && <WorkflowOrchestratorPage />}
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}
