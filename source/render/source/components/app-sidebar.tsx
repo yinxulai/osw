@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Cog,
   Database,
+  GitBranchPlus,
   Moon,
   ListOrdered,
   Plug,
@@ -14,7 +15,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-export type PageKey = 'queue' | 'providers' | 'access' | 'rules' | 'overview' | 'requests' | 'settings' | 'logs'
+export type PageKey = 'queue' | 'providers' | 'access' | 'rules' | 'orchestrator' | 'overview' | 'requests' | 'settings' | 'logs'
 export type Theme = 'light' | 'dark'
 export type ThemeMode = 'system' | Theme
 
@@ -30,11 +31,12 @@ interface AppSidebarProps {
   theme: Theme
   proxyRunning: boolean
   proxyPort?: number
+  showOrchestrator?: boolean
   onNavigate: (page: PageKey) => void
   onToggleTheme: () => void
 }
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   { key: 'queue', label: '模型队列', icon: ListOrdered, section: '主要' },
   { key: 'providers', label: '模型管理', icon: Database, section: '主要' },
   { key: 'overview', label: '统计分析', icon: ChartColumnIncreasing, section: '数据' },
@@ -45,17 +47,20 @@ const navItems: NavItem[] = [
   { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]
 
-const navSections = navItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
-  const currentSection = sections.at(-1)
-  if (currentSection?.label === item.section) {
-    currentSection.items.push(item)
-  } else {
-    sections.push({ label: item.section, items: [item] })
-  }
-  return sections
-}, [])
-
 export function AppSidebar(props: AppSidebarProps) {
+  const navItems = props.showOrchestrator
+    ? [...baseNavItems.slice(0, 5), { key: 'orchestrator', label: '流程编排', icon: GitBranchPlus, section: '高级' }, ...baseNavItems.slice(5)]
+    : baseNavItems
+  const navSections = navItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
+    const currentSection = sections.at(-1)
+    if (currentSection?.label === item.section) {
+      currentSection.items.push(item)
+    } else {
+      sections.push({ label: item.section, items: [item] })
+    }
+    return sections
+  }, [])
+
   return (
     <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
