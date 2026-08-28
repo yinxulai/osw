@@ -1,16 +1,13 @@
 import type { ProtocolAdapter, ProtocolAdapterRegistry } from './shared/types'
 import type { Protocol } from '@common/schemas'
-import { registerOpenAiCompletionsAdapters } from './openai-completions/registry'
-import { registerOpenAiResponsesAdapters } from './openai-responses/registry'
-import { registerAnthropicMessagesAdapters } from './anthropic-messages/registry'
-import { createOpenAiCompletionsAuthHeaders } from './openai-completions/upstream'
-import { createOpenAiResponsesAuthHeaders } from './openai-responses/upstream'
-import { createAnthropicMessagesAuthHeaders } from './anthropic-messages/upstream'
+import { registerOpenAiCompletionsAdapters, createOpenAiCompletionsAuthHeaders } from './openai-completions'
+import { registerOpenAiResponsesAdapters, createOpenAiResponsesAuthHeaders } from './openai-responses'
+import { registerAnthropicMessagesAdapters, createAnthropicMessagesAuthHeaders } from './anthropic-messages'
 
 const adapters = new Map<string, ProtocolAdapter>()
 registerOpenAiCompletionsAdapters(adapters)
-registerOpenAiResponsesAdapters(adapters)
 registerAnthropicMessagesAdapters(adapters)
+registerOpenAiResponsesAdapters(adapters)
 
 export const protocolAdapters: ProtocolAdapterRegistry = {
   resolve(clientProtocol, endpointProtocol): ProtocolAdapter {
