@@ -9,15 +9,15 @@ const mocks = vi.hoisted(() => ({
   unavailableModels: new Set<string>(),
 }))
 
-vi.mock('../database/model-store', () => ({
+vi.mock('@server/database/model-store', () => ({
   listProviderModelsForLogicalModel: async () => mocks.models,
 }))
 
-vi.mock('../database/provider-store', () => ({
+vi.mock('@server/database/provider-store', () => ({
   getProvider: async () => mocks.provider,
 }))
 
-vi.mock('./health', () => ({
+vi.mock('@server/proxy/upstream/health', () => ({
   isProviderAvailable: async (providerId: string) => !mocks.unavailableProviders.has(providerId),
   isProviderModelAvailable: async (providerModelId: string) => !mocks.unavailableModels.has(providerModelId),
 }))
