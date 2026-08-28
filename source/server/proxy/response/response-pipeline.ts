@@ -46,7 +46,7 @@ export class ResponsePipeline {
   private firstOutputReported = false
 
   constructor(private readonly options: ResponsePipelineOptions) {
-    this.streamConverter = options.adapter.requiresResponseConversion && options.isStreaming
+    this.streamConverter = options.adapter.kind === 'conversion' && options.isStreaming
       ? options.adapter.createStreamConverter()
       : null
   }
@@ -90,7 +90,7 @@ export class ResponsePipeline {
       if (this.streamConverter) {
         const tail = this.options.adapter.finishStream(this.streamConverter)
         if (tail) this.writeDownstream(tail)
-      } else if (this.options.adapter.requiresResponseConversion && !this.options.isStreaming && this.responseBuffer) {
+      } else if (this.options.adapter.kind === 'conversion' && !this.options.isStreaming && this.responseBuffer) {
         try {
           finalBody = this.options.adapter.convertResponse(finalBody)
         } catch {
@@ -111,7 +111,7 @@ export class ResponsePipeline {
         this.writeDownstream(finalBody.toString('utf8'))
       } else {
         this.options.onStart?.(finalHeaders)
-        if (this.options.adapter.requiresResponseConversion || !this.options.isStreaming) this.writeDownstream(finalBody.toString('utf8'))
+        if (this.options.adapter.kind === 'conversion' || !this.options.isStreaming) this.writeDownstream(finalBody.toString('utf8'))
       }
       this.options.response.end()
     }

@@ -3,11 +3,12 @@ import type { ProtocolAdapter } from '@server/proxy/protocols/shared/types'
 import { ResponsePipeline, type ResponsePipelineOptions, type ResponseSink } from '@server/proxy/response/response-pipeline'
 
 function makeAdapter(overrides: Partial<ProtocolAdapter> = {}): ProtocolAdapter {
-  return {
+  const adapter: ProtocolAdapter = {
+    kind: 'native',
     clientProtocol: 'openai-completions', endpointProtocol: 'openai-completions', requiresResponseConversion: false,
     prepareRequest: () => Buffer.from(''), createStreamConverter: () => null, finishStream: () => '', convertResponse: body => body,
-    ...overrides,
   }
+  return { ...adapter, ...overrides } as ProtocolAdapter
 }
 function setup(overrides: Partial<ResponsePipelineOptions> = {}) {
   let writableEnded = false
@@ -80,7 +81,15 @@ describe('ResponsePipeline', () => {
   })
 
   it('falls back to the original body when response conversion fails', () => {
-    const { pipeline, response } = setup({ adapter: makeAdapter({ requiresResponseConversion: true, convertResponse: () => { throw new Error('bad response') } }) })
+    const { pipeline, response } = setup({
+      adapter: makeAdapter({
+        kind: 'conversion',
+        requiresResponseConversion: true,
+        endpointProtocol: 'anthropic-messages',
+        createStreamConverter: () => ({ push: () => '', flush: () => '' }),
+        convertResponse: () => { throw new Error('bad response') },
+      }),
+    })
     pipeline.push('{"ok":true}', true)
     pipeline.finish(true, null)
     expect(response.chunks).toEqual(['{"ok":true}'])

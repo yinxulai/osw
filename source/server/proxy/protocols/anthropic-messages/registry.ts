@@ -1,7 +1,10 @@
 import type { ProtocolAdapter } from '../shared/types'
-import { registerAdapter } from '../shared/adapter-factory'
+import { AnthropicMessagesNativeAdapter, AnthropicMessagesToOpenAiCompletionsAdapter } from './adapters'
 
 export function registerAnthropicMessagesAdapters(adapters: Map<string, ProtocolAdapter>): void {
-  registerAdapter(adapters, 'anthropic-messages', 'anthropic-messages')
-  registerAdapter(adapters, 'anthropic-messages', 'openai-completions')
+  const native = new AnthropicMessagesNativeAdapter()
+  adapters.set(`${native.clientProtocol}:${native.endpointProtocol}`, native)
+
+  const toCompletions = new AnthropicMessagesToOpenAiCompletionsAdapter()
+  adapters.set(`${toCompletions.clientProtocol}:${toCompletions.endpointProtocol}`, toCompletions)
 }

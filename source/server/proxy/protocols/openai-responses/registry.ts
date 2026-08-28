@@ -1,7 +1,10 @@
 import type { ProtocolAdapter } from '../shared/types'
-import { registerAdapter } from '../shared/adapter-factory'
+import { OpenAiResponsesNativeAdapter, OpenAiResponsesToOpenAiCompletionsAdapter } from './adapters'
 
 export function registerOpenAiResponsesAdapters(adapters: Map<string, ProtocolAdapter>): void {
-  registerAdapter(adapters, 'openai-responses', 'openai-responses')
-  registerAdapter(adapters, 'openai-responses', 'openai-completions')
+  const native = new OpenAiResponsesNativeAdapter()
+  adapters.set(`${native.clientProtocol}:${native.endpointProtocol}`, native)
+
+  const toCompletions = new OpenAiResponsesToOpenAiCompletionsAdapter()
+  adapters.set(`${toCompletions.clientProtocol}:${toCompletions.endpointProtocol}`, toCompletions)
 }

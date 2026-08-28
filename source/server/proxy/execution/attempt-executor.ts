@@ -132,14 +132,14 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     },
     onTerminal: async (target, outcome) => {
       console.log(
-        `[proxy] 请求终止（不重试�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+        `[proxy] 请求终止（不重试�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
       )
       await requestLogger.finalizeRequestContent(outcome)
       await requestLogger.finalizeRequestLog('failed', startedAt)
     },
     onRetry: async (target, outcome, attemptIndex) => {
       console.warn(
-        `[proxy] 上游返回可重试状�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] 上游返回可重试状�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
     },
@@ -221,12 +221,12 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
 
       if (!response.headersSent) {
         console.error(
-          `[proxy] 所�?Provider 均失�? ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
+          `[proxy] 所�?Provider 均失�? ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
         )
         const responseBody = response.fail(
           502,
           'ALL_PROVIDERS_FAILED',
-          lastError?.message ?? '所�?Provider 都失败了',
+          lastError?.message ?? '所�?Provider 都失败了',
         )
         await requestLogger.finalizeLocalErrorContent(502, response.headers(), responseBody)
       }
@@ -243,7 +243,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   const nativeEndpoint = findEndpoint(model, protocol)
   const convertibleEndpoint = nativeEndpoint ? undefined : findConvertibleEndpoint(model, protocol)
   const endpoint = nativeEndpoint ?? convertibleEndpoint
-  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协�?${protocol}`)
+  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协�?${protocol}`)
   const endpointProtocol = endpoint.protocol
 
   const targetUrl = resolveUpstreamUrl(endpoint.endpointUrl)
@@ -300,7 +300,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     customAuthHeader: endpoint.customAuthHeader,
     clientProtocol: protocol,
     upstreamProtocol: endpointProtocol,
-    requiresResponseConversion: adapter.requiresResponseConversion,
+    requiresResponseConversion: adapter.kind === 'conversion',
     captureRequestContent: settings.captureRequestContent,
     hooks,
   })
@@ -344,7 +344,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
-      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取�?
+      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取�?
       let ttftMilliseconds: number | undefined
       let errorResponse = ''
       const upstreamChunks: string[] = []
@@ -399,7 +399,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
 
       const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
-      if (adapter.requiresResponseConversion || !isStreaming) delete downstreamHeaders['content-length']
+      if (adapter.kind === 'conversion' || !isStreaming) delete downstreamHeaders['content-length']
       if (isStreaming && !response.headersSent) response.start(statusCode, downstreamHeaders)
 
       const responsePipeline = new ResponsePipeline({
@@ -457,7 +457,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           body,
           pipelineResult.usage,
         )
-        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, upstreamResponseHeaders: upstreamRes.headers, clientResponseHeaders: response.headers(), responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.requiresResponseConversion ? pipelineResult.downstreamBody : null, streaming: isStreaming })
+        await recordAttemptContent({ attemptId: attempt?.id ?? null, captureStatus: 'captured', responseStatus: statusCode, upstreamResponseHeaders: upstreamRes.headers, clientResponseHeaders: response.headers(), responseBody: pipelineResult.upstreamBody, convertedResponseBody: adapter.kind === 'conversion' ? pipelineResult.downstreamBody : null, streaming: isStreaming })
         resolveAttempt({
           disposition,
           statusCode,
@@ -467,7 +467,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
           ttftMilliseconds,
           ...pipelineResult.usage,
           promptCacheHit: pipelineResult.usage.cachedInputTokens == null ? null : pipelineResult.usage.cachedInputTokens > 0,
-          upstreamProtocol: adapter.requiresResponseConversion ? endpointProtocol : null,
+          upstreamProtocol: adapter.kind === 'conversion' ? endpointProtocol : null,
           responseStatus: statusCode,
           responseHeaders: JSON.stringify(redactHeaders(createDownstreamHeaders(upstreamRes.headers))),
           responseBody: pipelineResult.downstreamBody,
@@ -570,11 +570,11 @@ function extractUpstreamRequestId(headers: http.IncomingHttpHeaders): string | n
 export function extractRequestIdFromBody(body: string | null): string | null {
   if (!body) return null
 
-  // 普�?JSON 响应：兼容成功响应、错误响应以�?Provider 自己的嵌套结构�?
+  // 普�?JSON 响应：兼容成功响应、错误响应以�?Provider 自己的嵌套结构�?
   const directId = parseRequestIdJson(body)
   if (directId) return directId
 
-  // 流式响应的捕获内容是 { schemaVersion, chunks }，每�?chunk 可能包含多个 SSE event�?
+  // 流式响应的捕获内容是 { schemaVersion, chunks }，每�?chunk 可能包含多个 SSE event�?
   try {
     const captured = JSON.parse(body) as Record<string, unknown>
     if (Array.isArray(captured.chunks)) {
@@ -585,7 +585,7 @@ export function extractRequestIdFromBody(body: string | null): string | null {
       }
     }
   } catch {
-    // �?JSON body 可能仍然是原�?SSE 文本，继续按 SSE 解析�?
+    // �?JSON body 可能仍然是原�?SSE 文本，继续按 SSE 解析�?
   }
 
   return extractRequestIdFromSse(body)

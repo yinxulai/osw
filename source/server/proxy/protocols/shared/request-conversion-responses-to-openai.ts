@@ -1,0 +1,71 @@
+type Json = Record<string, unknown>
+
+function asObject(value: unknown): Json | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Json)
+    : null
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+export function responsesToOpenAiRequest(body: Json, model: string): Json {
+  const messages: Json[] = []
+  const instructions = asString(body.instructions)
+  if (instructions) messages.push({ role: 'system', content: instructions })
+
+  for (const raw of asArray(body.input)) {
+    const item = asObject(raw)
+    if (!item) {
+      if (typeof raw === 'string') messages.push({ role: 'user', content: raw })
+      continue
+    }
+    const role = asString(item.role) === 'assistant' ? 'assistant' : 'user'
+    const parts: Json[] = []
+    if (typeof item.content === 'string') {
+      if (item.content) parts.push({ type: 'text', text: item.content })
+    } else {
+      for (const part of asArray(item.content)) {
+        const record = asObject(part)
+        if (!record) continue
+        if (record.type === 'input_text' || record.type === 'output_text') {
+          const text = asString(record.text)
+          if (text) parts.push({ type: 'text', text })
+        } else if (record.type === 'input_image' && asObject(record.image_url)) {
+          const url = asString((record.image_url as Json).url)
+          if (url) parts.push({ type: 'image_url', image_url: { url } })
+        } else if (record.type === 'function_call_output') {
+          messages.push({ role: 'tool', tool_call_id: asString(record.call_id) ?? '', content: asString(record.output) ?? '' })
+        } else if (record.type === 'function_call') {
+          messages.push({ role: 'assistant', content: null, tool_calls: [{ id: asString(record.call_id) ?? '', type: 'function', function: { name: asString(record.name) ?? '', arguments: asString(record.arguments) ?? '{}' } }] })
+        }
+      }
+    }
+    if (parts.length === 1 && parts[0].type === 'text') {
+      messages.push({ role, content: parts[0].text })
+    } else if (parts.length > 0) {
+      messages.push({ role, content: parts })
+    }
+  }
+
+  const result: Json = { model, messages }
+
+  const maxTokens = asNumber(body.max_output_tokens)
+  if (maxTokens !== undefined) result.max_tokens = maxTokens
+  const temperature = asNumber(body.temperature)
+  if (temperature !== undefined) result.temperature = temperature
+  const topP = asNumber(body.top_p)
+  if (topP !== undefined) result.top_p = topP
+  if (body.stream === true) result.stream = true
+
+  return result
+}

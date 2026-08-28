@@ -97,17 +97,15 @@ describe('convertRequestBody', () => {
     ).toThrow(/不支持的协议转换方向/)
   })
 
-  it('only rewrites the model on the native path', () => {
-    const body = convertRequestBody(
-      'openai-completions',
-      'openai-completions',
-      request('openai-completions', { model: 'client-model', messages: [{ role: 'user', content: 'hi' }], extra: true }),
-      'upstream-model',
-    )
-    const parsed = parseBody(body)
-    expect(parsed.model).toBe('upstream-model')
-    expect(parsed.extra).toBe(true)
-    expect(parsed.messages).toEqual([{ role: 'user', content: 'hi' }])
+  it('rejects native passthrough requests in conversion module', () => {
+    expect(() =>
+      convertRequestBody(
+        'openai-completions',
+        'openai-completions',
+        request('openai-completions', { model: 'client-model', messages: [{ role: 'user', content: 'hi' }], extra: true }),
+        'upstream-model',
+      ),
+    ).toThrow(/同协议请求不应进入转换路径/)
   })
 
   it('converts anthropic image blocks to openai image_url parts', () => {
@@ -305,9 +303,9 @@ describe('convertResponseBody', () => {
     expect(maxTokensParsed.choices[0].finish_reason).toBe('length')
   })
 
-  it('returns the body unchanged when protocols match', () => {
+  it('rejects native passthrough responses in conversion module', () => {
     const body = Buffer.from('{"a":1}')
-    expect(convertResponseBody('openai-completions', 'openai-completions', body)).toBe(body)
+    expect(() => convertResponseBody('openai-completions', 'openai-completions', body)).toThrow(/同协议响应不应进入转换路径/)
   })
 
   it('rejects unsupported directions', () => {
@@ -381,10 +379,8 @@ describe('SSE conversion', () => {
     expect(events[3].choices[0].finish_reason).toBe('tool_calls')
   })
 
-  it('passes through when protocols match', () => {
-    const converter = createSseConverter('openai-completions', 'openai-completions')
-    expect(converter.push('data: x\n\n')).toBe('data: x\n\n')
-    expect(converter.flush()).toBe('')
+  it('rejects native passthrough streams in conversion module', () => {
+    expect(() => createSseConverter('openai-completions', 'openai-completions')).toThrow(/同协议流式响应不应进入转换路径/)
   })
 
   it('buffers partial chunks split across pushes', () => {

@@ -7,15 +7,29 @@ export interface StreamConverter {
   finish?(): string
 }
 
-export interface ProtocolAdapter {
+interface ProtocolAdapterBase {
   readonly clientProtocol: Protocol
   readonly endpointProtocol: Protocol
-  readonly requiresResponseConversion: boolean
   prepareRequest(context: RequestContext, providerModelName: string): Buffer
-  createStreamConverter(): StreamConverter | null
+}
+
+export interface NativeProtocolAdapter extends ProtocolAdapterBase {
+  readonly kind: 'native'
+  readonly requiresResponseConversion: false
+  createStreamConverter(): null
   finishStream(converter: StreamConverter): string
   convertResponse(body: Buffer): Buffer
 }
+
+export interface ProtocolConversionAdapter extends ProtocolAdapterBase {
+  readonly kind: 'conversion'
+  readonly requiresResponseConversion: true
+  createStreamConverter(): StreamConverter
+  finishStream(converter: StreamConverter): string
+  convertResponse(body: Buffer): Buffer
+}
+
+export type ProtocolAdapter = NativeProtocolAdapter | ProtocolConversionAdapter
 
 export interface ProtocolAdapterRegistry {
   resolve(clientProtocol: Protocol, endpointProtocol: Protocol): ProtocolAdapter
