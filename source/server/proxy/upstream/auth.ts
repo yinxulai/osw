@@ -1,1 +1,1 @@
-export { createAuthHeaders } from './auth-dispatch'
+export { createAuthHeaders } from '@server/proxy/protocols/registry'
