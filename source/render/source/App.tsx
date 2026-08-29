@@ -12,7 +12,6 @@ import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
 import { ModificationRulesPage } from './pages/modification-rules/page'
 import { AccessConfigPage } from './pages/access-config/page'
-import { WorkflowOrchestratorV2Page } from './pages/workflow-orchestrator-v2/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
 function App() {
@@ -22,7 +21,6 @@ function App() {
   const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const proxyStatus = useProxyStatus()
-  const isOrchestratorVisible = import.meta.env.DEV
 
   // useProxyStatus 自身负责全局代理状态轮询
 
@@ -45,12 +43,6 @@ function App() {
     }
   }, [theme])
 
-  useEffect(() => {
-    if (!isOrchestratorVisible && activePage === 'orchestrator') {
-      setActivePage('queue')
-    }
-  }, [activePage, isOrchestratorVisible, setActivePage])
-
   const toggleTheme = () => setThemeMode(theme === 'dark' ? 'light' : 'dark')
 
   return (
@@ -63,7 +55,6 @@ function App() {
               theme={theme}
               proxyRunning={proxyStatus?.running ?? false}
               proxyPort={proxyStatus?.port}
-              showOrchestrator={isOrchestratorVisible}
               onNavigate={setActivePage}
               onToggleTheme={toggleTheme}
             />
@@ -83,7 +74,6 @@ function App() {
             />
           )}
           {activePage === 'rules' && <ModificationRulesPage />}
-          {isOrchestratorVisible && activePage === 'orchestrator' && <WorkflowOrchestratorV2Page />}
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}

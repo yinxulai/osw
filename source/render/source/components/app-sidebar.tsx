@@ -3,7 +3,6 @@ import {
   ClipboardList,
   Cog,
   Database,
-  GitBranchPlus,
   Moon,
   ListOrdered,
   Plug,
@@ -15,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-export type PageKey = 'queue' | 'providers' | 'access' | 'rules' | 'orchestrator' | 'overview' | 'requests' | 'settings' | 'logs'
+export type PageKey = 'queue' | 'providers' | 'access' | 'rules' | 'overview' | 'requests' | 'settings' | 'logs'
 export type Theme = 'light' | 'dark'
 export type ThemeMode = 'system' | Theme
 
@@ -31,7 +30,6 @@ interface AppSidebarProps {
   theme: Theme
   proxyRunning: boolean
   proxyPort?: number
-  showOrchestrator?: boolean
   onNavigate: (page: PageKey) => void
   onToggleTheme: () => void
 }
@@ -47,13 +45,8 @@ const baseNavItems: NavItem[] = [
   { key: 'settings', label: '设置', icon: Cog, section: '系统' },
 ]
 
-const orchestratorNavItem: NavItem = { key: 'orchestrator', label: '流程编排', icon: GitBranchPlus, section: '高级' }
-
 export function AppSidebar(props: AppSidebarProps) {
-  const navItems: NavItem[] = props.showOrchestrator
-    ? [...baseNavItems.slice(0, 5), orchestratorNavItem, ...baseNavItems.slice(5)]
-    : baseNavItems
-  const navSections = navItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
+  const navSections = baseNavItems.reduce<Array<{ label: string; items: NavItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
     if (currentSection?.label === item.section) {
       currentSection.items.push(item)
