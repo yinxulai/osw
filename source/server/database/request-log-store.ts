@@ -31,6 +31,7 @@ export interface RequestUsageSnapshot {
 
 export interface RequestLogFilter {
   providerId?: string
+  providerModelId?: string
   logicalModelId?: string
   clientProtocol?: string
   status?: RequestStatus
@@ -249,6 +250,7 @@ function requestLogFilterConditions(filter?: RequestLogFilter) {
   if (!filter) return []
   const conditions = []
   if (filter.providerId) conditions.push(sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerId = ${filter.providerId})`)
+  if (filter.providerModelId) conditions.push(sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerModelId = ${filter.providerModelId})`)
   if (filter.logicalModelId) conditions.push(eq(requestLogs.logicalModelId, filter.logicalModelId))
   if (filter.clientProtocol) conditions.push(eq(requestLogs.clientProtocol, filter.clientProtocol))
   if (filter.status) conditions.push(eq(requestLogs.status, filter.status))

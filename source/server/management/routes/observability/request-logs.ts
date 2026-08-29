@@ -15,6 +15,7 @@ const ListRequestLogsSchema = z.object({
   limit: z.number().int().positive().max(200).optional(),
   offset: z.number().int().nonnegative().optional(),
   providerId: z.string().optional(),
+  providerModelId: z.string().optional(),
   logicalModelId: z.string().optional(),
   clientProtocol: z.string().optional(),
   status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
@@ -47,9 +48,9 @@ async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse
 }
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { limit, offset, providerId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
+  const { limit, offset, providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
   const pageSize = limit ?? 50
-  const filter = { providerId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo }
+  const filter = { providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo }
   const [logs, total] = await Promise.all([
     listRequestLogs(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),

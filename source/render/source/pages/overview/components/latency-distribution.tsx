@@ -12,11 +12,11 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
 
   return (
     <Card className="min-w-70">
-      <CardSectionHeader title="延迟分布" description="请求耗时区间" compact />
+      <CardSectionHeader title="TTFT 分布" description="首字延迟区间" compact />
       <CardContent className="space-y-2 pt-1">
         {buckets.length === 0 ? (
           <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
-            暂无延迟数据
+            暂无 TTFT 数据
           </div>
         ) : buckets.map(l => (
           <div key={l.range} className="flex items-center gap-2">

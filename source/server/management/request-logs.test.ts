@@ -30,6 +30,87 @@ afterEach(async () => {
 })
 
 describe('request log management', () => {
+  it('filters request logs by provider model id', async () => {
+    const provider = await createProvider({ name: 'Provider', apiKeyReference: 'key_filter', timeoutMilliseconds: 30_000, enabled: true })
+    const matched = await createRequestLog({
+      id: 'req_model_match',
+      logicalModelId: 'default',
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: null,
+      status: 'success',
+      totalDurationMilliseconds: 10,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+    const other = await createRequestLog({
+      id: 'req_model_other',
+      logicalModelId: 'default',
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: null,
+      status: 'success',
+      totalDurationMilliseconds: 10,
+      totalTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      cacheCreationInputTokens: null,
+      promptCacheHit: null,
+      rawUsage: null,
+      ttftMilliseconds: null,
+      cacheHit: null,
+    })
+
+    await createRequestAttempt({
+      requestId: matched.id,
+      providerId: provider.id,
+      providerModelId: 'model_match',
+      providerName: provider.name,
+      providerModelName: 'match-model',
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/match',
+      httpStatus: 200,
+      retryable: false,
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 10,
+    })
+    await createRequestAttempt({
+      requestId: other.id,
+      providerId: provider.id,
+      providerModelId: 'model_other',
+      providerName: provider.name,
+      providerModelName: 'other-model',
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/other',
+      httpStatus: 200,
+      retryable: false,
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 10,
+    })
+
+    const res = mockResponse()
+    await requestLogRoutes.invoke('/api/request-log/list', res, { providerModelId: 'model_match' })
+
+    expect(res.statusCode).toBe(200)
+    expect(responseData(res)).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        total: 1,
+        logs: [expect.objectContaining({ id: matched.id })],
+      }),
+    }))
+  })
+
   it('returns one log with attempts and request contents on demand', async () => {
     const provider = await createProvider({ name: 'Provider', apiKeyReference: 'key_detail', timeoutMilliseconds: 30_000, enabled: true })
     const log = await createRequestLog({

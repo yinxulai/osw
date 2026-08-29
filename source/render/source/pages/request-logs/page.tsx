@@ -9,7 +9,7 @@ import { PAGE_SIZE } from './queries'
 import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
-  const { logs, total, providers, logicalModels, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
+  const { logs, total, providers, providerModelOptions, loading, refreshing, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const providerOptions = useMemo(() => {
     return providers
@@ -44,7 +44,7 @@ export function RequestLogsPage() {
         <RequestLogsFilters
           filter={filter}
           providerOptions={providerOptions}
-          logicalModels={logicalModels}
+          providerModelOptions={providerModelOptions}
           total={total}
           applyFilter={setFilter}
         />

@@ -10,6 +10,7 @@ function toParams(filter: RequestLogFilter, page: number) {
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     ...(filter.providerId !== 'all' ? { providerId: filter.providerId } : {}),
+    ...(filter.providerModelId !== 'all' ? { providerModelId: filter.providerModelId } : {}),
     ...(filter.logicalModelId !== 'all' ? { logicalModelId: filter.logicalModelId } : {}),
     ...(filter.clientProtocol !== 'all' ? { clientProtocol: filter.clientProtocol } : {}),
     ...(filter.status !== 'all' ? { status: filter.status as 'pending' | 'success' | 'failed' | 'cancelled' } : {}),

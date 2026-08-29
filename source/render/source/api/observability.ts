@@ -2,7 +2,7 @@ import type { AnalyticsRange, AnalyticsSummary, LogEntry, RequestLogDetail, Requ
 import { request } from './client'
 
 export type ListLogsParams = { after?: number; limit?: number }
-export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; logicalModelId?: string; protocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
+export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; providerModelId?: string; logicalModelId?: string; protocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
 
 export const logsApi = {
   list: (params: ListLogsParams = {}) => request<{ logs: LogEntry[]; latestId: number }>('/logs/list', params),

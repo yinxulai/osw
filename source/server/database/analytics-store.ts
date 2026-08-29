@@ -138,7 +138,7 @@ export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBu
   const buckets = [{ range: '< 1s', min: 0, max: 1000 }, { range: '1-2s', min: 1000, max: 2000 }, { range: '2-3s', min: 2000, max: 3000 }, { range: '3-5s', min: 3000, max: 5000 }, { range: '> 5s', min: 5000, max: Number.MAX_SAFE_INTEGER }]
   const result: LatencyBucket[] = []
   for (const bucket of buckets) {
-    const row = getDb().select({ count: sql<number>`count(*)`.as('count') }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') >= ${bucket.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'durationMilliseconds') < ${bucket.max}`).get()
+    const row = getDb().select({ count: sql<number>`count(*)`.as('count') }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') >= ${bucket.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') < ${bucket.max}`).get()
     result.push({ range: bucket.range, count: row?.count ?? 0 })
   }
   return result

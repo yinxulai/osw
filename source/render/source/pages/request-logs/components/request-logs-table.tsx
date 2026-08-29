@@ -33,6 +33,13 @@ interface RequestLogsTableProps {
   toggleExpand: (id: string) => void
 }
 
+function formatModelSummary(log: RequestLogEntry) {
+  const successfulAttempt = log.attempts.find(attempt => attempt.status === 'success')
+  const primaryAttempt = successfulAttempt ?? log.attempts[log.attempts.length - 1]
+  if (!primaryAttempt) return { label: '—', extraCount: 0 }
+  return { label: `${primaryAttempt.providerName}/${primaryAttempt.providerModelName}`, extraCount: Math.max(log.attempts.length - 1, 0) }
+}
+
 export function CachedTokensCell(props: CachedTokensCellProps) {
   if (props.value === null) {
     return <span className="text-muted-foreground/60">—</span>
@@ -56,7 +63,7 @@ function RequestLogsTableHeader() {
         <th className={cn(tableHeaderCellClass, 'w-8')} />
         <th className={tableHeaderCellClass}>状态</th>
         <th className={tableHeaderCellClass}>时间</th>
-        <th className={tableHeaderCellClass}>队列</th>
+        <th className={tableHeaderCellClass}>供应商模型</th>
         <th className={cn(tableHeaderCellClass, 'text-center')}>
           <ArrowUpFromLine size={11} className="mr-0.5 inline" />
           输入
@@ -98,7 +105,7 @@ function RequestLogsLoadingRows() {
             <Skeleton className="h-3 w-20" />
           </td>
           <td className="px-2.5 py-2.5">
-            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-28" />
           </td>
           {Array.from({ length: 5 }).map((__, cell) => (
             <td key={cell} className="px-2.5 py-2.5">
@@ -111,6 +118,9 @@ function RequestLogsLoadingRows() {
               />
             </td>
           ))}
+          <td className="px-2.5 py-2.5">
+            <Skeleton className="ml-auto h-3 w-12" />
+          </td>
         </tr>
       ))}
     </>
@@ -142,7 +152,21 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
         <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-foreground/75')}>
           {formatTime(props.log.createdTime)}
         </td>
-        <td className={cn(tableCellClass, 'max-w-35 truncate font-medium')}>{props.modelName}</td>
+        <td className={cn(tableCellClass, 'max-w-40')}>
+          {(() => {
+            const { label, extraCount } = formatModelSummary(props.log)
+            return (
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 truncate font-medium">{label}</span>
+                {extraCount > 0 && (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    +{extraCount}
+                  </span>
+                )}
+              </div>
+            )
+          })()}
+        </td>
         <td className={cn(tableCellClass, 'text-center font-mono')}>
           <span className={cn(props.log.inputTokens != null && 'text-foreground')}>
             {formatNumber(props.log.inputTokens)}

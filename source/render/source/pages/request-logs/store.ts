@@ -3,6 +3,7 @@ import type { RequestLogFilter } from './service'
 
 const initialFilter: RequestLogFilter = {
   providerId: 'all',
+  providerModelId: 'all',
   logicalModelId: 'all',
   clientProtocol: 'all',
   status: 'all',

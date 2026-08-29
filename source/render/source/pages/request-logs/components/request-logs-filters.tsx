@@ -9,7 +9,7 @@ export type RequestLogsFilter = RequestLogFilter
 interface RequestLogsFiltersProps {
   filter: RequestLogsFilter
   providerOptions: Array<{ id: string; name: string }>
-  logicalModels: Array<{ id: string; name: string }>
+  providerModelOptions: Array<{ id: string; name: string }>
   total: number
   applyFilter: (next: Partial<RequestLogsFilter>) => void
 }
@@ -33,11 +33,11 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
           {props.providerOptions.map(provider => <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Select value={props.filter.logicalModelId} onValueChange={value => props.applyFilter({ logicalModelId: value })}>
-        <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="全部模型" /></SelectTrigger>
+      <Select value={props.filter.providerModelId} onValueChange={value => props.applyFilter({ providerModelId: value })}>
+        <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="全部供应商模型" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">全部模型</SelectItem>
-          {props.logicalModels.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
+          <SelectItem value="all">全部供应商模型</SelectItem>
+          {props.providerModelOptions.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
         </SelectContent>
       </Select>
       <Select value={props.filter.clientProtocol} onValueChange={value => props.applyFilter({ clientProtocol: value })}>

@@ -183,4 +183,47 @@ describe('analytics route', () => {
     expect(payload.data.trend[0].label).toMatch(/^\d{2}:\d{2}$/)
     expect(payload.data.trend.reduce((total, point) => total + point.inputTokens, 0)).toBe(100)
   })
+
+  it('buckets latency distribution by TTFT instead of total duration', async () => {
+    const provider = await createProvider({ name: 'TTFT Provider', apiKeyReference: 'key_ttft', timeoutMilliseconds: 30_000, enabled: true })
+    const shortTtftLongDuration = await createRequestLog({
+      logicalModelId: 'default',
+      clientProtocol: 'openai-responses',
+      upstreamProtocol: 'openai-responses',
+      status: 'success',
+      totalDurationMilliseconds: 8_000,
+      totalTokens: 10,
+      inputTokens: 5,
+      outputTokens: 5,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      promptCacheHit: false,
+      rawUsage: null,
+      ttftMilliseconds: 120,
+      cacheHit: false,
+    })
+    await createRequestAttempt({
+      requestId: shortTtftLongDuration.id,
+      providerId: provider.id,
+      providerModelId: 'model_ttft',
+      providerName: provider.name,
+      providerModelName: 'ttft-model',
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: 'upstream_ttft',
+      url: 'https://example.com/ttft',
+      httpStatus: 200,
+      retryable: false,
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 8_000,
+    })
+
+    const res = mockResponse()
+    await analyticsRoutes.invoke('/api/analytics/summary', res, { range: '7d' })
+
+    const payload = responseData(res) as { data: { latencyDistribution: Array<{ range: string; count: number }> }; success: boolean }
+
+    expect(payload.success).toBe(true)
+    expect(payload.data.latencyDistribution).toEqual(expect.arrayContaining([expect.objectContaining({ range: '< 1s', count: 1 })]))
+  })
 })
