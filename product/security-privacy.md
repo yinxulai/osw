@@ -15,11 +15,11 @@
 
 ## 密钥存储
 
-- API Key 不写入明文配置文件
-- 使用 Electron `safeStorage` 或系统密钥环（macOS Keychain / Windows Credential Manager / Linux Secret Service）存储
-- 配置文件中仅保存密钥引用 ID
-- 配置导入/导出时默认脱敏密钥（导出文件不含明文密钥）
-- 上游代理首版禁止 URL 携带用户名或密码；后续代理认证必须使用系统密钥存储，普通设置表和配置导出只保存密钥引用，详见 [outbound-proxy.md](./outbound-proxy.md)
+- Provider API Key 不写入明文配置文件
+- Provider API Key 使用 Electron `safeStorage` 或系统密钥环（macOS Keychain / Windows Credential Manager / Linux Secret Service）存储
+- 配置文件中仅保存 Provider API Key 的密钥引用 ID
+- 配置导入/导出时默认脱敏 Provider API Key（导出文件不含明文 API Key）
+- 自定义上游代理 URL 例外：允许携带账号密码，并作为普通设置写入 SQLite 和配置导出；日志、错误与测试结果仍必须脱敏，详见 [outbound-proxy.md](./outbound-proxy.md)
 
 ## 隐私策略
 

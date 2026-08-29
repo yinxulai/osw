@@ -2,17 +2,18 @@
 
 ## 文档状态
 
-本文定义 One Switch 访问模型供应商时使用指定网络代理的产品与技术契约。功能尚未实现，本文作为后续开发和验收依据。
+本文定义 One Switch 访问模型供应商时使用指定网络代理的产品与技术契约。功能尚未实现，技术选型已确定使用 `proxy-agent`，本文作为后续开发和验收依据。
 
 ## 背景与目标
 
 部分网络环境无法直接访问模型供应商，或要求所有外部流量经过公司网关、调试代理或本地代理软件。One Switch 当前使用 Node.js `http.request` / `https.request` 直接访问上游，用户只能依赖进程环境变量或操作系统网络配置，控制台内没有可见、可验证的出站代理设置。
 
-本功能提供应用级全局出站代理，使用户可以：
+本功能提供应用级全局出站代理策略，使用户可以：
 
-- 指定 One Switch 访问模型供应商时使用的代理服务器；
-- 对本地地址或指定域名绕过代理；
-- 在保存前测试代理是否能够访问目标地址；
+- 明确选择强制直连、跟随系统代理或使用自定义代理；
+- 为自定义代理配置包含账号密码的完整代理 URL；
+- 对本地地址或指定域名绕过自定义代理；
+- 在保存前测试当前代理策略是否能够访问目标地址；
 - 在不重启本地监听服务的情况下，让新请求使用最新配置；
 - 从明确的错误信息中区分配置错误、代理不可达、认证失败、超时和目标站点错误。
 
@@ -25,7 +26,7 @@
 | 本地代理服务 | AI 客户端 → One Switch | One Switch 在 `listenHost:listenPort` 上提供的模型 API 入口 |
 | 上游出站代理 | One Switch → 网络代理 → 模型供应商 | 本文新增的网络访问能力 |
 
-“启用上游代理”不修改本地代理服务的监听地址、端口或访问控制，也不代表接管系统代理。
+上游代理策略不修改本地代理服务的监听地址、端口或访问控制。“使用系统代理”只读取操作系统或 Electron 会话解析出的代理结果，不修改系统配置，也不影响其他应用。
 
 ### 首版范围
 
@@ -33,19 +34,20 @@
 - SSE 流式响应；
 - 模型管理中的供应商模型列表获取；
 - 模型连接测试，因为该能力复用真实模型请求链路；
-- `http://`、`https://`、`socks4://`、`socks5://` 代理地址；
-- 主机名、IP 地址和端口形式的绕过规则；
+- “不使用任何代理”“使用系统代理”“自定义代理”三种互斥模式；
+- 自定义代理支持 `http://`、`https://`、`socks4://`、`socks5://` 地址及 URL userinfo 账号密码；
+- 主机名、IP 地址和端口形式的自定义代理绕过规则；
+- 系统代理模式支持操作系统静态代理和 PAC 解析结果；
 - 使用当前未保存表单值执行连接测试。
 
 ### 非目标
 
 - 不修改操作系统、Shell 或其他应用的代理设置；
 - 不代理 Electron 自动更新、GitHub 发布页、遥测或其他非模型网络流量；
-- 不提供 PAC 脚本；
-- 不在首版保存代理用户名或密码；
+- 不在应用内编辑或托管 PAC 脚本；
 - 不为正在进行的请求动态切换代理；
 - 不将代理失败直接解释为 Provider 或 ProviderModel 故障并触发健康冷却；
-- WebSocket 上游传输尚未实现，因此首版不包含 WS 验收；未来实现时必须复用本文的代理选择结果和 Agent 工厂。
+- WebSocket 上游传输尚未实现，因此首版不包含 WS 验收；未来实现时必须复用本文的代理选择结果和共享出站连接器。
 
 ## 产品交互
 
@@ -57,18 +59,20 @@
 
 | 字段 | 控件 | 默认值 | 行为 |
 | --- | --- | --- | --- |
-| 启用上游代理 | Switch | 关闭 | 关闭时所有请求直连，地址与绕过规则保留 |
-| 代理地址 | URL 输入框 | 空 | 支持 `http`、`https`、`socks4`、`socks5` |
-| 绕过代理 | 文本输入框 | `localhost,127.0.0.1,::1` | 逗号或换行分隔；命中时直接连接目标 |
+| 代理模式 | 单选组或分段控件 | 使用系统代理 | 可选“不使用任何代理”“使用系统代理”“自定义代理” |
+| 代理地址 | URL 输入框 | 空 | 仅自定义模式显示；支持 `http`、`https`、`socks4`、`socks5` 和 URL 账号密码 |
+| 绕过代理 | 文本输入框 | `localhost,127.0.0.1,::1` | 仅自定义模式显示；逗号或换行分隔，命中时直接连接目标 |
 | 测试目标 | URL 输入框 | `https://www.gstatic.com/generate_204` | 仅用于本次测试，不进入全局设置 |
-| 测试连接 | 次级按钮 | — | 使用当前表单中的代理地址、绕过规则和测试目标 |
+| 测试连接 | 次级按钮 | — | 使用当前表单中的代理模式、地址、绕过规则和测试目标 |
 
 交互规则：
 
-- 关闭上游代理时，地址和绕过输入框禁用，测试按钮禁用；
-- 代理地址为空或格式不合法时，测试按钮禁用，并在输入框附近显示校验信息；
+- 不使用任何代理时隐藏自定义地址和绕过规则，测试按钮仍可用于验证直连；
+- 使用系统代理时隐藏自定义地址和绕过规则，测试时展示系统最终解析为代理或直连；
+- 使用自定义代理时显示地址和绕过规则；地址为空或格式不合法时禁用测试按钮并显示校验信息；
+- 代理地址输入框使用普通文本输入，不自动遮挡整条 URL；页面不在其他位置重复显示其中的账号密码；
 - 测试进行中禁止重复提交，按钮显示加载状态；
-- 测试成功后展示 HTTP 状态码、耗时，以及本次实际使用“代理”或“直连”；
+- 测试成功后展示 HTTP 状态码、耗时，以及本次实际使用“直连”“系统代理”或“自定义代理”；
 - 测试失败使用可操作的中文错误信息，不展示包含代理凭据的原始 URL；
 - 测试不会自动保存设置，也不会修改运行中的代理配置；
 - 保存设置后只影响后续新请求，已经建立的请求继续使用创建时配置；
@@ -85,7 +89,7 @@
 在全局 `SettingsSchema` 增加：
 
 ```typescript
-outboundProxyEnabled: boolean
+outboundProxyMode: 'direct' | 'system' | 'custom'
 outboundProxyUrl: string
 outboundProxyBypass: string
 ```
@@ -94,24 +98,26 @@ outboundProxyBypass: string
 
 ```typescript
 {
-  outboundProxyEnabled: false,
+  outboundProxyMode: 'system',
   outboundProxyUrl: '',
   outboundProxyBypass: 'localhost,127.0.0.1,::1',
 }
 ```
 
+`direct` 明确强制直连，不读取系统代理或代理环境变量；`system` 使用 Electron 会话解析的系统代理，也是新安装和旧配置缺少该字段时的默认模式；`custom` 使用用户填写的代理 URL。
+
 ### 校验规则
 
 `outboundProxyUrl`：
 
-- 关闭代理时允许为空；
-- 开启代理时不能为空；
+- `direct` 和 `system` 模式允许为空并忽略已保存值；
+- `custom` 模式不能为空；
 - 必须是绝对 URL；
 - scheme 仅允许 `http:`、`https:`、`socks4:`、`socks5:`；
 - 必须包含主机名；
 - 如显式填写端口，端口必须在 `1..65535`；
-- 禁止 URL userinfo，即 `username` 和 `password` 必须为空；
-- 保存时规范化 scheme 和主机名大小写，但保留用户明确填写的路径之外部分；代理 URL 不允许业务路径、查询参数或 fragment。
+- 允许 URL userinfo，包括用户名、密码或仅用户名形式；账号密码按 URL 标准进行百分号编码；
+- 保存时规范化 scheme 和主机名大小写；代理 URL 不允许业务路径、查询参数或 fragment。
 
 `outboundProxyBypass`：
 
@@ -132,21 +138,20 @@ outboundProxyBypass: string
 - 配置导出和导入流程；
 - 设置页草稿与保存请求。
 
-旧配置文件缺少新字段时使用默认值，保持 schema version 3 的向后兼容。导出文件可以包含无凭据的代理地址和绕过规则。
+旧配置文件缺少新字段时使用默认值，保持 schema version 3 的向后兼容。配置导入导出完整保留代理模式、自定义代理 URL 和绕过规则，包括 URL 中的账号密码。
 
 ## 安全与隐私
 
-### 代理认证
+### 代理认证与存储
 
-首版禁止在 URL 中携带用户名和密码。原因：全局设置存储在普通 SQLite 键值表中，且会进入配置导出；直接支持 `http://user:password@proxy` 会让凭据以明文形式出现在数据库、导出文件、错误对象或调试日志中。
+自定义代理 URL 允许直接携带用户名和密码，例如 `http://user:password@127.0.0.1:7890`。按本功能契约，该完整 URL：
 
-后续如增加认证能力，必须：
+- 作为普通设置值保存在本地 SQLite；
+- 随配置导出和导入，不替换为密钥引用；
+- 在设置表单中可编辑；
+- 交给 `proxy-agent` 生成代理认证信息。
 
-1. 使用现有 Secret Store 保存用户名、密码或 Token；
-2. 设置表只保存不可逆的密钥引用；
-3. 导出配置仅包含占位符，不包含明文凭据；
-4. 日志和错误信息对 `Proxy-Authorization` 及代理 URL userinfo 脱敏；
-5. 测试接口只接收密钥引用或临时安全通道中的凭据，不回显秘密。
+这意味着数据库和导出文件可能包含明文代理凭据。导出操作应提示文件可能包含代理账号密码，用户负责保管。运行日志、请求日志、错误消息、测试结果和诊断信息不得输出完整 URL userinfo；显示代理地址时统一脱敏为 `scheme://***:***@host:port`。不得把 `Proxy-Authorization` 转发给目标服务器。
 
 ### 请求可见性
 
@@ -169,17 +174,19 @@ outboundProxyBypass: string
 
 ```mermaid
 flowchart TD
-    A[Settings / 当前测试草稿] --> B[出站代理策略]
-    B --> C{目标命中 bypass?}
-    C -->|是| D[Node 默认 Agent 直连]
-    C -->|否| E[代理 Agent 工厂]
-    E --> F[HTTP / HTTPS / SOCKS Agent]
-    D --> G[共享 HTTP 传输]
-    F --> G
-    G --> H[模型 API 请求]
-    G --> I[供应商模型列表获取]
-    G --> J[代理连接测试]
-    H --> K[普通响应 / SSE]
+    A[Settings / 当前测试草稿] --> B{代理模式}
+    B -->|direct| C[返回空字符串]
+    B -->|system| D[Electron session.resolveProxy]
+    B -->|custom| E{命中 bypass?}
+    E -->|是| C
+    E -->|否| F[返回自定义代理 URL]
+    D --> G[转换系统 DIRECT / PROXY / HTTPS / SOCKS 结果]
+    C --> H[共享出站连接器]
+    F --> H
+    G --> H
+    H --> I[共享 HTTP 传输]
+    I --> J[模型 API / 模型列表 / 连接测试]
+    J --> K[普通响应 / SSE]
 ```
 
 现有真实模型请求经过 `executeProxyRequest` 和 `sendUpstreamRequest`；模型连接测试复用该链路，因此主传输层接入后自然生效。
@@ -193,8 +200,7 @@ flowchart TD
 ```text
 network/
 ├── outbound-proxy.ts        # 配置校验、规范化、bypass 匹配
-├── outbound-agent.ts        # 按代理 URL 与目标协议创建、缓存 Agent
-└── outbound-request.ts      # 将策略应用到 Node RequestOptions
+└── outbound-connector.ts    # 解析三态策略并接入 Node RequestOptions
 ```
 
 职责边界：
@@ -202,28 +208,28 @@ network/
 | 模块 | 职责 | 明确不做 |
 | --- | --- | --- |
 | `outbound-proxy.ts` | 解析配置、判断目标直连或代理、生成脱敏描述 | 不发起网络请求 |
-| `outbound-agent.ts` | 创建和缓存 Node Agent，释放旧连接池 | 不读取业务 Provider |
-| `outbound-request.ts` | 为目标 URL 生成 `agent` 等请求选项 | 不解析模型协议报文 |
+| `outbound-connector.ts` | 持有共享出站连接器，为目标 URL 生成底层请求选项 | 不解析模型协议报文 |
 | `proxy/response/transport.ts` | 执行 HTTP I/O、超时、中止、响应生命周期 | 不决定业务路由或保存设置 |
-| Management 测试路由 | 校验输入、调用共享出站请求、映射测试结果 | 不修改全局配置 |
+| Management 测试路由 | 校验输入、调用共享出站连接器、映射测试结果 | 不修改全局配置 |
 
-### Agent 选择与缓存
+业务代码、配置字段、日志与 UI 统一使用“出站连接器”“代理模式”“代理策略”等名称，不使用 `agent` 命名；`Agent` 仅限第三方库类型和 Node.js 底层 API 边界。
 
-实现使用兼容 Node `http.request` / `https.request` 的 Agent，不迁移到另一套 Dispatcher API。建议直接依赖 `proxy-agent` 或其底层明确代理 Agent 包，不依赖锁文件中的传递依赖。
+### `proxy-agent` 与系统代理集成
 
-缓存键至少包含：
+项目直接依赖 `proxy-agent`，不使用锁文件中的传递依赖，也不通过修改 `HTTP_PROXY`、`HTTPS_PROXY` 或 `NO_PROXY` 环境变量来切换模式。
 
-- 规范化后的代理 URL；
-- 目标协议；
-- 不含秘密的 Agent 选项。
+底层实现使用一个长生命周期 `ProxyAgent`，通过异步 `getProxyForUrl(targetUrl)` 回调读取当前内存配置。该类型只封装在 `outbound-connector.ts` 内部，不进入业务接口：
 
-设置更新后不需要重启监听服务：
+- `direct`：始终返回空字符串，明确绕过系统代理和代理环境变量；
+- `custom`：命中应用 bypass 时返回空字符串，否则返回包含 userinfo 的规范化自定义代理 URL；
+- `system`：调用 Electron 默认会话的 `session.resolveProxy(targetUrl)`，将 Chromium 代理解析结果转换为 `proxy-agent` 支持的 URL；
+- `proxy-agent` 根据最终 URL scheme 自动选择 HTTP、HTTPS 或 SOCKS 实现；
+- 底层库负责按目标协议和代理 URL 缓存具体连接实现，并在缓存淘汰时释放连接资源；
+- 应用退出或网络运行时销毁时释放共享出站连接器。
 
-- 每次新请求根据最新设置选择 Agent；
-- 进行中的请求保留创建时 Agent，不中断；
-- 不再引用的 Agent 应在安全时机调用 `destroy()`，释放空闲 socket；
-- 并发更新配置时，Agent 缓存替换必须是原子的；
-- 测试草稿使用独立或按草稿键缓存的 Agent，不能污染已保存配置状态。
+`session.resolveProxy()` 可能返回按优先级排列的 `DIRECT`、`PROXY host:port`、`HTTPS host:port`、`SOCKS host:port`、`SOCKS4 host:port` 等 Chromium 代理规则。解析器按顺序选择首个受支持结果；`DIRECT` 返回空字符串；无法识别或系统解析失败时返回稳定错误，不静默回退到其他来源。系统代理解析通过运行时注入的适配器提供，保持 `source/server` 核心模块可测试且不直接依赖 Electron。
+
+设置更新后不需要重启监听服务。出站连接器对每个新请求读取最新配置，进行中的请求继续使用建连时选定的路径。测试草稿创建短生命周期连接器，测试结束后释放资源，不会修改或污染已保存配置对应的共享实例。
 
 ### 健康状态语义
 
@@ -246,49 +252,53 @@ POST /api/outbound-proxy/test
 
 ```json
 {
-  "proxyUrl": "http://127.0.0.1:7890",
+  "mode": "custom",
+  "proxyUrl": "http://user:password@127.0.0.1:7890",
   "bypass": "localhost,127.0.0.1,::1",
   "targetUrl": "https://www.gstatic.com/generate_204"
 }
 ```
 
-测试接口始终按请求中的草稿配置执行，不读取 `outboundProxyEnabled`，因为 UI 只有在启用状态下才允许调用。服务端仍需独立完成全部校验。
+测试接口始终按请求中的三态草稿配置执行。`direct` 和 `system` 模式忽略 `proxyUrl` 与 `bypass`；`custom` 模式完成全部 URL 与 bypass 校验。请求体允许携带代理账号密码，但服务端不得记录原始请求体或完整代理 URL。
 
 成功响应：
 
 ```json
 {
   "targetUrl": "https://www.gstatic.com/generate_204",
-  "route": "proxy",
+  "route": "custom-proxy",
   "statusCode": 204,
   "durationMilliseconds": 183
 }
 ```
 
-当测试目标命中绕过规则时，`route` 返回 `direct`。任意有效 HTTP 响应都返回成功结构，不要求状态码属于 2xx。
+`route` 可为 `direct`、`system-direct`、`system-proxy` 或 `custom-proxy`。自定义目标命中绕过规则时返回 `direct`；系统代理解析为 `DIRECT` 时返回 `system-direct`。任意有效 HTTP 响应都返回成功结构，不要求状态码属于 2xx。
 
 失败响应沿用 Management API 错误包装，建议增加或稳定映射以下错误码：
 
 | 错误码 | HTTP 状态 | 用户提示语义 |
 | --- | --- | --- |
-| `VALIDATION_ERROR` | 400 | 代理地址、绕过规则或目标 URL 不合法 |
+| `VALIDATION_ERROR` | 400 | 代理模式、地址、绕过规则或目标 URL 不合法 |
+| `SYSTEM_PROXY_RESOLUTION_FAILED` | 502 | 无法读取或解析当前系统代理配置 |
 | `OUTBOUND_PROXY_UNREACHABLE` | 502 | 无法连接代理服务器 |
-| `OUTBOUND_PROXY_AUTH_REQUIRED` | 502 | 代理要求认证，首版不支持保存认证信息 |
+| `OUTBOUND_PROXY_AUTH_REQUIRED` | 502 | 代理要求认证，或填写的账号密码无效 |
 | `OUTBOUND_PROXY_TUNNEL_REJECTED` | 502 | 代理拒绝连接目标地址 |
 | `UPSTREAM_UNAVAILABLE` | 502 | 已连接代理，但目标地址不可达 |
 | `UPSTREAM_TIMEOUT` | 504 | 代理连接或目标响应超时 |
 | `CLIENT_REQUEST_ABORTED` | 499 | 用户离开页面或取消测试 |
 
-底层错误文本只能用于服务端诊断，返回 UI 的消息必须稳定、可操作且不泄露敏感信息。
+底层错误文本只能用于服务端诊断，返回 UI 的消息必须稳定、可操作且不泄露代理账号密码。
 
 ## 出站请求行为
 
 ### 普通 HTTP 与 HTTPS
 
-- 关闭代理或命中 bypass 时使用 Node 默认 Agent 直连；
+- `direct` 模式和自定义 bypass 命中时使用 Node 默认连接实现直连；
+- `system` 模式尊重系统代理对每个目标返回的代理或 `DIRECT` 结果；
 - HTTP 目标通过 HTTP(S) 代理时使用代理支持的绝对请求地址语义；
 - HTTPS 目标通过 HTTP(S) 代理时使用 `CONNECT` 隧道；
-- SOCKS 代理由 Agent 完成 TCP/TLS 建连；
+- SOCKS 代理由底层连接器完成 TCP/TLS 建连；
+- 代理 URL userinfo 仅用于生成代理认证，不得进入目标请求 URL 或普通请求头；
 - 目标 TLS 校验继续使用 Node 默认信任链，不因为启用代理而关闭证书校验；
 - 不向目标服务器转发 `Proxy-Authorization`；
 - 原有连接超时、响应空闲超时、客户端取消和 SSE 流式边界保持不变。
@@ -302,7 +312,7 @@ POST /api/outbound-proxy/test
 未来实现 [websocket-transport.md](./websocket-transport.md) 时：
 
 - WS/WSS 握手必须使用同一代理策略和 bypass 规则；
-- 兼容 Node Agent 的 WS 客户端可以复用 Agent 工厂；
+- WS 客户端复用共享出站连接器提供的底层连接能力；
 - 一条已建立连接在生命周期内固定使用创建时代理；
 - 代理设置变化只影响后续新连接；
 - WS 连接失败同样需要区分代理阶段与上游阶段。
@@ -315,15 +325,22 @@ sequenceDiagram
     participant API as Management API
     participant Store as settings-store
     participant Request as 新上游请求
-    participant Agent as Agent 工厂
+    participant Connector as 出站连接器
 
     UI->>API: 保存 Settings
     API->>Store: updateSettings
     Store-->>UI: 返回规范化后的 Settings
     Note over UI,Store: 代理设置变化不重启本地监听服务
-    Request->>Store: 获取最新 Settings 快照
-    Request->>Agent: 目标 URL + 代理配置
-    Agent-->>Request: 直连或代理 Agent
+    Request->>Connector: 发起目标 URL 请求
+    Connector->>Store: 读取最新代理模式
+    alt direct
+        Store-->>Connector: 强制直连
+    else system
+        Store-->>Connector: session.resolveProxy 结果
+    else custom
+        Store-->>Connector: 自定义代理 URL 或 bypass 直连
+    end
+    Connector-->>Request: 选择并复用底层连接
 ```
 
 ## 实施改动面
@@ -355,10 +372,14 @@ sequenceDiagram
 
 ### 单元测试
 
-- 代理 URL 的合法协议、无效协议、userinfo、端口和多余 URL 部分；
+- 三种代理模式的默认值、互斥选择和配置校验；
+- 代理 URL 的合法协议、无效协议、带账号密码、端口和多余 URL 部分；
 - bypass 的精确主机、域名后缀、端口、大小写、IPv4 和 IPv6；
 - 代理 URL 脱敏函数不得输出用户名、密码或查询参数；
-- 同配置复用 Agent，配置变化替换 Agent；
+- `getProxyForUrl` 在 direct、system、custom bypass 和 custom proxy 状态下返回正确结果；
+- Chromium `DIRECT`、`PROXY`、`HTTPS`、`SOCKS`、`SOCKS4` 规则转换及未知规则错误；
+- 配置变化后新请求读取最新值，测试草稿实例销毁且不修改运行配置；
+- 带账号密码的代理 URL 完整持久化及导入导出，日志和错误仍保持脱敏；
 - 配置默认值、持久化、监听通知和旧配置导入。
 
 ### 传输集成测试
@@ -375,26 +396,30 @@ sequenceDiagram
 
 ### UI 测试
 
-- 开关控制输入框与测试按钮状态；
+- 三态控件正确切换直连、系统代理和自定义代理；
+- 仅自定义模式显示地址与绕过输入框；
 - 测试使用当前草稿而不是已保存设置；
 - 请求期间禁用重复操作；
 - 成功展示 route、状态码和耗时；
-- 失败展示稳定错误，不回显敏感 URL；
+- 失败展示稳定错误，不回显代理账号密码；
 - 保存代理设置不会重启本地服务；监听地址或端口变化仍会重启。
 
 ## 验收标准
 
-- [ ] 用户可以在运行设置页启用或关闭全局上游代理
-- [ ] 支持 HTTP、HTTPS、SOCKS4 和 SOCKS5 代理地址
-- [ ] 不合法 URL、未知协议、userinfo 和非法端口无法保存或测试
+- [ ] 用户可以明确选择不使用任何代理、使用系统代理或自定义代理
+- [ ] 新安装及旧配置缺少代理模式字段时默认使用系统代理
+- [ ] 不使用任何代理时强制直连，不读取系统代理或代理环境变量
+- [ ] 系统代理模式遵守操作系统静态代理、PAC 和 DIRECT 解析结果
+- [ ] 自定义模式支持 HTTP、HTTPS、SOCKS4 和 SOCKS5 代理地址
+- [ ] 自定义代理 URL 允许携带用户名和密码并可完成代理认证
+- [ ] 不合法 URL、未知协议和非法端口无法保存或测试
 - [ ] 默认绕过 localhost、127.0.0.1 和 ::1，本地模型访问不受影响
 - [ ] 普通模型请求、SSE 请求、模型连接测试和模型列表获取均遵守同一代理设置
-- [ ] 测试按钮使用未保存草稿，通过代理访问指定目标并展示 route、状态码和耗时
+- [ ] 测试按钮使用未保存草稿，并展示 direct/system/custom route、状态码和耗时
 - [ ] 代理不可达、407、CONNECT 拒绝、目标不可达和超时具有可区分的错误提示
 - [ ] 代理阶段失败不会错误冷却单个 Provider 或 ProviderModel
 - [ ] 保存代理设置后新请求立即生效，无需重启本地监听服务
 - [ ] 修改监听地址或端口时仍按现有流程重启本地代理服务
-- [ ] 配置导入导出包含无凭据的代理设置，旧 schema version 3 配置仍可导入
-- [ ] 数据库、配置导出、运行日志和 UI 错误中不出现代理认证凭据
-- [ ] 关闭上游代理后所有模型网络请求恢复直连
+- [ ] 配置导入导出完整保留代理模式、自定义 URL、账号密码和绕过规则，旧 schema version 3 配置仍可导入
+- [ ] 运行日志、请求日志、错误消息和测试结果不出现代理认证凭据
 - [ ] `pnpm typecheck`、`pnpm lint` 和完整测试通过
