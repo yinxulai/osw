@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
-import { modelTestRoutes } from './model-test'
+import { modelTestRoutes } from './routes/diagnostics/model-test'
 
 let temporaryDirectory: string
 

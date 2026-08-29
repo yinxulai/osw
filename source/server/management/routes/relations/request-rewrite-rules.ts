@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema } from '@common/schemas'
-import { createRequestRewriteRule, deleteRequestRewriteRule, getRequestRewriteRule, listProviderModelRequestRewriteRules, listRequestRewriteRules, replaceProviderModelRequestRewriteRuleBindings, updateRequestRewriteRule } from '../database/modification-rule-store'
-import { applyModificationRules } from '../proxy/modification/modification-engine'
-import { HttpRouter } from '../http-router'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
+import { createRequestRewriteRule, deleteRequestRewriteRule, getRequestRewriteRule, listProviderModelRequestRewriteRules, listRequestRewriteRules, replaceProviderModelRequestRewriteRuleBindings, updateRequestRewriteRule } from '@server/database/modification-rule-store'
+import { applyModificationRules } from '@server/proxy/modification/modification-engine'
+import { HttpRouter } from '@server/http-router'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
 
 const IdSchema = z.object({ id: z.string().min(1) })
 const ModelSchema = z.object({ providerModelId: z.string().min(1) })

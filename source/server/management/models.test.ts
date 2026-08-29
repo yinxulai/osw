@@ -5,7 +5,7 @@ import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createLogicalModel } from '@server/database/logical-model-store'
-import { modelRoutes } from './models'
+import { modelRoutes } from './routes/catalog'
 
 function mockResponse() {
   return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse

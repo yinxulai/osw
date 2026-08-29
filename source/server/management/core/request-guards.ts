@@ -9,7 +9,7 @@ export async function applyManagementRequestGuards(method: string | undefined, u
     res.end()
     return false
   }
-  
+
   const pathname = new URL(url!, 'http://localhost').pathname
   if (!pathname.startsWith('/api/')) {
     sendError(res, 'RESOURCE_NOT_FOUND', '管理 API 路径不存在', 404)

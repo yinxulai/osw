@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
 import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '@server/database/request-log-store'
 import { HttpRouter } from '@server/http-router'
@@ -29,7 +29,7 @@ async function handleRequestLogDetail(_req: IncomingMessage, res: ServerResponse
   const { id } = RequestLogDetailSchema.parse(body ?? {})
   const log = await getRequestLog(id)
   if (!log) {
-    sendError(res, 'RESOURCE_NOT_FOUND', `请求日志不存�? ${id}`, 404)
+    sendError(res, 'RESOURCE_NOT_FOUND', `请求日志不存在 ${id}`, 404)
     return
   }
   const [entry, contents, conversions] = await Promise.all([
@@ -64,43 +64,43 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
 async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
   const attempts = await listAttemptsByRequest(log.id)
   return {
-        id: log.id,
-        logicalModelId: log.logicalModelId,
-        clientProtocol: log.clientProtocol,
-        upstreamProtocol: log.upstreamProtocol,
-        status: log.status,
-        totalDurationMilliseconds: log.totalDurationMilliseconds,
-        totalTokens: log.totalTokens,
-        inputTokens: log.inputTokens,
-        outputTokens: log.outputTokens,
-        reasoningTokens: log.reasoningTokens ?? null,
-        cachedInputTokens: log.cachedInputTokens,
-        cacheCreationInputTokens: log.cacheCreationInputTokens,
-        promptCacheHit: log.promptCacheHit,
-        rawUsage: log.rawUsage,
-        ttftMilliseconds: log.ttftMilliseconds,
-        cacheHit: log.cacheHit,
-        createdTime: log.createdTime,
-        attempts: attempts
-          .sort((a, b) => a.attemptIndex - b.attemptIndex)
-          .map(a => ({
-            id: a.id,
-            attemptIndex: a.attemptIndex,
-            status: a.status,
-            providerId: a.providerId,
-            providerName: a.providerName,
-            providerModelId: a.providerModelId,
-            providerModelName: a.providerModelName,
-            upstreamProtocol: a.upstreamProtocol,
-            upstreamRequestId: a.upstreamRequestId,
-            url: a.url,
-            httpStatus: a.httpStatus,
-            retryable: a.retryable,
-            errorCode: a.errorCode,
-            errorMessage: a.errorMessage,
-            details: a.details,
-            durationMilliseconds: a.durationMilliseconds,
-            createdTime: a.createdTime,
-          })),
+    id: log.id,
+    logicalModelId: log.logicalModelId,
+    clientProtocol: log.clientProtocol,
+    upstreamProtocol: log.upstreamProtocol,
+    status: log.status,
+    totalDurationMilliseconds: log.totalDurationMilliseconds,
+    totalTokens: log.totalTokens,
+    inputTokens: log.inputTokens,
+    outputTokens: log.outputTokens,
+    reasoningTokens: log.reasoningTokens ?? null,
+    cachedInputTokens: log.cachedInputTokens,
+    cacheCreationInputTokens: log.cacheCreationInputTokens,
+    promptCacheHit: log.promptCacheHit,
+    rawUsage: log.rawUsage,
+    ttftMilliseconds: log.ttftMilliseconds,
+    cacheHit: log.cacheHit,
+    createdTime: log.createdTime,
+    attempts: attempts
+      .sort((a, b) => a.attemptIndex - b.attemptIndex)
+      .map(a => ({
+        id: a.id,
+        attemptIndex: a.attemptIndex,
+        status: a.status,
+        providerId: a.providerId,
+        providerName: a.providerName,
+        providerModelId: a.providerModelId,
+        providerModelName: a.providerModelName,
+        upstreamProtocol: a.upstreamProtocol,
+        upstreamRequestId: a.upstreamRequestId,
+        url: a.url,
+        httpStatus: a.httpStatus,
+        retryable: a.retryable,
+        errorCode: a.errorCode,
+        errorMessage: a.errorMessage,
+        details: a.details,
+        durationMilliseconds: a.durationMilliseconds,
+        createdTime: a.createdTime,
+      })),
   }
 }

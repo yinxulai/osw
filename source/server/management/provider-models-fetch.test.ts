@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildModelListUrls, parseModelListResponse } from './provider-models-fetch'
+import { buildModelListUrls, parseModelListResponse } from './routes/diagnostics/provider-models-fetch'
 
 describe('buildModelListUrls', () => {
   it('builds /models and /v1/models variants for a bare base url', () => {

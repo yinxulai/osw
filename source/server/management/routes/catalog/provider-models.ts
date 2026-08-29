@@ -15,8 +15,8 @@ import {
   upsertSchedulingPolicy,
 } from '@server/database/logical-model-store'
 import { HttpRouter } from '@server/http-router'
-import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendSuccess } from '../../core/response'
 
 export const providerModelRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/provider-model/list', handleListProviderModels)

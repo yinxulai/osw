@@ -7,7 +7,7 @@ import type { KeychainApi } from '@common/keychain'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider, getProvider, listProviders } from '@server/database/provider-store'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
-import { deleteProviderAndSecret, providerRoutes } from './providers'
+import { deleteProviderAndSecret, providerRoutes } from './routes/catalog/providers'
 
 function mockResponse() {
   return { setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse

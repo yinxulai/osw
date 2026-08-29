@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SettingsSchema } from '@common/schemas'
 import { getSettings, updateSettings } from '@server/database/settings-store'
-import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendSuccess } from '../../core/response'
 import { HttpRouter } from '@server/http-router'
 
 export const settingsRoutes = new HttpRouter<ManagementHandler>()

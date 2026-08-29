@@ -7,7 +7,7 @@ import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createProviderModelRoute } from '@server/database/model-store'
 import { createRequestRewriteRule } from '@server/database/modification-rule-store'
-import { requestRewriteRuleRoutes } from './request-rewrite-rules'
+import { requestRewriteRuleRoutes } from './routes/relations/request-rewrite-rules'
 
 function mockResponse() {
   return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse

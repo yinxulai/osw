@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
-import { parseJsonBody } from './request-body'
+import { parseJsonBody } from './core/request-body'
 
 type RequestEvent = { type: 'data' | 'end' | 'error' | 'aborted'; value?: unknown }
 

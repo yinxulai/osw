@@ -7,10 +7,10 @@ import {
   getLogicalModel,
   listLogicalModels,
   updateLogicalModel,
-} from '../database/logical-model-store'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
-import { HttpRouter } from '../http-router'
+} from '@server/database/logical-model-store'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
+import { HttpRouter } from '@server/http-router'
 
 export const modelRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/logical-model/list', handleListLogicalModels)

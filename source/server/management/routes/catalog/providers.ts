@@ -10,12 +10,12 @@ import {
   listProviders,
   replaceProviderEndpoints,
   updateProvider,
-} from '../database/provider-store'
-import { resetProviderHealth } from '../database/health-store'
-import { getSecretStore } from '../infrastructure/secrets/secret-store'
-import { HttpRouter } from '../http-router'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
+} from '@server/database/provider-store'
+import { resetProviderHealth } from '@server/database/health-store'
+import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { HttpRouter } from '@server/http-router'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
 
 export const providerRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/provider/list', handleListProviders)

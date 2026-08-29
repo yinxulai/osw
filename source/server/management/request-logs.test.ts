@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createRequestAttempt, createRequestContent, createRequestLog } from '@server/database/request-log-store'
-import { requestLogRoutes } from './request-logs'
+import { requestLogRoutes } from './routes/observability/request-logs'
 
 function mockResponse() {
   return { setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
@@ -100,7 +100,7 @@ describe('request log management', () => {
     expect(responseData(res)).toEqual({
       success: false,
       errorCode: 'RESOURCE_NOT_FOUND',
-      errorMessage: '请求日志不存�? req_missing',
+      errorMessage: '请求日志不存在 req_missing',
     })
   })
 

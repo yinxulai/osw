@@ -1,23 +1,25 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { modelRoutes } from './models'
-import { providerRoutes } from './providers'
-import type { ManagementHandler } from './response'
-import { sendError } from './response'
-import { runtimeControlRoutes } from './runtime-control'
-import { settingsRoutes } from './settings'
-import { providerModelRoutes } from './provider-models'
-import { logRoutes } from './logs'
-import { requestLogRoutes } from './request-logs'
-import { analyticsRoutes } from './analytics'
-import { configRoutes } from './config/routes'
-import { modelTestRoutes } from './model-test'
-import { providerModelFetchRoutes } from './provider-models-fetch'
-import { relationRoutes } from './relations'
-import { requestRewriteRuleRoutes } from './request-rewrite-rules'
+import type { ManagementHandler } from './core/response'
+import { sendError } from './core/response'
+import {
+  analyticsRoutes,
+  configRoutes,
+  logRoutes,
+  modelRoutes,
+  modelTestRoutes,
+  providerModelFetchRoutes,
+  providerModelRoutes,
+  providerRoutes,
+  relationRoutes,
+  requestLogRoutes,
+  requestRewriteRuleRoutes,
+  runtimeControlRoutes,
+  settingsRoutes,
+} from './routes'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
-import { parseJsonBody } from './request-body'
-import { handleApiError } from './error-handler'
-import { isManagementPathAllowed, rejectDisallowedEnvironmentPath } from './environment-guard'
+import { parseJsonBody } from './core/request-body'
+import { handleApiError } from './core/error-handler'
+import { isManagementPathAllowed, rejectDisallowedEnvironmentPath } from './core/environment-guard'
 import { HttpRouter } from '@server/http-router'
 
 const router = new HttpRouter<ManagementHandler>()
@@ -45,7 +47,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
   const route = router.match(req.method, url.pathname)
 
   if (!route) {
-    sendError(res, 'NOT_FOUND', `API 路径不存�? ${url.pathname}`, 404)
+    sendError(res, 'NOT_FOUND', `API 路径不存在 ${url.pathname}`, 404)
     return
   }
 

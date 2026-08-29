@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ManagementHandler } from '../response'
-import { sendError, sendSuccess } from '../response'
+import type { ManagementHandler } from '../core/response'
+import { sendError, sendSuccess } from '../core/response'
 import { seedDevelopmentData } from '../../database/development-seed'
 import { getSecretStore } from '../../infrastructure/secrets/secret-store'
 import { exportConfig } from './export-config'

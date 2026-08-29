@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendSuccess } from '../../core/response'
 import { AnalyticsRangeSchema, type AnalyticsRange, type AnalyticsSummary } from '@common/schemas'
 import {
   getStatsSummary,

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { getErrorResponseMessage, normalizeError } from '../errors'
+import { getErrorResponseMessage, normalizeError } from '../../errors'
 
 export type ManagementHandler = (req: IncomingMessage, res: ServerResponse, body: unknown) => Promise<void> | void
 

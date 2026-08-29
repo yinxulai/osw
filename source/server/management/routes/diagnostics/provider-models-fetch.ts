@@ -3,12 +3,12 @@ import http from 'node:http'
 import https from 'node:https'
 import { z } from 'zod'
 import { ProtocolSchema, type Protocol } from '@common/schemas'
-import { getProvider, listProviderEndpoints } from '../database/provider-store'
-import { getSecretStore } from '../infrastructure/secrets/secret-store'
-import { createAuthHeaders } from '../proxy/upstream/auth'
-import { HttpRouter } from '../http-router'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
+import { getProvider, listProviderEndpoints } from '@server/database/provider-store'
+import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { createAuthHeaders } from '../../../proxy/upstream/auth'
+import { HttpRouter } from '@server/http-router'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
 
 export interface FetchedProviderModel {
   id: string

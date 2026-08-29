@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ServerResponse } from 'node:http'
-import { applyManagementRequestGuards } from './request-guards'
+import { applyManagementRequestGuards } from './core/request-guards'
 
 function mockResponse(): ServerResponse {
   return {

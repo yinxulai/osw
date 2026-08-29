@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createRequestLog, createRequestAttempt } from '@server/database/request-log-store'
 import { createProvider } from '@server/database/provider-store'
-import { analyticsRoutes } from './analytics'
+import { analyticsRoutes } from './routes/observability/analytics'
 
 function mockResponse() {
   return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse

@@ -12,7 +12,7 @@ import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
 import { ModificationRulesPage } from './pages/modification-rules/page'
 import { AccessConfigPage } from './pages/access-config/page'
-import { WorkflowOrchestratorPage } from './pages/workflow-orchestrator/page'
+import { WorkflowOrchestratorV2Page } from './pages/workflow-orchestrator-v2/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
 function App() {
@@ -83,7 +83,7 @@ function App() {
             />
           )}
           {activePage === 'rules' && <ModificationRulesPage />}
-          {isOrchestratorVisible && activePage === 'orchestrator' && <WorkflowOrchestratorPage />}
+          {isOrchestratorVisible && activePage === 'orchestrator' && <WorkflowOrchestratorV2Page />}
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}

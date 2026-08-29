@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendSuccess } from '../../core/response'
 import type { LogEntry } from '@common/schemas'
-import { clearLogs, exportLogs, listLogs } from './log-buffer'
+import { clearLogs, exportLogs, listLogs } from '../../infrastructure/log-buffer'
 import { HttpRouter } from '@server/http-router'
 
 export const logRoutes = new HttpRouter<ManagementHandler>()

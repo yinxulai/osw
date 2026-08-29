@@ -25,8 +25,8 @@ import {
   updateProviderModelEndpoint,
 } from '@server/database/model-store'
 import { HttpRouter } from '@server/http-router'
-import type { ManagementHandler } from './response'
-import { sendError, sendSuccess } from './response'
+import type { ManagementHandler } from '../../core/response'
+import { sendError, sendSuccess } from '../../core/response'
 
 const IdSchema = z.object({ id: z.string().min(1) })
 const ProviderIdSchema = z.object({ providerId: z.string().startsWith('prov_') })

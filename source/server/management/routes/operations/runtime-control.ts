@@ -2,15 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { getSettings } from '@server/database/settings-store'
 import { listProviderHealth, listProviderModelHealth } from '@server/database/health-store'
-import { getManualModel, setManualModel } from '../proxy/routing/manual-routing'
+import { getManualModel, setManualModel } from '../../../proxy/routing/manual-routing'
 import {
   getProxyServerStatus,
   restartProxyServer,
   startProxyServer,
   stopProxyServer,
-} from '../proxy/runtime/server'
-import type { ManagementHandler } from './response'
-import { sendSuccess } from './response'
+} from '../../../proxy/runtime/server'
+import type { ManagementHandler } from '../../core/response'
+import { sendSuccess } from '../../core/response'
 import { HttpRouter } from '@server/http-router'
 
 export const runtimeControlRoutes = new HttpRouter<ManagementHandler>()

@@ -1,7 +1,7 @@
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { logRoutes } from './logs'
-import { clearLogs, installLogCapture, listLogs } from './log-buffer'
+import { logRoutes } from './routes/observability/logs'
+import { clearLogs, installLogCapture, listLogs } from './infrastructure/log-buffer'
 
 function mockResponse() {
   return { statusCode: 0, headersSent: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn() } as unknown as ServerResponse
