@@ -39,17 +39,12 @@ export interface UpdateState {
 type Listener = (state: UpdateState) => void
 
 /**
- * 基于 electron-updater 的官方自动更新实现。
+ * 基于 electron-updater 的更新检查与安装实现。
  *
  * 更新源由 electron-builder.config.cjs 的 publish 配置决定（GitHub Releases）。
  * 打包时 electron-builder 会生成 app-update.yml 并嵌入应用，autoUpdater 自动读取。
- *
- * 事件流：
- *   checking-for-update → update-available → download-progress → update-downloaded
- *                       → update-not-available
- *                       → error
- *
- * 前端通过 IPC 触发 check/download/install，状态变化通过监听器广播。
+ * macOS 的 ad-hoc 签名不满足 Squirrel.Mac 自动安装要求，因此只检查更新并引导用户
+ * 前往对应 GitHub Release 下载 DMG；其他平台继续使用下载和安装流程。
  */
 export class UpdaterManager {
   private state: UpdateState = {
@@ -83,11 +78,6 @@ export class UpdaterManager {
     autoUpdater.autoInstallOnAppQuit = false
     // 允许预发布版本（pre-release 阶段）
     autoUpdater.allowPrerelease = true
-
-    // 应用为 ad-hoc 签名（无开发者证书），每次构建的 CDHash 都不同，
-    // ShipIt 校验 designated requirement 必然失败（"代码未能满足指定的代码要求"）。
-    // 因此完全关闭更新包的代码签名校验；zip 完整性由 latest-mac.yml 的 sha512 保证。
-    ;(autoUpdater as unknown as { verifyUpdateCodeSignature: boolean }).verifyUpdateCodeSignature = false
 
     autoUpdater.on('checking-for-update', () => {
       this.setState({ status: 'checking', errorMessage: null })
@@ -171,7 +161,7 @@ export class UpdaterManager {
       latestVersion: info.version,
       releaseNotes,
       releaseDate: info.releaseDate ?? new Date().toISOString(),
-      releaseUrl: GITHUB_RELEASES_PAGE,
+      releaseUrl: `https://github.com/yinxulai/one-switch/releases/tag/v${info.version}`,
       assets,
       preferredAsset: assets[0],
     }
@@ -196,6 +186,10 @@ export class UpdaterManager {
   }
 
   async downloadUpdate(): Promise<boolean> {
+    if (process.platform === 'darwin') {
+      await this.openReleasesPage()
+      return false
+    }
     if (this.state.status === 'downloading') return false
     if (this.state.status !== 'update-available') {
       this.setState({
@@ -220,13 +214,13 @@ export class UpdaterManager {
   }
 
   /**
-   * 安装已下载的更新。electron-updater 会退出应用并启动安装程序。
-   * Windows 下运行 NSIS 安装包；macOS 下替换 .app 后重启。
+   * 安装已下载的更新。macOS 打开发布页进行 DMG 手动安装，
+   * 其他平台由 electron-updater 退出应用并启动安装程序。
    */
   async installUpdate(): Promise<void> {
-    if (this.state.status !== 'downloaded') {
-      // 没有已下载的更新时，打开发布页
-      await shell.openExternal(this.state.info?.releaseUrl ?? GITHUB_RELEASES_PAGE)
+    if (process.platform === 'darwin' || this.state.status !== 'downloaded') {
+      // macOS 使用 DMG 手动覆盖安装；其他平台无已下载更新时也回退到发布页。
+      await this.openReleasesPage()
       return
     }
     // isSilent=false 显示安装界面，isForceRunAfter=true 安装后重启应用

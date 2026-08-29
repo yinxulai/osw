@@ -34,10 +34,11 @@ function formatDate(iso: string): string {
 
 type UpdateActionsProps = {
   status: UpdateCheckStatus
+  isMacOS: boolean
   hasUpdate: boolean
   hasPreferredAsset: boolean
-  onDownload: () => void
   onInstall: () => void
+  onDownload: () => void
   onOpenReleases: () => void
 }
 
@@ -134,6 +135,7 @@ function UpdateActions(props: UpdateActionsProps) {
     status,
     hasUpdate,
     hasPreferredAsset,
+    isMacOS,
     onDownload,
     onInstall,
     onOpenReleases,
@@ -141,6 +143,14 @@ function UpdateActions(props: UpdateActionsProps) {
 
   const renderUpdateAction = () => {
     if (!hasUpdate) return null
+    if (isMacOS) {
+      return (
+        <Button size="sm" onClick={onOpenReleases}>
+          <Download className="mr-1 h-3.5 w-3.5" />
+          前往下载 DMG
+        </Button>
+      )
+    }
     if (!hasPreferredAsset) {
       return (
         <Button size="sm" onClick={onOpenReleases}>
@@ -171,10 +181,12 @@ function UpdateActions(props: UpdateActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1">
       {renderUpdateAction()}
-      <Button size="sm" variant="ghost" onClick={onOpenReleases}>
-        <ExternalLink className="mr-1 h-3.5 w-3.5" />
-        GitHub 发布页
-      </Button>
+      {(!isMacOS || !hasUpdate) && (
+        <Button size="sm" variant="ghost" onClick={onOpenReleases}>
+          <ExternalLink className="mr-1 h-3.5 w-3.5" />
+          GitHub 发布页
+        </Button>
+      )}
     </div>
   )
 }
@@ -248,6 +260,7 @@ export function UpdateCard() {
   if (!updater) return <PreviewCard />
 
   const { status, info, errorMessage, downloadProgress } = state
+  const isMacOS = window.electronAPI.platform === 'darwin'
   const isChecking = status === 'checking'
   const isDownloading = status === 'downloading'
   const hasUpdate = status === 'update-available' || status === 'downloading' || status === 'downloaded'
@@ -262,7 +275,9 @@ export function UpdateCard() {
               版本更新
             </CardTitle>
             <CardDescription>
-              基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级
+              {isMacOS
+                ? '基于 GitHub Releases 检查新版本，下载 DMG 后手动覆盖安装'
+                : '基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级'}
             </CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
@@ -282,7 +297,7 @@ export function UpdateCard() {
       <CardContent className="space-y-3 px-4 py-4">
         <VersionInfo info={info} />
 
-        {info?.preferredAsset && (
+        {!isMacOS && info?.preferredAsset && (
           <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-mono">{info.preferredAsset.name}</span>
@@ -303,6 +318,7 @@ export function UpdateCard() {
           status={status}
           hasUpdate={hasUpdate}
           hasPreferredAsset={Boolean(info?.preferredAsset)}
+          isMacOS={isMacOS}
           onDownload={handleDownload}
           onInstall={handleInstall}
           onOpenReleases={handleOpenReleases}
