@@ -1,8 +1,8 @@
 # 请求修改设计
 
-> **状态：TODO，暂不实施。**
+> **状态：已实现，本文对齐当前代码实现。**
 >
-> 本文是“修改规则”大模块的产品与技术设计草案，用于后续讨论、拆分任务和实施验收。本文没有改变当前代理行为；在未完成设计评审前，不新增数据库表、管理 API 或代理执行逻辑。
+> 本文描述当前仓库中已经落地的“请求重写规则”能力，包括数据库表、管理 API、前端页面、代理执行和观测行为。文中凡标注“后续”或“待讨论”的部分，表示当前实现尚未覆盖。
 
 ## 1. 背景与目标
 
@@ -14,18 +14,18 @@ One Switch 当前主要负责协议识别、ProviderModel 路由、故障切换�
 - 需要调整 thinking/reasoning 相关字段；
 - 需要在响应返回客户端前修正某些 JSON 字段。
 
-本模块的目标是提供一条**可配置、可排序、可复用、可观测的修改器链**：
+当前实现提供一条**可配置、可排序、可复用、可观测的修改器链**：
 
 1. 修改规则作为独立一级配置实体，在控制台中集中管理；
 2. ProviderModel 可以选择适用的规则并调整执行顺序；
-3. 修改器按报文阶段执行，明确区分上游请求、上游响应和客户端响应；
-4. 请求详情可以展示规则执行前后对应阶段的真实边界报文和非敏感修改摘要；
+3. 修改器按报文阶段执行，区分请求阶段和响应阶段；
+4. 请求详情可以展示上游请求、上游响应和转换后的正文内容，规则执行摘要目前仅记录规则 ID 列表；
 5. 每条规则只做小而明确的修改，规则失败有确定的错误语义；
 6. 默认不泄露密钥和完整敏感正文，不以脚本执行替代结构化配置。
 
 ## 2. 非目标
 
-首期不包含以下内容：
+当前实现仍不包含以下内容：
 
 - 任意 JavaScript/TypeScript 脚本执行或用户自定义代码沙箱；
 - 复杂表达式语言、网络访问、文件访问或进程调用；
@@ -39,12 +39,12 @@ One Switch 当前主要负责协议识别、ProviderModel 路由、故障切换�
 
 | 术语 | 定义 |
 | --- | --- |
-| 请求修改 | 全局管理的可复用规则实体，包含匹配条件和一个或多个请求/响应动作 |
-| 动作 | 规则执行时对 Header、JSON Body 或协议字段进行的一次具体修改 |
+| 请求修改 | 全局管理的可复用规则实体，名称在实现中为 request rewrite rule |
+| 动作 | 规则执行时对 Header 或 JSON Body 进行的一次具体修改，动作自带请求/响应阶段 |
 | 规则链 | 某个 ProviderModel 绑定的有序规则集合 |
 | 客户端原始请求 | 客户端发送的原始请求，只采集和展示，不由修改器修改 |
 | 请求修改器 | 在协议转换完成后、发送到真实 Provider 前修改 upstream 协议形态的请求 |
-| 响应修改器 | 在真实 Provider 响应完成反向协议转换后、写回客户端前修改 client 协议形态的响应 |
+| 响应修改器 | 在真实 Provider 响应完成后、对非流式响应做反向转换前或转换过程中的最终 JSON 结果进行修改 |
 | attempt | 一次具体的 ProviderModel 尝试；故障切换到下一个模型时重新执行规则链 |
 | 规则快照 | 某次 attempt 开始时读取的、不可变的启用规则及绑定顺序 |
 
@@ -81,11 +81,12 @@ attempt 2：重新构造上游请求 → 执行规则 → 发送
 
 ### 4.3 规则顺序
 
-规则顺序属于 ProviderModel 的绑定关系，而不是规则实体自身的全局属性：
+规则顺序主要来自 ProviderModel 绑定关系；全局规则按创建时间排序后与绑定规则拼接执行：
 
 - 同一规则可以被多个 ProviderModel 复用；
 - 不同 ProviderModel 可以使用不同顺序；
-- 规则链按 `priority ASC` 顺序执行；
+- 绑定规则按 `priority ASC` 顺序执行；
+- 全局规则按创建时间升序执行，并在绑定规则之前执行；
 - 同一 ProviderModel 下同一规则不得重复绑定；
 - 规则被禁用、软删除或不满足匹配条件时，不执行；
 - 规则管理页显示规则的全局启用状态，模型配置页显示绑定启用状态。
@@ -106,9 +107,8 @@ attempt 2：重新构造上游请求 → 执行规则 → 发送
 
 ### 5.1 匹配条件
 
-规则可以包含可选匹配条件；全部条件满足时执行。建议首期支持：
+规则可以包含可选匹配条件；全部条件满足时执行。当前实现支持：
 
-- 阶段：`request` 或 `response`；
 - 客户端协议：OpenAI Completions、OpenAI Responses、Anthropic Messages；
 - 上游协议：同上；
 - 请求路径；
@@ -117,9 +117,11 @@ attempt 2：重新构造上游请求 → 执行规则 → 发送
 
 匹配条件为空表示对绑定该规则的所有适用请求生效。条件应在执行前校验，不能使用任意代码表达式。
 
+阶段不属于规则匹配条件，而是动作级字段；同一条规则可以同时包含 request 和 response 动作。
+
 ### 5.2 Header 动作
 
-首期提供结构化 Header 动作：
+当前实现提供结构化 Header 动作：
 
 - `set`：设置 Header，已有值被替换；
 - `append`：追加值；
@@ -136,12 +138,12 @@ Header 名称按 HTTP 不区分大小写处理。明确允许修改 `User-Agent`
 
 ### 5.3 JSON Body 动作
 
-首期提供受限 JSON Path 操作：
+当前实现提供受限 JSON Path 操作：
 
 - 设置路径值；
 - 删除路径值；
 - 对字符串值执行精确替换；
-- 可选地将值解析为字符串、数字、布尔值、空值或 JSON 值。
+- 值直接按 JSON 值写入；
 
 要求：
 
@@ -151,9 +153,11 @@ Header 名称按 HTTP 不区分大小写处理。明确允许修改 `User-Agent`
 - 限制路径深度、Body 大小和单次替换数量；
 - 不支持任意数组遍历表达式和代码执行。
 
+当前实现的 JSONPath 语法只支持以 `$.` 开头的简单点号路径，不支持数组遍历、过滤器或复杂表达式。
+
 ### 5.4 thinking/reasoning
 
-thinking/reasoning 不是三个协议中完全同构的字段，不能简单承诺一个跨协议字段名永久等价。首期应采用“协议预设 + 明确目标协议”的方式：
+thinking/reasoning 不是三个协议中完全同构的字段。当前实现尚未提供协议预设，仅保留通用 JSON 动作能力；后续如需支持 reasoning/thinking，建议再补协议预设层：
 
 - 每个预设声明目标协议和目标字段路径；
 - 预设底层仍转换为普通结构化 JSON 动作；
@@ -161,25 +165,24 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 - 响应修改器不得静默删除、移动或伪造模型输出中的思考内容；
 - 需要区分“请求中的 reasoning/thinking 配置”和“响应中的 thinking 内容块”。
 
-首期优先讨论并实现常见请求侧场景，例如开启/关闭 reasoning、设置 reasoning effort、删除供应商不接受的 thinking 参数。响应侧 thinking 内容重写属于后续范围，尤其不能在流式响应中任意缓冲替换。
+当前实现没有针对 reasoning/thinking 的专用预设，也没有单独的协议字段矩阵；相关需求仍属于后续设计。
 
 ## 6. 流式响应边界
 
 当前代理一旦向客户端写出响应头或 SSE 数据，就不能撤回或切换 Provider。因此：
 
 - 请求规则可以用于流式请求，且在发送上游前执行；
-- 首期响应规则只处理完整的非流式 JSON 响应；
-- 流式响应规则不应静默执行一半后产生不完整输出；
-- 对流式响应，若规则声明为响应阶段，应显示“不适用于流式响应”并跳过，或在执行前明确失败，具体行为待产品确认；
+- 响应规则只处理完整的非流式 JSON 响应；
+- 流式响应的响应阶段规则在当前实现中直接跳过，不影响请求继续执行；
 - 不通过默认全量缓冲来规避流式约束。
 
 后续若支持流式修改，应按协议事件设计有限动作，例如修改单个 SSE 事件字段，而不是把流当作普通完整 JSON 文档。
 
 ## 7. 数据模型草案
 
-### 7.1 `modification_rules`
+### 7.1 `request_rewrite_rules`
 
-规则本体建议使用一张配置实体表：
+规则本体使用一张配置实体表：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -188,16 +191,18 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 | `description` | 规则描述 |
 | `enabled` | 全局启用状态 |
 | `scope` | `global` 或 `model`，决定是否自动应用及模型窗口是否可编辑 |
-| `actions` | 有序动作列表；每个动作通过 `stage` 指定 `request` 或 `response` |
 | `match` | 受限匹配条件 JSON |
-| `actions` | 有序动作 JSON |
+| `actions` | 有序动作 JSON；每个动作通过 `stage` 指定 `request` 或 `response` |
+| `schemaVersion` | 当前实现保留的规则 schema 版本 |
+| `source` | `user`、`builtin` 或 `imported` |
+| `testCases` | 规则编辑器内的测试用例 |
 | `createdTime` | Unix 毫秒 |
 | `updatedTime` | Unix 毫秒 |
 | `deletedTime` | 软删除时间，可空 |
 
-`match` 和 `actions` 是真正适合 JSON 的协议扩展内容，但必须有版本字段和 Zod 校验；名称、启用状态、阶段、时间等查询字段不放入 JSON。
+`match`、`actions` 和 `testCases` 是真正适合 JSON 的协议扩展内容，并由 Zod 校验；名称、启用状态、阶段、时间等查询字段不放入 JSON。
 
-### 7.2 `provider_model_modification_rules`
+### 7.2 `provider_model_request_rewrite_rules`
 
 规则与 ProviderModel 的多对多绑定表：
 
@@ -210,16 +215,16 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 | `createdTime` | Unix 毫秒 |
 | `updatedTime` | Unix 毫秒 |
 
-主键或唯一约束为 `(providerModelId, ruleId)`。绑定表不保存规则副本；请求执行时读取规则快照，历史 attempt 仅记录安全摘要。
+主键或唯一约束为 `(providerModelId, requestRewriteRuleId)`。绑定表不保存规则副本；请求执行时读取规则快照，历史 attempt 仅记录规则 ID 列表。
 
 首期不新增端点级绑定表。若后续确认同一 ProviderModel 的不同协议必须有不同规则链，再扩展为 `provider_model_endpoint_modification_rules`，同时定义模型级默认规则与端点级覆盖关系，不能直接叠加两套隐式规则。
 
 ### 7.3 观测数据
 
-首期不新增完整规则执行正文表。请求详情 UI 按阶段展示已有的采集内容和转换内容；修改器真正实施后，再为每个阶段记录修改前后摘要和可选正文。可以在现有 `request_attempts.details` 或 `request_conversions` 的受限 JSON 中记录：
+当前实现不新增完整规则执行正文表。请求详情 UI 按阶段展示已有的采集内容和转换内容；规则执行结果会把命中的规则 ID 写入 `request_contents.requestRewriteRuleIds`，转换记录仍由 `request_conversions` 保存。暂未记录：
 
 - 规则链版本或快照摘要；
-- 执行、跳过、失败的规则 ID；
+- 跳过、失败的规则明细；
 - 规则错误码；
 - 修改前后字段数量等非敏感统计。
 
@@ -227,17 +232,18 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 
 ## 8. 管理 API 草案
 
-管理服务新增规则领域路由，沿用当前本地 HTTP 管理 API 和统一响应结构：
+管理服务已存在请求重写规则路由，沿用当前本地 HTTP 管理 API 和统一响应结构：
 
-- `POST /api/modification-rule/list`
-- `POST /api/modification-rule/get`
-- `POST /api/modification-rule/create`
-- `POST /api/modification-rule/update`
-- `POST /api/modification-rule/delete`
-- `POST /api/modification-rule/replace-bindings`
-- `POST /api/modification-rule/bindings`
+- `POST /api/request-rewrite-rule/list`
+- `POST /api/request-rewrite-rule/get`
+- `POST /api/request-rewrite-rule/create`
+- `POST /api/request-rewrite-rule/update`
+- `POST /api/request-rewrite-rule/delete`
+- `POST /api/request-rewrite-rule/test`
+- `POST /api/request-rewrite-rule/replace-bindings`
+- `POST /api/request-rewrite-rule/bindings`
 
-模型编辑页也可以使用以 ProviderModel 为主语的接口，但规则关联更新必须是事务性的整体替换：
+模型编辑页使用以 ProviderModel 为主语的接口，规则关联更新是事务性的整体替换：
 
 ```text
 读取当前绑定
@@ -248,13 +254,13 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 
 ## 9. 控制台设计
 
-### 9.1 独立“修改规则”菜单
+### 9.1 独立“请求修改”菜单
 
-新增一级菜单“修改规则”，放在主要配置区域。页面采用主从工作区：
+当前前端已经有一级菜单“请求修改”，页面采用主从工作区：
 
 - 左侧：规则列表、搜索、启用筛选、使用模型数量；
 - 右侧：规则详情与编辑器；
-- 支持新建、编辑、复制、启用/禁用和删除；
+- 支持新建、编辑、复制、启用/禁用、测试和删除；
 - 删除前显示使用中的 ProviderModel 数量，并要求确认；
 - 规则保存前执行前端基础校验，最终以服务端校验为准。
 
@@ -263,13 +269,12 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 编辑器按以下区域组织：
 
 1. 基本信息：名称、描述、全局启用；
-2. 执行阶段：请求或响应；
+2. 测试阶段：请求或响应的测试用例；
 3. 匹配条件：协议、路径、模型；
 4. 动作列表：每个动作显示类型、路径/名称和值；
-5. 规则摘要：以用户可读文本展示最终动作；
-6. 保存和取消。
+5. 保存和取消。
 
-首期使用结构化控件，不直接要求用户编写任意 JSON。对于确实需要协议私有字段的场景，可以提供受校验的 JSON 值输入，而不是开放脚本。
+当前实现使用结构化控件编辑动作，并通过规则测试接口验证修改结果。
 
 ### 9.3 ProviderModel 规则选择
 
@@ -283,16 +288,18 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 - 提供跳转到规则管理的入口；
 - 规则正文不在模型编辑器中重复编辑。
 
+这些能力已由绑定表和管理 API 支持，具体 UI 取决于当前前端实现细节。
+
 ## 10. 配置导入导出
 
-规则属于可迁移配置，应纳入配置文件：
+当前配置导入导出未包含请求重写规则：
 
-- 提高 `schemaVersion`；
-- 导出规则稳定 ID、名称、阶段、匹配条件和动作；
-- 导出 ProviderModel 规则绑定及顺序；
-- 导入时检查 ProviderModel 和规则 ID 冲突；
+- `schemaVersion` 仍为 3；
+- 不导出规则稳定 ID、名称、阶段、匹配条件和动作；
+- 不导出 ProviderModel 规则绑定及顺序；
+- 导入也不会还原这些规则数据；
 - 导入不包含密钥和任何完整请求/响应正文；
-- 对未知动作类型拒绝导入，不静默忽略。
+- 对未知动作类型的导入处理不适用，因为当前未承载规则数据。
 
 ## 11. 安全与隐私
 
@@ -317,6 +324,8 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 - 非流式 JSON path set/delete/replace；
 - `User-Agent` 场景；
 - attempt 隔离、失败阻断和测试。
+
+这些内容已基本实现。
 
 ### Phase B：协议字段预设
 
@@ -351,4 +360,4 @@ thinking/reasoning 不是三个协议中完全同构的字段，不能简单承�
 6. 是否需要规则导入导出中的稳定 ID 冲突合并策略？
 7. 是否需要独立的规则 dry-run 页面，还是先通过请求日志验证？
 
-> 在以上问题未讨论完成前，本模块保持 TODO 状态，不进入源码实施。
+> 上述问题中仍未明确的部分，当前实现要么采用了保守默认值，要么尚未覆盖。
