@@ -13,8 +13,8 @@ const healthStore = vi.hoisted(() => ({
 
 const getSettings = vi.hoisted(() => vi.fn())
 
-vi.mock('../database/health-store', () => healthStore)
-vi.mock('../database/settings-store', () => ({ getSettings }))
+vi.mock('@server/database/health-store', () => healthStore)
+vi.mock('@server/database/settings-store', () => ({ getSettings }))
 
 import {
   getAllHealth,

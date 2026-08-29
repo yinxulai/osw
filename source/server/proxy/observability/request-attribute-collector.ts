@@ -12,7 +12,7 @@ export interface RequestAttributeInput {
   valueType: RequestAttributeValueType
 }
 
-export function extractRequestAttributes(headers: IncomingHttpHeaders): RequestAttributeInput[] {
+export function collectRequestAttributes(headers: IncomingHttpHeaders): RequestAttributeInput[] {
   const attributes: RequestAttributeInput[] = []
   const userAgent = normalizeHeaderValue(headers['user-agent'])
   const source = normalizeHeaderValue(headers['x-one-switch-source'])

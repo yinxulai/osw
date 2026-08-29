@@ -86,8 +86,8 @@ function formatIntradayLabel(startMs: number): string {
 
 export async function getRequestSourceStats(sinceMs: number, limit = 20): Promise<RequestSourceStat[]> {
   const rows = getDb().select({
-    source: sql<string>`coalesce((SELECT value FROM request_attributes source_attr WHERE source_attr.requestId = ${requestLogs.id} AND source_attr.key = 'request.source' LIMIT 1), 'unknown')`.as('source'),
-    category: sql<string>`coalesce((SELECT value FROM request_attributes category_attr WHERE category_attr.requestId = ${requestLogs.id} AND category_attr.key = 'client.category' LIMIT 1), 'unknown')`.as('category'),
+    source: sql<string>`coalesce((SELECT value FROM request_attributes source_attribute WHERE source_attribute.requestId = ${requestLogs.id} AND source_attribute.key = 'request.source' LIMIT 1), 'unknown')`.as('source'),
+    category: sql<string>`coalesce((SELECT value FROM request_attributes category_attribute WHERE category_attribute.requestId = ${requestLogs.id} AND category_attribute.key = 'client.category' LIMIT 1), 'unknown')`.as('category'),
     requests: sql<number>`count(*)`.as('requests'),
     success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
     failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
