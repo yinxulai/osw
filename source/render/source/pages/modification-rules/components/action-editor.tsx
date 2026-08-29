@@ -41,6 +41,12 @@ export function ActionEditor(props: ActionEditorProps) {
       </div>
 
       <div className="space-y-2.5">
+        {props.actions.length === 0 && (
+          <div className="rounded-md border border-dashed border-border bg-muted/40 px-4 py-8 text-center dark:bg-inset">
+            <p className="text-xs font-medium">还没有动作</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">添加至少一个动作来修改 Header 或 JSON Body。</p>
+          </div>
+        )}
         {props.actions.map((action, index) => {
           const isHeader = action.target === 'header'
           const isRemove = action.operation === 'remove'
@@ -48,20 +54,20 @@ export function ActionEditor(props: ActionEditorProps) {
           const operations = isHeader ? (['set', 'append', 'remove'] as RuleActionOperation[]) : (['set', 'remove', 'replace'] as RuleActionOperation[])
 
           return (
-            <div key={action.id} className="rounded-lg bg-muted/30 p-3">
-              <div className="flex items-center gap-1.5 pb-3">
+            <div key={action.id} className="rounded-md border border-border bg-muted/40 p-3 dark:bg-inset">
+              <div className="flex flex-wrap items-center gap-1.5 pb-3">
                 <span className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground">{index + 1}</span>
                 <Select value={action.stage} onValueChange={value => updateAction(action.id, { stage: value as 'request' | 'response' })}>
-                  <SelectTrigger className="h-7 w-20 bg-background px-2.5 text-[11px]" aria-label={`动作 ${index + 1} 阶段`}><SelectValue /></SelectTrigger>
-                  <SelectContent className="min-w-24 text-xs"><SelectItem className="text-xs" value="request">请求</SelectItem><SelectItem className="text-xs" value="response">响应</SelectItem></SelectContent>
+                  <SelectTrigger aria-label={`动作 ${index + 1} 阶段`}><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="request">请求</SelectItem><SelectItem value="response">响应</SelectItem></SelectContent>
                 </Select>
                 <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })}>
-                  <SelectTrigger className="h-7 w-24 bg-background px-2 text-xs" aria-label={`动作 ${index + 1} 目标`}><SelectValue /></SelectTrigger>
-                  <SelectContent className="min-w-24 text-xs"><SelectItem className="text-xs" value="header">Header</SelectItem><SelectItem className="text-xs" value="body">Body</SelectItem></SelectContent>
+                  <SelectTrigger aria-label={`动作 ${index + 1} 目标`}><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="header">Header</SelectItem><SelectItem value="body">Body</SelectItem></SelectContent>
                 </Select>
                 <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
-                  <SelectTrigger className="h-7 w-20 bg-background px-2 text-xs" aria-label={`动作 ${index + 1} 操作`}><SelectValue /></SelectTrigger>
-                  <SelectContent className="min-w-20 text-xs">{operations.map(operation => <SelectItem className="text-xs" key={operation} value={operation}>{operationLabels[operation]}</SelectItem>)}</SelectContent>
+                  <SelectTrigger aria-label={`动作 ${index + 1} 操作`}><SelectValue /></SelectTrigger>
+                  <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{operationLabels[operation]}</SelectItem>)}</SelectContent>
                 </Select>
                 <Popover open={deleteActionId === action.id} onOpenChange={open => setDeleteActionId(open ? action.id : undefined)}>
                   <PopoverTrigger asChild>
@@ -96,15 +102,15 @@ export function ActionEditor(props: ActionEditorProps) {
                 {!isRemove && (
                   <div className={isReplace ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}>
                     <Label htmlFor={`${action.id}-value`} className="text-[11px]">
-                      {isReplace ? '查找内容' : '值'}
+                      {isReplace ? '查找内容' : isHeader ? '值' : 'JSON 值'}
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
                         id={`${action.id}-value`}
                         value={action.value ?? ''}
                         onChange={event => updateAction(action.id, { value: event.target.value })}
-                        placeholder={isReplace ? '输入查找内容，例如 foo(\\d+)' : '输入值'}
-                        className="h-7 min-w-0 flex-1 bg-background px-2"
+                        placeholder={isReplace ? '输入查找内容，例如 foo(\\d+)' : isHeader ? '输入 Header 值' : '例如 "text"、true、42 或 {"key":"value"}'}
+                        className="h-7 min-w-0 flex-1 bg-background px-2 font-mono"
                       />
                       {isReplace && (
                         <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">

@@ -17,12 +17,12 @@ import { useToast } from '@/components/ui/toast'
 import { RuleEditorDialog } from './components/rule-editor-dialog'
 import { RuleStats } from './components/rule-stats'
 import { RulesTable } from './components/rules-table'
-import { initialRules, type RequestRewriteRule, type RuleStatusFilter } from './types'
+import { formatJsonActionValue, initialRules, parseJsonActionValue, type RequestRewriteRule, type RuleStatusFilter } from './types'
 import type { RequestRewriteRule as ApiRequestRewriteRule, Protocol } from '@common/schemas'
 
 const protocolLabels: Record<Protocol, string> = { 'openai-completions': 'OpenAI Completions', 'openai-responses': 'OpenAI Responses', 'anthropic-messages': 'Anthropic Messages' }
 const protocolValues = Object.fromEntries(Object.entries(protocolLabels).map(([value, label]) => [label, value])) as Record<string, Protocol>
-function toUiRule(rule: ApiRequestRewriteRule): RequestRewriteRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', protocols: rule.match.clientProtocols.map(item => protocolLabels[item]), match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols, path: rule.match.path, logicalModelId: rule.match.logicalModelId, providerModelId: rule.match.providerModelId }, actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, stage: action.stage, target: action.type.startsWith('header-') ? 'header' : 'body', operation: action.type.endsWith('set') ? 'set' : action.type.endsWith('append') ? 'append' : action.type.endsWith('remove') || action.type.endsWith('delete') ? 'remove' : 'replace', path: 'name' in action ? action.name : action.path, value: 'value' in action && typeof action.value === 'string' ? action.value : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined, regex: 'regex' in action ? action.regex : undefined })), testCases: rule.testCases.map(testCase => ({ ...testCase })), boundProviders: 0, updatedAt: new Date(rule.updatedTime).toLocaleString() } }
+function toUiRule(rule: ApiRequestRewriteRule): RequestRewriteRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', protocols: rule.match.clientProtocols.map(item => protocolLabels[item]), match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols, path: rule.match.path, logicalModelId: rule.match.logicalModelId, providerModelId: rule.match.providerModelId }, actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, stage: action.stage, target: action.type.startsWith('header-') ? 'header' : 'body', operation: action.type.endsWith('set') ? 'set' : action.type.endsWith('append') ? 'append' : action.type.endsWith('remove') || action.type.endsWith('delete') ? 'remove' : 'replace', path: 'name' in action ? action.name : action.path, value: 'value' in action ? (action.type === 'body-set' ? formatJsonActionValue(action.value) : String(action.value)) : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined, regex: 'regex' in action ? action.regex : undefined })), testCases: rule.testCases.map(testCase => ({ ...testCase })), boundProviders: 0, updatedAt: new Date(rule.updatedTime).toLocaleString() } }
 function toApiRule(rule: RequestRewriteRule): Omit<ApiRequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
   return {
     name: rule.name,
@@ -39,7 +39,7 @@ function toApiRule(rule: RequestRewriteRule): Omit<ApiRequestRewriteRule, 'id' |
       }
       if (action.operation === 'remove') return { type: 'body-delete', stage: action.stage, path: action.path }
       if (action.operation === 'replace') return { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false }
-      return { type: 'body-set', stage: action.stage, path: action.path, value: action.value ?? '' }
+      return { type: 'body-set', stage: action.stage, path: action.path, value: parseJsonActionValue(action.value) }
     }),
     testCases: rule.testCases,
   }

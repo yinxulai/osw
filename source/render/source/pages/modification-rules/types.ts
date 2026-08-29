@@ -44,6 +44,19 @@ export interface RequestRewriteRule {
   updatedAt: string
 }
 
+export function formatJsonActionValue(value: unknown) {
+  return typeof value === 'string' ? JSON.stringify(value) : JSON.stringify(value, null, 2)
+}
+
+export function parseJsonActionValue(value: string | undefined): unknown {
+  if (value === undefined || value.trim() === '') return ''
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return value
+  }
+}
+
 export const protocolOptions = [
   'OpenAI Completions',
   'OpenAI Responses',

@@ -20,10 +20,10 @@ interface TrendChartProps {
   range: AnalyticsRange
 }
 
-// X 轴刻度间隔：今日为 15 分钟槽，每 4 个槽（1 小时）显示一个标签；
-// 近 7 天全部显示；近 30 天每 5 天显示一个。
+// X 轴刻度只控制标签密度，不影响 15 分钟粒度的数据和 Tooltip；
+// 今日每 2 小时显示一个标签，近 7 天全部显示，近 30 天每 5 天显示一个。
 function axisInterval(range: AnalyticsRange): number {
-  if (range === 'today') return 3
+  if (range === 'today') return 7
   if (range === '7d') return 0
   return 4
 }

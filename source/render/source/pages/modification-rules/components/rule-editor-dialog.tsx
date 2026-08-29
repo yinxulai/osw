@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react'
+import { FlaskConical, ListFilter, LoaderCircle, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
 import { requestRewriteRuleApi } from '@/api/models'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -16,7 +16,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
-import type { RequestRewriteRule, RuleTestCase } from '../types'
+import { parseJsonActionValue, type RequestRewriteRule, type RuleTestCase } from '../types'
 import type { RequestRewriteRule as ApiRequestRewriteRule } from '@common/schemas'
 
 interface RuleTestResult {
@@ -78,7 +78,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       testCases: [],
       actions: props.rule.actions.map(action => action.target === 'header'
         ? action.operation === 'remove' ? { type: 'header-remove', stage: action.stage, name: action.path } : { type: action.operation === 'append' ? 'header-append' : 'header-set', stage: action.stage, name: action.path, value: action.value ?? '' }
-        : action.operation === 'remove' ? { type: 'body-delete', stage: action.stage, path: action.path } : action.operation === 'replace' ? { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false } : { type: 'body-set', stage: action.stage, path: action.path, value: action.value ?? '' }),
+        : action.operation === 'remove' ? { type: 'body-delete', stage: action.stage, path: action.path } : action.operation === 'replace' ? { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false } : { type: 'body-set', stage: action.stage, path: action.path, value: parseJsonActionValue(action.value) }),
       createdTime: 0,
       updatedTime: 0,
       deletedTime: null,
@@ -99,23 +99,30 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     <Sheet open={props.open} onOpenChange={open => open ? props.onOpenChange(true) : cancel()}>
       <SheetContent
         side="right"
-        className="w-140! max-w-140! gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
+        className="flex h-full w-full! max-w-3xl! flex-col gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
         onPointerDownOutside={event => event.preventDefault()}
       >
-        <SheetHeader className="shrink-0 border-b bg-card px-6 py-4 pr-14">
-          <SheetTitle className="text-base">{props.rule.updatedAt === '尚未保存' ? '新建请求修改规则' : '编辑请求修改规则'}</SheetTitle>
-          <SheetDescription className="text-xs">定义请求或响应中的字段转换。</SheetDescription>
+        <SheetHeader className="shrink-0 px-4 py-3.5 pr-12">
+          <SheetTitle className="text-sm">{props.rule.updatedAt === '尚未保存' ? '新建请求修改规则' : '编辑请求修改规则'}</SheetTitle>
+          <SheetDescription className="text-xs">配置匹配条件、修改动作，并用样例验证结果</SheetDescription>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-background/60">
+        <nav aria-label="表单分区" className="flex shrink-0 items-center gap-1 overflow-x-auto border-y border-border bg-muted/30 px-4 py-2">
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={() => document.getElementById('rule-overview')?.scrollIntoView({ behavior: 'smooth' })}><PencilLine />概览</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={() => document.getElementById('rule-match')?.scrollIntoView({ behavior: 'smooth' })}><ListFilter />匹配</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={() => document.getElementById('rule-actions')?.scrollIntoView({ behavior: 'smooth' })}>动作 <span className="rounded bg-background px-1.5 py-0.5 text-[10px] dark:bg-muted">{props.rule.actions.length}</span></Button>
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={() => document.getElementById('rule-tests')?.scrollIntoView({ behavior: 'smooth' })}><FlaskConical />测试 <span className="rounded bg-background px-1.5 py-0.5 text-[10px] dark:bg-muted">{props.rule.testCases.length}</span></Button>
+        </nav>
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
           <RuleEditor rule={props.rule} onChange={props.onChange} />
-          <section className="mx-6 mb-6 space-y-3">
+          <section id="rule-tests" className="mx-4 mb-4 scroll-mt-4 space-y-3 rounded-lg border border-border bg-card p-4">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold tracking-tight">测试</h3>
-                <p className="mt-1 text-[11px] text-muted-foreground">使用当前草稿验证动作是否按预期生效。</p>
+                <h3 className="text-sm font-semibold">测试</h3>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">使用当前草稿验证动作是否按预期生效。</p>
               </div>
-              <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 px-2.5 text-[11px]" onClick={addTestCase}><Plus /> 添加测试</Button>
+              <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0 px-2.5 text-[11px]" onClick={addTestCase}><Plus /> 添加测试</Button>
             </div>
             <div className="space-y-2.5">
               {props.rule.testCases.length > 0 ? (
@@ -124,7 +131,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                       const result = testResults[testCase.id]
                       const isTesting = testingId === testCase.id
                       return (
-                        <article key={testCase.id} className="space-y-3 rounded-lg bg-muted/30 p-3">
+                        <article key={testCase.id} className="space-y-3 rounded-md border border-border bg-muted/40 p-3 dark:bg-inset">
                           <div className="flex items-center gap-2 pb-3">
                             <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground">{index + 1}</span>
                             <input aria-label={`测试用例 ${index + 1} 名称`} className="h-7 min-w-0 flex-1 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground" value={testCase.name} onChange={event => updateTestCase(testCase.id, { name: event.target.value })} />
@@ -161,18 +168,18 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                       )
                     })}
                 </div>
-              ) : <p className="rounded-lg bg-muted/30 px-3 py-4 text-center text-[11px] text-muted-foreground">还没有测试用例，点击“添加测试”开始。</p>}
+              ) : <div className="rounded-md border border-dashed border-border bg-muted/40 px-4 py-8 text-center dark:bg-inset"><p className="text-xs font-medium">还没有测试用例</p><p className="mt-1 text-[11px] text-muted-foreground">测试不会保存请求记录，可在保存前反复运行。</p></div>}
             </div>
           </section>
         </div>
 
-        <SheetFooter className="mt-auto flex shrink-0 flex-row items-center justify-end gap-2 border-t bg-muted/50 px-6 py-4">
-          {props.dirty && <span className="mr-auto text-xs text-warning">未保存</span>}
+        <SheetFooter className="mt-auto flex shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-muted/50 px-4 py-3">
+          {props.dirty ? <span className="mr-auto hidden text-xs text-warning sm:inline">有尚未保存的更改</span> : <span className="mr-auto hidden text-xs text-muted-foreground sm:inline">没有待保存的更改</span>}
           <SheetClose asChild>
-            <Button type="button" variant="outline" size="sm">取消</Button>
+            <Button type="button" variant="ghost" size="sm" className="max-sm:mr-auto">取消</Button>
           </SheetClose>
-          <Button type="button" size="sm" onClick={props.onSave} disabled={!props.dirty}>
-            <Save /> 保存
+          <Button type="button" size="sm" onClick={props.onSave} disabled={!props.dirty || !props.rule.name.trim() || props.rule.actions.length === 0}>
+            <Save /> 保存规则
           </Button>
         </SheetFooter>
       </SheetContent>
