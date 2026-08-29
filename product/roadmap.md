@@ -147,15 +147,15 @@
 
 ## P2
 
-### 请求修改模块
+### 请求重写模块
 
-设计文档：[modification-rules.md](./modification-rules.md)
+设计文档：[request-rewrite-rules.md](./request-rewrite-rules.md)
 
 - [ ] 讨论并冻结规则模型：全局规则、ProviderModel 绑定、绑定顺序、启停和失败语义
 - [ ] 讨论请求/响应执行阶段，以及协议转换前后的字段形态
 - [ ] 讨论 `User-Agent`、Header、JSON Path 和 thinking/reasoning 的首期支持范围
 - [ ] 讨论流式响应规则的处理方式，不在当前实现中默认缓冲或改写 SSE
-- [ ] 设计 `modification_rules` 与 ProviderModel 规则关联表、迁移和配置导入导出
+- [ ] 设计 `request_rewrite_rules` 与 ProviderModel 规则关联表、迁移和配置导入导出
 - [ ] 设计管理 API、规则管理菜单/编辑器和 ProviderModel 规则选择交互
 - [ ] 评审通过后再拆分数据库、代理执行引擎、管理 API、控制台和测试任务
 

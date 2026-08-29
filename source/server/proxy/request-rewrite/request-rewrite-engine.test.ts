@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RequestRewriteRule, RequestRewriteRuleAction, RuleStage } from '@common/schemas'
-import { applyModificationRules, ModificationError } from './modification-engine'
+import { applyRequestRewriteRules, RequestRewriteError } from './request-rewrite-engine'
 
-const context = (stage: RuleStage = 'request', overrides: Partial<Parameters<typeof applyModificationRules>[3]> = {}) => ({
+const context = (stage: RuleStage = 'request', overrides: Partial<Parameters<typeof applyRequestRewriteRules>[3]> = {}) => ({
   stage,
   clientProtocol: 'openai-completions' as const,
   upstreamProtocol: 'openai-completions' as const,
@@ -37,13 +37,13 @@ function body(value: unknown): Buffer {
   return Buffer.from(JSON.stringify(value))
 }
 
-function parsed(result: ReturnType<typeof applyModificationRules>): unknown {
+function parsed(result: ReturnType<typeof applyRequestRewriteRules>): unknown {
   return JSON.parse(result.body.toString('utf8'))
 }
 
-describe('applyModificationRules', () => {
+describe('applyRequestRewriteRules', () => {
   it('按规则和动作顺序执行 Header 与 JSON 修改，并更新 content-length', () => {
-    const result = applyModificationRules(
+    const result = applyRequestRewriteRules(
       body({ metadata: { source: 'old' }, text: 'hello' }),
       { 'X-Test': 'before' },
       [rule([
@@ -62,7 +62,7 @@ describe('applyModificationRules', () => {
   })
 
   it('支持 Header 追加、大小写不敏感匹配和删除', () => {
-    const result = applyModificationRules(
+    const result = applyRequestRewriteRules(
       body({}),
       { 'X-Test': 'one', Remove: 'yes' },
       [rule([requestHeader('header-append', 'x-test', 'two'), requestHeader('header-remove', 'REMOVE')])],
@@ -77,8 +77,8 @@ describe('applyModificationRules', () => {
       requestHeader('header-set', 'X-Request', 'yes'),
       jsonAction({ type: 'body-set', path: '$.response', value: 'yes' }, 'response'),
     ])
-    const requestResult = applyModificationRules(body({}), {}, [mixed], context('request'))
-    const responseResult = applyModificationRules(body({}), {}, [mixed], context('response'))
+    const requestResult = applyRequestRewriteRules(body({}), {}, [mixed], context('request'))
+    const responseResult = applyRequestRewriteRules(body({}), {}, [mixed], context('response'))
     expect(requestResult.headers['X-Request']).toBe('yes')
     expect(parsed(requestResult)).toEqual({})
     expect(parsed(responseResult)).toEqual({ response: 'yes' })
@@ -89,7 +89,7 @@ describe('applyModificationRules', () => {
     const deleted = rule([requestHeader('header-set')], { id: 'deleted', deletedTime: 10 })
     const unmatched = rule([requestHeader('header-set')], { id: 'unmatched', match: { clientProtocols: ['anthropic-messages'], upstreamProtocols: [] } })
     const responseOnly = rule([jsonAction({ type: 'body-set', path: '$.x', value: 1 }, 'response')], { id: 'response-only' })
-    const result = applyModificationRules(body({}), {}, [disabled, deleted, unmatched, responseOnly], context('request'))
+    const result = applyRequestRewriteRules(body({}), {}, [disabled, deleted, unmatched, responseOnly], context('request'))
     expect(result.appliedRuleIds).toEqual([])
     expect(result.skippedRuleIds).toEqual(['disabled', 'deleted', 'unmatched', 'response-only'])
   })
@@ -98,13 +98,13 @@ describe('applyModificationRules', () => {
     const matching = rule([requestHeader('header-set', 'X-Match', 'yes')], {
       match: { clientProtocols: ['openai-completions'], upstreamProtocols: ['openai-completions'] },
     })
-    expect(applyModificationRules(body({}), {}, [matching], context()).headers['X-Match']).toBe('yes')
-    expect(applyModificationRules(body({}), {}, [matching], context('request', { clientProtocol: 'anthropic-messages' })).appliedRuleIds).toEqual([])
-    expect(applyModificationRules(body({}), {}, [matching], context('request', { upstreamProtocol: 'openai-responses' })).appliedRuleIds).toEqual([])
+    expect(applyRequestRewriteRules(body({}), {}, [matching], context()).headers['X-Match']).toBe('yes')
+    expect(applyRequestRewriteRules(body({}), {}, [matching], context('request', { clientProtocol: 'anthropic-messages' })).appliedRuleIds).toEqual([])
+    expect(applyRequestRewriteRules(body({}), {}, [matching], context('request', { upstreamProtocol: 'openai-responses' })).appliedRuleIds).toEqual([])
   })
 
   it('支持 JSON set 创建对象、delete 和普通字符串 replace', () => {
-    const result = applyModificationRules(body({ text: 'a-b-a', nested: { keep: true } }), {}, [rule([
+    const result = applyRequestRewriteRules(body({ text: 'a-b-a', nested: { keep: true } }), {}, [rule([
       jsonAction({ type: 'body-set', path: '$.metadata.source', value: 'test' }),
       jsonAction({ type: 'body-delete', path: '$.nested.keep' }),
       jsonAction({ type: 'body-replace', path: '$.text', search: 'a', replacement: 'x', regex: false }),
@@ -113,14 +113,14 @@ describe('applyModificationRules', () => {
   })
 
   it('支持正则 replace 和捕获组', () => {
-    const result = applyModificationRules(body({ text: 'user:alice user:bob' }), {}, [rule([
+    const result = applyRequestRewriteRules(body({ text: 'user:alice user:bob' }), {}, [rule([
       jsonAction({ type: 'body-replace', path: '$.text', search: 'user:(\\w+)', replacement: 'member:$1', regex: true }),
     ])], context())
     expect(parsed(result)).toEqual({ text: 'member:alice member:bob' })
   })
 
   it('响应流式场景跳过响应动作', () => {
-    const result = applyModificationRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-replace', path: '$.text', search: 'old', replacement: 'new', regex: false }, 'response')])], context('response', { streaming: true }))
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-replace', path: '$.text', search: 'old', replacement: 'new', regex: false }, 'response')])], context('response', { streaming: true }))
     expect(result.appliedRuleIds).toEqual([])
     expect(result.skippedRuleIds).toEqual(['rule-test'])
     expect(parsed(result)).toEqual({ text: 'old' })
@@ -134,14 +134,14 @@ describe('applyModificationRules', () => {
     ['替换目标不是字符串', [jsonAction({ type: 'body-replace', path: '$.value', search: 'a', replacement: 'b', regex: false })], body({ value: 1 })],
     ['空替换内容', [jsonAction({ type: 'body-replace', path: '$.value', search: '', replacement: 'b', regex: false })], body({ value: 'a' })],
     ['无效正则', [jsonAction({ type: 'body-replace', path: '$.value', search: '[', replacement: 'b', regex: true })], body({ value: 'a' })],
-  ] as const)('遇到%s时抛出带规则 ID 的 ModificationError', (_label, actions, input) => {
+  ] as const)('遇到%s时抛出带规则 ID 的 RequestRewriteError', (_label, actions, input) => {
     try {
-      applyModificationRules(Buffer.isBuffer(input) ? input : input, {}, [rule(actions)], context())
+      applyRequestRewriteRules(Buffer.isBuffer(input) ? input : input, {}, [rule(actions)], context())
       throw new Error('expected error')
     } catch (error) {
-      expect(error).toBeInstanceOf(ModificationError)
-      expect((error as ModificationError).ruleId).toBe('rule-test')
-      expect((error as ModificationError).code).toBe('MODIFICATION_RULE_FAILED')
+      expect(error).toBeInstanceOf(RequestRewriteError)
+      expect((error as RequestRewriteError).ruleId).toBe('rule-test')
+      expect((error as RequestRewriteError).code).toBe('REQUEST_REWRITE_RULE_FAILED')
     }
   })
 })

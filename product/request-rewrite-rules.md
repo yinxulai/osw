@@ -1,4 +1,4 @@
-# 请求修改设计
+# 请求重写规则设计
 
 > **状态：已实现，本文对齐当前代码实现。**
 >
@@ -14,11 +14,11 @@ One Switch 当前主要负责协议识别、ProviderModel 路由、故障切换�
 - 需要调整 thinking/reasoning 相关字段；
 - 需要在响应返回客户端前修正某些 JSON 字段。
 
-当前实现提供一条**可配置、可排序、可复用、可观测的修改器链**：
+当前实现提供一条**可配置、可排序、可复用、可观测的重写规则链**：
 
-1. 修改规则作为独立一级配置实体，在控制台中集中管理；
+1. 请求重写规则作为独立一级配置实体，在控制台中集中管理；
 2. ProviderModel 可以选择适用的规则并调整执行顺序；
-3. 修改器按报文阶段执行，区分请求阶段和响应阶段；
+3. 重写动作按报文阶段执行，区分请求阶段和响应阶段；
 4. 请求详情可以展示上游请求、上游响应和转换后的正文内容，规则执行摘要目前仅记录规则 ID 列表；
 5. 每条规则只做小而明确的修改，规则失败有确定的错误语义；
 6. 默认不泄露密钥和完整敏感正文，不以脚本执行替代结构化配置。
@@ -206,7 +206,7 @@ thinking/reasoning 不是三个协议中完全同构的字段。当前实现尚�
 | 字段 | 说明 |
 | --- | --- |
 | `providerModelId` | FK → `provider_models.id` |
-| `ruleId` | FK → `modification_rules.id` |
+| `ruleId` | FK → `request_rewrite_rules.id` |
 | `priority` | 该模型上的执行顺序 |
 | `enabled` | 该模型上的绑定状态 |
 | `createdTime` | Unix 毫秒 |
@@ -214,7 +214,7 @@ thinking/reasoning 不是三个协议中完全同构的字段。当前实现尚�
 
 主键或唯一约束为 `(providerModelId, requestRewriteRuleId)`。绑定表不保存规则副本；请求执行时读取规则快照，历史 attempt 仅记录规则 ID 列表。
 
-首期不新增端点级绑定表。若后续确认同一 ProviderModel 的不同协议必须有不同规则链，再扩展为 `provider_model_endpoint_modification_rules`，同时定义模型级默认规则与端点级覆盖关系，不能直接叠加两套隐式规则。
+首期不新增端点级绑定表。若后续确认同一 ProviderModel 的不同协议必须有不同规则链，再扩展为 `provider_model_endpoint_request_rewrite_rules`，同时定义模型级默认规则与端点级覆盖关系，不能直接叠加两套隐式规则。
 
 ### 7.3 观测数据
 
@@ -275,7 +275,7 @@ thinking/reasoning 不是三个协议中完全同构的字段。当前实现尚�
 
 ### 9.3 ProviderModel 规则选择
 
-在模型编辑区增加“修改规则”：
+在模型编辑区增加“请求重写规则”：
 
 - 搜索全局规则；
 - 多选并显示已选规则；

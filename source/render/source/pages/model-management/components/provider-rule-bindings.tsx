@@ -95,7 +95,7 @@ export function ProviderRuleBindings(props: ProviderRuleBindingsProps) {
       <Dialog open={addDialogOpen} onOpenChange={open => { setAddDialogOpen(open); if (!open) { setSelectedRuleIds([]); setRuleSearch('') } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>添加请求修改规则</DialogTitle>
+            <DialogTitle>添加请求重写规则</DialogTitle>
             <DialogDescription>选择需要绑定到当前模型的普通规则，可一次添加多条。</DialogDescription>
           </DialogHeader>
           <div className="relative">

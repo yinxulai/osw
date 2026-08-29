@@ -62,7 +62,7 @@ function createRule(): RequestRewriteRule {
   }
 }
 
-export function ModificationRulesPage() {
+export function RequestRewriteRulesPage() {
   const toast = useToast()
   const [rules, setRules] = useState<RequestRewriteRule[]>([])
   const [editingRuleId, setEditingRuleId] = useState('')
@@ -121,8 +121,8 @@ export function ModificationRulesPage() {
   return (
     <PageLayout>
       <PageHeader
-        title="请求修改"
-        description="集中维护全局请求与响应修改规则"
+        title="请求重写"
+        description="集中维护全局请求与响应重写规则"
         actions={(
           <div className="flex items-center gap-2">
             <Button type="button" onClick={addRule}><Plus /> 新建规则</Button>

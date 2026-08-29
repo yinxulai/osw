@@ -13,7 +13,7 @@ import {
   listRulesForProviderModel,
   replaceProviderModelRequestRewriteRuleBindings,
   updateRequestRewriteRule,
-} from './modification-rule-store'
+} from './request-rewrite-rule-store'
 import { createProvider } from './provider-store'
 import { createProviderModelRoute } from './model-store'
 
@@ -63,7 +63,7 @@ function makeRule(overrides: Partial<RuleInput> = {}): RuleInput {
   }
 }
 
-describe('modification rule store', () => {
+describe('request rewrite rule store', () => {
   it('creates, lists, and updates request rewrite rules while preserving testCases round-trips', async () => {
     const created = await createRequestRewriteRule(makeRule())
 

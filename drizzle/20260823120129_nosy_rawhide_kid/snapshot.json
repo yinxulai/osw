@@ -11,7 +11,7 @@
       "entityType": "tables"
     },
     {
-      "name": "modification_rules",
+      "name": "request_rewrite_rules",
       "entityType": "tables"
     },
     {
@@ -35,7 +35,7 @@
       "entityType": "tables"
     },
     {
-      "name": "provider_model_modification_rules",
+      "name": "provider_model_request_rewrite_rules",
       "entityType": "tables"
     },
     {
@@ -160,7 +160,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -170,7 +170,7 @@
       "generated": null,
       "name": "name",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -180,7 +180,7 @@
       "generated": null,
       "name": "description",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -190,7 +190,7 @@
       "generated": null,
       "name": "enabled",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -200,7 +200,7 @@
       "generated": null,
       "name": "stage",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -210,7 +210,7 @@
       "generated": null,
       "name": "schemaVersion",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -220,7 +220,7 @@
       "generated": null,
       "name": "match",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -230,7 +230,7 @@
       "generated": null,
       "name": "actions",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -240,7 +240,7 @@
       "generated": null,
       "name": "createdTime",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -250,7 +250,7 @@
       "generated": null,
       "name": "updatedTime",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -260,7 +260,7 @@
       "generated": null,
       "name": "deletedTime",
       "entityType": "columns",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "type": "text",
@@ -590,7 +590,7 @@
       "generated": null,
       "name": "providerModelId",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "text",
@@ -600,7 +600,7 @@
       "generated": null,
       "name": "ruleId",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -610,7 +610,7 @@
       "generated": null,
       "name": "priority",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -620,7 +620,7 @@
       "generated": null,
       "name": "enabled",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -630,7 +630,7 @@
       "generated": null,
       "name": "createdTime",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "integer",
@@ -640,7 +640,7 @@
       "generated": null,
       "name": "updatedTime",
       "entityType": "columns",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "type": "text",
@@ -1703,24 +1703,24 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_provider_model_modification_rules_providerModelId_provider_models_id_fk",
+      "name": "fk_provider_model_request_rewrite_rules_providerModelId_provider_models_id_fk",
       "entityType": "fks",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "columns": [
         "ruleId"
       ],
-      "tableTo": "modification_rules",
+      "tableTo": "request_rewrite_rules",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "nameExplicit": false,
-      "name": "fk_provider_model_modification_rules_ruleId_modification_rules_id_fk",
+      "name": "fk_provider_model_request_rewrite_rules_ruleId_request_rewrite_rules_id_fk",
       "entityType": "fks",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "columns": [
@@ -1878,9 +1878,9 @@
         "ruleId"
       ],
       "nameExplicit": false,
-      "name": "provider_model_modification_rules_pk",
+      "name": "provider_model_request_rewrite_rules_pk",
       "entityType": "pks",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "columns": [
@@ -1926,8 +1926,8 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "modification_rules_pk",
-      "table": "modification_rules",
+      "name": "request_rewrite_rules_pk",
+      "table": "request_rewrite_rules",
       "entityType": "pks"
     },
     {
@@ -2085,9 +2085,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "idx_modification_rules_enabled",
+      "name": "idx_request_rewrite_rules_enabled",
       "entityType": "indexes",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "columns": [
@@ -2099,9 +2099,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "idx_modification_rules_stage",
+      "name": "idx_request_rewrite_rules_stage",
       "entityType": "indexes",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "columns": [
@@ -2113,9 +2113,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "idx_modification_rules_deleted_time",
+      "name": "idx_request_rewrite_rules_deleted_time",
       "entityType": "indexes",
-      "table": "modification_rules"
+      "table": "request_rewrite_rules"
     },
     {
       "columns": [
@@ -2239,9 +2239,9 @@
       "isUnique": true,
       "where": null,
       "origin": "manual",
-      "name": "idx_model_modification_rule_priority",
+      "name": "idx_model_request_rewrite_rule_priority",
       "entityType": "indexes",
-      "table": "provider_model_modification_rules"
+      "table": "provider_model_request_rewrite_rules"
     },
     {
       "columns": [

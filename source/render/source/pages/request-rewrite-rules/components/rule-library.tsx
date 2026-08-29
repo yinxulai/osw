@@ -33,7 +33,7 @@ export function RuleLibrary(props: RuleLibraryProps) {
               onChange={event => props.onSearchChange(event.target.value)}
               placeholder="搜索名称或动作"
               className="h-8 pl-8 text-xs"
-              aria-label="搜索修改规则"
+              aria-label="搜索请求重写规则"
             />
           </div>
           <Select value={props.statusFilter} onValueChange={value => props.onStatusFilterChange(value as RuleStatusFilter)}>

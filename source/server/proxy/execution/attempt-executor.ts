@@ -18,8 +18,8 @@ import type { ProxyObservationHooks } from '@server/proxy/observability/hooks'
 import { runAttemptQueue } from '@server/proxy/execution/attempt-runner'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { resolveAttemptSnapshot } from '@server/proxy/routing/routing'
-import { listRulesForProviderModel } from '@server/database/modification-rule-store'
-import { applyModificationRules, ModificationError } from '@server/proxy/modification/modification-engine'
+import { listRulesForProviderModel } from '@server/database/request-rewrite-rule-store'
+import { applyRequestRewriteRules, RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
 import { createAttemptLogger, initializeRequestLogger } from '@server/proxy/observability/logging'
 
 class ClientRequestCancelledError extends Error {
@@ -145,8 +145,8 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     },
     onError: async (target, err, attemptIndex) => {
       const lastError = err instanceof Error ? err : new Error(String(err))
-      if (err instanceof ModificationError) {
-        console.error(`[proxy] 修改规则执行失败: requestId=${requestId}, providerModelId=${target.model.id}, ruleId=${err.ruleId ?? 'unknown'}, error=${err.message}`)
+      if (err instanceof RequestRewriteError) {
+        console.error(`[proxy] 请求重写规则执行失败: requestId=${requestId}, providerModelId=${target.model.id}, ruleId=${err.ruleId ?? 'unknown'}, error=${err.message}`)
         if (!response.headersSent) response.fail(422, err.code, err.message)
         await requestLogger.finalizeRequestLog('failed', startedAt)
         return false
@@ -271,7 +271,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     upstreamRequestBody.length,
   )
   const rules = await listRulesForProviderModel(model.id)
-  const modified = applyModificationRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol })
+  const modified = applyRequestRewriteRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol })
 
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
@@ -415,7 +415,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
         upstreamHeaders: downstreamHeaders,
         onStart: headers => { if (!response.headersSent) response.start(statusCode, headers) },
         transformResponse: !isStreaming ? (body, headers) => {
-          const modifiedResponse = applyModificationRules(body, headers, rules, {
+          const modifiedResponse = applyRequestRewriteRules(body, headers, rules, {
             stage: 'response',
             clientProtocol: protocol,
             upstreamProtocol: endpointProtocol,

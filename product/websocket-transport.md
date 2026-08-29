@@ -102,9 +102,9 @@ flowchart TD
 - 不解析帧内容，不产生 turn 级 `request_logs`；turn 级观测（按 `response.create` / `response.completed` 切分、usage 提取）留待 P2。
 - 连接失败计入健康冷却，与 HTTP attempt 的失败分类口径一致。
 
-### 修改规则
+### 请求重写规则
 
-- P1 修改器不介入 WS 帧。规则引擎作用于 HTTP request/response body，WS 传输下不保证执行，UI 文档需明确。
+- P1 请求重写引擎不介入 WS 帧。规则引擎作用于 HTTP request/response body，WS 传输下不保证执行，UI 文档需明确。
 - P2 如需支持，仅轻量读取帧的 `type` / `stream_id` / `response.id` 做归类与 header 级规则，不做全量 JSON 改写。
 
 ## P2（可选）：WS ↔ HTTP/SSE 桥接

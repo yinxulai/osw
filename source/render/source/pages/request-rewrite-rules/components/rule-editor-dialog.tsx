@@ -103,8 +103,8 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
         onPointerDownOutside={event => event.preventDefault()}
       >
         <SheetHeader className="shrink-0 px-4 py-3.5 pr-12">
-          <SheetTitle className="text-sm">{props.rule.updatedAt === '尚未保存' ? '新建请求修改规则' : '编辑请求修改规则'}</SheetTitle>
-          <SheetDescription className="text-xs">配置匹配条件、修改动作，并用样例验证结果</SheetDescription>
+          <SheetTitle className="text-sm">{props.rule.updatedAt === '尚未保存' ? '新建请求重写规则' : '编辑请求重写规则'}</SheetTitle>
+          <SheetDescription className="text-xs">配置匹配条件、重写动作，并用样例验证结果</SheetDescription>
         </SheetHeader>
 
         <nav aria-label="表单分区" className="flex shrink-0 items-center gap-1 overflow-x-auto border-y border-border bg-muted/30 px-4 py-2">

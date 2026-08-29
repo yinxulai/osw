@@ -21,6 +21,6 @@
 | [desktop.md](./desktop.md) | 桌面端形态、菜单栏、控制台页面、用户流程 |
 | [security-privacy.md](./security-privacy.md) | 安全边界、密钥存储、隐私策略 |
 | [observability.md](./observability.md) | 日志、用量统计、健康状态、冷却 |
-| [modification-rules.md](./modification-rules.md) | 请求与响应修改设计 |
+| [request-rewrite-rules.md](./request-rewrite-rules.md) | 请求与响应重写设计 |
 | [tech-architecture.md](./tech-architecture.md) | 技术架构、框架选型、项目结构、核心模块设计 |
 | [roadmap.md](./roadmap.md) | MVP / P1 / P2 版本规划与验收标准 |

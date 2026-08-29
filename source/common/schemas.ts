@@ -20,7 +20,7 @@ export const RequestRewriteRuleMatchSchema = z.object({
   upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
 })
 export type RequestRewriteRuleMatch = z.infer<typeof RequestRewriteRuleMatchSchema>
-export const RequestModificationTestCaseSchema = z.object({
+export const RequestRewriteRuleTestCaseSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
   stage: RuleStageSchema.default('request'),
@@ -30,7 +30,7 @@ export const RequestModificationTestCaseSchema = z.object({
   upstreamProtocol: ProtocolSchema.default('openai-completions'),
   streaming: z.boolean().default(false),
 })
-export type RequestModificationTestCase = z.infer<typeof RequestModificationTestCaseSchema>
+export type RequestRewriteRuleTestCase = z.infer<typeof RequestRewriteRuleTestCaseSchema>
 const RequestRewriteRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
 export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
   RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1).max(128), value: z.string().max(4096) }),
@@ -45,7 +45,7 @@ export const RequestRewriteRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
   scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default({}),
   actions: z.array(RequestRewriteRuleActionSchema).min(1).max(50),
-  testCases: z.array(RequestModificationTestCaseSchema).max(50).default([]),
+  testCases: z.array(RequestRewriteRuleTestCaseSchema).max(50).default([]),
   createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
 })
 export type RequestRewriteRule = z.infer<typeof RequestRewriteRuleSchema>

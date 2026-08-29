@@ -10,7 +10,7 @@ import { OverviewPage } from './pages/overview/page'
 import { RuntimeSettingsPage } from './pages/runtime-settings/page'
 import { LogsPage } from './pages/logs/page'
 import { RequestLogsPage } from './pages/request-logs/page'
-import { ModificationRulesPage } from './pages/modification-rules/page'
+import { RequestRewriteRulesPage } from './pages/request-rewrite-rules/page'
 import { AccessConfigPage } from './pages/access-config/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
@@ -73,7 +73,7 @@ function App() {
               onNavigateToSettings={() => setActivePage('settings')}
             />
           )}
-          {activePage === 'rules' && <ModificationRulesPage />}
+          {activePage === 'rules' && <RequestRewriteRulesPage />}
           {activePage === 'overview' && <OverviewPage />}
           {activePage === 'requests' && <RequestLogsPage />}
           {activePage === 'logs' && <LogsPage />}

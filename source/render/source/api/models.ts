@@ -1,4 +1,4 @@
-import type { LogicalModel, Protocol, ProviderModel, ProviderModelRequestRewriteRule, ProviderModelRoute, ProviderModelRouteEndpoint, RequestModificationTestCase, RequestRewriteRule, SchedulingPolicy } from '@common/schemas'
+import type { LogicalModel, Protocol, ProviderModel, ProviderModelRequestRewriteRule, ProviderModelRoute, ProviderModelRouteEndpoint, RequestRewriteRuleTestCase, RequestRewriteRule, SchedulingPolicy } from '@common/schemas'
 import { request } from './client'
 
 type CreateLogicalModelInput = { name: string; description?: string; enabled?: boolean }
@@ -15,7 +15,7 @@ export const requestRewriteRuleApi = {
   create: (data: Omit<RequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<RequestRewriteRule>('/request-rewrite-rule/create', data),
   update: (id: string, updates: Partial<RequestRewriteRule>) => request<RequestRewriteRule>('/request-rewrite-rule/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/request-rewrite-rule/delete', { id }),
-  test: (rule: RequestRewriteRule, testCase: RequestModificationTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[] }>('/request-rewrite-rule/test', { rule, testCase }),
+  test: (rule: RequestRewriteRule, testCase: RequestRewriteRuleTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[] }>('/request-rewrite-rule/test', { rule, testCase }),
 }
 
 export const logicalModelApi = {
