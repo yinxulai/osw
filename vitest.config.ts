@@ -11,12 +11,20 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['source/server/**/*.test.ts', 'source/render/**/*.test.ts'],
+    include: [
+      'source/command/**/*.test.ts',
+      'source/server/**/*.test.ts',
+      'source/render/**/*.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json', 'html'],
       reportsDirectory: './coverage',
-      include: ['source/server/**/*.ts', 'source/common/**/*.ts'],
+      include: [
+        'source/command/updater.ts',
+        'source/server/**/*.ts',
+        'source/common/**/*.ts',
+      ],
       exclude: ['**/*.test.ts', '**/types.ts', '**/schemas.ts'],
     },
   },

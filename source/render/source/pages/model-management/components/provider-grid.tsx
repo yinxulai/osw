@@ -16,11 +16,19 @@ interface ProviderGridProps {
   onSelectBuiltInProvider: (preset: ProviderPreset) => void
 }
 
+interface ProviderGridItem {
+  id: string
+  name: string
+  enabled: boolean
+  modelCount: number
+  onSelect: () => void
+}
+
 export function ProviderGrid(props: ProviderGridProps) {
   const { providers, models, selectedProviderId, onSelectProvider, onSelectBuiltInProvider } = props
   const builtinSuggestions = getBuiltInProviderSuggestions(providers.map(provider => provider.name))
 
-  const renderItem = (item: { id: string; name: string; enabled: boolean; modelCount: number; onSelect: () => void }) => {
+  const renderItem = (item: ProviderGridItem) => {
     const active = selectedProviderId === item.id
     const preset = findPresetByName(item.name)
     const iconColor = preset?.color
