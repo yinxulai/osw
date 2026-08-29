@@ -48,12 +48,16 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
 
   const closeProviderDialog = useCallback(() => setProviderDialogOpen(false), [])
 
-  const applyPreset = useCallback((preset: ProviderPreset) => {
+  const openPresetDialog = useCallback((preset: ProviderPreset) => {
+    setEditingProviderId(null)
     setProviderName(preset.name)
+    setApiKey('')
+    setTimeout('30000')
     setProviderEndpointEntries(PROTOCOL_OPTIONS.map(option => {
       const url = preset.endpoints[option.value] ?? ''
       return { protocol: option.value, enabled: Boolean(url), url }
     }))
+    setProviderDialogOpen(true)
   }, [])
 
   const updateProviderEndpointEntry = useCallback((index: number, patch: Partial<ProviderEndpointEntry>) => {
@@ -80,9 +84,9 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
     setApiKey,
     setTimeout,
     updateProviderEndpointEntry,
+    openPresetDialog,
     openProviderDialog,
     closeProviderDialog,
-    applyPreset,
     saveProvider,
     savingProvider: saveMutation.isPending,
   }

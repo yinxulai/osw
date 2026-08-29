@@ -4,8 +4,6 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { ProviderEndpointCard } from './provider-endpoint-card'
 import { ProviderFields } from './provider-fields'
-import { ProviderPresetPicker } from './provider-preset-picker'
-import type { ProviderPreset } from '../lib/provider-presets'
 import type { ProviderEndpointEntry } from '../hooks/types'
 
 interface ProviderDialogProps {
@@ -23,7 +21,6 @@ interface ProviderDialogProps {
   updateEndpointEntry: (index: number, patch: Partial<ProviderEndpointEntry>) => void
   onCancel: () => void
   onSave: () => void
-  onApplyPreset: (preset: ProviderPreset) => void
 }
 
 export function ProviderDialog(props: ProviderDialogProps) {
@@ -42,7 +39,6 @@ export function ProviderDialog(props: ProviderDialogProps) {
     updateEndpointEntry,
     onCancel,
     onSave,
-    onApplyPreset,
   } = props
 
   const canSave = Boolean(providerName.trim())
@@ -59,9 +55,6 @@ export function ProviderDialog(props: ProviderDialogProps) {
         </DialogHeader>
 
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
-          {!editingProviderId && (
-            <ProviderPresetPicker providerName={providerName} onApplyPreset={onApplyPreset} />
-          )}
 
           <ProviderFields
             editingProviderId={editingProviderId}

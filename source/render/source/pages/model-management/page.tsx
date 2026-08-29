@@ -101,7 +101,8 @@ export function ModelManagementPage() {
         providers={service.providers}
         models={service.models}
         selectedProviderId={service.selectedProviderId}
-        onSelect={service.setSelectedProviderId}
+        onSelectProvider={service.setSelectedProviderId}
+        onSelectBuiltInProvider={service.openPresetDialog}
       />
       {renderProviderSelection()}
     </div>
@@ -129,7 +130,6 @@ export function ModelManagementPage() {
         updateEndpointEntry={service.updateProviderEndpointEntry}
         onCancel={service.closeProviderDialog}
         onSave={service.saveProvider}
-        onApplyPreset={service.applyPreset}
       />
 
       <ModelDialog

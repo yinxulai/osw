@@ -27,7 +27,7 @@ export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
             backgroundColor: iconColor ? `${iconColor}14` : 'color-mix(in srgb, var(--primary) 10%, transparent)',
           }}
         >
-          <ProviderIcon name={provider.name} size={17} />
+          <ProviderIcon name={provider.name} size={27} />
         </div>
         <div>
           <CardTitle>{provider.name}</CardTitle>

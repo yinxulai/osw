@@ -21,13 +21,13 @@ export function ProviderPresetPicker(props: ProviderPresetPickerProps) {
             type="button"
             onClick={() => onApplyPreset(preset)}
             className={cn(
-              'flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs font-medium transition-colors',
+              'flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs font-medium transition-colors',
               'hover:bg-muted',
               providerName === preset.name && 'bg-primary/10 text-primary',
             )}
           >
             <span style={{ color: preset.color }}>
-              <ProviderIcon name={preset.name} size={14} />
+              <ProviderIcon name={preset.name} size={18} />
             </span>
             {preset.name}
           </button>
