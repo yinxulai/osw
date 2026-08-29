@@ -1,0 +1,11 @@
+﻿{
+  "key": "openai",
+  "name": "OpenAI",
+  "family": "openai",
+  "aliases": ["gpt", "chatgpt", "azure-openai", "azure openai"],
+  "color": "#10a37f",
+  "endpoints": {
+    "openai-completions": "https://api.openai.com/v1/chat/completions",
+    "openai-responses": "https://api.openai.com/v1/responses"
+  }
+}

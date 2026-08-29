@@ -1,0 +1,10 @@
+﻿{
+  "key": "baidu",
+  "name": "百度",
+  "family": "baidu",
+  "aliases": ["wenxin", "文心", "文心一言", "ernie"],
+  "color": "#2b6ae9",
+  "endpoints": {
+    "openai-completions": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxin/chat/completions"
+  }
+}

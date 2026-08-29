@@ -1,0 +1,10 @@
+﻿{
+  "key": "anthropic",
+  "name": "Anthropic",
+  "family": "anthropic",
+  "aliases": ["claude", "sonnet", "haiku", "opus"],
+  "color": "#d97757",
+  "endpoints": {
+    "anthropic-messages": "https://api.anthropic.com/v1/messages"
+  }
+}

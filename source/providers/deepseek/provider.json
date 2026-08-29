@@ -1,0 +1,11 @@
+﻿{
+  "key": "deepseek",
+  "name": "DeepSeek",
+  "family": "deepseek",
+  "aliases": ["deepseek-v3", "deepseek-r1"],
+  "color": "#4f9cff",
+  "endpoints": {
+    "openai-completions": "https://api.deepseek.com/v1/chat/completions",
+    "openai-responses": "https://api.deepseek.com/v1/responses"
+  }
+}

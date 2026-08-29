@@ -1,0 +1,12 @@
+﻿{
+  "key": "qiniu",
+  "name": "七牛云",
+  "family": "qiniu",
+  "aliases": ["qiniu", "七牛", "七牛云", "modelink", "qnaigc"],
+  "color": "#00bcd4",
+  "endpoints": {
+    "openai-completions": "https://api.qnaigc.com/v1/chat/completions",
+    "openai-responses": "https://api.qnaigc.com/v1/responses",
+    "anthropic-messages": "https://api.qnaigc.com/v1/messages"
+  }
+}

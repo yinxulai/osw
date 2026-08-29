@@ -1,0 +1,11 @@
+﻿{
+  "key": "meta",
+  "name": "Meta",
+  "family": "meta",
+  "aliases": ["llama", "llama-3", "meta-llama"],
+  "color": "#0866ff",
+  "endpoints": {
+    "openai-completions": "https://api.llama.meta.com/v1/chat/completions",
+    "openai-responses": "https://api.llama.meta.com/v1/responses"
+  }
+}

@@ -1,0 +1,11 @@
+﻿{
+  "key": "tencent",
+  "name": "腾讯云",
+  "family": "tencent",
+  "aliases": ["hunyuan", "混元", "腾讯"],
+  "color": "#23b8ff",
+  "endpoints": {
+    "openai-completions": "https://api.hunyuan.cloud.tencent.com/v1/chat/completions",
+    "openai-responses": "https://api.hunyuan.cloud.tencent.com/v1/responses"
+  }
+}

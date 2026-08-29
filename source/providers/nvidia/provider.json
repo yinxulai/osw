@@ -1,0 +1,11 @@
+﻿{
+  "key": "nvidia",
+  "name": "NVIDIA",
+  "family": "nvidia",
+  "aliases": ["nemotron", "nvidia-nims"],
+  "color": "#76b900",
+  "endpoints": {
+    "openai-completions": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "openai-responses": "https://integrate.api.nvidia.com/v1/responses"
+  }
+}

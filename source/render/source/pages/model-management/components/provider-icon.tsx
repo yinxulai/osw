@@ -1,5 +1,8 @@
 import { findPresetByName } from '../lib/provider-presets'
+import type { ProviderIconTheme } from '../../../../../providers'
+import { PROVIDER_ICON_URL_BY_KEY } from '../../../../../providers'
 import { cn } from '@/lib/utils'
+import { useEffect, useState } from 'react'
 
 interface ProviderIconProps {
   name: string
@@ -7,31 +10,52 @@ interface ProviderIconProps {
   className?: string
 }
 
-const providerIconAssets = import.meta.glob('../../../../../../build/providers/light/*.svg', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>
+function getThemeFromDocument(): ProviderIconTheme {
+  if (typeof document === 'undefined') {
+    return 'light'
+  }
 
-const providerIconUrlByFile = Object.fromEntries(
-  Object.entries(providerIconAssets)
-    .map(([path, url]) => [path.split('/').pop(), url] as const)
-    .filter((entry): entry is [string, string] => Boolean(entry[0])),
-)
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+}
 
-function resolveProviderIconUrl(iconFile: string): string | null {
-  return providerIconUrlByFile[iconFile] ?? null
+function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): string | null {
+  const iconVariants = PROVIDER_ICON_URL_BY_KEY[providerKey]
+  if (!iconVariants) {
+    return null
+  }
+
+  return iconVariants[theme] ?? iconVariants.light ?? null
 }
 
 /**
  * 供应商品牌图标。
- * 直接使用 build/providers 目录中的官方 SVG 文件，缺失时回退到应用图标。
+ * 直接使用 source/providers 中每个 provider 子目录的 icon.svg，缺失时回退到应用图标。
  */
 export function ProviderIcon(props: ProviderIconProps) {
   const { name, size = 17, className } = props
   const preset = findPresetByName(name)
+  const [theme, setTheme] = useState<ProviderIconTheme>(() => getThemeFromDocument())
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const root = document.documentElement
+    const observer = new MutationObserver(() => {
+      setTheme(getThemeFromDocument())
+    })
+
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+
+    return () => observer.disconnect()
+  }, [])
 
   if (preset) {
-    const iconUrl = resolveProviderIconUrl(preset.iconFile)
+    const iconUrl = resolveProviderIconUrl(preset.key, theme)
     if (iconUrl) {
       return (
         <img

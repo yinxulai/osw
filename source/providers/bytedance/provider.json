@@ -1,0 +1,11 @@
+﻿{
+  "key": "bytedance",
+  "name": "字节跳动",
+  "family": "bytedance",
+  "aliases": ["doubao", "豆包"],
+  "color": "#ff4d4f",
+  "endpoints": {
+    "openai-completions": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+    "openai-responses": "https://ark.cn-beijing.volces.com/api/v3/responses"
+  }
+}

@@ -1,0 +1,11 @@
+﻿{
+  "key": "volcengine",
+  "name": "火山引擎",
+  "family": "volcengine",
+  "aliases": ["火山", " volc"],
+  "color": "#ff7a00",
+  "endpoints": {
+    "openai-completions": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+    "openai-responses": "https://ark.cn-beijing.volces.com/api/v3/responses"
+  }
+}

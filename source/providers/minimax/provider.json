@@ -1,0 +1,10 @@
+﻿{
+  "key": "minimax",
+  "name": "MiniMax",
+  "family": "minimax",
+  "aliases": ["mini-max", "mini max"],
+  "color": "#30c4a2",
+  "endpoints": {
+    "openai-completions": "https://api.minimax.chat/v1/text/chatcompletion_pro"
+  }
+}

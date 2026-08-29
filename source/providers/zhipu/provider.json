@@ -1,0 +1,11 @@
+﻿{
+  "key": "zhipu",
+  "name": "智谱",
+  "family": "zhipu",
+  "aliases": ["glm", "chatglm", "智谱清言"],
+  "color": "#f0a400",
+  "endpoints": {
+    "openai-completions": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "openai-responses": "https://open.bigmodel.cn/api/paas/v4/responses"
+  }
+}

@@ -1,0 +1,12 @@
+﻿{
+  "key": "xai",
+  "name": "xAI",
+  "family": "xai",
+  "aliases": ["grok", "grok-2", "grok-3"],
+  "color": "#000000",
+  "fallbackKey": "openai",
+  "endpoints": {
+    "openai-completions": "https://api.x.ai/v1/chat/completions",
+    "openai-responses": "https://api.x.ai/v1/responses"
+  }
+}
