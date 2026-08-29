@@ -49,7 +49,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
   const addTestCase = () => {
     const id = `test-${Date.now()}`
     const input = defaultTestInput('request')
-    const testCase: RuleTestCase = { id, name: `测试用例 ${props.rule.testCases.length + 1}`, stage: 'request', ...input, clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', logicalModelId: 'default', providerModelId: 'test-model', path: '/v1/chat/completions', streaming: false }
+    const testCase: RuleTestCase = { id, name: `测试用例 ${props.rule.testCases.length + 1}`, stage: 'request', ...input, clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', streaming: false }
     updateTestCases([...props.rule.testCases, testCase])
   }
   const updateTestCase = (id: string, patch: Partial<RuleTestCase>) => {
@@ -74,7 +74,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       scope: props.rule.global ? 'global' : 'model',
       schemaVersion: 1,
       source: 'user',
-      match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'], path: props.rule.match.path, logicalModelId: props.rule.match.logicalModelId, providerModelId: props.rule.match.providerModelId },
+      match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'] },
       testCases: [],
       actions: props.rule.actions.map(action => action.target === 'header'
         ? action.operation === 'remove' ? { type: 'header-remove', stage: action.stage, name: action.path } : { type: action.operation === 'append' ? 'header-append' : 'header-set', stage: action.stage, name: action.path, value: action.value ?? '' }
@@ -150,9 +150,9 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                               </PopoverContent>
                             </Popover>
                           </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-path`} className="text-[11px]">请求路径</Label><input id={`${testCase.id}-path`} className="h-7 w-full rounded-md border-0 bg-background px-2 font-mono text-xs ring-1 ring-foreground/10" value={testCase.path} onChange={event => updateTestCase(testCase.id, { path: event.target.value })} /></div>
-                            <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-stage`} className="text-[11px]">测试阶段</Label><select id={`${testCase.id}-stage`} className="h-7 w-full rounded-md border-0 bg-background px-2 text-xs ring-1 ring-foreground/10" value={testCase.stage} onChange={event => { const stage = event.target.value as RuleTestCase['stage']; const input = defaultTestInput(stage); updateTestCase(testCase.id, { stage, ...input }) }}><option value="request">请求</option><option value="response">响应</option></select></div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`${testCase.id}-stage`} className="text-[11px]">测试阶段</Label>
+                            <select id={`${testCase.id}-stage`} className="h-7 w-full rounded-md border-0 bg-background px-2 text-xs ring-1 ring-foreground/10" value={testCase.stage} onChange={event => { const stage = event.target.value as RuleTestCase['stage']; const input = defaultTestInput(stage); updateTestCase(testCase.id, { stage, ...input }) }}><option value="request">请求</option><option value="response">响应</option></select>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5"><Label htmlFor={`${testCase.id}-body`} className="text-[11px]">{testCase.stage === 'response' ? '响应 Body' : '请求 Body'}（JSON）</Label><Textarea id={`${testCase.id}-body`} value={testCase.body} onChange={event => updateTestCase(testCase.id, { body: event.target.value })} className="min-h-32 font-mono text-xs" /></div>

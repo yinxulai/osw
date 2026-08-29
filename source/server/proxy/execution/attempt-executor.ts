@@ -271,7 +271,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     upstreamRequestBody.length,
   )
   const rules = await listRulesForProviderModel(model.id)
-  const modified = applyModificationRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol, logicalModelId, providerModelId: model.id, path: context.path })
+  const modified = applyModificationRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol })
 
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
@@ -419,9 +419,6 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
             stage: 'response',
             clientProtocol: protocol,
             upstreamProtocol: endpointProtocol,
-            logicalModelId,
-            providerModelId: model.id,
-            path: context.path,
             streaming: false,
           })
           return { body: modifiedResponse.body, headers: modifiedResponse.headers }

@@ -24,9 +24,6 @@ export interface RuleTestCase {
   headers: string
   clientProtocol: Protocol
   upstreamProtocol: Protocol
-  logicalModelId: string
-  providerModelId: string
-  path: string
   streaming: boolean
 }
 
@@ -37,7 +34,7 @@ export interface RequestRewriteRule {
   enabled: boolean
   global: boolean
   protocols: string[]
-  match: { clientProtocols: string[]; upstreamProtocols: string[]; path?: string; logicalModelId?: string; providerModelId?: string }
+  match: { clientProtocols: string[]; upstreamProtocols: string[] }
   actions: RuleAction[]
   testCases: RuleTestCase[]
   boundProviders: number

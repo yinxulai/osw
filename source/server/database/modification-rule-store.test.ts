@@ -42,8 +42,6 @@ function makeRule(overrides: Partial<RuleInput> = {}): RuleInput {
     match: {
       clientProtocols: ['openai-completions'],
       upstreamProtocols: ['openai-completions'],
-      path: '/v1/chat/completions',
-      logicalModelId: 'default',
     },
     actions: [{
       stage: 'request',
@@ -59,9 +57,6 @@ function makeRule(overrides: Partial<RuleInput> = {}): RuleInput {
       headers: '{"content-type":"application/json"}',
       clientProtocol: 'openai-completions',
       upstreamProtocol: 'openai-completions',
-      logicalModelId: 'default',
-      providerModelId: 'model_1',
-      path: '/v1/chat/completions',
       streaming: false,
     }],
     ...overrides,

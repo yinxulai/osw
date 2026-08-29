@@ -126,20 +126,6 @@ export function RuleEditor(props: RuleEditorProps) {
         </div>
         <ProtocolPicker label="客户端协议" description="进入代理时识别到的协议" selected={rule.protocols} onToggle={toggleClientProtocol} />
         <ProtocolPicker label="上游协议" description="协议转换后发往供应商的协议" selected={upstreamLabels} onToggle={toggleUpstreamProtocol} />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="rule-match-path" className="text-[11px]">请求路径</Label>
-            <Input id="rule-match-path" className="h-8 bg-muted/40 font-mono text-xs dark:bg-inset" value={rule.match.path ?? ''} onChange={event => updateMatch({ path: event.target.value || undefined })} placeholder="例如 /v1/chat/completions" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="rule-logical-model" className="text-[11px]">逻辑模型 ID</Label>
-            <Input id="rule-logical-model" className="h-8 bg-muted/40 font-mono text-xs dark:bg-inset" value={rule.match.logicalModelId ?? ''} onChange={event => updateMatch({ logicalModelId: event.target.value || undefined })} placeholder="不限制" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="rule-provider-model" className="text-[11px]">ProviderModel ID</Label>
-            <Input id="rule-provider-model" className="h-8 bg-muted/40 font-mono text-xs dark:bg-inset" value={rule.match.providerModelId ?? ''} onChange={event => updateMatch({ providerModelId: event.target.value || undefined })} placeholder="不限制" />
-          </div>
-        </div>
       </section>
 
       <div id="rule-actions" className="scroll-mt-16 rounded-lg border border-border bg-card p-4">

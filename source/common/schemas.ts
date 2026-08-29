@@ -18,9 +18,6 @@ const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.
 export const RequestRewriteRuleMatchSchema = z.object({
   clientProtocols: z.array(ProtocolSchema).max(3).default([]),
   upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
-  path: z.string().max(512).optional(),
-  logicalModelId: z.string().max(200).optional(),
-  providerModelId: z.string().max(200).optional(),
 })
 export type RequestRewriteRuleMatch = z.infer<typeof RequestRewriteRuleMatchSchema>
 export const RequestModificationTestCaseSchema = z.object({
@@ -31,9 +28,6 @@ export const RequestModificationTestCaseSchema = z.object({
   headers: z.string().max(64 * 1024),
   clientProtocol: ProtocolSchema.default('openai-completions'),
   upstreamProtocol: ProtocolSchema.default('openai-completions'),
-  logicalModelId: z.string().max(200).default('default'),
-  providerModelId: z.string().max(200).default('test-model'),
-  path: z.string().max(512).default('/v1/chat/completions'),
   streaming: z.boolean().default(false),
 })
 export type RequestModificationTestCase = z.infer<typeof RequestModificationTestCaseSchema>

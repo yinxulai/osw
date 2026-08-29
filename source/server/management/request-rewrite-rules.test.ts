@@ -32,9 +32,6 @@ afterEach(async () => {
 
 describe('request rewrite rule routes', () => {
   it('creates, reads, updates and tests a rewrite rule', async () => {
-    const provider = await createProvider({ name: 'Rule Provider', apiKeyReference: 'key_rule', timeoutMilliseconds: 20_000, enabled: true })
-    const providerModel = await createProviderModelRoute({ providerId: provider.id, modelName: 'rule-model', priority: 0 })
-
     const createRes = mockResponse()
     await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/create', createRes, {
       name: 'default header',
@@ -75,7 +72,7 @@ describe('request rewrite rule routes', () => {
       scope: 'global',
       schemaVersion: 1,
       source: 'user',
-      match: { clientProtocols: ['openai-responses'], upstreamProtocols: ['openai-responses'], path: '/v1/responses' },
+      match: { clientProtocols: ['openai-responses'], upstreamProtocols: ['openai-responses'] },
       actions: [{ type: 'header-set', stage: 'request', name: 'x-test-header', value: 'enabled' }],
       testCases: [],
     })
@@ -100,9 +97,6 @@ describe('request rewrite rule routes', () => {
         headers: '{"authorization":"Bearer token"}',
         clientProtocol: 'openai-responses',
         upstreamProtocol: 'openai-responses',
-        logicalModelId: 'default',
-        providerModelId: providerModel.id,
-        path: '/v1/responses',
         streaming: false,
       },
     })

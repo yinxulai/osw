@@ -10,9 +10,6 @@ export interface ModificationContext {
   stage: 'request' | 'response'
   clientProtocol: Protocol
   upstreamProtocol: Protocol
-  logicalModelId: string
-  providerModelId: string
-  path: string
   streaming?: boolean
 }
 
@@ -55,11 +52,8 @@ export function applyModificationRules(body: Buffer, headers: Record<string, str
 
 function matches(rule: RequestRewriteRule, context: ModificationContext): boolean {
   const match = rule.match
-  if (match.clientProtocols?.length && !match.clientProtocols.includes(context.clientProtocol)) return false
-  if (match.upstreamProtocols?.length && !match.upstreamProtocols.includes(context.upstreamProtocol)) return false
-  if (match.path && context.path !== match.path) return false
-  if (match.logicalModelId && context.logicalModelId !== match.logicalModelId) return false
-  if (match.providerModelId && context.providerModelId !== match.providerModelId) return false
+  if (match.clientProtocols.length && !match.clientProtocols.includes(context.clientProtocol)) return false
+  if (match.upstreamProtocols.length && !match.upstreamProtocols.includes(context.upstreamProtocol)) return false
   return true
 }
 

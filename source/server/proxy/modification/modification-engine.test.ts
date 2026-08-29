@@ -6,9 +6,6 @@ const context = (stage: RuleStage = 'request', overrides: Partial<Parameters<typ
   stage,
   clientProtocol: 'openai-completions' as const,
   upstreamProtocol: 'openai-completions' as const,
-  logicalModelId: 'default',
-  providerModelId: 'model-1',
-  path: '/v1/chat/completions',
   ...overrides,
 })
 
@@ -97,13 +94,13 @@ describe('applyModificationRules', () => {
     expect(result.skippedRuleIds).toEqual(['disabled', 'deleted', 'unmatched', 'response-only'])
   })
 
-  it('按 protocol、路径、逻辑模型和供应商模型匹配条件筛选', () => {
+  it('按客户端和上游协议匹配条件筛选', () => {
     const matching = rule([requestHeader('header-set', 'X-Match', 'yes')], {
-      match: { clientProtocols: ['openai-completions'], upstreamProtocols: ['openai-completions'], path: '/v1/chat/completions', logicalModelId: 'default', providerModelId: 'model-1' },
+      match: { clientProtocols: ['openai-completions'], upstreamProtocols: ['openai-completions'] },
     })
     expect(applyModificationRules(body({}), {}, [matching], context()).headers['X-Match']).toBe('yes')
-    expect(applyModificationRules(body({}), {}, [matching], context('request', { path: '/v1/responses' })).appliedRuleIds).toEqual([])
     expect(applyModificationRules(body({}), {}, [matching], context('request', { clientProtocol: 'anthropic-messages' })).appliedRuleIds).toEqual([])
+    expect(applyModificationRules(body({}), {}, [matching], context('request', { upstreamProtocol: 'openai-responses' })).appliedRuleIds).toEqual([])
   })
 
   it('支持 JSON set 创建对象、delete 和普通字符串 replace', () => {
