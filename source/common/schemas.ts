@@ -194,6 +194,9 @@ export type HealthSnapshot = z.infer<typeof HealthSnapshotSchema>
 
 // ========== Settings ==========
 
+export const OutboundProxyModeSchema = z.enum(['direct', 'system', 'custom'])
+export type OutboundProxyMode = z.infer<typeof OutboundProxyModeSchema>
+
 export const SettingsSchema = z.object({
   id: z.literal('singleton'),
   listenHost: z.string().default('127.0.0.1'),
@@ -204,6 +207,9 @@ export const SettingsSchema = z.object({
   cooldownMaxSeconds: z.number().int().positive().default(300),
   consecutiveFailureThreshold: z.number().int().positive().default(3),
   idleTimeoutMilliseconds: z.number().int().positive().default(30000),
+  outboundProxyMode: OutboundProxyModeSchema.default('system'),
+  outboundProxyUrl: z.string().default(''),
+  outboundProxyBypass: z.string().default('localhost,127.0.0.1,::1'),
   autoLaunch: z.boolean().default(false),
   updatedTime: z.number().int(),
 })
@@ -355,6 +361,13 @@ export const ApiErrorCodeSchema = z.enum([
   'PROXY_NOT_RUNNING',
   'NO_MODEL_CONFIGURED',
   'PROXY_INTERNAL_ERROR',
+  'SYSTEM_PROXY_RESOLUTION_FAILED',
+  'OUTBOUND_PROXY_UNREACHABLE',
+  'OUTBOUND_PROXY_AUTH_REQUIRED',
+  'OUTBOUND_PROXY_TUNNEL_REJECTED',
+  'UPSTREAM_UNAVAILABLE',
+  'UPSTREAM_TIMEOUT',
+  'CLIENT_REQUEST_ABORTED',
 ])
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 

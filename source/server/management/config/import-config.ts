@@ -4,7 +4,8 @@ import { ConfigImportRequestSchema } from '@common/config-schemas'
 import { createProvider, deleteProvider, listProviders, replaceProviderEndpoints, updateProvider } from '../../database/provider-store'
 import { createLogicalModel, deleteLogicalModel, listLogicalModels, updateLogicalModel, upsertSchedulingPolicy } from '../../database/logical-model-store'
 import { createProviderModelRoute, deleteProviderModelRoute, listProviderModelRoutes as listRoutes, updateProviderModelRoute } from '../../database/model-store'
-import { updateSettings } from '../../database/settings-store'
+import { getSettings, updateSettings } from '../../database/settings-store'
+import { validateOutboundProxyModeAndUrl } from '../../infrastructure/network/outbound-proxy'
 import { getSecretStore } from '../../infrastructure/secrets/secret-store'
 
 export async function importConfig(body: unknown): Promise<{ imported: { providers: number; logicalModels: number; providerModels: number } }> {
@@ -27,7 +28,16 @@ export async function importConfig(body: unknown): Promise<{ imported: { provide
     if (importedModelNames.has(model.name)) throw new Error(`导入文件中存在重复逻辑模型: ${model.name}`)
     importedModelNames.add(model.name)
   }
-  if (Object.keys(config.settings).length > 0) await updateSettings({ ...config.settings, logRetentionDays: config.settings.logRetentionDays ?? undefined })
+  if (Object.keys(config.settings).length > 0) {
+    if (config.settings.outboundProxyMode !== undefined || config.settings.outboundProxyUrl !== undefined) {
+      const current = await getSettings()
+      validateOutboundProxyModeAndUrl(
+        config.settings.outboundProxyMode ?? current.outboundProxyMode,
+        config.settings.outboundProxyUrl ?? current.outboundProxyUrl,
+      )
+    }
+    await updateSettings({ ...config.settings, logRetentionDays: config.settings.logRetentionDays ?? undefined })
+  }
 
   const importedProviderIds = new Set<string>()
   let importedProviders = 0

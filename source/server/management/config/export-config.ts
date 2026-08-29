@@ -14,9 +14,11 @@ export async function exportConfig(): Promise<{ config: ConfigDocument; content:
     exportedAt: Date.now(),
     settings: {
       listenHost: settings.listenHost, listenPort: settings.listenPort, logRetentionDays: settings.logRetentionDays,
+      captureRequestContent: settings.captureRequestContent,
       cooldownBaseSeconds: settings.cooldownBaseSeconds, cooldownMaxSeconds: settings.cooldownMaxSeconds,
       consecutiveFailureThreshold: settings.consecutiveFailureThreshold, idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
-      autoLaunch: settings.autoLaunch,
+      outboundProxyMode: settings.outboundProxyMode, outboundProxyUrl: settings.outboundProxyUrl,
+      outboundProxyBypass: settings.outboundProxyBypass, autoLaunch: settings.autoLaunch,
     },
     providers: await Promise.all(providers.map(async (p: Provider): Promise<ConfigProvider> => ({
       id: p.id, name: p.name, timeoutMilliseconds: p.timeoutMilliseconds, enabled: p.enabled,

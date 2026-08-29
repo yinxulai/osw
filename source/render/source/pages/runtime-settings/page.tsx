@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { useRuntimeSettingsService } from './service'
 import { ListenConfigCard } from './components/listen-config-card'
+import { OutboundProxyCard } from './components/outbound-proxy-card'
 import { FailoverCard } from './components/failover-card'
 import { LogRetentionCard } from './components/log-retention-card'
 import { GeneralCard } from './components/general-card'
@@ -46,6 +47,15 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
               onPortChange={value => service.updateField('listenPort', value)}
             />
 
+            <OutboundProxyCard
+              mode={service.settings.outboundProxyMode}
+              proxyUrl={service.settings.outboundProxyUrl}
+              bypass={service.settings.outboundProxyBypass}
+              onModeChange={value => service.updateField('outboundProxyMode', value)}
+              onProxyUrlChange={value => service.updateField('outboundProxyUrl', value)}
+              onBypassChange={value => service.updateField('outboundProxyBypass', value)}
+            />
+
             <FailoverCard
               settings={service.settings}
               onUpdate={service.updateField}
@@ -80,7 +90,7 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
                 disabled={service.saving || service.saved}
                 onClick={() => void service.saveSettings()}
               >
-                {service.saving ? '保存并重启中...' : service.saved ? '已保存' : '保存并重启代理'}
+                {service.saving ? '保存中...' : service.saved ? '已保存' : '保存设置'}
               </Button>
             </div>
           </>

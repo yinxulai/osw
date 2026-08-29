@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog, session } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -282,6 +282,7 @@ app.whenReady().then(async () => {
       dataDir: userDataDir,
       secretStore: new ElectronSecretStore(path.join(userDataDir, 'secrets.json')),
       runtimeProfile,
+      systemProxyResolver: targetUrl => session.defaultSession.resolveProxy(targetUrl),
     })
     console.log('[one-switch] server started successfully')
   } catch (error) {

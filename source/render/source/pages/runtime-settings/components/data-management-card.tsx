@@ -23,7 +23,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
 
   return (
     <Card className="border-border">
-      <SettingsCardHeader title="数据管理" description="导出或导入配置，API Key 将被脱敏导出" />
+      <SettingsCardHeader title="数据管理" description="导出或导入配置，Provider API Key 将被脱敏" />
       <CardContent className="px-4 py-4">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onExport}>
@@ -46,8 +46,7 @@ export function DataManagementCard(props: DataManagementCardProps) {
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          导出的配置文件不包含 API Key。导入时需在文件中手动添加{' '}
-          <code className="rounded bg-muted px-1">apiKey</code> 字段。
+          导出文件不包含 Provider API Key，但自定义代理 URL 中的账号密码会完整导出，请妥善保管。
         </p>
       </CardContent>
     </Card>

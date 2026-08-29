@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { formatContent } from '../lib/format-content'
 import { PROTOCOL_LABEL } from '../lib/format'
 
 interface ContentSectionProps {
@@ -47,15 +48,6 @@ interface RequestContentsSheetProps {
 
 function sectionKey(title: string, label: string) {
   return `${title}::${label}`
-}
-
-function formatContent(value: string) {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return { value: JSON.stringify(parsed, null, 2), isJson: true }
-  } catch {
-    return { value, isJson: false }
-  }
 }
 
 function ContentSection(props: ContentSectionProps) {

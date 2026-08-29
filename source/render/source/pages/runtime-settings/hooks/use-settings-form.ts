@@ -27,7 +27,7 @@ export function useSettingsForm() {
       if (!settings) throw new Error('设置尚未加载')
       const previousListenHost = proxyStatus?.host ?? settings.listenHost
       const previousListenPort = proxyStatus?.port ?? settings.listenPort
-      const updated = await unwrap(settingsApi.update({ listenHost: settings.listenHost, listenPort: settings.listenPort, logRetentionDays: settings.logRetentionDays, captureRequestContent: settings.captureRequestContent, cooldownBaseSeconds: settings.cooldownBaseSeconds, cooldownMaxSeconds: settings.cooldownMaxSeconds, consecutiveFailureThreshold: settings.consecutiveFailureThreshold, idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds, autoLaunch: settings.autoLaunch }))
+      const updated = await unwrap(settingsApi.update({ listenHost: settings.listenHost, listenPort: settings.listenPort, logRetentionDays: settings.logRetentionDays, captureRequestContent: settings.captureRequestContent, cooldownBaseSeconds: settings.cooldownBaseSeconds, cooldownMaxSeconds: settings.cooldownMaxSeconds, consecutiveFailureThreshold: settings.consecutiveFailureThreshold, idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds, outboundProxyMode: settings.outboundProxyMode, outboundProxyUrl: settings.outboundProxyUrl, outboundProxyBypass: settings.outboundProxyBypass, autoLaunch: settings.autoLaunch }))
       if (previousListenHost !== updated.listenHost || previousListenPort !== updated.listenPort) {
         const restart = await proxyActions.restart()
         if (!restart.success) throw new Error(`设置已保存，但代理重启失败：${restart.errorMessage}`)

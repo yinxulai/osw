@@ -4,6 +4,8 @@ import type { RuntimeProfile } from '@common/runtime-profile'
 import { closeDatabase, initDatabase } from '../database'
 import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { configureCoreNetworkConnector, resetCoreNetworkConnector } from '../infrastructure/network/core-network'
+import { configureOutboundConnector, createOutboundConnector, destroyOutboundConnector, type SystemProxyResolver } from '../infrastructure/network/outbound-connector'
 import { installLogCapture } from '../management/infrastructure/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { resetManualModels } from '../proxy/routing/manual-routing'
@@ -14,6 +16,7 @@ export interface ServerRuntimeOptions {
   secretStore: KeychainApi
   runtimeProfile: RuntimeProfile
   managementHost?: string
+  systemProxyResolver?: SystemProxyResolver
 }
 
 export class ServerRuntime {
@@ -42,6 +45,10 @@ export class ServerRuntime {
       configureSettingsDefaults({ listenPort: this.options.runtimeProfile.proxyPort })
       installLogCapture()
       await initDatabase(this.options.dataDir)
+      const outboundConnector = createOutboundConnector(getSettings, this.options.systemProxyResolver)
+      await outboundConnector.initialize()
+      configureOutboundConnector(outboundConnector, this.options.systemProxyResolver)
+      configureCoreNetworkConnector(outboundConnector)
       console.log('[runtime] database initialized')
       const settings = await getSettings()
       console.log(`[runtime] resolved proxy endpoint host=${settings.listenHost} port=${settings.listenPort} profileDefaultPort=${this.options.runtimeProfile.proxyPort}`)
@@ -88,6 +95,8 @@ export class ServerRuntime {
     console.log('[runtime] stopping proxy and management resources')
     const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
     console.log(`[runtime] resource stop results=${results.map(result => result.status).join(',')}`)
+    destroyOutboundConnector()
+    resetCoreNetworkConnector()
     await closeDatabase()
     this.managementServer = null
 

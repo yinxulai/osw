@@ -2,11 +2,13 @@ import { ServerRuntime } from './runtime/server-runtime'
 import type { Server } from 'node:http'
 import type { KeychainApi } from '@common/keychain'
 import type { RuntimeProfile } from '@common/runtime-profile'
+import type { SystemProxyResolver } from './infrastructure/network/outbound-connector'
 
 export interface StartServerOptions {
   dataDir: string
   secretStore: KeychainApi
   runtimeProfile: RuntimeProfile
+  systemProxyResolver?: SystemProxyResolver
   managementHost?: string
 }
 

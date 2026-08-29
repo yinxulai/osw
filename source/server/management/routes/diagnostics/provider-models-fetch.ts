@@ -1,10 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import http from 'node:http'
-import https from 'node:https'
 import { z } from 'zod'
 import { ProtocolSchema, type Protocol } from '@common/schemas'
 import { getProvider, listProviderEndpoints } from '@server/database/provider-store'
 import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { coreNetworkClient } from '@server/infrastructure/network/core-network'
 import { createAuthHeaders } from '../../../proxy/upstream/auth'
 import { HttpRouter } from '@server/http-router'
 import type { ManagementHandler } from '../../core/response'
@@ -139,56 +138,26 @@ interface ModelListFetchResult {
   models: FetchedProviderModel[]
 }
 
-function fetchModelList(urlPath: string, protocol: Protocol, apiKey: string | null, timeout: number, signal: AbortSignal): Promise<ModelListFetchResult> {
-  return new Promise(resolve => {
-    const parsed = new URL(urlPath)
-    const isHttps = parsed.protocol === 'https:'
-    const transport = isHttps ? https : http
-
-    const headers = {
-      ...createAuthHeaders(protocol, apiKey, null),
-      Accept: 'application/json',
+async function fetchModelList(urlPath: string, protocol: Protocol, apiKey: string | null, timeout: number, signal: AbortSignal): Promise<ModelListFetchResult> {
+  const parsed = new URL(urlPath)
+  try {
+    const response = await coreNetworkClient.requestHttpBuffered(parsed, {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: 'GET',
+      headers: { ...createAuthHeaders(protocol, apiKey, null), Accept: 'application/json' },
+      timeout,
+      signal,
+    }, Buffer.alloc(0))
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return { ok: false, statusCode: response.statusCode, models: [] }
     }
-
-    const req = transport.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || (isHttps ? 443 : 80),
-        path: parsed.pathname + parsed.search,
-        method: 'GET',
-        headers,
-        timeout,
-        signal,
-      },
-      res => {
-        const statusCode = res.statusCode ?? 0
-        let data = ''
-        res.on('data', chunk => { data += chunk.toString('utf8') })
-        res.on('end', () => {
-          if (statusCode < 200 || statusCode >= 300) {
-            resolve({ ok: false, statusCode, models: [] })
-            return
-          }
-          const models = parseModelListResponse(data)
-          resolve({ ok: models !== null, statusCode, error: models === null ? '响应不是有效的模型列表 JSON' : undefined, models: models ?? [] })
-        })
-      },
-    )
-
-    req.on('error', err => {
-      if (signal.aborted) {
-        resolve({ ok: false, error: '客户端已取消请求', models: [] })
-        return
-      }
-      resolve({ ok: false, error: err.message, models: [] })
-    })
-
-    req.on('timeout', () => {
-      req.destroy(new Error('请求超时'))
-    })
-
-    req.end()
-  })
+    const models = parseModelListResponse(response.body)
+    return { ok: models !== null, statusCode: response.statusCode, error: models === null ? '响应不是有效的模型列表 JSON' : undefined, models: models ?? [] }
+  } catch (error) {
+    return { ok: false, error: signal.aborted ? '客户端已取消请求' : (error as Error).message, models: [] }
+  }
 }
 
 /** 解析 OpenAI 风格与 Anthropic 风格的 models 响应；无法解析时返回 null */

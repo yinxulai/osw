@@ -1,18 +1,41 @@
 import { z } from 'zod'
-import { ProtocolSchema } from './schemas'
+import { OutboundProxyModeSchema, ProtocolSchema } from './schemas'
 
 const ConfigProviderEndpointsSchema = z.record(ProtocolSchema, z.string().url())
 
-const ConfigSettingsSchema = z.object({
+const RuntimeListenSettingsShape = {
   listenHost: z.string().optional(),
   listenPort: z.number().int().min(1).max(65535).optional(),
+}
+
+const ObservabilitySettingsShape = {
   logRetentionDays: z.number().int().positive().optional(),
   captureRequestContent: z.boolean().optional(),
+}
+
+const FailoverSettingsShape = {
   cooldownBaseSeconds: z.number().int().positive().optional(),
   cooldownMaxSeconds: z.number().int().positive().optional(),
   consecutiveFailureThreshold: z.number().int().positive().optional(),
   idleTimeoutMilliseconds: z.number().int().positive().optional(),
+}
+
+const OutboundConnectionSettingsShape = {
+  outboundProxyMode: OutboundProxyModeSchema.optional(),
+  outboundProxyUrl: z.string().optional(),
+  outboundProxyBypass: z.string().optional(),
+}
+
+const DesktopBehaviorSettingsShape = {
   autoLaunch: z.boolean().optional(),
+}
+
+const ConfigSettingsSchema = z.object({
+  ...RuntimeListenSettingsShape,
+  ...ObservabilitySettingsShape,
+  ...FailoverSettingsShape,
+  ...OutboundConnectionSettingsShape,
+  ...DesktopBehaviorSettingsShape,
 })
 
 const ConfigProviderSchema = z.object({

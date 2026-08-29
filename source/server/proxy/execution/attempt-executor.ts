@@ -8,6 +8,7 @@ import { resolveUpstreamUrl } from '@server/proxy/request/request'
 import { classifyHealthFailure, classifyUpstreamStatus } from '@server/proxy/response/response'
 import { createAuthHeaders } from '@server/proxy/upstream/auth'
 import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { isOutboundProxyConnectionError } from '@server/infrastructure/network/outbound-connector'
 import { createDownstreamHeaders, createUpstreamRequestHeaders, redactHeaders } from '@server/proxy/response/headers'
 import type { UpstreamStatusDisposition } from '@server/proxy/response/response'
 import { attachResponseIdleTimeout, sendUpstreamRequest } from '@server/proxy/response/transport'
@@ -205,7 +206,9 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
         console.error(`[proxy] 写入请求尝试日志失败: ${(logError as Error).message}`)
       }
       const recordedOutcome = err instanceof RecordedAttemptError ? err.outcome : null
-      await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.errorResponse)
+      if (!isOutboundProxyConnectionError(err)) {
+        await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.errorResponse)
+      }
       if (response.headersSent) {
         if (err instanceof RecordedAttemptError) await requestLogger.finalizeRequestContent(err.outcome)
         response.destroy(lastError)
