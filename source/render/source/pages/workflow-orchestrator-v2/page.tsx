@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Background,
   Controls,
@@ -39,8 +39,7 @@ import type { V2NodeKind, V2ExecutionResult, WorkflowV2Node } from './types'
 
 interface FlowNodeData extends Record<string, unknown> {
   node: WorkflowV2Node
-  nodeIds: string[]
-  connectingFrom: { nodeId: string; handleId: string | null } | null
+  getNodeIds: () => string[]
   onChange: (id: string, next: WorkflowV2Node) => void
   onRemove: (id: string) => void
 }
@@ -195,28 +194,25 @@ function createNode(kind: V2NodeKind, x: number, y: number): WorkflowV2Node {
 
 function WorkflowNodeCard(props: NodeProps<Node<FlowNodeData>>) {
   const node = props.data.node
-  const nodeIds = props.data.nodeIds
-  const connectingFrom = props.data.connectingFrom
+  const nodeIds = props.data.getNodeIds()
   const removable = node.kind !== 'start' && node.kind !== 'end'
-  const connectingThisNode = connectingFrom?.nodeId === node.id
-  const highlightTarget = Boolean(connectingFrom) && !connectingThisNode
 
   const setNode = (next: WorkflowV2Node) => props.data.onChange(node.id, next)
 
   return (
     <div className={cn('w-64 rounded-xl bg-card px-3 py-2 text-left ring-1 ring-foreground/10', props.selected && 'ring-2 ring-primary/60', !node.enabled && 'opacity-55')}>
       {(node.kind !== 'start') && (
-        <Handle type="target" id="in" position={Position.Left} className={cn('size-2! border-0! bg-muted-foreground!', highlightTarget && 'size-2.5! bg-primary!')} />
+        <Handle type="target" id="in" position={Position.Left} className="size-2! border-0! bg-muted-foreground!" />
       )}
 
       {(node.kind !== 'end') && (
-        <Handle type="source" id="next" position={Position.Right} className={cn('size-2! border-0! bg-muted-foreground!', connectingThisNode && connectingFrom?.handleId === 'next' && 'size-2.5! bg-primary!')} />
+        <Handle type="source" id="next" position={Position.Right} className="size-2! border-0! bg-muted-foreground!" />
       )}
 
       {node.kind === 'condition' && (
         <>
-          <Handle type="source" id="true" position={Position.Right} style={{ top: 28 }} className={cn('size-2! border-0! bg-success!', connectingThisNode && connectingFrom?.handleId === 'true' && 'size-2.5!')} />
-          <Handle type="source" id="false" position={Position.Right} style={{ top: 64 }} className={cn('size-2! border-0! bg-warning!', connectingThisNode && connectingFrom?.handleId === 'false' && 'size-2.5!')} />
+          <Handle type="source" id="true" position={Position.Right} style={{ top: 28 }} className="size-2! border-0! bg-success!" />
+          <Handle type="source" id="false" position={Position.Right} style={{ top: 64 }} className="size-2! border-0! bg-warning!" />
         </>
       )}
 
@@ -359,26 +355,48 @@ function WorkflowNodeCard(props: NodeProps<Node<FlowNodeData>>) {
   )
 }
 
-function toReactFlowNodes(
-  workflowNodes: WorkflowV2Node[],
-  nodeIds: string[],
-  connectingFrom: { nodeId: string; handleId: string | null } | null,
-  onChange: (id: string, next: WorkflowV2Node) => void,
-  onRemove: (id: string) => void,
-): Array<Node<FlowNodeData>> {
-  return workflowNodes.map(node => ({
-    id: node.id,
-    type: 'workflowNode',
-    position: { x: node.x, y: node.y },
-    draggable: node.kind !== 'start' && node.kind !== 'end',
-    data: {
-      node,
-      nodeIds,
-      connectingFrom,
-      onChange,
-      onRemove,
-    },
-  }))
+function toReactFlowNodes(workflowNodes: WorkflowV2Node[], getNodeIds: () => string[], cache: Map<string, Node<FlowNodeData>>, onChange: (id: string, next: WorkflowV2Node) => void, onRemove: (id: string) => void): Array<Node<FlowNodeData>> {
+  const nextCache = new Map<string, Node<FlowNodeData>>()
+
+  const nodes = workflowNodes.map(node => {
+    const previous = cache.get(node.id)
+
+    if (
+      previous
+      && previous.data.node === node
+      && previous.data.getNodeIds === getNodeIds
+      && previous.data.onChange === onChange
+      && previous.data.onRemove === onRemove
+      && previous.position.x === node.x
+      && previous.position.y === node.y
+    ) {
+      nextCache.set(node.id, previous)
+      return previous
+    }
+
+    const nextNode: Node<FlowNodeData> = {
+      id: node.id,
+      type: 'workflowNode',
+      position: { x: node.x, y: node.y },
+      draggable: node.kind !== 'start' && node.kind !== 'end',
+      data: {
+        node,
+        getNodeIds,
+        onChange,
+        onRemove,
+      },
+    }
+
+    nextCache.set(node.id, nextNode)
+    return nextNode
+  })
+
+  cache.clear()
+  for (const [id, value] of nextCache) {
+    cache.set(id, value)
+  }
+
+  return nodes
 }
 
 function toReactFlowEdges(workflowNodes: WorkflowV2Node[]): Edge[] {
@@ -432,14 +450,18 @@ function WorkflowOrchestratorV2Canvas() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>('start')
   const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; handleId: string | null } | null>(null)
   const [rf, setRf] = useState<ReactFlowInstance<Node<FlowNodeData>, Edge> | null>(null)
+  const nodeIdsRef = useRef<string[]>([])
+  const rfNodeCacheRef = useRef<Map<string, Node<FlowNodeData>>>(new Map())
 
   const nodeIds = useMemo(() => nodes.map(node => node.id), [nodes])
+  nodeIdsRef.current = nodeIds
+  const getNodeIds = useCallback(() => nodeIdsRef.current, [])
 
-  const updateNode = (id: string, next: WorkflowV2Node) => {
+  const updateNode = useCallback((id: string, next: WorkflowV2Node) => {
     setNodes(current => current.map(node => (node.id === id ? next : node)))
-  }
+  }, [])
 
-  const removeNode = (removedId: string) => {
+  const removeNode = useCallback((removedId: string) => {
     if (removedId === 'start' || removedId === 'end') return
 
     setNodes(current => current
@@ -459,11 +481,11 @@ function WorkflowOrchestratorV2Canvas() {
 
         return node
       }))
-  }
+  }, [])
 
   const reactFlowNodes = useMemo(
-    () => toReactFlowNodes(nodes, nodeIds, connectingFrom, updateNode, removeNode),
-    [nodes, nodeIds, connectingFrom],
+    () => toReactFlowNodes(nodes, getNodeIds, rfNodeCacheRef.current, updateNode, removeNode),
+    [nodes, getNodeIds, updateNode, removeNode],
   )
   const reactFlowEdges = useMemo(() => toReactFlowEdges(nodes), [nodes])
 
