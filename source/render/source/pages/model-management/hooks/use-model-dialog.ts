@@ -23,12 +23,14 @@ export function useModelDialog(options: UseModelDialogOptions) {
   const [modelId, setModelId] = useState('')
   const [protocolEntries, setProtocolEntries] = useState<ProtocolEndpointEntry[]>([])
   const [fetchedModels, setFetchedModels] = useState<FetchedProviderModel[]>([])
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
 
   const openModelDialog = useCallback((model?: ProviderModelRoute) => {
     setEditingModel(model ?? null)
     setModelId(model?.modelName ?? '')
     setFetchedModels([])
+    setSelectedModelIds([])
     setProtocolEntries(PROTOCOL_OPTIONS.map(option => {
       const match = model?.endpoints.find(endpoint => endpoint.protocol === option.value)
       return match
@@ -73,14 +75,59 @@ export function useModelDialog(options: UseModelDialogOptions) {
     setProtocolEntries(current => current.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
   }, [])
 
+  const toggleModelSelection = useCallback((id: string, checked: boolean) => {
+    setSelectedModelIds(current => {
+      if (checked) return current.includes(id) ? current : [...current, id]
+      return current.filter(item => item !== id)
+    })
+  }, [])
+
   const saveMutation = useMutation({ mutationFn: async () => {
     if (!selectedProvider) throw new Error('请先选择一个供应商')
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
-    if (!modelId.trim() || enabledEntries.length === 0) throw new Error('请填写模型并启用至少一个协议')
+    if (enabledEntries.length === 0) throw new Error('请填写模型并启用至少一个协议')
     const endpoints = enabledEntries.map(entry => ({ protocol: entry.protocol, endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '', customAuthHeader: null, protocolConversionEnabled: entry.protocolConversionEnabled }))
-    const priority = editingModel ? editingModel.priority : (models.length ? Math.max(...models.map(model => model.priority)) + 1 : 1)
-    return editingModel ? unwrap(providerModelApi.update(editingModel.id, { logicalModelId: 'default', modelName: modelId.trim(), endpoints })) : unwrap(providerModelApi.create({ providerId: selectedProvider.id, modelName: modelId.trim(), endpoints, logicalModelId: 'default', priority }))
-  }, onSuccess: async () => { setModelDialogOpen(false); toast.success(editingModel ? '模型已更新' : '模型已添加'); await reload() }, onError: error => toast.error(error.message) })
+    if (editingModel) {
+      if (!modelId.trim()) throw new Error('请填写模型并启用至少一个协议')
+      await unwrap(providerModelApi.update(editingModel.id, { logicalModelId: 'default', modelName: modelId.trim(), endpoints }))
+      return { createdCount: 0, skippedCount: 0, updated: true }
+    }
+
+    const existingNames = new Set(models.map(model => model.modelName))
+    const targets = (selectedModelIds.length > 0 ? selectedModelIds : [modelId.trim()])
+      .map(id => id.trim())
+      .filter(Boolean)
+
+    if (targets.length === 0) throw new Error('请填写模型并启用至少一个协议')
+
+    let nextPriority = models.length ? Math.max(...models.map(model => model.priority)) + 1 : 1
+    let createdCount = 0
+    let skippedCount = 0
+
+    for (const target of targets) {
+      if (existingNames.has(target)) {
+        skippedCount += 1
+        continue
+      }
+      await unwrap(providerModelApi.create({ providerId: selectedProvider.id, modelName: target, endpoints, logicalModelId: 'default', priority: nextPriority }))
+      existingNames.add(target)
+      nextPriority += 1
+      createdCount += 1
+    }
+
+    if (createdCount === 0) throw new Error('所选模型已存在，无需重复添加')
+    return { createdCount, skippedCount, updated: false }
+  }, onSuccess: async result => {
+    setModelDialogOpen(false)
+    if (result.updated) {
+      toast.success('模型已更新')
+    } else if (result.skippedCount > 0) {
+      toast.success(`已添加 ${result.createdCount} 个模型，跳过 ${result.skippedCount} 个已存在模型`)
+    } else {
+      toast.success(result.createdCount > 1 ? `已批量添加 ${result.createdCount} 个模型` : '模型已添加')
+    }
+    await reload()
+  }, onError: error => toast.error(error.message) })
   const saveModel = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
-  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, fetchingModels, fetchModels, setModelId, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
+  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
 }

@@ -20,8 +20,10 @@ interface ModelDialogProps {
   saving: boolean
   fetchedModels: FetchedProviderModel[]
   fetchingModels: boolean
+  selectedModelIds: string[]
   onFetchModels: () => void
   setModelId: (id: string) => void
+  toggleModelSelection: (id: string, checked: boolean) => void
   updateProtocolEntry: (index: number, patch: Partial<ProtocolEndpointEntry>) => void
   onCancel: () => void
   onSave: () => void
@@ -38,14 +40,16 @@ export function ModelDialog(props: ModelDialogProps) {
     saving,
     fetchedModels,
     fetchingModels,
+    selectedModelIds,
     onFetchModels,
     setModelId,
+    toggleModelSelection,
     updateProtocolEntry,
     onCancel,
     onSave,
   } = props
 
-  const canSave = modelId.trim() && protocolEntries.some(entry => entry.enabled)
+  const canSave = (editingModel ? modelId.trim() : selectedModelIds.length > 0 || modelId.trim()) && protocolEntries.some(entry => entry.enabled)
 
   const [modelSearch, setModelSearch] = useState('')
   const filteredModels = useMemo(() => {
@@ -96,12 +100,20 @@ export function ModelDialog(props: ModelDialogProps) {
 
             <FetchedModelPicker
               modelId={modelId}
+              multiSelect={!editingModel}
+              selectedModelIds={selectedModelIds}
               fetchedModels={fetchedModels}
               modelSearch={modelSearch}
               setModelSearch={setModelSearch}
               setModelId={setModelId}
+              toggleModelSelection={toggleModelSelection}
               filteredModels={filteredModels}
             />
+            {!editingModel && selectedModelIds.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                已选择 {selectedModelIds.length} 个模型，保存后将批量添加。
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -131,7 +143,7 @@ export function ModelDialog(props: ModelDialogProps) {
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button disabled={saving || !canSave} onClick={onSave}>
-            {saving ? '保存中...' : editingModel ? '保存修改' : '添加模型'}
+            {saving ? '保存中...' : editingModel ? '保存修改' : selectedModelIds.length > 0 ? `批量添加 ${selectedModelIds.length} 个模型` : '添加模型'}
           </Button>
         </DialogFooter>
       </DialogContent>

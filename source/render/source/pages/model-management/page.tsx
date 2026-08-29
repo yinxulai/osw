@@ -142,8 +142,10 @@ export function ModelManagementPage() {
         saving={service.saving}
         fetchedModels={service.fetchedModels}
         fetchingModels={service.fetchingModels}
+        selectedModelIds={service.selectedModelIds}
         onFetchModels={service.fetchModels}
         setModelId={service.setModelId}
+        toggleModelSelection={service.toggleModelSelection}
         updateProtocolEntry={service.updateProtocolEntry}
         onCancel={service.closeModelDialog}
         onSave={service.saveModel}
