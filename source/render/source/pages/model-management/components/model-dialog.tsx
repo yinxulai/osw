@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { FetchedModelPicker } from './fetched-model-picker'
 import { ModelProtocolEndpointCard } from './model-protocol-endpoint-card'
 import { ProviderRuleBindings } from './provider-rule-bindings'
@@ -82,24 +84,26 @@ export function ModelDialog(props: ModelDialogProps) {
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2">
           {/* 模型 ID */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="model-id">模型 ID</Label>
+            <Label htmlFor="model-id">模型 ID</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="model-id"
+                value={modelId}
+                onChange={event => setModelId(event.target.value)}
+                placeholder="例如：gpt-4o / claude-3-5-sonnet-20241022"
+              />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={fetchingModels}
                 onClick={onFetchModels}
+                className="h-8 sm:self-start"
               >
-                {fetchingModels ? '获取中…' : '从上游获取模型列表'}
+                <RefreshCw size={13} className={cn(fetchingModels && 'animate-spin')} />
+                {fetchingModels ? '拉取中…' : '拉取模型'}
               </Button>
             </div>
-            <Input
-              id="model-id"
-              value={modelId}
-              onChange={event => setModelId(event.target.value)}
-              placeholder="例如：gpt-4o / claude-3-5-sonnet-20241022"
-            />
             <p className="text-xs text-muted-foreground">
               这是上游供应商识别的模型名称，请求会原样转发。
             </p>
