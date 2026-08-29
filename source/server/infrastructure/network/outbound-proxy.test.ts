@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeProxyUrl, redactProxyUrl, resolveChromiumProxyRule, shouldBypassProxy } from './outbound-proxy'
+import { normalizeProxyUrl, redactProxyUrl, resolveChromiumProxyRule, shouldBypassProxy, validateOutboundProxyModeAndUrl } from './outbound-proxy'
 
 describe('outbound proxy utilities', () => {
   it('normalizes supported URLs and preserves credentials', () => {
@@ -31,5 +31,12 @@ describe('outbound proxy utilities', () => {
     expect(resolveChromiumProxyRule('PROXY proxy.test:8080; DIRECT', 'https://example.com')).toBe('http://proxy.test:8080')
     expect(resolveChromiumProxyRule('SOCKS5 proxy.test:1080', 'https://example.com')).toBe('socks5://proxy.test:1080')
     expect(resolveChromiumProxyRule('DIRECT', 'https://example.com')).toBe('')
+  })
+
+  it('validates custom mode URL and ignores non-custom mode', () => {
+    expect(() => validateOutboundProxyModeAndUrl('custom', 'http://127.0.0.1:7890')).not.toThrow()
+    expect(() => validateOutboundProxyModeAndUrl('custom', 'ftp://127.0.0.1:21')).toThrow('仅支持 HTTP、HTTPS 和 SOCKS')
+    expect(() => validateOutboundProxyModeAndUrl('system', '')).not.toThrow()
+    expect(() => validateOutboundProxyModeAndUrl('direct', '')).not.toThrow()
   })
 })

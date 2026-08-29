@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, Loader2, PlugZap, XCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, Network, PlugZap, ShieldCheck, XCircle } from 'lucide-react'
 import type { OutboundProxyMode } from '@common/schemas'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -27,15 +27,19 @@ const modes: { value: OutboundProxyMode; title: string; description: string }[] 
 
 export function OutboundProxyCard(props: OutboundProxyCardProps) {
   const test = useOutboundProxyTest()
-  const [targetUrl, setTargetUrl] = useState('https://www.google.com/generate_204')
+  const [targetUrl, setTargetUrl] = useState('https://www.gstatic.com/generate_204')
 
   return (
-    <Card className="border-border">
-      <SettingsCardHeader title="上游代理" description="控制 One Switch 访问模型服务时使用的网络代理" />
-      <CardContent className="space-y-4 px-4 py-4">
-        <RadioGroup value={props.mode} onValueChange={value => props.onModeChange(value as OutboundProxyMode)}>
+    <Card>
+      <SettingsCardHeader icon={<Network />} title="上游代理" description="控制 One Switch 访问模型服务时使用的网络路径" />
+      <CardContent className="space-y-5 px-4 py-4">
+        <RadioGroup className="grid gap-2 md:grid-cols-3" value={props.mode} onValueChange={value => props.onModeChange(value as OutboundProxyMode)}>
           {modes.map(option => (
-            <Label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-md bg-muted/40 px-3 py-2.5">
+            <Label
+              key={option.value}
+              data-checked={props.mode === option.value}
+              className="flex min-h-20 cursor-pointer items-start gap-3 rounded-lg bg-muted/40 px-3 py-3 transition-colors hover:bg-muted/70 data-[checked=true]:bg-primary/10"
+            >
               <RadioGroupItem value={option.value} className="mt-0.5" />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{option.title}</span>
@@ -46,36 +50,40 @@ export function OutboundProxyCard(props: OutboundProxyCardProps) {
         </RadioGroup>
 
         {props.mode === 'custom' && (
-          <div className="space-y-1.5">
-            <Label htmlFor="outbound-proxy-url" className="text-xs">代理 URL</Label>
-            <Input
-              id="outbound-proxy-url"
-              className="h-8 font-mono text-xs"
-              value={props.proxyUrl}
-              onChange={event => props.onProxyUrlChange(event.target.value)}
-              placeholder="http://user:password@127.0.0.1:7890"
-            />
+          <div className="grid gap-4 rounded-lg bg-muted/30 p-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="outbound-proxy-url" className="text-sm">代理 URL</Label>
+              <Input
+                id="outbound-proxy-url"
+                className="font-mono"
+                value={props.proxyUrl}
+                onChange={event => props.onProxyUrlChange(event.target.value)}
+                placeholder="http://user:password@127.0.0.1:7890"
+              />
+              <p className="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
+                <ShieldCheck className="size-3.5 shrink-0" />仅使用可信代理，凭据会保存在本机
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="outbound-proxy-bypass" className="text-sm">直连地址</Label>
+              <Input
+                id="outbound-proxy-bypass"
+                className="font-mono"
+                value={props.bypass}
+                onChange={event => props.onBypassChange(event.target.value)}
+                placeholder="localhost,127.0.0.1,::1"
+              />
+              <p className="text-xs leading-4 text-muted-foreground">逗号分隔，支持 *.example.com 和 &lt;local&gt;</p>
+            </div>
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="outbound-proxy-bypass" className="text-xs">不使用代理的地址</Label>
-          <Input
-            id="outbound-proxy-bypass"
-            className="h-8 font-mono text-xs"
-            value={props.bypass}
-            onChange={event => props.onBypassChange(event.target.value)}
-            placeholder="localhost,127.0.0.1,::1"
-          />
-          <p className="text-[11px] text-muted-foreground">使用逗号分隔，支持 *.example.com 和 &lt;local&gt;。</p>
-        </div>
-
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <div className="min-w-0 flex-1 space-y-1.5">
-            <Label htmlFor="outbound-proxy-test-target" className="text-xs">测试地址</Label>
+            <Label htmlFor="outbound-proxy-test-target" className="text-sm">连接测试</Label>
             <Input
               id="outbound-proxy-test-target"
-              className="h-8 font-mono text-xs"
+              className="font-mono"
               value={targetUrl}
               onChange={event => setTargetUrl(event.target.value)}
             />

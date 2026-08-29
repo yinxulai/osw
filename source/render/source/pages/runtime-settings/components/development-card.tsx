@@ -1,6 +1,7 @@
 import { Database } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { SettingsCardHeader } from './settings-card-header'
 
 interface DevelopmentCardProps {
   onSeedDevelopment: () => void
@@ -8,16 +9,10 @@ interface DevelopmentCardProps {
 
 export function DevelopmentCard(props: DevelopmentCardProps) {
   return (
-    <Card className="border-border">
-      <CardHeader className="border-b border-border/60">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Database className="h-4 w-4 text-muted-foreground" />
-          开发调试
-        </CardTitle>
-        <CardDescription>仅在开发环境提供，用于快速准备本地调试数据</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[11px] leading-4 text-muted-foreground">
+    <Card>
+      <SettingsCardHeader icon={<Database />} title="开发调试" description="仅在开发环境提供" />
+      <CardContent className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-5 text-muted-foreground">
           添加示例供应商、逻辑模型、供应商模型和请求记录，不会覆盖已有配置。
         </p>
         <Button variant="secondary" className="shrink-0" onClick={props.onSeedDevelopment}>

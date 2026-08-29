@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import DOMPurify from 'dompurify'
 import { Download, ExternalLink, Package, RefreshCw, Rocket } from 'lucide-react'
-import { CardSectionHeader } from '@/components/card-section-header'
+import { SettingsCardHeader } from './settings-card-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/components/ui/toast'
 
 type StatusBadgeProps = {
@@ -57,11 +57,11 @@ type DownloadProgressProps = {
 
 function PreviewCard() {
   return (
-    <Card className="border-border">
-      <CardSectionHeader
-        bordered
-        title={<span className="flex items-center gap-2"><Package className="h-4 w-4" />版本更新</span>}
-        description="基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级"
+    <Card>
+      <SettingsCardHeader
+        icon={<Package />}
+        title="版本更新"
+        description="通过 GitHub Releases 获取应用更新"
       />
       <CardContent className="px-4 py-4">
         <p className="text-[11px] text-muted-foreground">
@@ -266,36 +266,26 @@ export function UpdateCard() {
   const hasUpdate = status === 'update-available' || status === 'downloading' || status === 'downloaded'
 
   return (
-    <Card className="border-border">
-      <CardHeader className="border-b border-border/60">
-        <div className="w-full flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              版本更新
-            </CardTitle>
-            <CardDescription>
-              {isMacOS
-                ? '基于 GitHub Releases 检查新版本，下载 DMG 后手动覆盖安装'
-                : '基于 GitHub Releases 检查新版本，下载后由系统安装程序完成升级'}
-            </CardDescription>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-            <StatusBadge status={status} />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCheck}
-              disabled={isChecking}
-            >
-              <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-              {isChecking ? '检查中…' : '检查更新'}
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
+    <Card>
+      <SettingsCardHeader
+        icon={<Package />}
+        title="版本更新"
+        description={isMacOS ? '检查新版本并下载 DMG 安装包' : '检查新版本并通过系统安装程序升级'}
+        actions={<StatusBadge status={status} />}
+      />
       <CardContent className="space-y-3 px-4 py-4">
-        <VersionInfo info={info} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <VersionInfo info={info} />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCheck}
+            disabled={isChecking}
+          >
+            <RefreshCw className={isChecking ? 'animate-spin' : ''} />
+            {isChecking ? '检查中…' : '检查更新'}
+          </Button>
+        </div>
 
         {!isMacOS && info?.preferredAsset && (
           <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">

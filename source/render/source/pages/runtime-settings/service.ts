@@ -15,6 +15,7 @@ export function useRuntimeSettingsService() {
     loading: form.loading,
     saving: form.saving,
     saved: form.saved,
+    isDirty: form.isDirty,
     updateField: form.updateField,
     saveSettings: form.saveSettings,
     pruneLogs: retention.pruneLogs,

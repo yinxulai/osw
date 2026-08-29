@@ -16,6 +16,7 @@ export function useSettingsForm() {
   const settingsLoading = useSettingsLoading()
   const settings = useRuntimeSettingsUiStore(state => state.draft)
   const saved = useRuntimeSettingsUiStore(state => state.saved)
+  const isDirty = useRuntimeSettingsUiStore(state => state.isDirty)
   const hydrate = useRuntimeSettingsUiStore(state => state.hydrate)
   const updateField = useRuntimeSettingsUiStore(state => state.updateField)
   const setSaved = useRuntimeSettingsUiStore(state => state.setSaved)
@@ -37,6 +38,10 @@ export function useSettingsForm() {
     onSuccess: updated => { client.setQueryData(settingsKeys.all, updated); hydrate(updated); setSaved(true); toast.success('设置已保存'); window.setTimeout(() => setSaved(false), 2000) },
     onError: error => toast.error(error.message),
   })
-  const saveSettings = useCallback(async () => { setSaved(false); await mutation.mutateAsync().catch(() => undefined) }, [mutation, setSaved])
-  return { settings, proxyStatus, loading: settingsLoading && !settings, saving: mutation.isPending, saved, updateField, hydrate, saveSettings }
+  const saveSettings = useCallback(async () => {
+    if (!isDirty) return
+    setSaved(false)
+    await mutation.mutateAsync().catch(() => undefined)
+  }, [isDirty, mutation, setSaved])
+  return { settings, proxyStatus, loading: settingsLoading && !settings, saving: mutation.isPending, saved, isDirty, updateField, hydrate, saveSettings }
 }

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Database, FileText, LockKeyhole, Trash2 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { SettingsCardHeader } from './settings-card-header'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -40,40 +42,28 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
   }
 
   return (
-    <Card className="border-border">
-      <CardHeader className="border-b border-border/60">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <span className="flex size-7 items-center justify-center rounded-md bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
-                <Database size={15} />
-              </span>
-              请求日志
-            </CardTitle>
-            <CardDescription className="mt-2 max-w-xl leading-5">
-              记录代理请求的状态、耗时、Token 和故障切换路径，帮助定位模型与供应商问题。
-            </CardDescription>
-          </div>
-          <span className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-            仅保存于本机
-          </span>
-        </div>
-      </CardHeader>
-      <CardContent className="px-4 py-0">
-        <div className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+    <Card>
+      <SettingsCardHeader
+        icon={<Database />}
+        title="请求日志"
+        description="控制请求记录范围、保留周期和历史数据清理"
+        actions={<Badge variant="muted">仅限本机</Badge>}
+      />
+      <CardContent className="grid divide-y divide-border/60 px-4 py-0 md:grid-cols-3 md:divide-x md:divide-y-0">
+        <div className="flex min-w-0 flex-col justify-between gap-4 py-5 md:pr-4">
           <div className="flex min-w-0 items-start gap-3">
             <Trash2 size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
             <div>
-              <Label htmlFor="log-retention-days" className="text-xs">自动保留</Label>
-              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">请求完成后自动删除超过此期限的日志。</p>
+              <Label htmlFor="log-retention-days" className="text-sm">自动保留</Label>
+              <p className="mt-1 text-xs leading-4 text-muted-foreground">自动删除超过期限的日志</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:shrink-0">
+          <div className="flex items-center gap-2 self-end">
             <Input
               id="log-retention-days"
               type="number"
               min={1}
-              className="h-8 w-20 text-xs"
+              className="w-20"
               value={retentionDays}
               onChange={event => onRetentionDaysChange(Number(event.target.value))}
             />
@@ -81,27 +71,28 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
           </div>
         </div>
 
-        <div className="flex items-start justify-between gap-4 py-5">
+        <div className="flex min-w-0 flex-col justify-between gap-4 py-5 md:px-4">
           <div className="flex min-w-0 gap-2.5">
             <FileText size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <div>
-              <Label htmlFor="capture-request-content" className="text-xs">记录请求与响应正文</Label>
-              <p className="mt-1 max-w-xl text-[11px] leading-4 text-muted-foreground">包含协议转换前后的完整内容，可能包含敏感信息，仅写入本地数据库。</p>
+              <Label htmlFor="capture-request-content" className="text-sm">记录完整正文</Label>
+              <p className="mt-1 text-xs leading-4 text-muted-foreground">可能包含敏感请求与响应内容</p>
             </div>
           </div>
           <Switch
+            className="self-end"
             id="capture-request-content"
             checked={captureRequestContent}
             onCheckedChange={onCaptureRequestContentChange}
           />
         </div>
 
-        <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-col justify-between gap-4 py-5 md:pl-4">
           <div className="flex min-w-0 gap-2.5">
             <LockKeyhole size={15} className="mt-0.5 shrink-0 text-muted-foreground" />
             <div>
-              <div className="text-xs font-medium">立即清理</div>
-              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">按自定义天数删除历史日志，不会修改上面的自动保留设置。</p>
+              <div className="text-sm font-medium">立即清理</div>
+              <p className="mt-1 text-xs leading-4 text-muted-foreground">按指定天数删除历史记录</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="shrink-0 self-end sm:self-auto" disabled={pruning} onClick={() => { setPruneDays(String(retentionDays)); setPruneDialogOpen(true) }}>
