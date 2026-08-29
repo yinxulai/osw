@@ -1,5 +1,6 @@
 import { GripVertical, KeyRound, Pencil, Timer, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { ProtocolIcons } from '@/components/protocol-icons'
 import { SortableProviderModel } from './sortable-provider-model'
@@ -8,13 +9,15 @@ import type { Provider, ProviderModelRoute } from '@common/schemas'
 interface ProviderModelRowProps {
   provider: Provider
   model: ProviderModelRoute
+  selected: boolean
+  onSelectedChange: (checked: boolean) => void
   onEditModel: (model: ProviderModelRoute) => void
   onToggleModelEnabled: (model: ProviderModelRoute, enabled: boolean) => void
   onRemoveModel: (model: ProviderModelRoute) => void
 }
 
 export function ProviderModelRow(props: ProviderModelRowProps) {
-  const { provider, model, onEditModel, onToggleModelEnabled, onRemoveModel } = props
+  const { provider, model, selected, onSelectedChange, onEditModel, onToggleModelEnabled, onRemoveModel } = props
 
   return (
     <SortableProviderModel id={model.id}>
@@ -28,6 +31,11 @@ export function ProviderModelRow(props: ProviderModelRowProps) {
           >
             <GripVertical size={14} />
           </button>
+          <Checkbox
+            checked={selected}
+            onCheckedChange={value => onSelectedChange(value === true)}
+            aria-label={`选择模型 ${model.modelName}`}
+          />
           <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-medium text-muted-foreground">
             {model.priority}
           </div>

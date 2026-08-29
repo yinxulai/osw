@@ -67,6 +67,8 @@ export function ModelManagementPage() {
           onEditModel={service.openModelDialog}
           onToggleModelEnabled={service.updateModelEnabled}
           onRemoveModel={service.removeModel}
+          onRemoveModels={service.removeModels}
+          onDisableModels={service.disableModels}
           onDragEnd={service.handleDragEnd}
         />
       )
@@ -146,6 +148,9 @@ export function ModelManagementPage() {
         onFetchModels={service.fetchModels}
         setModelId={service.setModelId}
         toggleModelSelection={service.toggleModelSelection}
+        selectAllFetchedModels={service.selectAllFetchedModels}
+        invertFetchedModels={service.invertFetchedModels}
+        clearSelectedModels={service.clearSelectedModels}
         updateProtocolEntry={service.updateProtocolEntry}
         onCancel={service.closeModelDialog}
         onSave={service.saveModel}

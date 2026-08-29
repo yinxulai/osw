@@ -27,14 +27,60 @@ export function useModelManagement() {
 
   const invalidateModels = useCallback(async () => { await Promise.all([client.invalidateQueries({ queryKey: modelKeys.all }), client.invalidateQueries({ queryKey: queueKeys.models })]) }, [client])
   const updateModelMutation = useMutation({ mutationFn: ({ id, enabled }: UpdateModelEnabledVariables) => unwrap(providerModelApi.update(id, { logicalModelId: 'default', enabled })), onMutate: async ({ id, enabled }) => { await client.cancelQueries({ queryKey: modelKeys.all }); const previous = client.getQueryData<ProviderModelRoute[]>(modelKeys.all); client.setQueryData<ProviderModelRoute[]>(modelKeys.all, current => current?.map(model => model.id === id ? { ...model, enabled } : model)); return { previous } }, onError: (error, _variables, context) => { client.setQueryData(modelKeys.all, context?.previous); toast.error(error.message) }, onSettled: invalidateModels })
-  const removeModelMutation = useMutation({ mutationFn: (id: string) => unwrap(providerModelApi.remove(id)), onSuccess: invalidateModels, onError: error => toast.error(error.message) })
+  const removeModelMutation = useMutation({ mutationFn: (id: string) => unwrap(providerModelApi.remove(id)), onError: error => toast.error(error.message) })
   const updateModelEnabled = useCallback(async (model: typeof data.models[number], enabled: boolean) => {
     try { await updateModelMutation.mutateAsync({ id: model.id, enabled }); toast.success(enabled ? '模型已启用' : '模型已停用') } catch { /* handled by mutation */ }
   }, [updateModelMutation, toast])
   const removeModel = useCallback(async (model: typeof data.models[number]) => {
     if (!window.confirm(`删除模型"${model.modelName}"？该模型关联的所有协议接口都会被移除。`)) return
-    try { await removeModelMutation.mutateAsync(model.id); toast.success('模型已删除') } catch { /* handled by mutation */ }
-  }, [removeModelMutation, toast])
+    try {
+      await removeModelMutation.mutateAsync(model.id)
+      await invalidateModels()
+      toast.success('模型已删除')
+    } catch { /* handled by mutation */ }
+  }, [invalidateModels, removeModelMutation, toast])
+
+  const removeModels = useCallback(async (modelsToRemove: typeof data.models) => {
+    if (modelsToRemove.length === 0) return false
+    const count = modelsToRemove.length
+    const confirmed = window.confirm(`删除选中的 ${count} 个模型？该批模型关联的所有协议接口都会被移除。`)
+    if (!confirmed) return false
+
+    const results = await Promise.allSettled(modelsToRemove.map(model => removeModelMutation.mutateAsync(model.id)))
+    const successCount = results.filter(result => result.status === 'fulfilled').length
+    const failedCount = results.length - successCount
+
+    if (successCount > 0) {
+      await invalidateModels()
+      toast.success(failedCount > 0 ? `已删除 ${successCount} 个模型，${failedCount} 个删除失败` : `已删除 ${successCount} 个模型`)
+      return true
+    }
+
+    toast.error('批量删除失败，请稍后重试')
+    return false
+  }, [invalidateModels, removeModelMutation, toast])
+
+  const disableModels = useCallback(async (modelsToDisable: typeof data.models) => {
+    if (modelsToDisable.length === 0) return false
+    const enabledModels = modelsToDisable.filter(model => model.enabled)
+    if (enabledModels.length === 0) {
+      toast.success('所选模型已是停用状态')
+      return true
+    }
+
+    const results = await Promise.allSettled(enabledModels.map(model => updateModelMutation.mutateAsync({ id: model.id, enabled: false })))
+    const successCount = results.filter(result => result.status === 'fulfilled').length
+    const failedCount = results.length - successCount
+
+    if (successCount > 0) {
+      await invalidateModels()
+      toast.success(failedCount > 0 ? `已禁用 ${successCount} 个模型，${failedCount} 个失败` : `已禁用 ${successCount} 个模型`)
+      return true
+    }
+
+    toast.error('批量禁用失败，请稍后重试')
+    return false
+  }, [invalidateModels, toast, updateModelMutation])
 
   const handleDragEnd = useModelReordering(selectedModels, data.setModels, data.reload)
 
@@ -47,6 +93,8 @@ export function useModelManagement() {
     ...modelDialog,
     updateModelEnabled,
     removeModel,
+    removeModels,
+    disableModels,
     saving: providerDialog.savingProvider || modelDialog.savingModel,
     handleDragEnd,
     PROTOCOL_OPTIONS,

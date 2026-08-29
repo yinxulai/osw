@@ -82,6 +82,29 @@ export function useModelDialog(options: UseModelDialogOptions) {
     })
   }, [])
 
+  const selectAllFetchedModels = useCallback((ids: string[]) => {
+    setSelectedModelIds(current => {
+      const next = new Set(current)
+      for (const id of ids) next.add(id)
+      return [...next]
+    })
+  }, [])
+
+  const invertFetchedModels = useCallback((ids: string[]) => {
+    setSelectedModelIds(current => {
+      const selected = new Set(current)
+      for (const id of ids) {
+        if (selected.has(id)) selected.delete(id)
+        else selected.add(id)
+      }
+      return [...selected]
+    })
+  }, [])
+
+  const clearSelectedModels = useCallback(() => {
+    setSelectedModelIds([])
+  }, [])
+
   const saveMutation = useMutation({ mutationFn: async () => {
     if (!selectedProvider) throw new Error('请先选择一个供应商')
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
@@ -129,5 +152,5 @@ export function useModelDialog(options: UseModelDialogOptions) {
     await reload()
   }, onError: error => toast.error(error.message) })
   const saveModel = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
-  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
+  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, selectAllFetchedModels, invertFetchedModels, clearSelectedModels, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
 }

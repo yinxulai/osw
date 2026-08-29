@@ -14,11 +14,13 @@ interface ProviderDetailProps {
   onEditModel: (model: ProviderModelRoute) => void
   onToggleModelEnabled: (model: ProviderModelRoute, enabled: boolean) => void
   onRemoveModel: (model: ProviderModelRoute) => void
+  onRemoveModels: (models: ProviderModelRoute[]) => Promise<boolean>
+  onDisableModels: (models: ProviderModelRoute[]) => Promise<boolean>
   onDragEnd: (event: DragEndEvent) => void
 }
 
 export function ProviderDetail(props: ProviderDetailProps) {
-  const { provider, models, onToggleProviderEnabled, onEditProvider, onRemoveProvider, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onDragEnd } = props
+  const { provider, models, onToggleProviderEnabled, onEditProvider, onRemoveProvider, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onRemoveModels, onDisableModels, onDragEnd } = props
 
   return (
     <Card>
@@ -36,6 +38,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
           onEditModel={onEditModel}
           onToggleModelEnabled={onToggleModelEnabled}
           onRemoveModel={onRemoveModel}
+          onRemoveModels={onRemoveModels}
+          onDisableModels={onDisableModels}
           onDragEnd={onDragEnd}
         />
       </CardContent>

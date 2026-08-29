@@ -77,7 +77,7 @@ export function QueueListCard(props: QueueListCardProps) {
     <CardHeader className="flex-row items-center justify-between gap-4 pb-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <CardTitle>优先级队列</CardTitle>
+          <CardTitle>模型队列</CardTitle>
         </div>
         <CardDescription className="mt-1">
           {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加供应商模型后配置优先级和故障转移'}

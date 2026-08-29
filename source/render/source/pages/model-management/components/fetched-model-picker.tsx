@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { FetchedProviderModel } from '@/api/providers'
@@ -12,6 +13,9 @@ interface FetchedModelPickerProps {
   setModelSearch: (search: string) => void
   setModelId: (id: string) => void
   toggleModelSelection: (id: string, checked: boolean) => void
+  onSelectAllFiltered: (ids: string[]) => void
+  onInvertFiltered: (ids: string[]) => void
+  onClearSelection: () => void
   filteredModels: FetchedProviderModel[]
 }
 
@@ -25,6 +29,9 @@ export function FetchedModelPicker(props: FetchedModelPickerProps) {
     setModelSearch,
     setModelId,
     toggleModelSelection,
+    onSelectAllFiltered,
+    onInvertFiltered,
+    onClearSelection,
     filteredModels,
   } = props
 
@@ -38,6 +45,40 @@ export function FetchedModelPicker(props: FetchedModelPickerProps) {
         onChange={event => setModelSearch(event.target.value)}
         placeholder={`搜索 ${fetchedModels.length} 个模型…`}
       />
+      {multiSelect && filteredModels.length > 0 && (
+        <div className="flex items-center justify-between px-2 pt-1">
+          <p className="text-[11px] text-muted-foreground">当前筛选 {filteredModels.length} 个模型</p>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => onSelectAllFiltered(filteredModels.map(model => model.id))}
+            >
+              全选
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => onInvertFiltered(filteredModels.map(model => model.id))}
+            >
+              反选
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={onClearSelection}
+            >
+              清空
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="max-h-48 overflow-y-auto p-1">
         {filteredModels.length === 0 && (
           <p className="px-2 py-3 text-center text-xs text-muted-foreground">没有匹配的模型</p>

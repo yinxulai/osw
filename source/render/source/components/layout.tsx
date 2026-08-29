@@ -55,7 +55,13 @@ export function PageHeader(props: PageHeaderProps) {
         <h1 className="text-[15px] font-semibold leading-none">{title}</h1>
         {description && <p className="mt-1 text-xs text-muted-foreground/80">{description}</p>}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && (
+        <div
+          className="shrink-0 [&_[data-slot=button][data-size=sm]]:h-8 [&_[data-slot=button][data-size=sm]]:rounded-lg [&_[data-slot=button][data-size=sm]]:gap-1.5 [&_[data-slot=button][data-size=sm]]:px-2.5 [&_[data-slot=button][data-size=sm]]:text-sm [&_[data-slot=button][data-size=sm]svg:not([class*='size-'])]:size-4"
+        >
+          {actions}
+        </div>
+      )}
     </header>
   )
 }

@@ -24,6 +24,9 @@ interface ModelDialogProps {
   onFetchModels: () => void
   setModelId: (id: string) => void
   toggleModelSelection: (id: string, checked: boolean) => void
+  selectAllFetchedModels: (ids: string[]) => void
+  invertFetchedModels: (ids: string[]) => void
+  clearSelectedModels: () => void
   updateProtocolEntry: (index: number, patch: Partial<ProtocolEndpointEntry>) => void
   onCancel: () => void
   onSave: () => void
@@ -44,6 +47,9 @@ export function ModelDialog(props: ModelDialogProps) {
     onFetchModels,
     setModelId,
     toggleModelSelection,
+    selectAllFetchedModels,
+    invertFetchedModels,
+    clearSelectedModels,
     updateProtocolEntry,
     onCancel,
     onSave,
@@ -107,6 +113,9 @@ export function ModelDialog(props: ModelDialogProps) {
               setModelSearch={setModelSearch}
               setModelId={setModelId}
               toggleModelSelection={toggleModelSelection}
+              onSelectAllFiltered={selectAllFetchedModels}
+              onInvertFiltered={invertFetchedModels}
+              onClearSelection={clearSelectedModels}
               filteredModels={filteredModels}
             />
             {!editingModel && selectedModelIds.length > 0 && (
