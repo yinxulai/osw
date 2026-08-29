@@ -14,6 +14,7 @@
 |------|------|
 | [architecture.md](./architecture.md) | 系统架构、核心概念、零协议转换原则 |
 | [proxy.md](./proxy.md) | 本地代理服务：协议识别、路由、自动切换、流式边界 |
+| [outbound-proxy.md](./outbound-proxy.md) | 上游出站代理设置：代理协议、绕过规则、连接测试、安全边界与传输接入 |
 | [websocket-transport.md](./websocket-transport.md) | proxy.md 传输层补充：`/v1/responses` 的 WS 透传中继、握手降级、连接级观测（原生透传，非协议转换） |
 | [protocol-conversion.md](./protocol-conversion.md) | 协议兼容转换器（可选功能）：转换开关、转换矩阵、流式转换、UI 展示 |
 | [provider-model.md](./provider-model.md) | Provider、Logical Model、Provider Model 配置模型 |

@@ -108,6 +108,7 @@ proxy/
 - 支持普通 HTTP 请求和 SSE 流式响应透传
 - 支持 Responses API 的 WebSocket 传输（`/v1/responses` 的 `Upgrade: websocket` 握手），WS→WS 透传中继、上游不支持时回 426 由客户端降级 HTTP，详见 [websocket-transport.md](./websocket-transport.md)
 - 不强制接管系统代理；推荐用户在 AI 工具中配置本地 Base URL
+- 可选的应用级上游出站代理用于 One Switch 访问模型供应商，覆盖真实模型请求、连接测试和模型列表获取；协议、绕过规则和安全边界详见 [outbound-proxy.md](./outbound-proxy.md)
 
 ## 协议识别
 

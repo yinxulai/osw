@@ -19,6 +19,7 @@
 - 使用 Electron `safeStorage` 或系统密钥环（macOS Keychain / Windows Credential Manager / Linux Secret Service）存储
 - 配置文件中仅保存密钥引用 ID
 - 配置导入/导出时默认脱敏密钥（导出文件不含明文密钥）
+- 上游代理首版禁止 URL 携带用户名或密码；后续代理认证必须使用系统密钥存储，普通设置表和配置导出只保存密钥引用，详见 [outbound-proxy.md](./outbound-proxy.md)
 
 ## 隐私策略
 
