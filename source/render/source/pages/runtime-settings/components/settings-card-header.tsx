@@ -13,8 +13,8 @@ export function SettingsCardHeader(props: SettingsCardHeaderProps) {
   const { title, description, icon, actions, className } = props
   return (
     <CardSectionHeader
+      className={`-mt-4 py-3 ${className ?? ''}`}
       bordered
-      className={className}
       title={(
         <span className="flex items-center gap-2">
           {icon && <span className="text-muted-foreground [&>svg]:size-4">{icon}</span>}
