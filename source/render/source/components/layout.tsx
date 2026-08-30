@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { DotPattern } from '@/components/ui/dot-pattern'
 import { cn } from '@/lib/utils'
 
@@ -7,10 +8,16 @@ interface PageLayoutProps {
   className?: string
 }
 
+export interface PageBreadcrumb {
+  label: string
+  onClick?: () => void
+}
+
 interface PageHeaderProps {
   title: string
   description?: string
   actions?: ReactNode
+  breadcrumbs?: PageBreadcrumb[]
   className?: string
 }
 
@@ -45,7 +52,7 @@ export function PageLayout(props: PageLayoutProps) {
 }
 
 export function PageHeader(props: PageHeaderProps) {
-  const { title, description, actions, className } = props
+  const { title, description, actions, breadcrumbs, className } = props
   return (
     <header
       className={cn(
@@ -54,6 +61,18 @@ export function PageHeader(props: PageHeaderProps) {
       )}
     >
       <div className="min-w-0">
+        {breadcrumbs && breadcrumbs.length > 0 && (
+          <nav aria-label="面包屑" className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+            {breadcrumbs.map((breadcrumb, index) => (
+              <span key={`${breadcrumb.label}-${index}`} className="flex items-center gap-1">
+                {index > 0 && <ChevronRight className="size-3" aria-hidden="true" />}
+                {breadcrumb.onClick ? (
+                  <button type="button" className="rounded-sm hover:text-foreground" onClick={breadcrumb.onClick}>{breadcrumb.label}</button>
+                ) : <span>{breadcrumb.label}</span>}
+              </span>
+            ))}
+          </nav>
+        )}
         <h1 className="text-[15px] font-semibold leading-none">{title}</h1>
         {description && <p className="mt-1 text-xs text-muted-foreground/80">{description}</p>}
       </div>

@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import type { ProviderStat } from '@common/schemas'
 import { cn } from '@/lib/utils'
 import { CardSectionHeader } from '@/components/card-section-header'
@@ -6,6 +7,7 @@ import { getProviderColor } from '../lib/format'
 
 interface ProviderDistributionProps {
   stats: ProviderStat[]
+  onSelectProvider?: (provider: ProviderStat) => void
 }
 
 export function ProviderDistribution(props: ProviderDistributionProps) {
@@ -20,17 +22,28 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
             暂无供应商请求数据
           </div>
         ) : stats.map((p, idx) => (
-          <div key={p.providerId}>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="font-medium">{p.providerName}</span>
-              <span className="text-muted-foreground tabular-nums">
+          <button
+            key={p.providerId}
+            type="button"
+            className="group w-full text-left"
+            onClick={() => props.onSelectProvider?.(p)}
+            disabled={!props.onSelectProvider}
+            aria-label={props.onSelectProvider ? `查看 ${p.providerName} 数据分析` : undefined}
+          >
+            <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+              <span className="flex min-w-0 items-center gap-2 font-medium">
+                <span className={cn('size-2 shrink-0 rounded-full', getProviderColor(idx))} />
+                <span className="truncate">{p.providerName}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1 text-muted-foreground tabular-nums">
                 {p.percent}% · {p.requests.toLocaleString()}
+                {props.onSelectProvider && <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />}
               </span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={cn('h-full rounded-full', getProviderColor(idx))} style={{ width: `${p.percent}%` }} />
             </div>
-          </div>
+          </button>
         ))}
       </CardContent>
     </Card>

@@ -1,4 +1,5 @@
-import type { AnalyticsRange } from '@common/schemas'
+import { useState } from 'react'
+import type { AnalyticsRange, ProviderStat } from '@common/schemas'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Card } from '@/components/ui/card'
@@ -7,12 +8,14 @@ import { useOverviewService } from './service'
 import { StatsGrid } from './components/stats-grid'
 import { TrendChart } from './components/trend-chart'
 import { ProviderDistribution } from './components/provider-distribution'
+import { ProviderDetail } from './components/provider-detail'
 import { ModelRanking } from './components/model-ranking'
 import { LatencyDistribution } from './components/latency-distribution'
 import { FailureReasons } from './components/failure-reasons'
 
 export function OverviewPage() {
   const { timeRange, setTimeRange, data, loading } = useOverviewService()
+  const [selectedProvider, setSelectedProvider] = useState<ProviderStat | null>(null)
 
   const renderLoading = () => (
     <div className="space-y-4">
@@ -24,15 +27,11 @@ export function OverviewPage() {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card className="p-4">
-          <Skeleton className="mb-4 h-4 w-24" />
-          <Skeleton className="h-40 w-full" />
-        </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
         <Card className="p-4">
           <Skeleton className="mb-4 h-4 w-24" />
           <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-2">
                 <Skeleton className="h-3 w-3 rounded-full" />
                 <Skeleton className="h-3 flex-1" />
@@ -40,6 +39,10 @@ export function OverviewPage() {
               </div>
             ))}
           </div>
+        </Card>
+        <Card className="p-4">
+          <Skeleton className="mb-4 h-4 w-24" />
+          <Skeleton className="h-40 w-full" />
         </Card>
       </div>
       <div className="grid grid-cols-1 gap-4">
@@ -67,24 +70,18 @@ export function OverviewPage() {
 
   const renderContent = () => {
     if (!data) return null
+    if (selectedProvider) return <ProviderDetail provider={selectedProvider} models={data.modelStats} range={timeRange} />
     return (
       <>
         <StatsGrid summary={data.summary} />
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
+          <ProviderDistribution stats={data.providerStats} onSelectProvider={setSelectedProvider} />
           <TrendChart trend={data.trend} range={timeRange} />
-          <ProviderDistribution stats={data.providerStats} />
         </div>
-
         <ModelRanking stats={data.modelStats} />
-
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <LatencyDistribution buckets={data.latencyDistribution} />
-          <FailureReasons
-            reasons={data.failureReasons}
-            failedCount={data.summary.failedCount}
-            totalRequests={data.summary.totalRequests}
-          />
+          <FailureReasons reasons={data.failureReasons} failedCount={data.summary.failedCount} totalRequests={data.summary.totalRequests} />
         </div>
       </>
     )
@@ -98,8 +95,9 @@ export function OverviewPage() {
   return (
     <PageLayout>
       <PageHeader
-        title="统计分析"
-        description="请求量、成功率、延迟等核心指标统计"
+        title={selectedProvider ? `${selectedProvider.providerName} 数据分析` : '统计分析'}
+        description={selectedProvider ? '供应商请求质量、用量和模型表现' : '请求量、成功率、延迟等核心指标统计'}
+        breadcrumbs={selectedProvider ? [{ label: '统计分析', onClick: () => setSelectedProvider(null) }, { label: selectedProvider.providerName }] : undefined}
         actions={(
           <Tabs value={timeRange} onValueChange={v => setTimeRange(v as AnalyticsRange)}>
             <TabsList className="h-7">
