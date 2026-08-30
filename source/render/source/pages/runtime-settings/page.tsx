@@ -13,12 +13,7 @@ import { GeneralCard } from './components/general-card'
 import { DataManagementCard } from './components/data-management-card'
 import { DevelopmentCard } from './components/development-card'
 import { UpdateCard } from './components/update-card'
-import type { ThemeMode } from '@/components/app-sidebar'
-
-interface RuntimeSettingsPageProps {
-  themeMode: ThemeMode
-  onThemeModeChange: (mode: ThemeMode) => void
-}
+import { useAppUiStore } from '@/store/app-ui-store'
 
 interface SettingsSectionProps {
   title: string
@@ -34,8 +29,10 @@ function SettingsSection(props: SettingsSectionProps) {
   )
 }
 
-export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
+export function RuntimeSettingsPage() {
   const service = useRuntimeSettingsService()
+  const themeMode = useAppUiStore(state => state.themeMode)
+  const setThemeMode = useAppUiStore(state => state.setThemeMode)
 
   return (
     <PageLayout className="pb-20">
@@ -57,8 +54,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
               <GeneralCard
                 autoLaunch={service.settings.autoLaunch}
                 onAutoLaunchChange={value => service.updateField('autoLaunch', value)}
-                themeMode={props.themeMode}
-                onThemeModeChange={props.onThemeModeChange}
+                themeMode={themeMode}
+                onThemeModeChange={setThemeMode}
               />
               <UpdateCard />
             </SettingsSection>

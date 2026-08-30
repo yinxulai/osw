@@ -1,30 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
 import { ConfirmProvider } from '@/components/ui/confirm-dialog'
 import { AppLayout } from '@/components/layout'
-import { AppSidebar, type Theme } from '@/components/app-sidebar'
+import { AppSidebar, type PageKey, type Theme } from '@/components/app-sidebar'
 import { useAppUiStore } from '@/store/app-ui-store'
-import { QueueControlPage } from './pages/queue-control/page'
-import { ModelManagementPage } from './pages/model-management/page'
-import { OverviewPage } from './pages/overview/page'
-import { RuntimeSettingsPage } from './pages/runtime-settings/page'
-import { LogsPage } from './pages/logs/page'
-import { RequestLogsPage } from './pages/request-logs/page'
-import { RequestRewriteRulesPage } from './pages/request-rewrite-rules/page'
-import { AccessConfigPage } from './pages/access-config/page'
 import { useProxyStatus } from './features/proxy/hooks'
 
+const pagePaths = {
+  queue: '/queue',
+  providers: '/providers',
+  access: '/access',
+  rules: '/rules',
+  overview: '/overview',
+  requests: '/requests',
+  settings: '/settings',
+  logs: '/logs',
+} as const satisfies Record<PageKey, string>
+
 function App() {
-  const activePage = useAppUiStore(state => state.activePage)
-  const setActivePage = useAppUiStore(state => state.setActivePage)
-  const setOverviewProviderId = useAppUiStore(state => state.setOverviewProviderId)
+  const pathname = useRouterState({ select: state => state.location.pathname })
+  const activePage = (pathname.split('/').filter(Boolean)[0] || 'queue') as PageKey
+  const navigate = useNavigate()
   const themeMode = useAppUiStore(state => state.themeMode)
   const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
   const proxyStatus = useProxyStatus()
-
-  // useProxyStatus 自身负责全局代理状态轮询
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -37,19 +39,10 @@ function App() {
   const theme: Theme = themeMode === 'system' ? systemTheme : themeMode
 
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-    } else {
-      root.classList.remove('dark')
-    }
+    document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
   const toggleTheme = () => setThemeMode(theme === 'dark' ? 'light' : 'dark')
-  const navigateToProviderAnalytics = (providerId: string) => {
-    setOverviewProviderId(providerId)
-    setActivePage('overview')
-  }
 
   return (
     <ToastProvider>
@@ -62,35 +55,12 @@ function App() {
                 theme={theme}
                 proxyRunning={proxyStatus?.running ?? false}
                 proxyPort={proxyStatus?.port}
-                onNavigate={setActivePage}
+                onNavigate={page => void navigate({ to: pagePaths[page] })}
                 onToggleTheme={toggleTheme}
               />
             )}
           >
-            {activePage === 'queue' && (
-              <QueueControlPage
-                onNavigateToModels={() => setActivePage('providers')}
-                onNavigateToAccess={() => setActivePage('access')}
-                onNavigateToProviderAnalytics={navigateToProviderAnalytics}
-              />
-            )}
-            {activePage === 'providers' && <ModelManagementPage onNavigateToProviderAnalytics={navigateToProviderAnalytics} />}
-            {activePage === 'access' && (
-              <AccessConfigPage
-                onNavigateToModels={() => setActivePage('providers')}
-                onNavigateToSettings={() => setActivePage('settings')}
-              />
-            )}
-            {activePage === 'rules' && <RequestRewriteRulesPage />}
-            {activePage === 'overview' && <OverviewPage />}
-            {activePage === 'requests' && <RequestLogsPage />}
-            {activePage === 'logs' && <LogsPage />}
-            {activePage === 'settings' && (
-              <RuntimeSettingsPage
-                themeMode={themeMode}
-                onThemeModeChange={setThemeMode}
-              />
-            )}
+            <Outlet />
           </AppLayout>
         </TooltipProvider>
       </ConfirmProvider>

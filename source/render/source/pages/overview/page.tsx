@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import type { AnalyticsRange, ProviderStat } from '@common/schemas'
+import type { AnalyticsRange } from '@common/schemas'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Card } from '@/components/ui/card'
@@ -8,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { useAppUiStore } from '@/store/app-ui-store'
 import { useOverviewService, useProviderAnalyticsDetail } from './service'
 import { StatsGrid } from './components/stats-grid'
 import { TrendChart } from './components/trend-chart'
@@ -18,19 +16,18 @@ import { ModelRanking } from './components/model-ranking'
 import { LatencyDistribution } from './components/latency-distribution'
 import { FailureReasons } from './components/failure-reasons'
 
-export function OverviewPage() {
-  const { timeRange, setTimeRange, data, loading, refreshing, error, refresh } = useOverviewService()
-  const overviewProviderId = useAppUiStore(state => state.overviewProviderId)
-  const setOverviewProviderId = useAppUiStore(state => state.setOverviewProviderId)
-  const [selectedProvider, setSelectedProvider] = useState<ProviderStat | null>(null)
-  const providerDetail = useProviderAnalyticsDetail(selectedProvider?.providerId ?? null, timeRange)
+interface OverviewPageProps {
+  range: AnalyticsRange
+  providerId?: string
+  onRangeChange: (range: AnalyticsRange) => void
+  onSelectProvider: (providerId?: string) => void
+}
 
-  useEffect(() => {
-    if (!overviewProviderId || !data) return
-    const provider = data.providerStats.find(item => item.providerId === overviewProviderId)
-    if (provider) setSelectedProvider(provider)
-    setOverviewProviderId(null)
-  }, [data, overviewProviderId, setOverviewProviderId])
+export function OverviewPage(props: OverviewPageProps) {
+  const { data, loading, refreshing, error, refresh } = useOverviewService(props.range)
+  const providerDetail = useProviderAnalyticsDetail(props.providerId ?? null, props.range)
+  const selectedProviderName = providerDetail.data?.summary.providerName
+    ?? data?.providerStats.find(provider => provider.providerId === props.providerId)?.providerName
 
   const renderLoading = () => (
     <div className="space-y-4">
@@ -111,11 +108,11 @@ export function OverviewPage() {
       )
     }
     if (!providerDetail.data) return null
-    return <ProviderDetail detail={providerDetail.data} range={timeRange} />
+    return <ProviderDetail detail={providerDetail.data} range={props.range} />
   }
 
   const renderContent = () => {
-    if (selectedProvider) return renderProviderDetail()
+    if (props.providerId) return renderProviderDetail()
     if (error) {
       return (
         <Card>
@@ -134,8 +131,8 @@ export function OverviewPage() {
       <>
         <StatsGrid summary={data.summary} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
-          <ProviderDistribution stats={data.providerStats} onSelectProvider={setSelectedProvider} />
-          <TrendChart trend={data.trend} range={timeRange} />
+          <ProviderDistribution stats={data.providerStats} onSelectProvider={provider => props.onSelectProvider(provider.providerId)} />
+          <TrendChart trend={data.trend} range={props.range} />
         </div>
         <ModelRanking stats={data.modelStats} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -147,22 +144,22 @@ export function OverviewPage() {
   }
 
   const renderBody = () => {
-    if (!selectedProvider && loading) return renderLoading()
+    if (!props.providerId && loading) return renderLoading()
     return renderContent()
   }
 
-  const activeRefreshing = selectedProvider ? providerDetail.refreshing : refreshing
-  const refreshActiveView = () => selectedProvider ? providerDetail.refresh() : refresh()
+  const activeRefreshing = props.providerId ? providerDetail.refreshing : refreshing
+  const refreshActiveView = () => props.providerId ? providerDetail.refresh() : refresh()
 
   return (
     <PageLayout>
       <PageHeader
-        title={selectedProvider ? `${selectedProvider.providerName} 数据分析` : '统计分析'}
-        description={selectedProvider ? '供应商请求质量、用量和模型表现' : '请求量、成功率、延迟等核心指标统计'}
-        breadcrumbs={selectedProvider ? [{ label: '统计分析', onClick: () => setSelectedProvider(null) }, { label: selectedProvider.providerName }] : undefined}
+        title={props.providerId ? `${selectedProviderName ?? '供应商'} 数据分析` : '统计分析'}
+        description={props.providerId ? '供应商请求质量、用量和模型表现' : '请求量、成功率、延迟等核心指标统计'}
+        breadcrumbs={props.providerId ? [{ label: '统计分析', onClick: () => props.onSelectProvider() }, { label: selectedProviderName ?? '供应商分析' }] : undefined}
         actions={(
           <div className="flex items-center gap-2">
-            <Tabs value={timeRange} onValueChange={v => setTimeRange(v as AnalyticsRange)}>
+            <Tabs value={props.range} onValueChange={value => props.onRangeChange(value as AnalyticsRange)}>
               <TabsList className="h-7">
                 <TabsTrigger value="today" className="h-6 px-2.5 text-xs">今日</TabsTrigger>
                 <TabsTrigger value="7d" className="h-6 px-2.5 text-xs">近 7 天</TabsTrigger>

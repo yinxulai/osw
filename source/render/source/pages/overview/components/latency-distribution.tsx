@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { Card, CardContent } from '@/components/ui/card'
 
+const TTFT_BUCKET_COLORS = ['bg-success', 'bg-lime-500', 'bg-warning', 'bg-orange-500', 'bg-destructive'] as const
+
 interface LatencyDistributionProps {
   buckets: LatencyBucket[]
 }
@@ -18,23 +20,36 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
           <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
             暂无 TTFT 数据
           </div>
-        ) : buckets.map(l => (
-          <div key={l.range} className="flex items-center gap-2">
-            <div className="w-10 text-[11px] text-muted-foreground shrink-0">{l.range}</div>
-            <div className="flex-1 relative h-5 bg-muted rounded-sm overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-sm',
-                  l.percent > 30 ? 'bg-success' : l.percent > 10 ? 'bg-warning' : 'bg-destructive'
-                )}
-                style={{ width: `${l.percent}%` }}
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium tabular-nums">
-                {l.percent}%
-              </span>
+        ) : (
+          <>
+            {buckets.map((bucket, index) => (
+              <div key={bucket.range} className="flex items-center gap-2">
+                <div className="w-10 shrink-0 text-[11px] text-muted-foreground">{bucket.range}</div>
+                <div className="relative h-5 flex-1 overflow-hidden rounded-sm bg-muted">
+                  <div
+                    className={cn('h-full rounded-sm', TTFT_BUCKET_COLORS[index] ?? 'bg-destructive')}
+                    style={{ width: `${bucket.percent}%` }}
+                    role="progressbar"
+                    aria-label={`${bucket.range} TTFT 占比`}
+                    aria-valuenow={bucket.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium tabular-nums">
+                    {bucket.percent}%
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-end gap-1.5 pt-1 text-[10px] text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />
+              <span>快</span>
+              <span className="mx-0.5 text-muted-foreground/50">→</span>
+              <span className="h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
+              <span>慢</span>
             </div>
-          </div>
-        ))}
+          </>
+        )}
       </CardContent>
     </Card>
   )
