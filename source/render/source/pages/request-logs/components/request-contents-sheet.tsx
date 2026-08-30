@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { AlertCircle, ChevronDown, LoaderCircle, Search } from 'lucide-react'
-import type { AppliedRequestRewriteRule, RequestContent, RequestConversion } from '@common/schemas'
+import type { AppliedRequestRewriteRule, RequestContent, RequestConversion, RequestLogEntryAttempt } from '@common/schemas'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
@@ -36,9 +36,14 @@ interface AppliedRulesProps {
   rules: AppliedRequestRewriteRule[] | null
 }
 
+interface AttemptErrorProps {
+  attempt: RequestLogEntryAttempt
+}
+
 interface RequestContentsSheetProps {
   contents: RequestContent[] | null
   conversions: RequestConversion[] | null
+  attempts: RequestLogEntryAttempt[]
   requestRewriteRules: AppliedRequestRewriteRule[] | null
   clientProtocol: string
   upstreamProtocol?: string | null
@@ -111,25 +116,42 @@ function RequestStage(props: RequestStageProps) {
   )
 }
 
-export function RequestContentsSheet(props: RequestContentsSheetProps) {
-  const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
-  const clientContent = props.contents?.find(content => content.attemptId === null) ?? null
-  const conversion = props.conversions?.find(item => item.attemptId === props.selectedAttemptId) ?? null
-  const [search, setSearch] = React.useState('')
-  const [sectionStates, setSectionStates] = React.useState<Record<string, boolean>>({})
+function AttemptError(props: AttemptErrorProps) {
+  const { attempt } = props
+  if (!attempt.errorCode && !attempt.errorMessage && !attempt.details) return null
 
-  const clientProtocol = conversion?.clientProtocol ?? props.clientProtocol
-  const upstreamProtocol = conversion?.upstreamProtocol ?? props.upstreamProtocol ?? clientProtocol
+  return (
+    <section className="rounded-lg bg-red-500/8 px-3 py-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2 font-medium text-red-700 dark:text-red-300">
+        <AlertCircle size={14} />
+        <span>{attempt.httpStatus !== null ? `HTTP ${attempt.httpStatus}` : '上游请求失败'}</span>
+        {attempt.errorCode && <span className="font-mono text-[10px] font-normal">{attempt.errorCode}</span>}
+      </div>
+      {attempt.errorMessage && <div className="mt-1 wrap-break-word text-red-700/90 dark:text-red-300/90">{attempt.errorMessage}</div>}
+      {attempt.details && <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all bg-red-500/8 p-2 font-mono text-[11px] leading-5 text-foreground/90">{formatContent(attempt.details).value}</pre>}
+    </section>
+  )
+}
+
+type RequestStageData = Omit<RequestStageProps, 'sectionStates' | 'onSectionOpenChange'>
+
+type RequestStageBuilderInput = {
+  clientContent: RequestContent | null
+  selectedContent: RequestContent | null
+  conversion: RequestConversion | null
+  clientProtocol: string
+  upstreamProtocol: string
+}
+
+function buildRequestStages(input: RequestStageBuilderInput): RequestStageData[] {
+  const { clientContent, selectedContent, conversion, clientProtocol, upstreamProtocol } = input
   const clientLabel = PROTOCOL_LABEL[clientProtocol] ?? clientProtocol
   const upstreamLabel = PROTOCOL_LABEL[upstreamProtocol] ?? upstreamProtocol
   const converted = Boolean(conversion && conversion.clientProtocol !== conversion.upstreamProtocol)
+  const upstreamRequestTitle = converted ? '协议转换后的上游请求' : '发送到真实供应商的请求'
+  const clientResponseTitle = converted ? '协议转换后的客户端响应' : '返回客户端的响应'
 
-  React.useEffect(() => {
-    setSearch('')
-    setSectionStates({})
-  }, [props.selectedAttemptId])
-
-  const stages: RequestStageProps[] = [
+  return [
     {
       title: '客户端原始请求',
       protocol: clientProtocol,
@@ -137,18 +159,14 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
         { id: sectionKey('客户端原始请求', `请求头 · ${clientLabel}`), label: `请求头 · ${clientLabel}`, value: conversion?.clientRequestHeaders ?? clientContent?.requestHeaders ?? null },
         { id: sectionKey('客户端原始请求', `请求 Body · ${clientLabel}`), label: `请求 Body · ${clientLabel}`, value: clientContent?.requestBody ?? null },
       ],
-      sectionStates,
-      onSectionOpenChange: (id, open) => setSectionStates(current => ({ ...current, [id]: open })),
     },
     {
-      title: converted ? '协议转换后的上游请求' : '发送到真实供应商的请求',
+      title: upstreamRequestTitle,
       protocol: upstreamProtocol,
       sections: [
-        { id: sectionKey(converted ? '协议转换后的上游请求' : '发送到真实供应商的请求', `请求头 · ${upstreamLabel}`), label: `请求头 · ${upstreamLabel}`, value: conversion?.upstreamRequestHeaders ?? selectedContent?.requestHeaders ?? null },
-        { id: sectionKey(converted ? '协议转换后的上游请求' : '发送到真实供应商的请求', `请求 Body · ${upstreamLabel}`), label: `请求 Body · ${upstreamLabel}`, value: conversion?.requestBody ?? selectedContent?.requestBody ?? null },
+        { id: sectionKey(upstreamRequestTitle, `请求头 · ${upstreamLabel}`), label: `请求头 · ${upstreamLabel}`, value: conversion?.upstreamRequestHeaders ?? selectedContent?.requestHeaders ?? null },
+        { id: sectionKey(upstreamRequestTitle, `请求 Body · ${upstreamLabel}`), label: `请求 Body · ${upstreamLabel}`, value: conversion?.requestBody ?? selectedContent?.requestBody ?? null },
       ],
-      sectionStates,
-      onSectionOpenChange: (id, open) => setSectionStates(current => ({ ...current, [id]: open })),
     },
     {
       title: '真实供应商响应',
@@ -157,20 +175,45 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
         { id: sectionKey('真实供应商响应', `响应头 · ${upstreamLabel}`), label: `响应头 · ${upstreamLabel}`, value: conversion?.upstreamResponseHeaders ?? selectedContent?.responseHeaders ?? null },
         { id: sectionKey('真实供应商响应', `响应 Body · ${upstreamLabel}`), label: `响应 Body · ${upstreamLabel}`, value: selectedContent?.responseBody ?? null },
       ],
-      sectionStates,
-      onSectionOpenChange: (id, open) => setSectionStates(current => ({ ...current, [id]: open })),
     },
     {
-      title: converted ? '协议转换后的客户端响应' : '返回客户端的响应',
+      title: clientResponseTitle,
       protocol: clientProtocol,
       sections: [
-        { id: sectionKey(converted ? '协议转换后的客户端响应' : '返回客户端的响应', `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
-        { id: sectionKey(converted ? '协议转换后的客户端响应' : '返回客户端的响应', `响应 Body · ${clientLabel}`), label: `响应 Body · ${clientLabel}`, value: conversion?.responseBody ?? selectedContent?.responseBody ?? null },
+        { id: sectionKey(clientResponseTitle, `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
+        { id: sectionKey(clientResponseTitle, `响应 Body · ${clientLabel}`), label: `响应 Body · ${clientLabel}`, value: conversion?.responseBody ?? selectedContent?.responseBody ?? null },
       ],
-      sectionStates,
-      onSectionOpenChange: (id, open) => setSectionStates(current => ({ ...current, [id]: open })),
     },
   ]
+}
+
+export function RequestContentsSheet(props: RequestContentsSheetProps) {
+  const selectedAttempt = props.attempts.find(attempt => attempt.id === props.selectedAttemptId) ?? null
+  const selectedContent = props.contents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
+  const clientContent = props.contents?.find(content => content.attemptId === null) ?? null
+  const conversion = props.conversions?.find(item => item.attemptId === props.selectedAttemptId) ?? null
+  const [search, setSearch] = React.useState('')
+  const [sectionStates, setSectionStates] = React.useState<Record<string, boolean>>({})
+
+  const clientProtocol = conversion?.clientProtocol ?? props.clientProtocol
+  const upstreamProtocol = conversion?.upstreamProtocol ?? props.upstreamProtocol ?? clientProtocol
+
+  React.useEffect(() => {
+    setSearch('')
+    setSectionStates({})
+  }, [props.selectedAttemptId])
+
+  const stages: RequestStageProps[] = buildRequestStages({
+    clientContent,
+    selectedContent,
+    conversion,
+    clientProtocol,
+    upstreamProtocol,
+  }).map(stage => ({
+    ...stage,
+    sectionStates,
+    onSectionOpenChange: (id, open) => setSectionStates(current => ({ ...current, [id]: open })),
+  }))
 
   const normalizedSearch = search.trim().toLowerCase()
   const filteredStages = normalizedSearch
@@ -198,7 +241,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
         {props.error}
       </div>
     )
-  } else if (selectedContent || clientContent) {
+  } else if (selectedAttempt || clientContent) {
     state = (
       <div className="flex h-full min-h-0 flex-col">
         <div className="sticky top-0 z-10 border-b border-border/60 bg-card/95 px-4 py-3 backdrop-blur">
@@ -244,6 +287,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           </div>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 pb-4 pt-3">
+          {selectedAttempt && <AttemptError attempt={selectedAttempt} />}
           <AppliedRules ruleIds={selectedContent?.requestRewriteRuleIds ?? []} rules={props.requestRewriteRules} />
           {filteredStages.length > 0 ? (
             filteredStages.map(stage => <RequestStage key={stage.title} {...stage} />)
@@ -254,7 +298,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
       </div>
     )
   } else if (props.selectedAttemptId) {
-    state = <div className="py-8 text-center text-sm text-muted-foreground">该尝试没有正文记录</div>
+    state = <div className="py-8 text-center text-sm text-muted-foreground">该尝试没有可查看的记录</div>
   } else {
     state = null
   }

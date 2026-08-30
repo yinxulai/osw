@@ -28,6 +28,14 @@ interface AttemptBadgeProps {
   attempt: RequestLogEntryAttempt
 }
 
+interface AttemptSummaryProps {
+  attempt: RequestLogEntryAttempt
+}
+
+interface UpstreamRequestIdProps {
+  requestId: string | null
+}
+
 interface ProviderRouteProps {
   attempts: RequestLogEntryAttempt[]
   onSelect: (attemptId: string) => void
@@ -86,6 +94,41 @@ function MetricCard(props: MetricCardProps) {
   )
 }
 
+function AttemptSummary(props: AttemptSummaryProps) {
+  const { attempt } = props
+  const hasError = attempt.errorCode || attempt.errorMessage
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-muted-foreground">
+      {attempt.httpStatus !== null && <span>HTTP {attempt.httpStatus}</span>}
+      {attempt.retryable && <span className="text-amber-600 dark:text-amber-400">已转移</span>}
+      {hasError && <span className="min-w-0 truncate text-red-600 dark:text-red-400">{attempt.errorMessage ?? attempt.errorCode}</span>}
+    </div>
+  )
+}
+
+function UpstreamRequestId(props: UpstreamRequestIdProps) {
+  return (
+    <div className="mt-1 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
+      <span className="break-all">Upstream request ID：{props.requestId || '-'}</span>
+      {props.requestId && (
+        <button
+          type="button"
+          aria-label="复制 Upstream request ID"
+          title="复制 Upstream request ID"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          onClick={event => {
+            event.stopPropagation()
+            if (props.requestId) void navigator.clipboard.writeText(props.requestId)
+          }}
+        >
+          <Copy size={11} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ProviderRoute(props: ProviderRouteProps) {
   return (
     <section className="overflow-hidden rounded-lg border border-border/70 bg-inset">
@@ -132,23 +175,8 @@ function ProviderRoute(props: ProviderRouteProps) {
                 </span>
                 <AttemptBadge attempt={attempt} />
               </div>
-              <div className="mt-1 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
-                <span className="break-all">Upstream request ID：{attempt.upstreamRequestId || '-'}</span>
-                {attempt.upstreamRequestId && (
-                  <button
-                    type="button"
-                    aria-label="复制 Upstream request ID"
-                    title="复制 Upstream request ID"
-                    className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                    onClick={event => {
-                      event.stopPropagation()
-                      void navigator.clipboard.writeText(attempt.upstreamRequestId ?? '')
-                    }}
-                  >
-                    <Copy size={11} />
-                  </button>
-                )}
-              </div>
+              <AttemptSummary attempt={attempt} />
+              <UpstreamRequestId requestId={attempt.upstreamRequestId} />
             </div>
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {formatDuration(attempt.durationMilliseconds)}
@@ -273,6 +301,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             contents={contents}
             conversions={'conversions' in log ? log.conversions : null}
             requestRewriteRules={requestRewriteRules}
+            attempts={log.attempts}
             clientProtocol={log.clientProtocol}
             upstreamProtocol={upstreamProtocol}
             loading={props.detailLoading}
