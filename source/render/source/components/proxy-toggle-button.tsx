@@ -1,6 +1,5 @@
 import { Pause } from 'lucide-react'
 import { InteractiveHoverButton } from '@/components/ui/interactive-hover-button'
-import { cn } from '@/lib/utils'
 
 interface ProxyToggleButtonProps {
   running: boolean
@@ -12,13 +11,6 @@ export function ProxyToggleButton(props: ProxyToggleButtonProps) {
 
   return (
     <InteractiveHoverButton
-      className={cn(
-        running && [
-          'bg-success text-success-foreground hover:bg-success',
-          '[&>span:first-child>span:first-child]:bg-destructive',
-          '[&>span:last-child]:text-destructive-foreground',
-        ],
-      )}
       hoverContent={running ? (
         <>
           <span>暂停服务</span>
