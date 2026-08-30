@@ -1,7 +1,7 @@
 {
   "name": "one-switch",
   "private": true,
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "author": "yinxulai <yinxulai@hotmail.com>",
   "type": "module",
   "main": "dist/command/index.js",
