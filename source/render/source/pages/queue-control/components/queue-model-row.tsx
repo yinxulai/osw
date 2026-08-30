@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Provider, ProviderHealth, ProviderModelHealth, ProviderModelRoute } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
+import { NumberTicker } from '@/components/ui/number-ticker'
 import { ProtocolIcons } from '@/components/protocol-icons'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
@@ -149,7 +150,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
           <GripVertical size={16} />
         )}
         <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-muted text-[10px] font-medium text-muted-foreground">
-          {model.priority}
+          <NumberTicker value={model.priority} />
         </div>
       </div>
       <div className="min-w-0 flex items-center gap-2">

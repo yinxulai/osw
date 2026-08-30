@@ -1,5 +1,6 @@
 import { Activity, Clock3, Layers3, Zap } from 'lucide-react'
 import { MetricGrid } from '@/components/metric-grid'
+import { NumberTicker } from '@/components/ui/number-ticker'
 import type { ProviderModelRoute } from '@common/schemas'
 import type { QueueSummaryMetrics } from '../lib/model-metrics'
 
@@ -8,17 +9,15 @@ interface QueueSummaryProps {
   summaryMetrics?: QueueSummaryMetrics
 }
 
-function formatPercent(value: number | null | undefined): string {
-  return value == null ? '—' : `${(value * 100).toFixed(1)}%`
+type TickerValueProps = {
+  value: number | null | undefined
+  decimalPlaces?: number
+  suffix?: string
 }
 
-function formatDuration(milliseconds: number | null | undefined): string {
-  if (milliseconds == null) return '—'
-  return milliseconds >= 1000 ? `${(milliseconds / 1000).toFixed(1)}s` : `${Math.round(milliseconds)}ms`
-}
-
-function formatTps(value: number | null | undefined): string {
-  return value == null ? '—' : value >= 10 ? String(Math.round(value)) : value.toFixed(1)
+function TickerValue(props: TickerValueProps) {
+  if (props.value == null) return <>—</>
+  return <><NumberTicker value={props.value} decimalPlaces={props.decimalPlaces} />{props.suffix}</>
 }
 
 export function QueueSummary(props: QueueSummaryProps) {
@@ -27,10 +26,10 @@ export function QueueSummary(props: QueueSummaryProps) {
 
   return (
     <MetricGrid items={[
-      { label: '请求成功率', value: formatPercent(metrics?.successRate), Icon: Activity, hint: metrics ? `近 ${metrics.completedRequestCount} 次已完成请求` : '等待请求数据' },
-      { label: '平均响应耗时', value: formatDuration(metrics?.avgDurationMilliseconds), Icon: Clock3, hint: '成功请求的完整返回耗时' },
-      { label: '平均 TPS', value: formatTps(metrics?.avgTps), Icon: Zap, hint: '输出 Token ÷ 总耗时' },
-      { label: '当前可用模型', value: `${enabledCount} / ${props.models.length}`, Icon: Layers3, hint: metrics?.failoverCount ? `近 ${metrics.failoverCount} 次发生故障转移` : '当前没有故障转移' },
+      { label: '请求成功率', value: metrics?.successRate == null ? '—' : <><TickerValue value={metrics.successRate * 100} decimalPlaces={1} suffix="%" /></>, Icon: Activity, hint: metrics ? <>近 <TickerValue value={metrics.completedRequestCount} /> 次已完成请求</> : '等待请求数据' },
+      { label: '平均响应耗时', value: metrics?.avgDurationMilliseconds == null ? '—' : <><TickerValue value={metrics.avgDurationMilliseconds >= 1000 ? metrics.avgDurationMilliseconds / 1000 : metrics.avgDurationMilliseconds} decimalPlaces={metrics.avgDurationMilliseconds >= 1000 ? 1 : 0} suffix={metrics.avgDurationMilliseconds >= 1000 ? 's' : 'ms'} /></>, Icon: Clock3, hint: '成功请求的完整返回耗时' },
+      { label: '平均 TPS', value: metrics?.avgTps == null ? '—' : <TickerValue value={metrics.avgTps} decimalPlaces={metrics.avgTps >= 10 ? 0 : 1} />, Icon: Zap, hint: '输出 Token ÷ 总耗时' },
+      { label: '当前可用模型', value: <><TickerValue value={enabledCount} /> / <TickerValue value={props.models.length} /></>, Icon: Layers3, hint: metrics?.failoverCount ? <>近 <TickerValue value={metrics.failoverCount} /> 次发生故障转移</> : '当前没有故障转移' },
     ]} />
   )
 }
