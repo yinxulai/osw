@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { FlaskConical, ListFilter, LoaderCircle, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
 import { requestRewriteRuleApi } from '@/api/models'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/toast'
 import {
@@ -136,19 +136,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                             <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground">{index + 1}</span>
                             <input aria-label={`测试用例 ${index + 1} 名称`} className="h-7 min-w-0 flex-1 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground" value={testCase.name} onChange={event => updateTestCase(testCase.id, { name: event.target.value })} />
                             <Button type="button" size="sm" className="h-7 text-[11px]" onClick={() => runTest(testCase)} disabled={isTesting}>{isTesting && <LoaderCircle className="animate-spin" />}运行测试</Button>
-                            <Popover open={deleteTestCaseId === testCase.id} onOpenChange={open => setDeleteTestCaseId(open ? testCase.id : undefined)}>
-                              <PopoverTrigger asChild>
-                                <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={`删除测试用例 ${index + 1}`}><Trash2 /></Button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" className="w-56">
-                                <p className="text-xs font-medium">删除这个测试用例？</p>
-                                <p className="text-[11px] text-muted-foreground">删除后需要保存规则才会生效。</p>
-                                <div className="flex justify-end gap-2">
-                                  <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setDeleteTestCaseId(undefined)}>取消</Button>
-                                  <Button type="button" variant="destructive" size="sm" className="h-7 text-[11px]" onClick={() => { removeTestCase(testCase.id); setDeleteTestCaseId(undefined) }}>删除</Button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                            <Button type="button" variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={`删除测试用例 ${index + 1}`} onClick={() => setDeleteTestCaseId(testCase.id)}><Trash2 /></Button>
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={`${testCase.id}-stage`} className="text-[11px]">测试阶段</Label>
@@ -172,6 +160,19 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
             </div>
           </section>
         </div>
+
+        <ConfirmDialog
+          open={Boolean(deleteTestCaseId)}
+          title="删除这个测试用例？"
+          description="该测试用例将从当前草稿中移除，保存规则后生效。"
+          confirmLabel="删除测试用例"
+          variant="destructive"
+          onConfirm={() => {
+            if (deleteTestCaseId) removeTestCase(deleteTestCaseId)
+            setDeleteTestCaseId(undefined)
+          }}
+          onOpenChange={open => !open && setDeleteTestCaseId(undefined)}
+        />
 
         <SheetFooter className="mt-auto flex shrink-0 flex-row items-center justify-end gap-2 border-t border-border bg-muted/50 px-4 py-3">
           {props.dirty ? <span className="mr-auto hidden text-xs text-warning sm:inline">有尚未保存的更改</span> : <span className="mr-auto hidden text-xs text-muted-foreground sm:inline">没有待保存的更改</span>}

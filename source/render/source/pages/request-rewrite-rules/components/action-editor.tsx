@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
@@ -69,21 +69,9 @@ export function ActionEditor(props: ActionEditorProps) {
                   <SelectTrigger aria-label={`动作 ${index + 1} 操作`}><SelectValue /></SelectTrigger>
                   <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{operationLabels[operation]}</SelectItem>)}</SelectContent>
                 </Select>
-                <Popover open={deleteActionId === action.id} onOpenChange={open => setDeleteActionId(open ? action.id : undefined)}>
-                  <PopoverTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label="删除动作" className="ml-auto text-muted-foreground hover:text-destructive">
-                      <Trash2 />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-56">
-                    <p className="text-xs font-medium">删除这个动作？</p>
-                    <p className="text-[11px] text-muted-foreground">删除后需要保存规则才会生效。</p>
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setDeleteActionId(undefined)}>取消</Button>
-                      <Button type="button" variant="destructive" size="sm" className="h-7 text-[11px]" onClick={() => { props.onChange(props.actions.filter(item => item.id !== action.id)); setDeleteActionId(undefined) }}>删除</Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="删除动作" className="ml-auto text-muted-foreground hover:text-destructive" onClick={() => setDeleteActionId(action.id)}>
+                  <Trash2 />
+                </Button>
               </div>
 
               <div className="mt-3 grid gap-3 pl-0 sm:grid-cols-2">
@@ -138,6 +126,18 @@ export function ActionEditor(props: ActionEditorProps) {
           )
         })}
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteActionId)}
+        title="删除这个动作？"
+        description="该动作将从当前草稿中移除，保存规则后生效。"
+        confirmLabel="删除动作"
+        variant="destructive"
+        onConfirm={() => {
+          props.onChange(props.actions.filter(action => action.id !== deleteActionId))
+          setDeleteActionId(undefined)
+        }}
+        onOpenChange={open => !open && setDeleteActionId(undefined)}
+      />
     </section>
   )
 }
