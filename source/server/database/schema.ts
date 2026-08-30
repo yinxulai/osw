@@ -120,8 +120,12 @@ export const requestRewriteRules = sqliteTable('request_rewrite_rules', {
 }, table => [index('idx_request_rewrite_rules_enabled').on(table.enabled), index('idx_request_rewrite_rules_scope').on(table.scope), index('idx_request_rewrite_rules_deleted_time').on(table.deletedTime)])
 
 export const providerModelRequestRewriteRules = sqliteTable('provider_model_request_rewrite_rules', {
-  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), requestRewriteRuleId: text('requestRewriteRuleId').notNull().references(() => requestRewriteRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(),
-}, table => [primaryKey({ columns: [table.providerModelId, table.requestRewriteRuleId] }), uniqueIndex('idx_provider_model_request_rewrite_rule_priority').on(table.providerModelId, table.priority)])
+  providerModelId: text('providerModelId').notNull().references(() => providerModels.id), requestRewriteRuleId: text('requestRewriteRuleId').notNull().references(() => requestRewriteRules.id), priority: integer('priority').notNull(), enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true), createdTime: integer('createdTime').notNull(), updatedTime: integer('updatedTime').notNull(), deletedTime: integer('deletedTime'),
+}, table => [
+  primaryKey({ columns: [table.providerModelId, table.requestRewriteRuleId] }),
+  uniqueIndex('idx_provider_model_request_rewrite_rule_priority_active').on(table.providerModelId, table.priority).where(sql`deletedTime IS NULL`),
+  index('idx_provider_model_request_rewrite_rules_deleted_time').on(table.deletedTime),
+])
 
 export const protocolConverters = sqliteTable(
   'protocol_converters',

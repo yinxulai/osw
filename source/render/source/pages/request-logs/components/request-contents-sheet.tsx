@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { AlertCircle, ChevronDown, LoaderCircle, Search } from 'lucide-react'
-import type { RequestContent, RequestConversion } from '@common/schemas'
+import type { AppliedRequestRewriteRule, RequestContent, RequestConversion } from '@common/schemas'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
@@ -33,11 +33,13 @@ interface RequestStageProps {
 
 interface AppliedRulesProps {
   ruleIds: string[]
+  rules: AppliedRequestRewriteRule[] | null
 }
 
 interface RequestContentsSheetProps {
   contents: RequestContent[] | null
   conversions: RequestConversion[] | null
+  requestRewriteRules: AppliedRequestRewriteRule[] | null
   clientProtocol: string
   upstreamProtocol?: string | null
   loading: boolean
@@ -71,12 +73,13 @@ function ContentSection(props: ContentSectionProps) {
 
 function AppliedRules(props: AppliedRulesProps) {
   if (props.ruleIds.length === 0) return null
+  const ruleNames = new Map(props.rules?.map(rule => [rule.id, rule.name]) ?? [])
 
   return (
     <section className="rounded-lg bg-info/8 px-3 py-2.5">
       <div className="text-xs font-medium">已应用修改器</div>
       <div className="mt-1 flex flex-wrap gap-1.5">
-        {props.ruleIds.map(id => <span key={id} className="rounded bg-info/15 px-1.5 py-0.5 font-mono text-[10px] text-info">{id}</span>)}
+        {props.ruleIds.map(id => <span key={id} className="rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info">{ruleNames.get(id) ?? id}</span>)}
       </div>
     </section>
   )
@@ -241,11 +244,9 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           </div>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 pb-4 pt-3">
+          <AppliedRules ruleIds={selectedContent?.requestRewriteRuleIds ?? []} rules={props.requestRewriteRules} />
           {filteredStages.length > 0 ? (
-            <>
-              {filteredStages.map(stage => <RequestStage key={stage.title} {...stage} />)}
-              <AppliedRules ruleIds={selectedContent?.requestRewriteRuleIds ?? []} />
-            </>
+            filteredStages.map(stage => <RequestStage key={stage.title} {...stage} />)
           ) : (
             <div className="py-8 text-center text-sm text-muted-foreground">未找到匹配内容</div>
           )}

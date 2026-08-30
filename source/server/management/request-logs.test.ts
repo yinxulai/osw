@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, initDatabase } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createRequestAttempt, createRequestContent, createRequestLog } from '@server/database/request-log-store'
+import { createRequestRewriteRule, deleteRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
 import { requestLogRoutes } from './routes/observability/request-logs'
 
 function mockResponse() {
@@ -145,6 +146,17 @@ describe('request log management', () => {
       status: 'success',
       durationMilliseconds: 10,
     })
+    const rule = await createRequestRewriteRule({
+      name: '请求日志规则名称',
+      description: '',
+      enabled: true,
+      scope: 'global',
+      schemaVersion: 1,
+      source: 'user',
+      match: { clientProtocols: [], upstreamProtocols: [] },
+      actions: [{ type: 'header-set', stage: 'request', name: 'x-test', value: 'true' }],
+      testCases: [],
+    })
     await createRequestContent({
       requestId: log.id,
       attemptId: attempt.id,
@@ -156,7 +168,9 @@ describe('request log management', () => {
       responseStatus: 200,
       responseHeaders: '{"content-type":"application/json"}',
       responseBody: '{"ok":true}',
+      requestRewriteRuleIds: [rule.id, 'rule_missing'],
     })
+    await deleteRequestRewriteRule(rule.id)
     const res = mockResponse()
 
     await requestLogRoutes.invoke('/api/request-log/detail', res, { id: log.id })
@@ -167,7 +181,8 @@ describe('request log management', () => {
       data: expect.objectContaining({
         id: log.id,
         attempts: [expect.objectContaining({ providerModelName: 'detail-model' })],
-        contents: [expect.objectContaining({ attemptId: attempt.id, responseBody: '{"ok":true}' })],
+        contents: [expect.objectContaining({ attemptId: attempt.id, responseBody: '{"ok":true}', requestRewriteRuleIds: [rule.id, 'rule_missing'] })],
+        requestRewriteRules: [{ id: rule.id, name: '请求日志规则名称' }],
       }),
     })
   })

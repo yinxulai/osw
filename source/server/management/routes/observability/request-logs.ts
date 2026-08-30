@@ -4,6 +4,7 @@ import type { ManagementHandler } from '../../core/response'
 import { sendError, sendSuccess } from '../../core/response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
 import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '@server/database/request-log-store'
+import { listRequestRewriteRulesByIds } from '@server/database/request-rewrite-rule-store'
 import { HttpRouter } from '@server/http-router'
 
 export const requestLogRoutes = new HttpRouter<ManagementHandler>()
@@ -38,7 +39,9 @@ async function handleRequestLogDetail(_req: IncomingMessage, res: ServerResponse
     listRequestContents(id),
     listRequestConversions(id),
   ])
-  sendSuccess(res, { ...entry, contents, conversions })
+  const ruleIds = [...new Set(contents.flatMap(content => content.requestRewriteRuleIds))]
+  const requestRewriteRules = (await listRequestRewriteRulesByIds(ruleIds)).map(rule => ({ id: rule.id, name: rule.name }))
+  sendSuccess(res, { ...entry, contents, conversions, requestRewriteRules })
 }
 
 async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

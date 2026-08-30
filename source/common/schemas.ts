@@ -49,7 +49,7 @@ export const RequestRewriteRuleSchema = z.object({
   createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
 })
 export type RequestRewriteRule = z.infer<typeof RequestRewriteRuleSchema>
-export const ProviderModelRequestRewriteRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int() })
+export const ProviderModelRequestRewriteRuleSchema = z.object({ providerModelId: z.string(), ruleId: z.string(), priority: z.number().int().nonnegative(), enabled: z.boolean().default(true), createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable() })
 export type ProviderModelRequestRewriteRule = z.infer<typeof ProviderModelRequestRewriteRuleSchema>
 
 export const RequestStatusSchema = z.enum(['pending', 'success', 'failed', 'cancelled'])
@@ -416,9 +416,16 @@ export const RequestLogEntrySchema = z.object({
 })
 export type RequestLogEntry = z.infer<typeof RequestLogEntrySchema>
 
+export const AppliedRequestRewriteRuleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+})
+export type AppliedRequestRewriteRule = z.infer<typeof AppliedRequestRewriteRuleSchema>
+
 export const RequestLogDetailSchema = RequestLogEntrySchema.extend({
   contents: z.array(RequestContentSchema),
   conversions: z.array(RequestConversionSchema),
+  requestRewriteRules: z.array(AppliedRequestRewriteRuleSchema),
 })
 export type RequestLogDetail = z.infer<typeof RequestLogDetailSchema>
 

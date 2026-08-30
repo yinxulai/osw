@@ -206,6 +206,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
     ?? log.attempts[0]?.upstreamProtocol
   const tps = formatTPS(log.outputTokens, successfulAttempt?.durationMilliseconds ?? log.totalDurationMilliseconds)
   const contents = 'contents' in log ? log.contents : null
+  const requestRewriteRules = 'requestRewriteRules' in log ? log.requestRewriteRules : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
 
   return (
@@ -271,8 +272,9 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           <RequestContentsSheet
             contents={contents}
             conversions={'conversions' in log ? log.conversions : null}
-              clientProtocol={log.clientProtocol}
-              upstreamProtocol={upstreamProtocol}
+            requestRewriteRules={requestRewriteRules}
+            clientProtocol={log.clientProtocol}
+            upstreamProtocol={upstreamProtocol}
             loading={props.detailLoading}
             error={props.detailError}
             selectedAttemptId={selectedAttemptId}

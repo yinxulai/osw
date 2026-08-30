@@ -141,5 +141,12 @@ describe('request rewrite rule store', () => {
     const deleted = await deleteRequestRewriteRule(boundRule.id)
     expect(deleted).toMatchObject({ id: boundRule.id, affectedProviderModelCount: 1 })
     expect(await getRequestRewriteRule(boundRule.id)).toMatchObject({ deletedTime: expect.any(Number) })
+    expect(await listProviderModelRequestRewriteRules(providerModel.id)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ ruleId: boundRule.id }),
+    ]))
+
+    await replaceProviderModelRequestRewriteRuleBindings(providerModel.id, [])
+    expect(await listProviderModelRequestRewriteRules(providerModel.id)).toEqual([])
+    expect(await countProviderModelsUsingRule(globalRule.id)).toBe(0)
   })
 })
