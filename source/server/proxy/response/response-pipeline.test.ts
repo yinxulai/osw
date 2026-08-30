@@ -37,6 +37,25 @@ describe('ResponsePipeline', () => {
     expect(pipeline.finish(true, null).usage.reasoningTokens).toBe(3)
   })
 
+  it.each([
+    ['Gemini camel-case metadata', { usageMetadata: { promptTokenCount: 30, candidatesTokenCount: 4, cachedContentTokenCount: 12 } }, { inputTokens: 30, outputTokens: 4, cachedInputTokens: 12 }],
+    ['Gemini total cached tokens', { usage: { input_tokens: 30, output_tokens: 4, total_cached_tokens: 12 } }, { inputTokens: 30, outputTokens: 4, cachedInputTokens: 12 }],
+    ['OpenAI prompt cache write details', { usage: { prompt_tokens: 30, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 12, cache_write_tokens: 6 } } }, { cachedInputTokens: 12, cacheCreationInputTokens: 6 }],
+    ['OpenAI input cache write details', { usage: { input_tokens: 30, output_tokens: 4, input_tokens_details: { cached_tokens: 12, cache_write_tokens: 6 } } }, { inputTokens: 30, cachedInputTokens: 12, cacheCreationInputTokens: 6 }],
+    ['Anthropic cache creation TTL details', { usage: { input_tokens: 12, output_tokens: 4, cache_creation: { ephemeral_5m_input_tokens: 5, ephemeral_1h_input_tokens: 7 } } }, { inputTokens: 24, cacheCreationInputTokens: 12 }],
+    ['Anthropic cache read and write totals', { usage: { input_tokens: 8, output_tokens: 4, cache_read_input_tokens: 7, cache_creation_input_tokens: 5 } }, { inputTokens: 20, cachedInputTokens: 7, cacheCreationInputTokens: 5 }],
+  ])('extracts %s', (_name, body, expected) => {
+    const { pipeline } = setup()
+    pipeline.push(JSON.stringify(body), true)
+    expect(pipeline.finish(true, null).usage).toMatchObject(expected)
+  })
+
+  it('preserves zero cache metrics', () => {
+    const { pipeline } = setup()
+    pipeline.push('{"usage":{"prompt_tokens":3,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0}}}', true)
+    expect(pipeline.finish(true, null).usage).toMatchObject({ cachedInputTokens: 0, cacheCreationInputTokens: 0 })
+  })
+
   it('parses split SSE lines, ignores DONE, and serializes captured chunks', () => {
     const { pipeline, response } = setup({ isStreaming: true })
     pipeline.push('data: {"usage":{"prompt_tokens":3}}\n\n', true)

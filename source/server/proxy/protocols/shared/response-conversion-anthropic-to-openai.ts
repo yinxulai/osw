@@ -33,12 +33,15 @@ function anthropicUsageToOpenAi(usage: Json | null): Json | undefined {
   const output = asNumber(usage.output_tokens)
   if (input === undefined && output === undefined) return undefined
   const cached = asNumber(usage.cache_read_input_tokens)
+  const created = asNumber(usage.cache_creation_input_tokens)
+  const details = {
+    ...(cached !== undefined ? { cached_tokens: cached } : {}),
+    ...(created !== undefined ? { cache_write_tokens: created } : {}),
+  }
   return {
-    prompt_tokens: input ?? 0,
+    prompt_tokens: (input ?? 0) + (cached ?? 0) + (created ?? 0),
     completion_tokens: output ?? 0,
-    ...(cached !== undefined
-      ? { prompt_tokens_details: { cached_tokens: cached } }
-      : {}),
+    ...(Object.keys(details).length > 0 ? { prompt_tokens_details: details } : {}),
   }
 }
 
@@ -68,6 +71,12 @@ export interface AnthropicToOpenAiState {
   model: string
   toolCalls: Map<number, { id: string; name: string }>
   started: boolean
+  usage?: Json
+}
+
+function mergeAnthropicUsage(current: Json | undefined, incoming: Json | null): Json | undefined {
+  if (!incoming) return current
+  return { ...(current ?? {}), ...incoming }
 }
 
 export function anthropicEventToOpenAiChunks(event: Json, state: AnthropicToOpenAiState): Json[] {
@@ -77,6 +86,7 @@ export function anthropicEventToOpenAiChunks(event: Json, state: AnthropicToOpen
     state.started = true
     state.id = asString(message?.id) ?? state.id
     state.model = asString(message?.model) ?? state.model
+    state.usage = mergeAnthropicUsage(state.usage, asObject(message?.usage))
     chunks.push({ id: state.id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: state.model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })
   } else if (event.type === 'content_block_start') {
     const block = asObject(event.content_block)
@@ -95,7 +105,8 @@ export function anthropicEventToOpenAiChunks(event: Json, state: AnthropicToOpen
     if (text) chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })
     if (partialJson) chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: { tool_calls: [{ index, function: { arguments: partialJson } }] }, finish_reason: null }] })
   } else if (event.type === 'message_delta') {
-    const usage = anthropicUsageToOpenAi(asObject(event.usage))
+    state.usage = mergeAnthropicUsage(state.usage, asObject(event.usage))
+    const usage = anthropicUsageToOpenAi(state.usage ?? null)
     chunks.push({ id: state.id, object: 'chat.completion.chunk', model: state.model, choices: [{ index: 0, delta: {}, finish_reason: anthropicStopToOpenAiFinish(asString(asObject(event.delta)?.stop_reason)) }], ...(usage ? { usage } : {}) })
   }
   return chunks

@@ -14,12 +14,22 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+function openAiUsageToResponses(usage: Json | null): Json | undefined {
+  if (!usage) return undefined
+  const promptDetails = asObject(usage.prompt_tokens_details)
+  return {
+    ...(usage.prompt_tokens !== undefined ? { input_tokens: usage.prompt_tokens } : {}),
+    ...(usage.completion_tokens !== undefined ? { output_tokens: usage.completion_tokens } : {}),
+    ...(promptDetails ? { input_tokens_details: promptDetails } : {}),
+  }
+}
+
 export function openAiResponseToResponses(body: Json): Json {
   const choices = asArray(body.choices)
   const first = asObject(choices[0])
   const message = asObject(first?.message)
   const text = asString(message?.content) ?? ''
-  const usage = asObject(body.usage)
+  const usage = openAiUsageToResponses(asObject(body.usage))
 
   return {
     id: asString(body.id) ?? '',
@@ -46,7 +56,7 @@ export function openAiChunkToResponsesEvents(chunk: Json): Json[] {
     })
   }
 
-  const usage = asObject(chunk.usage)
+  const usage = openAiUsageToResponses(asObject(chunk.usage))
   if (usage) {
     events.push({ type: 'response.completed', response: { usage } })
   }

@@ -38,7 +38,7 @@ function contentToOpenAiParts(content: unknown): Json[] {
     if (!record) continue
     if (record.type === 'text') {
       const text = asString(record.text)
-      if (text) parts.push({ type: 'text', text, ...(record.cache_control ? { cache_control: record.cache_control } : {}) })
+      if (text) parts.push({ type: 'text', text, ...(record.cache_control ? { prompt_cache_breakpoint: { mode: 'explicit' } } : {}) })
     } else if (record.type === 'image' && asObject(record.source)) {
       const source = record.source as Json
       if (source.type === 'base64' && asString(source.media_type) && asString(source.data)) {
@@ -54,13 +54,19 @@ function contentToOpenAiParts(content: unknown): Json[] {
 function anthropicToolToOpenAi(tool: Json): Json | null {
   const name = asString(tool.name)
   if (!name) return null
-  return { type: 'function', function: { name, description: asString(tool.description) ?? '', parameters: asObject(tool.input_schema) ?? { type: 'object', properties: {} } } }
+  return {
+    type: 'function',
+    function: { name, description: asString(tool.description) ?? '', parameters: asObject(tool.input_schema) ?? { type: 'object', properties: {} } },
+  }
 }
 
 export function anthropicToOpenAiRequest(body: Json, model: string): Json {
-  const system = asString(body.system) ?? contentToOpenAiText(body.system)
+  const system = asString(body.system)
+  const systemParts = contentToOpenAiParts(body.system)
   const messages: Json[] = []
   if (system) messages.push({ role: 'system', content: system })
+  else if (systemParts.length === 1 && systemParts[0].type === 'text' && !systemParts[0].prompt_cache_breakpoint) messages.push({ role: 'system', content: systemParts[0].text })
+  else if (systemParts.length > 0) messages.push({ role: 'system', content: systemParts })
 
   for (const raw of asArray(body.messages)) {
     const message = asObject(raw)
@@ -73,7 +79,7 @@ export function anthropicToOpenAiRequest(body: Json, model: string): Json {
       return [{ id: asString(record.id) ?? '', type: 'function', function: { name: record.name, arguments: JSON.stringify(asObject(record.input) ?? {}) } }]
     }) : []
     if (toolCalls.length > 0) messages.push({ role: 'assistant', content: null, tool_calls: toolCalls })
-    else if (parts.length === 1 && parts[0].type === 'text') messages.push({ role, content: parts[0].text })
+    else if (parts.length === 1 && parts[0].type === 'text' && !parts[0].prompt_cache_breakpoint) messages.push({ role, content: parts[0].text })
     else if (parts.length > 0) messages.push({ role, content: parts })
   }
 
@@ -87,6 +93,7 @@ export function anthropicToOpenAiRequest(body: Json, model: string): Json {
   }
 
   const result: Json = { model, messages }
+  if (body.cache_control !== undefined) result.prompt_cache_options = { mode: 'implicit' }
   const tools = asArray(body.tools).map(tool => anthropicToolToOpenAi(asObject(tool) ?? {})).filter((tool): tool is Json => tool !== null)
   if (tools.length > 0) result.tools = tools
   const choice = asObject(body.tool_choice)

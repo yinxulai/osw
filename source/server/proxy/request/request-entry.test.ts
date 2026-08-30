@@ -828,8 +828,8 @@ describe('handleProxyRequest', () => {
     expect(mocks.updateRequestLogStatus).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({
-        totalTokens: 1875,
-        inputTokens: 1800,
+        totalTokens: 3375,
+        inputTokens: 3300,
         outputTokens: 75,
         cachedInputTokens: 1000,
         cacheCreationInputTokens: 500,

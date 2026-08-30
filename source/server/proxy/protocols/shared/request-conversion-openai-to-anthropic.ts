@@ -18,18 +18,14 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function contentToOpenAiText(content: unknown): string {
-  if (typeof content === 'string') return content
-  return asArray(content)
-    .map(block => {
-      const record = asObject(block)
-      return record?.type === 'text' ? (asString(record.text) ?? '') : ''
-    })
-    .join('')
+function toAnthropicCacheControl(value: unknown): Json | undefined {
+  const marker = asObject(value)
+  if (!marker || (marker.mode !== undefined && marker.mode !== 'explicit')) return undefined
+  return { type: 'ephemeral' }
 }
 
 export function openAiToAnthropicRequest(body: Json, model: string): Json {
-  const system: string[] = []
+  const system: Json[] = []
   const messages: Json[] = []
 
   for (const raw of asArray(body.messages)) {
@@ -38,8 +34,17 @@ export function openAiToAnthropicRequest(body: Json, model: string): Json {
     const role = asString(message.role) ?? 'user'
 
     if (role === 'system' || role === 'developer') {
-      const text = contentToOpenAiText(message.content)
-      if (text) system.push(text)
+      if (typeof message.content === 'string') {
+        if (message.content) system.push({ type: 'text', text: message.content })
+      } else {
+        for (const rawPart of asArray(message.content)) {
+          const part = asObject(rawPart)
+          const text = asString(part?.text)
+          if (!text) continue
+          const cacheControl = toAnthropicCacheControl(part?.prompt_cache_breakpoint)
+          system.push({ type: 'text', text, ...(cacheControl ? { cache_control: cacheControl } : {}) })
+        }
+      }
       continue
     }
 
@@ -61,7 +66,8 @@ export function openAiToAnthropicRequest(body: Json, model: string): Json {
         if (!record) continue
         if (record.type === 'text') {
           const text = asString(record.text)
-          if (text) content.push({ type: 'text', text })
+          const cacheControl = toAnthropicCacheControl(record.prompt_cache_breakpoint)
+          if (text) content.push({ type: 'text', text, ...(cacheControl ? { cache_control: cacheControl } : {}) })
         } else if (record.type === 'image_url' && asObject(record.image_url)) {
           const url = asString((record.image_url as Json).url) ?? ''
           const match = /^data:([^;]+);base64,(.+)$/.exec(url)
@@ -79,7 +85,11 @@ export function openAiToAnthropicRequest(body: Json, model: string): Json {
     messages,
     max_tokens: asNumber(body.max_tokens) ?? 4096,
   }
-  if (system.length > 0) result.system = system.join('\n\n')
+  if (system.length > 0) {
+    const hasCacheControl = system.some(block => block.cache_control !== undefined)
+    result.system = hasCacheControl ? system : system.map(block => asString(block.text) ?? '').join('\n\n')
+  }
+  if (asObject(body.prompt_cache_options)?.mode === 'implicit') result.cache_control = { type: 'ephemeral' }
   const temperature = asNumber(body.temperature)
   if (temperature !== undefined) result.temperature = temperature
   const topP = asNumber(body.top_p)
@@ -89,7 +99,8 @@ export function openAiToAnthropicRequest(body: Json, model: string): Json {
   const tools: Json[] = asArray(body.tools).map(raw => {
     const tool = asObject(raw)
     const fn = asObject(tool?.function)
-    return fn && asString(fn.name) ? { name: fn.name, description: asString(fn.description) ?? '', input_schema: asObject(fn.parameters) ?? { type: 'object', properties: {} } } : null
+    if (!fn || !asString(fn.name)) return null
+    return { name: fn.name, description: asString(fn.description) ?? '', input_schema: asObject(fn.parameters) ?? { type: 'object', properties: {} } }
   }).filter(tool => tool !== null)
   if (tools.length > 0) result.tools = tools
   const choice = body.tool_choice

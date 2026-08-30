@@ -6,6 +6,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"] {
+  width: 14rem;
+}
+
+html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"] .opacity-0 {
+  opacity: 1;
+}
+
+html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"] nav h2 {
+  height: 1.25rem;
+}
+
+html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"] > div:first-child img {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
 @theme inline {
   --font-sans:
     'Geist Variable', sans-serif;

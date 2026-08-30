@@ -38,7 +38,7 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
   const service = useRuntimeSettingsService()
 
   return (
-    <PageLayout className="mx-auto max-w-4xl pb-20">
+    <PageLayout className="pb-20">
       <PageHeader title="设置" description="管理应用行为、网络连接、故障恢复与本地数据" />
       <PageContent className="space-y-6">
         {service.loading || !service.settings ? (
@@ -106,8 +106,8 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
       </PageContent>
 
       {!service.loading && service.settings && (
-        <div className="fixed inset-x-0 bottom-0 z-20 ml-12 bg-background/90 px-6 py-3 backdrop-blur-md">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 ml-12 bg-background/90 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-3">
             <p className="text-xs text-muted-foreground">
               {service.saved ? '所有设置已保存' : service.isDirty ? '有尚未保存的更改' : '当前设置已同步'}
             </p>

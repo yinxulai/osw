@@ -216,6 +216,70 @@ describe('convertRequestBody', () => {
     const parsed = parseBody(body)
     expect(parsed.messages).toEqual([{ role: 'user', content: 'plain text' }])
   })
+
+  it('maps explicit and automatic cache controls between OpenAI and Anthropic', () => {
+    const anthropic = parseBody(convertRequestBody(
+      'openai-completions',
+      'anthropic-messages',
+      request('openai-completions', {
+        prompt_cache_options: { mode: 'implicit', ttl: '30m' },
+        messages: [
+          { role: 'system', content: [{ type: 'text', text: 'policy', prompt_cache_breakpoint: { mode: 'explicit' } }] },
+          { role: 'user', content: [{ type: 'text', text: 'question', prompt_cache_breakpoint: { mode: 'explicit' } }] },
+        ],
+        tools: [{ type: 'function', prompt_cache_breakpoint: { mode: 'explicit' }, function: { name: 'lookup', parameters: { type: 'object' } } }],
+      }),
+      'claude-test',
+    ))
+    expect(anthropic.cache_control).toEqual({ type: 'ephemeral' })
+    expect(anthropic.system).toEqual([{ type: 'text', text: 'policy', cache_control: { type: 'ephemeral' } }])
+    expect(anthropic.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'question', cache_control: { type: 'ephemeral' } }] }])
+    expect(anthropic.tools).toEqual([{ name: 'lookup', description: '', input_schema: { type: 'object' } }])
+
+    const openai = parseBody(convertRequestBody(
+      'anthropic-messages',
+      'openai-completions',
+      request('anthropic-messages', {
+        cache_control: { type: 'ephemeral' },
+        system: [{ type: 'text', text: 'policy', cache_control: { type: 'ephemeral', ttl: '1h' } }],
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'question', cache_control: { type: 'ephemeral' } }] }],
+        tools: [{ name: 'lookup', input_schema: { type: 'object' }, cache_control: { type: 'ephemeral' } }],
+      }),
+      'gpt-test',
+    ))
+    expect(openai.prompt_cache_options).toEqual({ mode: 'implicit' })
+    expect(openai.messages).toEqual([
+      { role: 'system', content: [{ type: 'text', text: 'policy', prompt_cache_breakpoint: { mode: 'explicit' } }] },
+      { role: 'user', content: [{ type: 'text', text: 'question', prompt_cache_breakpoint: { mode: 'explicit' } }] },
+    ])
+    expect(openai.tools).toEqual([{ type: 'function', function: { name: 'lookup', description: '', parameters: { type: 'object' } } }])
+  })
+
+  it('preserves cache options and breakpoints across Responses to Completions', () => {
+    const parsed = parseBody(convertRequestBody(
+      'openai-responses',
+      'openai-completions',
+      request('openai-responses', {
+        prompt_cache_key: 'tenant:1',
+        prompt_cache_retention: '24h',
+        prompt_cache_options: { mode: 'explicit' },
+        input: [{ role: 'user', content: [
+          { type: 'input_text', text: 'stable', prompt_cache_breakpoint: { mode: 'explicit' } },
+          { type: 'input_image', image_url: 'https://example.com/reference.png', prompt_cache_breakpoint: { mode: 'explicit' } },
+        ] }],
+      }),
+      'gpt-test',
+    ))
+    expect(parsed).toMatchObject({
+      prompt_cache_key: 'tenant:1',
+      prompt_cache_retention: '24h',
+      prompt_cache_options: { mode: 'explicit' },
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: 'stable', prompt_cache_breakpoint: { mode: 'explicit' } },
+        { type: 'image_url', image_url: { url: 'https://example.com/reference.png' }, prompt_cache_breakpoint: { mode: 'explicit' } },
+      ] }],
+    })
+  })
 })
 
 describe('convertResponseBody', () => {
@@ -235,7 +299,31 @@ describe('convertResponseBody', () => {
     expect(parsed.role).toBe('assistant')
     expect(parsed.content).toEqual([{ type: 'text', text: 'answer' }])
     expect(parsed.stop_reason).toBe('end_turn')
-    expect(parsed.usage).toEqual({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 3 })
+    expect(parsed.usage).toEqual({ input_tokens: 7, output_tokens: 5, cache_read_input_tokens: 3 })
+  })
+
+  it('splits OpenAI total input into uncached, cache read, and cache write tokens', () => {
+    const parsed = parseBody(convertResponseBody(
+      'anthropic-messages',
+      'openai-completions',
+      Buffer.from(JSON.stringify({
+        choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 20, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 } },
+      })),
+    ))
+    expect(parsed.usage).toEqual({ input_tokens: 8, output_tokens: 4, cache_read_input_tokens: 7, cache_creation_input_tokens: 5 })
+  })
+
+  it('clamps inconsistent OpenAI cache details without producing negative input', () => {
+    const parsed = parseBody(convertResponseBody(
+      'anthropic-messages',
+      'openai-completions',
+      Buffer.from(JSON.stringify({
+        choices: [{ message: { content: 'answer' } }],
+        usage: { input_tokens: 3, output_tokens: 1, input_tokens_details: { cached_tokens: 4, cache_write_tokens: 2 } },
+      })),
+    ))
+    expect(parsed.usage).toEqual({ input_tokens: 0, output_tokens: 1, cache_read_input_tokens: 4, cache_creation_input_tokens: 2 })
   })
 
   it('converts anthropic message to openai completion', () => {
@@ -257,6 +345,22 @@ describe('convertResponseBody', () => {
     expect(parsed.usage).toEqual({ prompt_tokens: 7, completion_tokens: 4 })
   })
 
+  it('aggregates Anthropic cache read and write into OpenAI total input', () => {
+    const parsed = parseBody(convertResponseBody(
+      'openai-completions',
+      'anthropic-messages',
+      Buffer.from(JSON.stringify({
+        content: [{ type: 'text', text: 'answer' }],
+        usage: { input_tokens: 8, output_tokens: 4, cache_read_input_tokens: 7, cache_creation_input_tokens: 5 },
+      })),
+    ))
+    expect(parsed.usage).toEqual({
+      prompt_tokens: 20,
+      completion_tokens: 4,
+      prompt_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 },
+    })
+  })
+
   it('converts openai completion to openai responses', () => {
     const body = convertResponseBody(
       'openai-responses',
@@ -276,7 +380,23 @@ describe('convertResponseBody', () => {
       role: 'assistant',
       content: [{ type: 'output_text', text: 'answer' }],
     }])
-    expect(parsed.usage).toEqual({ prompt_tokens: 3, completion_tokens: 2 })
+    expect(parsed.usage).toEqual({ input_tokens: 3, output_tokens: 2 })
+  })
+
+  it('maps Responses cache usage details', () => {
+    const parsed = parseBody(convertResponseBody(
+      'openai-responses',
+      'openai-completions',
+      Buffer.from(JSON.stringify({
+        choices: [{ message: { content: 'answer' } }],
+        usage: { prompt_tokens: 20, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 } },
+      })),
+    ))
+    expect(parsed.usage).toEqual({
+      input_tokens: 20,
+      output_tokens: 4,
+      input_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 },
+    })
   })
 
   it('maps finish reasons across protocols', () => {
@@ -350,6 +470,21 @@ describe('SSE conversion', () => {
     expect(events[4].usage).toEqual({ input_tokens: 2, output_tokens: 2 })
   })
 
+  it('converts OpenAI streaming cache read and write usage to Anthropic', () => {
+    const converter = createSseConverter('anthropic-messages', 'openai-completions')
+    const out = converter.push(
+      'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+      + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":7,"cache_write_tokens":5}}}\n\n',
+    )
+    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    expect(events.find(event => event.type === 'message_delta').usage).toEqual({
+      input_tokens: 8,
+      output_tokens: 2,
+      cache_read_input_tokens: 7,
+      cache_creation_input_tokens: 5,
+    })
+  })
+
   it('converts streaming OpenAI tool calls to Anthropic tool_use blocks', () => {
     const converter = createSseConverter('anthropic-messages', 'openai-completions')
     const chunks = [
@@ -378,7 +513,19 @@ describe('SSE conversion', () => {
     expect(events[2].choices[0].delta.tool_calls[0].function.arguments).toBe('{\"q\":')
     expect(events[3].choices[0].finish_reason).toBe('tool_calls')
   })
-
+  it('merges Anthropic start and delta usage before converting cache metrics', () => {
+    const converter = createSseConverter('openai-completions', 'anthropic-messages')
+    const out = converter.push(
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-cache","model":"claude-test","usage":{"input_tokens":8,"output_tokens":0,"cache_read_input_tokens":7,"cache_creation_input_tokens":5}}}\n\n'
+      + 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}\n\n',
+    )
+    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    expect(events.at(-1).usage).toEqual({
+      prompt_tokens: 20,
+      completion_tokens: 4,
+      prompt_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 },
+    })
+  })
   it('rejects native passthrough streams in conversion module', () => {
     expect(() => createSseConverter('openai-completions', 'openai-completions')).toThrow(/同协议流式响应不应进入转换路径/)
   })
@@ -431,7 +578,7 @@ describe('SSE conversion', () => {
     })
     expect(JSON.parse(events[1].replace('data: ', ''))).toEqual({
       type: 'response.completed',
-      response: { usage: { prompt_tokens: 4, completion_tokens: 1 } },
+      response: { usage: { input_tokens: 4, output_tokens: 1 } },
     })
   })
 })

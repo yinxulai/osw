@@ -214,6 +214,8 @@ function hasValue(value: unknown): boolean {
 function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {
   const candidates: RawUsage[] = []
   collectUsage(data.usage, candidates)
+  collectUsage(data.usageMetadata, candidates)
+  collectUsage(data.usage_metadata, candidates)
   collectUsage(asRecord(data.message)?.usage, candidates)
   collectUsage(asRecord(data.response)?.usage, candidates)
   if (Array.isArray(data.output)) {
@@ -223,11 +225,21 @@ function extractTokenUsage(data: Record<string, unknown>): ExtractedUsage {
   let rawUsage: RawUsage | null = null
   for (const candidate of candidates) rawUsage = mergeRawUsage(rawUsage, candidate)
   const cacheCreation = asRecord(rawUsage?.cache_creation)
+  const promptDetails = asRecord(rawUsage?.prompt_tokens_details)
+  const inputDetails = asRecord(rawUsage?.input_tokens_details)
+  const cachedInputTokens = firstNumber(promptDetails?.cached_tokens, inputDetails?.cached_tokens, rawUsage?.cache_read_input_tokens, rawUsage?.cached_input_tokens, rawUsage?.cache_read_tokens, rawUsage?.cachedContentTokenCount, rawUsage?.total_cached_tokens)
+  const cacheCreationInputTokens = firstNumber(promptDetails?.cache_write_tokens, inputDetails?.cache_write_tokens, rawUsage?.cache_creation_input_tokens, rawUsage?.cache_creation_tokens, rawUsage?.cached_creation_input_tokens, rawUsage?.cache_write_tokens, sumNumbers(cacheCreation?.ephemeral_5m_input_tokens, cacheCreation?.ephemeral_1h_input_tokens))
+  const reportedInputTokens = firstNumber(rawUsage?.prompt_tokens, rawUsage?.input_tokens, rawUsage?.total_input_tokens, rawUsage?.promptTokenCount, data.input_tokens, data.prompt_tokens)
+  const usesAnthropicInputSemantics = rawUsage?.cache_read_input_tokens !== undefined
+    || rawUsage?.cache_creation_input_tokens !== undefined
+    || rawUsage?.cache_creation !== undefined
   return {
-    inputTokens: firstNumber(rawUsage?.prompt_tokens, rawUsage?.input_tokens, rawUsage?.total_input_tokens, rawUsage?.promptTokenCount, data.input_tokens, data.prompt_tokens),
+    inputTokens: reportedInputTokens === null || !usesAnthropicInputSemantics
+      ? reportedInputTokens
+      : reportedInputTokens + (cachedInputTokens ?? 0) + (cacheCreationInputTokens ?? 0),
     outputTokens: firstNumber(rawUsage?.completion_tokens, rawUsage?.output_tokens, rawUsage?.total_output_tokens, rawUsage?.candidatesTokenCount, data.output_tokens, data.completion_tokens),
-    cachedInputTokens: firstNumber(asRecord(rawUsage?.prompt_tokens_details)?.cached_tokens, asRecord(rawUsage?.input_tokens_details)?.cached_tokens, rawUsage?.cache_read_input_tokens, rawUsage?.cached_input_tokens, rawUsage?.cache_read_tokens, rawUsage?.cachedContentTokenCount),
-    cacheCreationInputTokens: firstNumber(rawUsage?.cache_creation_input_tokens, rawUsage?.cache_creation_tokens, rawUsage?.cached_creation_input_tokens, sumNumbers(cacheCreation?.ephemeral_5m_input_tokens, cacheCreation?.ephemeral_1h_input_tokens)),
+    cachedInputTokens,
+    cacheCreationInputTokens,
     reasoningTokens: firstNumber(asRecord(rawUsage?.completion_tokens_details)?.reasoning_tokens, asRecord(rawUsage?.output_tokens_details)?.reasoning_tokens, rawUsage?.reasoning_tokens),
     rawUsage,
   }

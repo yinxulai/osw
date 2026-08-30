@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { DotPattern } from '@/components/ui/dot-pattern'
 import { cn } from '@/lib/utils'
 
 interface PageLayoutProps {
@@ -30,8 +31,9 @@ export function AppLayout(props: AppLayoutProps) {
       <aside className="relative z-30 min-h-0 overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         {sidebar}
       </aside>
-      <main className="min-w-0 overflow-auto overscroll-contain">
-        <div className="mx-auto min-h-full w-full max-w-7xl px-6 py-5">{children}</div>
+      <main className="relative isolate min-w-0 overflow-auto overscroll-contain">
+        <DotPattern />
+        <div className="relative z-10 mx-auto min-h-full w-full max-w-7xl px-6 py-5">{children}</div>
       </main>
     </div>
   )

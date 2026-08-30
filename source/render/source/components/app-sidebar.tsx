@@ -3,16 +3,15 @@ import {
   ClipboardList,
   Cog,
   Database,
-  Moon,
   ListOrdered,
   Plug,
   ScrollText,
   SlidersHorizontal,
-  Sun,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
+import { buttonVariants } from '@/components/ui/button'
 
 export type PageKey = 'queue' | 'providers' | 'access' | 'rules' | 'overview' | 'requests' | 'settings' | 'logs'
 export type Theme = 'light' | 'dark'
@@ -57,7 +56,7 @@ export function AppSidebar(props: AppSidebarProps) {
   }, [])
 
   return (
-    <div className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
+    <div data-slot="app-sidebar" className="group/sidebar absolute inset-y-0 left-0 flex w-12 min-h-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out hover:w-56 motion-reduce:transition-none">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
         <img src="icon.svg" alt="" className="size-6 shrink-0 transition-[width,height] duration-200 ease-out group-hover/sidebar:size-7 motion-reduce:transition-none" />
         <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">
@@ -99,16 +98,13 @@ export function AppSidebar(props: AppSidebarProps) {
       </nav>
 
       <div className="shrink-0 space-y-1 p-1.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={props.onToggleTheme}
-          className="w-full justify-start gap-2.5 px-2.5"
-          aria-label={props.theme === 'dark' ? '切换到浅色' : '切换到深色'}
+        <AnimatedThemeToggler
+          theme={props.theme}
+          onThemeChange={() => props.onToggleTheme()}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'w-full justify-start gap-2.5 px-2.5')}
         >
-          {props.theme === 'dark' ? <Sun /> : <Moon />}
           <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-hover/sidebar:delay-75 motion-reduce:transition-none">{props.theme === 'dark' ? '浅色模式' : '深色模式'}</span>
-        </Button>
+        </AnimatedThemeToggler>
         <div className="flex h-7 items-center gap-2.5 px-2.5 text-[11px] text-muted-foreground">
           <span className="flex size-3.5 shrink-0 items-center justify-center" aria-hidden="true">
             <span className={cn('size-1.5 rounded-full', props.proxyRunning ? 'animate-pulse bg-success motion-reduce:animate-none' : 'bg-muted-foreground/50')} />

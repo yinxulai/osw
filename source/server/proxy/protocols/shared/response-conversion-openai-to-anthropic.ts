@@ -20,14 +20,18 @@ function asNumber(value: unknown): number | undefined {
 
 function openAiUsageToAnthropic(usage: Json | null): Json | undefined {
   if (!usage) return undefined
-  const input = asNumber(usage.prompt_tokens)
-  const output = asNumber(usage.completion_tokens)
+  const input = asNumber(usage.prompt_tokens) ?? asNumber(usage.input_tokens)
+  const output = asNumber(usage.completion_tokens) ?? asNumber(usage.output_tokens)
   if (input === undefined && output === undefined) return undefined
-  const cached = asNumber(asObject(usage.prompt_tokens_details)?.cached_tokens)
+  const details = asObject(usage.prompt_tokens_details) ?? asObject(usage.input_tokens_details)
+  const cached = asNumber(details?.cached_tokens)
+  const created = asNumber(details?.cache_write_tokens)
+  const uncached = Math.max(0, (input ?? 0) - (cached ?? 0) - (created ?? 0))
   return {
-    input_tokens: input ?? 0,
+    input_tokens: uncached,
     output_tokens: output ?? 0,
     ...(cached !== undefined ? { cache_read_input_tokens: cached } : {}),
+    ...(created !== undefined ? { cache_creation_input_tokens: created } : {}),
   }
 }
 

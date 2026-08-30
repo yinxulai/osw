@@ -39,10 +39,10 @@ export function responsesToOpenAiRequest(body: Json, model: string): Json {
         if (!record) continue
         if (record.type === 'input_text' || record.type === 'output_text') {
           const text = asString(record.text)
-          if (text) parts.push({ type: 'text', text })
-        } else if (record.type === 'input_image' && asObject(record.image_url)) {
-          const url = asString((record.image_url as Json).url)
-          if (url) parts.push({ type: 'image_url', image_url: { url } })
+          if (text) parts.push({ type: 'text', text, ...(record.prompt_cache_breakpoint ? { prompt_cache_breakpoint: record.prompt_cache_breakpoint } : {}) })
+        } else if (record.type === 'input_image') {
+          const imageUrl = asString(record.image_url) ?? asString(asObject(record.image_url)?.url)
+          if (imageUrl) parts.push({ type: 'image_url', image_url: { url: imageUrl }, ...(record.prompt_cache_breakpoint ? { prompt_cache_breakpoint: record.prompt_cache_breakpoint } : {}) })
         } else if (record.type === 'function_call_output') {
           messages.push({ role: 'tool', tool_call_id: asString(record.call_id) ?? '', content: asString(record.output) ?? '' })
         } else if (record.type === 'function_call') {
@@ -50,7 +50,7 @@ export function responsesToOpenAiRequest(body: Json, model: string): Json {
         }
       }
     }
-    if (parts.length === 1 && parts[0].type === 'text') {
+    if (parts.length === 1 && parts[0].type === 'text' && !parts[0].prompt_cache_breakpoint) {
       messages.push({ role, content: parts[0].text })
     } else if (parts.length > 0) {
       messages.push({ role, content: parts })
@@ -58,6 +58,9 @@ export function responsesToOpenAiRequest(body: Json, model: string): Json {
   }
 
   const result: Json = { model, messages }
+  for (const field of ['prompt_cache_key', 'prompt_cache_retention', 'prompt_cache_options'] as const) {
+    if (body[field] !== undefined) result[field] = body[field]
+  }
 
   const maxTokens = asNumber(body.max_output_tokens)
   if (maxTokens !== undefined) result.max_tokens = maxTokens

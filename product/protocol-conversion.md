@@ -180,8 +180,32 @@ interface ProtocolConverter {
 - **工具调用**：OpenAI `tool_calls` ↔ Anthropic `tool_use` / `tool_result` content block 双向映射
 - **多模态**：图片 base64 双向映射；视频等单侧能力降级为文本提示
 - **采样参数**：`temperature` / `top_p` / `max_tokens` 直接映射；`stop` ↔ `stop_sequences`
-- **usage**：按目标协议格式回填（OpenAI `usage.prompt_tokens` ↔ Anthropic `usage.input_tokens`）
+- **usage**：按目标协议格式回填；不能把 OpenAI 总输入与 Anthropic 未缓存输入直接等同。
 - 不做角色扮演式 hack（不注入「你在扮演 Claude」之类的提示词）
+
+### Prompt Cache 兼容边界
+
+输入 token 统一按以下口径处理：
+
+- OpenAI `prompt_tokens` / `input_tokens` 表示总输入。
+- Anthropic `input_tokens` 只表示未缓存输入，总输入为 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`。
+- OpenAI → Anthropic 时，从总输入中扣除 `cached_tokens` 和 `cache_write_tokens`；异常数据使用 0 作为未缓存输入下限。
+- Anthropic → OpenAI 时，将未缓存、缓存读取和缓存创建三部分相加，并把读取/写入分别放入 `*_tokens_details`。
+- 非流式与 SSE 最终 usage 必须使用相同公式。Anthropic SSE 的输入 usage 可能位于 `message_start`、输出 usage 位于 `message_delta`，转换器必须合并后输出。
+
+请求缓存控制采用保守的 best-effort 映射：
+
+| 来源能力 | 目标映射 | 限制 |
+|---|---|---|
+| OpenAI `prompt_cache_options.mode=implicit` | Anthropic 顶层 `cache_control: { type: "ephemeral" }` | 仅表示启用自动缓存，不保证目标模型支持 |
+| Anthropic 顶层 `cache_control` | OpenAI `prompt_cache_options.mode=implicit` | 仅表示启用自动缓存 |
+| OpenAI 文本/图片 `prompt_cache_breakpoint.mode=explicit` | Anthropic block `cache_control: { type: "ephemeral" }` | 仅转换显式断点 |
+| Anthropic 文本 block `cache_control` | OpenAI content block `prompt_cache_breakpoint.mode=explicit` | TTL 不可等价时丢弃 |
+| Responses `prompt_cache_key` / `prompt_cache_retention` / `prompt_cache_options` | Chat Completions 同名字段 | 同属 OpenAI 协议族时原样保留 |
+| 工具定义上的缓存断点 | 不映射 | OpenAI 工具对象没有已验证的显式 breakpoint 字段位置 |
+| Gemini 显式 CachedContent 资源 | 不映射 | 当前转换器不创建、引用或管理缓存资源生命周期 |
+
+缓存字段是否生效仍取决于具体 API、端点和模型版本。转换器不伪造 cache key，不把 Anthropic `5m` / `1h` TTL 猜测为 OpenAI TTL，也不把 Google OpenAI-compatible 端点当作原生 Gemini CachedContent API。观测层兼容 OpenAI read/write details、Anthropic read/write 与 TTL 明细，以及 Gemini `cachedContentTokenCount` / `total_cached_tokens`。
 
 ## 验收标准
 
