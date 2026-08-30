@@ -51,7 +51,7 @@ function parseStoredValue(key: string, raw: string | undefined): unknown {
   try {
     return JSON.parse(raw)
   } catch {
-    console.warn(`[store] settings key "${key}" has invalid JSON, ignoring`, raw)
+    console.warn(`[store] invalid stored JSON ignored key=${key}`)
     return undefined
   }
 }

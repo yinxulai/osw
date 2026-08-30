@@ -647,7 +647,7 @@ describe('handleProxyRequest', () => {
     expect(JSON.parse(responseBody)).toEqual({
       success: false,
       errorCode: 'ALL_PROVIDERS_FAILED',
-      errorMessage: '所�?Provider 都失败了',
+      errorMessage: '所有 Provider 都失败了',
     })
     expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
       captureStatus: 'captured',

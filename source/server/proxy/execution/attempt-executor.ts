@@ -105,14 +105,15 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     requestBody,
     captureRequestContent: settings.captureRequestContent,
   })
+  console.debug(`[proxy] attempt queue started requestId=${requestId} targets=${targets.length} captureContent=${settings.captureRequestContent}`)
   await runAttemptQueue<ModelWithProvider, AttemptOutcome>({
     signal: context.signal,
     targets,
     attempt: (target, attemptIndex) => attemptRequest(context, response, target, attemptIndex, hooks),
     onSuccess: async (target, outcome, attemptIndex) => {
       if (outcome.disposition === 'success') {
-        console.log(
-          `[proxy] 透传成功: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+        console.info(
+          `[proxy] request forwarded requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} upstreamProtocol=${outcome.upstreamProtocol ?? protocol} attempt=${attemptIndex} attempts=${attemptIndex + 1} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms totalDuration=${Date.now() - startedAt}ms`,
         )
         await markProviderSuccess(target.provider.id)
         await markProviderModelSuccess(target.model.id)
@@ -131,28 +132,30 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
         return
       }
     },
-    onTerminal: async (target, outcome) => {
-      console.log(
-        `[proxy] 请求终止（不重试�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, status=${outcome.statusCode}, duration=${outcome.durationMilliseconds}ms)`,
+    onTerminal: async (target, outcome, attemptIndex) => {
+      console.warn(
+        `[proxy] upstream request terminated without retry requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} attempts=${attemptIndex + 1} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms totalDuration=${Date.now() - startedAt}ms`,
       )
       await requestLogger.finalizeRequestContent(outcome)
       await requestLogger.finalizeRequestLog('failed', startedAt)
     },
     onRetry: async (target, outcome, attemptIndex) => {
+      const nextTarget = targets[attemptIndex + 1]
       console.warn(
-        `[proxy] 上游返回可重试状�? ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}, status=${outcome.statusCode})`,
+        `[proxy] upstream retry scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.model.id ?? 'none'}`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.errorResponse)
     },
     onError: async (target, err, attemptIndex) => {
       const lastError = err instanceof Error ? err : new Error(String(err))
       if (err instanceof RequestRewriteError) {
-        console.error(`[proxy] 请求重写规则执行失败: requestId=${requestId}, providerModelId=${target.model.id}, ruleId=${err.ruleId ?? 'unknown'}, error=${err.message}`)
+        console.warn(`[proxy] request rewrite rejected requestId=${requestId} providerModelId=${target.model.id} ruleId=${err.ruleId ?? 'unknown'} error=${err.message}`)
         if (!response.headersSent) response.fail(422, err.code, err.message)
         await requestLogger.finalizeRequestLog('failed', startedAt)
         return false
       }
       if (isClientRequestCancelled(err)) {
+        console.debug(`[proxy] client request cancelled requestId=${requestId} attempt=${attemptIndex}`)
         try {
           const snapshot = resolveAttemptSnapshot(target, protocol)
           await createAttemptLogger({
@@ -178,8 +181,9 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
         await requestLogger.finalizeRequestLog('cancelled', startedAt)
         return false
       }
-      console.error(
-        `[proxy] 上游请求失败: ${context.method} ${context.path} -> ${formatTarget(target)} (protocol=${protocol}, requestId=${requestId}, attempt=${attemptIndex}) error=${lastError.message}`,
+      const nextTarget = targets[attemptIndex + 1]
+      console.warn(
+        `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} retry=${!response.headersSent && nextTarget !== undefined} nextProviderModelId=${nextTarget?.model.id ?? 'none'} error=${lastError.message}`,
       )
       try {
         const snapshot = resolveAttemptSnapshot(target, protocol)
@@ -217,19 +221,19 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
       }
       return true
     },
-    onCancelled: async () => {
+    onCancelled: async (_target, attemptIndex) => {
+      console.debug(`[proxy] request execution cancelled requestId=${requestId} attempt=${attemptIndex} attempts=${attemptIndex + 1} totalDuration=${Date.now() - startedAt}ms`)
       await requestLogger.finalizeRequestLog('cancelled', startedAt)
     },
     onExhausted: async lastError => {
-
       if (!response.headersSent) {
         console.error(
-          `[proxy] 所�?Provider 均失�? ${context.method} ${context.path} (protocol=${protocol}, logicalModel=${logicalModelId}, requestId=${requestId}) error=${lastError?.message}`,
+          `[proxy] all providers failed requestId=${requestId} method=${context.method} path=${context.path} clientProtocol=${protocol} logicalModelId=${logicalModelId} attempts=${targets.length} totalDuration=${Date.now() - startedAt}ms error=${lastError?.message ?? 'unknown'}`,
         )
         const responseBody = response.fail(
           502,
           'ALL_PROVIDERS_FAILED',
-          lastError?.message ?? '所�?Provider 都失败了',
+          lastError?.message ?? '所有 Provider 都失败了',
         )
         await requestLogger.finalizeLocalErrorContent(502, response.headers(), responseBody)
       }
@@ -246,7 +250,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   const nativeEndpoint = findEndpoint(model, protocol)
   const convertibleEndpoint = nativeEndpoint ? undefined : findConvertibleEndpoint(model, protocol)
   const endpoint = nativeEndpoint ?? convertibleEndpoint
-  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协�?${protocol}`)
+  if (!endpoint) throw new Error(`模型 ${model.modelName} 不支持协议 ${protocol}`)
   const endpointProtocol = endpoint.protocol
 
   const targetUrl = resolveUpstreamUrl(endpoint.endpointUrl)
@@ -264,6 +268,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   })
   const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
   const upstreamRequestBody = adapter.prepareRequest(requestContext, model.modelName)
+  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} providerId=${provider.id} providerModelId=${model.id} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${upstreamRequestBody.length} timeout=${provider.timeoutMilliseconds}ms`)
   const apiKey = await getSecretStore().get(provider.apiKeyReference)
 
   const isHttps = parsed.protocol === 'https:'
@@ -275,6 +280,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
   )
   const rules = await listRulesForProviderModel(model.id)
   const modified = applyRequestRewriteRules(upstreamRequestBody, headers, rules, { stage: 'request', clientProtocol: protocol, upstreamProtocol: endpointProtocol })
+  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${model.id} rules=${rules.length} applied=${modified.appliedRuleIds.length} skipped=${modified.skippedRuleIds.length} appliedRuleIds=${modified.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${upstreamRequestBody.length} bodyBytesAfter=${modified.body.length}`)
 
   const options: http.RequestOptions = {
     hostname: parsed.hostname,
@@ -347,7 +353,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const statusCode = upstreamRes.statusCode ?? 502
       const disposition = classifyUpstreamStatus(statusCode)
 
-      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取�?
+      // TTFT 由响应管线记录，Prompt Cache 仅从响应 usage 读取。
       let ttftMilliseconds: number | undefined
       let errorResponse = ''
       const upstreamChunks: string[] = []
@@ -355,6 +361,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
 
       const contentType = String(upstreamRes.headers['content-type'] ?? '')
       const isStreaming = isStreamingRequest(requestBody) && contentType.includes('text/event-stream')
+      console.debug(`[proxy] upstream response received requestId=${requestId} attempt=${attemptIndex} providerModelId=${model.id} status=${statusCode} disposition=${disposition} streaming=${isStreaming} upstreamRequestIdPresent=${upstreamRequestId !== null} responseLatency=${Date.now() - attemptStartedAt}ms`)
 
       if (disposition === 'retry') {
         const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
@@ -404,6 +411,8 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const downstreamHeaders = createDownstreamHeaders(upstreamRes.headers)
       if (adapter.kind === 'conversion' || !isStreaming) delete downstreamHeaders['content-length']
       if (isStreaming && !response.headersSent) response.start(statusCode, downstreamHeaders)
+      let responseRewriteAppliedRuleIds: string[] = []
+      let responseRewriteSkippedRuleIds: string[] = []
 
       const responsePipeline = new ResponsePipeline({
         adapter,
@@ -424,8 +433,13 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
             upstreamProtocol: endpointProtocol,
             streaming: false,
           })
+          responseRewriteAppliedRuleIds = modifiedResponse.appliedRuleIds
+          responseRewriteSkippedRuleIds = modifiedResponse.skippedRuleIds
           return { body: modifiedResponse.body, headers: modifiedResponse.headers }
         } : undefined,
+        onConversionError: error => {
+          console.warn(`[proxy] response conversion failed requestId=${requestId} attempt=${attemptIndex} providerModelId=${model.id} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} streaming=${isStreaming} error=${error.message}`)
+        },
         onUsage: () => undefined,
         onUpstreamChunk: () => undefined,
         onDownstreamChunk: () => undefined,
@@ -445,6 +459,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
         idleTimeout.dispose()
 
         const pipelineResult = responsePipeline.finish(disposition === 'success', errorResponse || null)
+        console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${model.id} streaming=${isStreaming} skippedForStreaming=${isStreaming} rules=${rules.length} applied=${responseRewriteAppliedRuleIds.length} skipped=${isStreaming ? rules.length : responseRewriteSkippedRuleIds.length} appliedRuleIds=${responseRewriteAppliedRuleIds.join(',') || 'none'}`)
         const body = disposition === 'success' ? null : (errorResponse || null)
         const resolvedRequestId = upstreamRequestId ?? extractRequestIdFromBody(pipelineResult.upstreamBody)
         const attempt = await recordAttempt(

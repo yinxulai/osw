@@ -99,7 +99,8 @@ describe('ResponsePipeline', () => {
     expect(onFirstOutput).not.toHaveBeenCalled()
   })
 
-  it('falls back to the original body when response conversion fails', () => {
+  it('falls back to the original body and reports when response conversion fails', () => {
+    const onConversionError = vi.fn()
     const { pipeline, response } = setup({
       adapter: makeAdapter({
         kind: 'conversion',
@@ -108,10 +109,12 @@ describe('ResponsePipeline', () => {
         createStreamConverter: () => ({ push: () => '', flush: () => '' }),
         convertResponse: () => { throw new Error('bad response') },
       }),
+      onConversionError,
     })
     pipeline.push('{"ok":true}', true)
     pipeline.finish(true, null)
     expect(response.chunks).toEqual(['{"ok":true}'])
+    expect(onConversionError).toHaveBeenCalledWith(expect.objectContaining({ message: 'bad response' }))
   })
 
   it('does not write after the downstream response has ended', () => {

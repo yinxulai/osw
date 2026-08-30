@@ -31,6 +31,7 @@ export interface ResponsePipelineOptions {
   upstreamHeaders: HeaderMap
   onStart?(headers: HeaderMap): void
   transformResponse?(body: Buffer, headers: HeaderMap): { body: Buffer; headers: HeaderMap }
+  onConversionError?(error: Error): void
   onUsage(usage: ExtractedUsage): void
   onFirstOutput?(): void
   onUpstreamChunk(chunk: string): void
@@ -93,7 +94,8 @@ export class ResponsePipeline {
       } else if (this.options.adapter.kind === 'conversion' && !this.options.isStreaming && this.responseBuffer) {
         try {
           finalBody = this.options.adapter.convertResponse(finalBody)
-        } catch {
+        } catch (error) {
+          this.options.onConversionError?.(error instanceof Error ? error : new Error(String(error)))
           finalBody = Buffer.from(this.responseBuffer)
         }
         if (this.options.transformResponse && successful) {

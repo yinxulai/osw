@@ -14,11 +14,13 @@ export class TrayManager {
   private statusPort: number | null = null
   private statusPoller: NodeJS.Timeout | null = null
   private isQuitting = false
+  private statusReadFailed = false
 
   constructor() {}
 
   init(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
+    console.info('[tray] initialization started')
 
     // 创建初始托盘图标
     const icon = generateTrayIcon('stopped')
@@ -46,6 +48,7 @@ export class TrayManager {
         this.hideWindow()
       }
     })
+    console.info('[tray] initialization completed')
   }
 
   destroy(): void {
@@ -57,6 +60,7 @@ export class TrayManager {
       this.tray.destroy()
       this.tray = null
     }
+    console.info('[tray] destroyed')
   }
 
   /**
@@ -169,8 +173,13 @@ export class TrayManager {
     try {
       const status = await getProxyServerStatus()
       const newStatus: TrayIconStatus = status.running ? 'running' : 'stopped'
+      if (this.statusReadFailed) {
+        this.statusReadFailed = false
+        console.info('[tray] proxy status polling recovered')
+      }
 
       if (newStatus !== this.status || status.port !== this.statusPort) {
+        console.info(`[tray] proxy status changed status=${newStatus} port=${status.port}`)
         this.status = newStatus
         this.statusPort = status.port
         const icon = generateTrayIcon(newStatus)
@@ -182,8 +191,11 @@ export class TrayManager {
         )
         await this.updateMenu()
       }
-    } catch {
-      // 忽略错误
+    } catch (error) {
+      if (!this.statusReadFailed) {
+        this.statusReadFailed = true
+        console.warn('[tray] proxy status polling failed; repeated failures will be suppressed', error)
+      }
     }
   }
 }

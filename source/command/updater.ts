@@ -80,10 +80,12 @@ export class UpdaterManager {
     autoUpdater.allowPrerelease = true
 
     autoUpdater.on('checking-for-update', () => {
+      console.info(`[updater] check started currentVersion=${app.getVersion()} packaged=${app.isPackaged}`)
       this.setState({ status: 'checking', errorMessage: null })
     })
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
+      console.info(`[updater] update available currentVersion=${app.getVersion()} latestVersion=${info.version}`)
       this.setState({
         status: 'update-available',
         info: this.mapInfo(info),
@@ -93,6 +95,7 @@ export class UpdaterManager {
     })
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+      console.info(`[updater] already up to date currentVersion=${app.getVersion()} latestVersion=${info.version}`)
       this.setState({
         status: 'up-to-date',
         info: this.mapInfo(info),
@@ -109,6 +112,7 @@ export class UpdaterManager {
     })
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      console.info(`[updater] download completed version=${info.version}`)
       this.setState({
         status: 'downloaded',
         info: this.mapInfo(info),
@@ -122,6 +126,7 @@ export class UpdaterManager {
       const message = app.isPackaged
         ? error.message
         : `开发环境无法检查更新：${error.message}`
+      console.error(`[updater] operation failed status=${this.state.status} message=${message}`, error)
       this.setState({
         status: 'error',
         errorMessage: message,
@@ -199,11 +204,13 @@ export class UpdaterManager {
       return false
     }
     try {
+      console.info(`[updater] download started version=${this.state.info?.latestVersion ?? 'unknown'}`)
       this.setState({ status: 'downloading', downloadProgress: 0, errorMessage: null })
       await autoUpdater.downloadUpdate()
       // 下载成功由 update-downloaded 事件把 status 置为 downloaded；这里返回 true 表示已开始并完成下载
       return true
     } catch (error) {
+      console.error('[updater] download failed', error)
       this.setState({
         status: 'error',
         errorMessage: error instanceof Error ? error.message : String(error),
@@ -220,9 +227,11 @@ export class UpdaterManager {
   async installUpdate(): Promise<void> {
     if (process.platform === 'darwin' || this.state.status !== 'downloaded') {
       // macOS 使用 DMG 手动覆盖安装；其他平台无已下载更新时也回退到发布页。
+      console.info(`[updater] opening release page reason=${process.platform === 'darwin' ? 'manual-macos-install' : 'update-not-downloaded'}`)
       await this.openReleasesPage()
       return
     }
+    console.info(`[updater] installing version=${this.state.info?.latestVersion ?? 'unknown'}`)
     // isSilent=false 显示安装界面，isForceRunAfter=true 安装后重启应用
     autoUpdater.quitAndInstall(false, true)
   }

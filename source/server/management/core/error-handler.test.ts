@@ -27,7 +27,7 @@ function mockResponse(overrides: Partial<ServerResponse> = {}): ServerResponse {
 describe('handleApiError', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.normalizeError.mockReturnValue({ code: 'INTERNAL_ERROR', message: 'boom' })
+    mocks.normalizeError.mockReturnValue({ code: 'INTERNAL_ERROR', statusCode: 500, message: 'boom' })
   })
 
   it('normalizes and sends management errors when response is writable', () => {
@@ -37,7 +37,7 @@ describe('handleApiError', () => {
     handleApiError(req, res, new Error('raw-error'))
 
     expect(mocks.normalizeError).toHaveBeenCalledWith(expect.any(Error))
-    expect(mocks.sendManagementError).toHaveBeenCalledWith(res, { code: 'INTERNAL_ERROR', message: 'boom' })
+    expect(mocks.sendManagementError).toHaveBeenCalledWith(res, { code: 'INTERNAL_ERROR', statusCode: 500, message: 'boom' })
     expect(res.destroy).not.toHaveBeenCalled()
   })
 
@@ -50,7 +50,7 @@ describe('handleApiError', () => {
 
     handleApiError(req, res, 'unknown-error')
 
-    expect(res.destroy).toHaveBeenCalledWith({ code: 'INTERNAL_ERROR', message: 'boom' })
+    expect(res.destroy).toHaveBeenCalledWith({ code: 'INTERNAL_ERROR', statusCode: 500, message: 'boom' })
     expect(mocks.sendManagementError).not.toHaveBeenCalled()
   })
 
@@ -61,7 +61,10 @@ describe('handleApiError', () => {
 
     handleApiError(req, res, new Error('x'))
 
-    expect(spy).toHaveBeenCalledWith('[management] request failed: UNKNOWN / code=INTERNAL_ERROR message=boom')
+    expect(spy).toHaveBeenCalledWith(
+      '[management] request failed method=UNKNOWN path=/ status=500 code=INTERNAL_ERROR message=boom',
+      { code: 'INTERNAL_ERROR', statusCode: 500, message: 'boom' },
+    )
     spy.mockRestore()
   })
 })

@@ -32,6 +32,7 @@ const SwitchQueueSchema = z.object({ logicalModelId: z.string().min(1), modelId:
 function handleQueueSwitch(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
   const { logicalModelId, modelId } = SwitchQueueSchema.parse(body)
   setManualModel(logicalModelId, modelId)
+  console.info(`[management] manual route updated logicalModelId=${logicalModelId} providerModelId=${modelId ?? 'automatic'}`)
   sendSuccess(res, { logicalModelId, modelId })
 }
 
@@ -45,23 +46,26 @@ async function handleProxyStatus(_req: IncomingMessage, res: ServerResponse): Pr
 }
 
 async function handleProxyStart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  console.log('[management] /api/proxy/start begin')
+  console.info('[management] proxy start requested')
   await startProxyServer()
   const status = await getProxyServerStatus()
-  console.log(`[management] /api/proxy/start success status=${JSON.stringify(status)}`)
+  console.info(`[management] proxy start completed host=${status.host} port=${status.port} running=${status.running}`)
   sendSuccess(res, status)
 }
 
 async function handleProxyStop(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  console.log('[management] /api/proxy/stop begin')
+  console.info('[management] proxy stop requested')
   await stopProxyServer()
   const status = await getProxyServerStatus()
-  console.log(`[management] /api/proxy/stop success status=${JSON.stringify(status)}`)
+  console.info(`[management] proxy stop completed host=${status.host} port=${status.port} running=${status.running}`)
   sendSuccess(res, status)
 }
 
 async function handleProxyRestart(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  console.info('[management] proxy restart requested')
   const settings = await getSettings()
   await restartProxyServer({ host: settings.listenHost, port: settings.listenPort })
-  sendSuccess(res, await getProxyServerStatus())
+  const status = await getProxyServerStatus()
+  console.info(`[management] proxy restart completed host=${status.host} port=${status.port} running=${status.running}`)
+  sendSuccess(res, status)
 }

@@ -33,9 +33,9 @@ export class AutoLaunchManager {
         openAsHidden: true, // 开机时隐藏启动，只显示托盘
       })
       this.currentValue = enabled
-      console.log(`[auto-launch] ${enabled ? 'enabled' : 'disabled'}`)
+      console.info(`[auto-launch] state updated enabled=${enabled}`)
     } catch (err) {
-      console.error('[auto-launch] failed to set login item', err)
+      console.error(`[auto-launch] failed to set login item enabled=${enabled}`, err)
     }
   }
 }

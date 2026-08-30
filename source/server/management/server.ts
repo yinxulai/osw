@@ -51,14 +51,21 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
 }
 
 async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, environment: RuntimeEnvironment): Promise<void> {
-  console.log(`[management] request begin ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
+  const startedAt = Date.now()
+  console.debug(`[management] request begin method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
   try {
     if (!await applyManagementRequestGuards(req.method, req.url, res)) {
-      console.warn(`[management] request rejected by guard ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`)
+      const message = `[management] request handled by guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${Date.now() - startedAt}ms`
+      if (req.method === 'OPTIONS') console.debug(message)
+      else console.warn(message)
       return
     }
     await handleApiRequest(req, res, environment)
-    console.log(`[management] request completed ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'} status=${res.statusCode}`)
+    const duration = Date.now() - startedAt
+    const message = `[management] request completed method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${duration}ms`
+    if (res.statusCode >= 500) console.error(message)
+    else if (res.statusCode >= 400 || duration >= 1_000) console.warn(message)
+    else console.debug(message)
   } catch (error) {
     console.error(`[management] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`, error)
     if (res.headersSent || res.writableEnded) {

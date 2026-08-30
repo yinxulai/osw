@@ -14,28 +14,35 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   const requestId = generateId('req_')
   const protocol = detectProtocolFromPath(req.url!)
   if (!protocol) {
-    console.error(`[proxy] 无法识别的 API 路径: ${req.method} ${req.url} (logicalModel=${logicalModelId}, requestId=${requestId})`)
+    console.warn(`[proxy] unknown API path method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} logicalModelId=${logicalModelId} requestId=${requestId}`)
     writeJsonError(res, 404, 'UNKNOWN_API_PATH', '无法识别的 API 路径')
     return
   }
 
   const requestBody = await readRequestBody(req)
-  if (req.aborted) return
+  if (req.aborted) {
+    console.debug(`[proxy] client request aborted requestId=${requestId} phase=read-body`)
+    return
+  }
+  console.debug(`[proxy] request accepted requestId=${requestId} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} bodyBytes=${requestBody.length}`)
   const modelValidationError = validateLogicalModel(requestBody)
   if (modelValidationError) {
+    console.warn(`[proxy] invalid model request requestId=${requestId} protocol=${protocol} reason=${modelValidationError}`)
     writeJsonError(res, 400, 'INVALID_MODEL', modelValidationError)
     return
   }
 
   const requestedModel = (JSON.parse(requestBody.toString('utf8')) as { model: string }).model.trim()
   const logicalModels = await listLogicalModels()
-  const resolvedLogicalModel = logicalModels.find(model => model.enabled && (model.id === requestedModel || model.name === requestedModel))
-    ?? logicalModels.find(model => model.enabled && model.name === 'default')
+  const requestedLogicalModel = logicalModels.find(model => model.enabled && (model.id === requestedModel || model.name === requestedModel))
+  const resolvedLogicalModel = requestedLogicalModel ?? logicalModels.find(model => model.enabled && model.name === 'default')
   if (!resolvedLogicalModel) {
+    console.error(`[proxy] no enabled logical model requestId=${requestId} requestedModel=${requestedModel}`)
     writeJsonError(res, 503, 'NO_MODEL_CONFIGURED', '还没有配置已启用的 default 逻辑模型')
     return
   }
   logicalModelId = resolvedLogicalModel.id
+  console.debug(`[proxy] logical model resolved requestId=${requestId} requestedModel=${requestedModel} logicalModelId=${logicalModelId} fallback=${requestedLogicalModel === undefined}`)
 
   const controller = new AbortController()
   req.once('aborted', () => controller.abort())
@@ -56,7 +63,9 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   await hooks.onRequestStarted?.(context)
 
   const { availableModels, targets, manualModelUnavailable } = await resolveProxyTargets(logicalModelId, protocol)
+  console.debug(`[proxy] routing resolved requestId=${requestId} logicalModelId=${logicalModelId} protocol=${protocol} availableModels=${availableModels.length} targets=${targets.length} targetOrder=${targets.map(target => target.model.id).join(',') || 'none'} manualModelUnavailable=${manualModelUnavailable}`)
   if (manualModelUnavailable) {
+    console.warn(`[proxy] manual provider model unavailable requestId=${requestId} logicalModelId=${logicalModelId} protocol=${protocol}`)
     writeJsonError(res, 409, 'MANUAL_MODEL_UNAVAILABLE', '手动指定的 ProviderModel 当前不可用于该协议')
     return
   }
@@ -73,6 +82,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
 
+  console.debug(`[proxy] execution started requestId=${requestId} logicalModelId=${logicalModelId} targets=${targets.length}`)
   await executeProxyRequest({ context, targets, response: new NodeProxyResponse(res), hooks })
 }
 

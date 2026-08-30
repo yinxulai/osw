@@ -13,8 +13,13 @@ let database: Database | null = null
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 export async function initDatabase(dataDir: string): Promise<Database> {
-  if (database) return database
+  if (database) {
+    console.debug('[database] initialization skipped reason=already-initialized')
+    return database
+  }
 
+  const startedAt = Date.now()
+  console.info(`[database] initialization started file=${DATABASE_FILE_NAME}`)
   fs.mkdirSync(dataDir, { recursive: true })
   const client = new DatabaseSync(path.join(dataDir, DATABASE_FILE_NAME), {
     enableForeignKeyConstraints: true,
@@ -26,10 +31,12 @@ export async function initDatabase(dataDir: string): Promise<Database> {
     migrate(db, { migrationsFolder: getMigrationsFolder() })
     ensureDefaultLogicalModel(client)
     database = db
+    console.info(`[database] initialization completed duration=${Date.now() - startedAt}ms`)
     return database
   } catch (error) {
     client.close()
     database = null
+    console.error(`[database] initialization failed duration=${Date.now() - startedAt}ms`, error)
     throw error
   }
 }
@@ -40,10 +47,19 @@ export function getDb(): Database {
 }
 
 export async function closeDatabase(): Promise<void> {
-  if (!database) return
+  if (!database) {
+    console.debug('[database] close skipped reason=not-initialized')
+    return
+  }
   const activeDatabase = database
   database = null
-  activeDatabase.$client.close()
+  try {
+    activeDatabase.$client.close()
+    console.info('[database] closed')
+  } catch (error) {
+    console.error('[database] close failed', error)
+    throw error
+  }
 }
 
 function getMigrationsFolder(): string {

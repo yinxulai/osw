@@ -284,7 +284,7 @@ app.whenReady().then(async () => {
       runtimeProfile,
       systemProxyResolver: targetUrl => session.defaultSession.resolveProxy(targetUrl),
     })
-    console.log('[one-switch] server started successfully')
+    console.info('[one-switch] server started successfully')
   } catch (error) {
     showStartupError(error)
     app.quit()
@@ -316,7 +316,7 @@ app.whenReady().then(async () => {
     autoLaunchManager = new AutoLaunchManager()
     void autoLaunchManager.init()
   } else {
-    console.log('[auto-launch] skipped in development')
+    console.debug('[auto-launch] initialization skipped reason=development')
   }
 
   // 启动 10 秒后静默检查一次更新，避免阻塞启动。
@@ -327,7 +327,7 @@ app.whenReady().then(async () => {
     }, 10_000)
   }
 
-  console.log(`[one-switch] ready (startup took ${formatUptime()})`)
+  console.info(`[one-switch] ready startupDuration=${formatUptime()}`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

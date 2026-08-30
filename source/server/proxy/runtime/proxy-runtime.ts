@@ -36,17 +36,24 @@ export class ProxyRuntime {
 
   start(endpoint = this.endpoint): Promise<void> {
     return this.enqueue(async () => {
-      if (this.state === 'running') return
+      if (this.state === 'running') {
+        console.debug('[proxy-lifecycle] start skipped reason=already-running')
+        return
+      }
+      const startedAt = Date.now()
       this.endpoint = endpoint
       this.state = 'starting'
+      console.info(`[proxy-lifecycle] start requested host=${endpoint.host} port=${endpoint.port}`)
       const candidate = this.createServer()
       try {
         await listen(candidate, endpoint)
         this.server = candidate
         this.state = 'running'
+        console.info(`[proxy-lifecycle] listening host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`)
       } catch (error) {
         await close(candidate)
         this.state = 'stopped'
+        console.error(`[proxy-lifecycle] start failed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`, error)
         throw error
       }
     })
@@ -54,17 +61,31 @@ export class ProxyRuntime {
 
   stop(): Promise<void> {
     return this.enqueue(async () => {
-      if (this.state === 'stopped') return
+      if (this.state === 'stopped') {
+        console.debug('[proxy-lifecycle] stop skipped reason=already-stopped')
+        return
+      }
+      const startedAt = Date.now()
       this.state = 'stopping'
+      console.info('[proxy-lifecycle] stop requested')
       const active = this.server
       this.server = null
-      await close(active)
-      this.state = 'stopped'
+      try {
+        await close(active)
+        this.state = 'stopped'
+        console.info(`[proxy-lifecycle] stopped duration=${Date.now() - startedAt}ms`)
+      } catch (error) {
+        this.state = 'stopped'
+        console.error(`[proxy-lifecycle] stop failed duration=${Date.now() - startedAt}ms`, error)
+        throw error
+      }
     })
   }
 
   restart(endpoint = this.endpoint): Promise<void> {
     return this.enqueue(async () => {
+      const startedAt = Date.now()
+      console.info(`[proxy-lifecycle] restart requested host=${endpoint.host} port=${endpoint.port}`)
       if (this.state === 'running' || this.state === 'starting') {
         this.state = 'stopping'
         const active = this.server
@@ -79,9 +100,11 @@ export class ProxyRuntime {
         await listen(candidate, endpoint)
         this.server = candidate
         this.state = 'running'
+        console.info(`[proxy-lifecycle] restart completed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`)
       } catch (error) {
         await close(candidate)
         this.state = 'stopped'
+        console.error(`[proxy-lifecycle] restart failed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`, error)
         throw error
       }
     })
