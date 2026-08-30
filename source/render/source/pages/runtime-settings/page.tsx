@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Check, Save } from 'lucide-react'
+import { Check, RotateCcw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -111,14 +111,25 @@ export function RuntimeSettingsPage(props: RuntimeSettingsPageProps) {
             <p className="text-xs text-muted-foreground">
               {service.saved ? '所有设置已保存' : service.isDirty ? '有尚未保存的更改' : '当前设置已同步'}
             </p>
-            <Button
-              size="sm"
-              disabled={service.saving || !service.isDirty}
-              onClick={() => void service.saveSettings()}
-            >
-              {service.saved ? <Check /> : <Save />}
-              {service.saving ? '保存中...' : service.saved ? '已保存' : '保存更改'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={service.saving || !service.isDirty}
+                onClick={service.resetSettings}
+              >
+                <RotateCcw />
+                重置
+              </Button>
+              <Button
+                size="sm"
+                disabled={service.saving || !service.isDirty}
+                onClick={() => void service.saveSettings()}
+              >
+                {service.saved ? <Check /> : <Save />}
+                {service.saving ? '保存中...' : service.saved ? '已保存' : '保存更改'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

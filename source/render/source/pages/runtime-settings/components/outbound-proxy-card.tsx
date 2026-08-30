@@ -90,10 +90,11 @@ export function OutboundProxyCard(props: OutboundProxyCardProps) {
           </div>
           <Button
             variant="outline"
+            size="default"
             disabled={test.status === 'running' || (props.mode === 'custom' && !props.proxyUrl.trim())}
             onClick={() => void test.run({ mode: props.mode, proxyUrl: props.proxyUrl, bypass: props.bypass, targetUrl })}
           >
-            {test.status === 'running' ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : <PlugZap className="mr-1 size-3.5" />}
+            {test.status === 'running' ? <Loader2 className="size-3.5 animate-spin" /> : <PlugZap className="size-3.5" />}
             {test.status === 'running' ? '测试中' : '测试连接'}
           </Button>
         </div>

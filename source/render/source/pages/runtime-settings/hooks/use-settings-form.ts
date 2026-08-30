@@ -19,6 +19,7 @@ export function useSettingsForm() {
   const isDirty = useRuntimeSettingsUiStore(state => state.isDirty)
   const hydrate = useRuntimeSettingsUiStore(state => state.hydrate)
   const updateField = useRuntimeSettingsUiStore(state => state.updateField)
+  const resetSettings = useRuntimeSettingsUiStore(state => state.resetDraft)
   const setSaved = useRuntimeSettingsUiStore(state => state.setSaved)
 
   useEffect(() => { if (!settings && globalSettings) hydrate(globalSettings) }, [globalSettings, hydrate, settings])
@@ -43,5 +44,5 @@ export function useSettingsForm() {
     setSaved(false)
     await mutation.mutateAsync().catch(() => undefined)
   }, [isDirty, mutation, setSaved])
-  return { settings, proxyStatus, loading: settingsLoading && !settings, saving: mutation.isPending, saved, isDirty, updateField, hydrate, saveSettings }
+  return { settings, proxyStatus, loading: settingsLoading && !settings, saving: mutation.isPending, saved, isDirty, updateField, hydrate, resetSettings, saveSettings }
 }
