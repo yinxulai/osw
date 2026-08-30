@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
+import { ConfirmProvider } from '@/components/ui/confirm-dialog'
 import { AppLayout } from '@/components/layout'
 import { AppSidebar, type Theme } from '@/components/app-sidebar'
 import { useAppUiStore } from '@/store/app-ui-store'
@@ -47,44 +48,46 @@ function App() {
 
   return (
     <ToastProvider>
-      <TooltipProvider>
-        <AppLayout
-          sidebar={(
-            <AppSidebar
-              activePage={activePage}
-              theme={theme}
-              proxyRunning={proxyStatus?.running ?? false}
-              proxyPort={proxyStatus?.port}
-              onNavigate={setActivePage}
-              onToggleTheme={toggleTheme}
-            />
-          )}
-        >
-          {activePage === 'queue' && (
-            <QueueControlPage
-              onNavigateToModels={() => setActivePage('providers')}
-              onNavigateToAccess={() => setActivePage('access')}
-            />
-          )}
-          {activePage === 'providers' && <ModelManagementPage />}
-          {activePage === 'access' && (
-            <AccessConfigPage
-              onNavigateToModels={() => setActivePage('providers')}
-              onNavigateToSettings={() => setActivePage('settings')}
-            />
-          )}
-          {activePage === 'rules' && <RequestRewriteRulesPage />}
-          {activePage === 'overview' && <OverviewPage />}
-          {activePage === 'requests' && <RequestLogsPage />}
-          {activePage === 'logs' && <LogsPage />}
-          {activePage === 'settings' && (
-            <RuntimeSettingsPage
-              themeMode={themeMode}
-              onThemeModeChange={setThemeMode}
-            />
-          )}
-        </AppLayout>
-      </TooltipProvider>
+      <ConfirmProvider>
+        <TooltipProvider>
+          <AppLayout
+            sidebar={(
+              <AppSidebar
+                activePage={activePage}
+                theme={theme}
+                proxyRunning={proxyStatus?.running ?? false}
+                proxyPort={proxyStatus?.port}
+                onNavigate={setActivePage}
+                onToggleTheme={toggleTheme}
+              />
+            )}
+          >
+            {activePage === 'queue' && (
+              <QueueControlPage
+                onNavigateToModels={() => setActivePage('providers')}
+                onNavigateToAccess={() => setActivePage('access')}
+              />
+            )}
+            {activePage === 'providers' && <ModelManagementPage />}
+            {activePage === 'access' && (
+              <AccessConfigPage
+                onNavigateToModels={() => setActivePage('providers')}
+                onNavigateToSettings={() => setActivePage('settings')}
+              />
+            )}
+            {activePage === 'rules' && <RequestRewriteRulesPage />}
+            {activePage === 'overview' && <OverviewPage />}
+            {activePage === 'requests' && <RequestLogsPage />}
+            {activePage === 'logs' && <LogsPage />}
+            {activePage === 'settings' && (
+              <RuntimeSettingsPage
+                themeMode={themeMode}
+                onThemeModeChange={setThemeMode}
+              />
+            )}
+          </AppLayout>
+        </TooltipProvider>
+      </ConfirmProvider>
     </ToastProvider>
   )
 }

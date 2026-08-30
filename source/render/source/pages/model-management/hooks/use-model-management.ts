@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { providerModelApi } from '@/api/models'
 import { unwrap } from '@/api/unwrap'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import type { ProviderModelRoute } from '@common/schemas'
 import { queueKeys } from '@/pages/queue-control/queries'
@@ -17,6 +18,7 @@ type UpdateModelEnabledVariables = { id: string; enabled: boolean }
 
 export function useModelManagement() {
   const toast = useToast()
+  const confirm = useConfirm()
   const client = useQueryClient()
   const data = useModelData()
   const selectedProvider = useMemo(() => data.providers.find(provider => provider.id === data.selectedProviderId), [data.providers, data.selectedProviderId])
@@ -32,18 +34,29 @@ export function useModelManagement() {
     try { await updateModelMutation.mutateAsync({ id: model.id, enabled }); toast.success(enabled ? '模型已启用' : '模型已停用') } catch { /* handled by mutation */ }
   }, [updateModelMutation, toast])
   const removeModel = useCallback(async (model: typeof data.models[number]) => {
-    if (!window.confirm(`删除模型"${model.modelName}"？该模型关联的所有协议接口都会被移除。`)) return
+    const confirmed = await confirm({
+      title: `删除“${model.modelName}”？`,
+      description: '该模型关联的所有协议接口都会被移除，此操作无法撤销。',
+      confirmLabel: '删除模型',
+      variant: 'destructive',
+    })
+    if (!confirmed) return
     try {
       await removeModelMutation.mutateAsync(model.id)
       await invalidateModels()
       toast.success('模型已删除')
     } catch { /* handled by mutation */ }
-  }, [invalidateModels, removeModelMutation, toast])
+  }, [confirm, invalidateModels, removeModelMutation, toast])
 
   const removeModels = useCallback(async (modelsToRemove: typeof data.models) => {
     if (modelsToRemove.length === 0) return false
     const count = modelsToRemove.length
-    const confirmed = window.confirm(`删除选中的 ${count} 个模型？该批模型关联的所有协议接口都会被移除。`)
+    const confirmed = await confirm({
+      title: `删除选中的 ${count} 个模型？`,
+      description: '这些模型关联的所有协议接口都会被移除，此操作无法撤销。',
+      confirmLabel: `删除 ${count} 个模型`,
+      variant: 'destructive',
+    })
     if (!confirmed) return false
 
     const results = await Promise.allSettled(modelsToRemove.map(model => removeModelMutation.mutateAsync(model.id)))
@@ -58,7 +71,7 @@ export function useModelManagement() {
 
     toast.error('批量删除失败，请稍后重试')
     return false
-  }, [invalidateModels, removeModelMutation, toast])
+  }, [confirm, invalidateModels, removeModelMutation, toast])
 
   const disableModels = useCallback(async (modelsToDisable: typeof data.models) => {
     if (modelsToDisable.length === 0) return false

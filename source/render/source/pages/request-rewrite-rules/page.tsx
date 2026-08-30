@@ -2,17 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, ShieldCheck } from 'lucide-react'
 import { requestRewriteRuleApi } from '@/api/models'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { RuleEditorDialog } from './components/rule-editor-dialog'
 import { RuleStats } from './components/rule-stats'
@@ -156,18 +147,15 @@ export function RequestRewriteRulesPage() {
           onSave={saveRule}
           onReset={() => savedRule && setDraft(savedRule)}
         />
-        <AlertDialog open={Boolean(deleteTarget)} onOpenChange={open => !open && setDeleteTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>删除“{deleteTarget?.name}”？</AlertDialogTitle>
-              <AlertDialogDescription>该规则及其模型绑定将被同步移除，此操作无法撤销。</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={() => deleteTarget && deleteRule(deleteTarget)}>删除规则</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          title={`删除“${deleteTarget?.name ?? ''}”？`}
+          description="该规则及其模型绑定将被同步移除，此操作无法撤销。"
+          confirmLabel="删除规则"
+          variant="destructive"
+          onConfirm={() => deleteTarget && deleteRule(deleteTarget)}
+          onOpenChange={open => !open && setDeleteTarget(null)}
+        />
       </PageContent>
     </PageLayout>
   )
