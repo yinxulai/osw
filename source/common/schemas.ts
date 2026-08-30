@@ -485,6 +485,7 @@ export const ProviderStatSchema = z.object({
 export type ProviderStat = z.infer<typeof ProviderStatSchema>
 
 export const ModelStatSchema = z.object({
+  providerModelId: z.string(),
   providerModelName: z.string(),
   providerId: z.string(),
   providerName: z.string(),
@@ -522,6 +523,37 @@ export const RequestSourceStatSchema = z.object({
   avgLatencyMs: z.number().nonnegative(),
 })
 export type RequestSourceStat = z.infer<typeof RequestSourceStatSchema>
+
+export const ProviderRequestTrendPointSchema = z.object({
+  label: z.string(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  successRate: z.number().min(0).max(1),
+  avgLatencyMs: z.number().nonnegative(),
+})
+export type ProviderRequestTrendPoint = z.infer<typeof ProviderRequestTrendPointSchema>
+
+export const ProviderDetailSummarySchema = z.object({
+  providerId: z.string(),
+  providerName: z.string(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  successRate: z.number().min(0).max(1),
+  avgLatencyMs: z.number().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+})
+export type ProviderDetailSummary = z.infer<typeof ProviderDetailSummarySchema>
+
+export const ProviderAnalyticsDetailSchema = z.object({
+  summary: ProviderDetailSummarySchema,
+  requestTrend: z.array(ProviderRequestTrendPointSchema),
+  tokenTrend: z.array(DailyTrendPointSchema),
+  models: z.array(ModelStatSchema),
+  latencyDistribution: z.array(LatencyBucketSchema),
+  failureReasons: z.array(FailureReasonStatSchema),
+})
+export type ProviderAnalyticsDetail = z.infer<typeof ProviderAnalyticsDetailSchema>
 
 export const AnalyticsSummarySchema = z.object({
   summary: StatsSummarySchema,

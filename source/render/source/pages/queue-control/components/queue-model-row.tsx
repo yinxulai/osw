@@ -4,6 +4,7 @@ import {
   Circle,
   CircleDot,
   Clock,
+  ChevronRight,
   GripVertical,
   Timer,
   Zap,
@@ -29,6 +30,7 @@ interface QueueModelRowProps {
   dragHandleProps: Record<string, unknown>
   onSelect: () => void
   onToggleEnabled: (enabled: boolean) => void
+  onNavigateToProviderAnalytics?: (providerId: string) => void
 }
 
 type HealthSource = 'model' | 'provider-fallback' | 'none'
@@ -152,7 +154,23 @@ export function QueueModelRow(props: QueueModelRowProps) {
       </div>
       <div className="min-w-0 flex items-center gap-2">
         <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
+          {props.provider && props.onNavigateToProviderAnalytics ? (
+            <button
+              type="button"
+              className="group/provider inline-flex max-w-full items-center gap-0.5 rounded-sm text-left text-xs font-medium text-foreground/90 outline-none transition-colors hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary"
+              title={`查看 ${props.provider.name} 数据分析`}
+              aria-label={`查看 ${props.provider.name} 数据分析`}
+              onClick={event => {
+                event.stopPropagation()
+                props.onNavigateToProviderAnalytics?.(model.providerId)
+              }}
+            >
+              <span className="truncate">{props.provider.name}</span>
+              <ChevronRight size={13} aria-hidden="true" className="shrink-0 text-muted-foreground/60 transition-transform group-hover/provider:translate-x-0.5 group-hover/provider:text-primary group-focus-visible/provider:text-primary" />
+            </button>
+          ) : (
+            <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
+          )}
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="truncate font-mono text-[11px] text-muted-foreground">{model.modelName}</div>
             <ProtocolIcons endpoints={model.endpoints} />

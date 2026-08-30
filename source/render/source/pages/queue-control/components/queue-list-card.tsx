@@ -39,6 +39,7 @@ interface QueueListCardProps {
   onSelectManualModel: (model: ProviderModelRoute) => void
   onToggleEnabled: (model: ProviderModelRoute, enabled: boolean) => void
   onDragEnd: (event: DragEndEvent) => void
+  onNavigateToProviderAnalytics?: (providerId: string) => void
   onNavigateToModels?: () => void
 }
 
@@ -57,6 +58,7 @@ export function QueueListCard(props: QueueListCardProps) {
     onSelectManualModel,
     onToggleEnabled,
     onDragEnd,
+    onNavigateToProviderAnalytics,
     onNavigateToModels,
   } = props
 
@@ -135,6 +137,7 @@ export function QueueListCard(props: QueueListCardProps) {
                   dragHandleProps={handleProps}
                   onSelect={() => void onSelectManualModel(row.model)}
                   onToggleEnabled={enabled => void onToggleEnabled(row.model, enabled)}
+                  onNavigateToProviderAnalytics={onNavigateToProviderAnalytics}
                 />
               )}
             </SortableQueueModel>

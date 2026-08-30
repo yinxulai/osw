@@ -12,7 +12,11 @@ import { ProviderDetail } from './components/provider-detail'
 import { ProviderDialog } from './components/provider-dialog'
 import { ModelDialog } from './components/model-dialog'
 
-export function ModelManagementPage() {
+interface ModelManagementPageProps {
+  onNavigateToProviderAnalytics?: (providerId: string) => void
+}
+
+export function ModelManagementPage(props: ModelManagementPageProps) {
   const service = useModelManagementService()
   const [testPanelOpen, setTestPanelOpen] = useState(false)
 
@@ -63,6 +67,7 @@ export function ModelManagementPage() {
           onToggleProviderEnabled={enabled => void service.updateProviderEnabled(service.selectedProvider!, enabled)}
           onEditProvider={() => service.openProviderDialog(service.selectedProvider)}
           onRemoveProvider={() => service.removeProvider(service.selectedProvider!)}
+          onNavigateToAnalytics={props.onNavigateToProviderAnalytics}
           onAddModel={() => service.openModelDialog()}
           onEditModel={service.openModelDialog}
           onToggleModelEnabled={service.updateModelEnabled}

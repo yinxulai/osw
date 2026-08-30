@@ -62,10 +62,10 @@ export async function getUsageTrend(sinceMs: number): Promise<DailyTrendPoint[]>
 
 export async function getIntradayUsageTrend(sinceMs: number): Promise<DailyTrendPoint[]> {
   const intervalMs = 15 * 60 * 1000
-  const rows = getDb().select({ bucket: sql<number>`floor((${requestLogs.createdTime} - ${sinceMs}) / ${intervalMs})`.as('bucket'), ...usageTrendSelect }).from(requestLogs).leftJoin(requestUsages, and(eq(requestUsages.requestId, requestLogs.id), isNull(requestUsages.attemptId))).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`bucket`).all()
+  const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
+  const rows = getDb().select({ bucket: sql<number>`floor((${requestLogs.createdTime} - ${sinceFloor}) / ${intervalMs})`.as('bucket'), ...usageTrendSelect }).from(requestLogs).leftJoin(requestUsages, and(eq(requestUsages.requestId, requestLogs.id), isNull(requestUsages.attemptId))).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(sql`bucket`).all()
   const map = new Map(rows.map(row => [row.bucket, row]))
   const nowFloor = Math.floor(Date.now() / intervalMs) * intervalMs
-  const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
   const slots = Math.floor((nowFloor - sinceFloor) / intervalMs) + 1
   return Array.from({ length: slots }, (_, bucket) => {
     const row = map.get(bucket)
@@ -99,46 +99,129 @@ export async function getRequestSourceStats(sinceMs: number, limit = 20): Promis
 
 export interface ProviderStat { providerId: string; providerName: string; requests: number; success: number; failed: number; avgLatencyMs: number }
 
-export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]> {
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId})`
-  const rows = getDb().select({
-    providerId: requestAttempts.providerId,
-    providerName: requestAttempts.providerName,
-    requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
-    success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
-    failed: sql<number>`count(distinct case when ${requestAttempts.status} = 'failed' then ${requestAttempts.requestId} end)`.as('failed'),
-    avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
-  }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, finalAttempt)).groupBy(requestAttempts.providerId, requestAttempts.providerName).orderBy(sql`requests desc`).all()
-  return rows.map(row => ({ providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
+const providerStatSelect = {
+  providerId: requestAttempts.providerId,
+  providerName: sql<string>`(SELECT latest.providerName FROM request_attempts latest WHERE latest.providerId = ${requestAttempts.providerId} ORDER BY latest.createdTime DESC LIMIT 1)`.as('providerName'),
+  requests: sql<number>`count(*)`.as('requests'),
+  success: sql<number>`sum(case when ${requestAttempts.status} = 'success' then 1 else 0 end)`.as('success'),
+  failed: sql<number>`sum(case when ${requestAttempts.status} = 'failed' then 1 else 0 end)`.as('failed'),
+  avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
 }
 
-export interface ModelStat { providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number; avgTtftMs: number | null; cachedInputTokens: number; inputTokens: number; outputTokens: number; successGenerationDurationMs: number }
+type ProviderStatRow = { providerId: string; providerName: string; requests: number | null; success: number | null; failed: number | null; avgLatency: number | null }
 
-export async function getModelStats(sinceMs: number, limit = 10): Promise<ModelStat[]> {
-  const finalAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId})`
+function normalizeDevelopmentProviderName(providerId: string, providerName: string): string {
+  return providerId.startsWith('prov_dev_') ? providerName.replace(/（开发示例）$/, '') : providerName
+}
+
+function mapProviderStat(row: ProviderStatRow): ProviderStat {
+  return { providerId: row.providerId, providerName: normalizeDevelopmentProviderName(row.providerId, row.providerName), requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, avgLatencyMs: row.avgLatency ?? 0 }
+}
+
+export async function getProviderStats(sinceMs: number): Promise<ProviderStat[]> {
+  const rows = getDb().select(providerStatSelect).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(sql`${requestLogs.createdTime} >= ${sinceMs}`).groupBy(requestAttempts.providerId).orderBy(sql`requests desc`).all()
+  return rows.map(mapProviderStat)
+}
+
+export async function getProviderStat(providerId: string, sinceMs: number): Promise<ProviderStat | null> {
+  const row = getDb().select(providerStatSelect).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(eq(requestAttempts.providerId, providerId), sql`${requestLogs.createdTime} >= ${sinceMs}`)).groupBy(requestAttempts.providerId).get()
+  return row ? mapProviderStat(row) : null
+}
+
+export interface ProviderRequestTrendPoint { label: string; success: number; failed: number; successRate: number; avgLatencyMs: number }
+export interface ProviderAnalyticsTrend { requestTrend: ProviderRequestTrendPoint[]; tokenTrend: DailyTrendPoint[]; totalTokens: number }
+
+type ProviderTrendRow = TrendPointRow & {
+  label: string
+  requests?: number | null
+  success?: number | null
+  failed?: number | null
+  avgLatencyMs?: number | null
+  totalTokens?: number | null
+}
+
+const providerTrendSelect = {
+  requests: sql<number>`count(*)`.as('requests'),
+  success: sql<number>`sum(case when ${requestAttempts.status} = 'success' then 1 else 0 end)`.as('success'),
+  failed: sql<number>`sum(case when ${requestAttempts.status} = 'failed' then 1 else 0 end)`.as('failed'),
+  avgLatencyMs: sql<number>`coalesce(avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end), 0)`.as('avgLatencyMs'),
+  inputTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'inputTokens')), 0)`.as('inputTokens'),
+  outputTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'outputTokens')), 0)`.as('outputTokens'),
+  cachedInputTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'cachedInputTokens')), 0)`.as('cachedInputTokens'),
+  cacheCreationInputTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'cacheCreationInputTokens')), 0)`.as('cacheCreationInputTokens'),
+  reasoningTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'reasoningTokens')), 0)`.as('reasoningTokens'),
+  totalTokens: sql<number>`coalesce(sum((SELECT usage.value FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id} AND usage.type = 'totalTokens')), 0)`.as('totalTokens'),
+}
+
+export async function getProviderAnalyticsTrend(providerId: string, sinceMs: number, intraday: boolean): Promise<ProviderAnalyticsTrend> {
+  const intervalMs = 15 * 60 * 1000
+  const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
+  const bucket = intraday
+    ? sql<string>`floor((${requestLogs.createdTime} - ${sinceFloor}) / ${intervalMs})`
+    : sql<string>`strftime('%Y-%m-%d', ${requestLogs.createdTime} / 1000, 'unixepoch', 'localtime')`
+  const rows = getDb().select({ label: bucket.as('label'), ...providerTrendSelect })
+    .from(requestAttempts)
+    .innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id))
+    .where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, eq(requestAttempts.providerId, providerId)))
+    .groupBy(bucket)
+    .orderBy(bucket)
+    .all()
+  const normalizedRows = intraday ? fillIntradayProviderTrend(rows, sinceMs) : rows.map(row => ({ ...row, label: String(row.label) }))
+  return {
+    requestTrend: normalizedRows.map(normalizeProviderRequestTrendPoint),
+    tokenTrend: normalizedRows.map(normalizeTrendPoint),
+    totalTokens: rows.reduce((total, row) => total + (row.totalTokens ?? 0), 0),
+  }
+}
+
+function fillIntradayProviderTrend(rows: ProviderTrendRow[], sinceMs: number): ProviderTrendRow[] {
+  const intervalMs = 15 * 60 * 1000
+  const map = new Map(rows.map(row => [Number(row.label), row]))
+  const sinceFloor = Math.floor(sinceMs / intervalMs) * intervalMs
+  const nowFloor = Math.floor(Date.now() / intervalMs) * intervalMs
+  const slots = Math.floor((nowFloor - sinceFloor) / intervalMs) + 1
+  return Array.from({ length: slots }, (_, index) => ({ ...map.get(index), label: formatIntradayLabel(sinceFloor + index * intervalMs) }))
+}
+
+function normalizeProviderRequestTrendPoint(row: ProviderTrendRow): ProviderRequestTrendPoint {
+  const success = row.success ?? 0
+  const failed = row.failed ?? 0
+  const requests = row.requests ?? 0
+  return { label: row.label, success, failed, successRate: requests > 0 ? success / requests : 0, avgLatencyMs: row.avgLatencyMs ?? 0 }
+}
+
+export interface ModelStat { providerModelId: string; providerModelName: string; providerId: string; providerName: string; requests: number; success: number; avgLatencyMs: number; avgTtftMs: number | null; cachedInputTokens: number; inputTokens: number; outputTokens: number; successGenerationDurationMs: number }
+
+export async function getModelStats(sinceMs: number, limit = 10, providerId?: string): Promise<ModelStat[]> {
+  const filters = [sql`${requestLogs.createdTime} >= ${sinceMs}`]
+  if (providerId) filters.push(eq(requestAttempts.providerId, providerId))
   const rows = getDb().select({
-    providerModelName: requestAttempts.providerModelName,
+    providerModelId: requestAttempts.providerModelId,
+    providerModelName: sql<string>`(SELECT latest.providerModelName FROM request_attempts latest WHERE latest.providerModelId = ${requestAttempts.providerModelId} ORDER BY latest.createdTime DESC LIMIT 1)`.as('providerModelName'),
     providerId: requestAttempts.providerId,
-    providerName: requestAttempts.providerName,
-    requests: sql<number>`count(distinct ${requestAttempts.requestId})`.as('requests'),
-    success: sql<number>`count(distinct case when ${requestAttempts.status} = 'success' then ${requestAttempts.requestId} end)`.as('success'),
+    providerName: sql<string>`(SELECT latest.providerName FROM request_attempts latest WHERE latest.providerId = ${requestAttempts.providerId} ORDER BY latest.createdTime DESC LIMIT 1)`.as('providerName'),
+    requests: sql<number>`count(*)`.as('requests'),
+    success: sql<number>`sum(case when ${requestAttempts.status} = 'success' then 1 else 0 end)`.as('success'),
     avgLatency: sql<number>`avg(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} end)`.as('avgLatency'),
     avgTtft: sql<number>`avg((SELECT value FROM request_metrics ttft WHERE ttft.requestId = ${requestAttempts.requestId} AND ttft.key = 'ttftMilliseconds'))`.as('avgTtft'),
-    cachedInputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'cachedInputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('cachedInputTokens'),
-    inputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'inputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('inputTokens'),
-    outputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'outputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.requestId = ${requestAttempts.requestId} AND usage.attemptId IS NULL))`.as('outputTokens'),
+    cachedInputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'cachedInputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id}))`.as('cachedInputTokens'),
+    inputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'inputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id}))`.as('inputTokens'),
+    outputTokens: sql<number>`sum((SELECT coalesce(sum(CASE WHEN usage.type = 'outputTokens' THEN usage.value ELSE 0 END), 0) FROM request_usages usage WHERE usage.attemptId = ${requestAttempts.id}))`.as('outputTokens'),
     successGenerationDurationMs: sql<number>`sum(case when ${requestAttempts.status} = 'success' then ${requestAttempts.durationMilliseconds} else 0 end)`.as('successGenerationDurationMs'),
-  }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, finalAttempt)).groupBy(requestAttempts.providerModelName, requestAttempts.providerId, requestAttempts.providerName).orderBy(sql`requests desc`).limit(limit).all()
-  return rows.map(row => ({ providerModelName: row.providerModelName, providerId: row.providerId, providerName: row.providerName, requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0, avgTtftMs: row.avgTtft ?? null, cachedInputTokens: row.cachedInputTokens ?? 0, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, successGenerationDurationMs: row.successGenerationDurationMs ?? 0 }))
+  }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(...filters)).groupBy(requestAttempts.providerModelId, requestAttempts.providerId).orderBy(sql`requests desc`).limit(limit).all()
+  return rows.map(row => ({ providerModelId: row.providerModelId, providerModelName: row.providerModelName, providerId: row.providerId, providerName: normalizeDevelopmentProviderName(row.providerId, row.providerName), requests: row.requests ?? 0, success: row.success ?? 0, avgLatencyMs: row.avgLatency ?? 0, avgTtftMs: row.avgTtft ?? null, cachedInputTokens: row.cachedInputTokens ?? 0, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, successGenerationDurationMs: row.successGenerationDurationMs ?? 0 }))
 }
 
 export interface LatencyBucket { range: string; count: number }
 
-export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBucket[]> {
+export async function getLatencyDistribution(sinceMs: number, providerId?: string): Promise<LatencyBucket[]> {
   const buckets = [{ range: '< 1s', min: 0, max: 1000 }, { range: '1-2s', min: 1000, max: 2000 }, { range: '2-3s', min: 2000, max: 3000 }, { range: '3-5s', min: 3000, max: 5000 }, { range: '> 5s', min: 5000, max: Number.MAX_SAFE_INTEGER }]
   const result: LatencyBucket[] = []
+  const providerFilter = providerId
+    ? sql`and exists (SELECT 1 FROM request_attempts provider_attempt WHERE provider_attempt.requestId = ${requestLogs.id} AND provider_attempt.providerId = ${providerId})`
+    : sql``
   for (const bucket of buckets) {
-    const row = getDb().select({ count: sql<number>`count(*)`.as('count') }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') >= ${bucket.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') < ${bucket.max}`).get()
+    const row = getDb().select({ count: sql<number>`count(*)`.as('count') }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs} ${providerFilter} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') >= ${bucket.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') < ${bucket.max}`).get()
     result.push({ range: bucket.range, count: row?.count ?? 0 })
   }
   return result
@@ -146,9 +229,11 @@ export async function getLatencyDistribution(sinceMs: number): Promise<LatencyBu
 
 export interface FailureReasonStat { reason: string; count: number }
 
-export async function getFailureReasons(sinceMs: number): Promise<FailureReasonStat[]> {
+export async function getFailureReasons(sinceMs: number, providerId?: string): Promise<FailureReasonStat[]> {
   const finalFailedAttempt = sql`${requestAttempts.attemptIndex} = (SELECT max(final_attempt.attemptIndex) FROM request_attempts AS final_attempt WHERE final_attempt.requestId = ${requestAttempts.requestId} AND final_attempt.status = 'failed')`
-  const rows = getDb().select({ errorCode: requestAttempts.errorCode, count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count') }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(sql`${requestLogs.createdTime} >= ${sinceMs}`, eq(requestLogs.status, 'failed'), eq(requestAttempts.status, 'failed' as RequestStatus), finalFailedAttempt)).groupBy(requestAttempts.errorCode).orderBy(sql`count desc`).all()
+  const filters = [sql`${requestLogs.createdTime} >= ${sinceMs}`, eq(requestLogs.status, 'failed'), eq(requestAttempts.status, 'failed' as RequestStatus), finalFailedAttempt]
+  if (providerId) filters.push(eq(requestAttempts.providerId, providerId))
+  const rows = getDb().select({ errorCode: requestAttempts.errorCode, count: sql<number>`count(distinct ${requestAttempts.requestId})`.as('count') }).from(requestAttempts).innerJoin(requestLogs, eq(requestAttempts.requestId, requestLogs.id)).where(and(...filters)).groupBy(requestAttempts.errorCode).orderBy(sql`count desc`).all()
   const categories: Record<string, number> = { '超时': 0, '限流 (429)': 0, '服务错误 (5xx)': 0, '认证失败': 0, '其他': 0 }
   for (const row of rows) {
     const code = row.errorCode ?? 'UNKNOWN'

@@ -11,10 +11,11 @@ import { QueueSummary } from './components/queue-summary'
 interface QueueControlPageProps {
   onNavigateToModels?: () => void
   onNavigateToAccess?: () => void
+  onNavigateToProviderAnalytics?: (providerId: string) => void
 }
 
 export function QueueControlPage(props: QueueControlPageProps) {
-  const { onNavigateToModels, onNavigateToAccess } = props
+  const { onNavigateToModels, onNavigateToAccess, onNavigateToProviderAnalytics } = props
   const service = useQueueControlService()
   const proxyRunning = service.proxyStatus?.running ?? false
 
@@ -80,6 +81,7 @@ export function QueueControlPage(props: QueueControlPageProps) {
               onSelectManualModel={service.selectManualModel}
               onToggleEnabled={service.updateEnabled}
               onDragEnd={service.handleDragEnd}
+              onNavigateToProviderAnalytics={onNavigateToProviderAnalytics}
               onNavigateToModels={onNavigateToModels}
             />
           </>

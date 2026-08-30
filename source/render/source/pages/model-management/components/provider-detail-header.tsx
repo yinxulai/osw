@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { BarChart3, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -11,6 +11,7 @@ interface ProviderDetailHeaderProps {
   onToggleProviderEnabled: (enabled: boolean) => void
   onEditProvider: () => void
   onRemoveProvider: () => void
+  onNavigateToAnalytics?: () => void
 }
 
 export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
@@ -42,6 +43,11 @@ export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
           onCheckedChange={onToggleProviderEnabled}
           aria-label={`${provider.name} 启用状态`}
         />
+        {props.onNavigateToAnalytics && (
+          <Button variant="outline" onClick={props.onNavigateToAnalytics}>
+            <BarChart3 size={13} /> 数据分析
+          </Button>
+        )}
         <Button variant="outline" onClick={onEditProvider}>
           <Pencil size={13} /> 编辑
         </Button>

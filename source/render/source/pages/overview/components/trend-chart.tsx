@@ -86,7 +86,7 @@ export function TrendChart(props: TrendChartProps) {
 
   return (
     <Card className="min-w-0 w-full">
-      <CardSectionHeader title="Token 使用量趋势" description={formatTrendDescription(range)} compact />
+      <CardSectionHeader title="用量分布" description={formatTrendDescription(range)} compact />
       <CardContent className="min-w-0">
         {trend.length === 0 ? (
           <div className="flex h-44 items-center justify-center text-xs text-muted-foreground">

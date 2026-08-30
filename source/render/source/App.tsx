@@ -18,6 +18,7 @@ import { useProxyStatus } from './features/proxy/hooks'
 function App() {
   const activePage = useAppUiStore(state => state.activePage)
   const setActivePage = useAppUiStore(state => state.setActivePage)
+  const setOverviewProviderId = useAppUiStore(state => state.setOverviewProviderId)
   const themeMode = useAppUiStore(state => state.themeMode)
   const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
@@ -45,6 +46,10 @@ function App() {
   }, [theme])
 
   const toggleTheme = () => setThemeMode(theme === 'dark' ? 'light' : 'dark')
+  const navigateToProviderAnalytics = (providerId: string) => {
+    setOverviewProviderId(providerId)
+    setActivePage('overview')
+  }
 
   return (
     <ToastProvider>
@@ -66,9 +71,10 @@ function App() {
               <QueueControlPage
                 onNavigateToModels={() => setActivePage('providers')}
                 onNavigateToAccess={() => setActivePage('access')}
+                onNavigateToProviderAnalytics={navigateToProviderAnalytics}
               />
             )}
-            {activePage === 'providers' && <ModelManagementPage />}
+            {activePage === 'providers' && <ModelManagementPage onNavigateToProviderAnalytics={navigateToProviderAnalytics} />}
             {activePage === 'access' && (
               <AccessConfigPage
                 onNavigateToModels={() => setActivePage('providers')}

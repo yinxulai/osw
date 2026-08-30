@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 interface FailureReasonsProps {
   reasons: FailureReasonStat[]
   failedCount: number
-  totalRequests: number
+  totalRequests?: number
 }
 
 const ERROR_COLORS = [
@@ -22,13 +22,15 @@ const ERROR_COLORS = [
 
 export function FailureReasons(props: FailureReasonsProps) {
   const { reasons, failedCount, totalRequests } = props
-  const failureRate = totalRequests > 0 ? ((failedCount / totalRequests) * 100).toFixed(2) : '0.00'
+  const description = totalRequests == null
+    ? `共 ${failedCount.toLocaleString()} 个最终失败请求`
+    : `共 ${failedCount.toLocaleString()} 次失败 · 失败率 ${totalRequests > 0 ? ((failedCount / totalRequests) * 100).toFixed(2) : '0.00'}%`
 
   return (
     <Card className="min-w-[320px]">
       <CardSectionHeader
         title="错误分布"
-        description={`共 ${failedCount.toLocaleString()} 次失败 · 失败率 ${failureRate}%`}
+        description={description}
         compact
       />
       <CardContent className="pt-0">

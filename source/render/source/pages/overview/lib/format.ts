@@ -12,7 +12,7 @@ export function formatTokens(tokens: number): string {
 }
 
 export function formatTrendDescription(range: AnalyticsRange): string {
-  return range === 'today' ? '15 分钟粒度 Token 用量' : '每日 Token 用量'
+  return range === 'today' ? '15 分钟粒度用量' : '每日用量'
 }
 
 export const PROVIDER_COLORS = [

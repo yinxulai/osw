@@ -1,4 +1,4 @@
-import type { AnalyticsRange, AnalyticsSummary, LogEntry, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import type { AnalyticsRange, AnalyticsSummary, LogEntry, ProviderAnalyticsDetail, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
 export type ListLogsParams = { after?: number; limit?: number }
@@ -18,4 +18,5 @@ export const requestLogApi = {
 
 export const analyticsApi = {
   summary: (range: AnalyticsRange = '7d') => request<AnalyticsSummary>('/analytics/summary', { range }),
+  providerDetail: (providerId: string, range: AnalyticsRange = '7d') => request<ProviderAnalyticsDetail>('/analytics/provider-detail', { providerId, range }),
 }

@@ -40,7 +40,7 @@ export function ModelRanking(props: ModelRankingProps) {
                   </td>
                 </tr>
               ) : stats.map((m, idx) => (
-                <tr key={`${m.providerId}-${m.providerModelName}`} className={tableRowClass}>
+                <tr key={m.providerModelId} className={tableRowClass}>
                   <td className={cn(tableCellClass, 'px-4')}>
                     <span className={cn(
                       'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium',

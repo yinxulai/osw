@@ -15,11 +15,11 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
 
   return (
     <Card className="min-w-70">
-      <CardSectionHeader title="供应商分布" description="按请求量统计" compact />
+      <CardSectionHeader title="供应商分布" description="按实际调用次数统计" compact />
       <CardContent className="space-y-2.5 pt-1">
         {stats.length === 0 ? (
           <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
-            暂无供应商请求数据
+            暂无供应商调用数据
           </div>
         ) : stats.map((p, idx) => (
           <button

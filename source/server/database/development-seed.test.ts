@@ -34,6 +34,8 @@ describe('development seed', () => {
     expect(await seedDevelopmentData(secretStore)).toBe(true)
 
     expect(await listProviders()).toHaveLength(5)
+    expect((await listProviders()).map(provider => provider.name)).toEqual(expect.arrayContaining(['OpenAI', 'Anthropic', '火山方舟', 'DeepSeek', '协议实验室']))
+    expect((await listProviders()).every(provider => !provider.name.includes('开发示例'))).toBe(true)
     expect(await listLogicalModels()).toHaveLength(1)
     expect(getDb().select({ id: providerModels.id }).from(providerModels).all()).toHaveLength(10)
     expect(await listRequestLogs(200)).toHaveLength(120)

@@ -1,5 +1,5 @@
 import type { KeychainApi } from '@common/keychain'
-import { inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { getDb } from './index'
 import {
   providerEndpoints,
@@ -20,7 +20,8 @@ import {
 const PROVIDER_FIXTURES = [
   {
     id: 'prov_dev_openai',
-    name: 'OpenAI（开发示例）',
+    name: 'OpenAI',
+    legacyName: 'OpenAI（开发示例）',
     apiKeyReference: 'key_dev_openai',
     apiKey: 'sk-development-openai',
     endpoints: {
@@ -30,7 +31,8 @@ const PROVIDER_FIXTURES = [
   },
   {
     id: 'prov_dev_anthropic',
-    name: 'Anthropic（开发示例）',
+    name: 'Anthropic',
+    legacyName: 'Anthropic（开发示例）',
     apiKeyReference: 'key_dev_anthropic',
     apiKey: 'sk-development-anthropic',
     endpoints: {
@@ -39,7 +41,8 @@ const PROVIDER_FIXTURES = [
   },
   {
     id: 'prov_dev_ark',
-    name: '火山方舟（开发示例）',
+    name: '火山方舟',
+    legacyName: '火山方舟（开发示例）',
     apiKeyReference: 'key_dev_ark',
     apiKey: 'development-ark-key',
     endpoints: {
@@ -49,7 +52,8 @@ const PROVIDER_FIXTURES = [
   },
   {
     id: 'prov_dev_deepseek',
-    name: 'DeepSeek（开发示例）',
+    name: 'DeepSeek',
+    legacyName: 'DeepSeek（开发示例）',
     apiKeyReference: 'key_dev_deepseek',
     apiKey: 'sk-development-deepseek',
     endpoints: {
@@ -58,7 +62,8 @@ const PROVIDER_FIXTURES = [
   },
   {
     id: 'prov_dev_all_protocols',
-    name: '协议实验室（开发示例）',
+    name: '协议实验室',
+    legacyName: '协议实验室（开发示例）',
     apiKeyReference: 'key_dev_all_protocols',
     apiKey: 'sk-development-all-protocols',
     endpoints: {
@@ -129,6 +134,16 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
       createdTime: timestamp,
       updatedTime: timestamp,
     }))).run()
+    for (const provider of PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
+      transaction.update(providers)
+        .set({ name: provider.name, updatedTime: timestamp })
+        .where(and(eq(providers.id, provider.id), eq(providers.name, provider.legacyName)))
+        .run()
+      transaction.update(requestAttempts)
+        .set({ providerName: provider.name })
+        .where(and(eq(requestAttempts.providerId, provider.id), eq(requestAttempts.providerName, provider.legacyName)))
+        .run()
+    }
     if (providersToInsert.length > 0) transaction.insert(providerSettings).values(providersToInsert.flatMap(provider => [
       { providerId: provider.id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: timestamp },
       { providerId: provider.id, key: 'connection.timeoutMilliseconds', value: '30000', valueType: 'number', updatedTime: timestamp },
