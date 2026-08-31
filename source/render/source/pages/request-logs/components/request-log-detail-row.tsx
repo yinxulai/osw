@@ -28,10 +28,6 @@ interface AttemptBadgeProps {
   attempt: RequestLogEntryAttempt
 }
 
-interface AttemptSummaryProps {
-  attempt: RequestLogEntryAttempt
-}
-
 interface UpstreamRequestIdProps {
   requestId: string | null
 }
@@ -90,19 +86,6 @@ function MetricCard(props: MetricCardProps) {
         {props.value}
       </div>
       {props.hint && <div className="mt-0.5 text-[10px] text-muted-foreground">{props.hint}</div>}
-    </div>
-  )
-}
-
-function AttemptSummary(props: AttemptSummaryProps) {
-  const { attempt } = props
-  const hasError = attempt.errorCode || attempt.errorMessage
-
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-muted-foreground">
-      {attempt.httpStatus !== null && <span>HTTP {attempt.httpStatus}</span>}
-      {attempt.retryable && <span className="text-amber-600 dark:text-amber-400">已转移</span>}
-      {hasError && <span className="min-w-0 truncate text-red-600 dark:text-red-400">{attempt.errorMessage ?? attempt.errorCode}</span>}
     </div>
   )
 }
@@ -175,7 +158,6 @@ function ProviderRoute(props: ProviderRouteProps) {
                 </span>
                 <AttemptBadge attempt={attempt} />
               </div>
-              <AttemptSummary attempt={attempt} />
               <UpstreamRequestId requestId={attempt.upstreamRequestId} />
             </div>
             <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -301,7 +283,6 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             contents={contents}
             conversions={'conversions' in log ? log.conversions : null}
             requestRewriteRules={requestRewriteRules}
-            attempts={log.attempts}
             clientProtocol={log.clientProtocol}
             upstreamProtocol={upstreamProtocol}
             loading={props.detailLoading}
