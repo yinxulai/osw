@@ -272,7 +272,6 @@ export const RequestAttemptSchema = z.object({
   retryable: z.boolean(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
-  details: z.string().nullable(),
   durationMilliseconds: z.number().int().nonnegative(),
   createdTime: z.number().int(),
 })
@@ -388,7 +387,6 @@ export const RequestLogEntryAttemptSchema = z.object({
   retryable: z.boolean(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
-  details: z.string().nullable(),
   durationMilliseconds: z.number().int().nonnegative(),
   createdTime: z.number().int(),
 })

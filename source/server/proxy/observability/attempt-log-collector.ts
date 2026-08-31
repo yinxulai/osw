@@ -5,11 +5,11 @@ import {
   createRequestConversion,
   replaceRequestUsage,
 } from '@server/database/request-log-store'
-import type { AttemptContentInput, AttemptLoggingInput, AttemptUsageInput, RequestLogger } from '@server/proxy/observability/logging-types'
+import type { AttemptContentInput, AttemptFinalizationInput, AttemptLoggingInput, AttemptUsageInput, RequestLogger } from '@server/proxy/observability/logging-types'
 import { redactHeaders } from '@server/proxy/response/headers'
 
-export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLogger, 'recordAttempt' | 'recordAttemptContent'> {
-  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput) => {
+export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLogger, 'recordAttempt' | 'recordAttemptContent' | 'finalizeAttempt'> {
+  const recordAttempt = async (status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, usage?: AttemptUsageInput) => {
     try {
       const attempt = await createRequestAttempt({
         requestId: input.requestId,
@@ -21,7 +21,6 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         errorCode: errorCode ?? null,
         errorMessage: errorMessage ?? null,
         upstreamRequestId: upstreamRequestId ?? null,
-        details: details ?? null,
         upstreamProtocol: input.snapshot.upstreamProtocol,
         durationMilliseconds: Date.now() - input.startedAt,
       })
@@ -76,7 +75,11 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
         requestBody: input.upstreamRequestBody.toString('utf8'),
         requestRewriteRuleIds: input.requestRewriteRuleIds ?? [],
         responseStatus: content.responseStatus,
-        responseHeaders: content.clientResponseHeaders ? JSON.stringify(redactHeaders(content.clientResponseHeaders)) : null,
+        responseHeaders: content.upstreamResponseHeaders
+          ? JSON.stringify(redactHeaders(content.upstreamResponseHeaders))
+          : content.clientResponseHeaders
+            ? JSON.stringify(redactHeaders(content.clientResponseHeaders))
+            : null,
         responseBody: content.responseBody,
       })
       if (input.requiresResponseConversion && content.attemptId) {
@@ -107,5 +110,21 @@ export function createAttemptLogger(input: AttemptLoggingInput): Pick<RequestLog
     }
   }
 
-  return { recordAttempt, recordAttemptContent }
+  const finalizeAttempt = async (finalization: AttemptFinalizationInput) => {
+    const attempt = await recordAttempt(
+      finalization.status,
+      finalization.httpStatus,
+      finalization.retryable,
+      finalization.errorCode,
+      finalization.errorMessage,
+      finalization.upstreamRequestId,
+      finalization.usage,
+    )
+    if (finalization.content && attempt) {
+      await recordAttemptContent({ ...finalization.content, attemptId: attempt.id })
+    }
+    return attempt
+  }
+
+  return { recordAttempt, recordAttemptContent, finalizeAttempt }
 }

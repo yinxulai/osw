@@ -113,5 +113,6 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
     finalizeLocalErrorContent,
     recordAttempt: async () => null,
     recordAttemptContent: async () => undefined,
+    finalizeAttempt: async () => null,
   }
 }

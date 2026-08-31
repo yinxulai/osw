@@ -18,7 +18,6 @@ function attempt(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogEnt
     retryable: false,
     errorCode: null,
     errorMessage: null,
-    details: null,
     durationMilliseconds: 2_000,
     createdTime: 1,
     ...overrides,

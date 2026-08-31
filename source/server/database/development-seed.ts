@@ -257,7 +257,6 @@ export async function seedDevelopmentData(secretStore: KeychainApi, options: Dev
         attemptIndex: 0,
         errorCode: request.failed ? 'UPSTREAM_TIMEOUT' : null,
         errorMessage: request.failed ? '开发示例：上游请求超时' : null,
-        details: null,
         durationMilliseconds: request.totalDurationMilliseconds,
         createdTime: request.createdTime,
       }

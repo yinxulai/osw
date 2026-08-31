@@ -1,5 +1,6 @@
 export type {
   AttemptContentInput,
+  AttemptFinalizationInput,
   AttemptLogSnapshot,
   AttemptLoggingInput,
   AttemptUsageInput,

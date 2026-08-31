@@ -251,7 +251,6 @@ export const requestAttempts = sqliteTable(
     durationMilliseconds: integer('durationMilliseconds').notNull(),
     errorCode: text('errorCode'),
     errorMessage: text('errorMessage'),
-    details: text('details'),
     createdTime: integer('createdTime').notNull(),
   },
   table => [

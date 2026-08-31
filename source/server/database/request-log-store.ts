@@ -202,12 +202,12 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
   return pruneRequestLogsInternal(retentionDays)
 }
 
-type CreateRequestAttemptInput = Omit<RequestAttempt, 'id' | 'createdTime' | 'errorCode' | 'errorMessage' | 'details'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage' | 'details'>>
+type CreateRequestAttemptInput = Omit<RequestAttempt, 'id' | 'createdTime' | 'errorCode' | 'errorMessage'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage'>>
 
 export async function createRequestAttempt(input: CreateRequestAttemptInput): Promise<RequestAttempt> {
   const id = generateId('att_')
   const time = now()
-  const attempt = { id, ...input, errorCode: input.errorCode ?? null, errorMessage: input.errorMessage ?? null, details: input.details ?? null, createdTime: time }
+  const attempt = { id, ...input, errorCode: input.errorCode ?? null, errorMessage: input.errorMessage ?? null, createdTime: time }
   getDb().insert(requestAttempts).values(attempt).run()
   return attempt
 }
@@ -333,7 +333,6 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     retryable: row.retryable,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
-    details: row.details,
     durationMilliseconds: row.durationMilliseconds,
     createdTime: Number(row.createdTime),
   }

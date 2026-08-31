@@ -102,7 +102,6 @@ async function mapRequestLogEntry(log: RequestLog): Promise<RequestLogEntry> {
         retryable: a.retryable,
         errorCode: a.errorCode,
         errorMessage: a.errorMessage,
-        details: a.details,
         durationMilliseconds: a.durationMilliseconds,
         createdTime: a.createdTime,
       })),

@@ -462,7 +462,6 @@ describe('handleProxyRequest', () => {
       httpStatus: 503,
       retryable: true,
       status: 'failed',
-      details: 'first provider failed',
     }))
     expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
       providerId: 'prov_second',
@@ -519,7 +518,6 @@ describe('handleProxyRequest', () => {
       httpStatus: status,
       retryable: true,
       status: 'failed',
-      details: body,
     }))
     if (failureScope === 'provider') {
       expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_failed')
@@ -534,6 +532,7 @@ describe('handleProxyRequest', () => {
     { name: 'connection refusal', closeBeforeRequest: true },
     { name: 'disconnect before response headers', closeBeforeRequest: false },
   ])('fails over after $name and records a provider failure', async ({ closeBeforeRequest }) => {
+    mocks.captureRequestContent = true
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
@@ -570,6 +569,13 @@ describe('handleProxyRequest', () => {
       retryable: true,
       status: 'failed',
       errorCode: 'UPSTREAM_ERROR',
+    }))
+    expect(mocks.createRequestContent).toHaveBeenCalledWith(expect.objectContaining({
+      attemptId: 'att_test',
+      captureStatus: 'partial',
+      responseStatus: null,
+      responseHeaders: null,
+      responseBody: null,
     }))
     expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_failed')
     expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
@@ -697,6 +703,47 @@ describe('handleProxyRequest', () => {
     }))
     const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.responseStatus === 503)?.[0]
     expect(attemptContent).toEqual(expect.objectContaining({ captureStatus: 'partial', responseBody: firstChunk }))
+  })
+
+  it('stores the complete retry response body and upstream headers', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const errorBody = JSON.stringify({ error: { code: 'quota_exceeded', message: 'quota exceeded', request_id: 'upstream-request-1' } })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(429, { 'content-type': 'application/json', 'x-request-id': 'upstream-request-1' })
+      res.end(errorBody)
+    })
+    const fallback = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+    })
+    mocks.models = [
+      model('model_retry_body', 'prov_retry_body', `${upstream.url}/v1/completions`, 'retry-body-model'),
+      model('model_retry_body_fallback', 'prov_retry_body_fallback', `${fallback.url}/v1/completions`, 'retry-body-fallback-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.responseStatus === 429)?.[0]
+    expect(attemptContent).toEqual(expect.objectContaining({
+      attemptId: 'att_test',
+      captureStatus: 'captured',
+      responseStatus: 429,
+      responseBody: errorBody,
+      responseHeaders: expect.stringContaining('x-request-id'),
+    }))
   })
 
   it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {

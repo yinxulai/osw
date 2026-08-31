@@ -64,6 +64,19 @@ export interface AttemptContentInput {
   streaming?: boolean
 }
 
+export type AttemptContentDraft = Omit<AttemptContentInput, 'attemptId'>
+
+export interface AttemptFinalizationInput {
+  status: RequestStatus
+  httpStatus: number | null
+  retryable: boolean
+  errorCode?: string
+  errorMessage?: string
+  upstreamRequestId?: string | null
+  usage?: AttemptUsageInput
+  content?: AttemptContentDraft
+}
+
 export interface AttemptLoggingInput {
   requestId: string
   attemptIndex: number
@@ -86,9 +99,10 @@ export interface AttemptLoggingInput {
 
 export interface RequestLogger {
   readonly requestContentId: string | null
+  finalizeAttempt(input: AttemptFinalizationInput): Promise<{ id: string } | null>
   finalizeRequestLog(status: RequestStatus, startedAt: number, metrics?: RequestLogMetrics): Promise<void>
   finalizeRequestContent(outcome: RequestLogOutcome): Promise<void>
   finalizeLocalErrorContent(statusCode: number, responseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, responseBody: string): Promise<void>
-  recordAttempt(status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, details?: string | null, usage?: AttemptUsageInput): Promise<{ id: string } | null>
+  recordAttempt(status: RequestStatus, httpStatus: number | null, retryable: boolean, errorCode?: string, errorMessage?: string, upstreamRequestId?: string | null, usage?: AttemptUsageInput): Promise<{ id: string } | null>
   recordAttemptContent(input: AttemptContentInput): Promise<void>
 }

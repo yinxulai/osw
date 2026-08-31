@@ -109,7 +109,6 @@ describe('analytics route', () => {
       durationMilliseconds: 1500,
       errorCode: null,
       errorMessage: null,
-      details: null,
     })
     const failedAttempt = await createRequestAttempt({
       requestId: failedLog.id,
@@ -127,7 +126,6 @@ describe('analytics route', () => {
       durationMilliseconds: 2200,
       errorCode: 'RateLimit_429',
       errorMessage: 'rate limited',
-      details: null,
     })
     await replaceRequestUsage({ requestId: successLog.id, attemptId: successAttempt.id, inputTokens: 100, outputTokens: 20, totalTokens: 120, cachedInputTokens: 0, cacheCreationInputTokens: 0, rawUsage: null })
     await replaceRequestUsage({ requestId: failedLog.id, attemptId: failedAttempt.id, inputTokens: 30, outputTokens: 10, totalTokens: 40, cachedInputTokens: 0, cacheCreationInputTokens: 0, rawUsage: null })
@@ -223,13 +221,13 @@ describe('analytics route', () => {
       requestId: log.id, providerId: firstProvider.id, providerModelId: 'model_first', providerName: firstProvider.name,
       providerModelName: 'first-model', upstreamProtocol: 'openai-responses', upstreamRequestId: null,
       url: 'https://first.example.com', httpStatus: 503, retryable: true, attemptIndex: 0, status: 'failed',
-      durationMilliseconds: 10, errorCode: 'Status_503', errorMessage: 'unavailable', details: null,
+      durationMilliseconds: 10, errorCode: 'Status_503', errorMessage: 'unavailable',
     })
     const successAttempt = await createRequestAttempt({
       requestId: log.id, providerId: secondProvider.id, providerModelId: 'model_second', providerName: secondProvider.name,
       providerModelName: 'second-model', upstreamProtocol: 'openai-responses', upstreamRequestId: null,
       url: 'https://second.example.com', httpStatus: 200, retryable: false, attemptIndex: 1, status: 'success',
-      durationMilliseconds: 20, errorCode: null, errorMessage: null, details: null,
+      durationMilliseconds: 20, errorCode: null, errorMessage: null,
     })
     await replaceRequestUsage({ requestId: log.id, attemptId: failedAttempt.id, inputTokens: null, outputTokens: null, totalTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, rawUsage: null })
     await replaceRequestUsage({ requestId: log.id, attemptId: successAttempt.id, inputTokens: 10, outputTokens: 2, totalTokens: 12, cachedInputTokens: 0, cacheCreationInputTokens: 0, rawUsage: null })
