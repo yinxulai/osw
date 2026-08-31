@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { runAttemptQueue } from '@server/proxy/execution/attempt-runner'
 
 describe('attempt runner', () => {
-  it('continues retryable targets in order and stops on success', async () => {
+  it('fails over to targets in order and stops on success', async () => {
     const events: string[] = []
-    await runAttemptQueue<string, { disposition: 'success' | 'retry' | 'terminal'; statusCode: number }>({
+    await runAttemptQueue<string, { disposition: 'success' | 'failover' | 'terminal'; statusCode: number }>({
       signal: new AbortController().signal,
       targets: ['first', 'second'],
       attempt: async target => {
         events.push(`attempt:${target}`)
         return target === 'first'
-          ? { disposition: 'retry', statusCode: 503 }
+          ? { disposition: 'failover', statusCode: 503 }
           : { disposition: 'success', statusCode: 200 }
       },
-      onRetry: async target => { events.push(`retry:${target}`) },
+      onFailover: async target => { events.push(`failover:${target}`) },
       onSuccess: async target => { events.push(`success:${target}`) },
       onTerminal: async target => { events.push(`terminal:${target}`) },
       onError: async () => true,
@@ -21,16 +21,16 @@ describe('attempt runner', () => {
       onExhausted: async () => { events.push('exhausted') },
     })
 
-    expect(events).toEqual(['attempt:first', 'retry:first', 'attempt:second', 'success:second'])
+    expect(events).toEqual(['attempt:first', 'failover:first', 'attempt:second', 'success:second'])
   })
 
   it('stops when an error handler declines continuation', async () => {
     const events: string[] = []
-    await runAttemptQueue<string, { disposition: 'success' | 'retry' | 'terminal'; statusCode: number }>({
+    await runAttemptQueue<string, { disposition: 'success' | 'failover' | 'terminal'; statusCode: number }>({
       signal: new AbortController().signal,
       targets: ['only'],
       attempt: async () => { throw new Error('failed') },
-      onRetry: async () => undefined,
+      onFailover: async () => undefined,
       onSuccess: async () => undefined,
       onTerminal: async () => undefined,
       onError: async (_target, error) => {

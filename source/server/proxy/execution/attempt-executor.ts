@@ -138,10 +138,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
       await requestLogger.finalizeRequestContent(outcome)
       await requestLogger.finalizeRequestLog('failed', startedAt)
     },
-    onRetry: async (target, outcome, attemptIndex) => {
+    onFailover: async (target, outcome, attemptIndex) => {
       const nextTarget = targets[attemptIndex + 1]
       console.warn(
-        `[proxy] upstream retry scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.model.id ?? 'none'}`,
+        `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.model.id ?? 'none'}`,
       )
       await recordHealthFailure(target, outcome.statusCode, outcome.responseBody)
     },
@@ -182,7 +182,7 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
       }
       const nextTarget = targets[attemptIndex + 1]
       console.warn(
-        `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} retry=${!response.headersSent && nextTarget !== undefined} nextProviderModelId=${nextTarget?.model.id ?? 'none'} error=${lastError.message}`,
+        `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} failover=${!response.headersSent && nextTarget !== undefined} nextProviderModelId=${nextTarget?.model.id ?? 'none'} error=${lastError.message}`,
       )
       try {
         const snapshot = resolveAttemptSnapshot(target, protocol)
@@ -376,7 +376,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       const isStreaming = isStreamingRequest(requestBody) && contentType.includes('text/event-stream')
       console.debug(`[proxy] upstream response received requestId=${requestId} attempt=${attemptIndex} providerModelId=${model.id} status=${statusCode} disposition=${disposition} streaming=${isStreaming} upstreamRequestIdPresent=${upstreamRequestId !== null} responseLatency=${Date.now() - attemptStartedAt}ms`)
 
-      if (disposition === 'retry') {
+      if (disposition === 'failover') {
         const idleTimeout = attachResponseIdleTimeout(upstreamRes, settings.idleTimeoutMilliseconds)
         upstreamRes.on('data', chunk => {
           const chunkText = chunk.toString('utf8')
@@ -403,7 +403,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
               streaming: isStreaming,
             },
           })
-          resolveAttempt({ disposition: 'retry', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, responseBody: body, responseStatus: statusCode, captureStatus: 'captured' })
+          resolveAttempt({ disposition: 'failover', statusCode, durationMilliseconds: Date.now() - attemptStartedAt, upstreamRequestId: resolvedRequestId, responseBody: body, responseStatus: statusCode, captureStatus: 'captured' })
         })
         upstreamRes.on('error', err => {
           idleTimeout.dispose()
@@ -426,7 +426,7 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
               },
             })
             rejectAttempt(new RecordedAttemptError(err, {
-              disposition: 'retry',
+              disposition: 'failover',
               statusCode,
               durationMilliseconds: Date.now() - attemptStartedAt,
               upstreamRequestId: upstreamRequestId,

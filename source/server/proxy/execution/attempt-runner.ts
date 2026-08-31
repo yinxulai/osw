@@ -1,5 +1,5 @@
 export interface AttemptRunnerResult {
-  disposition: 'success' | 'retry' | 'terminal'
+  disposition: 'success' | 'failover' | 'terminal'
   statusCode: number
   errorResponse?: string | null
 }
@@ -10,7 +10,7 @@ export interface AttemptRunnerOptions<T, O extends AttemptRunnerResult> {
   attempt(target: T, attemptIndex: number): Promise<O>
   onSuccess(target: T, outcome: O, attemptIndex: number): Promise<void>
   onTerminal(target: T, outcome: O, attemptIndex: number): Promise<void>
-  onRetry(target: T, outcome: O, attemptIndex: number): Promise<void>
+  onFailover(target: T, outcome: O, attemptIndex: number): Promise<void>
   onError(target: T, error: unknown, attemptIndex: number): Promise<boolean>
   onCancelled(target: T, attemptIndex: number): Promise<void>
   onExhausted(lastError: Error | null): Promise<void>
@@ -36,7 +36,7 @@ export async function runAttemptQueue<T, O extends AttemptRunnerResult>(options:
         await options.onTerminal(target, outcome, attemptIndex)
         return
       }
-      await options.onRetry(target, outcome, attemptIndex)
+      await options.onFailover(target, outcome, attemptIndex)
       attemptIndex++
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))

@@ -1,12 +1,12 @@
-export type UpstreamStatusDisposition = 'success' | 'retry' | 'terminal'
+export type UpstreamStatusDisposition = 'success' | 'failover' | 'terminal'
 export type HealthFailureScope = 'provider' | 'provider-model' | 'none'
 
 export function classifyUpstreamStatus(statusCode: number): UpstreamStatusDisposition {
   if (statusCode >= 200 && statusCode < 300) return 'success'
-  if (statusCode === 401 || statusCode === 403 || statusCode === 408 || statusCode === 429) {
-    return 'retry'
+  if (statusCode === 401 || statusCode === 403 || statusCode === 405 || statusCode === 408 || statusCode === 429) {
+    return 'failover'
   }
-  if (statusCode >= 500) return 'retry'
+  if (statusCode >= 500) return 'failover'
   return 'terminal'
 }
 

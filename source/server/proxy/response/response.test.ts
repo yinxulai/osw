@@ -10,8 +10,8 @@ describe('classifyUpstreamStatus', () => {
     expect(classifyUpstreamStatus(status)).toBe('terminal')
   })
 
-  it.each([408, 401, 403, 429, 500, 502, 503, 599])('allows failover for %i', status => {
-    expect(classifyUpstreamStatus(status)).toBe('retry')
+  it.each([401, 403, 405, 408, 429, 500, 502, 503, 599])('allows failover for %i', status => {
+    expect(classifyUpstreamStatus(status)).toBe('failover')
   })
 
   it.each([400, 404, 409, 422])('returns non-retryable client error %i', status => {
