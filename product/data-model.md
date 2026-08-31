@@ -576,7 +576,7 @@ CREATE INDEX idx_request_usages_attempt
 
 `type` 表示标准用量名，例如 `inputTokens`、`outputTokens`、`cachedInputTokens`、`reasoningTokens`；`value` 使用 REAL，通常为非负整数。`unit` 默认是 `count`，可扩展为其他明确单位。`attemptId` 为空表示请求级汇总用量，不为空表示某次远端尝试的用量。统计时必须明确选择请求级或尝试级口径，避免重复计入。
 
-原始协议 `usage` 不直接塞入 `request_usages`：可聚合字段拆成 `request_usages` 数值行，无法稳定建模的 upstream 私有字段保存在对应 `request_attempts.details` 的 JSON 中；若需要完整保留原始 usage，则放入对应的 `request_conversions` 或扩展的正文 envelope，并通过 `schemaVersion` 版本化。
+原始协议 `usage` 不直接塞入 `request_usages`：可聚合字段拆成 `request_usages` 数值行，无法稳定建模的 upstream 私有字段保存在请求级 `request_logs.rawUsage` 中；一次 attempt 收到的完整上游响应正文（包括错误响应和流式 partial 响应）统一保存在对应 `request_contents.responseBody`，并通过 `attemptId` 关联。
 
 ```json
 {
