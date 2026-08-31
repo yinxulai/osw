@@ -54,7 +54,7 @@ export function OverviewPage(props: OverviewPageProps) {
         </Card>
         <Card className="p-4">
           <Skeleton className="mb-4 h-4 w-24" />
-          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-44 w-full" />
         </Card>
       </div>
       <div className="grid grid-cols-1 gap-4">
