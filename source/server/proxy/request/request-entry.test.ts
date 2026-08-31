@@ -581,15 +581,18 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
   })
 
-  it('returns an upstream 400 response without trying the next provider', async () => {
+  it.each([
+    { status: 400, body: '{"error":"provider-specific validation"}' },
+    { status: 422, body: '{"error":"unsupported parameter"}' },
+  ])('fails over upstream client status $status', async ({ status, body }) => {
     configureSecretStore({
       set: async () => undefined,
       get: async () => 'secret',
       delete: async () => undefined,
     })
     const first = await listen((_req, res) => {
-      res.writeHead(400, { 'content-type': 'application/json' })
-      res.end('{"error":"invalid request"}')
+      res.writeHead(status, { 'content-type': 'application/json' })
+      res.end(body)
     })
     const secondHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -597,8 +600,8 @@ describe('handleProxyRequest', () => {
     })
     const second = await listen(secondHandler)
     mocks.models = [
-      model('model_terminal', 'prov_terminal', `${first.url}/v1/completions`, 'terminal-model'),
-      model('model_unused', 'prov_unused', `${second.url}/v1/completions`, 'unused-model'),
+      model('model_failed', 'prov_failed', `${first.url}/v1/completions`, 'failed-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
     ]
     const proxy = await listen((req, res) => {
       void handleProxyRequest(req, res, 'default')
@@ -610,18 +613,21 @@ describe('handleProxyRequest', () => {
       body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
     })
 
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'invalid request' })
-    expect(secondHandler).not.toHaveBeenCalled()
-    expect(mocks.createRequestAttempt).toHaveBeenCalledTimes(1)
-    expect(mocks.createRequestAttempt).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'prov_terminal',
-      httpStatus: 400,
-      retryable: false,
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(secondHandler).toHaveBeenCalledOnce()
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerId: 'prov_failed',
+      httpStatus: status,
+      retryable: true,
       status: 'failed',
     }))
-    expect(mocks.markProviderFailure).not.toHaveBeenCalled()
-    expect(mocks.markProviderModelFailure).not.toHaveBeenCalled()
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      providerId: 'prov_second',
+      httpStatus: 200,
+      retryable: false,
+      status: 'success',
+    }))
   })
 
   it('stores the final local error response after all providers fail', async () => {

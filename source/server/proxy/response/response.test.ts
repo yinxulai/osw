@@ -6,16 +6,8 @@ describe('classifyUpstreamStatus', () => {
     expect(classifyUpstreamStatus(status)).toBe('success')
   })
 
-  it.each([300, 301, 399])('does not treat redirect %i as a successful model response', status => {
-    expect(classifyUpstreamStatus(status)).toBe('terminal')
-  })
-
-  it.each([401, 403, 405, 408, 429, 500, 502, 503, 599])('allows failover for %i', status => {
+  it.each([300, 301, 399, 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503, 599])('allows failover for %i', status => {
     expect(classifyUpstreamStatus(status)).toBe('failover')
-  })
-
-  it.each([400, 404, 409, 422])('returns non-retryable client error %i', status => {
-    expect(classifyUpstreamStatus(status)).toBe('terminal')
   })
 })
 

@@ -3,11 +3,8 @@ export type HealthFailureScope = 'provider' | 'provider-model' | 'none'
 
 export function classifyUpstreamStatus(statusCode: number): UpstreamStatusDisposition {
   if (statusCode >= 200 && statusCode < 300) return 'success'
-  if (statusCode === 401 || statusCode === 403 || statusCode === 405 || statusCode === 408 || statusCode === 429) {
-    return 'failover'
-  }
-  if (statusCode >= 500) return 'failover'
-  return 'terminal'
+  // 上游状态码无法证明请求在其他供应商也一定无效，默认优先切换供应商。
+  return 'failover'
 }
 
 export function classifyHealthFailure(statusCode: number | null, responseBody?: string | null): HealthFailureScope {
