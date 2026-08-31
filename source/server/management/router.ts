@@ -4,6 +4,7 @@ import { sendError } from './core/response'
 import {
   analyticsRoutes,
   configRoutes,
+  freeModelRoutes,
   logRoutes,
   modelRoutes,
   modelTestRoutes,
@@ -38,6 +39,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(providerModelFetchRoutes)
   .mount(relationRoutes)
   .mount(requestRewriteRuleRoutes)
+  .mount(freeModelRoutes)
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')

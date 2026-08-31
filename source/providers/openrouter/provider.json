@@ -1,0 +1,11 @@
+{
+  "key": "openrouter",
+  "name": "OpenRouter",
+  "family": "openai",
+  "aliases": ["openrouter.ai", "open router"],
+  "color": "#6d6af5",
+  "fallbackKey": "openai",
+  "endpoints": {
+    "openai-completions": "https://openrouter.ai/api/v1/chat/completions"
+  }
+}

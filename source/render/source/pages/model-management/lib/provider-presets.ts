@@ -34,6 +34,7 @@ const PRESET_FALLBACKS: Record<string, string> = {
   'azure openai': 'openai',
   gpt: 'openai',
   chatgpt: 'openai',
+  openrouter: 'openrouter',
   claude: 'anthropic',
   sonnet: 'anthropic',
   haiku: 'anthropic',

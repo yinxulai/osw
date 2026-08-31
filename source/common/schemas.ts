@@ -211,6 +211,8 @@ export const SettingsSchema = z.object({
   outboundProxyUrl: z.string().default(''),
   outboundProxyBypass: z.string().default('localhost,127.0.0.1,::1'),
   autoLaunch: z.boolean().default(false),
+  freeModelAutoSyncEnabled: z.boolean().default(true),
+  freeModelSyncIntervalHours: z.number().int().min(1).max(168).default(12),
   updatedTime: z.number().int(),
 })
 export type Settings = z.infer<typeof SettingsSchema>

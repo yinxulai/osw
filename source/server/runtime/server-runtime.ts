@@ -10,6 +10,7 @@ import { installLogCapture } from '../management/infrastructure/log-buffer'
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { resetManualModels } from '../proxy/routing/manual-routing'
 import { startProxyServer, stopProxyServer } from '../proxy/runtime/server'
+import { freeModelSyncScheduler } from '../free-models/scheduler'
 
 export interface ServerRuntimeOptions {
   dataDir: string
@@ -60,6 +61,7 @@ export class ServerRuntime {
       console.info(`[runtime] management server started listening=${this.managementServer.listening}`)
       console.info(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)
       await startProxyServer({ host: settings.listenHost, port: settings.listenPort })
+      freeModelSyncScheduler.start()
       this.state = 'running'
       console.info(`[runtime] start completed state=${this.state}`)
       return this.managementServer
@@ -92,6 +94,7 @@ export class ServerRuntime {
 
   private async stopResources(): Promise<void> {
     console.info('[runtime] stopping resources')
+    freeModelSyncScheduler.stop()
     const names = ['proxy', 'management'] as const
     const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
     results.forEach((result, index) => {

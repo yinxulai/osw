@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FlaskConical, Plus, MousePointerClick } from 'lucide-react'
+import { FlaskConical, Gift, Plus, MousePointerClick } from 'lucide-react'
 import { ModelTestPanel } from '@/components/model-test-panel'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { ProviderGrid } from './components/provider-grid'
 import { ProviderDetail } from './components/provider-detail'
 import { ProviderDialog } from './components/provider-dialog'
 import { ModelDialog } from './components/model-dialog'
+import { FreeModelsDialog } from './components/free-models-dialog'
 
 interface ModelManagementPageProps {
   onNavigateToProviderAnalytics?: (providerId: string) => void
@@ -19,9 +20,13 @@ interface ModelManagementPageProps {
 export function ModelManagementPage(props: ModelManagementPageProps) {
   const service = useModelManagementService()
   const [testPanelOpen, setTestPanelOpen] = useState(false)
+  const [freeModelsOpen, setFreeModelsOpen] = useState(false)
 
   const renderHeaderActions = () => (
     <div className="flex items-center gap-2">
+      <Button variant="outline" onClick={() => setFreeModelsOpen(true)}>
+        <Gift size={14} /> 免费模型
+      </Button>
       <Button variant="outline" onClick={() => setTestPanelOpen(true)}>
         <FlaskConical size={14} /> 连接测试
       </Button>
@@ -167,6 +172,8 @@ export function ModelManagementPage(props: ModelManagementPageProps) {
         models={service.models}
         providers={service.providers}
       />
+
+      <FreeModelsDialog open={freeModelsOpen} onOpenChange={setFreeModelsOpen} />
     </>
   )
 
