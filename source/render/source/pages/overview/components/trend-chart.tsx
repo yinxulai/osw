@@ -18,6 +18,7 @@ const chartConfig = {
 interface TrendChartProps {
   trend: DailyTrendPoint[]
   range: AnalyticsRange
+  stretchToRow?: boolean
 }
 
 // X 轴刻度只控制标签密度，不影响 15 分钟粒度的数据和 Tooltip；
@@ -82,18 +83,24 @@ function TrendTooltip(props: TrendTooltipProps) {
 }
 
 export function TrendChart(props: TrendChartProps) {
-  const { trend, range } = props
+  const { trend, range, stretchToRow = false } = props
+  const contentClassName = stretchToRow
+    ? 'flex min-h-0 min-w-0 flex-1 flex-col'
+    : 'min-w-0'
+  const chartClassName = stretchToRow
+    ? 'aspect-auto min-h-44 w-full flex-1'
+    : 'aspect-auto h-44 w-full'
 
   return (
-    <Card className="h-full min-w-0 w-full">
+    <Card className="min-w-0 w-full">
       <CardSectionHeader title="用量分布" description={formatTrendDescription(range)} compact />
-      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <CardContent className={contentClassName}>
         {trend.length === 0 ? (
-          <div className="flex min-h-44 flex-1 items-center justify-center text-xs text-muted-foreground">
+          <div className={`${stretchToRow ? 'flex-1 ' : ''}flex min-h-44 items-center justify-center text-xs text-muted-foreground`}>
             暂无使用量数据，产生代理请求后将显示趋势
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="min-h-44 w-full flex-1">
+          <ChartContainer config={chartConfig} className={chartClassName}>
             <BarChart data={trend} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barCategoryGap="25%">
               <CartesianGrid vertical={false} />
               <XAxis

@@ -132,7 +132,7 @@ export function OverviewPage(props: OverviewPageProps) {
         <StatsGrid summary={data.summary} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
           <ProviderDistribution stats={data.providerStats} onSelectProvider={provider => props.onSelectProvider(provider.providerId)} />
-          <TrendChart trend={data.trend} range={props.range} />
+          <TrendChart trend={data.trend} range={props.range} stretchToRow />
         </div>
         <ModelRanking stats={data.modelStats} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
