@@ -1,12 +1,43 @@
 import type { LatencyBucket } from '@common/schemas'
-import { cn } from '@/lib/utils'
-import { CardSectionHeader } from '@/components/card-section-header'
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
+import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
+import { CardSectionHeader } from '@/components/card-section-header'
 
-const TTFT_BUCKET_COLORS = ['bg-success', 'bg-lime-500', 'bg-warning', 'bg-orange-500', 'bg-destructive'] as const
+const chartConfig = {
+  count: { label: '请求数', color: 'hsl(var(--success))' },
+} satisfies ChartConfig
 
 interface LatencyDistributionProps {
   buckets: LatencyBucket[]
+}
+
+function formatAxisTick(value: string): string {
+  const [start] = value.split('-')
+  return start ?? value
+}
+
+function LatencyTooltip(props: {
+  active?: boolean
+  label?: string
+  payload?: Array<{ payload?: LatencyBucket }>
+}) {
+  const { active, label, payload } = props
+  if (!active || !label || !payload?.length) return null
+  const bucket = payload[0]?.payload
+  if (!bucket) return null
+
+  return (
+    <div className="rounded-lg bg-muted px-3 py-2 text-xs">
+      <div className="font-medium">TTFT {bucket.range}</div>
+      <div className="mt-1.5 flex items-center justify-between gap-6">
+        <span className="text-muted-foreground">请求数</span>
+        <span className="font-mono font-medium tabular-nums">
+          {bucket.count}（{bucket.percent}%）
+        </span>
+      </div>
+    </div>
+  )
 }
 
 export function LatencyDistribution(props: LatencyDistributionProps) {
@@ -14,41 +45,36 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
 
   return (
     <Card className="min-w-70">
-      <CardSectionHeader title="TTFT 分布" description="首字延迟区间" compact />
-      <CardContent className="space-y-2 pt-1">
+      <CardSectionHeader title="TTFT 分布" description="按 p95 均分区间" compact />
+      <CardContent className="pt-1">
         {buckets.length === 0 ? (
-          <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+          <div className="flex min-h-44 items-center justify-center text-xs text-muted-foreground">
             暂无 TTFT 数据
           </div>
         ) : (
-          <>
-            {buckets.map((bucket, index) => (
-              <div key={bucket.range} className="flex items-center gap-2">
-                <div className="w-10 shrink-0 text-[11px] text-muted-foreground">{bucket.range}</div>
-                <div className="relative h-5 flex-1 overflow-hidden rounded-sm bg-muted">
-                  <div
-                    className={cn('h-full rounded-sm', TTFT_BUCKET_COLORS[index] ?? 'bg-destructive')}
-                    style={{ width: `${bucket.percent}%` }}
-                    role="progressbar"
-                    aria-label={`${bucket.range} TTFT 占比`}
-                    aria-valuenow={bucket.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium tabular-nums">
-                    {bucket.percent}%
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div className="flex items-center justify-end gap-1.5 pt-1 text-[10px] text-muted-foreground">
-              <span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />
-              <span>快</span>
-              <span className="mx-0.5 text-muted-foreground/50">→</span>
-              <span className="h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
-              <span>慢</span>
-            </div>
-          </>
+          <ChartContainer config={chartConfig} className="aspect-auto h-44 w-full">
+            <BarChart data={buckets} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="range"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                interval={1}
+                tickFormatter={value => formatAxisTick(String(value))}
+                fontSize={11}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={36}
+                allowDecimals={false}
+                fontSize={11}
+              />
+              <Tooltip content={<LatencyTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
+              <Bar dataKey="count" fill="var(--color-count)" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
         )}
       </CardContent>
     </Card>

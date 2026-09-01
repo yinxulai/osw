@@ -46,8 +46,7 @@ describe('analytics route', () => {
 
     expect(payload.success).toBe(true)
     expect(payload.data.providerStats).toEqual([])
-    expect(payload.data.latencyDistribution).toHaveLength(5)
-    expect(payload.data.latencyDistribution.every(bucket => bucket.count === 0 && bucket.percent === 0)).toBe(true)
+    expect(payload.data.latencyDistribution).toEqual([])
     expect(payload.data.failureReasons).toEqual([])
   })
 
@@ -170,7 +169,7 @@ describe('analytics route', () => {
     expect(detailPayload.data.summary).toEqual(expect.objectContaining({ requests: 2, success: 1, failed: 1, totalTokens: 160 }))
     expect(detailPayload.data.requestTrend.reduce((total, point) => total + point.success + point.failed, 0)).toBe(2)
     expect(detailPayload.data.tokenTrend.reduce((total, point) => total + point.inputTokens + point.outputTokens, 0)).toBe(160)
-    expect(detailPayload.data.latencyDistribution).toEqual(expect.arrayContaining([expect.objectContaining({ range: '< 1s', count: 2, percent: 100 })]))
+    expect(detailPayload.data.latencyDistribution).toEqual([expect.objectContaining({ count: 2, percent: 100 })])
     expect(detailPayload.data.failureReasons).toEqual([expect.objectContaining({ reason: '限流 (429)', count: 1, percent: 100 })])
     expect(detailPayload.data.models).toEqual(expect.arrayContaining([
       expect.objectContaining({ providerModelName: 'provider-success' }),
@@ -305,9 +304,9 @@ describe('analytics route', () => {
     const res = mockResponse()
     await analyticsRoutes.invoke('/api/analytics/summary', res, { range: '7d' })
 
-    const payload = responseData(res) as { data: { latencyDistribution: Array<{ range: string; count: number }> }; success: boolean }
+    const payload = responseData(res) as { data: { latencyDistribution: Array<{ count: number }> }; success: boolean }
 
     expect(payload.success).toBe(true)
-    expect(payload.data.latencyDistribution).toEqual(expect.arrayContaining([expect.objectContaining({ range: '< 1s', count: 1 })]))
+    expect(payload.data.latencyDistribution.reduce((total, bucket) => total + bucket.count, 0)).toBe(1)
   })
 })

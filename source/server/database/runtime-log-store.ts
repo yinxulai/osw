@@ -54,6 +54,44 @@ export function listRuntimeLogs(options?: ListRuntimeLogsOptions): LogEntry[] {
   return rows.map(mapLogRow)
 }
 
+export interface RuntimeLogFilter {
+  level?: LogEntry['level']
+  query?: string
+}
+
+export interface RuntimeLogPage {
+  logs: LogEntry[]
+  total: number
+}
+
+function buildRuntimeLogConditions(filter?: RuntimeLogFilter): {
+  sql: string
+  params: Array<string | number>
+} {
+  const conditions: string[] = []
+  const params: Array<string | number> = []
+  if (filter?.level) {
+    conditions.push('level = ?')
+    params.push(filter.level)
+  }
+  if (filter?.query) {
+    conditions.push('message LIKE ?')
+    params.push(`%${filter.query}%`)
+  }
+  return { sql: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '', params }
+}
+
+export function listRuntimeLogsPaged(limit: number, offset: number, filter?: RuntimeLogFilter): RuntimeLogPage {
+  const { sql, params } = buildRuntimeLogConditions(filter)
+  const rows = getDb().$client
+    .prepare(`SELECT id, level, message, timestamp FROM runtime_logs ${sql} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset) as RuntimeLogRow[]
+  const countRow = getDb().$client
+    .prepare(`SELECT count(*) AS total FROM runtime_logs ${sql}`)
+    .get(...params) as { total: number | bigint } | undefined
+  return { logs: rows.map(mapLogRow), total: Number(countRow?.total ?? 0) }
+}
+
 export function listAllRuntimeLogs(): LogEntry[] {
   const rows = getDb().$client
     .prepare('SELECT id, level, message, timestamp FROM runtime_logs ORDER BY id ASC')

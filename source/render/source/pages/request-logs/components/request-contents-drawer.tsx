@@ -154,7 +154,7 @@ export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
       title: '真实供应商响应',
       protocol: upstreamProtocol,
       sections: [
-        { id: sectionKey('真实供应商响应', `响应头 · ${upstreamLabel}`), label: `响应头 · ${upstreamLabel}`, value: conversion?.upstreamResponseHeaders ?? selectedContent?.responseHeaders ?? null },
+        { id: sectionKey('真实供应商响应', `响应头 · ${upstreamLabel}`), label: `响应头 · ${upstreamLabel}`, value: conversion?.upstreamResponseHeaders ?? selectedContent?.upstreamResponseHeaders ?? selectedContent?.responseHeaders ?? null },
         { id: sectionKey('真实供应商响应', `响应 Body · ${upstreamLabel}`), label: `响应 Body · ${upstreamLabel}`, value: selectedContent?.responseBody ?? null },
       ],
       sectionStates,
@@ -164,7 +164,7 @@ export function RequestContentsDrawer(props: RequestContentsDrawerProps) {
       title: converted ? '协议转换后的客户端响应' : '返回客户端的响应',
       protocol: clientProtocol,
       sections: [
-        { id: sectionKey(converted ? '协议转换后的客户端响应' : '返回客户端的响应', `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
+        { id: sectionKey(converted ? '协议转换后的客户端响应' : '返回客户端的响应', `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
         { id: sectionKey(converted ? '协议转换后的客户端响应' : '返回客户端的响应', `响应 Body · ${clientLabel}`), label: `响应 Body · ${clientLabel}`, value: conversion?.responseBody ?? selectedContent?.responseBody ?? null },
       ],
       sectionStates,

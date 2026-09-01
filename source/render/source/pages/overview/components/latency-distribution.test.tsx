@@ -11,28 +11,18 @@ describe('LatencyDistribution', () => {
     expect(screen.getByText('暂无 TTFT 数据')).not.toBeNull()
   })
 
-  it('uses the TTFT range order for the green-to-red color scale', () => {
-    render(
+  it('renders a vertical bar chart for TTFT buckets', () => {
+    const { container } = render(
       <LatencyDistribution
         buckets={[
-          { range: '< 1s', count: 1, percent: 10 },
-          { range: '1-2s', count: 2, percent: 11 },
-          { range: '2-3s', count: 3, percent: 12 },
-          { range: '3-5s', count: 4, percent: 13 },
-          { range: '> 5s', count: 5, percent: 14 },
+          { range: '0-100ms', count: 1, percent: 50 },
+          { range: '100-200ms', count: 1, percent: 50 },
         ]}
       />,
     )
 
-    const progressBars = screen.getAllByRole('progressbar')
-    expect(progressBars).toHaveLength(5)
-    expect(progressBars.map(bar => bar.className)).toEqual([
-      expect.stringContaining('bg-success'),
-      expect.stringContaining('bg-lime-500'),
-      expect.stringContaining('bg-warning'),
-      expect.stringContaining('bg-orange-500'),
-      expect.stringContaining('bg-destructive'),
-    ])
-    expect(progressBars.map(bar => bar.getAttribute('aria-valuenow'))).toEqual(['10', '11', '12', '13', '14'])
+    expect(screen.queryByText('暂无 TTFT 数据')).toBeNull()
+    expect(container.querySelector('[data-slot="chart"]')).not.toBeNull()
+    expect(screen.queryAllByRole('progressbar')).toEqual([])
   })
 })

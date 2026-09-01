@@ -5,7 +5,8 @@
  */
 
 import type { LogEntry } from '@common/schemas'
-import { clearRuntimeLogs, createRuntimeLog, listAllRuntimeLogs, listRuntimeLogs, pruneRuntimeLogsBefore } from '@server/database/runtime-log-store'
+import type { RuntimeLogFilter } from '@server/database/runtime-log-store'
+import { clearRuntimeLogs, createRuntimeLog, listAllRuntimeLogs, listRuntimeLogs, listRuntimeLogsPaged, pruneRuntimeLogsBefore } from '@server/database/runtime-log-store'
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 
@@ -134,6 +135,24 @@ export function listLogs(options?: ListLogsOptions): LogEntry[] {
     const limit = options?.limit ?? 500
     const filtered = after > 0 ? entries.filter(entry => entry.id > after) : entries
     return filtered.slice(-limit).reverse()
+  }
+}
+
+export interface PagedLogs {
+  logs: LogEntry[]
+  total: number
+}
+
+export function listLogsPaged(limit: number, offset: number, filter?: RuntimeLogFilter): PagedLogs {
+  try {
+    drainPendingEntries()
+    return listRuntimeLogsPaged(limit, offset, filter)
+  } catch {
+    const sorted = [...entries].reverse()
+    const filtered = sorted.filter(entry =>
+      (filter?.level === undefined || entry.level === filter.level) &&
+      (filter?.query === undefined || entry.message.toLowerCase().includes(filter.query.toLowerCase())))
+    return { logs: filtered.slice(offset, offset + limit), total: filtered.length }
   }
 }
 

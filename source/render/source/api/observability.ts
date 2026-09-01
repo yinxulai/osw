@@ -1,11 +1,11 @@
 import type { AnalyticsRange, AnalyticsSummary, LogEntry, ProviderAnalyticsDetail, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
-export type ListLogsParams = { after?: number; limit?: number }
+export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; query?: string }
 export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; providerModelId?: string; logicalModelId?: string; protocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
 
 export const logsApi = {
-  list: (params: ListLogsParams = {}) => request<{ logs: LogEntry[]; latestId: number }>('/logs/list', params),
+  list: (params: ListLogsParams = {}) => request<{ logs: LogEntry[]; total: number }>('/logs/list', params),
   export: () => request<{ content: string }>('/logs/export'),
   clear: () => request<{ cleared: boolean }>('/logs/clear'),
 }

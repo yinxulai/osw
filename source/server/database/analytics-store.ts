@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { RequestSourceStat, RequestStatus } from '@common/schemas'
 import { getDb } from './index'
-import { requestAttempts, requestLogs, requestUsages } from './schema'
+import { requestAttempts, requestLogs, requestMetrics, requestUsages } from './schema'
 
 export interface StatsSummary {
   totalRequests: number
@@ -214,17 +214,56 @@ export async function getModelStats(sinceMs: number, limit = 10, providerId?: st
 
 export interface LatencyBucket { range: string; count: number }
 
+const LATENCY_BUCKET_COUNT = 10
+
+// 线性插值取分位数，样本已按升序排列。
+function percentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0
+  const index = (sortedValues.length - 1) * p
+  const lower = Math.floor(index)
+  const upper = Math.ceil(index)
+  const weight = index - lower
+  return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight
+}
+
+// 把步长向上对齐到整数，确保前 n 个桶覆盖完整的 p95 范围。
+function ceilStep(raw: number): number {
+  return Math.max(1, Math.ceil(raw))
+}
+
+function formatShortDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const seconds = ms / 1000
+  const rounded = Math.round(seconds * 10) / 10
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}s`
+}
+
+// 根据 TTFT 的 p95 把 [0, p95] 均分成 n 份，桶边界对齐整数；超过 p95 的样本单独计入长尾桶。
 export async function getLatencyDistribution(sinceMs: number, providerId?: string): Promise<LatencyBucket[]> {
-  const buckets = [{ range: '< 1s', min: 0, max: 1000 }, { range: '1-2s', min: 1000, max: 2000 }, { range: '2-3s', min: 2000, max: 3000 }, { range: '3-5s', min: 3000, max: 5000 }, { range: '> 5s', min: 5000, max: Number.MAX_SAFE_INTEGER }]
-  const result: LatencyBucket[] = []
-  const providerFilter = providerId
-    ? sql`and exists (SELECT 1 FROM request_attempts provider_attempt WHERE provider_attempt.requestId = ${requestLogs.id} AND provider_attempt.providerId = ${providerId})`
-    : sql``
-  for (const bucket of buckets) {
-    const row = getDb().select({ count: sql<number>`count(*)`.as('count') }).from(requestLogs).where(sql`${requestLogs.createdTime} >= ${sinceMs} ${providerFilter} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') >= ${bucket.min} and (SELECT value FROM request_metrics m WHERE m.requestId = ${requestLogs.id} AND m.key = 'ttftMilliseconds') < ${bucket.max}`).get()
-    result.push({ range: bucket.range, count: row?.count ?? 0 })
+  const filters = [sql`${requestLogs.createdTime} >= ${sinceMs}`]
+  if (providerId) filters.push(sql`exists (SELECT 1 FROM request_attempts provider_attempt WHERE provider_attempt.requestId = ${requestLogs.id} AND provider_attempt.providerId = ${providerId})`)
+  const rows = getDb()
+    .select({ value: requestMetrics.value })
+    .from(requestLogs)
+    .innerJoin(requestMetrics, and(eq(requestMetrics.requestId, requestLogs.id), eq(requestMetrics.key, 'ttftMilliseconds')))
+    .where(and(...filters))
+    .all()
+  const samples = rows.map(row => row.value).sort((left, right) => left - right)
+  if (samples.length === 0) return []
+  const p95 = percentile(samples, 0.95)
+  const step = ceilStep(p95 / LATENCY_BUCKET_COUNT)
+  const tailMin = step * LATENCY_BUCKET_COUNT
+  const buckets: LatencyBucket[] = Array.from({ length: LATENCY_BUCKET_COUNT + 1 }, (_, index) => ({
+    range: index < LATENCY_BUCKET_COUNT
+      ? `${formatShortDuration(index * step)}-${formatShortDuration((index + 1) * step)}`
+      : `> ${formatShortDuration(tailMin)}`,
+    count: 0,
+  }))
+  for (const value of samples) {
+    const index = Math.min(Math.floor(value / step), LATENCY_BUCKET_COUNT)
+    buckets[index].count += 1
   }
-  return result
+  return buckets
 }
 
 export interface FailureReasonStat { reason: string; count: number }

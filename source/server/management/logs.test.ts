@@ -27,9 +27,10 @@ describe('log routes', () => {
 
     const listRes = mockResponse()
     await logRoutes.invoke('/api/logs/list', listRes, { limit: 50 })
-    const listPayload = responseData(listRes) as { data: { logs: Array<{ message: string }>; latestId: number } }
+    const listPayload = responseData(listRes) as { data: { logs: Array<{ message: string }>; total: number } }
     expect(listPayload.data.logs.length).toBeGreaterThan(0)
     expect(listPayload.data.logs[0].message).toContain('hello from logs route test')
+    expect(listPayload.data.total).toBeGreaterThan(0)
 
     const exportRes = mockResponse()
     await logRoutes.invoke('/api/logs/export', exportRes)
@@ -40,5 +41,27 @@ describe('log routes', () => {
     await logRoutes.invoke('/api/logs/clear', clearRes)
     expect(responseData(clearRes)).toEqual({ success: true, data: { cleared: true } })
     expect(listLogs()).toEqual([])
+  })
+
+  it('paginates logs and applies level/query filters', async () => {
+    console.info('alpha marker')
+    console.warn('beta marker')
+
+    const listRes = mockResponse()
+    await logRoutes.invoke('/api/logs/list', listRes, { limit: 1, offset: 0 })
+    const listPayload = responseData(listRes) as { data: { logs: Array<{ level: string }>; total: number } }
+    expect(listPayload.data.logs).toHaveLength(1)
+    expect(listPayload.data.total).toBeGreaterThanOrEqual(2)
+
+    const levelRes = mockResponse()
+    await logRoutes.invoke('/api/logs/list', levelRes, { limit: 50, level: 'warn' })
+    const levelPayload = responseData(levelRes) as { data: { logs: Array<{ level: string; message: string }> } }
+    expect(levelPayload.data.logs.every(log => log.level === 'warn')).toBe(true)
+    expect(levelPayload.data.logs.some(log => log.message.includes('beta marker'))).toBe(true)
+
+    const queryRes = mockResponse()
+    await logRoutes.invoke('/api/logs/list', queryRes, { limit: 50, query: 'alpha marker' })
+    const queryPayload = responseData(queryRes) as { data: { logs: Array<{ message: string }> } }
+    expect(queryPayload.data.logs.every(log => log.message.includes('alpha marker'))).toBe(true)
   })
 })

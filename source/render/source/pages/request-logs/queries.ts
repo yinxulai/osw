@@ -45,7 +45,8 @@ export function useRequestLogDetailQuery(id: string | null) {
     queryKey: ['request-log-detail', id],
     queryFn: () => fetchDetail(id!),
     enabled: Boolean(id),
-    staleTime: 60_000,
+    staleTime: 1_000,
+    refetchInterval: query => query.state.data?.status === 'pending' ? 1_500 : false,
   })
 }
 

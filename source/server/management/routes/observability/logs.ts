@@ -2,8 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
-import type { LogEntry } from '@common/schemas'
-import { clearLogs, exportLogs, listLogs } from '../../infrastructure/log-buffer'
+import { clearLogs, exportLogs, listLogsPaged } from '../../infrastructure/log-buffer'
 import { HttpRouter } from '@server/http-router'
 
 export const logRoutes = new HttpRouter<ManagementHandler>()
@@ -11,12 +10,19 @@ export const logRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/logs/export', handleExportLogs)
   .post('/api/logs/clear', handleClearLogs)
 
-const ListLogsSchema = z.object({ after: z.number().int().nonnegative().optional(), limit: z.number().int().positive().max(2000).optional() })
+const ListLogsSchema = z.object({
+  limit: z.number().int().positive().max(500).optional(),
+  offset: z.number().int().nonnegative().optional(),
+  level: z.enum(['log', 'warn', 'error', 'info', 'debug']).optional(),
+  query: z.string().max(500).optional(),
+})
 
 function handleListLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
-  const { after, limit } = ListLogsSchema.parse(body)
-  const logs: LogEntry[] = listLogs({ after, limit })
-  sendSuccess(res, { logs, latestId: logs.length > 0 ? logs[0].id : (after ?? 0) })
+  const { limit, offset, level, query } = ListLogsSchema.parse(body)
+  const pageSize = limit ?? 100
+  const normalizedQuery = query?.trim() || undefined
+  const result = listLogsPaged(pageSize, offset ?? 0, { level, query: normalizedQuery })
+  sendSuccess(res, { logs: result.logs, total: result.total })
 }
 
 function handleExportLogs(_req: IncomingMessage, res: ServerResponse): void {
