@@ -8,7 +8,14 @@ interface ListRuntimeLogsOptions {
 
 const DEFAULT_LIMIT = 500
 
-function mapLogRow(row: { id: number | bigint; level: string; message: string; timestamp: number | bigint }): LogEntry {
+type RuntimeLogRow = {
+  id: number | bigint
+  level: string
+  message: string
+  timestamp: number | bigint
+}
+
+function mapLogRow(row: RuntimeLogRow): LogEntry {
   return {
     id: Number(row.id),
     level: row.level as LogEntry['level'],
@@ -37,20 +44,20 @@ export function listRuntimeLogs(options?: ListRuntimeLogsOptions): LogEntry[] {
   if (after > 0) {
     const rows = getDb().$client
       .prepare('SELECT id, level, message, timestamp FROM runtime_logs WHERE id > ? ORDER BY id DESC LIMIT ?')
-      .all(after, limit) as Array<{ id: number | bigint; level: string; message: string; timestamp: number | bigint }>
+      .all(after, limit) as RuntimeLogRow[]
     return rows.map(mapLogRow)
   }
 
   const rows = getDb().$client
     .prepare('SELECT id, level, message, timestamp FROM runtime_logs ORDER BY id DESC LIMIT ?')
-    .all(limit) as Array<{ id: number | bigint; level: string; message: string; timestamp: number | bigint }>
+    .all(limit) as RuntimeLogRow[]
   return rows.map(mapLogRow)
 }
 
 export function listAllRuntimeLogs(): LogEntry[] {
   const rows = getDb().$client
     .prepare('SELECT id, level, message, timestamp FROM runtime_logs ORDER BY id ASC')
-    .all() as Array<{ id: number | bigint; level: string; message: string; timestamp: number | bigint }>
+    .all() as RuntimeLogRow[]
   return rows.map(mapLogRow)
 }
 

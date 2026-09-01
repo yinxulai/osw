@@ -58,6 +58,7 @@ function emit(event: string, ...args: unknown[]) {
 }
 
 beforeEach(() => {
+  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
   mocks.handlers.clear()
   vi.clearAllMocks()
   mocks.app.isPackaged = false

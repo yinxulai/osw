@@ -33,6 +33,10 @@ interface UpstreamRequestIdProps {
   requestId: string | null
 }
 
+interface RequestLogIdLinkProps {
+  requestId: string
+}
+
 interface ProviderRouteProps {
   attempts: RequestLogEntryAttempt[]
   onSelect: (attemptId: string) => void
@@ -116,7 +120,7 @@ function UpstreamRequestId(props: UpstreamRequestIdProps) {
   )
 }
 
-function RequestLogIdLink(props: { requestId: string }) {
+function RequestLogIdLink(props: RequestLogIdLinkProps) {
   const navigate = useNavigate()
 
   return (
