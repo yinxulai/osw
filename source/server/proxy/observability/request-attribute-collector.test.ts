@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectRequestAttributes } from './request-attribute-collector'
+import { collectRequestAttributes, extractClientRequestId } from './request-attribute-collector'
 
 function collectedAttributes(userAgent: string, extra: Record<string, string> = {}) {
   return Object.fromEntries(collectRequestAttributes({ 'user-agent': userAgent, ...extra }).map(attribute => [attribute.key, attribute.value]))
@@ -28,5 +28,13 @@ describe('collectRequestAttributes', () => {
       'client.name': 'curl',
       'request.source': 'build-agent',
     })
+  })
+
+  it('captures client request id from common headers', () => {
+    expect(collectedAttributes('curl/8.0.1', { 'x-ms-client-request-id': 'eeb9e968-272c-4cb2-85d8-f9826e86bd19' })).toMatchObject({
+      'request.client_request_id': 'eeb9e968-272c-4cb2-85d8-f9826e86bd19',
+    })
+    expect(extractClientRequestId({ 'x-client-request-id': 'client-id-123' })).toBe('client-id-123')
+    expect(extractClientRequestId({ 'x-request-id': 'request-id-456' })).toBe('request-id-456')
   })
 })

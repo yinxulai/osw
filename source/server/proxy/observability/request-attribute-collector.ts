@@ -4,6 +4,15 @@ import type { RequestAttributeValueType } from '@common/schemas'
 
 const MAX_VALUE_LENGTH = 4096
 const USER_AGENT_MAX_LENGTH = 1024
+const CLIENT_REQUEST_ID_HEADERS = [
+  'x-ms-client-request-id',
+  'client-request-id',
+  'x-client-request-id',
+  'x-request-id',
+  'request-id',
+  'x-correlation-id',
+] as const
+
 const detector = new DeviceDetector({ skipBotDetection: true })
 
 export interface RequestAttributeInput {
@@ -16,6 +25,7 @@ export function collectRequestAttributes(headers: IncomingHttpHeaders): RequestA
   const attributes: RequestAttributeInput[] = []
   const userAgent = normalizeHeaderValue(headers['user-agent'])
   const source = normalizeHeaderValue(headers['x-one-switch-source'])
+  const clientRequestId = extractClientRequestId(headers)
 
   if (userAgent) {
     const normalizedUserAgent = normalizeValue(userAgent, USER_AGENT_MAX_LENGTH)
@@ -44,7 +54,16 @@ export function collectRequestAttributes(headers: IncomingHttpHeaders): RequestA
   }
 
   if (source) attributes.push({ key: 'request.source', value: normalizeValue(source), valueType: 'string' })
+  if (clientRequestId) attributes.push({ key: 'request.client_request_id', value: normalizeValue(clientRequestId), valueType: 'string' })
   return attributes
+}
+
+export function extractClientRequestId(headers: IncomingHttpHeaders): string | null {
+  for (const header of CLIENT_REQUEST_ID_HEADERS) {
+    const value = normalizeHeaderValue(headers[header])
+    if (value && value.trim()) return value.trim()
+  }
+  return null
 }
 
 function addAttribute(attributes: RequestAttributeInput[], key: string, value: string | undefined): void {

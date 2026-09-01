@@ -9,7 +9,7 @@ import { validateLogicalModel } from './request'
 import { resolveProxyTargets } from '../routing/routing'
 import { detectProtocolFromPath } from '../routing/router'
 import { getManualModel } from '../routing/manual-routing'
-import { collectRequestAttributes } from '@server/proxy/observability/request-attribute-collector'
+import { collectRequestAttributes, extractClientRequestId } from '@server/proxy/observability/request-attribute-collector'
 
 export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string, hooks: ProxyObservationHooks = {}): Promise<void> {
   const requestId = generateId('req_')
@@ -25,7 +25,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     console.debug(`[proxy] client request aborted requestId=${requestId} phase=read-body`)
     return
   }
-  console.debug(`[proxy] request accepted requestId=${requestId} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} bodyBytes=${requestBody.length}`)
+  const clientRequestId = extractClientRequestId(req.headers)
+  console.debug(`[proxy] request accepted requestId=${requestId} clientRequestId=${clientRequestId ?? 'none'} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} bodyBytes=${requestBody.length}`)
   const modelValidationError = validateLogicalModel(requestBody)
   if (modelValidationError) {
     console.warn(`[proxy] invalid model request requestId=${requestId} protocol=${protocol} reason=${modelValidationError}`)
