@@ -30,7 +30,109 @@ afterEach(() => {
 })
 
 describe('getAvailableModels', () => {
-  it('skips only the cooled provider model while preserving siblings from the same provider', async () => {
+  it('keeps available models first and preserves original order within each group', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_a', providerId: 'prov_shared', modelName: 'a', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_b', providerId: 'prov_shared', modelName: 'b', endpoints: [], priority: 2, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_c', providerId: 'prov_shared', modelName: 'c', endpoints: [], priority: 3, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_d', providerId: 'prov_shared', modelName: 'd', endpoints: [], priority: 4, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+    mocks.unavailableModels.add('model_b')
+    mocks.unavailableModels.add('model_d')
+
+    const available = await getAvailableModels('default')
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_a', 'model_c', 'model_b', 'model_d'])
+  })
+
+  it('filters disabled models while keeping available and unavailable order', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_available_first', providerId: 'prov_shared', modelName: 'available-first', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_disabled_first', providerId: 'prov_shared', modelName: 'disabled-first', endpoints: [], priority: 2, enabled: false, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_unavailable_first', providerId: 'prov_shared', modelName: 'unavailable-first', endpoints: [], priority: 3, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_disabled_second', providerId: 'prov_shared', modelName: 'disabled-second', endpoints: [], priority: 4, enabled: false, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_available_second', providerId: 'prov_shared', modelName: 'available-second', endpoints: [], priority: 5, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+      { id: 'model_unavailable_second', providerId: 'prov_shared', modelName: 'unavailable-second', endpoints: [], priority: 6, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+    mocks.unavailableModels.add('model_unavailable_first')
+    mocks.unavailableModels.add('model_unavailable_second')
+
+    const available = await getAvailableModels('default')
+
+    expect(available.map(entry => entry.model.id)).toEqual([
+      'model_available_first',
+      'model_available_second',
+      'model_unavailable_first',
+      'model_unavailable_second',
+    ])
+    expect(available.some(entry => entry.model.id.startsWith('model_disabled'))).toBe(false)
+  })
+
+  it('skips disabled providers in automatic routing', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_disabled',
+      name: 'Disabled Provider',
+      apiKeyReference: 'disabled-key',
+      timeoutMilliseconds: 1_000,
+      enabled: false,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    mocks.models = [
+      { id: 'model_disabled_provider', providerId: 'prov_disabled', modelName: 'disabled-provider', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+
+    const available = await getAvailableModels('default')
+
+    expect(available).toEqual([])
+  })
+
+  it('skips deleted providers in automatic routing', async () => {
+    const time = Date.now()
+    mocks.provider = {
+      id: 'prov_deleted',
+      name: 'Deleted Provider',
+      apiKeyReference: 'deleted-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: time,
+    }
+    mocks.models = [
+      { id: 'model_deleted_provider', providerId: 'prov_deleted', modelName: 'deleted-provider', endpoints: [], priority: 1, enabled: true, createdTime: time, updatedTime: time, deletedTime: null },
+    ]
+
+    const available = await getAvailableModels('default')
+
+    expect(available).toEqual([])
+  })
+
+  it('keeps cooled provider models behind healthy ones', async () => {
     const time = Date.now()
     mocks.provider = {
       id: 'prov_shared',
@@ -50,7 +152,7 @@ describe('getAvailableModels', () => {
 
     const available = await getAvailableModels('default')
 
-    expect(available.map(entry => entry.model.id)).toEqual(['model_ready'])
+    expect(available.map(entry => entry.model.id)).toEqual(['model_ready', 'model_cooled'])
   })
 
   it('returns the full queue in order when every model is unavailable', async () => {

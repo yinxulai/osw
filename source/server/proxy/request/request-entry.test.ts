@@ -8,6 +8,7 @@ import { configureSecretStore } from '@server/infrastructure/secrets/secret-stor
 const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
   captureRequestContent: false,
+  listRulesForProviderModel: vi.fn(),
   markProviderFailure: vi.fn(),
   markProviderSuccess: vi.fn(),
   markProviderModelFailure: vi.fn(),
@@ -61,6 +62,12 @@ vi.mock('@server/database/request-log-store', () => ({
   pruneRequestLogs: mocks.pruneRequestLogs,
 }))
 
+vi.mock('@server/database/request-rewrite-rule-store', () => ({
+  listRulesForProviderModel: mocks.listRulesForProviderModel,
+}))
+
+mocks.listRulesForProviderModel.mockResolvedValue([])
+
 import { handleProxyRequest } from './request-entry'
 import { getManualModel, setManualModel } from '../routing/manual-routing'
 
@@ -72,6 +79,7 @@ afterEach(async () => {
   setManualModel('secondary', null)
   mocks.models = []
   mocks.captureRequestContent = false
+  mocks.listRulesForProviderModel.mockResolvedValue([])
   vi.clearAllMocks()
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
 })
@@ -141,6 +149,49 @@ describe('handleProxyRequest', () => {
     setManualModel('default', null)
     expect(getManualModel('default')).toBeNull()
     expect(getManualModel('secondary')).toBe('model_secondary')
+  })
+
+  it('rejects unknown api paths before creating a request log', async () => {
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/unknown`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default' }),
+    })
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({
+      success: false,
+      errorCode: 'UNKNOWN_API_PATH',
+      errorMessage: '无法识别的 API 路径',
+    })
+    expect(mocks.createRequestLog).not.toHaveBeenCalled()
+  })
+
+  it('rejects requests without any supported upstream target', async () => {
+    mocks.models = [
+      model('model_text', 'prov_text', 'https://example.com/v1/completions', 'text-model', 'openai-completions'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', messages: [] }),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      success: false,
+      errorCode: 'NO_AVAILABLE_PROVIDER',
+      errorMessage: expect.stringContaining('没有可用的上游 Provider'),
+    })
+    expect(mocks.createRequestLog).not.toHaveBeenCalled()
   })
 
   it('starts routing from the manually selected provider model', async () => {
@@ -405,6 +456,53 @@ describe('handleProxyRequest', () => {
     expect(mocks.createRequestLog).not.toHaveBeenCalled()
   })
 
+  it('rejects request rewrite failures before any upstream attempt', async () => {
+    mocks.listRulesForProviderModel.mockResolvedValue([
+      {
+        id: 'rule_protected_header',
+        name: 'Protected Header',
+        description: '',
+        enabled: true,
+        scope: 'model',
+        schemaVersion: 1,
+        source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] },
+        actions: [{ type: 'header-set', stage: 'request', name: 'Authorization', value: 'blocked' }],
+        testCases: [],
+        createdTime: 1,
+        updatedTime: 1,
+        deletedTime: null,
+      },
+    ])
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstreamHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => res.end())
+    const upstream = await listen(upstreamHandler)
+    mocks.models = [model('model_rewrite', 'prov_rewrite', `${upstream.url}/v1/completions`, 'rewrite-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(422)
+    expect(await response.json()).toEqual({
+      success: false,
+      errorCode: 'REQUEST_REWRITE_RULE_FAILED',
+      errorMessage: '禁止修改受保护 Header: Authorization',
+    })
+    expect(upstreamHandler).not.toHaveBeenCalled()
+    expect(mocks.createRequestAttempt).not.toHaveBeenCalled()
+    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
+  })
+
   it('discards a retryable response before forwarding the next successful response', async () => {
     configureSecretStore({
       set: async () => undefined,
@@ -581,6 +679,59 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
   })
 
+  it('fails over after an upstream connection timeout', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const first = await listen((_req, _res) => {
+      // Keep the socket open so the proxy hits the configured request timeout.
+    })
+    const second = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"provider":"second"}')
+    })
+    const timedOutModel = model('model_failed', 'prov_failed', `${first.url}/v1/completions`, 'failed-model')
+    timedOutModel.provider.timeoutMilliseconds = 20
+    mocks.models = [
+      timedOutModel,
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ provider: 'second' })
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      providerId: 'prov_failed',
+      providerModelId: 'model_failed',
+      httpStatus: null,
+      retryable: true,
+      status: 'failed',
+      errorCode: 'UPSTREAM_ERROR',
+      errorMessage: 'Connection timeout',
+    }))
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      providerId: 'prov_second',
+      providerModelId: 'model_second',
+      httpStatus: 200,
+      retryable: false,
+      status: 'success',
+    }))
+    expect(mocks.markProviderFailure).toHaveBeenCalledWith('prov_failed')
+    expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_failed')
+    expect(mocks.markProviderSuccess).toHaveBeenCalledWith('prov_second')
+    expect(mocks.markProviderModelSuccess).toHaveBeenCalledWith('model_second')
+  })
+
   it.each([
     { status: 400, body: '{"error":"provider-specific validation"}' },
     { status: 422, body: '{"error":"unsupported parameter"}' },
@@ -709,6 +860,57 @@ describe('handleProxyRequest', () => {
     }))
     const attemptContent = mocks.createRequestContent.mock.calls.find(([input]) => input.responseStatus === 503)?.[0]
     expect(attemptContent).toEqual(expect.objectContaining({ captureStatus: 'partial', responseBody: firstChunk }))
+  })
+
+  it('does not fail over after downstream streaming has already started', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const first = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write('data: {"type":"response.output_text.delta","delta":"partial"}\n\n', () => {
+        setImmediate(() => res.socket?.destroy(new Error('stream interrupted after headers')))
+      })
+    })
+    const secondHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.end('data: {"type":"response.output_text.delta","delta":"fallback"}\n\n')
+    })
+    const second = await listen(secondHandler)
+    mocks.models = [
+      model('model_started_stream', 'prov_started_stream', `${first.url}/v1/responses`, 'started-stream-model', 'openai-responses'),
+      model('model_fallback_stream', 'prov_fallback_stream', `${second.url}/v1/responses`, 'fallback-stream-model', 'openai-responses'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res, 'default')
+    })
+
+    const response = await fetch(`${proxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', input: 'Hello', stream: true }),
+    })
+
+    await response.text().catch(() => undefined)
+    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+      (input as { status?: string }).status === 'failed'
+    )))
+
+    expect(secondHandler).not.toHaveBeenCalled()
+    expect(mocks.createRequestAttempt).toHaveBeenCalledTimes(1)
+    expect(mocks.createRequestAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'prov_started_stream',
+      providerModelId: 'model_started_stream',
+      status: 'failed',
+      errorCode: 'UPSTREAM_STREAM_ERROR',
+    }))
+    expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
+      captureStatus: 'partial',
+      responseStatus: 200,
+    }))
   })
 
   it('stores the complete retry response body and upstream headers', async () => {

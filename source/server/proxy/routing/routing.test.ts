@@ -38,6 +38,20 @@ describe('resolveProxyTargets', () => {
     expect(result.manualModelUnavailable).toBe(false)
   })
 
+  it('keeps only protocol-compatible targets and preserves their relative order', async () => {
+    mocks.models = [
+      { model: model('a'), provider },
+      { model: model('b', 'anthropic-messages'), provider },
+      { model: model('c', 'openai-completions', true), provider },
+      { model: model('d', 'openai-responses'), provider },
+    ]
+
+    const result = await resolveProxyTargets('logical', 'openai-completions')
+
+    expect(result.targets.map(target => target.model.id)).toEqual(['a', 'c'])
+    expect(result.availableModels.map(target => target.model.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
   it('only uses the manually selected model without fallback', async () => {
     mocks.models = [{ model: model('a'), provider }, { model: model('b'), provider }, { model: model('c'), provider }]
     mocks.manualModel = 'b'

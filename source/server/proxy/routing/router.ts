@@ -1,9 +1,9 @@
 import { listProviderModelsForLogicalModel } from '@server/database/model-store'
 import { getProvider } from '@server/database/provider-store'
-import { isProviderAvailable, isProviderModelAvailable } from '@server/proxy/upstream/health'
 import { isConvertible } from '@common/protocols'
 import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
 import { HttpRouter } from '@server/http-router'
+import { isProviderAvailable, isProviderModelAvailable } from '@server/proxy/upstream/health'
 import { registerOpenAiCompletionsRoutes } from '@server/proxy/protocols/openai-completions/routes'
 import { registerOpenAiResponsesRoutes } from '@server/proxy/protocols/openai-responses/routes'
 import { registerAnthropicMessagesRoutes } from '@server/proxy/protocols/anthropic-messages/routes'
@@ -19,16 +19,17 @@ export interface AvailableModelsOptions {
 }
 
 /**
- * 获取逻辑模型绑定�?ProviderModel 列表，按数据库返回的队列顺序排列�?
- * 自动模式只调度已启用且健康的模型；若健康模型为零，则返回全部已启用模�?
- * 逐个探测。手动模式只返回指定模型，不受启用状态或健康冷却影响�?
+ * 获取逻辑模型绑定?ProviderModel 列表，按数据库返回的队列顺序排列�?
+ * 自动模式保持用户指定的原始顺序：可用模型排在前面，不可用模型整体后移；
+ * 两个分组内部都保持用户设置的先后级别。
+ * 手动模式只返回指定模型，不受启用状态或健康冷却影响�?
  */
 export async function getAvailableModels(logicalModelId = 'default', options: AvailableModelsOptions = {}): Promise<ModelWithProvider[]> {
   const manualModelId = options.manualModelId ?? null
   const models = await listProviderModelsForLogicalModel(logicalModelId, false, manualModelId !== null)
 
-  const allModels: ModelWithProvider[] = []
   const availableModels: ModelWithProvider[] = []
+  const unavailableModels: ModelWithProvider[] = []
 
   for (const model of models) {
     if (manualModelId !== null && model.id !== manualModelId) continue
@@ -40,14 +41,13 @@ export async function getAvailableModels(logicalModelId = 'default', options: Av
     const candidate = { model, provider }
     if (manualModelId !== null) return [candidate]
     if (!provider.enabled) continue
-    allModels.push(candidate)
 
-    if (!await isProviderAvailable(provider.id)) continue
-    if (!await isProviderModelAvailable(model.id)) continue
-    availableModels.push(candidate)
+    const healthy = await isProviderAvailable(provider.id) && await isProviderModelAvailable(model.id)
+    if (healthy) availableModels.push(candidate)
+    else unavailableModels.push(candidate)
   }
 
-  return availableModels.length > 0 ? availableModels : allModels
+  return [...availableModels, ...unavailableModels]
 }
 
 /**
