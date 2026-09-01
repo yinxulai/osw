@@ -69,5 +69,5 @@ export function pruneRuntimeLogsBefore(retentionDays: number): number {
   if (!Number.isInteger(retentionDays) || retentionDays < 1) return 0
   const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
   const result = getDb().$client.prepare('DELETE FROM runtime_logs WHERE timestamp < ?').run(cutoff)
-  return result.changes
+  return Number(result.changes)
 }
