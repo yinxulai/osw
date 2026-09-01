@@ -189,6 +189,20 @@ export const requestLogs = sqliteTable(
   table => [index('idx_request_logs_created_time').on(table.createdTime), index('idx_request_logs_status').on(table.status), index('idx_request_logs_logical_model').on(table.logicalModelId)],
 )
 
+export const runtimeLogs = sqliteTable(
+  'runtime_logs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    level: text('level').notNull(),
+    message: text('message').notNull(),
+    timestamp: integer('timestamp').notNull(),
+  },
+  table => [
+    index('idx_runtime_logs_timestamp').on(table.timestamp),
+    index('idx_runtime_logs_level_timestamp').on(table.level, table.timestamp),
+  ],
+)
+
 export const requestMetrics = sqliteTable(
   'request_metrics',
   {
@@ -321,6 +335,7 @@ export type ProviderModelEndpointRow = typeof providerModelEndpoints.$inferSelec
 export type ProtocolConverterRow = typeof protocolConverters.$inferSelect
 export type SchedulingPolicyRow = typeof schedulingPolicies.$inferSelect
 export type RequestLogRow = typeof requestLogs.$inferSelect
+export type RuntimeLogRow = typeof runtimeLogs.$inferSelect
 export type RequestMetricRow = typeof requestMetrics.$inferSelect
 export type RequestAttributeRow = typeof requestAttributes.$inferSelect
 export type RequestUsageRow = typeof requestUsages.$inferSelect

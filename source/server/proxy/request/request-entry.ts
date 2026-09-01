@@ -8,6 +8,7 @@ import { createRequestContext } from './request-context'
 import { validateLogicalModel } from './request'
 import { resolveProxyTargets } from '../routing/routing'
 import { detectProtocolFromPath } from '../routing/router'
+import { getManualModel } from '../routing/manual-routing'
 import { collectRequestAttributes } from '@server/proxy/observability/request-attribute-collector'
 
 export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, logicalModelId: string, hooks: ProxyObservationHooks = {}): Promise<void> {
@@ -62,8 +63,9 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   })
   await hooks.onRequestStarted?.(context)
 
+  const manualModelId = getManualModel(logicalModelId)
   const { availableModels, targets, manualModelUnavailable } = await resolveProxyTargets(logicalModelId, protocol)
-  console.debug(`[proxy] routing resolved requestId=${requestId} logicalModelId=${logicalModelId} protocol=${protocol} availableModels=${availableModels.length} targets=${targets.length} targetOrder=${targets.map(target => target.model.id).join(',') || 'none'} manualModelUnavailable=${manualModelUnavailable}`)
+  console.debug(`[proxy] routing resolved requestId=${requestId} logicalModelId=${logicalModelId} protocol=${protocol} manualModelId=${manualModelId ?? 'none'} availableModels=${availableModels.length} targets=${targets.length} targetOrder=${targets.map(target => target.model.id).join(',') || 'none'} manualModelUnavailable=${manualModelUnavailable}`)
   if (manualModelUnavailable) {
     console.warn(`[proxy] manual provider model unavailable requestId=${requestId} logicalModelId=${logicalModelId} protocol=${protocol}`)
     writeJsonError(res, 409, 'MANUAL_MODEL_UNAVAILABLE', '手动指定的 ProviderModel 当前不可用于该协议')

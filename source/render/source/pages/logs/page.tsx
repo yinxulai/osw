@@ -3,8 +3,12 @@ import { LogsTable } from './components/logs-table'
 import { LogsToolbar } from './components/logs-toolbar'
 import { useLogsModel } from './hooks/use-logs-model'
 
-export function LogsPage() {
-  const model = useLogsModel()
+interface LogsPageProps {
+  q?: string
+}
+
+export function LogsPage(props: LogsPageProps) {
+  const model = useLogsModel(props.q)
   return (
     <PageLayout>
       <PageHeader

@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { logsApi } from '@/api/observability'
 import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
 import { useLogsUiStore } from '../store'
 
-export function useLogsModel() {
+export function useLogsModel(initialSearchText?: string) {
   const toast = useToast()
   const client = useQueryClient()
   const live = useLogsUiStore(state => state.live)
@@ -15,6 +15,11 @@ export function useLogsModel() {
   const searchText = useLogsUiStore(state => state.searchText)
   const setSearchText = useLogsUiStore(state => state.setSearchText)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  useEffect(() => {
+    setSearchText(initialSearchText ?? '')
+    if (initialSearchText?.trim()) setLevelFilter('all')
+  }, [initialSearchText, setLevelFilter, setSearchText])
+
   const query = useQuery({ queryKey: ['runtime-logs'], queryFn: () => unwrap(logsApi.list({ limit: 2000 })).then(data => data.logs), refetchInterval: live ? 2_000 : false })
   const exportMutation = useMutation({ mutationFn: () => unwrap(logsApi.export()) })
   const clearMutation = useMutation({ mutationFn: () => unwrap(logsApi.clear()), onSuccess: () => { client.setQueryData(['runtime-logs'], []); setClearDialogOpen(false); toast.success('运行日志已清空') } })

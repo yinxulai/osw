@@ -117,7 +117,24 @@ function OverviewProviderRoute() {
 const accessRoute = createRoute({ getParentRoute: () => rootRoute, path: '/access', component: AccessConfigPage })
 const rulesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/rules', component: RequestRewriteRulesPage })
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestLogsPage })
-const logsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/logs', component: LogsPage })
+
+interface LogsSearch {
+  q?: string
+}
+
+const logsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/logs',
+  validateSearch: (search: Record<string, unknown>): LogsSearch => ({
+    q: typeof search.q === 'string' && search.q.trim() ? search.q.trim() : undefined,
+  }),
+  component: LogsRoute,
+})
+
+function LogsRoute() {
+  const { q } = logsRoute.useSearch()
+  return <LogsPage q={q} />
+}
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute })
 
 function SettingsRoute() {

@@ -6,6 +6,7 @@ import { findConvertibleEndpoint, findEndpoint, type ModelWithProvider } from '@
 import type { Protocol, RawUsage } from '@common/schemas'
 import { resolveUpstreamUrl } from '@server/proxy/request/request'
 import { classifyHealthFailure, classifyUpstreamStatus } from '@server/proxy/response/response'
+import type { HealthFailureScope } from '@server/proxy/response/response'
 import { createAuthHeaders } from '@server/proxy/upstream/auth'
 import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { isOutboundProxyConnectionError } from '@server/infrastructure/network/outbound-connector'
@@ -75,10 +76,11 @@ function formatTarget(target: ModelWithProvider): string {
   return `${target.provider.name}/${target.model.modelName} [providerId=${target.provider.id}, providerModelId=${target.model.id}]`
 }
 
-async function recordHealthFailure(target: ModelWithProvider, statusCode: number | null, responseBody?: string | null): Promise<void> {
+async function recordHealthFailure(target: ModelWithProvider, statusCode: number | null, responseBody?: string | null): Promise<HealthFailureScope> {
   const scope = classifyHealthFailure(statusCode, responseBody)
   if (scope === 'provider') await markProviderFailure(target.provider.id)
   if (scope === 'provider-model') await markProviderModelFailure(target.model.id)
+  return scope
 }
 
 export interface ProxyExecutionOptions {
@@ -140,10 +142,10 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     },
     onFailover: async (target, outcome, attemptIndex) => {
       const nextTarget = targets[attemptIndex + 1]
+      const healthScope = await recordHealthFailure(target, outcome.statusCode, outcome.responseBody)
       console.warn(
-        `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.model.id ?? 'none'}`,
+        `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.model.id ?? 'none'} healthFailureScope=${healthScope}`,
       )
-      await recordHealthFailure(target, outcome.statusCode, outcome.responseBody)
     },
     onError: async (target, err, attemptIndex) => {
       const lastError = err instanceof Error ? err : new Error(String(err))
@@ -223,8 +225,14 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
         console.error(`[proxy] 写入请求尝试日志失败: ${(logError as Error).message}`)
       }
       const recordedOutcome = err instanceof RecordedAttemptError ? err.outcome : null
+      let healthScope: HealthFailureScope = 'none'
       if (!isOutboundProxyConnectionError(err)) {
-        await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.responseBody)
+        healthScope = await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome?.responseBody)
+      }
+      if (healthScope !== 'none') {
+        console.debug(
+          `[proxy] health failure recorded requestId=${requestId} attempt=${attemptIndex} providerId=${target.provider.id} providerModelId=${target.model.id} scope=${healthScope} status=${recordedOutcome?.statusCode ?? 'none'}`,
+        )
       }
       if (response.headersSent) {
         if (err instanceof RecordedAttemptError) await requestLogger.finalizeRequestContent(err.outcome)

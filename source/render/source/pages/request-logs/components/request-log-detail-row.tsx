@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Braces, CheckCircle2, ChevronRight, Copy, Gauge, Route, XCircle } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import type { RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,9 @@ interface MetricCardProps {
   hint?: string
   accent?: boolean
 }
+
+const RUNTIME_LOG_RETENTION_DAYS = 3
+const RUNTIME_LOG_RETENTION_MS = RUNTIME_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
 
 const STATUS_BADGE: Record<string, string> = {
   pending: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
@@ -109,6 +113,24 @@ function UpstreamRequestId(props: UpstreamRequestIdProps) {
         </button>
       )}
     </div>
+  )
+}
+
+function RequestLogIdLink(props: { requestId: string }) {
+  const navigate = useNavigate()
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 px-2 font-mono text-[11px] text-muted-foreground"
+      onClick={event => {
+        event.stopPropagation()
+        void navigate({ to: '/logs', search: { q: props.requestId } })
+      }}
+    >
+      查看日志
+    </Button>
   )
 }
 
@@ -218,6 +240,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const contents = 'contents' in log ? log.contents : null
   const requestRewriteRules = 'requestRewriteRules' in log ? log.requestRewriteRules : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
+  const canOpenRuntimeLogs = Date.now() - log.createdTime <= RUNTIME_LOG_RETENTION_MS
 
   return (
     <tr className="bg-muted/20">
@@ -243,21 +266,10 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                     </>
                   ) : <span className="text-muted-foreground/70"> · 原生协议</span>}
                 </span><span>·</span>
-                <span className="font-mono">{log.id}</span>
+                <span className="font-mono text-[11px] text-muted-foreground/80">请求 ID：{log.id}</span>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-[11px] text-muted-foreground"
-              onClick={event => {
-                event.stopPropagation()
-                void navigator.clipboard.writeText(log.id)
-              }}
-            >
-              <Copy size={12} />
-              复制 ID
-            </Button>
+            {canOpenRuntimeLogs && <RequestLogIdLink requestId={log.id} />}
           </div>
 
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">

@@ -34,6 +34,7 @@ export function useRequestLogsService() {
   const refresh = useCallback((targetPage = page) => queryClient.invalidateQueries({ queryKey: ['request-logs', filter, targetPage] }), [filter, page, queryClient])
   const setFilter = useCallback((next: Partial<RequestLogFilter>) => { setFilterState(next) }, [setFilterState])
   const goToPage = useCallback((targetPage: number) => setPage(targetPage), [setPage])
+
   return {
     logs: logsQuery.data?.logs ?? [], total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
