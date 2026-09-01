@@ -116,6 +116,7 @@ function model(id: string, providerId: string, upstreamUrl: string, upstreamMode
       name: providerId,
       apiKeyReference: `${providerId}_key`,
       timeoutMilliseconds: 1_000,
+      queueGroupEnabled: false,
       enabled: true,
       createdTime: time,
       updatedTime: time,

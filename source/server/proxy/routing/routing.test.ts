@@ -22,6 +22,7 @@ import { resolveAttemptSnapshot, resolveProxyTargets } from '@server/proxy/routi
 
 const provider: Provider = {
   id: 'prov_1', name: 'Provider', apiKeyReference: 'key', timeoutMilliseconds: 1000,
+  queueGroupEnabled: false,
   enabled: true, createdTime: 0, updatedTime: 0, deletedTime: null,
 }
 function model(id: string, protocol: 'openai-completions' | 'openai-responses' | 'anthropic-messages' = 'openai-completions', conversion = false): ProviderModelRoute {

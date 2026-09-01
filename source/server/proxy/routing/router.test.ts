@@ -37,6 +37,7 @@ describe('getAvailableModels', () => {
       name: 'Shared Provider',
       apiKeyReference: 'shared-key',
       timeoutMilliseconds: 1_000,
+      queueGroupEnabled: false,
       enabled: true,
       createdTime: time,
       updatedTime: time,
@@ -60,6 +61,7 @@ describe('getAvailableModels', () => {
       name: 'Shared Provider',
       apiKeyReference: 'shared-key',
       timeoutMilliseconds: 1_000,
+      queueGroupEnabled: false,
       enabled: true,
       createdTime: time,
       updatedTime: time,
@@ -81,6 +83,7 @@ describe('getAvailableModels', () => {
     const time = Date.now()
     mocks.provider = {
       id: 'prov_shared', name: 'Shared Provider', apiKeyReference: 'shared-key', timeoutMilliseconds: 1_000,
+      queueGroupEnabled: false,
       enabled: true, createdTime: time, updatedTime: time, deletedTime: null,
     }
     mocks.models = [
@@ -97,6 +100,7 @@ describe('getAvailableModels', () => {
     const time = Date.now()
     mocks.provider = {
       id: 'prov_shared', name: 'Shared Provider', apiKeyReference: 'shared-key', timeoutMilliseconds: 1_000,
+      queueGroupEnabled: false,
       enabled: false, createdTime: time, updatedTime: time, deletedTime: null,
     }
     mocks.models = [

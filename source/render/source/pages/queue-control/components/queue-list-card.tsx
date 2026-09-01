@@ -10,14 +10,17 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowRight, ListTree, RefreshCw, Target } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { TableHeaderSurface } from '@/components/table-primitives'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SortableQueueModel } from './sortable-queue-model'
+import { SortableQueueGroup } from './sortable-queue-group'
 import { QueueModelRow } from './queue-model-row'
+import { QueueGroupHeader } from './queue-group-header'
+import { buildQueueUnits } from '../lib/queue-groups'
 import { queueModelMetricKey, type QueueModelMetrics } from '../lib/model-metrics'
 import type { ProviderModelRoute, Provider, ProviderHealth, ProviderModelHealth } from '@common/schemas'
 
@@ -66,12 +69,27 @@ export function QueueListCard(props: QueueListCardProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  const itemIds = useMemo(() => models.map(model => model.id), [models])
+  // 分组默认收起：仅记录"已展开"的分组 id
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
+  const units = useMemo(() => buildQueueUnits(models, providers), [models, providers])
+  const sortableIds = useMemo(() => units.map(unit => unit.id), [units])
+  const groupCount = units.filter(unit => unit.kind === 'group').length
+
+  const toggleGroupCollapsed = (groupId: string) => {
+    setExpandedGroups(current => {
+      const next = new Set(current)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
+
   const rows = models.map(model => ({
     model,
     cooling: isCooling(model.providerId, model.id),
     selected: mode === 'manual' && manualModelId === model.id,
   }))
+  const rowByModelId = new Map(rows.map(row => [row.model.id, row]))
   const enabledCount = models.filter(model => model.enabled).length
   const coolingCount = rows.filter(row => row.cooling).length
 
@@ -83,6 +101,7 @@ export function QueueListCard(props: QueueListCardProps) {
         </div>
         <CardDescription className="mt-1">
           {models.length ? `${models.length} 个模型 · ${enabledCount} 个已启用` : '添加供应商模型后配置优先级和故障转移'}
+          {groupCount > 0 && <span> · {groupCount} 个免费模型分组</span>}
           {coolingCount > 0 && <span className="text-amber-600 dark:text-amber-500"> · {coolingCount} 个冷却中</span>}
         </CardDescription>
       </div>
@@ -111,6 +130,29 @@ export function QueueListCard(props: QueueListCardProps) {
     </TableHeaderSurface>
   )
 
+  const renderModelRow = (model: ProviderModelRoute, inGroup: boolean) => {
+    const row = rowByModelId.get(model.id)
+    if (!row) return null
+    return (
+      <QueueModelRow
+        model={row.model}
+        provider={providers[row.model.providerId]}
+        providerHealth={health[row.model.providerId]}
+        providerModelHealth={providerModelHealth[row.model.id]}
+        metrics={modelMetrics[queueModelMetricKey(row.model.providerId, row.model.id)]}
+        mode={mode}
+        selected={row.selected}
+        cooling={row.cooling}
+        dragging={false}
+        dragHandleProps={{}}
+        inGroup={inGroup}
+        onSelect={() => void onSelectManualModel(row.model)}
+        onToggleEnabled={enabled => void onToggleEnabled(row.model, enabled)}
+        onNavigateToProviderAnalytics={onNavigateToProviderAnalytics}
+      />
+    )
+  }
+
   const renderQueueTable = () => (
     <DndContext
       sensors={sensors}
@@ -118,30 +160,56 @@ export function QueueListCard(props: QueueListCardProps) {
       modifiers={[restrictToVerticalAxis, restrictToParentElement]}
       onDragEnd={event => void onDragEnd(event)}
     >
-      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
         <div className="overflow-x-auto overflow-y-hidden rounded-b-lg">
           {renderTableHeader()}
-          {rows.map(row => (
-            <SortableQueueModel key={row.model.id} id={row.model.id}>
-              {(handleProps, dragging) => (
-                <QueueModelRow
-                  model={row.model}
-                  provider={providers[row.model.providerId]}
-                  providerHealth={health[row.model.providerId]}
-                  providerModelHealth={providerModelHealth[row.model.id]}
-                  metrics={modelMetrics[queueModelMetricKey(row.model.providerId, row.model.id)]}
-                  mode={mode}
-                  selected={row.selected}
-                  cooling={row.cooling}
-                  dragging={dragging}
-                  dragHandleProps={handleProps}
-                  onSelect={() => void onSelectManualModel(row.model)}
-                  onToggleEnabled={enabled => void onToggleEnabled(row.model, enabled)}
-                  onNavigateToProviderAnalytics={onNavigateToProviderAnalytics}
-                />
-              )}
-            </SortableQueueModel>
-          ))}
+          {units.map(unit => {
+            if (unit.kind === 'model') {
+              return (
+                <SortableQueueModel key={unit.id} id={unit.id}>
+                  {(handleProps, dragging) => (
+                    <QueueModelRow
+                      model={unit.model}
+                      provider={providers[unit.model.providerId]}
+                      providerHealth={health[unit.model.providerId]}
+                      providerModelHealth={providerModelHealth[unit.model.id]}
+                      metrics={modelMetrics[queueModelMetricKey(unit.model.providerId, unit.model.id)]}
+                      mode={mode}
+                      selected={rowByModelId.get(unit.id)?.selected ?? false}
+                      cooling={rowByModelId.get(unit.id)?.cooling ?? false}
+                      dragging={dragging}
+                      dragHandleProps={handleProps}
+                      onSelect={() => void onSelectManualModel(unit.model)}
+                      onToggleEnabled={enabled => void onToggleEnabled(unit.model, enabled)}
+                      onNavigateToProviderAnalytics={onNavigateToProviderAnalytics}
+                    />
+                  )}
+                </SortableQueueModel>
+              )
+            }
+
+            const collapsed = !expandedGroups.has(unit.id)
+            return (
+              <SortableQueueGroup key={unit.id} id={unit.id}>
+                {(handleProps, dragging) => (
+                  <div>
+                    <QueueGroupHeader
+                      providerName={unit.providerName}
+                      models={unit.models}
+                      collapsed={collapsed}
+                      mode={mode}
+                      dragging={dragging}
+                      dragHandleProps={handleProps}
+                      onToggleCollapsed={() => toggleGroupCollapsed(unit.id)}
+                    />
+                    {!collapsed && unit.models.map(groupModel => (
+                      <div key={groupModel.id}>{renderModelRow(groupModel, true)}</div>
+                    ))}
+                  </div>
+                )}
+              </SortableQueueGroup>
+            )
+          })}
         </div>
       </SortableContext>
     </DndContext>

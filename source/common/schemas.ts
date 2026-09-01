@@ -64,6 +64,11 @@ export const ProviderSchema = z.object({
   description: z.string().default('').optional(),
   apiKeyReference: z.string(),
   timeoutMilliseconds: z.number().int().positive().default(30000),
+  /**
+   * 内部标记：该供应商的模型在模型队列中是否聚合为一个可折叠分组。
+   * 目前仅由免费模型源托管的供应商自动开启，不在供应商编辑界面暴露。
+   */
+  queueGroupEnabled: z.boolean().default(false),
   createdTime: z.number().int(),
   updatedTime: z.number().int(),
   deletedTime: z.number().int().nullable(),

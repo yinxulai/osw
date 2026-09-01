@@ -29,6 +29,8 @@ interface QueueModelRowProps {
   cooling: boolean
   dragging: boolean
   dragHandleProps: Record<string, unknown>
+  /** 组内成员：不单独拖拽，轻微缩进以体现层级 */
+  inGroup?: boolean
   onSelect: () => void
   onToggleEnabled: (enabled: boolean) => void
   onNavigateToProviderAnalytics?: (providerId: string) => void
@@ -137,15 +139,23 @@ export function QueueModelRow(props: QueueModelRowProps) {
         props.selected && 'rounded-md border-l-primary bg-primary/5',
         props.mode === 'manual' && 'cursor-pointer',
         props.dragging && 'rounded-md bg-muted/60',
+        props.inGroup && 'bg-muted/20',
       )}
     >
       <div
-        className="flex min-h-9 w-full cursor-grab touch-none select-none items-center gap-2 rounded-md px-1.5 text-muted-foreground/70 active:cursor-grabbing"
-        {...(props.mode === 'auto' ? props.dragHandleProps : {})}
-        aria-label={props.mode === 'auto' ? `拖动 ${model.modelName}` : undefined}
+        className={cn(
+          'flex min-h-9 w-full items-center gap-2 rounded-md px-1.5 text-muted-foreground/70',
+          !props.inGroup && props.mode === 'auto' && 'cursor-grab touch-none select-none active:cursor-grabbing',
+        )}
+        {...(!props.inGroup && props.mode === 'auto' ? props.dragHandleProps : {})}
+        aria-label={!props.inGroup && props.mode === 'auto' ? `拖动 ${model.modelName}` : undefined}
       >
         {props.mode === 'manual' ? (
           props.selected ? <CircleDot size={16} className="text-primary" /> : <Circle size={16} className="text-muted-foreground/40" />
+        ) : props.inGroup ? (
+          <span className="flex h-6 w-6 items-center justify-center">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+          </span>
         ) : (
           <GripVertical size={16} />
         )}
@@ -155,7 +165,9 @@ export function QueueModelRow(props: QueueModelRowProps) {
       </div>
       <div className="min-w-0 flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          {props.provider && props.onNavigateToProviderAnalytics ? (
+          {props.inGroup ? (
+            <div className="h-4" />
+          ) : props.provider && props.onNavigateToProviderAnalytics ? (
             <button
               type="button"
               className="group/provider inline-flex max-w-full items-center gap-0.5 rounded-sm text-left text-xs font-medium text-foreground/90 outline-none transition-colors hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary"
@@ -172,7 +184,7 @@ export function QueueModelRow(props: QueueModelRowProps) {
           ) : (
             <div className="truncate text-xs font-medium">{props.provider?.name ?? '未知供应商'}</div>
           )}
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className={cn('flex min-w-0 items-center gap-1.5', props.inGroup && 'pl-5')}>
             <div className="truncate font-mono text-[11px] text-muted-foreground">{model.modelName}</div>
             <ProtocolIcons endpoints={model.endpoints} />
           </div>

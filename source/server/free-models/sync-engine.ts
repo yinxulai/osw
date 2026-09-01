@@ -24,6 +24,7 @@ import type { FreeModelSource, FreeModelSyncResult, FreeModelSyncState } from '.
 
 const SOURCE_MARKER_KEY = 'freeModel.source'
 const SYNC_STATE_KEY = 'freeModel.syncState'
+const QUEUE_GROUP_ENABLED_KEY = 'queue.groupEnabled'
 const DEFAULT_LOGICAL_MODEL = 'default'
 
 /** 标记某个 provider 由哪个免费模型源管理 */
@@ -87,6 +88,8 @@ export async function ensureManagedProvider(source: FreeModelSource, apiKey?: st
   const provider = await createProvider({ name: source.providerName, apiKeyReference, enabled: true })
   await replaceProviderEndpoints(provider.id, source.endpoints)
   await markProviderSource(provider.id, source.key)
+  // 免费模型源托管的供应商在模型队列中默认聚合为可折叠分组（内部配置，不暴露给用户）
+  await upsertProviderSetting({ providerId: provider.id, key: QUEUE_GROUP_ENABLED_KEY, value: 'true', valueType: 'boolean' })
   return provider.id
 }
 

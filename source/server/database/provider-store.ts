@@ -151,6 +151,7 @@ function mapProvider(row: typeof providers.$inferSelect): Provider {
   return {
     id: row.id, name: row.name, description: row.description, apiKeyReference: values.get('security.secretReference') ?? '',
     timeoutMilliseconds: Number(values.get('connection.timeoutMilliseconds') ?? 30000), enabled: row.enabled,
+    queueGroupEnabled: values.get('queue.groupEnabled') === 'true',
     createdTime: Number(row.createdTime), updatedTime: Number(row.updatedTime), deletedTime: row.deletedTime === null ? null : Number(row.deletedTime),
   }
 }

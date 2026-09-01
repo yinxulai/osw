@@ -21,16 +21,18 @@ export function useQueueControl() {
   const metrics = useQueueMetrics()
   const proxy = useProxyToggle()
   const queueMode = useQueueMode(modelsState.models, health, providerModelHealth)
-  const interactions = useQueueInteractions(
-    modelsState.models,
-    modelsState.updateModels,
-    modelsState.loadModels,
-    proxy.proxyBaseUrl,
-  )
 
   const providersMap = useMemo(
     () => Object.fromEntries(providers.map(provider => [provider.id, provider])),
     [providers],
+  )
+
+  const interactions = useQueueInteractions(
+    modelsState.models,
+    providersMap,
+    modelsState.updateModels,
+    modelsState.loadModels,
+    proxy.proxyBaseUrl,
   )
 
   const updateEnabled = useCallback(async (model: ProviderModelRoute, enabled: boolean) => {
