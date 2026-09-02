@@ -12,16 +12,18 @@ interface LatencyDistributionProps {
   buckets: LatencyBucket[]
 }
 
+interface LatencyTooltipProps {
+  active?: boolean
+  label?: string
+  payload?: Array<{ payload?: LatencyBucket }>
+}
+
 function formatAxisTick(value: string): string {
   const [start] = value.split('-')
   return start ?? value
 }
 
-function LatencyTooltip(props: {
-  active?: boolean
-  label?: string
-  payload?: Array<{ payload?: LatencyBucket }>
-}) {
+function LatencyTooltip(props: LatencyTooltipProps) {
   const { active, label, payload } = props
   if (!active || !label || !payload?.length) return null
   const bucket = payload[0]?.payload

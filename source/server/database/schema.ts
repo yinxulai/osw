@@ -251,7 +251,6 @@ export const requestAttempts = sqliteTable(
     durationMilliseconds: integer('durationMilliseconds').notNull(),
     errorCode: text('errorCode'),
     errorMessage: text('errorMessage'),
-    details: text('details'),
     createdTime: integer('createdTime').notNull(),
   },
   table => [
@@ -298,8 +297,6 @@ export const requestContents = sqliteTable(
     requestBody: text('requestBody'),
     responseStatus: integer('responseStatus'),
     responseHeaders: text('responseHeaders'),
-    upstreamResponseHeaders: text('upstreamResponseHeaders'),
-    clientResponseHeaders: text('clientResponseHeaders'),
     responseBody: text('responseBody'),
     requestRewriteRuleIds: text('requestRewriteRuleIds'),
 

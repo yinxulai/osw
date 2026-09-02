@@ -949,8 +949,8 @@ describe('handleProxyRequest', () => {
       attemptId: 'att_test',
       captureStatus: 'captured',
       responseStatus: 429,
+      responseHeaders: null,
       responseBody: errorBody,
-      responseHeaders: expect.stringContaining('x-request-id'),
     }))
   })
 

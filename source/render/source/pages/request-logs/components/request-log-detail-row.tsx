@@ -298,6 +298,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           <RequestContentsSheet
             contents={contents}
             conversions={'conversions' in log ? log.conversions : null}
+            attempts={log.attempts}
             requestRewriteRules={requestRewriteRules}
             clientProtocol={log.clientProtocol}
             upstreamProtocol={upstreamProtocol}

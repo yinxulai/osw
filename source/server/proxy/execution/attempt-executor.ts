@@ -17,6 +17,7 @@ import { createRequestContext, type RequestContext } from '@server/proxy/request
 import { protocolAdapters } from '@server/proxy/protocols/registry'
 import { ResponsePipeline } from '@server/proxy/response/response-pipeline'
 import type { ProxyObservationHooks } from '@server/proxy/observability/hooks'
+import type { AttemptFinalizationInput } from '@server/proxy/observability/logging-types'
 import { runAttemptQueue } from '@server/proxy/execution/attempt-runner'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { resolveAttemptSnapshot } from '@server/proxy/routing/routing'
@@ -206,19 +207,14 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
             captureRequestContent: settings.captureRequestContent,
             hooks: {},
           })
-          await attemptLogger.finalizeAttempt({
-            status: 'failed',
-            httpStatus: null,
-            retryable: !response.headersSent,
-            errorCode: 'UPSTREAM_ERROR',
-            errorMessage: lastError.message,
-            content: {
-              captureStatus: 'partial',
-              responseStatus: null,
-              upstreamResponseHeaders: null,
-              clientResponseHeaders: null,
-              responseBody: null,
-            },
+          const attempt = await attemptLogger.recordAttempt('failed', null, !response.headersSent, 'UPSTREAM_ERROR', lastError.message)
+          await attemptLogger.recordAttemptContent({
+            attemptId: attempt?.id ?? null,
+            captureStatus: 'partial',
+            responseStatus: null,
+            upstreamResponseHeaders: null,
+            clientResponseHeaders: null,
+            responseBody: null,
           })
         }
       } catch (logError) {
@@ -334,7 +330,27 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
     captureRequestContent: settings.captureRequestContent,
     hooks,
   })
-  const { finalizeAttempt } = attemptLogger
+  const finalizeAttempt = async (input: AttemptFinalizationInput) => {
+    const attempt = await attemptLogger.recordAttempt(
+      input.status,
+      input.httpStatus,
+      input.retryable,
+      input.errorCode,
+      input.errorMessage,
+      input.upstreamRequestId,
+      input.usage,
+    )
+    await attemptLogger.recordAttemptContent({
+      attemptId: attempt?.id ?? null,
+      captureStatus: input.content?.captureStatus ?? 'captured',
+      responseStatus: input.content?.responseStatus ?? null,
+      upstreamResponseHeaders: input.content?.upstreamResponseHeaders ?? null,
+      clientResponseHeaders: input.content?.clientResponseHeaders ?? null,
+      responseBody: input.content?.responseBody ?? null,
+      convertedResponseBody: input.content?.convertedResponseBody,
+      streaming: input.content?.streaming,
+    })
+  }
 
   return new Promise<AttemptOutcome>((resolve, reject) => {
     let settled = false

@@ -169,7 +169,11 @@ describe('analytics route', () => {
     expect(detailPayload.data.summary).toEqual(expect.objectContaining({ requests: 2, success: 1, failed: 1, totalTokens: 160 }))
     expect(detailPayload.data.requestTrend.reduce((total, point) => total + point.success + point.failed, 0)).toBe(2)
     expect(detailPayload.data.tokenTrend.reduce((total, point) => total + point.inputTokens + point.outputTokens, 0)).toBe(160)
-    expect(detailPayload.data.latencyDistribution).toEqual([expect.objectContaining({ count: 2, percent: 100 })])
+    expect(detailPayload.data.latencyDistribution.reduce((total, bucket) => total + bucket.count, 0)).toBe(2)
+    expect(detailPayload.data.latencyDistribution).toEqual(expect.arrayContaining([
+      expect.objectContaining({ count: 1, percent: expect.any(Number) }),
+      expect.objectContaining({ count: 1, percent: expect.any(Number) }),
+    ]))
     expect(detailPayload.data.failureReasons).toEqual([expect.objectContaining({ reason: '限流 (429)', count: 1, percent: 100 })])
     expect(detailPayload.data.models).toEqual(expect.arrayContaining([
       expect.objectContaining({ providerModelName: 'provider-success' }),

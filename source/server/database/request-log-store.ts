@@ -202,25 +202,24 @@ export async function pruneRequestLogsBefore(retentionDays: number): Promise<num
   return pruneRequestLogsInternal(retentionDays)
 }
 
-type CreateRequestAttemptInput = Omit<RequestAttempt, 'id' | 'createdTime' | 'errorCode' | 'errorMessage' | 'details'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage' | 'details'>>
+type CreateRequestAttemptInput = Omit<RequestAttempt, 'id' | 'createdTime' | 'errorCode' | 'errorMessage'> & Partial<Pick<RequestAttempt, 'errorCode' | 'errorMessage'>>
 
 export async function createRequestAttempt(input: CreateRequestAttemptInput): Promise<RequestAttempt> {
   const id = generateId('att_')
   const time = now()
-  const attempt = { id, ...input, errorCode: input.errorCode ?? null, errorMessage: input.errorMessage ?? null, details: input.details ?? null, createdTime: time }
+  const attempt = { id, ...input, errorCode: input.errorCode ?? null, errorMessage: input.errorMessage ?? null, createdTime: time }
   getDb().insert(requestAttempts).values(attempt).run()
   return attempt
 }
 
-type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'requestRewriteRuleIds' | 'upstreamResponseHeaders' | 'clientResponseHeaders'> & Partial<Pick<RequestContent, 'requestRewriteRuleIds' | 'upstreamResponseHeaders' | 'clientResponseHeaders'>>
-type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'upstreamResponseHeaders' | 'clientResponseHeaders' | 'responseBody'>>
+type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'requestRewriteRuleIds'> & Partial<Pick<RequestContent, 'requestRewriteRuleIds'>>
+type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
 
 export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
   const id = generateId('content_')
   const time = now()
-  const content = { ...input, upstreamResponseHeaders: input.upstreamResponseHeaders ?? null, clientResponseHeaders: input.clientResponseHeaders ?? null }
-  getDb().insert(requestContents).values({ id, ...content, requestRewriteRuleIds: JSON.stringify(input.requestRewriteRuleIds ?? []), createdTime: time, updatedTime: time }).run()
-  return { id, ...content, requestRewriteRuleIds: input.requestRewriteRuleIds ?? [], createdTime: time, updatedTime: time }
+  getDb().insert(requestContents).values({ id, ...input, requestRewriteRuleIds: JSON.stringify(input.requestRewriteRuleIds ?? []), createdTime: time, updatedTime: time }).run()
+  return { id, ...input, requestRewriteRuleIds: input.requestRewriteRuleIds ?? [], createdTime: time, updatedTime: time }
 }
 
 export async function updateRequestContent(id: string, input: UpdateRequestContentInput): Promise<void> {
@@ -334,7 +333,6 @@ function mapRequestAttempt(row: typeof requestAttempts.$inferSelect): RequestAtt
     retryable: row.retryable,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
-    details: row.details,
     durationMilliseconds: row.durationMilliseconds,
     createdTime: Number(row.createdTime),
   }
@@ -380,8 +378,6 @@ function mapRequestContent(row: typeof requestContents.$inferSelect): RequestCon
     requestBody: row.requestBody,
     responseStatus: row.responseStatus,
     responseHeaders: row.responseHeaders,
-    upstreamResponseHeaders: row.upstreamResponseHeaders,
-    clientResponseHeaders: row.clientResponseHeaders,
     responseBody: row.responseBody,
     requestRewriteRuleIds: row.requestRewriteRuleIds ? parseStringArray(row.requestRewriteRuleIds) : [],
     createdTime: row.createdTime,

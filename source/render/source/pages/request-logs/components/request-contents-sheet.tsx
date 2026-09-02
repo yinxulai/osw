@@ -118,7 +118,7 @@ function RequestStage(props: RequestStageProps) {
 
 function AttemptError(props: AttemptErrorProps) {
   const { attempt } = props
-  if (!attempt.errorCode && !attempt.errorMessage && !attempt.details) return null
+  if (!attempt.errorCode && !attempt.errorMessage) return null
 
   return (
     <section className="rounded-lg bg-red-500/8 px-3 py-2.5 text-xs">
@@ -128,7 +128,6 @@ function AttemptError(props: AttemptErrorProps) {
         {attempt.errorCode && <span className="font-mono text-[10px] font-normal">{attempt.errorCode}</span>}
       </div>
       {attempt.errorMessage && <div className="mt-1 wrap-break-word text-red-700/90 dark:text-red-300/90">{attempt.errorMessage}</div>}
-      {attempt.details && <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all bg-red-500/8 p-2 font-mono text-[11px] leading-5 text-foreground/90">{formatContent(attempt.details).value}</pre>}
     </section>
   )
 }
@@ -172,7 +171,7 @@ function buildRequestStages(input: RequestStageBuilderInput): RequestStageData[]
       title: '真实供应商响应',
       protocol: upstreamProtocol,
       sections: [
-        { id: sectionKey('真实供应商响应', `响应头 · ${upstreamLabel}`), label: `响应头 · ${upstreamLabel}`, value: conversion?.upstreamResponseHeaders ?? selectedContent?.upstreamResponseHeaders ?? selectedContent?.responseHeaders ?? null },
+        { id: sectionKey('真实供应商响应', `响应头 · ${upstreamLabel}`), label: `响应头 · ${upstreamLabel}`, value: conversion?.upstreamResponseHeaders ?? selectedContent?.responseHeaders ?? null },
         { id: sectionKey('真实供应商响应', `响应 Body · ${upstreamLabel}`), label: `响应 Body · ${upstreamLabel}`, value: selectedContent?.responseBody ?? null },
       ],
     },
@@ -180,7 +179,7 @@ function buildRequestStages(input: RequestStageBuilderInput): RequestStageData[]
       title: clientResponseTitle,
       protocol: clientProtocol,
       sections: [
-        { id: sectionKey(clientResponseTitle, `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
+        { id: sectionKey(clientResponseTitle, `响应头 · ${clientLabel}`), label: `响应头 · ${clientLabel}`, value: conversion?.clientResponseHeaders ?? selectedContent?.responseHeaders ?? null },
         { id: sectionKey(clientResponseTitle, `响应 Body · ${clientLabel}`), label: `响应 Body · ${clientLabel}`, value: conversion?.responseBody ?? selectedContent?.responseBody ?? null },
       ],
     },

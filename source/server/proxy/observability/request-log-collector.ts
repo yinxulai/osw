@@ -44,8 +44,6 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
         requestBody: input.requestBody.toString('utf8'),
         responseStatus: null,
         responseHeaders: null,
-        upstreamResponseHeaders: null,
-        clientResponseHeaders: null,
         responseBody: null,
       })
       requestContentId = content.id
@@ -92,7 +90,6 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
         captureStatus: outcome.captureStatus ?? 'captured',
         responseStatus: outcome.responseStatus ?? outcome.statusCode,
         responseHeaders: outcome.responseHeaders ?? null,
-        clientResponseHeaders: outcome.clientResponseHeaders ?? outcome.responseHeaders ?? null,
         responseBody: outcome.responseBody ?? null,
       })
     } catch (error) {
