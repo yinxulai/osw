@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ManagementHandler } from '../../core/response'
 import { sendError, sendSuccess } from '../../core/response'
 import type { RequestLog, RequestLogEntry } from '@common/schemas'
-import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogs, pruneRequestLogsBefore } from '@server/database/request-log-store'
+import { countRequestLogs, getRequestLog, listAttemptsByRequest, listRequestContents, listRequestConversions, listRequestLogEntries, pruneRequestLogsBefore } from '@server/database/request-log-store'
 import { listRequestRewriteRulesByIds } from '@server/database/request-rewrite-rule-store'
 import { HttpRouter } from '@server/http-router'
 
@@ -54,13 +54,10 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
   const { limit, offset, providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
   const pageSize = limit ?? 50
   const filter = { providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo }
-  const [logs, total] = await Promise.all([
-    listRequestLogs(pageSize, offset ?? 0, filter),
+  const [entries, total] = await Promise.all([
+    listRequestLogEntries(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),
   ])
-  const entries: RequestLogEntry[] = await Promise.all(
-    logs.map(mapRequestLogEntry),
-  )
 
   sendSuccess(res, { logs: entries, total })
 }

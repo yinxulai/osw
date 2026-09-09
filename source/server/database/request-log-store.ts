@@ -8,6 +8,7 @@ import type {
   RequestContentCaptureStatus,
   RequestConversion,
   RequestLog,
+  RequestLogEntry,
   RequestLogUpdate,
   RequestStatus,
 } from '@common/schemas'
@@ -183,6 +184,51 @@ export async function listRequestLogs(limit = 50, offset = 0, filter?: RequestLo
     .orderBy(desc(requestLogs.createdTime)).limit(limit).offset(offset).all().map(mapRequestLog)
 }
 
+export async function listRequestLogEntries(limit = 50, offset = 0, filter?: RequestLogFilter): Promise<RequestLogEntry[]> {
+  const conditions = requestLogFilterConditions(filter)
+  const rows = getDb().select().from(requestLogs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(requestLogs.createdTime)).limit(limit).offset(offset).all()
+  if (rows.length === 0) return []
+
+  const ids = rows.map(row => row.id)
+  const attempts = getDb().select().from(requestAttempts).where(inArray(requestAttempts.requestId, ids)).all().map(mapRequestAttempt)
+  const metrics = getDb().select().from(requestMetrics).where(inArray(requestMetrics.requestId, ids)).all()
+  const usages = getDb().select().from(requestUsages).where(inArray(requestUsages.requestId, ids)).all()
+  const attemptsByRequest = new Map<string, RequestAttempt[]>()
+  for (const attempt of attempts) attemptsByRequest.set(attempt.requestId, [...(attemptsByRequest.get(attempt.requestId) ?? []), attempt])
+  const metricsByRequest = new Map<string, typeof metrics>()
+  for (const metric of metrics) metricsByRequest.set(metric.requestId, [...(metricsByRequest.get(metric.requestId) ?? []), metric])
+  const usagesByRequest = new Map<string, typeof usages>()
+  for (const usage of usages) usagesByRequest.set(usage.requestId, [...(usagesByRequest.get(usage.requestId) ?? []), usage])
+
+  return rows.map(row => {
+    const log = mapRequestLogWithData(row, metricsByRequest.get(row.id) ?? [], usagesByRequest.get(row.id) ?? [])
+    return {
+      ...log,
+      reasoningTokens: log.reasoningTokens ?? null,
+      attempts: (attemptsByRequest.get(row.id) ?? []).map(attempt => ({
+        id: attempt.id,
+        attemptIndex: attempt.attemptIndex,
+        status: attempt.status,
+        providerId: attempt.providerId,
+        providerName: attempt.providerName,
+        providerModelId: attempt.providerModelId,
+        providerModelName: attempt.providerModelName,
+        upstreamProtocol: attempt.upstreamProtocol,
+        upstreamRequestId: attempt.upstreamRequestId,
+        url: attempt.url,
+        httpStatus: attempt.httpStatus,
+        retryable: attempt.retryable,
+        errorCode: attempt.errorCode,
+        errorMessage: attempt.errorMessage,
+        durationMilliseconds: attempt.durationMilliseconds,
+        createdTime: attempt.createdTime,
+      })),
+    }
+  })
+}
+
 export async function getRequestLog(id: string): Promise<RequestLog | null> {
   const row = getDb().select().from(requestLogs).where(eq(requestLogs.id, id)).get()
   return row ? mapRequestLog(row) : null
@@ -291,9 +337,14 @@ function parseRawUsage(rawUsage: string | null | undefined): RequestLog['rawUsag
 }
 
 function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
-  const metrics = new Map(getDb().select().from(requestMetrics).where(eq(requestMetrics.requestId, row.id)).all().map(metric => [metric.key, metric]))
+  const metrics = getDb().select().from(requestMetrics).where(eq(requestMetrics.requestId, row.id)).all()
   const usages = getDb().select().from(requestUsages).where(and(eq(requestUsages.requestId, row.id), isNull(requestUsages.attemptId))).all()
-  const usageValue = (type: string) => usages.find(usage => usage.type === type)?.value ?? null
+  return mapRequestLogWithData(row, metrics, usages)
+}
+
+function mapRequestLogWithData(row: typeof requestLogs.$inferSelect, metricRows: Array<typeof requestMetrics.$inferSelect>, usageRows: Array<typeof requestUsages.$inferSelect>): RequestLog {
+  const metrics = new Map(metricRows.map(metric => [metric.key, metric]))
+  const usageValue = (type: string) => usageRows.find(usage => usage.type === type)?.value ?? null
   const metricValue = (key: string) => metrics.get(key)?.value ?? null
   return {
     id: row.id,
@@ -309,7 +360,7 @@ function mapRequestLog(row: typeof requestLogs.$inferSelect): RequestLog {
     cachedInputTokens: usageValue('cachedInputTokens'),
     cacheCreationInputTokens: usageValue('cacheCreationInputTokens'),
     promptCacheHit: metricValue('promptCacheHit') == null ? null : metricValue('promptCacheHit') === 1,
-    rawUsage: parseRawUsage(usages.find(usage => usage.type === 'raw')?.rawValue),
+    rawUsage: parseRawUsage(usageRows.find(usage => usage.type === 'raw')?.rawValue),
     ttftMilliseconds: metricValue('ttftMilliseconds'),
     cacheHit: metricValue('cacheHit') == null ? null : metricValue('cacheHit') === 1,
     createdTime: Number(row.createdTime),

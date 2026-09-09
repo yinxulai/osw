@@ -13,6 +13,7 @@ import {
   getRequestLog,
   listRequestContents,
   listRequestConversions,
+  listRequestLogEntries,
   listRequestLogs,
   listAttemptsByRequest,
   pruneRequestLogsBefore,
@@ -64,6 +65,30 @@ describe('request log store persistence', () => {
       expect.objectContaining({ id: second.id, status: 'failed', totalDurationMilliseconds: 10 }),
     ])
     expect(await listRequestLogs(1, 1)).toEqual([expect.objectContaining({ id: first.id })])
+  })
+
+  it('lists request log entries with related attempts and usage data', async () => {
+    const log = await createLog('req_entry')
+    const provider = await createProvider({ name: 'Entry Provider', apiKeyReference: 'entry-key', timeoutMilliseconds: 1000 })
+    const attempt = await createRequestAttempt({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: 'model_entry',
+      providerName: provider.name,
+      providerModelName: 'entry-model',
+      upstreamProtocol: 'openai-completions',
+      upstreamRequestId: null,
+      url: 'https://example.com',
+      attemptIndex: 0,
+      status: 'success',
+      httpStatus: 200,
+      retryable: false,
+      durationMilliseconds: 8,
+    })
+
+    const entries = await listRequestLogEntries(20)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toEqual(expect.objectContaining({ id: log.id, attempts: [expect.objectContaining({ id: attempt.id, providerModelName: 'entry-model' })] }))
   })
 
   it('round-trips content, attempts, and conversions and updates content fields', async () => {
