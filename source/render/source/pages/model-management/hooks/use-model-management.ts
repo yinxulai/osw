@@ -25,7 +25,7 @@ export function useModelManagement() {
   const selectedModels = useMemo(() => data.models.filter(model => model.providerId === data.selectedProviderId).sort((a, b) => a.priority - b.priority), [data.models, data.selectedProviderId])
   const providerDialog = useProviderDialog({ reload: data.reload, selectProvider: data.setSelectedProviderId })
   const providerManagement = useProviderManagement({ reload: data.reload })
-  const modelDialog = useModelDialog({ selectedProvider, models: data.models, reload: data.reload })
+  const modelDialog = useModelDialog({ selectedProvider, models: selectedModels, reload: data.reload })
 
   const invalidateModels = useCallback(async () => { await Promise.all([client.invalidateQueries({ queryKey: modelKeys.all }), client.invalidateQueries({ queryKey: queueKeys.models })]) }, [client])
   const updateModelMutation = useMutation({ mutationFn: ({ id, enabled }: UpdateModelEnabledVariables) => unwrap(providerModelApi.update(id, { logicalModelId: 'default', enabled })), onMutate: async ({ id, enabled }) => { await client.cancelQueries({ queryKey: modelKeys.all }); const previous = client.getQueryData<ProviderModelRoute[]>(modelKeys.all); client.setQueryData<ProviderModelRoute[]>(modelKeys.all, current => current?.map(model => model.id === id ? { ...model, enabled } : model)); return { previous } }, onError: (error, _variables, context) => { client.setQueryData(modelKeys.all, context?.previous); toast.error(error.message) }, onSettled: invalidateModels })
