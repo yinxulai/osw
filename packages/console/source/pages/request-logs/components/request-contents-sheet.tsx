@@ -1,14 +1,16 @@
 import * as React from 'react'
 import { AlertCircle, Check, ChevronDown, ChevronUp, Copy, LoaderCircle, Search } from 'lucide-react'
-import type { AppliedRequestRewriteRule, AttemptContent, AttemptContentSummary, RequestContent, RequestContentSummary, RequestLogBodies, RequestLogEntryAttempt } from '@common/schemas'
+import type { AppliedRequestRewriteRule, AttemptContent, AttemptContentSummary, RequestContent, RequestContentSummary, RequestLogEntryAttempt } from '@common/schemas'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/components/ui/toast'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
+import { useRequestLogBodiesQuery } from '../queries'
 import { searchBlocks, type ContentSearchResult, type SectionHighlight } from '../lib/content-search'
 import { formatContent, isLocalFailureBody } from '../lib/format-content'
 import { PROTOCOL_LABEL, distinctAttemptErrorCode, distinctAttemptErrorMessage, formatAttemptOutcome, formatTransport } from '../lib/format'
@@ -23,6 +25,13 @@ interface ContentSectionProps {
   highlight: SectionHighlight | null
   /** 当前激活的命中序号（全局），用于定位与强调。 */
   activeMatchIndex: number | null
+  /**
+   * 正文还在路上。
+   *
+   * 这一节该存在、该叫什么，都写在「报文摘要」里（摘要随详情一起到），只有正文那几列要现取，
+   * 所以加载时不该让整块内容消失——标题照常画出来，正文位置放骨架。
+   */
+  loading: boolean
 }
 
 interface CopyButtonProps {
@@ -57,6 +66,8 @@ interface RequestStageProps {
   search: ContentSearchResult
   /** 当前激活的命中序号（全局）；没有搜索词时为 `null`。 */
   activeMatchIndex: number | null
+  /** 正文还在路上：阶段外壳照常画，正文位置放骨架。 */
+  loading: boolean
   /**
    * 正文整体缺失（被保留策略清掉，或采集开关当时是关的）。
    *
@@ -80,11 +91,13 @@ interface RequestContentsSheetProps {
   contents: RequestContentSummary[] | null
   /** 上游视角正文摘要；每次尝试至多一行。只有报文身份，没有正文。 */
   attemptContents: AttemptContentSummary[] | null
-  /** 按需取回的正文；用户没点开面板、或还在路上时为 `null`。 */
-  bodies: RequestLogBodies | null
-  /** 正文还在取。摘要可能早就到了，但面板一次只画一种状态，避免先闪一版空版面。 */
-  bodiesLoading: boolean
-  bodiesError: string | null
+  /** 请求 ID。正文由面板自己按需取（见 `useRequestLogBodiesQuery`）。 */
+  requestId: string
+  /**
+   * 请求还在进行中（`pending`）时把正文保持在新鲜状态；一旦落定就停：
+   * 那时正文已经写完，再取只是重复解压同一份数据。
+   */
+  pollBodies: boolean
   attempts: RequestLogEntryAttempt[]
   requestRewriteRules: AppliedRequestRewriteRule[] | null
   /** 客户端协议；`null` 表示该请求连 API 路径都未识别。 */
@@ -267,6 +280,22 @@ function AttemptFacts(props: AttemptFactsProps) {
   )
 }
 
+/**
+ * 正文占位。
+ *
+ * 不在外面套 `bg-inset` 凹槽：骨架条自己就是 `bg-inset`，套进去亮色下就看不见了
+ * （一条嵌套链只允许一层凹槽，见设计令牌笔记）。
+ */
+function ContentSkeleton() {
+  return (
+    <div aria-hidden className="space-y-2 px-3 pb-3.5">
+      <Skeleton className="h-3 w-3/5" />
+      <Skeleton className="h-3 w-4/5" />
+      <Skeleton className="h-3 w-2/5" />
+    </div>
+  )
+}
+
 function ContentSection(props: ContentSectionProps) {
   const t = useTranslation()
   const content = formatContent(t, props.value)
@@ -283,35 +312,40 @@ function ContentSection(props: ContentSectionProps) {
       <div className="flex items-center transition-colors hover:bg-state-base-hover">
         <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left system-xs-medium text-text-primary">
           <span className="truncate">{props.label}</span>
-          {content.isJson && <span className="shrink-0 rounded-md bg-inset px-1.5 py-0.5 font-mono system-2xs-regular text-text-tertiary">JSON</span>}
-          {matchCount > 0 && (
+          {!props.loading && content.isJson && <span className="shrink-0 rounded-md bg-inset px-1.5 py-0.5 font-mono system-2xs-regular text-text-tertiary">JSON</span>}
+          {!props.loading && matchCount > 0 && (
             <span className="shrink-0 rounded-md bg-amber-300/70 px-1.5 py-0.5 font-mono system-2xs-regular text-text-primary dark:bg-amber-400/25">
               {t('requestLogs.contents.matchCount', { count: matchCount })}
             </span>
           )}
           <ChevronDown size={15} aria-hidden className={cn('ml-auto shrink-0 text-text-quaternary transition-transform', !props.open && '-rotate-90')} />
         </CollapsibleTrigger>
-        <CopyButton className="mr-1.5" label={t('requestLogs.contents.copyLabel', { label: props.label })} value={content.value} />
+        {/* 正文没到就没有可复制的东西，不给一个只会复制出空字符串的按钮。 */}
+        {!props.loading && <CopyButton className="mr-1.5" label={t('requestLogs.contents.copyLabel', { label: props.label })} value={content.value} />}
       </div>
       <CollapsibleContent>
-        <pre className="mx-3 mb-3 whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-xs leading-5 text-text-secondary">
-          {segments.map((segment, index) => segment.matchIndex === null
-            ? <React.Fragment key={index}>{segment.text}</React.Fragment>
-            : (
-              <mark
-                key={index}
-                data-search-match={segment.matchIndex}
-                className={cn(
-                  'rounded-sm',
-                  segment.matchIndex === props.activeMatchIndex
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-amber-300/70 text-text-primary dark:bg-amber-400/30',
-                )}
-              >
-                {segment.text}
-              </mark>
-            ))}
-        </pre>
+        {props.loading
+          ? <ContentSkeleton />
+          : (
+            <pre className="mx-3 mb-3 whitespace-pre-wrap break-all rounded-md bg-inset p-3 font-mono text-xs leading-5 text-text-secondary">
+              {segments.map((segment, index) => segment.matchIndex === null
+                ? <React.Fragment key={index}>{segment.text}</React.Fragment>
+                : (
+                  <mark
+                    key={index}
+                    data-search-match={segment.matchIndex}
+                    className={cn(
+                      'rounded-sm',
+                      segment.matchIndex === props.activeMatchIndex
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-amber-300/70 text-text-primary dark:bg-amber-400/30',
+                    )}
+                  >
+                    {segment.text}
+                  </mark>
+                ))}
+            </pre>
+          )}
       </CollapsibleContent>
     </Collapsible>
   )
@@ -343,7 +377,10 @@ function RequestStage(props: RequestStageProps) {
   const t = useTranslation()
   const sections = props.sections.filter(section => section.value)
   // 正文整体缺失时仍然把阶段画出来（见 `empty`），其余情况没有内容就不占版面。
-  if (sections.length === 0 && !props.empty) return null
+  // 加载中也不能提前 return：那时每一节的正文都还是 `null`，一 return 整块就「还没到就先消失」。
+  if (sections.length === 0 && !props.empty && !props.loading) return null
+  // 加载中每一节都要画，正文位置换成骨架；这就把「这一节存在、叫什么」与「正文到没到」拆开了。
+  const renderedSections = props.loading ? props.sections : sections
 
   // 阶段是这条链路上唯一的一层「外壳」：只留边框，不再铺灰底。
   // 铺灰底会和 Sheet 的 bg-card 形成「白 → 灰 → 白 → 灰」的交替填充，
@@ -375,23 +412,24 @@ function RequestStage(props: RequestStageProps) {
         )}
       </div>
       <div className="divide-y divide-border/50">
-        {sections.length === 0
+        {sections.length === 0 && !props.loading
           ? props.sections.map(section => (
             <div key={section.id} className="flex items-center gap-2 px-3 py-2.5 system-xs-regular">
               <span className="text-text-tertiary">{section.label}</span>
               <span className="ml-auto font-mono text-text-quaternary">—</span>
             </div>
           ))
-          : sections.map(section => (
+          : renderedSections.map(section => (
             <ContentSection
               key={section.id}
               id={section.id}
               label={section.label}
-              value={section.value!}
+              value={section.value ?? ''}
               open={props.sectionStates[section.id] ?? true}
               onOpenChange={open => props.onSectionOpenChange(section.id, open)}
               highlight={props.search.highlights.get(section.id) ?? null}
               activeMatchIndex={props.activeMatchIndex}
+              loading={props.loading}
             />
           ))}
       </div>
@@ -432,7 +470,8 @@ function AttemptError(props: AttemptErrorProps) {
   )
 }
 
-type RequestStageData = Omit<RequestStageProps, 'sectionStates' | 'onSectionOpenChange' | 'search' | 'activeMatchIndex' | 'empty'>
+// `loading` 不在数据里：正文是四个阶段共用的一次取数，渲染时由面板统一给（见 `stages.map`）。
+type RequestStageData = Omit<RequestStageProps, 'sectionStates' | 'onSectionOpenChange' | 'search' | 'activeMatchIndex' | 'empty' | 'loading'>
 
 type RequestStageBuilderInput = {
   /** 客户端视角正文。 */
@@ -533,11 +572,19 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
 export function RequestContentsSheet(props: RequestContentsSheetProps) {
   const t = useTranslation()
   const selectedAttempt = props.attempts.find(attempt => attempt.id === props.selectedAttemptId) ?? null
+  // 正文由面板自己取：它是库里最大的那几列，只在「用户真的点开某个尝试」这一刻才请求一次
+  // （`selectedAttemptId` 为空时查询整个禁用）。加载态因此也只落在面板内部，不拖累宿主。
+  const bodiesQuery = useRequestLogBodiesQuery(props.selectedAttemptId === null ? null : props.requestId, props.pollBodies)
+  const bodies = bodiesQuery.data ?? null
+  // 详情本身还没到（摘要、改写规则在路上）与正文在路上，对用户是同一件事：这一块还没内容。
+  // 两种来源合并成一个 `loading`，画面就只会有「骨架 → 内容」这一条路径。
+  const contentsLoading = props.selectedAttemptId !== null && (props.loading || bodiesQuery.isPending)
+  const bodiesError = bodiesQuery.error === null ? null : bodiesQuery.error.message
   // 摘要在详情里（随行一起到达），正文在 `bodies` 里（点开面板才取），两者按 `id`
   // 对齐后才是渲染需要的一整行。对齐失败只可能是「正文还没取到」，落 `null`；
-  // 那时整个面板被加载态挡着，不会把「还没取」画成「没采到」。
+  // 那时正文区块画的是骨架，不会把「还没取」画成「没采到」。
   const attemptSummary = props.attemptContents?.find(content => content.attemptId === props.selectedAttemptId) ?? null
-  const attemptBody = props.bodies?.attemptContents.find(content => content.id === attemptSummary?.id) ?? null
+  const attemptBody = bodies?.attemptContents.find(content => content.id === attemptSummary?.id) ?? null
   const attemptContent: AttemptContent | null = attemptSummary === null ? null : {
     ...attemptSummary,
     requestBody: attemptBody?.requestBody ?? null,
@@ -545,7 +592,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   }
   // 客户端视角每个请求只有一行，不需要按 attemptId 筛选。
   const clientSummary = props.contents?.[0] ?? null
-  const clientBody = props.bodies?.contents.find(content => content.id === clientSummary?.id) ?? null
+  const clientBody = bodies?.contents.find(content => content.id === clientSummary?.id) ?? null
   const clientContent: RequestContent | null = clientSummary === null ? null : {
     ...clientSummary,
     requestBody: clientBody?.requestBody ?? null,
@@ -629,28 +676,17 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     setActiveMatchIndex(next)
   }
 
-  const visibleSectionIds = sections.map(section => section.id)
+  // 展开/折叠要覆盖「每一节」而不是「已经有正文的节」：正文没到时分节骨架占着同样的 id，
+  // 否则加载中这两个按钮一直是灰的。
+  const visibleSectionIds = stages.flatMap(stage => stage.sections).map(section => section.id)
   // 一条正文都没有：被保留策略清掉了，或采集正文的开关一直是关的。
   // 这两种情况在数据上无法区分（都是「没有行」），因此只说事实、不猜原因。
-  const bodiesMissing = sections.length === 0
+  // 加载中（还可能取到）、取正文失败（取不到）、详情失败（压根不知道有没有）都不是「没有」，
+  // 不能混进这条结论。
+  const bodiesMissing = props.error === null && !contentsLoading && bodiesError === null && sections.length === 0
 
   let state: React.ReactNode
-  const error = props.error ?? props.bodiesError
-  if (props.loading || props.bodiesLoading) {
-    state = (
-      <div className="flex items-center justify-center gap-2 py-8 system-sm-regular text-text-tertiary">
-        <LoaderCircle size={15} aria-hidden className="animate-spin" />
-        {t('requestLogs.contents.loading')}
-      </div>
-    )
-  } else if (error) {
-    state = (
-      <div className="flex items-center justify-center gap-2 py-8 system-sm-regular text-text-destructive">
-        <AlertCircle size={15} aria-hidden />
-        {error}
-      </div>
-    )
-  } else if (selectedAttempt || clientContent) {
+  if (selectedAttempt || clientContent || props.loading) {
     state = (
       <div className="flex h-full min-h-0 flex-col">
         <div className="sticky top-0 z-10 bg-card/95 px-4 py-3 backdrop-blur">
@@ -670,7 +706,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
                 className="pl-9"
               />
             </div>
-            {searchQuery && (
+            {searchQuery && !contentsLoading && (
               <span
                 aria-live="polite"
                 className="shrink-0 font-mono system-2xs-regular tabular-nums text-text-tertiary"
@@ -684,7 +720,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               size="icon-sm"
               aria-label={t('requestLogs.contents.previousMatch')}
               title={t('requestLogs.contents.previousMatchTitle')}
-              disabled={totalMatches === 0}
+              disabled={totalMatches === 0 || contentsLoading}
               onClick={() => jumpToMatch(-1)}
             >
               <ChevronUp size={14} />
@@ -695,7 +731,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               size="icon-sm"
               aria-label={t('requestLogs.contents.nextMatch')}
               title={t('requestLogs.contents.nextMatchTitle')}
-              disabled={totalMatches === 0}
+              disabled={totalMatches === 0 || contentsLoading}
               onClick={() => jumpToMatch(1)}
             >
               <ChevronDown size={14} />
@@ -731,10 +767,43 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           </div>
         </div>
         <div ref={contentRef} className="min-h-0 flex-1 space-y-3 overflow-auto px-4 pb-4 pt-3">
+          {/* 详情级错误只挡「需要详情才能展示」的那几块，不能连尝试事实一起收走：
+              事实来自随行一起到的尝试记录，它们是在详情失败时唯一不受影响的证据。 */}
+          {props.error && (
+            <div className="flex items-start gap-2 rounded-md border border-module-border bg-destructive/8 px-3 py-2 system-xs-regular text-text-destructive">
+              <AlertCircle size={14} aria-hidden className="mt-0.5 shrink-0" />
+              <span className="min-w-0 wrap-break-word">{props.error}</span>
+            </div>
+          )}
           {selectedAttempt && <AttemptError attempt={selectedAttempt} />}
           {selectedAttempt && <AttemptFacts attempt={selectedAttempt} />}
           <AppliedRules ruleIds={selectedAttempt ? [...selectedAttempt.requestRewriteRuleIds, ...selectedAttempt.responseRewriteRuleIds] : []} rules={props.requestRewriteRules} />
-          {searchQuery && totalMatches === 0 && (
+          {contentsLoading && (
+            <div role="status" className="flex items-center gap-2 system-xs-regular text-text-tertiary">
+              <LoaderCircle size={13} aria-hidden className="animate-spin" />
+              {t('requestLogs.contents.loading')}
+            </div>
+          )}
+          {/* 正文没取到与正文没采到是两件事：前者可以去重试，后者只能接受。 */}
+          {bodiesError && (
+            <div className="flex items-start gap-2 rounded-md border border-module-border bg-destructive/8 px-3 py-2 system-xs-regular">
+              <AlertCircle size={14} aria-hidden className="mt-0.5 shrink-0 text-text-destructive" />
+              <div className="min-w-0">
+                <div className="text-text-destructive">{t('requestLogs.contents.bodiesError')}</div>
+                <div className="mt-0.5 wrap-break-word text-text-secondary">{bodiesError}</div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto h-7 shrink-0"
+                onClick={() => void bodiesQuery.refetch()}
+              >
+                {t('common.action.retry')}
+              </Button>
+            </div>
+          )}
+          {searchQuery && !contentsLoading && !bodiesError && totalMatches === 0 && (
             <div className="rounded-md border border-module-border bg-inset px-3 py-2 system-xs-regular text-text-tertiary">
               {t('requestLogs.contents.noMatchHint', { query: searchQuery })}
             </div>
@@ -744,7 +813,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               {t('requestLogs.contents.pruned')}
             </div>
           )}
-          {stages.map(stage => (
+          {!bodiesError && stages.map(stage => (
             <RequestStage
               key={stage.title}
               {...stage}
@@ -752,12 +821,13 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               onSectionOpenChange={(id, open) => setSectionStates(current => ({ ...current, [id]: open }))}
               search={searchResult}
               activeMatchIndex={searchQuery && totalMatches > 0 ? activeMatchIndex : null}
+              loading={contentsLoading}
               empty={bodiesMissing}
             />
           ))}
           {/* 该阶段被隐藏的地方要留一句解释：否则「少了第四个阶段」既可能被读成界面出错，
               也可能被读成「正文丢了」（那由上面的 `pruned` 负责说明）。 */}
-          {selectedAttempt && !servesClient && (
+          {selectedAttempt && !servesClient && !contentsLoading && (
             <div className="rounded-md border border-dashed border-module-border px-3 py-2 system-xs-regular text-text-tertiary">
               {t('requestLogs.contents.clientResponseNotDelivered')}
             </div>

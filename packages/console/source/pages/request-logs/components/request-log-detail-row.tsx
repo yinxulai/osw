@@ -18,7 +18,7 @@ import { useProxyStatus } from '@/features/proxy/hooks'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { routePaths } from '@/routes'
-import { fetchRequestLogBodies, useRequestLogBodiesQuery } from '../queries'
+import { fetchRequestLogBodies } from '../queries'
 import { buildCurl } from '../lib/build-curl'
 import {
   PROTOCOL_LABEL,
@@ -530,9 +530,8 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const contents = 'contents' in log ? log.contents : null
   const requestRewriteRules = 'requestRewriteRules' in log ? log.requestRewriteRules : null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
-  // 正文只在用户点开某个尝试的正文面板时才去取：它是库里最大的列，而详情在请求还挂着时
-  // 每 1.5s 就被重取一次（见 issue #23）。请求落定后正文不会再变，也就不再轮询。
-  const bodiesQuery = useRequestLogBodiesQuery(selectedAttemptId === null ? null : log.id, log.status === 'pending')
+  // 正文不在这一层取，交给侧滑面板自己按需拉（库里最大的列，见 issue #23）：
+  // 面板只在用户点开某个尝试的正文时才挂载，请求还挂着时也由面板自己轮询。
   const canOpenRuntimeLogs = Date.now() - log.createdTime <= RUNTIME_LOG_RETENTION_MS
   // 客户端请求的绝对地址：代理监听地址 + 记录下来的路径。拿不到监听地址就不拼，宁可禁用。
   const origin = resolveProxyOrigin(proxyStatus?.host ?? null, proxyStatus?.port ?? null)
@@ -604,9 +603,8 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           <RequestContentsSheet
             contents={contents}
             attemptContents={'attemptContents' in log ? log.attemptContents : null}
-            bodies={bodiesQuery.data ?? null}
-            bodiesLoading={bodiesQuery.isPending}
-            bodiesError={bodiesQuery.error === null ? null : bodiesQuery.error.message}
+            requestId={log.id}
+            pollBodies={log.status === 'pending'}
             attempts={log.attempts}
             requestRewriteRules={requestRewriteRules}
             clientProtocol={log.clientProtocol}

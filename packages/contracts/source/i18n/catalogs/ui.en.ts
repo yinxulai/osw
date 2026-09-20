@@ -323,6 +323,7 @@ export const uiEn = {
   'requestLogs.contents.collapseAll': 'Collapse all',
   'requestLogs.contents.noMatchHint': 'Nothing matches "{query}"',
   'requestLogs.contents.loading': 'Loading contents',
+  'requestLogs.contents.bodiesError': 'Failed to load contents',
   'requestLogs.contents.noRecord': 'This attempt has no contents to show',
   'requestLogs.contents.title': 'Attempt {index} / {total}',
   'requestLogs.contents.titleFallback': 'Request details',

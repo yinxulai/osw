@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
@@ -12,6 +12,21 @@ import { RequestContentsSheet } from './request-contents-sheet'
 
 // `I18nProvider` 会读取服务端设置，单测里不需要也不该走 react-query。
 vi.mock('@/features/settings/hooks', () => ({ useSettings: () => null }))
+
+// 面板自己持有正文查询（正文是库里最大的列，点开才取），测试替掉它才能把
+// 「还没到 / 到了 / 取失败」三种状态分别摆到界面上验。
+const bodiesQuery = vi.hoisted(() => ({
+  data: null as { contents: unknown[]; attemptContents: unknown[] } | null,
+  isPending: false,
+  error: null as Error | null,
+  refetch: vi.fn(),
+}))
+
+vi.mock('../queries', () => ({
+  useRequestLogBodiesQuery: () => bodiesQuery,
+  // 只有「复制请求」按钮会直接取正文，本文件不覆盖那条路径。
+  fetchRequestLogBodies: vi.fn(),
+}))
 
 interface WrapperProps { children: ReactNode }
 
@@ -101,6 +116,8 @@ interface RenderInput {
   pruned?: boolean
   /** 正文还在取：摘要已经到了，正文没到。 */
   bodiesLoading?: boolean
+  /** 取正文失败时的错误信息。 */
+  bodiesError?: string
 }
 
 /**
@@ -120,13 +137,19 @@ function renderSheet(input: RenderInput = {}) {
   const attemptContents = (input.attemptContents ?? [input.upstream]).map(content => attemptContentOf(content))
   const selectedAttemptId = input.selectedAttemptId === undefined ? attempts[0]?.id ?? null : input.selectedAttemptId
   const servingAttemptId = input.servingAttemptId === undefined ? attempts[attempts.length - 1]?.id ?? null : input.servingAttemptId
+  // 正文查询的三种状态：还在取（摘要已到、正文没到）、取失败、取到（pruned 取到的是一组空行）。
+  bodiesQuery.data = input.pruned
+    ? { contents: [], attemptContents: [] }
+    : (input.bodiesLoading || input.bodiesError ? null : { contents: [client], attemptContents })
+  bodiesQuery.isPending = input.bodiesLoading ?? false
+  bodiesQuery.error = input.bodiesError === undefined ? null : new Error(input.bodiesError)
+  bodiesQuery.refetch.mockClear()
   return render(
     <RequestContentsSheet
       contents={input.pruned ? [] : [summaryOf(client)]}
       attemptContents={input.pruned ? [] : attemptContents.map(summaryOf)}
-      bodies={input.bodiesLoading || input.pruned ? null : { contents: [client], attemptContents }}
-      bodiesLoading={input.bodiesLoading ?? false}
-      bodiesError={null}
+      requestId="req_1"
+      pollBodies={false}
       attempts={attempts}
       requestRewriteRules={[]}
       clientProtocol="openai-responses"
@@ -140,16 +163,28 @@ function renderSheet(input: RenderInput = {}) {
   )
 }
 
+/**
+ * 正文是库里最大的列，点开面板才去取。取回来的这段时间里给的是「确定的外壳 + 分节骨架」：
+ * 用户点开的是一次确定的尝试，先看清它是哪一次、链路里有哪些节，比先看到转圈更接近他要的信息；
+ * 而「正文没取到」与「正文没采到」是两件事，界面上必须分得开。
+ */
 describe('deferred bodies', () => {
   beforeEach(() => {
     useLanguageStore.setState({ preference: 'en' })
   })
 
-  it('keeps the panel in its loading state until the bodies arrive, instead of drawing an empty one', () => {
+  it('draws the shell and the section skeletons while the bodies are on the way', () => {
     renderSheet({ bodiesLoading: true })
 
+    // 外壳先出：标题、搜索条、四个阶段的分节标题都已就位。
+    expect(screen.getByText('Attempt 1 / 1')).toBeTruthy()
+    expect(screen.getByRole('textbox')).toBeTruthy()
+    expect(screen.getByText('Original client request')).toBeTruthy()
+    expect(screen.getByText('Response from the real channel')).toBeTruthy()
+    // 这句话是读屏器唯一的加载信号：骨架条本身是 aria-hidden 的。
     expect(screen.getByText('Loading contents')).toBeTruthy()
-    expect(screen.queryByText('No bodies to show: this request was pruned by the retention policy, or bodies were never captured. Attempts, usage and metrics are kept.')).toBeNull()
+    // 还没到就不能说成「没有」。
+    expect(screen.queryByText(/No bodies to show/)).toBeNull()
   })
 
   it('draws every stage once the bodies arrive', () => {
@@ -158,6 +193,19 @@ describe('deferred bodies', () => {
     expect(screen.queryByText('Loading contents')).toBeNull()
     expect(screen.getByText('Original client request')).toBeTruthy()
     expect(screen.getByText('Request sent to the real channel')).toBeTruthy()
+  })
+
+  it('offers a retry when the bodies failed to load, and does not call it "no bodies"', () => {
+    renderSheet({ bodiesError: 'request failed' })
+
+    expect(screen.getByText('Failed to load contents')).toBeTruthy()
+    expect(screen.getByText('request failed')).toBeTruthy()
+    expect(screen.queryByText(/No bodies to show/)).toBeNull()
+    expect(screen.queryByText('Loading contents')).toBeNull()
+
+    // 重试就是让查询自己再取一次，不重挂面板（那会把搜索与展开态一并清掉）。
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(bodiesQuery.refetch).toHaveBeenCalledTimes(1)
   })
 })
 

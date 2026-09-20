@@ -326,6 +326,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.contents.collapseAll': '全折叠',
   'requestLogs.contents.noMatchHint': '没有匹配「{query}」的内容',
   'requestLogs.contents.loading': '正在加载正文',
+  'requestLogs.contents.bodiesError': '正文加载失败',
   'requestLogs.contents.noRecord': '该尝试没有可查看的记录',
   'requestLogs.contents.title': '尝试 {index} / {total}',
   'requestLogs.contents.titleFallback': '请求详情',
