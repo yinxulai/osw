@@ -30,6 +30,30 @@ export function classifyUpstreamStatus(statusCode: number): UpstreamStatusDispos
   return 'failover'
 }
 
+/**
+ * 上游明确在说「这个请求本身不成立」的状态码。
+ *
+ * 切换候选与「最终回什么给客户端」是两件事：这里回答的是后者。全部候选都试过以后，
+ * 如果其中有上游回的是这一组状态码，那客户端手里的请求就是不可能成功的，
+ * 此时把 `502 ALL_PROVIDERS_FAILED` 交给它会诱导它在同一个请求上反复重试
+ * （`502` 在客户端语义里是「网关临时故障，可重试」），真正的根因被永久隐藏。
+ *
+ * 白名单必须显式枚举，不能用「4xx」一把抓：
+ *
+ * - `401` / `403`：凭证问题，换一家可能就成功了，不属于「请求本身的问题」；
+ * - `404`：模型或路径不存在，同样是换一家可能成立；
+ * - `408`：上游自己等待超时，是上游侧的事实；
+ * - `429`：限流，换一家可能成立，且客户端重试也确实是对的。
+ *
+ * `400` / `413` / `414` / `422` 是仅有的「报文格式不成立」类：换多少家都一样。
+ */
+const CLIENT_ATTRIBUTABLE_STATUS_CODES: ReadonlySet<number> = new Set([400, 413, 414, 422])
+
+/** 全部候选告罄时，上游是否明确告诉过我们「这个请求本身不成立」。 */
+export function isClientAttributableStatus(statusCode: number): boolean {
+  return CLIENT_ATTRIBUTABLE_STATUS_CODES.has(statusCode)
+}
+
 export function classifyHealthFailure(input: HealthFailureInput): HealthFailureScope {
   const { statusCode, responseBody, transportMismatch, streamInterrupted } = input
   // 「没兼现要求」与「正文没搬完」都是**这个模型**没做到：同样的请求在别的候选上可能就能做到，

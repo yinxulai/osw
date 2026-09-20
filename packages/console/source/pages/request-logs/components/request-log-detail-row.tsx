@@ -614,6 +614,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             loading={props.detailLoading}
             error={props.detailError}
             selectedAttemptId={selectedAttemptId}
+            servingAttemptId={servingAttempt?.id ?? null}
             onClose={() => setSelectedAttemptId(null)}
           />
         </div>

@@ -5,6 +5,7 @@ import type { RequestLogger } from '@server/proxy/observability/logging-types'
 import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import type { HealthFailureScope } from '@server/proxy/response/response'
+import { isClientAttributableStatus } from '@server/proxy/response/response'
 import type { UpstreamTarget } from '@server/proxy/contracts'
 import type { RequestContext } from '@server/proxy/request/request-context'
 import { isClientRequestCancelled, LocalAttemptError, RecordedAttemptError, serializeLocalFailure } from './attempt-errors'
@@ -50,6 +51,15 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
    */
   let lastUpstreamFailure: UpstreamFailureSummary | null = null
 
+  /**
+   * 最后一个「上游明确说这个请求不成立」的候选（见 `isClientAttributableStatus`）。
+   *
+   * 与 `lastUpstreamFailure` 分开记：前者是「最后一次上游回了什么」，用于解释失败；
+   * 它记的是「哪一次上游说了客户端该改请求」，用于决定最终状态码。
+   * 混着记会让一个「先 400、再连接错误」的请求丢掉那条唯一能让客户端自救的结论。
+   */
+  let lastClientAttributableFailure: UpstreamFailureSummary | null = null
+
   return {
     onSuccess: async (target, outcome, attemptIndex) => {
       if (outcome.disposition === 'success') {
@@ -75,7 +85,12 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
 
     onFailover: async (target, outcome, attemptIndex) => {
       const nextTarget = targets[attemptIndex + 1]
-      lastUpstreamFailure = { statusCode: outcome.statusCode, body: outcome.upstreamResponseBody ?? null }
+      const failure: UpstreamFailureSummary = { statusCode: outcome.statusCode, body: outcome.upstreamResponseBody ?? null }
+      lastUpstreamFailure = failure
+      // 只要出现过一次请求格式类 4xx，客户端的请求就已经被上游判定为「不成立」，
+      // 这个结论不会因为后面某家网络不通而失效；若后面又是同类 4xx，覆盖成最近那一条，
+      // 因为正文要交给客户端的是最近一次上游原文。
+      if (isClientAttributableStatus(failure.statusCode)) lastClientAttributableFailure = failure
       const healthScope = await recordHealthFailure(target, outcome.statusCode, healthFailureHints(outcome))
       console.warn(
         `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.providerModelId ?? 'none'} healthFailureScope=${healthScope}`,
@@ -166,6 +181,12 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
         console.error(`[proxy] failed to write the request attempt log: ${(logError as Error).message}`)
       }
       const recordedOutcome = error instanceof RecordedAttemptError ? error.outcome : null
+      // 上游明确回了「请求不成立」的状态码、随后正文搬运中断时，这条尝试是作为异常
+      // （`RecordedAttemptError`）抛出来的，不会经过 `onFailover`。事实不能因此漏收：
+      // 漏掉它，客户端就会在这个永远不可能成功的请求上拿到一个「可重试」的 502。
+      if (recordedOutcome !== null && isClientAttributableStatus(recordedOutcome.statusCode)) {
+        lastClientAttributableFailure = { statusCode: recordedOutcome.statusCode, body: recordedOutcome.upstreamResponseBody ?? null }
+      }
       let healthScope: HealthFailureScope = 'none'
       if (!isOutboundProxyConnectionError(rootError)) {
         healthScope = await recordHealthFailure(target, recordedOutcome?.statusCode ?? null, recordedOutcome === null ? {} : healthFailureHints(recordedOutcome))
@@ -193,12 +214,18 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
 
     onExhausted: async lastError => {
       if (!response.headersSent) {
-        const message = describeExhaustion(lastError, lastUpstreamFailure)
+        const message = describeExhaustion(lastError, lastClientAttributableFailure, lastUpstreamFailure)
+        // 状态码保留上游失败的性质，而不是一律折叠成 502：
+        // 上游说「这个请求不成立」时回它原本的 4xx，客户端才能据此修正请求而不是无限重试；
+        // 失败属于服务端/连接层时才回 `502 ALL_PROVIDERS_FAILED`（本项目的网关语义）。
+        // `errorCode` 不变：它说的是代理层的结论（没有任何候选能服务这个请求），
+        // 机器可读的「责任归属」由 HTTP 状态码承担。
+        const statusCode = lastClientAttributableFailure?.statusCode ?? 502
         console.error(
-          `[proxy] all providers failed requestId=${requestId} method=${context.method} path=${context.path} clientProtocol=${protocol} logicalModelId=${logicalModelId} attempts=${targets.length} lastUpstreamStatus=${lastUpstreamFailure?.statusCode ?? 'none'} totalDuration=${Date.now() - startedAt}ms error=${message}`,
+          `[proxy] all providers failed requestId=${requestId} method=${context.method} path=${context.path} clientProtocol=${protocol} logicalModelId=${logicalModelId} attempts=${targets.length} clientStatus=${statusCode} lastUpstreamStatus=${lastUpstreamFailure?.statusCode ?? 'none'} totalDuration=${Date.now() - startedAt}ms error=${message}`,
         )
-        const responseBody = response.fail(502, 'ALL_PROVIDERS_FAILED', message)
-        await requestLogger.finalizeLocalErrorContent(502, response.headers(), responseBody)
+        const responseBody = response.fail(statusCode, 'ALL_PROVIDERS_FAILED', message)
+        await requestLogger.finalizeLocalErrorContent(statusCode, response.headers(), responseBody)
       }
       await requestLogger.finalizeRequestLog('failed', startedAt)
     },
@@ -217,16 +244,21 @@ const UPSTREAM_FAILURE_BODY_LIMIT = 200
 /**
  * 「所有候选都失败」时给客户端的解释。
  *
- * 优先级是「谁知道得更多谁来说」：异常（连接层、搬运中断）最接近根因，因此先看它；
- * 没有异常时用最后一次上游响应的状态码与正文——状态码是客户端唯一能据以自救的东西
+ * 优先级是「谁知道得更多谁来说」：**请求格式类 4xx 排在异常前面**，因为它才是客户端
+ * 能据以自救的那条线索（「你这类请求上游一律不认」）；一条连接异常只能解释这一次
+ * 为什么没转发出去，覆盖掉 4xx 反而把根因藏了起来。没有 4xx 时沿用原来的顺序：
+ * 异常（连接层、搬运中断）最接近根因，其次才是最后一次上游响应的状态码与正文
  * （401 该换密钥、404 该换模型），把它换掉只等于把「为什么失败」推回给用户。
  */
-function describeExhaustion(lastError: Error | null, upstreamFailure: UpstreamFailureSummary | null): string {
+function describeExhaustion(lastError: Error | null, clientAttributable: UpstreamFailureSummary | null, upstreamFailure: UpstreamFailureSummary | null): string {
+  const failure = clientAttributable ?? (lastError === null ? upstreamFailure : null)
+  if (failure !== null) {
+    const detail = summarizeUpstreamBody(failure.body)
+    const head = `All providers failed: the last upstream responded with ${failure.statusCode}`
+    return detail === null ? head : `${head} (${detail})`
+  }
   if (lastError !== null) return lastError.message
-  if (upstreamFailure === null) return 'All providers failed'
-  const detail = summarizeUpstreamBody(upstreamFailure.body)
-  const head = `All providers failed: the last upstream responded with ${upstreamFailure.statusCode}`
-  return detail === null ? head : `${head} (${detail})`
+  return 'All providers failed'
 }
 
 /** 把上游错误正文压成单行短句；没有可用内容时返回 `null`，让调用方只说状态码。 */

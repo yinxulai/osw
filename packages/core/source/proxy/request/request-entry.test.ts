@@ -845,6 +845,118 @@ describe('handleProxyRequest', () => {
     }))
   })
 
+  it('returns the upstream client status when every candidate rejects the request', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const first = await listen((_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      res.end('{"error":"first provider validation"}')
+    })
+    const second = await listen((_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      res.end('{"error":"second provider validation"}')
+    })
+    mocks.models = [
+      model('model_first', 'prov_first', `${first.url}/v1/completions`, 'first-model'),
+      model('model_second', 'prov_second', `${second.url}/v1/completions`, 'second-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+    const responseBody = await response.text()
+
+    // 换一家上游也照样被判定为「请求本身不成立」，因此客户端必须收到 400 而不是 502：
+    // 502 在客户端语义里是「网关临时故障，可重试」，那会让它在这个请求上无限重试。
+    expect(response.status).toBe(400)
+    expect(JSON.parse(responseBody)).toEqual({
+      success: false,
+      errorCode: 'ALL_PROVIDERS_FAILED',
+      // 交给客户端的原文是**最近**那一次上游说的：同类结论被后面一次覆盖。
+      errorMessage: 'All providers failed: the last upstream responded with 400 ({"error":"second provider validation"})',
+    })
+  })
+
+  it('keeps the client status when a later provider fails below HTTP', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const dead = await listen((_req, res) => res.end())
+    const deadUrl = dead.url
+    await closeServer(dead.server)
+    const rejecting = await listen((_req, res) => {
+      res.writeHead(422, { 'content-type': 'application/json' })
+      res.end('{"error":"unsupported parameter"}')
+    })
+    mocks.models = [
+      model('model_dead', 'prov_dead', `${deadUrl}/v1/completions`, 'dead-model'),
+      model('model_rejecting', 'prov_rejecting', `${rejecting.url}/v1/completions`, 'rejecting-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+    const responseBody = await response.text()
+
+    // 一次连接失败只解释了「这一家这次没连上」，盖不住「上游已经判定这个请求不成立」这个结论，
+    // 因此解释与状态码都要继续以 422 为准。
+    expect(response.status).toBe(422)
+    expect(JSON.parse(responseBody)).toEqual({
+      success: false,
+      errorCode: 'ALL_PROVIDERS_FAILED',
+      errorMessage: 'All providers failed: the last upstream responded with 422 ({"error":"unsupported parameter"})',
+    })
+  })
+
+  it.each([401, 429])('keeps the gateway status when every candidate fails with %i', async status => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(status, { 'content-type': 'application/json' })
+      res.end('{"error":"invalid api key"}')
+    })
+    mocks.models = [
+      model('model_failed', 'prov_failed', `${upstream.url}/v1/completions`, 'failed-model'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+    const responseBody = await response.text()
+
+    // 凭证错误与限流都是「换一家可能就成立、客户端重试也确实合理」的失败，
+    // 不能把 4xx 当成责任归属交给客户端（见 `isClientAttributableStatus` 的白名单）。
+    expect(response.status).toBe(502)
+    expect(JSON.parse(responseBody)).toEqual({
+      success: false,
+      errorCode: 'ALL_PROVIDERS_FAILED',
+      errorMessage: `All providers failed: the last upstream responded with ${status} ({"error":"invalid api key"})`,
+    })
+  })
+
   it('stores the final local error response after all providers fail', async () => {
     mocks.captureRequestContent = true
     configureSecretStore({

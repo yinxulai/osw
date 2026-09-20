@@ -93,6 +93,14 @@ interface RequestContentsSheetProps {
   loading: boolean
   error: string | null
   selectedAttemptId: string | null
+  /**
+   * 真正把响应写回客户端的那次尝试；`null` 表示这次请求没有任何尝试。
+   *
+   * 客户端跳在整条请求上只有一条出口，而且**最多只写一次**：它只属于
+   * `servingAttemptOf(log)`（尝试顺序里的最后一条）。这条事实必须由外面传进来，
+   * 面板自己只能看到「选中了哪次尝试」，猜不出谁交付过。
+   */
+  servingAttemptId: string | null
   onClose: () => void
 }
 
@@ -437,10 +445,17 @@ type RequestStageBuilderInput = {
   upstreamProtocol: string | null
   /** 客户端协议与上游协议不一致，即发生过协议转换。 */
   converted: boolean
+  /**
+   * 选中的这次尝试是否就是把响应写回客户端的那一次。
+   *
+   * 为假表示这次尝试被放弃了（`servesRequest: false`）：它一个字节都没有交给客户端，
+   * 因此「返回客户端的响应」这个阶段根本不属于它。
+   */
+  servesClient: boolean
 }
 
 function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): RequestStageData[] {
-  const { clientContent, attemptContent, clientProtocol, upstreamProtocol, converted } = input
+  const { clientContent, attemptContent, clientProtocol, upstreamProtocol, converted, servesClient } = input
   const clientLabel = protocolLabel(t, clientProtocol)
   const upstreamLabel = protocolLabel(t, upstreamProtocol)
   const clientRequestTitle = t('requestLogs.contents.stage.clientRequest')
@@ -451,10 +466,10 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
   // 叫它「上游响应」会让人以为是上游回的内容。
   const upstreamResponseBodyIsLocalFailure = isLocalFailureBody(attemptContent?.responseBody ?? null)
 
-  // 四个阶段的取值直接来自它所属的表：
+  // 阶段的取值直接来自它所属的表：
   //   客户端原始请求 / 返回客户端的响应 -> request_contents（客户端视角）
   //   发送到供应商的请求 / 供应商响应   -> attempt_contents（上游视角）
-  return [
+  const stages: RequestStageData[] = [
     {
       title: clientRequestTitle,
       protocol: clientLabel,
@@ -491,7 +506,14 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
         },
       ],
     },
-    {
+  ]
+
+  // 「返回客户端的响应」是请求级事实，不属于每一次尝试：被放弃的尝试从来没有向客户端
+  // 写出过一个字节（`attempt-conclusion.ts` 里 `servesRequest: false`）。
+  // 无条件拼出这一阶段，等于把**最后一次尝试**的响应记在前面几次头上——既是错误的
+  // 失败归因，也让搜索与复制混进不属于这次尝试的正文。
+  if (servesClient) {
+    stages.push({
       title: clientResponseTitle,
       protocol: clientLabel,
       statusLabel: clientContent
@@ -502,8 +524,10 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
         { id: sectionKey(clientResponseTitle, t('requestLogs.contents.section.responseHeader', { protocol: clientLabel })), label: t('requestLogs.contents.section.responseHeader', { protocol: clientLabel }), value: clientContent?.responseHeaders ?? null },
         { id: sectionKey(clientResponseTitle, t('requestLogs.contents.section.responseBody', { protocol: clientLabel })), label: t('requestLogs.contents.section.responseBody', { protocol: clientLabel }), value: clientContent?.responseBody ?? null },
       ],
-    },
-  ]
+    })
+  }
+
+  return stages
 }
 
 export function RequestContentsSheet(props: RequestContentsSheetProps) {
@@ -536,6 +560,8 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   const clientProtocol = props.clientProtocol
   const upstreamProtocol = selectedAttempt?.upstreamProtocol ?? null
   const converted = clientProtocol !== null && upstreamProtocol !== null && clientProtocol !== upstreamProtocol
+  // 客户端跳只写一次，而且只可能由服务该请求的那次尝试写出，因此这里只做身份比对。
+  const servesClient = props.selectedAttemptId !== null && props.selectedAttemptId === props.servingAttemptId
 
   const stages = React.useMemo<RequestStageData[]>(() => buildRequestStages(t, {
     clientContent,
@@ -543,7 +569,8 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     clientProtocol,
     upstreamProtocol,
     converted,
-  }), [t, clientContent, attemptContent, clientProtocol, upstreamProtocol, converted])
+    servesClient,
+  }), [t, clientContent, attemptContent, clientProtocol, upstreamProtocol, converted, servesClient])
 
   const sections = React.useMemo(
     () => stages.flatMap(stage => stage.sections).filter(section => section.value !== null),
@@ -728,6 +755,13 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               empty={bodiesMissing}
             />
           ))}
+          {/* 该阶段被隐藏的地方要留一句解释：否则「少了第四个阶段」既可能被读成界面出错，
+              也可能被读成「正文丢了」（那由上面的 `pruned` 负责说明）。 */}
+          {selectedAttempt && !servesClient && (
+            <div className="rounded-md border border-dashed border-module-border px-3 py-2 system-xs-regular text-text-tertiary">
+              {t('requestLogs.contents.clientResponseNotDelivered')}
+            </div>
+          )}
         </div>
       </div>
     )

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHealthFailure, classifyUpstreamStatus } from '@server/proxy/response/response'
+import { classifyHealthFailure, classifyUpstreamStatus, isClientAttributableStatus } from '@server/proxy/response/response'
 
 describe('classifyUpstreamStatus', () => {
   it.each([200, 201, 204])('treats %i as a successful upstream response', status => {
@@ -10,6 +10,20 @@ describe('classifyUpstreamStatus', () => {
     // 上游 4xx 最常见的来源是「这家不支持这个参数」：状态码不能证明换一家也无效，
     // 因此包括 400/422 在内的非 2xx 一律优先切换候选（见 `request-entry.test.ts` 的用例）。
     expect(classifyUpstreamStatus(status)).toBe('failover')
+  })
+})
+
+describe('isClientAttributableStatus', () => {
+  it.each([400, 413, 414, 422])('reports %i as a request the upstream itself rejected', status => {
+    // 这一组是仅有的「报文格式不成立」类：换多少家上游都一样，因此全部候选告罄时
+    // 客户端应该收到这个状态码，而不是「可重试」的 502。
+    expect(isClientAttributableStatus(status)).toBe(true)
+  })
+
+  it.each([200, 300, 401, 403, 404, 405, 408, 409, 429, 500, 502, 503])('keeps %i out of the client-attributable set', status => {
+    // 401/403（凭证）、404（模型或路径）、408（上游等待超时）、429（限流）都可能换一家就成立，
+    // 客户端重试也确实合理，因此不能让它们把最终状态码改写成 4xx。
+    expect(isClientAttributableStatus(status)).toBe(false)
   })
 })
 

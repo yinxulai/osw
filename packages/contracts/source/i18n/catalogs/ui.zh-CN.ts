@@ -331,6 +331,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.contents.titleFallback': '请求详情',
   'requestLogs.contents.description': '按请求链路和采集时的原始字符串展示',
   'requestLogs.contents.pruned': '没有可展示的正文：已被保留策略清理，或本来就没有采集。尝试、用量与指标仍然保留。',
+  'requestLogs.contents.clientResponseNotDelivered': '这次尝试被放弃，没有向客户端返回任何内容：「返回客户端的响应」只属于真正服务这个请求的那次尝试（尝试顺序里的最后一次）。',
   'requestLogs.contents.unknownProtocol': '未知协议',
   'requestLogs.contents.stage.clientRequest': '客户端原始请求',
   'requestLogs.contents.stage.upstreamRequestConverted': '协议转换后的上游请求',

@@ -923,7 +923,7 @@ CREATE UNIQUE INDEX idx_attempt_contents_attempt
 | 客户端原始请求 | `request_contents.requestHeaders` / `requestBody` |
 | 发送到上游的请求 | `attempt_contents.requestHeaders` / `requestBody` |
 | 真实供应商响应 | `attempt_contents.responseHeaders` / `responseBody` |
-| 返回客户端的响应 | `request_contents.responseHeaders` / `responseBody` |
+| 返回客户端的响应 | `request_contents.responseHeaders` / `responseBody`，且只在服务该请求的那次尝试（尝试顺序里的最后一条）上展示 |
 | 已应用修改器 | `request_attempts.requestRewriteRuleIds` ∪ `responseRewriteRuleIds` |
 | 协议与上游跳形态 | `request_attempts.upstreamProtocol` ∪ `request_attempts.upstreamTransport`，与 `request_logs.clientProtocol` / `request_logs.transport` 对比得出转换 |
 

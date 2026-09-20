@@ -328,6 +328,7 @@ export const uiEn = {
   'requestLogs.contents.titleFallback': 'Request details',
   'requestLogs.contents.description': 'Shown along the request chain, using the raw captured strings',
   'requestLogs.contents.pruned': 'No bodies to show: this request was pruned by the retention policy, or bodies were never captured. Attempts, usage and metrics are kept.',
+  'requestLogs.contents.clientResponseNotDelivered': 'This attempt was abandoned and never returned anything to the client. The client response belongs to the attempt that actually served the request — the last one in the attempt order.',
   'requestLogs.contents.unknownProtocol': 'Unknown protocol',
   'requestLogs.contents.stage.clientRequest': 'Original client request',
   'requestLogs.contents.stage.upstreamRequestConverted': 'Upstream request after conversion',
