@@ -81,6 +81,7 @@
 import { type TelemetryEvent } from '@common/telemetry'
 import {
   postJson,
+  readErrorDetail,
   type Fetcher,
   type TelemetryForwardContext,
   type TelemetryForwardOutcome,
@@ -189,10 +190,20 @@ export function createAptabaseSink(options: AptabaseSinkOptions): TelemetrySink 
       // 凭证走**请求头**（`App-Key`），这是 Aptabase 的规矩；它与事件是分开的参数，所以
       // 「谁也不知道密钥」这件事在类型上就成立——测试可以只断言事件部分。
       const headers = { 'App-Key': options.appKey }
-      const response = await postJson(APTABASE_EVENTS_URL, buildEventBatch(events, context), options.fetcher, headers)
-      if (response === null) return { ok: false, failure: 'unreachable' }
+      const result = await postJson(APTABASE_EVENTS_URL, buildEventBatch(events, context), options.fetcher, headers)
+      // 带上「是哪一种没有回答」（见 `TelemetryUnreachableReason`）：`timeout` 指向下游慢，
+      // `error` 指向这次请求根本没到对方手里。两者对运维是两件不同的事。
+      if (!result.ok) return { ok: false, failure: 'unreachable', reason: result.reason }
       // ⚠️ 2xx 只说明下游收下了请求，**不代表每一条都入库**（见文件头那条静默失败）。
-      if (!response.ok) return { ok: false, failure: 'rejected', status: response.status }
+      if (!result.response.ok) {
+        // 把它的答复读出来一起带下去。读不出来就是 `null`，不影响这个判定的成立。
+        return {
+          ok: false,
+          failure: 'rejected',
+          status: result.response.status,
+          detail: await readErrorDetail(result.response),
+        }
+      }
       return { ok: true }
     },
   }

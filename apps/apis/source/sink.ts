@@ -22,6 +22,7 @@
  */
 
 import { type TelemetryEvent } from '@common/telemetry'
+import { oneLine } from './log'
 
 /** 一次转发要用的 `fetch`。写成别名是为了让「可以在测试里换掉」这件事在签名上一眼可见。 */
 export type Fetcher = typeof fetch
@@ -49,17 +50,36 @@ export interface TelemetryForwardContext {
 }
 
 /**
+ * 「下游没有回答」是哪一种。**只有两种，因为只有两种排查方向。**
+ *
+ * - `timeout`：我们自己那个定时器按下的。指向「下游慢」——该看它的状态页，或考虑把
+ *   `FORWARD_TIMEOUT_MILLISECONDS` 放宽；
+ * - `error`：别的一律归这里（DNS、TLS、被重置、进程里抛错）。指向「这次请求根本没到
+ *   对方手里」——该看出入口与地址。
+ *
+ * 再往下细分就不必了：那是 Cloudflare 的日志该说的话，不是我们能在这一层编出来的。
+ */
+export type TelemetryUnreachableReason = 'timeout' | 'error'
+
+/**
  * 一次转发的结果。**分三态而不是布尔**：「连不上」与「对方收了但拒了」对运维是两件事
  * （前者看网络与出入口，后者看凭证与报文），合并成一个 `false` 就等于把这条线索扔掉。
+ *
+ * 三态各自还带一项**只给日志用**的补充：连不上时是哪一种（`reason`），被拒时对方说了什么
+ * （`detail`）。它们不参与任何判断——调用方看的是 `failure`——但没有它们，这一层交出去的
+ * 就只剩「失败了」三个字，而那正好是最需要一行日志时的全部内容。
  */
 export type TelemetryForwardOutcome =
   | { readonly ok: true }
-  | { readonly ok: false; readonly failure: 'unreachable' }
-  | { readonly ok: false; readonly failure: 'rejected'; readonly status: number }
+  | { readonly ok: false; readonly failure: 'unreachable'; readonly reason: TelemetryUnreachableReason }
+  | { readonly ok: false; readonly failure: 'rejected'; readonly status: number; readonly detail: string | null }
 
 /** 一个下游。 */
 export interface TelemetrySink {
-  /** 后端名，只用于日志（`upstream rejected sink=aptabase status=…`）。 */
+  /**
+   * 后端名，只用于日志（`status=502 error=upstream_rejected sink=aptabase upstream_status=…`）。
+   * 将来同时挂两个下游时，靠它把两行分开。
+   */
   readonly name: string
 
   /**
@@ -83,29 +103,59 @@ export interface TelemetrySink {
  */
 export const FORWARD_TIMEOUT_MILLISECONDS = 3_000
 
+/** `postJson` 的回答：要么一个响应，要么「没有回答」加上是哪一种（见 `TelemetryUnreachableReason`）。 */
+export type PostJsonResult =
+  | { readonly ok: true; readonly response: Response }
+  | { readonly ok: false; readonly reason: TelemetryUnreachableReason }
+
 /**
- * 发一个 JSON POST，**失败与超时都折成 `null`**。
+ * 发一个 JSON POST。**失败与超时都折成一个返回值，绝不抛。**
  *
- * 唯一被接受的「回答」是一个 HTTP 响应；「没有回答」只有一种，所以不区分 DNS、TLS、超时、
- * 中途断开——它们对调用方的含义相同，而对它们分门别类是运维在 Cloudflare 日志里看的事，
- * 不是这里该编出来的信息。
+ * 唯一被接受的「回答」是一个 HTTP 响应；「没有回答」的后果也只有一种（这批数据没出去），
+ * 所以 DNS、TLS、被重置、中途断开全归一类。但**「是我们按下的超时」要单独拎出来**：它也
+ * 有一种后果，指向的方向却与前面几个相反（下游慢 vs. 请求没到）。把这一项省掉的代价，就是
+ * 那条日志里除了「连不上」之外一个字都说不出。
  *
  * `headers` 是**留给下游自己的位置**：凭证放请求头（有的后端就是这么设计的）还是放正文，
  * 是下游的规矩，这一层不替它决定。这里唯一不变的部分是「正文是 JSON」。
  */
-export async function postJson(url: string, body: unknown, fetcher: Fetcher, headers: Record<string, string>): Promise<Response | null> {
+export async function postJson(url: string, body: unknown, fetcher: Fetcher, headers: Record<string, string>): Promise<PostJsonResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MILLISECONDS)
   try {
-    return await fetcher(url, {
+    const response = await fetcher(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
       signal: controller.signal,
     })
+    return { ok: true, response }
   } catch {
-    return null
+    // 这个控制器只有我们自己那个定时器会用，所以「信号已置位」就等于「是我们按的」。
+    return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'error' }
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/**
+ * 读一次**失败**响应的正文，只为了日志。
+ *
+ * 「下游为什么拒收」只有下游自己说的那一句话能回答。状态码回答不了：400 可能是密钥不对、
+ * 可能是一条事件超长、也可能是整批太大，三者的处置完全不同。
+ *
+ * 只读失败响应：成功那一边没有可读的东西，而多读一次正文就是多等一次下游。读不出来
+ * （正文已被读过、连接在中途断了）返回 `null`——诊断信息的缺失不该把一个已经判定清楚的
+ * 失败变成另一种失败。
+ *
+ * 正文可能很长（有的后端会回一整页 HTML），所以洗一遍再截断，且**只留一行**：它最终会被
+ * 拼进一条日志里。
+ */
+export async function readErrorDetail(response: Response, maxLength = 200): Promise<string | null> {
+  try {
+    const text = (await response.text()).trim()
+    return text === '' ? null : oneLine(text, maxLength)
+  } catch {
+    return null
   }
 }

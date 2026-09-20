@@ -29,7 +29,28 @@ routes = [
 [observability]
 # 打开 Worker 的日志与指标。日志里**没有**安装标识、没有来源地址、没有报文正文——
 # 这一段只回答「端点活着吗、下游答不答」，不回答「谁在发」。
+#
+# 每一个非 2xx 出口都会留一行，形状统一（`source/log.ts`）：
+#
+#   [apis] status=500 error=not_configured missing=APTABASE_APP_KEY
+#
+# 2xx 不打：成功行会按「安装数 × 频率」增长，而它回答不了任何问题。
+# 要查历史日志：Cloudflare 后台 → Workers & Pages → osw-telemetry → Logs；
+# 要看实时的：在 `apps/apis` 里跑 `pnpm exec wrangler tail`。
 enabled = true
+
+[secrets]
+# 声明「少了下游密钥就不算一份完整的部署」。声明之后，`wrangler deploy` / `wrangler versions upload`
+# 会在**部署时**核对它到底配上了没有，缺了直接报错退出——而不是把代码推上去、让每个请求在线上
+# 回 500（见下面「密钥」一节与 `source/index.ts`）。
+#
+# 这就是这条链路想要的失败方式：把「少配了一个 secret」从「上线后有人看见」挪到「发布日志里
+# 直接写着」。没有它时，唯一能发现的方式是有人去戳端点或在日志里翻到那一行。
+#
+# ⚠️ 配上它之后，缺密钥的发布**会失败**，这是刻意的。所以先去把密钥配好，再发下一次。
+#
+# 顺带：它也是 `wrangler types` 的类型来源（`apps/apis/worker-configuration.d.ts`，已被忽略）。
+required = ["APTABASE_APP_KEY"]
 
 # ---------------------------------------------------------------- 自定义域名
 #
@@ -76,12 +97,23 @@ enabled = true
 #
 #   wrangler secret put APTABASE_APP_KEY     # A-EU-…（Aptabase 应用的 App Key）
 #
+# ⚠️ 在后台「Variables and Secrets → Add」里加时，类型必须选 **Secret**。
+# 选成 Variable（明文）的那种会在**下一次 `wrangler deploy` 时被清掉**：`wrangler.toml` 是这份
+# 配置的唯一真相，后台的**变量**每次部署都会被它覆盖；而 **Secret 不会**（除非显式跑
+# `wrangler secret delete`）。「后台配了、发布一次就没了」说的就是前者。
+# 想让后台变量活下来要写 `keep_vars = true`，这里刻意不写：那等于让仓库之外还藏着半份配置。
+#
 # 只有一个：它是这条链路上唯一的秘密，也是唯一可能泄出去的东西。它会进**转发请求的请求头**
 # （`App-Key`），所以它一旦泄露，任何人都能往这个应用里灌数据。不进仓库、不进本文件、不进客户端。
 #
 # **区域要跟着 `source/sinks/aptabase.ts` 里的 `APTABASE_EVENTS_URL` 走**：App Key 中间那一段就是
 # 它所属的数据中心（`A-EU-…` / `A-US-…`），而区域是签在密钥上的。地址与它对不上时下游回 404
-# （它在自己那张表里找不到这个密钥），表现为 502 `upstream_rejected` 加一行 `status=404` 的日志
-# ——不是静默丢数据。
+# （它在自己那张表里找不到这个密钥），表现为 502 `upstream_rejected` 加一行 `upstream_status=404`
+# 的日志——不是静默丢数据。
 #
-# 少了它，端点会对所有请求回 500 `not_configured`——它宁可明确失败，也不会静默把数据丢掉。
+# 少了它，端点会对所有请求回 500 `not_configured`（全 Worker 唯一一个 500），并在日志里留下：
+#
+#   [apis] status=500 error=not_configured missing=APTABASE_APP_KEY
+#
+# 它宁可明确失败，也不会静默把数据丢掉。**看到这一行就说明是这里没配**——
+# 注意这里说的是密钥本身没有被这个 Worker 读到，而不是密钥不对（那是 404，走上面那条）。

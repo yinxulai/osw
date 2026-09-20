@@ -22,8 +22,8 @@ interface CapturedRequest {
   body: AptabaseEvent[]
 }
 
-/** 下游替身：把请求留下来，回一个给定状态码。 */
-function createFetcher(status = 200): { fetcher: typeof fetch; calls: CapturedRequest[] } {
+/** 下游替身：把请求留下来，回一个给定状态码（可附一行正文）。 */
+function createFetcher(status = 200, body: string | null = null): { fetcher: typeof fetch; calls: CapturedRequest[] } {
   const calls: CapturedRequest[] = []
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({
@@ -32,7 +32,7 @@ function createFetcher(status = 200): { fetcher: typeof fetch; calls: CapturedRe
       headers: (init?.headers ?? {}) as Record<string, string>,
       body: typeof init?.body === 'string' ? (JSON.parse(init.body) as AptabaseEvent[]) : [],
     })
-    return new Response(null, { status })
+    return new Response(body, { status })
   }) as typeof fetch
   return { fetcher, calls }
 }
@@ -261,13 +261,19 @@ describe('Aptabase 下游', () => {
       const sink = createAptabaseSink({ appKey: APP_KEY, fetcher: failing })
 
       // sink 的契约是「永不抛」：抛出去会把 Worker 变成 500，而这一层能说的是「下游没接」。
-      await expect(sink.forward([appStarted()], CONTEXT)).resolves.toEqual({ ok: false, failure: 'unreachable' })
+      // `reason` 是给日志用的：非超时的那些都归 `error`（见 `TelemetryUnreachableReason`）。
+      await expect(sink.forward([appStarted()], CONTEXT)).resolves.toEqual({
+        ok: false,
+        failure: 'unreachable',
+        reason: 'error',
+      })
     })
 
     it('下游 4xx 时带回状态码', async () => {
       const { outcome } = await forwardOne(appStarted(), 400)
 
-      expect(outcome).toEqual({ ok: false, failure: 'rejected', status: 400 })
+      // `detail` 为 `null`：这个替身没有回正文，而「它没说话」就是事实。
+      expect(outcome).toEqual({ ok: false, failure: 'rejected', status: 400, detail: null })
     })
 
     it('密钥不对时带回 404', async () => {
@@ -275,7 +281,33 @@ describe('Aptabase 下游', () => {
       // 所以「密钥的区域段与入口地址对不上」会在日志里立刻显形。
       const { outcome } = await forwardOne(appStarted(), 404)
 
-      expect(outcome).toEqual({ ok: false, failure: 'rejected', status: 404 })
+      expect(outcome).toEqual({ ok: false, failure: 'rejected', status: 404, detail: null })
+    })
+
+    it('下游说了拒收的理由时原样带回', async () => {
+      const upstream = createFetcher(400, 'Invalid App Key')
+      const sink = createAptabaseSink({ appKey: APP_KEY, fetcher: upstream.fetcher })
+
+      // 状态码回答不了「为什么」：它把下游自己那句话一并交上去，由 Worker 记进日志。
+      await expect(sink.forward([appStarted()], CONTEXT)).resolves.toEqual({
+        ok: false,
+        failure: 'rejected',
+        status: 400,
+        detail: 'Invalid App Key',
+      })
+    })
+
+    it('下游的答复里有换行时只剩一行', async () => {
+      const upstream = createFetcher(400, 'first line\nsecond line')
+      const sink = createAptabaseSink({ appKey: APP_KEY, fetcher: upstream.fetcher })
+
+      // 它最终会被拼进一条日志行，而日志是按行读的：一行变成两行就是在伪造记录。
+      await expect(sink.forward([appStarted()], CONTEXT)).resolves.toEqual({
+        ok: false,
+        failure: 'rejected',
+        status: 400,
+        detail: 'first line second line',
+      })
     })
 
     it('超时就放弃，不等下游', async () => {
@@ -290,7 +322,8 @@ describe('Aptabase 下游', () => {
         const pending = sink.forward([appStarted()], CONTEXT)
         await vi.advanceTimersByTimeAsync(FORWARD_TIMEOUT_MILLISECONDS + 1)
 
-        await expect(pending).resolves.toEqual({ ok: false, failure: 'unreachable' })
+        // `reason=timeout`：这一次是我们自己那个定时器按下的，指向「下游慢」。
+        await expect(pending).resolves.toEqual({ ok: false, failure: 'unreachable', reason: 'timeout' })
       } finally {
         vi.useRealTimers()
       }

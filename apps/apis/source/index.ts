@@ -46,6 +46,14 @@
  *
  * `/v1/track` 是幂等追加、无鉴权、无副作用的，漏挡不构成风险。删掉它还顺带简化了上面那段隐私
  * 账：那个地址之前至少要被哈希一次才成为限流键，现在连一次哈希都没有了。
+ *
+ * ## 关于日志
+ *
+ * **每一个非 2xx 出口都留一行**，形状统一、由 `source/log.ts` 收口；2xx 不打（理由见那个
+ * 文件）。这曾经是一处真实缺口：唯一那个 500（`not_configured`）当时**没有任何日志**，于是
+ * 现场只剩下客户端那句 `telemetry endpoint responded with 500`——状态码有了，原因要人去翻
+ * 代码才知道。而它恰恰是部署期最容易犯的错（`wrangler secret put` 那一步漏了），也恰好是
+ * 唯一一个「看到就能直接修」的失败。最容易犯的错必须是日志里最响的一条，不能是最静的一条。
  */
 
 import {
@@ -54,6 +62,7 @@ import {
   TELEMETRY_REQUEST_PATH,
   type TelemetryEvent,
 } from '@common/telemetry'
+import { logOutcome } from './log'
 import type { Fetcher, TelemetrySink } from './sink'
 import { createAptabaseSink } from './sinks/aptabase'
 
@@ -88,39 +97,77 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
 
     // 只认一条路径。不在它上面的一律 404（根路径也是）：域名上**没有**「不知道为什么有回应」
     // 的地址，包括不给运维探针留位置——那件事由 `GET /v1/track` 的 405 回答，见文件头。
-    if (new URL(request.url).pathname !== TELEMETRY_REQUEST_PATH) return json(404, { ok: false, error: 'not_found' })
-    if (request.method !== 'POST') return methodNotAllowed('POST')
-    if (!isJsonContentType(request.headers.get('content-type'))) return json(415, { ok: false, error: 'unsupported_media_type' })
+    const path = new URL(request.url).pathname
+    if (path !== TELEMETRY_REQUEST_PATH) {
+      // 未知路径也记一行，并且**带上路径**：老客户端停在旧地址（`/v1/events`）是真实会发生的，
+      // 而没有这行日志时它和「有人在扫这个域名」长得一模一样——两种都不是能看到答案的事。
+      // 路径来自请求，所以得先洗一遍（见 `log.ts`）。
+      logOutcome(404, 'not_found', { path })
+      return json(404, { ok: false, error: 'not_found' })
+    }
+
+    if (request.method !== 'POST') {
+      // 这行同时是部署探针的落点：对 `GET /v1/track` 期待 405 的那个人，会在这里看到一条
+      // 带路径与方法的记录，而不是只有一个状态码。
+      logOutcome(405, 'method_not_allowed', { method: request.method })
+      return methodNotAllowed('POST')
+    }
+
+    const contentType = request.headers.get('content-type')
+    if (!isJsonContentType(contentType)) {
+      // 同样带上原始值：客户端发错 `Content-Type`（比如忘了设、设成了 `text/plain`）是
+      // 这条链路上最常见的客户端错，而错误码本身只说「不接受」。
+      logOutcome(415, 'unsupported_media_type', { content_type: contentType ?? '<none>' })
+      return json(415, { ok: false, error: 'unsupported_media_type' })
+    }
 
     // ---- 2. 下游：缺配置就说清楚，不能静默丢数据 ----
 
     // `createSink` 是**全 Worker 唯一知道选的是哪个后端的地方**。换后端时只改它。
     const sink = createSink(env, fetcher)
-    if (sink === null) return json(500, { ok: false, error: 'not_configured' })
+    if (sink === null) {
+      // ⚠️ 全 Worker 唯一一个 500，而原因只有一个：密钥没配上（`wrangler secret put` 没执行，
+      // 或配到了别的 Worker / 别的环境）。所以这一行**必须点名缺的是哪一项**——「少了一个
+      // secret」与「少的是 `APTABASE_APP_KEY`」之间，差的正好是拿去修的那一步。
+      logOutcome(500, 'not_configured', { missing: 'APTABASE_APP_KEY' })
+      return json(500, { ok: false, error: 'not_configured' })
+    }
 
     // ---- 3. 严格校验 ----
 
     const text = await request.text()
-    if (byteLength(text) > TELEMETRY_MAX_REQUEST_BYTES) return json(413, { ok: false, error: 'payload_too_large' })
+    const size = byteLength(text)
+    if (size > TELEMETRY_MAX_REQUEST_BYTES) {
+      // 带上实际字节数：只有一个「太大了」时，修的人还得先量一遍才知道差了多少。
+      logOutcome(413, 'payload_too_large', { bytes: size, limit: TELEMETRY_MAX_REQUEST_BYTES })
+      return json(413, { ok: false, error: 'payload_too_large' })
+    }
 
     const payload = parseJson(text)
-    if (payload === null) return json(400, { ok: false, error: 'invalid_json' })
+    if (payload === null) {
+      logOutcome(400, 'invalid_json', { bytes: size })
+      return json(400, { ok: false, error: 'invalid_json' })
+    }
 
     const parsed = TelemetryBatchSchema.safeParse(payload)
     if (!parsed.success) {
       // 回显前几条问题：客户端开发者要能自己看出报文哪里不对，而这里没有任何秘密可泄露
       // （schema 是开源的、端点本来也没有鉴权）。
-      return json(400, {
-        ok: false,
-        error: 'invalid_payload',
-        issues: parsed.error.issues.slice(0, 5).map(issue => `${issue.path.join('.') || '<root>'}: ${issue.message}`),
-      })
+      const issues = parsed.error.issues.slice(0, 5).map(issue => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+      // 日志里只留第一条：它几乎总是根因，而五条会把一行撑成五行，反而没人看。
+      logOutcome(400, 'invalid_payload', { issue: issues[0] ?? null })
+      return json(400, { ok: false, error: 'invalid_payload', issues })
     }
 
     // ---- 4. 一批只能来自一台设备 ----
 
     const events = parsed.data.events
-    if (!isSingleDevice(events)) return json(400, { ok: false, error: 'mixed_batch' })
+    if (!isSingleDevice(events)) {
+      // 只说「几条事件混了」，**不说标识与平台**：这一行要给的是「客户端把两批并成了一批」
+      // 这个结论，而具体是哪两台设备正在混，正好是最不该落盘的那一点信息。
+      logOutcome(400, 'mixed_batch', { events: events.length })
+      return json(400, { ok: false, error: 'mixed_batch' })
+    }
 
     // ---- 5. 交给下游：本 Worker 的职责到此为止 ----
 
@@ -129,17 +176,27 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
     const outcome = await sink.forward(events, { receivedAt: now, countryCode: countryOf(request) })
     if (outcome.ok) return new Response(null, { status: 204 })
 
-    // 唯一的两个日志点，都说「下游答不答」，不说「谁在发」：没有安装标识、没有来源地址、
-    // 没有报文正文。`wrangler.toml` 把 `[observability]` 打开，等的就是这两行。
-    // 也带上 `sink` 名：将来同时挂两个下游时，这两行要能分开。
+    // 从这里往下都只有一行日志，都说「下游答不答」，不说「谁在发」：没有安装标识、没有来源
+    // 地址、没有报文正文。`wrangler.toml` 把 `[observability]` 打开，等的就是它们。带上
+    // `sink` 名是为了将来同时挂两个下游时这些行还能分开；`reason` 与 `detail` 是下游能给、
+    // 而只有它才能给出的两项（见 `sink.ts`）。
     if (outcome.failure === 'unreachable') {
-      console.error(`[apis] upstream unreachable sink=${sink.name}`)
+      logOutcome(502, 'upstream_unreachable', {
+        sink: sink.name,
+        reason: outcome.reason,
+        events: events.length,
+      })
       return json(502, { ok: false, error: 'upstream_unreachable' })
     }
     // ⚠️ 2xx 只说明下游收下了请求，**不代表事件入库**：缺标识、缺事件名、超出它的时间窗
     // 都会被静默丢弃（telemetry.md §9）。所以这个返回值不能当验收标准用，验收要看下游
     // 自己的报表。
-    console.error(`[apis] upstream rejected sink=${sink.name} status=${outcome.status}`)
+    logOutcome(502, 'upstream_rejected', {
+      sink: sink.name,
+      upstream_status: outcome.status,
+      events: events.length,
+      detail: outcome.detail,
+    })
     return json(502, { ok: false, error: 'upstream_rejected', status: outcome.status })
   }
 }
