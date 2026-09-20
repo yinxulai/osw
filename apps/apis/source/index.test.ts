@@ -5,12 +5,22 @@ import entry, { createTelemetryHandler, workerFetch, type TelemetryEnv } from '.
 const NOW = 1_700_000_000_000
 const INSTALL_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
 const ENDPOINT = 'https://api.osw.yinxulai.com/v1/track'
-const ENV: TelemetryEnv = { GA_MEASUREMENT_ID: 'G-TEST123', GA_API_SECRET: 'secret' }
+const APP_KEY = 'A-EU-0000000000'
+const ENV: TelemetryEnv = { APTABASE_APP_KEY: APP_KEY }
 
+/**
+ * 这些用例**刻意不认识下游**。
+ *
+ * 它们验的是 Worker 自己的四条职责：路由、配置、校验，以及「下游答复 → 我方状态码」
+ * 这一次映射。报文里字段怎么摆是 sink 的事（见 `sinks/aptabase.test.ts`），这里只断言
+ * 「发生了一次 POST、正文是 JSON」。理由不是洁癖：把下游的形状写进 Worker 的用例，等于
+ * 「换一个 sink 就要改一批不相干的测试」，而那正是这套分层要消除的东西。
+ */
 interface CapturedRequest {
   url: string
   body: unknown
   method: string | undefined
+  headers: Record<string, string>
 }
 
 /** 下游替身。返回给定状态码，并把收到的请求留下来给断言用。 */
@@ -20,6 +30,7 @@ function createUpstream(status = 204): { fetcher: typeof fetch; calls: CapturedR
     calls.push({
       url: String(input),
       method: init?.method,
+      headers: (init?.headers ?? {}) as Record<string, string>,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
     })
     return new Response(null, { status })
@@ -49,6 +60,10 @@ interface PostOptions {
   contentType?: string | null
   method?: string
   url?: string
+  /**
+   * 来源地址。限流删掉之后**代码里已经没有它的读者了**，还留着是为了钉住「它也就到此为止」：
+   * 既不进日志，也不进转发报文（见「下游出事时留一行日志」那条）。
+   */
   address?: string | null
 }
 
@@ -126,11 +141,12 @@ describe('上报端点', () => {
   })
 
   describe('配置', () => {
+    // 密钥的名字跟着下游走，所以这里也顺带钉住「配的是哪家的东西」：换后端时这一组会跟着变，
+    // 那正是应该发生的（见 `TelemetryEnv`）。
     it.each([
-      ['缺少 measurement id', { GA_API_SECRET: 'secret' }],
-      ['缺少 api secret', { GA_MEASUREMENT_ID: 'G-TEST123' }],
-      ['空字符串算未配置', { GA_MEASUREMENT_ID: '', GA_API_SECRET: '' }],
-    ])('%s 时明确失败而不是静默丢数据', async (_name, env) => {
+      ['完全没有', {}],
+      ['是空字符串', { APTABASE_APP_KEY: '' }],
+    ] as [string, TelemetryEnv][])('%s: 明确失败而不是静默丢数据', async (_name, env) => {
       const upstream = createUpstream()
       const handler = createTelemetryHandler(upstream.fetcher)
 
@@ -140,10 +156,22 @@ describe('上报端点', () => {
       expect(await response.json()).toEqual({ ok: false, error: 'not_configured' })
       expect(upstream.calls).toHaveLength(0)
     })
+
+    // 只判断「有没有值」，不去猜格式：前缀、区域段、长度都不看。猜错的代价是「部署时看着没问题，
+    // 上线后一条都收不到」，所以一个形状古怪的密钥必须能通过这一层，由下游去回答它。
+    it('不猜密钥格式：形状古怪的值照样发出去', async () => {
+      const upstream = createUpstream()
+      const handler = createTelemetryHandler(upstream.fetcher)
+
+      const response = await handler(post(), { APTABASE_APP_KEY: 'not-a-key' }, NOW)
+
+      expect(response.status).toBe(204)
+      expect(upstream.calls).toHaveLength(1)
+    })
   })
 
   describe('请求体', () => {
-    it('超过 64 KiB 拒绝', async () => {
+    it('超过契约里的上限就拒绝', async () => {
       const handler = createTelemetryHandler(createUpstream().fetcher)
 
       const response = await handler(post({ body: 'x'.repeat(65 * 1024) }), ENV, NOW)
@@ -186,14 +214,42 @@ describe('上报端点', () => {
       expect(response.status).toBe(400)
     })
 
-    it('一批只能来自一台设备', async () => {
+    it.each([
+      ['安装标识不同', { installId: '9f2504e0-4f89-41d3-9a0c-0305e82c3302' }],
+      ['平台不同', { os: 'darwin' }],
+      ['界面语言不同', { locale: 'zh-CN' }],
+    ] as [string, EventOverrides][])('一批里%s时拒收', async (_name, overrides) => {
       const handler = createTelemetryHandler(createUpstream().fetcher)
-      const events = [appStarted(), appStarted({ installId: '9f2504e0-4f89-41d3-9a0c-0305e82c3302' })]
+      const events = [appStarted(), appStarted(overrides)]
 
       const response = await handler(post({ events }), ENV, NOW)
 
       expect(response.status).toBe(400)
       expect(await response.json()).toEqual({ ok: false, error: 'mixed_batch' })
+    })
+
+    // 被拒绝的报文不该占用下游的连接：校验不过就在本地回头
+    it('被拒绝的报文不计入下游', async () => {
+      const upstream = createUpstream()
+      const handler = createTelemetryHandler(upstream.fetcher)
+
+      await handler(post({ events: [appStarted(), appStarted({ installId: crypto.randomUUID() })] }), ENV, NOW)
+
+      expect(upstream.calls).toHaveLength(0)
+    })
+
+    // 版本、架构、宿主都会在同一次真实上报里合法地不同（升级、桌面端与命令行共用一个安装标识），
+    // 所以它们**不在**同设备比对里。这条用例防的是「把比对条件越加越严」那种回归。
+    it('同一批里版本或宿主不同不算混批', async () => {
+      const handler = createTelemetryHandler(createUpstream().fetcher)
+      const events: TelemetryEvent[] = [
+        appStarted(),
+        { ...appStarted(), version: '1.1.0-beta.15', runtime: 'cli' },
+      ]
+
+      const response = await handler(post({ events }), ENV, NOW)
+
+      expect(response.status).toBe(204)
     })
 
     it('节点类型是闭集：清单里的过，任意字符串不过', async () => {
@@ -202,7 +258,7 @@ describe('上报端点', () => {
       const nodeRun = (nodeKind: string) => ({ ...appStarted(), name: 'workflow_node_run', nodeKind })
 
       const accepted = await handler(post({ body: JSON.stringify({ events: [nodeRun('condition')] }) }), ENV, NOW)
-      // 24 个字符的 URL 塞得进旧的 40 字符上限，这条用例验的就是那条缝已经封死。
+      // 24 个字符的 URL 塞得进旧的名字长度上限，这条用例验的就是那条缝已经封死。
       const rejected = await handler(
         post({ body: JSON.stringify({ events: [nodeRun('https://example.com/?q=1')] }) }),
         ENV,
@@ -214,7 +270,7 @@ describe('上报端点', () => {
     })
   })
 
-  describe('转发给下游', () => {
+  describe('交给下游', () => {
     it('成功时返回 204 且不带正文', async () => {
       const upstream = createUpstream()
       const handler = createTelemetryHandler(upstream.fetcher)
@@ -225,151 +281,33 @@ describe('上报端点', () => {
       expect(await response.text()).toBe('')
     })
 
-    it('凭证放在查询串里，正文里没有它们', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      await handler(post(), ENV, NOW)
-
-      const [call] = upstream.calls
-      const url = new URL(call.url)
-      expect(url.pathname).toBe('/mp/collect')
-      expect(url.searchParams.get('measurement_id')).toBe('G-TEST123')
-      expect(url.searchParams.get('api_secret')).toBe('secret')
-      expect(JSON.stringify(call.body)).not.toContain('secret')
-    })
-
-    it('client_id 用安装标识，位置、平台与安装级字段各有其位', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      await handler(post({ events: [appStarted({ os: 'darwin', locale: 'zh-CN' })] }), ENV, NOW)
-
-      const body = upstream.calls[0].body as {
-        client_id: string
-        user_properties: Record<string, { value: string }>
-        ip_override?: string
-        device: { category: string; operating_system: string; language: string }
-        events: { name: string; params: Record<string, string | number>; timestamp_micros?: number }[]
-      }
-      expect(body.client_id).toBe(INSTALL_ID)
-      expect(body.ip_override).toBe('203.0.113.7')
-      expect(body.device).toEqual({ category: 'desktop', operating_system: 'Macintosh', language: 'zh-CN' })
-      expect(body.events[0].name).toBe('app_started')
-      // 只发契约里声明了去 param 的公共字段，其余各有去向（client_id / 时间戳 / device / user_properties）。
-      expect(body.events[0].params).toMatchObject({ runtime: 'desktop' })
-      expect(body.user_properties).toEqual({ version: { value: '1.1.0-beta.14' }, arch: { value: 'x64' } })
-      expect(body.events[0].timestamp_micros).toBe((NOW - 1_000) * 1_000)
-    })
-
-    it('补上 GA 归属用户与会话所需的那两个参数', async () => {
+    it('一批只发一次 POST，正文是 JSON', async () => {
       const upstream = createUpstream()
       const handler = createTelemetryHandler(upstream.fetcher)
       const events = [appStarted(), appStarted({ occurredAt: NOW - 500 })]
 
       await handler(post({ events }), ENV, NOW)
 
-      const body = upstream.calls[0].body as { events: { params: Record<string, string | number> }[] }
-      // `session_id` 必须是正整数（GA 要求匹配 ^\d+$），而且是**数字**不是字符串。
-      const day = Math.floor(NOW / 86_400_000)
-      expect(body.events[0].params.session_id).toBe(day)
-      expect(typeof body.events[0].params.session_id).toBe('number')
-      // 同一批里逐事件同值：会话是「收到时刻」的函数，不是「事件时刻」的函数。
-      expect(body.events[1].params.session_id).toBe(day)
-      expect(body.events[1].params.engagement_time_msec).toBe(body.events[0].params.engagement_time_msec)
-      expect(typeof body.events[0].params.engagement_time_msec).toBe('number')
-      expect(Number(body.events[0].params.engagement_time_msec)).toBeGreaterThan(0)
+      // 只断言「一次请求、POST、JSON 正文」：拆不拆包、发到哪个地址、字段怎么摆全在下游那一层，
+      // 而下游的用例在 `sinks/aptabase.test.ts`。
+      expect(upstream.calls).toHaveLength(1)
+      expect(upstream.calls[0].method).toBe('POST')
+      expect(upstream.calls[0].body).toBeTypeOf('object')
     })
 
-    it('声明不用作个性化广告', async () => {
+    it('密钥只出现在请求头里，不进 URL', async () => {
       const upstream = createUpstream()
       const handler = createTelemetryHandler(upstream.fetcher)
 
       await handler(post(), ENV, NOW)
 
-      const body = upstream.calls[0].body as { consent: unknown; non_personalized_ads: unknown }
-      expect(body.consent).toEqual({ ad_user_data: 'DENIED', ad_personalization: 'DENIED' })
-      expect(body.non_personalized_ads).toBe(true)
+      // 凭证放哪里是下游自己的规矩（这一版是请求头）；无论放哪，URL 里都不该有它——
+      // 那是最容易被记进某层访问日志的地方。
+      expect(upstream.calls[0].url).not.toContain(APP_KEY)
+      expect(upstream.calls[0].headers['App-Key']).toBe(APP_KEY)
     })
 
-    it('位置交给 GA：发的是真实客户端 IP', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      await handler(post({ address: '203.0.113.7' }), ENV, NOW)
-
-      const [call] = upstream.calls
-      // 转发请求从机房发出，所以位置必须显式给出；给的是**用户自己的地址**，
-      // 由 GA 的 IP 地理库去解析——比我们临时读一个国家级字段准。
-      expect(call.body).toMatchObject({ ip_override: '203.0.113.7' })
-      // 而 `user_location` 必须**不在**：GA 文档写明它优先于 `ip_override`，
-      // 两个同时发等于把这个 IP 白传一场（且 GA 会退回按机房出口定位）。
-      expect(JSON.stringify(call.body)).not.toContain('user_location')
-    })
-
-    it('拿不到来源地址时不传 ip_override，而不是编一个', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      await handler(post({ address: null }), ENV, NOW)
-
-      expect(upstream.calls[0].body).not.toHaveProperty('ip_override')
-    })
-
-    it('畸形的来源地址也不进转发报文', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      // 限流那一层同样拿不到键，但它不会因此报错——地址本来就是一个「有则用」的维度。
-      expect((await handler(post({ address: 'not-an-ip' }), ENV, NOW)).status).toBe(204)
-      expect(upstream.calls[0].body).not.toHaveProperty('ip_override')
-    })
-
-    it('业务属性原样进参数表', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-      const modeChanged: TelemetryEvent = {
-        name: 'route_mode_changed',
-        occurredAt: NOW - 1_000,
-        installId: INSTALL_ID,
-        version: '1.1.0-beta.14',
-        os: 'win32',
-        arch: 'x64',
-        locale: 'en',
-        runtime: 'desktop',
-        mode: 'workflow',
-      }
-
-      await handler(post({ events: [modeChanged] }), ENV, NOW)
-
-      const body = upstream.calls[0].body as { events: { params: Record<string, string> }[] }
-      expect(body.events[0].params).toMatchObject({ mode: 'workflow' })
-    })
-
-    it('超出回溯窗口的时间戳不带，事件本身照发', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-      const old = appStarted({ occurredAt: NOW - 73 * 60 * 60 * 1000 })
-
-      const response = await handler(post({ events: [old] }), ENV, NOW)
-
-      expect(response.status).toBe(204)
-      const body = upstream.calls[0].body as { events: { timestamp_micros?: number }[] }
-      expect(body.events[0].timestamp_micros).toBeUndefined()
-    })
-
-    it('未来时间戳同样不带', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-      const future = appStarted({ occurredAt: NOW + 60_000 })
-
-      await handler(post({ events: [future] }), ENV, NOW)
-
-      const body = upstream.calls[0].body as { events: { timestamp_micros?: number }[] }
-      expect(body.events[0].timestamp_micros).toBeUndefined()
-    })
-
-    it('下游连不上与下游拒收都算 502', async () => {
+    it('下游连不上算 502', async () => {
       const failing = (async () => {
         throw new Error('network down')
       }) as typeof fetch
@@ -381,70 +319,13 @@ describe('上报端点', () => {
       expect(await response.json()).toEqual({ ok: false, error: 'upstream_unreachable' })
     })
 
-    it('下游 4xx 原样暴露状态码', async () => {
+    it('下游拒收时原样暴露它的状态码', async () => {
       const handler = createTelemetryHandler(createUpstream(400).fetcher)
 
       const response = await handler(post(), ENV, NOW)
 
       expect(response.status).toBe(502)
       expect(await response.json()).toEqual({ ok: false, error: 'upstream_rejected', status: 400 })
-    })
-  })
-
-  describe('限流', () => {
-    it('同一安装标识超过每分钟上限后拒绝', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      for (let index = 0; index < 30; index += 1) {
-        expect((await handler(post(), ENV, NOW)).status).toBe(204)
-      }
-
-      const limited = await handler(post(), ENV, NOW)
-      expect(limited.status).toBe(429)
-      expect(limited.headers.get('retry-after')).toBe('60')
-      expect(upstream.calls).toHaveLength(30)
-    })
-
-    it('换一分钟窗口后恢复', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      for (let index = 0; index < 31; index += 1) await handler(post(), ENV, NOW)
-
-      expect((await handler(post(), ENV, NOW + 60_001)).status).toBe(204)
-    })
-
-    it('按来源地址限流，与安装标识无关', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      for (let index = 0; index < 120; index += 1) {
-        const events = [appStarted({ installId: crypto.randomUUID() })]
-        expect((await handler(post({ events }), ENV, NOW)).status).toBe(204)
-      }
-
-      const events = [appStarted({ installId: crypto.randomUUID() })]
-      expect((await handler(post({ events }), ENV, NOW)).status).toBe(429)
-    })
-
-    it('拿不到来源地址时跳过这一维度而不是共用一个假键', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      for (let index = 0; index < 121; index += 1) {
-        const events = [appStarted({ installId: crypto.randomUUID() })]
-        expect((await handler(post({ events, address: null }), ENV, NOW)).status).toBe(204)
-      }
-    })
-
-    it('被拒绝的报文不计入下游', async () => {
-      const upstream = createUpstream()
-      const handler = createTelemetryHandler(upstream.fetcher)
-
-      await handler(post({ events: [appStarted(), appStarted({ installId: crypto.randomUUID() })] }), ENV, NOW)
-
-      expect(upstream.calls).toHaveLength(0)
     })
   })
 
@@ -468,18 +349,24 @@ describe('上报端点', () => {
     it('下游出事时留一行日志，但里面没有标识、没有地址、没有正文', async () => {
       const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       try {
-        const handler = createTelemetryHandler(createUpstream(400).fetcher)
+        const upstream = createUpstream(400)
+        const handler = createTelemetryHandler(upstream.fetcher)
 
         await handler(post({ address: '203.0.113.7' }), ENV, NOW)
 
         // `wrangler.toml` 把 `[observability]` 打开，等的就是这一行；而它同时承诺了日志里
-        // 不问「谁在发」——这是那句承诺在测试里的落点。注意同一批报文里是带着用户地址的，
-        // 它只该出现在转发报文里，不该出现在日志里。
+        // 不问「谁在发」——这是那句承诺在测试里的落点。这一批报文是带着用户地址的，
+        // 两处都不该有它：日志里没有，发给下游的正文里也没有（限流删掉之后，这条链路上
+        // 没有任何一行代码读那个头，见文件头「关于限流」）。带上 sink 名是为了将来同时挂
+        // 两个下游时这两行还能分开。
         expect(logged).toHaveBeenCalledTimes(1)
         const line = String(logged.mock.calls[0][0])
-        expect(line).toContain('upstream rejected status=400')
+        expect(line).toContain('upstream rejected')
+        expect(line).toContain('sink=aptabase')
+        expect(line).toContain('status=400')
         expect(line).not.toContain(INSTALL_ID)
         expect(line).not.toContain('203.0.113.7')
+        expect(JSON.stringify(upstream.calls[0].body)).not.toContain('203.0.113.7')
       } finally {
         logged.mockRestore()
       }

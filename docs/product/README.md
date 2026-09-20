@@ -39,7 +39,7 @@
 | 观测 | [observability.md](./observability.md) | 请求日志与正文采集、用量统计、健康状态与冷却 |
 | 上游出站代理 | [outbound-proxy.md](./outbound-proxy.md) | 三种代理模式、绕过规则、连接测试、错误语义 |
 | 安全与隐私 | [security-privacy.md](./security-privacy.md) | 监听边界、访问控制、密钥存储、脚本沙箱、隐私 |
-| 匿名使用统计 | [telemetry.md](./telemetry.md) | 默认关闭的统计口径、事件白名单、上报链路与分析口径 |
+| 匿名使用统计 | [telemetry.md](./telemetry.md) | 默认开启、界面无任何入口的统计口径、事件白名单、上报链路与分析口径 |
 | 桌面端形态 | [desktop.md](./desktop.md) | 托盘与菜单、控制台页面、用户流程 |
 | 服务端结构 | [server-architecture.md](./server-architecture.md) | 两个监听服务、模块划分、依赖方向、启动与关闭 |
 | 技术架构 | [tech-architecture.md](./tech-architecture.md) | 技术栈与依赖、构建与打包、仓库顶层结构 |

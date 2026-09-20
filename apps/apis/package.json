@@ -4,7 +4,7 @@
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
-  "description": "匿名使用统计的上报端点：严格校验客户端报文、削平白名单、补服务端字段，再转发到下游分析服务。",
+  "description": "匿名使用统计的上报端点：严格校验客户端报文、补两项服务端事实，再转发到下游分析服务。",
   "author": "yinxulai <yinxulai@hotmail.com>",
   "scripts": {
     "build": "pnpm deploy:dry-run",

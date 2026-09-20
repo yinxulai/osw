@@ -1,109 +1,88 @@
 /**
  * 匿名使用统计的上报端点（Cloudflare Worker）。
  *
- * 它是**客户端与下游分析服务之间唯一的一层**，只干四件事（见 `docs/product/telemetry.md` §7）：
+ * 它是**客户端与下游分析服务之间唯一的一层**，只干三件事（见 `docs/product/telemetry.md` §7）：
  *
  * 1. **严格校验**：用客户端同一份 schema 解析，拒绝多余字段；
- * 2. **白名单削平**：只把认识的字段交给下游；
- * 3. **补服务端字段**：把真实客户端 IP 交给 GA 去解析地理位置，时间戳来自服务器时钟；
- * 4. **限流**：按安装标识与来源地址两个维度。
+ * 2. **补服务端事实**：服务器时钟，以及客户端所在的国家；
+ * 3. **交给下游**：具体去哪个后端由 `source/sinks/` 决定，这里不知道也不需要知道。
+ *
+ * 第 3 条被单独拎出来，是因为**它可替换**：换分析后端只写一个新 sink 文件并改 `createSink`
+ * 一处，收报文、校验这些与下游无关的事一行都不动（见 `source/sink.ts`）。
  *
  * 请求路径只有 `/v1/track` 一条（`TELEMETRY_REQUEST_PATH`），其余一律 404，根路径也不例外。
  * 刻意不为部署流水线另加一个健康检查接口：域名上「唯一一条路径」本身就是最强的信号，
  * 而部署后真正要确认的只有「路由注册上了没有」——对 `GET /v1/track` 期待 405 就回答了它，
  * 那是一个只可能来自本 Worker 的答案。
  *
- * 为什么必须有这一层，而不是让客户端直接打 GA：GA 的密钥只应该存在于这里。桌面应用里嵌的
+ * 为什么必须有这一层，而不是让客户端直接打下游：下游的凭证只应该存在于这里。桌面应用里嵌的
  * 任何凭证都能被解出来，所以「客户端不持有下游凭证」不是可选的组织方式，是唯一的正确形态。
  * 也因此这里**不做客户端鉴权**——它只能提供虚假的安全感（§7）。
  *
  * 端点地址是客户端里唯一写死的地址，**发布出去就是永久地址**：换下游、换存储、换数据驻留
  * 区域都只动这个 Worker。所以这里对客户端承诺的是**请求格式**（`/v1/track`），不是数据去向。
  *
- * ## 关于来源 IP
+ * ## 关于地理位置
  *
- * 转发请求是从 **Cloudflare 机房**发出的，而 GA 在没有拿到显式地理位置时会按请求的来源 IP
- * （也就是机房出口）定位——结果是「所有用户都落在数据中心所在地」。所以这里全程用的是
- * **客户端的真实 IP**，而不是这个 Worker 自己的出口：
+ * 转发请求是从 **Cloudflare 机房**发出的，所以下游按请求来源 IP 做地理归属只会得到
+ * 「所有用户都在机房所在地」这个假答案。因此这里把**来源国家**（`CF-IPCountry`，由 Cloudflare
+ * 在边缘按真实客户端 IP 判好，客户端伪造不了）当作一项服务端事实交给 sink。
  *
- * - **地理**：`CF-Connecting-IP`（Cloudflare 填的真实客户端 IP，客户端伪造不了）作为
- *   `ip_override` 交给 GA，由 GA 自己解析成地理位置。**这是故意的**：IP 地理库在 GA 那边，
- *   比我们临时读一个 `cf.country`（只有国家级）准得多，也不必自己维护映射表。
- *   代价说清楚：**用户的 IP 会随这次转发进入 GA**——报文的其余部分仍然是白名单字段。
- * - **限流**：同一个地址哈希后当键，不落地、不出 Worker（除上面那次转发外）。
+ * **给的是结论，不是原料**：`CF-IPCountry` 是一枚两字母的代码，比一个能定位到人的地址粗得多，
+ * 而这一步 Cloudflare 已经算完了——把 IP 再往下递换不到任何更准的答案，只是让链路上多留一份
+ * 原始用户信息。于是**客户端的地址从头到尾没有被读过**：离开这个 Worker 的只有契约里的枚举值
+ * 与这一枚国家代码。
  *
- * ⚠️ `user_location` 与 `ip_override` **只能给一个**：GA 文档写明前者优先，两者同时出现时
- * `ip_override` 会被忽略。所以报文里**没有** `user_location`，给了它这个 IP 就白传了。
+ * 拿不到国家时 sink 不带地区，**绝不退回请求自身的来源地址**：那只会得到「所有人都来自
+ * 机房」这个假答案。
  *
- * 两处都取不到就各自降级（不传 `ip_override`、地址维度直接跳过），**绝不退回请求自身的来源地址**：
- * 那只会得到一个「所有人都来自机房」的假键。
+ * ## 关于限流：这里不做
+ *
+ * 曾经有一层按安装标识与来源地址的内存计数器，删掉了，因为它做不到它看起来在做的事：计数器
+ * 住在**单个 isolate 的内存**里，而 Cloudflare 会同时跑很多个 isolate、很多个机房，状态既不
+ * 共享也不持久。于是实际放行量是「配置值 × 机房数」的量级——一个会随部署规模自行放大的上限，
+ * 不像上限，更像噪声。而按客户端聚合（限流真正要的东西）只有边缘做得到，所以限流配在域名上
+ * （`wrangler.toml` 里有说明），**那是这条链路上唯一的限流手段**。
+ *
+ * `/v1/track` 是幂等追加、无鉴权、无副作用的，漏挡不构成风险。删掉它还顺带简化了上面那段隐私
+ * 账：那个地址之前至少要被哈希一次才成为限流键，现在连一次哈希都没有了。
  */
 
 import {
   TelemetryBatchSchema,
+  TELEMETRY_MAX_REQUEST_BYTES,
   TELEMETRY_REQUEST_PATH,
   type TelemetryEvent,
 } from '@common/telemetry'
-import { buildCollectBody, collectUrl } from './ga'
-import { createRateLimiter } from './rate-limit'
+import type { Fetcher, TelemetrySink } from './sink'
+import { createAptabaseSink } from './sinks/aptabase'
 
 /**
  * Worker 的绑定。
  *
- * `GA_MEASUREMENT_ID` 与 `GA_API_SECRET` 是 secret（`wrangler secret put`），不进仓库、不进
- * `wrangler.toml`、不进客户端。
+ * 只有一项：下游的应用密钥。它是 secret（`wrangler secret put`），不进仓库、不进
+ * `wrangler.toml`、不进客户端。它一旦泄露，任何人都能往这个项目里灌数据。
+ *
+ * 名字跟着下游走（现在是 Aptabase），而不是起一个中性的 `TELEMETRY_TOKEN`：不同后端的凭证
+ * 本来就不是同一样东西，把它藏在一个通用名字后面只会让「现在配的到底是哪家的密钥」
+ * 变成一件要靠人记的事。换后端时这里会跟着变，那正是应该发生的。
+ *
+ * 值的形状是 `A-<区域>-<随机段>`（区域那一段决定它属于哪个数据中心），但**这里不看它**
+ * ——为什么，见 `createSink`。
  */
 export interface TelemetryEnv {
-  GA_MEASUREMENT_ID?: string
-  /** Measurement Protocol 的 API 密钥。它一旦泄露，任何人都能往这个媒体资源里灌数据。 */
-  GA_API_SECRET?: string
+  APTABASE_APP_KEY?: string
 }
 
-/**
- * 请求体上限：64 KiB。
- *
- * 一批 25 条事件的实际体积在 4 KiB 量级，所以这个上限离正常用量很远，只用来让「往端点灌大包」
- * 变成一件便宜的事。GA 自己的上限是 130 kB，比这里宽，所以这里卡住的同时也就顺便守住了它。
- */
-const MAX_REQUEST_BODY_BYTES = 64 * 1024
-
-/**
- * 转发给下游的请求超时（毫秒）。
- *
- * **必须短于客户端的超时**（`TELEMETRY_REQUEST_TIMEOUT_MILLISECONDS`，5 秒）：否则客户端会先
- * 放弃，而我们已经把请求发了出去——那是「客户端以为失败了、下游其实收到了」的最坏情形，
- * 虽然统计能容忍重复与丢失，但没有理由主动制造它。
- */
-const UPSTREAM_TIMEOUT_MILLISECONDS = 3_000
-
-/** 每个来源地址每分钟的请求数上限。 */
-const ADDRESS_LIMITS = { windowMilliseconds: 60_000, maxPerWindow: 120, maxKeys: 20_000 }
-
-/**
- * 每个安装标识每分钟的请求数上限。
- *
- * 客户端默认每 30 秒最多发一批（`TELEMETRY_FLUSH_INTERVAL_MILLISECONDS`），所以正常用量在
- * 每分钟 2 次量级；30 这个数字留出了「补报积压一次性发完」与「同机多实例」的余量，
- * 却仍然能挡住循环发送。
- */
-const INSTALL_LIMITS = { windowMilliseconds: 60_000, maxPerWindow: 30, maxKeys: 50_000 }
-
 export type TelemetryHandler = (request: Request, env: TelemetryEnv, now?: number) => Promise<Response>
-
-/** 下游请求的实现。写成别名是为了让「可以在测试里换掉」这件事在签名上一眼可见。 */
-type Fetcher = typeof fetch
 
 /**
  * 造一个 handler。
  *
- * 之所以是工厂而不是一个模块级的函数：限流状态必须活在 handler 上，测试要能拿到互不干扰的
- * 实例。部署时用文件末尾那个默认实例——**限流状态在部署形态下必须是长命的**，每次请求新建
- * 一个计数器等于没有限流。
+ * 之所以是工厂而不是一个模块级的函数，是为了让 `fetcher` 能被换掉：测试要替换的正是「那一次
+ * HTTP」，而不是把整条链路搭起来。部署时用文件末尾那个默认实例。
  */
 export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandler {
-  const addressLimiter = createRateLimiter(ADDRESS_LIMITS)
-  const installLimiter = createRateLimiter(INSTALL_LIMITS)
-
   return async function handle(request, env, now = Date.now()) {
     // ---- 1. 路由：只有一条路径，只有一种方法 ----
 
@@ -113,24 +92,16 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
     if (request.method !== 'POST') return methodNotAllowed('POST')
     if (!isJsonContentType(request.headers.get('content-type'))) return json(415, { ok: false, error: 'unsupported_media_type' })
 
-    // ---- 2. 下游配置：缺了就说清楚，不能静默丢数据 ----
+    // ---- 2. 下游：缺配置就说清楚，不能静默丢数据 ----
 
-    const credentials = credentialsOf(env)
-    if (credentials === null) return json(500, { ok: false, error: 'not_configured' })
-    const { measurementId, apiSecret } = credentials
+    // `createSink` 是**全 Worker 唯一知道选的是哪个后端的地方**。换后端时只改它。
+    const sink = createSink(env, fetcher)
+    if (sink === null) return json(500, { ok: false, error: 'not_configured' })
 
-    // ---- 3. 来源地址限流 ----
-
-    // 地址这一维度先于解析：它的判断不需要读正文，能在花掉反序列化的钱之前就把洪峰挡掉。
-    // 键来自 `CF-Connecting-IP`，即**真实客户端 IP**；同一个地址还要作为 `ip_override`
-    // 交给 GA（见第 6 步），所以这个头只读一次。拿不到就跳过这一维度（见文件头）。
-    const address = addressOf(request)
-    if (address !== null && !addressLimiter.admit(`ip:${await sha256Prefix(address)}`, now)) return rateLimited()
-
-    // ---- 4. 严格校验 ----
+    // ---- 3. 严格校验 ----
 
     const text = await request.text()
-    if (byteLength(text) > MAX_REQUEST_BODY_BYTES) return json(413, { ok: false, error: 'payload_too_large' })
+    if (byteLength(text) > TELEMETRY_MAX_REQUEST_BYTES) return json(413, { ok: false, error: 'payload_too_large' })
 
     const payload = parseJson(text)
     if (payload === null) return json(400, { ok: false, error: 'invalid_json' })
@@ -146,39 +117,43 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
       })
     }
 
-    // ---- 5. 安装标识限流 + 一批只能来自一台设备 ----
+    // ---- 4. 一批只能来自一台设备 ----
 
     const events = parsed.data.events
-    if (!installLimiter.admit(`id:${events[0].installId}`, now)) return rateLimited()
     if (!isSingleDevice(events)) return json(400, { ok: false, error: 'mixed_batch' })
 
-    // ---- 6. 削平 + 补服务端字段 + 转发 ----
+    // ---- 5. 交给下游：本 Worker 的职责到此为止 ----
 
-    const body = buildCollectBody(events, { ipOverride: address, receivedAt: now })
+    // 没有削平、没有拼报文、没有字段去向：那全是 sink 的事。这一层只提供两项服务端事实
+    // （服务器时钟与来源国家），因为只有它看得到 HTTP、也只有它读得到 Cloudflare 填的头。
+    const outcome = await sink.forward(events, { receivedAt: now, countryCode: countryOf(request) })
+    if (outcome.ok) return new Response(null, { status: 204 })
 
-    const upstream = await postToGa(collectUrl(measurementId, apiSecret), body, fetcher)
-    if (upstream === null) {
-      // 唯一的日志点，而且只说「下游答不答」，不说「谁在发」：没有安装标识、没有来源地址、
-      // 没有报文正文。`wrangler.toml` 把 `[observability]` 打开，等的就是这行。
-      console.error('[apis] upstream unreachable')
+    // 唯一的两个日志点，都说「下游答不答」，不说「谁在发」：没有安装标识、没有来源地址、
+    // 没有报文正文。`wrangler.toml` 把 `[observability]` 打开，等的就是这两行。
+    // 也带上 `sink` 名：将来同时挂两个下游时，这两行要能分开。
+    if (outcome.failure === 'unreachable') {
+      console.error(`[apis] upstream unreachable sink=${sink.name}`)
       return json(502, { ok: false, error: 'upstream_unreachable' })
     }
-    // ⚠️ 2xx 只说明 GA 收下了请求，**不代表事件被接受**：参数超长、名字非法、时间戳过旧都会
-    // 静默丢弃（telemetry.md §9）。所以这个返回值不能当验收标准用，验收要看实时报告。
-    if (!upstream.ok) {
-      console.error(`[apis] upstream rejected status=${upstream.status}`)
-      return json(502, { ok: false, error: 'upstream_rejected', status: upstream.status })
-    }
-    return new Response(null, { status: 204 })
+    // ⚠️ 2xx 只说明下游收下了请求，**不代表事件入库**：缺标识、缺事件名、超出它的时间窗
+    // 都会被静默丢弃（telemetry.md §9）。所以这个返回值不能当验收标准用，验收要看下游
+    // 自己的报表。
+    console.error(`[apis] upstream rejected sink=${sink.name} status=${outcome.status}`)
+    return json(502, { ok: false, error: 'upstream_rejected', status: outcome.status })
   }
 }
 
 /**
  * 同一批必须来自同一台设备。
  *
- * 不是洁癖：GA 的 `client_id`、`ip_override`、`device` 都是**每请求一个**的字段，一批只能
- * 表达一个值。混着发就必然要把某些事件归到别的用户或别的平台上去——那比拒收更糟，
- * 因为它静默地坏了口径。
+ * 不是洁癖：下游看到的是一批事件加一个标识，而「一批」在语义上就是一个安装的一次上报。
+ * 混着发必然要把某些事件归到别的安装上去——那比拒收更糟，因为它静默地坏了口径。
+ *
+ * 比对的是 `installId` / `os` / `locale`：前两者是这条链路的基本单位，`locale` 则是「界面语言」
+ * 这个维度——同一台机器同一次上报里出现两种界面语言是不可能的。`version` / `arch` / `runtime`
+ * **刻意不在这里比对**：桌面端与命令行共用安装标识与数据目录，升级与宿主切换都会在真实场景里
+ * 让同一批里出现不同的值，那是事实，不是有人手改了报文。
  */
 function isSingleDevice(events: readonly TelemetryEvent[]): boolean {
   const [first] = events
@@ -189,52 +164,22 @@ function isSingleDevice(events: readonly TelemetryEvent[]): boolean {
 }
 
 /**
- * 请求的来源地址，**真实客户端 IP**。
+ * 请求的来源国家，**Cloudflare 的边缘判词**。
  *
- * `CF-Connecting-IP` 由 Cloudflare 填，客户端伪造不了；**刻意不回退到 `X-Forwarded-For`**
- * （随便谁都能写）。拿不到就返回 `null`：限流跳过这一维度，地理位置也不传——**绝不退回
- * 请求自身的来源地址**，那只会得到「所有用户都来自机房」的假答案（见文件头）。
+ * `CF-IPCountry` 是 Cloudflare 在边缘按真实客户端 IP 判好的一枚两字母代码，客户端伪造不了，
+ * 所以它是一种服务端事实——而且是一枚**结论**：我们不知道、也不需要知道它是从哪个地址得出
+ * 的（见文件头）。
  *
- * 这里做一次形状检查：这个值会被写进转发报文，而报文是给外部服务的。真正的保证来自
- * Cloudflare 会覆盖这个头，这里只是不让一个畸形的值穿过去。
+ * 这里做一次形状检查：这个值会被写进转发报文，而报文是给外部服务的。两字母以外的取值
+ * （Cloudflare 在某些情形下会填 `XX` 表示「不知道」，另有 `T1` 这类非国家的标记）一律当
+ * **不知道**处理，而不是当成一个国家发出去——把「不确定」写成 `XX` 会让下游的地区视图里多出
+ * 一个假国家。
  */
-function addressOf(request: Request): string | null {
-  const address = request.headers.get('CF-Connecting-IP')
-  if (address === null) return null
-  const trimmed = address.trim()
-  // 45 字符是 IPv6 长度上限；字符集同时容纳 IPv4 与 IPv6 的写法。
-  return trimmed !== '' && trimmed.length <= 45 && /^[0-9a-fA-F.:]+$/.test(trimmed) ? trimmed : null
-}
-
-/**
- * 地址哈希，**只用作限流键**。
- *
- * 客户端不该在这里被识别，所以哈希只做一件事：把同一个地址在同一分钟内的请求归到同一个桶里。
- * 它不写日志、isolate 一死就没了，所以这里不需要加盐——没有「谁都能读到的哈希表」可供反查。
- *
- * 取前 8 字节而不是全长：这个键只活在内存表的生命周期里，碰撞概率要远低于「一台机器在
- * 一分钟内换 IP」的可能，而短键让表更便宜。
- */
-async function sha256Prefix(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return [...new Uint8Array(digest).slice(0, 8)].map(byte => byte.toString(16).padStart(2, '0')).join('')
-}
-
-async function postToGa(url: string, body: unknown, fetcher: Fetcher): Promise<Response | null> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MILLISECONDS)
-  try {
-    return await fetcher(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timer)
-  }
+function countryOf(request: Request): string | null {
+  const country = request.headers.get('CF-IPCountry')
+  if (country === null) return null
+  const normalized = country.trim().toUpperCase()
+  return /^[A-Z]{2}$/.test(normalized) && normalized !== 'XX' ? normalized : null
 }
 
 function parseJson(text: string): unknown {
@@ -253,19 +198,23 @@ function isJsonContentType(contentType: string | null): boolean {
   return contentType !== null && contentType.toLowerCase().startsWith('application/json')
 }
 
-interface DownstreamCredentials {
-  measurementId: string
-  apiSecret: string
-}
-
 /**
- * 「下游配置齐了吗」只留这一个定义：业务路径据此回 500。写成两份判断，迟早会出现
- * 「这条路径说配好了、那条路径说没配」这种最难查的不一致。
+ * 选一个下游。**全 Worker 唯一知道选的是哪个后端的地方**（见 `source/sink.ts`）。
+ *
+ * 拆成独立的函数而不是写在 handler 里，是为了让「换后端要改哪里」有一个能被搜到的答案。
+ * 返回 `null` 表示配置不齐——调用方据此回 500，而不是静默地把数据丢掉。
+ *
+ * 只判断「密钥存不存在」：**不去猜它的格式**（前缀、区域段、长度都不看）。密钥的合法性只有
+ * 下游知道，猜错的后果是「部署时看着没问题，上线后一条都收不到」。让第一个真实请求去回答它。
+ *
+ * ⚠️ 有一处**格式之外**的一致性靠人是守的：密钥里那一段区域要与 sink 里的入口地址对得上
+ * （见 `sinks/aptabase.ts`）。对不上时下游会回 404，所以它会在日志里立刻显形，而不是静默
+ * 丢数据——这也正是这里敢不去校验它的原因。
  */
-function credentialsOf(env: TelemetryEnv): DownstreamCredentials | null {
-  const { GA_MEASUREMENT_ID: measurementId, GA_API_SECRET: apiSecret } = env
-  if (!isNonEmpty(measurementId) || !isNonEmpty(apiSecret)) return null
-  return { measurementId, apiSecret }
+function createSink(env: TelemetryEnv, fetcher: Fetcher): TelemetrySink | null {
+  const appKey = env.APTABASE_APP_KEY
+  if (!isNonEmpty(appKey)) return null
+  return createAptabaseSink({ appKey, fetcher })
 }
 
 function isNonEmpty(value: string | undefined): value is string {
@@ -276,7 +225,8 @@ function isNonEmpty(value: string | undefined): value is string {
  * 所有响应的头都只从这里出去。
  *
  * 刻意**不加 CORS**：调用方是桌面应用与命令行，不是浏览器里的页面，放开跨域只会让它更容易被
- * 滥用。刻意**不设 `Cache-Control`**：这里没有任何东西值得被缓存，而缓存住一个 429 是真伤害。
+ * 滥用。刻意**不设 `Cache-Control`**：这里没有任何东西值得被缓存，而缓存住一个错误响应
+ * 是真伤害。
  */
 function responseHeaders(extra?: Record<string, string>): Record<string, string> {
   return { 'Content-Type': 'application/json; charset=utf-8', ...extra }
@@ -293,14 +243,7 @@ function methodNotAllowed(allow: string): Response {
   })
 }
 
-function rateLimited(): Response {
-  return new Response(JSON.stringify({ ok: false, error: 'rate_limited' }), {
-    status: 429,
-    headers: responseHeaders({ 'Retry-After': '60' }),
-  })
-}
-
-// 部署形态：入口无状态，限流状态活在模块作用域上，所以它比 isolate 活得短、比请求活得多。
+// 部署形态：handler 里没有状态，模块作用域上建一次就够，请求之间可以共用。
 const handleRequest = createTelemetryHandler()
 
 /**
