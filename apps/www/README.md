@@ -25,7 +25,7 @@ pnpm --filter @osw/www dev:worker # 本地起静态资源服务（wrangler dev�
 ## 多语言（i18next）
 
 用 **i18next + react-i18next**，但**中文不建资源表**：中文是兜底语言，文案直接写在
-`t(key, '中文')` 的第二个参数里（`source/App.tsx`），英文才在 `source/i18n.ts` 里有一份资源表。
+`t(key, '中文')` 的第二个参数里（就写在用到它的那个组件里），英文才在 `source/i18n.ts` 里有一份资源表。
 
 ```tsx
 const { t, i18n } = useTranslation()
@@ -37,8 +37,11 @@ i18n.changeLanguage('zh')                          // 切语言（组件自动�
 好处是**永远不会漏翻译**：新增文案时先在 JSX 里写中文兜底，英文表漏了就显示中文，而不是显示 key。
 初始化语言按 `navigator.language` 猜（`zh*` → 中文），识别不到也是中文；`<html lang>` 跟随界面语言。
 
-加文案的流程：在 `App.tsx` 里写 `t('<域>.<叶子>', '中文')`，需要英文时再去 `i18n.ts` 的 `en`
-对象补同名 key（用嵌套对象，别在 key 里写点号以外的结构）。
+加文案的流程：在对应组件的 JSX 里写 `t('<域>.<叶子>', '中文')`，需要英文时再去 `i18n.ts` 的 `en`
+对象补同名 key（用嵌套对象）。
+
+> ⚠️ key 里**不要出现点号以外的分隔**，也别把整条 key 写成 `'footer.repo'` 再指望它是**字面** key——
+i18next 会把点号解析成嵌套路径，找不到就回落。顶层单段 key（如 `footerRepo`）最省事。
 
 > 注意：`apps/www` 不在根 `eslint.config.js` 的 `i18n/no-hardcoded-cjk` 规则范围内
 > （那段只覆盖 `apps/app`、`apps/cli`、`packages/*`），所以这里内联中文不会被 lint 拦。
@@ -107,14 +110,45 @@ curl -I https://osw.yinxulai.com/    # 200，HTML
 ```text
 apps/www/
   source/            # React 应用
-    App.tsx          # 单页落地（hero + 功能 + 下载 + 页脚）
+    App.tsx          # 页面骨架：背景层 + 区块顺序（各节实现在 components/ 下）
+    components/      # 逐节拆分的区块
+      site-header.tsx        # 常驻顶栏（锚点导航 + 语言开关 + 下载按钮）
+      hero.tsx               # 首屏：承诺 + 两个动作 + 右侧轨迹
+      request-trace.tsx      # 首屏右侧的「请求轨迹」动效（产品主视觉）
+      failover-section.tsx   # 故障转移判定口径表
+      capabilities-section.tsx # 路由改写 / 可观测 / 协议识别
+      privacy-section.tsx    # 三条隐私承诺
+      download-section.tsx   # 下载区（全站唯一主行动区）
+      site-footer.tsx        # 页脚
+      section-heading.tsx    # 区块标题组（小标签 + 标题 + 引言）
+      reveal.tsx             # 滚动进场包装（IntersectionObserver）
     i18n.ts          # i18next 初始化 + 英文资源表（中文是兜底语言，见下）
     downloads.ts     # 版本号 + 最新发布页地址
     platforms.ts     # 平台清单（下载区那一行平台标记用）
     platform-icons.tsx # 三平台品牌标记（Simple Icons + 手绘 Windows 方标）
-    index.css        # Tailwind v4 入口 + 基础样式
+    feature-icons.tsx  # 能力图标（手绘 1.5px 描边，继承 currentColor）
+    index.css        # Tailwind v4 入口 + 设计 token + 基础样式
     main.tsx / vite-env.d.ts
-  public/icon.svg    # 官方 logo（自 packages/console/public/icon.svg 复制的副本；改 logo 以真源为准同步覆盖）
+  public/
+    icon.svg           # 官方 logo（自 packages/console/public/icon.svg 复制的副本；改 logo 以真源为准同步覆盖）
+    social-preview.png # 分享卡片图（自 docs/design/brand/png/ 复制）
   wrangler.toml      # Workers Static Assets（纯静态，无 main、无绑定）
   vite.config.ts / tsconfig.json / index.html
 ```
+
+## 视觉约定
+
+沿用 `docs/product/route-workbench.md` 的视觉下限：**不用阴影**，层级靠「底色明度阶梯 + 1px 发丝边框」表达，
+字号下限 11px。具体到官网，多放开两件事：
+
+- **品牌渐变**：标志是一道彩虹斜切的闪电，`index.css` 把它的四个色相（金 → 橙 → 玫红 → 紫）取出来做点缀，
+  只出现在焦点处——首屏标题的关键词、下载区的光晕、卡片 hover 时的图标。正文与结构仍然是中性的。
+- **设计 token**：底色、边框、文字、品牌色、状态色全部收敛在 `index.css` 的 `@theme` 里，组件只用
+  `bg-surface-1` / `text-ink-3` / `border-line` / `text-brand` 这类语义类名，不再在 className 里写死色值。
+
+`index.css` 另提供三个工具类：`.brand-gradient`（渐变文字）、`.bg-grid`（顶部网格底纹）、
+`.ring-gradient`（1px 渐变描边，替代 `border` 做卡片边缘）。滚动进场用 `[data-reveal]` + `Reveal` 组件，
+**默认可见**，JS 接管后才从下方浮入——JS 没跑起来时不会白屏。
+
+> 首屏的产品主视觉是**用 CSS 画的请求轨迹**，不是产品截图。原因：`snapshot/` 下的截图仍是旧版青色标志，
+> 与当前品牌不一致；而「渠道失败后发生了什么」这件事本身更适合画成一条有先后顺序的链。

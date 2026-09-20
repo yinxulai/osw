@@ -1,29 +1,199 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/geist';
 
-/* 与产品界面同一套排版基准（见 packages/console/source/index.css）。
-   字体从仓库安装的 @fontsource-variable/geist 取；若站点构建环境没装该包会静默回退 sans-serif。 */
-:root {
-  --font-sans:
-    'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+/* ==========================================================================
+   设计 token
+
+   与产品界面（`packages/console/source/index.css`）同一套取向：**不用阴影**，
+   层次靠「底色明度阶梯 + 1px 发丝边框」表达。落地页额外放开两件事：
+
+   1. **品牌渐变**。标志本身是一道彩虹斜切的闪电，控制台因为要长期盯着看而保持
+      中性色；官网是「看一眼」的场景，允许把标志那四个色相取出来做点缀
+      （标题里的关键词、图标底座、按钮的光晕），但**只出现在焦点处**，不铺满。
+   2. **一组固定的明度阶梯**。原先把 `rgb(200 206 218 / 0.55)` 这类值直接写在
+      几十处 className 里，既改不动也读不出层级关系；现在收敛成 4 档 ink + 3 档
+      surface，改色只改这里。
+   ========================================================================== */
+@theme {
+  --font-sans: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono:
-    'Source Code Pro', 'SF Mono', 'Fira Code', ui-monospace, SFMono-Regular,
-    Menlo, Monaco, Consolas, monospace;
+    ui-monospace, 'SF Mono', 'Geist Mono', 'Source Code Pro', Menlo, Monaco,
+    monospace;
+
+  /* 底色：3 档明度。surface-0 是页面本身，往上每档抬一点，用来看出「谁在上面」。 */
+  --color-void: #06070a;
+  --color-surface-0: #0a0c11;
+  --color-surface-1: #101219;
+  --color-surface-2: #171a23;
+
+  /* 发丝边框：line 是常态，line-strong 用于 hover / 需要强调的分隔。 */
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-strong: rgb(255 255 255 / 0.15);
+
+  /* 文字：4 档。最淡的 ink-4 也保持在 4:1 以上——它是说明文字的下限，
+     不再往下压（旧版 0.55 透明度的灰在暗底上只有 3:1 左右，读起来发虚）。 */
+  --color-ink: #f4f6fb;
+  --color-ink-2: rgb(226 232 244 / 0.78);
+  --color-ink-3: rgb(196 205 224 / 0.62);
+  --color-ink-4: rgb(178 188 210 / 0.42);
+
+  /* 品牌色：直接取自标志渐变上的四个锚点。 */
+  --color-gold: #ffe066;
+  --color-amber: #ff9500;
+  --color-brand: #f0297c;
+  --color-violet: #7c3aed;
+
+  /* 状态色：只在请求轨迹里用，对应产品的成功 / 限流 / 拒绝三态。 */
+  --color-mint: #35d39a;
+  --color-rose: #f2555a;
+  --color-sand: #e8a33d;
+
+  --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-drift: drift 14s ease-in-out infinite;
 }
 
-@theme inline {
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(2%, -3%, 0) scale(1.08);
+  }
 }
 
 html {
   scroll-behavior: smooth;
+  /* 锚点跳转要给常驻顶栏留出让位，否则目标标题会被压在栏下面。 */
+  scroll-padding-top: 5.5rem;
+  background: var(--color-void);
 }
 
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  background: #0b0d12;
-  color: #f3f4f8;
+  background: var(--color-void);
+  color: var(--color-ink);
+  /* 顶部光晕是绝对定位的装饰层，横向溢出会让手机上出现一条可以左右拖的缝。 */
+  overflow-x: hidden;
 }
 
-/* 遵循「禁止阴影」：层次靠明度阶梯 + 1px 发丝边框，不用 shadow-*。 */
+::selection {
+  background: color-mix(in oklab, var(--color-brand) 40%, transparent);
+  color: #fff;
+}
+
+/* 键盘焦点：全站统一一个可见环，不再逐个元素各写一份。 */
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-brand) 70%, white);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* 滚动条跟着底色走，否则亮色系统主题下会在暗色页面右侧挂一条白条。 */
+* {
+  scrollbar-color: rgb(255 255 255 / 0.16) transparent;
+}
+
+/* 关键词用的品牌渐变文字。四段色标与 `public/icon.svg` 的 linearGradient 同源。 */
+.brand-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-gold),
+    var(--color-amber) 34%,
+    var(--color-brand) 68%,
+    var(--color-violet)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 1px 网格底纹，只在页面上缘可见（靠 mask 淡出）。
+   纯 CSS 画，不引图片：省一次请求，也不会在 2x 屏上糊。 */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.032) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.032) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: radial-gradient(
+    ellipse 90% 62% at 50% 0%,
+    #000 32%,
+    transparent 100%
+  );
+}
+
+/* 卡片边缘的渐变描边：用 border-image 会跟圆角打架，改用「叠一层渐变 + 内层遮罩」。 */
+.ring-gradient {
+  position: relative;
+}
+
+.ring-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    140deg,
+    rgb(255 255 255 / 0.16),
+    rgb(255 255 255 / 0.02) 42%,
+    transparent 70%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* 滚动进场：默认可见，JS 接管后才加 `data-reveal` 让它从下方浮入。
+   这样 JS 没跑起来（或用户禁用动效）时内容**一定**是可见的，不会白屏。 */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-reveal='shown'] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
