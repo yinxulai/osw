@@ -487,6 +487,31 @@ export async function getModelStats(sinceMs: number, limit = 10, providerId?: st
   return rows.map(row => ({ providerModelId: row.providerModelId, providerModelName: row.providerModelName, providerId: row.providerId, providerName: normalizeDevelopmentProviderName(row.providerId, row.providerName), attempts: row.attempts ?? 0, success: row.success ?? 0, avgTtftMs: row.avgTtft ?? null, cachedInputTokens: row.cachedInputTokens ?? 0, inputTokens: row.inputTokens ?? 0, outputTokens: row.outputTokens ?? 0, speedOutputTokens: row.speedOutputTokens ?? 0, speedDurationMs: row.speedDurationMs ?? 0 }))
 }
 
+/**
+ * 一段时间内用得最多的模型名，按成功尝试计数、从多到少，取前 `limit` 个。
+ *
+ * 给启动时的「本地模型快照」用（`@common/telemetry` 的 `popular_models`），回答「当下什么
+ * 模型热门」。**只返回名字**：不带 provider id、不带 baseUrl、不带用量——上报侧只需要名字。
+ *
+ * 分组键用快照列 `providerModelName` 而不是 `providerModelId`：同一个上游模型在配置里被改过名
+ * 是常态，而「热门模型」问的是名字层面的热度，按 id 分组会把同一个模型拆成两行。
+ *
+ * 只算**成功的尝试**：失败尝试的次数反映的是「这个模型被试过」，不是「这个模型在用」，
+ * 与其它排行榜（`getModelStats` 的 `successOnly`）同一口径。窗口按尝试表自己的 `createdTime`。
+ */
+export async function listPopularModelNames(limit: number, sinceMs: number): Promise<string[]> {
+  const rows = getDataDb()
+    .select({ modelName: requestAttempts.providerModelName, uses: sql<number>`count(*)`.as('uses') })
+    .from(requestAttempts)
+    .where(and(gte(requestAttempts.createdTime, sinceMs), eq(requestAttempts.status, 'success')))
+    .groupBy(requestAttempts.providerModelName)
+    // 次数相同时用名字兜底：同一份数据每次读到的顺序应当一样，否则统计快照会自己抖动。
+    .orderBy(sql`uses desc, ${requestAttempts.providerModelName} asc`)
+    .limit(limit)
+    .all()
+  return rows.map(row => row.modelName).filter(name => name.length > 0)
+}
+
 export interface LatencyBucket { range: string; count: number }
 
 /**

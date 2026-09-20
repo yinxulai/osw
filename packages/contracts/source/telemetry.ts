@@ -1,18 +1,30 @@
 /**
- * 匿名使用统计的报文契约（默认关闭，见 `docs/product/telemetry.md`）。
+ * 上报接口契约：**客户端 → Worker 的报文格式**，也就是两端之间唯一的一份约定
+ * （默认开启、界面上不提供开关，见 `docs/product/telemetry.md`）。
  *
- * 这个文件是**客户端与 Worker 共用的唯一一份定义**：事件名的闭集、公共字段、属性枚举、
- * 长度与批次上限、端点常量都在这里。文档（telemetry.md §5）与两端代码引用的是同一份东西，
- * 所以「文档写了一个事件、代码里没有」这种事只在文档失修时才会发生，而不是在实现时。
+ * ## 这个接口只描述事实
  *
- * 三条不能随手改的性质：
+ * 一份报文说的是一件事：**一台匿名的机器，在某个时刻，发生了一件产品上的事**。
+ * 它不说这件事将被存到哪里，也不为任何具体的分析系统留字段、留位置——这里没有 `client_id`、
+ * 没有 `user_properties`、没有「事件参数」这类词，也没有一个上限是从某家后端的文档里抄来的。
+ * 客户端不知道下游是谁，也不需要知道（那条边界在 `apps/apis/source/sink.ts`）。
+ *
+ * 所以「换一套存储」对这份契约是零影响：适配器负责把这里的字段翻译成目标系统的语言，
+ * 翻译不过来是那次改动的成本，而不应该变成契约的形状。判断一个字段该不该加只有一条标准：
+ * **它在描述发生的事，还是描述它要去哪？** 后者一律不加。
+ *
+ * ## 三条不能随手改的性质
  *
  * 1. **事件名与属性名是闭集，只增不删。** 删掉一个名字等于历史数据里那一列失去解释。
  *    要停用就在文档里标「已停用」并停止发送，不是从这张表里移除。
- * 2. **这里不出现任何自由文本字段。** 所有属性都是固定枚举（唯一例外是把事件名本身当
- *    参数名用的那些，见下），所以没有任何位置能塞进一个 URL、一个供应商名或一段用户内容。
- * 3. **约束要在这里卡死，不能指望下游报错。** GA4 对超长、非法或超出枚举的参数**不报错**，
- *    只是丢掉（telemetry.md §9），所以「长度对不对」是这里的类型问题，不是运行期问题。
+ * 2. **这里几乎不出现自由文本字段。** 属性值只能是固定枚举或布尔（见「属性规则」），
+ *    所以正常没有任何位置能塞进一个 URL、一个供应商名或一段用户内容。
+ *    **唯一的例外是 `popular_models` 的模型名**：它是「当下什么模型热门」这一问题的答案，
+ *    值被限死为「模型名」一件事（不含 provider 名、不含 baseUrl、不含任何用户内容），
+ *    最多三条、每条仍受长度上限约束。这是 §3 红线上被明确记下的一处例外，不是漏改。
+ * 3. **约束要在这里卡死，不能指望下游报错。** 几乎所有的分析后端对超长、非法或不在词表里的
+ *    值都是**不报错、直接丢**（telemetry.md §9），所以「长度对不对、值合不合法」必须是这里
+ *    的类型问题，而不是运行期问题。
  *
  * 本文件不 import 任何 Node 内置模块：它是契约，Worker 跑在 V8 isolate 里（见
  * `packages/toolkit/scripts/check-package-boundaries.mjs`）。
@@ -47,84 +59,85 @@ export const TELEMETRY_ENDPOINT = 'https://api.osw.yinxulai.com/v1/track'
  */
 export const TELEMETRY_REQUEST_PATH = '/v1/track'
 
-// ========== 硬上限 ==========
+// ========== 上限 ==========
+
+/**
+ * 一份报文的字节上限，64 KiB。
+ *
+ * 这是一条**传输层**的线，不是产品口径：一批 25 条事件的实际体积在 4 KiB 量级，离它很远。
+ * 写在这里而不是只写在 Worker 里，是为了让客户端能先自查一次，也为了让它只是一个数字。
+ */
+export const TELEMETRY_MAX_REQUEST_BYTES = 64 * 1024
 
 /**
  * 单批事件数上限，25。
  *
- * 这是 GA4 Measurement Protocol 的硬限制（一次请求最多 25 个事件），**超出了不报错、直接丢**。
- * 因此它必须由客户端守住，而不是由 Worker 截断：截断会静默改变统计口径。
- * Worker 收到超长批次的做法是**拒绝**，不是切到 25 条。
+ * 它只由「一次上报不该明显拖慢关闭流程」与「请求要够小」推出来，与下游无关。
+ * Worker 对超长批次**拒绝而不是截断**——截断会静默改变统计口径，比丢一批更难发现。
  */
 export const TELEMETRY_MAX_EVENTS_PER_BATCH = 25
 
-/** 事件名与属性名的长度上限（GA4 的上限）。 */
-export const TELEMETRY_MAX_NAME_LENGTH = 40
-
-/** 属性值的长度上限（标准版 GA4；360 版是 500）。 */
-export const TELEMETRY_MAX_ATTRIBUTE_VALUE_LENGTH = 100
-
 /**
- * **用户属性**值的长度上限，36。
+ * 属性值的长度上限，100。
  *
- * 与事件参数值（100）是两个不同的上限：GA4 对 `user_properties` 单独卡 36 字符
- * （名字卡 24）。超长的用户属性 GA **不报错、直接丢**，所以凡是落点在那里的字段
- * 都得按这个数字卡住（telemetry.md §9）。
+ * **一个数字管所有属性值。** 早先这里按「事件参数 100 / 用户属性 36」分两套，那是把某家后端的
+ * 实现细节写进了双方的契约；现在它只服务于「一段值不可能长到藏下一段内容」这个目的。
  */
-export const TELEMETRY_MAX_USER_PROPERTY_VALUE_LENGTH = 36
-
-/** 单个事件的属性数上限（GA4 的上限）。 */
-export const TELEMETRY_MAX_ATTRIBUTES_PER_EVENT = 25
+export const TELEMETRY_MAX_PROPERTY_VALUE_LENGTH = 100
 
 /**
  * 时间戳可回溯的窗口，72 小时。
  *
- * GA4 拒绝更早的 `timestamp_micros`；`RELAXED` 模式下它不会拒收事件，而是把时间戳替换成
- * 72 小时前。因此 Worker 的做法是：超出窗口时**丢掉 `occurredAt` 而不是丢掉事件**
- * （telemetry.md §7）。
+ * 比这更早的事件多半是休眠很久之后的一次补报，而下限存在的意义是让「什么时候发生的」
+ * 不至于变成一个无从考证的数字。超出窗口时 Worker 的做法是**丢掉时间戳而不是丢掉事件**
+ * （telemetry.md §7）——补报允许损失时间精度，但整批数据没了是另一回事。
  */
 export const TELEMETRY_MAX_BACKDATE_MILLISECONDS = 72 * 60 * 60 * 1000
 
-/** 上报请求的超时（毫秒级，不参与任何重试预算）。 */
+/**
+ * 上报请求的超时（毫秒），不参与任何重试预算。
+ *
+ * 它同时是 Worker 侧转发超时的上界：下游必须在客户端放弃之前答完，否则就会出现「客户端
+ * 以为失败了、下游其实收到了」（见 `apps/apis/source/sink.ts`）。
+ */
 export const TELEMETRY_REQUEST_TIMEOUT_MILLISECONDS = 5_000
 
 /**
  * 默认批量条数。
  *
- * 远小于 25 的硬上限：批量只为了少发几次请求，不是为了攒到极限。真正决定它的是
- * 「一次上报不能明显拖慢关闭流程」（telemetry.md §12）。
+ * 远小于 25 的硬上限：批量只为了少发几次请求，不是为了攒到极限。
  */
 export const TELEMETRY_DEFAULT_BATCH_SIZE = 12
 
 /** 凑不满一批时的最长等待（毫秒）；先到先发。 */
 export const TELEMETRY_FLUSH_INTERVAL_MILLISECONDS = 30_000
 
-// ========== 公共字段 ==========
+// ========== 信封 ==========
 
 /**
- * 每条事件都带的字段，由客户端填写。**它们与具体的业务属性分开定义**，因为写事件的人
- * 只该关心自己那几个属性，公共字段由上报器统一补（见 `TelemetryEventInput`）。
+ * 每条事件都带的字段，由客户端填写。
+ *
+ * 它是这份契约里**最抽象的一层**：与具体发生了什么无关，只回答「谁、什么时候、在什么上」。
+ * 业务属性另行定义（见事件目录），写事件的人只关心自己那几个属性，信封由上报器统一补
+ * （见 `TelemetryEventInput`）。
+ *
+ * 这里没有「用户」「会话」「设备」这类词，只有事实：安装标识、时间、版本、平台、语言、
+ * 宿主形态。换个后端，它们可能被叫作别的名字，但那是那边的事，不是这里的命名依据。
  */
-export const TelemetryCommonFieldsSchema = z.object({
+export const TelemetryEnvelopeSchema = z.object({
   /** 事件发生时间，本地时钟的毫秒时间戳。 */
   occurredAt: z.number().int().nonnegative(),
   /**
    * 本机匿名安装标识，标准 UUID v4。
    *
-   * 直接上报本地 UUID，**不派生、不轮换**：worker 拿它当 GA4 的 `client_id` 用，
-   * 因此 GA 的 `users` 指标就是它的去重计数，跨天的活跃与留存全部现成可用。
-   * 轮换换不到真正的匿名，却会把 GA 的留存报表全部废掉（telemetry.md §4）。
-   *
-   * 客户端**不知道**它在下游被当 `client_id` 用，这是 Worker 的事。
+   * 直接上报本地 UUID，**不派生、不轮换**：它是「同一台机器」的唯一凭据，轮换换不到真正的
+   * 匿名，却会把「跨天的活跃与留存」整个废掉（telemetry.md §4）。
    */
   installId: z.string().uuid(),
   /**
    * 应用版本，由宿主注入（core 拿不到渲染层的版本常量，也没有 electron）。
-   *
-   * 长度按**用户属性**的上限卡（36），不是按事件参数的上限（40）：它在下游的落点是
-   * `user_properties.version`，多出来的字符会被 GA 直接丢掉。
    */
-  version: z.string().min(1).max(TELEMETRY_MAX_USER_PROPERTY_VALUE_LENGTH),
+  version: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH),
   /** 操作系统。 */
   os: z.enum(['win32', 'darwin', 'linux']),
   /** CPU 架构。 */
@@ -135,10 +148,10 @@ export const TelemetryCommonFieldsSchema = z.object({
   runtime: z.enum(HOST_RUNTIMES),
 })
 
-export type TelemetryCommonFields = z.infer<typeof TelemetryCommonFieldsSchema>
+export type TelemetryEnvelope = z.infer<typeof TelemetryEnvelopeSchema>
 
-/** 公共字段名，供「组装事件」的地方一次性剔除。 */
-export const TELEMETRY_COMMON_FIELD_NAMES = [
+/** 信封字段名，供「组装事件」的地方一次性剔除。 */
+export const TELEMETRY_ENVELOPE_FIELDS = [
   'occurredAt',
   'installId',
   'version',
@@ -147,6 +160,26 @@ export const TELEMETRY_COMMON_FIELD_NAMES = [
   'locale',
   'runtime',
 ] as const
+
+// ========== 属性规则 ==========
+
+/**
+ * 一个属性值只允许两种类型：**有界字符串**与**布尔**。
+ *
+ * 没有数字、没有数组、没有对象——不是因为下游不支持，而是因为这份契约的红线
+ * 是「不存在任何位置能塞进一段内容」（见文件头）。要表达「几个」就用枚举（见
+ * `TELEMETRY_FAILOVER_ATTEMPT_BUCKETS`），不要发一个恰好是数字的字符串。
+ *
+ * 有界字符串默认是**枚举**（值来自固定词表）；唯一的例外是 `popular_models` 的模型名，
+ * 它是自由文本但被限定为「模型名」这一个含义、且受下面的长度上限约束（见文件头第 2 条）。
+ *
+ * 每条事件自己的属性仍然按**固定枚举**逐个写出来（见事件目录）；这个 schema 表达的是那条
+ * 更宽的规则，也是「新增一个属性时它能是什么类型」的答案。
+ */
+export const TelemetryPropertyValueSchema = z.union([
+  z.string().max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH),
+  z.boolean(),
+])
 
 // ========== 事件目录（首版，只增不删） ==========
 
@@ -166,11 +199,13 @@ export const TELEMETRY_FAILOVER_ATTEMPT_BUCKETS = ['2', '3', '4+'] as const
 /** `rewrite_rule_created.kind`：规则来源。 */
 export const TELEMETRY_REWRITE_RULE_KINDS = ['builtin', 'custom'] as const
 
-/** 布尔属性统一发字符串，不走 JSON 布尔：GA 的参数值以字符串为准。 */
-const TelemetryBooleanSchema = z.enum(['true', 'false'])
-
-/** 布尔属性的类型别名。 */
-export type TelemetryBoolean = z.infer<typeof TelemetryBooleanSchema>
+/**
+ * 布尔属性用原生 JSON 布尔。
+ *
+ * 早先它是 `'true'` / `'false'` 两个字符串，唯一的理由是某家后端只吃字符串参数；那属于
+ * 适配器该操心的事，把类型退化写进契约只会让每个读报文的人都得多想一次。
+ */
+const TelemetryBooleanSchema = z.boolean()
 
 /**
  * 事件名的闭集。
@@ -178,71 +213,75 @@ export type TelemetryBoolean = z.infer<typeof TelemetryBooleanSchema>
  * 每一项是一句话能说清的产品事实，不是一次函数调用。判断标准见 telemetry.md §5.3：
  * 事件目录就是**需求边界**，表里没有的问题首版不加字段，先在文档里加一行再说。
  *
- * GA4 的预留名（`error`、`session_start`、`first_visit`、`app_install`、`app_update`、
- * `user_engagement` 等）不能用；属性名也不得以 `_`、`firebase_`、`ga_`、`google_`、`gtag.`
- * 开头。新增事件时要再查一次——这些约束 GA 不会在发送时报错。
+ * 命名只有两条规则，目的都是「这个名字在任何系统里都能原样使用」：
+ *
+ * - 小写下划线、不带前缀——`$` 与 `_` 开头的名字是各家后端给自己留的；
+ * - 是产品事实，不是函数名或界面元素名（`provider_created`，不是 `openCreateDialog`）。
+ *
+ * 首版这 14 个名字与当前后端的保留名不冲突（它的保留名全部以 `$` 开头）。将来接一个新后端
+ * 时如果撞上了，解决办法是在适配器里做映射，**不是把契约里的名字改掉**：名字发出去就不能变。
  */
 export const TelemetryEventSchema = z.discriminatedUnion('name', [
   /** 服务启动完成。 */
-  z.object({ ...TelemetryCommonFieldsSchema.shape, name: z.literal('app_started') }).strict(),
+  z.object({ ...TelemetryEnvelopeSchema.shape, name: z.literal('app_started') }).strict(),
   /** 启动最终失败。`reason` 是归因分桶，不带错误原文——那是排障信息，不是统计。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('service_start_failed'),
     reason: z.enum(TELEMETRY_SERVICE_FAILURE_REASONS),
   }).strict(),
   /** 用户改变统计开关。关闭时尽力发一次，否则只能看到「某天起不再出现」，区分不出关闭/卸载/断网。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('telemetry_toggled'),
     enabled: TelemetryBooleanSchema,
   }).strict(),
   /** 引导走完或跳过。`skipped` 为真表示没走完就退出——它与「走完了」是两种不同的结果。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('onboarding_finished'),
     skipped: TelemetryBooleanSchema,
   }).strict(),
   /** 生效模式切换。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('route_mode_changed'),
     mode: RouteModeSchema,
   }).strict(),
   /** 新建 Provider。只发来源，不发名称与地址。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('provider_created'),
     kind: z.enum(['builtin', 'custom']),
   }).strict(),
   /** 添加 ProviderModel。协议是产品能力维度，不是供应商标识。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('model_added'),
     protocol: ProtocolSchema,
   }).strict(),
   /** 连接测试。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('provider_test_run'),
     result: z.enum(['success', 'failed']),
   }).strict(),
   /** 新建请求改写规则。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('rewrite_rule_created'),
     kind: z.enum(TELEMETRY_REWRITE_RULE_KINDS),
   }).strict(),
   /** 一次请求发生了协议转换；两侧都记，否则「转换从哪来到哪去」这一格读不出来。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('protocol_conversion_used'),
     from: ProtocolSchema,
     to: ProtocolSchema,
   }).strict(),
   /** 一次请求发生了故障转移。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('failover_happened'),
     attempts: z.enum(TELEMETRY_FAILOVER_ATTEMPT_BUCKETS),
   }).strict(),
@@ -255,15 +294,33 @@ export const TelemetryEventSchema = z.discriminatedUnion('name', [
    * 「破坏性变更开新路径」这条既有约定的适用场景（§7）。
    */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('workflow_node_run'),
     nodeKind: z.enum(WORKFLOW_NODE_KINDS),
   }).strict(),
   /** 导出日志。只发「带没带正文」，不发导了多少条、导到了哪。 */
   z.object({
-    ...TelemetryCommonFieldsSchema.shape,
+    ...TelemetryEnvelopeSchema.shape,
     name: z.literal('logs_exported'),
     withContent: TelemetryBooleanSchema,
+  }).strict(),
+  /**
+   * 启动时的本地模型使用快照：最近一段时间里用得最多的前三个模型名。
+   *
+   * 它回答「当下什么模型热门」。这是事件目录里**唯一携带自由文本的一条**，也是 §3 红线上
+   * 被明确记下的例外（见文件头第 2 条）：值被限死为「模型名」一件事，不含 provider 名、
+   * 不含 baseUrl、不含任何用户内容；最多三条，每条仍受 `TELEMETRY_MAX_PROPERTY_VALUE_LENGTH`
+   * 约束。三个字段都可缺省——不够三个就不填，一个都没有时**不发这条事件**（见入口实现）。
+   *
+   * 名字按名次落在 `first` / `second` / `third` 上，而不是写成数组：契约的属性值不接受数组，
+   * 而三个可选字符串恰好表达了「最多三条、有序」这件事。
+   */
+  z.object({
+    ...TelemetryEnvelopeSchema.shape,
+    name: z.literal('popular_models'),
+    first: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
+    second: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
+    third: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
   }).strict(),
 ])
 
@@ -277,15 +334,15 @@ export const TELEMETRY_EVENT_NAMES = TelemetryEventSchema.options
 /**
  * 写事件的人要提供的东西：只有事件名与它自己的属性。
  *
- * 公共字段（版本、平台、标识、时间）由上报器统一补，写业务的人碰不到它们——
+ * 信封字段（标识、时间、版本、平台）由上报器统一补，写业务的人碰不到它们——
  * 少一个可以填错的地方。`DistributiveOmit` 是必要的：直接用 `Omit` 会把联合类型
  * 压成一个共有的属性集，判别联合的窄化就没了。
  */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
-export type TelemetryEventInput = DistributiveOmit<TelemetryEvent, (typeof TELEMETRY_COMMON_FIELD_NAMES)[number]>
+export type TelemetryEventInput = DistributiveOmit<TelemetryEvent, (typeof TELEMETRY_ENVELOPE_FIELDS)[number]>
 
-/** `.omit` 要的是 `{ key: true }`，不是名字数组；写在这里能让它跟着公共字段名单一起变。 */
-const OMIT_COMMON_FIELDS = {
+/** `.omit` 要的是 `{ key: true }`，不是名字数组；写在这里能让它跟着信封名单一起变。 */
+const OMIT_ENVELOPE_FIELDS = {
   occurredAt: true,
   installId: true,
   version: true,
@@ -293,23 +350,23 @@ const OMIT_COMMON_FIELDS = {
   arch: true,
   locale: true,
   runtime: true,
-} as const satisfies Record<(typeof TELEMETRY_COMMON_FIELD_NAMES)[number], true>
+} as const satisfies Record<(typeof TELEMETRY_ENVELOPE_FIELDS)[number], true>
 
 /**
- * `TelemetryEventInput` 的运行期对应物：与事件联合**同源**，只是不含公共字段。
+ * `TelemetryEventInput` 的运行期对应物：与事件联合**同源**，只是不含信封字段。
  *
  * 存在的理由是边界。界面侧发生的事（走完引导、新建 Provider）要经管理接口交给 core 上报，
- * 那条接口收的是不可信输入，必须有校验；而校验的对象偏偏是「去掉公共字段之后」的形状。
+ * 那条接口收的是不可信输入，必须有校验；而校验的对象偏偏是「去掉信封字段之后」的形状。
  * 派生而不是另抄一份，是为了让「新增一个事件」只改上面那一处。
  *
  * 两个写法上的让步，都只是类型系统的形状问题，不影响运行期：
- * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十三项联合，
+ * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十四项联合，
  *   直接 `.omit` 会因为「联合的签名互不兼容」而不通过（联合不整体可调用）；
  * - 前两项单独拆出来再展开剩余项：`z.union` 的签名要求「首个元素 + 第二项 + 其余」，
  *   而 `.map` 的返回值在类型上是数组，直接展开满足不了那个元组形状。
  */
 const EVENT_INPUT_OPTIONS = TelemetryEventSchema.options.map((option: z.ZodObject<z.ZodRawShape>) =>
-  option.omit(OMIT_COMMON_FIELDS),
+  option.omit(OMIT_ENVELOPE_FIELDS),
 )
 const [firstEventInputSchema, secondEventInputSchema, ...restEventInputSchemas] = EVENT_INPUT_OPTIONS
 /**
@@ -337,58 +394,39 @@ export function parseTelemetryEventInput(value: unknown): TelemetryEventInput | 
 
 // ========== 请求体 ==========
 
-/** 上报请求体。 */
+/**
+ * 上报请求体：一批事件。
+ *
+ * 只有一项，而且它是一个数组：**批次是传输单位，不是产品概念**。再多一层包装（一个 `meta`、
+ * 一个 `schemaVersion`）都会让人以为里面有东西，而里面确实没有——信封已经在每条事件上了。
+ */
 export const TelemetryBatchSchema = z.object({
   events: z.array(TelemetryEventSchema).min(1).max(TELEMETRY_MAX_EVENTS_PER_BATCH),
 }).strict()
 
 export type TelemetryBatch = z.infer<typeof TelemetryBatchSchema>
 
-// ========== 公共字段在下游的去向 ==========
+// ========== 字段去向 ==========
 
 /**
- * 每个公共字段去哪，写在这里而不是写在 Worker 的 `switch` 里。
+ * **契约不规定字段去向。** 哪个字段落在哪里是适配器的事，而它不需要在这里有一份声明：
+ * 适配器接到的是已经校验过的事件，字段就那么多，怎么摆由它决定。
  *
- * 四个不进事件参数的去向各有理由：
- * - `installId` → `client_id`：GA4 的自定义维度每天每维度约 500 个不同值后会把余下的折进
- *   `(other)`，安装标识这种量级第一天就会被折叠；而 `client_id` 没有这个上限；
- * - `occurredAt` → 时间戳：GA 用的是事件自己的时间，不是一个叫 `occurredAt` 的参数；
- * - `os` / `locale` → `device`：它们本就是设备属性，GA 的原生报表直接读这两个字段，
- *   走参数反而要额外注册自定义维度；
- * - `version` / `arch` → `user_properties`：它们是**安装级**事实而不是事件级事实。走用户属性
- *   之后 GA 按用户保存，「版本分布」这一类问题里同一个安装只算一次（升级不会同时出现在两行），
- *   而且不占用每个事件 25 个参数的名额。
- *
- * `runtime` **刻意留在事件参数里**：桌面端与命令行共用数据目录、因而共用安装标识，
- * 同一个安装会先后发出两种 `runtime`。做成用户属性只会让它按最后一次上报来回翻。
+ * 这里曾经有一份 `TELEMETRY_FIELD_TARGETS`，把每个信封字段钉到某家后端的某个概念上
+ * （`client_id` / `user_properties` / `device`…）。它的问题不是写错了，而是**位置错了**：
+ * 一份 vendor 的表格放在双方的公共契约里，等于让「换一个存储」变成一次契约变更。
+ * 删掉它之后，换后端只写一个新的 sink 文件（见 `docs/product/telemetry.md` §6）。
  */
-export const TELEMETRY_FIELD_TARGETS = {
-  occurredAt: 'timestamp',
-  installId: 'clientId',
-  os: 'deviceOperatingSystem',
-  locale: 'deviceLanguage',
-  version: 'userProperty',
-  arch: 'userProperty',
-  runtime: 'param',
-} as const satisfies Record<(typeof TELEMETRY_COMMON_FIELD_NAMES)[number], string>
-
-/**
- * 需要**事先注册**才能查的用户级自定义维度：`version` 与 `arch`（telemetry.md §11）。
- *
- * 留在这里是为了让「要注册哪几个维度」有个代码里的落点——顺序很关键：维度必须在
- * **首次上报之前**注册，否则注册前的数据在这些维度上永远是空的，且无法回填。
- */
-export const TELEMETRY_USER_PROPERTIES = ['version', 'arch'] as const
 
 // ========== 预览 ==========
 
 /**
- * 「预览即将发送的内容」的响应（telemetry.md §13 要求设置页能自证）。
+ * 「预览即将发送的内容」的响应（telemetry.md §13：自查走管理接口，设置页不展示）。
  *
  * `events` 必须是**真实报文**，不是另写一份说明文案：
  * - 队列里有待发送的事件时，给的就是那一批（`source: 'queue'`）；
- * - 队列为空时（绝大多数时候都是），用当前公共字段造一条 `app_started`（`source: 'sample'`），
- *   界面据此标注来源。两种来源走的是同一个序列化路径，所以用户看到的字节与真正会发出去的
+ * - 队列为空时（绝大多数时候都是），用当前信封造一条 `app_started`（`source: 'sample'`），
+ *   调用方据此标注来源。两种来源走的是同一个序列化路径，所以预览到的字节与真正会发出去的
  *   字节是同一份东西。
  */
 export interface TelemetryPreview {

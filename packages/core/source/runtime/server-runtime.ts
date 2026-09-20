@@ -1,6 +1,7 @@
 import type { Server } from 'node:http'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { SecretStore } from '@common/secret-store'
+import type { TelemetryServiceFailureReason } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
@@ -11,6 +12,7 @@ import { configureShutdownHandshake, type ShutdownHandshake } from '../managemen
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { resetManualModels } from '../proxy/routing/manual-routing'
 import { startProxyServer, stopProxyServer } from '../proxy/runtime/server'
+import { reportTelemetryStartFailure, startTelemetry } from '../telemetry'
 import {
   acquireInstanceLock,
   InstanceLockError,
@@ -47,6 +49,7 @@ export class ServerRuntime {
   private endpoints: ServerEndpoints | null = null
   private instanceLock: InstanceLock | null = null
   private stopLockHeartbeat: (() => void) | null = null
+  private stopTelemetry: (() => void) | null = null
 
   constructor(private readonly options: ServerRuntimeOptions) {}
 
@@ -93,6 +96,9 @@ export class ServerRuntime {
       console.info(`[runtime] management server started listening=${this.managementServer.listening}`)
       console.info(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)
       await startProxyServer({ host: settings.listenHost, port: settings.listenPort })
+      // 统计在「一切都起来了」之后才开：它自己会读一次设置、决定是否上报，并且注册一个监听
+      // 以便用户开关。放在最后也意味着启动失败时不会有半个队列留在后台。
+      this.stopTelemetry = startTelemetry(config)
       this.endpoints = {
         managementHost: config.managementHost,
         managementPort: config.managementPort,
@@ -105,6 +111,8 @@ export class ServerRuntime {
       return this.endpoints
     } catch (error) {
       console.error(`[runtime] start failed state=${this.state}`, error)
+      // 启动失败的一次性上报排在清理之前：清理会关掉数据库，之后就读不到「用户是否同意」了。
+      await reportTelemetryStartFailure(config, classifyStartFailure(error))
       try {
         await this.stopResources()
       } catch (cleanupError) {
@@ -132,6 +140,8 @@ export class ServerRuntime {
 
   private async stopResources(): Promise<void> {
     console.info('[runtime] stopping resources')
+    this.stopTelemetry?.()
+    this.stopTelemetry = null
     const names = ['proxy', 'management'] as const
     const results = await Promise.allSettled([stopProxyServer(), stopManagementServer()])
     results.forEach((result, index) => {
@@ -182,4 +192,19 @@ export class ServerRuntime {
       console.error('[runtime] failed to release the instance lock', error)
     }
   }
+}
+
+/**
+ * 把启动异常归类成事件契约里的闭集。
+ *
+ * 归类粗是**故意的**：`service_start_failed` 要回答的是「最近失败变多了吗、主要是哪一类」
+ * （见 `docs/product/telemetry.md` §7），把每个异常类型都映射成一档，只会把这张图画成噪声。
+ * 归不进去的一律进 `other`——`other` 常年偏高才说明该来加一档了。
+ */
+function classifyStartFailure(error: unknown): TelemetryServiceFailureReason {
+  if (error instanceof InstanceLockError) return 'instance_lock'
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  if (code === 'EADDRINUSE') return 'port'
+  if (typeof code === 'string' && code.startsWith('ERR_SQLITE')) return 'database'
+  return 'other'
 }

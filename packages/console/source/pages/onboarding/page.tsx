@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
 import { routePaths } from '@/routes'
 import { useAppUiStore } from '@/store/app-ui-store'
+import { telemetryApi } from '@/api/runtime'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { RouteModeStep } from './steps/route-mode-step'
 import { AddModelStep } from './steps/add-model-step'
@@ -20,7 +21,7 @@ interface OnboardingStep {
 }
 
 /**
- * 前三步只回答三个问题：**怎么选路 → 拿什么跑 → 填到哪里**。
+ * 三步只回答三个问题：**怎么选路 → 拿什么跑 → 填到哪里**。
  *
  * 顺序不可换：没有模型时「填到哪里」没有意义，没选模式时「拿什么跑」也说不清会怎么被选中。
  * 每一步的产物都是下一步的前提，所以这里是一条直线，不是可自由勾选的清单。
@@ -74,14 +75,15 @@ export function OnboardingPage() {
   const setOnboardingComplete = useAppUiStore(state => state.setOnboardingComplete)
   const t = useTranslation()
 
-  const steps = STEPS
-  const step = steps[index]
-  const isLast = index === steps.length - 1
+  const step = STEPS[index]
+  const isLast = index === STEPS.length - 1
 
   /**
-   * 收尾。「跳过」与「完成」走同一条路：把不能跳过的东西做成引导，只会让人以为程序坏了。
+   * 收尾。「跳过」与「完成」走同一条路，区别只在 `skipped`：把不能跳过的东西做成引导，
+   * 只会让人以为程序坏了。
    */
-  const finish = () => {
+  const finish = (skipped: boolean) => {
+    telemetryApi.report({ name: 'onboarding_finished', skipped })
     setOnboardingComplete(true)
     void navigate({ to: routePaths.router, replace: true })
   }
@@ -95,7 +97,7 @@ export function OnboardingPage() {
 
       {/* 进度条本身就是可点的回头路：走过头了要能回到第一步改模式，而不是退出重来。 */}
       <ol aria-label={t('onboarding.progressLabel')} className="flex items-center gap-2">
-        {steps.map((item, itemIndex) => {
+        {STEPS.map((item, itemIndex) => {
           const done = itemIndex < index
           const current = itemIndex === index
           return (
@@ -123,7 +125,7 @@ export function OnboardingPage() {
                 </span>
                 <span className="truncate">{t(item.labelKey)}</span>
               </button>
-              {itemIndex < steps.length - 1 && (
+              {itemIndex < STEPS.length - 1 && (
                 <span aria-hidden className="h-px w-4 shrink-0 bg-border" />
               )}
             </li>
@@ -153,12 +155,12 @@ export function OnboardingPage() {
           <ArrowLeft />
           {t('onboarding.action.previous')}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => finish()}>
+        <Button variant="ghost" size="sm" onClick={() => finish(true)}>
           {t('onboarding.action.skip')}
         </Button>
         <div className="ml-auto">
           {isLast ? (
-            <Button size="sm" onClick={() => finish()}>
+            <Button size="sm" onClick={() => finish(false)}>
               {t('onboarding.action.finish')}
             </Button>
           ) : (
