@@ -47,7 +47,7 @@
 
 ## 2. 目标问题
 
-首版只需回答七个问题。**这份清单就是需求边界**：不在表里的问题，首版不为其增加字段。
+首版只需回答六个问题。**这份清单就是需求边界**：不在表里的问题，首版不为其增加字段。
 
 | # | 问题 | 观察单位 |
 |---|------|---------|
@@ -57,7 +57,7 @@
 | 4 | 语言分布 | 去重安装 |
 | 5 | 平台构成（系统 + 架构） | 去重安装 |
 | 6 | 功能使用排行 | 事件次数 |
-| 7 | 热门模型（当下大家在用哪些模型） | 模型名 × 去重安装（启动快照） |
+
 
 **首版只有下游一层存储，我们不自己存一份。** 「去重安装」是一个安装标识的去重计数，不是自然人的数量（见 §4）。取舍见 §8 与 §10。
 
@@ -78,13 +78,7 @@
 
 供应商 baseUrl 单独强调一次：用户自建中转的地址本身就是敏感信息，泄露它是实打实的隐私事故。因此事件属性里**没有位置能随手塞进一段内容**：所有属性都是固定枚举、布尔或分桶（见 §5.3），这条红线由契约的形状保证（§5.2 的「只描述事实」原则），不是靠转发时的过滤。
 
-**唯一被明确记下的例外是 `popular_models` 事件里的模型名**（见 §5.3）。它回答「当下什么模型热门」，这是目标问题之一（§2），而模型名恰恰是「供应商标识」这一行的下半部分——所以这不是漏改，是一次权衡后的刻意开口，边界写死在三点上：
-
-- **只出模型名这一件事**：不含 Provider 名称、不含 `providerModelId`、不含 baseUrl、不含用量与耗时；
-- **每次启动最多三个名字**（本地最常用的前三个），是一条低基数的趋势快照，不是逐请求日志；
-- **名字受长度上限约束**（`TELEMETRY_MAX_PROPERTY_VALUE_LENGTH`），超长即被契约拒绝。
-
-用户自定义的、带私有中转信息或个人标注的模型名仍然可能落在这个字段里。接受它的理由与 §4 里「标识长期稳定」同类：换来的是一条看得到的产品信号，代价是一条用户自己写下的名字。如果将来要进一步收紧，正确的做法是给一个**固定词表的下拉**放在模型命名处，而不是在上报侧做字符串过滤（过滤会把同一个模型拆成两种名字，反而弄脏数据）。
+**这里没有任何例外。** 首版曾为「当下什么模型热门」开过一扇小窗：启动时上报本地最常用的几个**模型名**，理由是模型名是一个看得到的产品信号。它后来被撤掉了（§2 的第七条问题随之删除），因为那扇窗的代价恰恰是本表的第一条下半行——模型名是**用户自己写下的一段字符串**，可能带着私有中转的标注或人名的后缀。一条统计信号换不来这个，而真正想要的是「哪些供应商 / 哪些协议在被用」，那是另一类可以做成闭集的问题（见 §15）。
 
 ## 4. 安装标识
 
@@ -156,7 +150,6 @@
 | `failover_happened` | 一次请求发生故障转移 | `attempts`: `2` / `3` / `4+` |
 | `workflow_node_run` | 工作流节点执行 | `nodeKind`: 节点类型枚举 |
 | `logs_exported` | 导出日志 | `withContent`: 布尔 |
-| `popular_models` | 启动时上报本地最常用模型快照（§2 问题 7） | `first` / `second` / `third`: 模型名（按名次，可缺省） |
 
 约束与说明：
 
@@ -165,7 +158,7 @@
 - `protocol_conversion_used` 只发「发生了转换」与两侧协议。协议是产品能力维度（三值枚举），不是供应商标识。
 - `failover_happened` 的 `attempts` 分桶，不发精确次数：精确值对产品决策没有额外信息量，却是更细的行为指纹。
 - **`workflow_node_run` 的 `nodeKind` 是闭集。** 它复用 `packages/contracts/source/router/types.ts` 的 `WORKFLOW_NODE_KINDS`（一个运行期数组，不是又写一份字面量联合），所以工作流引擎新增一种节点时，统计侧要么跟着认它、要么在改契约时一起决定，不会悄悄地开始丢事件。
-- **`popular_models` 是目录里唯一携带自由文本的一条**（§3 红线的那个例外）：`first` / `second` / `third` 是**模型名**，按名次排列、最多三个。名字来自 30 天回看窗口内成功尝试次数最多的前三个模型（按 `providerModelName` 分组，口径与 `getModelStats` 的 `successOnly` 一致）。三个字段都可缺省：不够三个就只填有的，本地一个都没有时**不发这条事件**。它在监听成功后异步发出（读一次本地库，不挡启动），失败即丢——它是一条补充信息，不是启动的必要条件。
+- **`popular_models` / `provider_model` 两个名字被撤掉了。** 它们回答的是「当下什么模型热门」，做法都是把本地最常用的几个模型名带出去，差别只在形状（前者的名次写在 `first` / `second` / `third` 三个字段里，后者一个模型一条事件、模型名写在同名属性里）。两个都从未随正式版发出，所以直接删除、不留「已停用」的占位——「只增不删」防的是历史数据失去解释，而不是防改动本身。要恢复这条信号时，正确的做法也不是把名字原样搬回来，而是重新问一次「这个答案值不值得一条用户写下的字符串」（§3）。
 - 事件目录**只增不删**：删掉一个事件名等于历史数据里那一列失去解释。要停用就在文档里标「已停用」，代码里停止发送。
 - **单批上限 25 条**（`TELEMETRY_MAX_EVENTS_PER_BATCH`），请求体上限 64 KiB（`TELEMETRY_MAX_REQUEST_BYTES`）。这两个数字都是**我们自己的**选择，不是下游的限额：客户端默认批量远小于它们（见 §12），它们只是「往端点灌大包」的成本下限。Worker 对超长批次直接拒绝而不是截断——截断会静默改变统计口径。
 
@@ -473,8 +466,8 @@ core 是纯 Node 进程，拿不到渲染层的 `__APP_VERSION__`，也没有 `e
 | `packages/core/source/telemetry/install-id.ts` | 安装标识的读写与落盘；只在采集真正开启时才创建 |
 | `packages/core/source/telemetry/queue.ts` | 内存队列：容量上限、批量阈值、定时冲刷、`unref()` 定时器 |
 | `packages/core/source/telemetry/sender.ts` | 直连发送：`createOutboundConnector(直连配置)` + `createCoreNetworkClient()`，非 2xx 视为失败 |
-| `packages/core/source/telemetry/index.ts` | 生命周期：开发档短路、开关订阅、补信封字段、`app_started` / `popular_models` / `telemetry_toggled`、启动失败直发、预览 |
-| `packages/core/source/database/analytics-store.ts` | `listPopularModelNames(limit, sinceMs)`：`popular_models` 的数据源——30 天窗口内成功尝试最多的前几个模型名，只返回名字 |
+| `packages/core/source/telemetry/index.ts` | 生命周期：开发档短路、开关订阅、补信封字段、`app_started` / `telemetry_toggled`、启动失败直发、预览 |
+| `packages/core/source/database/analytics-store.ts` | 控制台图表的取数：延迟分布、模型统计等；**不参与上报**（§3 不再有任何自由文本字段，上报侧也不需要读本地库） |
 | `packages/core/source/runtime/server-runtime.ts` | 启动上报循环、停机清理、启动失败原因分类 |
 | `packages/core/source/management/routes/operations/telemetry.ts` | 预览接口 `/api/telemetry/preview` 与静默接受接口 `/api/telemetry/report` |
 | `packages/console/source/api/runtime.ts` | `telemetryApi.report`（控制台只负责把界面侧的事实转交给 core；`/telemetry/preview` 仅供 curl 自查，控制台不再包装它） |

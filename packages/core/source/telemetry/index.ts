@@ -28,7 +28,6 @@ import type {
   TelemetryServiceFailureReason,
 } from '@common/telemetry'
 import { TELEMETRY_ENDPOINT } from '@common/telemetry'
-import { listPopularModelNames } from '../database/analytics-store'
 import { getSettings, onSettingsChanged } from '../database/settings-store'
 import { loadOrCreateTelemetryId } from './install-id'
 import { createTelemetryQueue, type TelemetryQueue } from './queue'
@@ -112,9 +111,6 @@ async function start(config: RuntimeConfig, isCancelled: () => boolean): Promise
 
   // `app_started` 也走同一条队列：它不是特殊路径，只是「启动后的第一条事件」。
   active.report({ name: 'app_started' })
-
-  // 启动快照是补充信息，不挡启动：读到就补一条，读不到就算。
-  void reportPopularModels(active, isCancelled)
 }
 
 /**
@@ -216,52 +212,6 @@ async function reportToggle(enabled: boolean): Promise<void> {
 
 function isEnabled(): boolean {
   return active !== null && settings?.telemetryEnabled === true
-}
-
-/** 「热门模型」取前几名。三个，与契约里 `popular_models` 的三个字段一一对应。 */
-const POPULAR_MODEL_COUNT = 3
-
-/**
- * 「热门模型」的回看窗口：30 天。
- *
- * 问题问的是「**当下**什么模型热门」，所以不能把全部历史一起数——半年前的热门与现在无关。
- * 30 天既够把低频用户的使用暴露出来，又不至于让一份趋势快照被陈年数据主导。
- */
-const POPULAR_MODEL_WINDOW_MILLISECONDS = 30 * 24 * 60 * 60 * 1000
-
-/**
- * 启动快照：本地最常使用的模型名（回答「当下什么模型热门」）
- *
- * `app_started` 之后异步补一条。查询是一次降级读取、失败也不影响启动，所以这里不 await、
- * 也不让异常冒出去；名字一个也没有时（新装、库还没热）不发——一条空事件只是噪声。
- */
-async function reportPopularModels(queue: TelemetryQueue, isCancelled: () => boolean): Promise<void> {
-  try {
-    const names = await listPopularModelNames(POPULAR_MODEL_COUNT, Date.now() - POPULAR_MODEL_WINDOW_MILLISECONDS)
-    if (isCancelled()) return
-    const event = popularModelsEvent(names)
-    if (event !== null) queue.report(event)
-  } catch (error) {
-    console.debug('[telemetry] popular models snapshot dropped', error)
-  }
-}
-
-/**
- * 把「前几个模型名」拼成事件；一个都没有时返回 `null`（不发一条空事件）。
- *
- * 名字按名次落到 `first` / `second` / `third`，不够三个就只填有的那几个——契约里三个字段都可缺省。
- * `undefined` 的键不进对象，所以这里用条件展开而不是直接写 `second: names[1]`：后者会留下一个
- * 值为 `undefined` 的键，预览与序列化时要多考虑一种状态。
- */
-function popularModelsEvent(names: string[]): TelemetryEventInput | null {
-  const [first, second, third] = names
-  if (first === undefined) return null
-  return {
-    name: 'popular_models',
-    first,
-    ...(second === undefined ? {} : { second }),
-    ...(third === undefined ? {} : { third }),
-  }
 }
 
 /**

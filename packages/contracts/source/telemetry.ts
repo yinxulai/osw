@@ -17,11 +17,10 @@
  *
  * 1. **事件名与属性名是闭集，只增不删。** 删掉一个名字等于历史数据里那一列失去解释。
  *    要停用就在文档里标「已停用」并停止发送，不是从这张表里移除。
- * 2. **这里几乎不出现自由文本字段。** 属性值只能是固定枚举或布尔（见「属性规则」），
- *    所以正常没有任何位置能塞进一个 URL、一个供应商名或一段用户内容。
- *    **唯一的例外是 `popular_models` 的模型名**：它是「当下什么模型热门」这一问题的答案，
- *    值被限死为「模型名」一件事（不含 provider 名、不含 baseUrl、不含任何用户内容），
- *    最多三条、每条仍受长度上限约束。这是 §3 红线上被明确记下的一处例外，不是漏改。
+ * 2. **这里不出现自由文本字段。** 属性值只能是固定枚举或布尔（见「属性规则」），
+ *    所以没有任何位置能塞进一个 URL、一个供应商名或一段用户内容。首版曾为「当下什么模型
+ *    热门」开过一扇小窗（模型名），后来连它一起撤掉了：那个问题不值得用一条用户自己写下的
+ *    字符串去换（telemetry.md §3）。
  * 3. **约束要在这里卡死，不能指望下游报错。** 几乎所有的分析后端对超长、非法或不在词表里的
  *    值都是**不报错、直接丢**（telemetry.md §9），所以「长度对不对、值合不合法」必须是这里
  *    的类型问题，而不是运行期问题。
@@ -170,8 +169,8 @@ export const TELEMETRY_ENVELOPE_FIELDS = [
  * 是「不存在任何位置能塞进一段内容」（见文件头）。要表达「几个」就用枚举（见
  * `TELEMETRY_FAILOVER_ATTEMPT_BUCKETS`），不要发一个恰好是数字的字符串。
  *
- * 有界字符串默认是**枚举**（值来自固定词表）；唯一的例外是 `popular_models` 的模型名，
- * 它是自由文本但被限定为「模型名」这一个含义、且受下面的长度上限约束（见文件头第 2 条）。
+ * 有界字符串就是**枚举**（值来自固定词表）：没有「自由文本属性」这个类别，也不打算再加一个
+ * ——要表达一段用户写下的内容时，先回文件头看第 2 条。
  *
  * 每条事件自己的属性仍然按**固定枚举**逐个写出来（见事件目录）；这个 schema 表达的是那条
  * 更宽的规则，也是「新增一个属性时它能是什么类型」的答案。
@@ -218,8 +217,12 @@ const TelemetryBooleanSchema = z.boolean()
  * - 小写下划线、不带前缀——`$` 与 `_` 开头的名字是各家后端给自己留的；
  * - 是产品事实，不是函数名或界面元素名（`provider_created`，不是 `openCreateDialog`）。
  *
- * 首版这 14 个名字与当前后端的保留名不冲突（它的保留名全部以 `$` 开头）。将来接一个新后端
+ * 首版这 13 个名字与当前后端的保留名不冲突（它的保留名全部以 `$` 开头）。将来接一个新后端
  * 时如果撞上了，解决办法是在适配器里做映射，**不是把契约里的名字改掉**：名字发出去就不能变。
+ *
+ * 两个名字（`popular_models` / `provider_model`）曾经存在又被撤掉，原因是同一个：它们要把
+ * 模型名带出去，而那是用户自己写下的一段字符串（telemetry.md §3）。从未发出过的名字可以直接
+ * 移除，不留「已停用」的占位——「只增不删」防的是历史数据失去解释，而不是防改动本身。
  */
 export const TelemetryEventSchema = z.discriminatedUnion('name', [
   /** 服务启动完成。 */
@@ -304,24 +307,6 @@ export const TelemetryEventSchema = z.discriminatedUnion('name', [
     name: z.literal('logs_exported'),
     withContent: TelemetryBooleanSchema,
   }).strict(),
-  /**
-   * 启动时的本地模型使用快照：最近一段时间里用得最多的前三个模型名。
-   *
-   * 它回答「当下什么模型热门」。这是事件目录里**唯一携带自由文本的一条**，也是 §3 红线上
-   * 被明确记下的例外（见文件头第 2 条）：值被限死为「模型名」一件事，不含 provider 名、
-   * 不含 baseUrl、不含任何用户内容；最多三条，每条仍受 `TELEMETRY_MAX_PROPERTY_VALUE_LENGTH`
-   * 约束。三个字段都可缺省——不够三个就不填，一个都没有时**不发这条事件**（见入口实现）。
-   *
-   * 名字按名次落在 `first` / `second` / `third` 上，而不是写成数组：契约的属性值不接受数组，
-   * 而三个可选字符串恰好表达了「最多三条、有序」这件事。
-   */
-  z.object({
-    ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('popular_models'),
-    first: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
-    second: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
-    third: z.string().min(1).max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH).optional(),
-  }).strict(),
 ])
 
 export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>
@@ -360,7 +345,7 @@ const OMIT_ENVELOPE_FIELDS = {
  * 派生而不是另抄一份，是为了让「新增一个事件」只改上面那一处。
  *
  * 两个写法上的让步，都只是类型系统的形状问题，不影响运行期：
- * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十四项联合，
+ * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十三项联合，
  *   直接 `.omit` 会因为「联合的签名互不兼容」而不通过（联合不整体可调用）；
  * - 前两项单独拆出来再展开剩余项：`z.union` 的签名要求「首个元素 + 第二项 + 其余」，
  *   而 `.map` 的返回值在类型上是数组，直接展开满足不了那个元组形状。

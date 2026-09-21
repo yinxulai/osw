@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import { closeDatabases, getDataDb, initDatabases } from './index'
 import { createRequestAttempt, createRequestLog, recordAttemptUsage } from './request-log-store'
 import { requestAttempts, requestLogs } from './data-schema'
-import { getLatencyDistribution, getModelStats, listPopularModelNames } from './analytics-store'
+import { getLatencyDistribution, getModelStats } from './analytics-store'
 
 const EMPTY_USAGE = { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, reasoningTokens: null, rawUsage: null }
 
@@ -255,77 +255,5 @@ describe('getModelStats', () => {
     // 分母是 2000 + 800，不是扣首字之后的 1500 + 0，也不是四次尝试相加。
     expect(stats.speedOutputTokens).toBe(44)
     expect(stats.speedDurationMs).toBe(2800)
-  })
-})
-
-describe('listPopularModelNames', () => {
-  interface ModelAttemptInput {
-    modelName: string
-    status?: 'success' | 'failed'
-  }
-
-  /** 造一条归属确定的尝试；「热门模型」只看模型名与结果，其余字段给最小可用值。 */
-  async function createModelAttempt(input: ModelAttemptInput): Promise<string> {
-    const requestId = await createLog()
-    await createRequestAttempt({
-      requestId,
-      providerId: 'prov_popular',
-      providerModelId: 'model_popular',
-      providerName: 'popular-provider',
-      providerModelName: input.modelName,
-      upstreamProtocol: 'openai-responses',
-      upstreamRequestId: null,
-      url: 'https://example.com/v1/responses',
-      status: input.status ?? 'success',
-      httpStatus: 200,
-      retryable: false,
-      upstreamTransport: 'http',
-      attemptIndex: 0,
-      durationMilliseconds: 10,
-    })
-    return requestId
-  }
-
-  it('ranks by success count and returns names only', async () => {
-    for (let index = 0; index < 3; index++) await createModelAttempt({ modelName: 'gpt-4o' })
-    for (let index = 0; index < 2; index++) await createModelAttempt({ modelName: 'claude-3-5' })
-    await createModelAttempt({ modelName: 'gemini-2' })
-
-    expect(await listPopularModelNames(3, 0)).toEqual(['gpt-4o', 'claude-3-5', 'gemini-2'])
-  })
-
-  it('caps the snapshot at the requested top-N', async () => {
-    for (let index = 0; index < 3; index++) await createModelAttempt({ modelName: 'gpt-4o' })
-    for (let index = 0; index < 2; index++) await createModelAttempt({ modelName: 'claude-3-5' })
-    await createModelAttempt({ modelName: 'gemini-2' })
-
-    expect(await listPopularModelNames(2, 0)).toEqual(['gpt-4o', 'claude-3-5'])
-  })
-
-  it('counts only successful attempts — a model being tried is not a model in use', async () => {
-    for (let index = 0; index < 5; index++) await createModelAttempt({ modelName: 'failing-model', status: 'failed' })
-    await createModelAttempt({ modelName: 'gpt-4o' })
-
-    expect(await listPopularModelNames(3, 0)).toEqual(['gpt-4o'])
-  })
-
-  it('excludes attempts created before the requested window', async () => {
-    await createModelAttempt({ modelName: 'new-model' })
-    const staleRequestId = await createModelAttempt({ modelName: 'old-model' })
-    const staleAttemptId = getDataDb().select({ id: requestAttempts.id }).from(requestAttempts).where(eq(requestAttempts.requestId, staleRequestId)).all()[0].id
-    getDataDb().$client.prepare('UPDATE request_attempts SET createdTime = ? WHERE id = ?').run(100, staleAttemptId)
-
-    expect(await listPopularModelNames(3, 1_000)).toEqual(['new-model'])
-  })
-
-  it('orders by name when counts tie so the snapshot does not jitter', async () => {
-    await createModelAttempt({ modelName: 'zzz-model' })
-    await createModelAttempt({ modelName: 'aaa-model' })
-
-    expect(await listPopularModelNames(3, 0)).toEqual(['aaa-model', 'zzz-model'])
-  })
-
-  it('returns an empty list when nothing has been used', async () => {
-    expect(await listPopularModelNames(3, 0)).toEqual([])
   })
 })

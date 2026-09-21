@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { TelemetryBatch } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
-import { createRequestAttempt, createRequestLog } from '../database/request-log-store'
 import { updateSettings } from '../database/settings-store'
 import { previewTelemetry, reportTelemetryEvent, reportTelemetryStartFailure, startTelemetry } from './index'
 import { TELEMETRY_ID_FILE_NAME } from './install-id'
@@ -77,35 +76,6 @@ async function settle(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 25))
 }
 
-/** 往数据库里塞几条成功尝试，作为「热门模型」的数据源。 */
-async function seedModelUsage(modelName: string, times: number): Promise<void> {
-  for (let index = 0; index < times; index++) {
-    const log = await createRequestLog({
-      logicalModelId: 'model_default',
-      clientProtocol: 'openai-responses',
-      transport: 'http',
-      status: 'success',
-      totalDurationMilliseconds: 1,
-    })
-    await createRequestAttempt({
-      requestId: log.id,
-      providerId: 'prov_popular',
-      providerModelId: 'model_popular',
-      providerName: 'popular-provider',
-      providerModelName: modelName,
-      upstreamProtocol: 'openai-responses',
-      upstreamRequestId: null,
-      url: 'https://example.com/v1/responses',
-      status: 'success',
-      httpStatus: 200,
-      retryable: false,
-      upstreamTransport: 'http',
-      attemptIndex: 0,
-      durationMilliseconds: 1,
-    })
-  }
-}
-
 let dataDir: string
 let endpoint: StubEndpoint
 let stop: (() => void) | null
@@ -170,35 +140,6 @@ describe('startTelemetry', () => {
     })
     // 预览里的标识与磁盘上的那一份必须同一个：否则「展示的就是要发的」不成立。
     expect(preview.installId).toBe(fs.readFileSync(idFilePath(dataDir), 'utf8').trim())
-  })
-
-  it('adds a popular_models snapshot of the locally most used models on startup', async () => {
-    await updateSettings({ telemetryEnabled: true })
-    await seedModelUsage('gpt-4o', 3)
-    await seedModelUsage('claude-3-5', 1)
-
-    stop = startTelemetry(config)
-    await waitForIdFile(dataDir)
-
-    await vi.waitFor(() => {
-      expect(previewTelemetry().events.filter(event => event.name === 'popular_models')).toHaveLength(1)
-    })
-
-    const snapshot = previewTelemetry().events.find(event => event.name === 'popular_models')
-    expect(snapshot).toMatchObject({ name: 'popular_models', first: 'gpt-4o', second: 'claude-3-5' })
-    // 只有两个名字时 `third` 不出现：契约里三个字段都可缺省，不够三个就只填有的那几个。
-    expect(snapshot).not.toHaveProperty('third')
-  })
-
-  it('sends no popular_models snapshot when nothing has been used', async () => {
-    // 一个名字都没有时发的是一条空事件，那是噪声——直接不发。
-    await updateSettings({ telemetryEnabled: true })
-    stop = startTelemetry(config)
-    await waitForIdFile(dataDir)
-    await vi.waitFor(() => expect(previewTelemetry().running).toBe(true))
-    await settle()
-
-    expect(previewTelemetry().events.map(event => event.name)).toEqual(['app_started'])
   })
 
   it('reports telemetry_toggled and flushes it when the user turns the switch on', async () => {
