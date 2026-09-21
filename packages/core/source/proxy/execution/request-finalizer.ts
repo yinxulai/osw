@@ -6,8 +6,12 @@ import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewri
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import type { HealthFailureScope } from '@server/proxy/response/response'
 import { isClientAttributableStatus } from '@server/proxy/response/response'
-import type { UpstreamTarget } from '@server/proxy/contracts'
+import type { TelemetryFailoverAttemptBucket } from '@common/telemetry'
+import type { UpstreamTarget, ExecutionOrigin } from '@server/proxy/contracts'
 import type { RequestContext } from '@server/proxy/request/request-context'
+// 统计埋点直连遥测入口，**不经过请求日志器**：记录日志是用户可关的调试功能（观测口径），
+// 而「处理了多少任务」是产品口径，两者开关不同、保留期不同、字段要求相反（telemetry.md §5.4）。
+import { reportTelemetryEvent } from '@server/telemetry'
 import { isClientRequestCancelled, LocalAttemptError, RecordedAttemptError, serializeLocalFailure } from './attempt-errors'
 import { formatTarget, healthFailureHints, recordHealthFailure, toRequestContentOutcome, type AttemptOutcome } from './attempt-outcome'
 
@@ -19,6 +23,20 @@ export interface RequestFinalizerOptions {
   requestLogger: RequestLogger
   captureRequestContent: boolean
   startedAt: number
+  /** 见 `ProxyExecutionOptions.origin`：统计只把客户端请求算作「处理了一个任务」。 */
+  origin: ExecutionOrigin
+}
+
+/**
+ * `failover_happened.attempts` 的分桶。
+ *
+ * 入参是**转移之后要进行的第几次尝试**，因此它的下限就是 `2`：转移本身意味着还有下一个候选。
+ * 精确值对产品决策没有额外信息量，却是更细的行为指纹，所以四层以上合并成一桶
+ * （见 `TELEMETRY_FAILOVER_ATTEMPT_BUCKETS`）。
+ */
+export function failoverAttemptBucket(attempts: number): TelemetryFailoverAttemptBucket {
+  if (attempts >= 4) return '4+'
+  return attempts === 3 ? '3' : '2'
 }
 
 /**
@@ -38,7 +56,7 @@ export interface RequestFinalizer {
 }
 
 export function createRequestFinalizer(options: RequestFinalizerOptions): RequestFinalizer {
-  const { context, targets, response, requestLogger, captureRequestContent, startedAt } = options
+  const { context, targets, response, requestLogger, captureRequestContent, startedAt, origin } = options
   const { requestId, logicalModelId, clientProtocol: protocol } = context
 
   /**
@@ -71,6 +89,10 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
         await requestLogger.finalizeRequestContent(toRequestContentOutcome(outcome))
         // 用量不在请求级收尾里写：它随着「服务该请求的那次尝试」一起落库。
         await requestLogger.finalizeRequestLog('success', startedAt)
+        // 本地任务量就在这里计：一次成功的转发就是一次被处理的任务，发一条、不带属性。
+        // 内部执行不算任务：连接测试与工作流里的模型节点走的是同一条收尾，但它们不是
+        // 「代理替客户端处理的一次请求」（见 `ExecutionOrigin`）。
+        if (origin === 'client') reportTelemetryEvent({ name: 'request_completed' })
         return
       }
     },
@@ -87,6 +109,12 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
       const nextTarget = targets[attemptIndex + 1]
       const failure: UpstreamFailureSummary = { statusCode: outcome.statusCode, body: outcome.upstreamResponseBody ?? null }
       lastUpstreamFailure = failure
+      // 转移发生一次发一条。`attemptIndex + 2` 是「转移之后落在第几次尝试上」：
+      // `attemptIndex` 从 0 起，第一次尝试失败后要试的是第 2 个候选（见 `failoverAttemptBucket`）。
+      // 没有下一个候选时不算转移——那是「候选耗尽」，不是转移（见 `onExhausted`）。
+      if (origin === 'client' && nextTarget) {
+        reportTelemetryEvent({ name: 'failover_happened', attempts: failoverAttemptBucket(attemptIndex + 2) })
+      }
       // 只要出现过一次请求格式类 4xx，客户端的请求就已经被上游判定为「不成立」，
       // 这个结论不会因为后面某家网络不通而失效；若后面又是同类 4xx，覆盖成最近那一条，
       // 因为正文要交给客户端的是最近一次上游原文。

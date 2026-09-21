@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SecretStore } from '@common/secret-store'
+import type { TelemetryEventInput } from '@common/telemetry'
 import { PROVIDER_BUNDLE_FORMAT, PROVIDER_BUNDLE_VERSION } from '@common/provider-bundle'
 import type { ProviderBundle, ProviderBundleProvider } from '@common/provider-bundle'
 import { closeDatabases, initDatabases } from '../database'
@@ -27,12 +28,25 @@ import { mockResponse } from './test-support'
 
 const API_KEY_REFERENCE = 'key_source_environment'
 
+/**
+ * 导入的埋点口径：**只算真的新建出来的记录**。同名供应商（及其同名模型）走的是覆盖分支，
+ * 那是一次更新，不是「建出来了」——把它算成新建会让这张表里混进没发生的事。
+ */
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
+
 let temporaryDirectory: string
 let secretStore: SecretStore
 
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-provider-transfer-'))
   await initDatabases(temporaryDirectory)
+  reported.length = 0
   secretStore = {
     set: vi.fn(async () => undefined),
     get: vi.fn(async () => null),
@@ -280,6 +294,11 @@ describe('provider bundle import', () => {
 
     expect((await importProviderBundle({ bundle })).imported).toEqual({ providers: 1, models: 1 })
     expect(secretStore.set).toHaveBeenCalledWith(expect.stringMatching(/^key_/), 'sk-anthropic')
+    // 新建的供应商算一条，它的模型按端点逐条算——与手工新建同一个口径。
+    expect(reported).toEqual([
+      { name: 'provider_created', kind: 'custom' },
+      { name: 'model_created', protocol: 'anthropic-messages' },
+    ])
 
     const [model] = await listProviderModels(false)
     expect(await listSchedulingPolicies('default')).toEqual([
@@ -292,6 +311,8 @@ describe('provider bundle import', () => {
     expect((await listProviderModels(false)).map(item => item.modelName)).toEqual(['claude-sonnet-4'])
     expect(await listSchedulingPolicies('default')).toHaveLength(1)
     expect(secretStore.set).toHaveBeenCalledTimes(2)
+    // 这一遍什么也没新建，所以埋点不该再长：按名覆盖不是创建。
+    expect(reported).toHaveLength(2)
   })
 
   it('rejects payloads that are not provider bundles', async () => {

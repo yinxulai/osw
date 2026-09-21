@@ -65,7 +65,7 @@ describe('createTelemetryQueue', () => {
     const queue = createQueue(spy, 3)
 
     queue.report({ name: 'app_started' })
-    queue.report({ name: 'logs_exported', withContent: false })
+    queue.report({ name: 'route_mode_changed', mode: 'rules' })
 
     expect(spy.calls).toHaveLength(0)
     expect(queue.pending()).toHaveLength(2)
@@ -76,11 +76,11 @@ describe('createTelemetryQueue', () => {
     const queue = createQueue(spy, 2)
 
     queue.report({ name: 'app_started' })
-    queue.report({ name: 'logs_exported', withContent: false })
+    queue.report({ name: 'route_mode_changed', mode: 'rules' })
 
     expect(spy.calls).toHaveLength(1)
     expect(spy.calls[0]?.endpoint).toBe(ENDPOINT)
-    expect(namesOf(spy.calls[0]?.batch.events ?? [])).toEqual(['app_started', 'logs_exported'])
+    expect(namesOf(spy.calls[0]?.batch.events ?? [])).toEqual(['app_started', 'route_mode_changed'])
     expect(queue.pending()).toEqual([])
   })
 
@@ -98,7 +98,7 @@ describe('createTelemetryQueue', () => {
 
     queue.report({ name: 'app_started' })
     locale = 'en'
-    queue.report({ name: 'logs_exported', withContent: true })
+    queue.report({ name: 'route_mode_changed', mode: 'rules' })
 
     expect(spy.calls[0]?.batch.events.map(event => event.locale)).toEqual(['zh-CN', 'en'])
   })
@@ -226,7 +226,7 @@ describe('createTelemetryQueue', () => {
     queue.report({ name: 'app_started' })
 
     queue.stop()
-    queue.report({ name: 'logs_exported', withContent: false })
+    queue.report({ name: 'route_mode_changed', mode: 'rules' })
     vi.advanceTimersByTime(60_000)
 
     expect(spy.calls).toHaveLength(0)

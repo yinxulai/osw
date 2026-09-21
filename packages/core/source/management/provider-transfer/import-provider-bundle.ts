@@ -15,6 +15,7 @@ import {
   upsertProviderSetting,
 } from '@server/database/provider-store'
 import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
+import { reportTelemetryEvent } from '@server/telemetry'
 import { MANAGED_PROVIDER_SETTING_KEYS } from './export-provider-bundle'
 
 export interface ProviderBundleImportResult {
@@ -42,6 +43,10 @@ export interface ProviderBundleImportResult {
  *
  * 包内数据在写入前全部校验（含重名检查），因此这里的失败只可能来自数据库本身；不做跨表事务是
  * 既有 store 的边界（每个 store 函数各管自己的事务），代价是极端情况下会留下一个半导入的供应商。
+ *
+ * 埋点与手工新建同一个口径**只算真的新建出来的东西**（`provider_created` / `model_created`）：
+ * 按名覆盖已有供应商走的是另一条分支，它是一次更新，不是「建出来了」。导入的来源只有 `custom`
+ * 一档——包里的内容不是从内置预设界面上起手的，包本身也没地方装这个事实。
  */
 export async function importProviderBundle(body: unknown): Promise<ProviderBundleImportResult> {
   const { bundle } = parseImportRequest(body)
@@ -73,6 +78,9 @@ export async function importProviderBundle(body: unknown): Promise<ProviderBundl
         timeoutMilliseconds: entry.timeoutMilliseconds,
         enabled: entry.enabled,
       })
+      // 只在地还没有这个供应商」时发：上面那条分支按名覆盖的是既有记录，不是新建。
+      // 位置就在行落库之后、细节之前，因此事件流里的次序就是「先供应商、后它的模型」。
+      reportTelemetryEvent({ name: 'provider_created', kind: 'custom' })
       await applyProviderDetail(created.id, entry)
     }
     providers += 1
@@ -141,6 +149,9 @@ async function applyModels(providerId: string, models: ProviderBundleModel[]): P
       // 绑定开关跟随模型本体的开关：包里带着停用模型时，不能顺手建一条打开的绑定。
       const created = await createProviderModelRoute({ providerId, modelName: model.modelName, enabled: model.enabled, endpoints, priority: 0 })
       await upsertSchedulingPolicy({ logicalModelId: BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, providerModelId: created.id, priority: 0, enabled: created.enabled })
+      // 与手工新建同一个口径：一条端点绑定算一次「这类能力被接进来」（见 `model_created` 的契约注释）。
+      // 同一个包的模型名与本地对得上时走的是上面的复用分支，那条不发。
+      for (const endpoint of endpoints) reportTelemetryEvent({ name: 'model_created', protocol: endpoint.protocol })
     }
   }
 

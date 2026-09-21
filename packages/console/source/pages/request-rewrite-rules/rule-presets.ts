@@ -111,6 +111,9 @@ export function createRuleFromPreset(preset: RulePreset, t: AppTranslator): Requ
   const rule = createDraft(t)
   return {
     ...rule,
+    // 从模板起手就记 `builtin`：这个事实只有界面知道，而且它必须在**保存时**原样传回服务端
+    // （`page.tsx` 的 `toApiRule`），否则遥测里的「内建模板有人用吗」永远问不出来。
+    source: 'builtin',
     name: t(preset.nameKey),
     description: t(preset.descriptionKey),
     actions: preset.actions.map((action, index) => toAction(action, rule.id, index)),
@@ -124,6 +127,7 @@ export function createRuleFromPreset(preset: RulePreset, t: AppTranslator): Requ
  * `updatedTime` 必须是 `null` —— 页面正是靠它区分「还没保存过」与「已保存」，
  * 决定保存时走 create 还是 update。模板与空白规则都是新建，所以一律 `null`。
  * `global` 也一律 `false`：全局规则会自动应用到所有模型，不该由模板悄悄替用户决定。
+ * `source` 默认是 `user`（自己写的），模板草稿在 `createRuleFromPreset` 里改成 `builtin`。
  */
 function createDraft(t: AppTranslator): RequestRewriteRule {
   return {
@@ -132,6 +136,7 @@ function createDraft(t: AppTranslator): RequestRewriteRule {
     description: '',
     enabled: true,
     global: false,
+    source: 'user',
     protocols: [],
     match: { clientProtocols: [], upstreamProtocols: [] },
     actions: [],

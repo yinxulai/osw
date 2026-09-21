@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBlankGraph, createDefaultPolicyGraph, samplePayload } from '@common/router/presets'
 import { UNSAVED_ROUTER_GRAPH_VERSION } from '@common/router/types'
 import type { RuntimeLogicalModel, WorkflowGraph } from '@common/router/types'
+import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { routerGraphRoutes } from './routes/router/graph'
 import { routerRunRoutes } from './routes/router/run'
@@ -20,6 +21,15 @@ import { mockResponse } from './test-support'
 
 const models: RuntimeLogicalModel[] = [{ id: 'default', name: 'Default', enabled: true }]
 
+/** 试跑也会真的跑一遍引擎，所以「跑过哪些节点」同样是产品事实，要按同一口径埋点。 */
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
+
 let temporaryDirectory: string
 
 function responseData(response: ServerResponse): unknown {
@@ -30,6 +40,7 @@ function responseData(response: ServerResponse): unknown {
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-router-graph-'))
   await initDatabases(temporaryDirectory)
+  reported.length = 0
 })
 
 afterEach(async () => {
@@ -111,11 +122,14 @@ describe('router run route', () => {
       inputPayload: samplePayload,
     })
 
-    const result = responseData(response) as { stopReason: string; nodeOutputs: Record<string, unknown>; trace: unknown[] } | null
+    const result = responseData(response) as { stopReason: string; nodeOutputs: Record<string, unknown>; trace: Array<{ kind: string }> } | null
     expect(result).not.toBeNull()
     expect(result!.stopReason).not.toBe('error')
     expect(typeof result!.nodeOutputs).toBe('object')
     expect(Array.isArray(result!.trace)).toBe(true)
+
+    // 轨迹里的每个节点各一条，且类型对得上——埋点不能只报「跑过图」这个事实。
+    expect(reported).toEqual(result!.trace.map(step => ({ name: 'workflow_node_executed', node_kind: step.kind })))
   })
 
   it('图不合法时拒绝执行', async () => {

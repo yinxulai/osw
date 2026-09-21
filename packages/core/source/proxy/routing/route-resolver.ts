@@ -6,6 +6,7 @@ import { listLogicalModels } from '@server/database/logical-model-store'
 import { resolveRouteRuleSet } from '@server/database/route-rule-store'
 import { resolveRouterGraph } from '@server/database/router-graph-store'
 import { getSettings } from '@server/database/settings-store'
+import { reportWorkflowTrace } from '@server/telemetry/events'
 import { createRouteCapabilities } from '../capabilities/route-capabilities'
 import type { HeaderMap } from '../contracts'
 
@@ -90,6 +91,7 @@ async function resolveByWorkflow(input: RouteResolutionInput): Promise<WorkflowR
   // 脚本沙箱与提示词调用要主进程的资源：图在代理里跑，能力就必须在这里注入，
   // 否则图上真配了这两种节点，运行时只会得到一句「能力未注入」。
   const result = await runWorkflow(snapshot.graph, routeContext, { capabilities: createRouteCapabilities() })
+  reportWorkflowTrace(result.trace)
 
   // 决策以图为准：读到什么就回什么，读不到（还没走到写决策的节点）才退回入口的事实。
   const decision = readRouteDecision(result.outputPayload)

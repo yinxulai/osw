@@ -275,7 +275,7 @@ describe('上报端点', () => {
     it('节点类型是闭集：清单里的过，任意字符串不过', async () => {
       const handler = createTelemetryHandler(createUpstream().fetcher)
       // 故意不写成 TelemetryEvent：这里要发的正是**不合契约**的那一份。
-      const nodeRun = (nodeKind: string) => ({ ...appStarted(), name: 'workflow_node_run', nodeKind })
+      const nodeRun = (node_kind: string) => ({ ...appStarted(), name: 'workflow_node_executed', node_kind })
 
       const accepted = await handler(post({ body: JSON.stringify({ events: [nodeRun('condition')] }) }), ENV, NOW)
       // 24 个字符的 URL 塞得进旧的名字长度上限，这条用例验的就是那条缝已经封死。

@@ -11,7 +11,9 @@ import { runAttempts } from '@server/proxy/execution/attempt-runner'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { listRulesForProviderModel } from '@server/database/request-rewrite-rule-store'
 import { createAttemptLogger, initializeRequestLogger } from '@server/proxy/observability/logging'
-import type { AttemptView, ExchangeView, UpstreamTarget } from '@server/proxy/contracts'
+import type { AttemptView, ExchangeView, ExecutionOrigin, UpstreamTarget } from '@server/proxy/contracts'
+// 协议转换是一次真实发生的技术事实，直接发给遥测入口，不经请求日志器（见 request-finalizer.ts 的说明）。
+import { reportTelemetryEvent } from '@server/telemetry'
 import { createHttpResponseSink, isEventStreamResponse } from '@server/proxy/adapters/http-response-sink'
 import { resolveTransportImplementation } from '@server/proxy/transports/registry'
 import { resolveUpstreamTransport } from '@server/proxy/routing/upstream-url'
@@ -33,10 +35,15 @@ export interface ProxyExecutionOptions {
   targets: readonly UpstreamTarget[]
   response: ProxyResponse
   hooks?: ProxyObservationHooks
+  /**
+   * 这次执行是替客户端处理的请求，还是产品自己发起的内部执行。**必填**：
+   * 统计口径按它分叉，没有「默认算哪一侧」这种答案（见 `ExecutionOrigin`）。
+   */
+  origin: ExecutionOrigin
 }
 
 export async function executeProxyRequest(options: ProxyExecutionOptions): Promise<void> {
-  const { context, targets, response, hooks = {} } = options
+  const { context, targets, response, hooks = {}, origin } = options
   const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
   const startedAt = Date.now()
   const settings = await getSettings()
@@ -64,11 +71,12 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     requestLogger,
     captureRequestContent: settings.captureRequestContent,
     startedAt,
+    origin,
   })
   await runAttempts<UpstreamTarget, AttemptOutcome>({
     signal: context.signal,
     targets,
-    attempt: (target, attemptIndex) => attemptRequest(context, response, target, attemptIndex, hooks),
+    attempt: (target, attemptIndex) => attemptRequest({ context, response, target, attemptIndex, hooks, origin }),
     onSuccess: finalizer.onSuccess,
     onTerminal: finalizer.onTerminal,
     onFailover: finalizer.onFailover,
@@ -76,6 +84,16 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     onCancelled: finalizer.onCancelled,
     onExhausted: finalizer.onExhausted,
   })
+}
+
+interface AttemptRequestOptions {
+  context: RequestContext
+  response: ProxyResponse
+  target: UpstreamTarget
+  attemptIndex: number
+  hooks: ProxyObservationHooks
+  /** 见 `ProxyExecutionOptions.origin`。 */
+  origin: ExecutionOrigin
 }
 
 /**
@@ -86,7 +104,8 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
  * 字节搬运在帧管道里，「发往哪里」在规划器里——因此这个函数里没有任何 `http` 细节，
  * 没有任何协议分支，也没有任何路由判断。
  */
-async function attemptRequest(context: RequestContext, response: ProxyResponse, target: UpstreamTarget, attemptIndex: number, hooks: ProxyObservationHooks): Promise<AttemptOutcome> {
+async function attemptRequest(options: AttemptRequestOptions): Promise<AttemptOutcome> {
+  const { context, response, target, attemptIndex, hooks, origin } = options
   const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
   const settings = await getSettings()
   const endpointProtocol = target.protocol
@@ -110,6 +129,11 @@ async function attemptRequest(context: RequestContext, response: ProxyResponse, 
       signal: controller.signal,
     })
     const adapter = protocolAdapters.resolve(protocol, endpointProtocol)
+    // 协议转换是**尝试级**的事实：这一次尝试真的经适配器翻译过一遍，转换几次就发几条。
+    // 两侧协议都带上——只记一侧的话「转换从哪来到哪去」这一格读不出来（契约注释）。
+    if (origin === 'client' && adapter.kind === 'conversion') {
+      reportTelemetryEvent({ name: 'protocol_conversion_used', from: protocol, to: endpointProtocol })
+    }
     const apiKey = await getSecretStore().get(target.apiKeyReference)
     const rules = await listRulesForProviderModel(target.providerModelId)
 

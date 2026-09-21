@@ -187,11 +187,11 @@
 
 **状态：客户端与服务端两侧均已落地（2026-09）。** `apps/apis/` Worker 已按「契约 → `TelemetrySink` 抽象 → `sinks/aptabase.ts`」实现（下游为 Aptabase 欧盟区）；客户端侧实现（core 安装标识 / 队列 / 直连发送与生命周期接线、`SettingsSchema` 统计字段、管理接口预览与上报）已回到仓库。默认开启，界面上不提供任何入口（引导页的同意步骤与设置页的说明均已移除）。详见 [telemetry.md](./telemetry.md)。
 
-- [x] 设计定稿：事件目录（13 个事件）、信封字段、稳定不轮换的 `installId` 与保留期取舍、端点恒定与后端可换、不自建存储、Worker 职责与下游抽象边界、分析口径
+- [x] 设计定稿：事件目录（首版 12 个事件，命名规则见 §5.3）、信封字段、稳定不轮换的 `installId` 与保留期取舍、端点恒定与后端可换、不自建存储、Worker 职责与下游抽象边界、分析口径
 - [x] 契约层去厂商化：`packages/contracts/source/telemetry.ts` 只描述事实、不描述去向，事件名闭集、属性枚举与长度约束、端点常量
 - [x] `apps/apis/`：严格校验、补服务端事实、`TelemetrySink` 抽象与 Aptabase 适配器（纯事件流、`CF-IPCountry` 落成事件属性、ISO 时间戳、单批 25 条硬上限）；限流不下在 Worker 里，交给域名级的 Rate limiting 规则
 - [x] 客户端上报链路：`SettingsSchema` 统计字段、core 安装标识 / 队列 / 直连发送与生命周期接线、管理接口预览与上报
-- [ ] 客户端域事件埋点：目前只上报 `app_started` / `telemetry_toggled` / `onboarding_finished` / `service_start_failed`，其余 9 个事件待接入各自的业务动作
+- [x] 客户端域事件埋点：契约里的 12 个事件各自接上了真实触发点（启动、引导、路由模式、Provider / 模型 / 改写规则的新建、连接测试、协议转换、故障转移、工作流节点、请求处理成功），每个发点都有针对性用例
 - [ ] `apps/apis/` 自动部署：push 到 `main` 且 `apps/apis/**` 变更时发布，支持手动触发
 
 ### 范围

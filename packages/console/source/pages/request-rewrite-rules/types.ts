@@ -6,6 +6,15 @@ export type RuleStatusFilter = 'all' | 'enabled' | 'disabled'
 export type RuleActionTarget = 'header' | 'body'
 export type RuleActionOperation = 'set' | 'append' | 'remove' | 'replace'
 
+/**
+ * 规则的来源。库里的三档，与 `@common/schemas` 的 `source` 一一对应。
+ *
+ * 它是**用户数据**的一部分，不是显示用的派生值：界面必须原样读进来、原样写回去。之前两处
+ * 硬编码 `user`，结果是编辑一条从模板建的规则会把它默默改成「自己写的」，而遥测要回答的
+ * 「内建模板有人用吗」在界面里永远接不通（见 `@common/telemetry` 的 `rewrite_rule_created`）。
+ */
+export type RuleSource = 'user' | 'builtin' | 'imported'
+
 export interface RuleAction {
   id: string
   stage: RuleStage
@@ -35,6 +44,8 @@ export interface RequestRewriteRule {
   description: string
   enabled: boolean
   global: boolean
+  /** 这条规则是怎么来的（模板 / 自己写的 / 导入的）。 */
+  source: RuleSource
   /** 匹配的客户端协议；留空表示不限制。 */
   protocols: Protocol[]
   match: { clientProtocols: Protocol[]; upstreamProtocols: Protocol[] }

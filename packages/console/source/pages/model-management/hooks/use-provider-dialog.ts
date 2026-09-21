@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { providerApi } from '@/api/providers'
+import { telemetryApi } from '@/api/runtime'
 import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
@@ -24,6 +25,9 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
   const [apiKey, setApiKey] = useState('')
   const [timeout, setTimeout] = useState('30000')
   const [providerEndpointEntries, setProviderEndpointEntries] = useState<ProviderEndpointEntry[]>([])
+  // 「这个供应商是从内置预设起手建的，还是用户从零填的」只有界面知道：core 收到的
+  // 创建请求里没有来源这个概念，也不该有（`telemetry.md` §5.3 的 `provider_created`）。
+  const [createdFromPreset, setCreatedFromPreset] = useState(false)
 
   const openProviderDialog = useCallback(async (provider?: Provider) => {
     let endpoints: ProviderEndpoints = {}
@@ -38,6 +42,7 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
       )
     }
     setEditingProviderId(provider?.id ?? null)
+    setCreatedFromPreset(false)
     setProviderName(provider?.name ?? '')
     setApiKey('')
     setTimeout(String(provider?.timeoutMilliseconds ?? 30000))
@@ -52,6 +57,7 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
 
   const openPresetDialog = useCallback((preset: ProviderPreset) => {
     setEditingProviderId(null)
+    setCreatedFromPreset(true)
     setProviderName(preset.name)
     setApiKey('')
     setTimeout('30000')
@@ -71,7 +77,12 @@ export function useProviderDialog(options: UseProviderDialogOptions) {
     const endpoints: Record<string, string> = Object.fromEntries(providerEndpointEntries.filter(entry => entry.enabled).map(entry => [entry.protocol, entry.url.trim()]).filter(([, value]) => value))
     const payload = { name: providerName.trim(), timeoutMilliseconds: Number(timeout), endpoints, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) }
     return editingProviderId ? unwrap(providerApi.update(editingProviderId, payload)) : unwrap(providerApi.create(payload))
-  }, onSuccess: async provider => { setProviderDialogOpen(false); selectProvider(provider.id); toast.success(editingProviderId ? t('providers.toast.updated') : t('providers.toast.added')); await reload() }, onError: error => toast.error(error.message) })
+  }, onSuccess: async provider => {
+    setProviderDialogOpen(false); selectProvider(provider.id)
+    // 新建才发；编辑走的是同一次保存的另一条分支（那时 `editingProviderId` 还在）。
+    if (!editingProviderId) telemetryApi.report({ name: 'provider_created', kind: createdFromPreset ? 'builtin' : 'custom' })
+    toast.success(editingProviderId ? t('providers.toast.updated') : t('providers.toast.added')); await reload()
+  }, onError: error => toast.error(error.message) })
   const saveProvider = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
 
   return {

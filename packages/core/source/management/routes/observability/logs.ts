@@ -26,6 +26,8 @@ function handleListLogs(_req: IncomingMessage, res: ServerResponse, body: unknow
 }
 
 function handleExportLogs(_req: IncomingMessage, res: ServerResponse): void {
+  // 导出**不埋点**：这一段是纯文本的运行日志，从来不带请求 / 响应正文，所以上报它所能说的
+  // 只有「用户点过一次下载」——不值得占一个事件名（契约注释里有完整取舍）。
   sendSuccess(res, { content: exportLogs() })
 }
 

@@ -4,7 +4,7 @@ import type { UiCatalogKey } from '@common/i18n/catalogs'
 /**
  * 节点类型的全集。
  *
- * 写成**运行期的数组**再派生出类型，是为了让需要枚举它的地方（上报契约的 `nodeKind` 字段）
+ * 写成**运行期的数组**再派生出类型，是为了让需要枚举它的地方（上报契约的 `node_kind` 字段）
  * 直接用同一份清单，而不是各抄一遍：抄一份的代价是「画布上能建的节点，上报接口不认识」。
  * `(typeof …)[number]` 与原来的联合类型完全等价，消费方不受影响。
  */
@@ -546,6 +546,19 @@ export interface WorkflowTrace {
   kind: WorkflowNodeKind
   success: boolean
   message: string
+  /**
+   * 这一步**有没有真的执行节点**。缺省（`undefined`）就是执行过。
+   *
+   * 只有两种情况是 `false`，而它们都还留在轨迹里：
+   *
+   * 1. 节点被禁用、引擎跳过它继续往下走（`message` 是「节点禁用，跳过」）——路径走过了，
+   *    但这条边上的逻辑一行都没跑；
+   * 2. 图里没有输入节点时那条「初始化」占位（`nodeId` 是 `-`）——它根本不是图上的节点。
+   *
+   * 留在轨迹里是因为界面要把「为什么走到这里」讲清楚（跳过也是走向的一部分），而遥测要的是
+   * 「节点用得怎么样」，那里只有执行过才算数（见 `@common/telemetry` 的 `workflow_node_executed`）。
+   */
+  executed?: boolean
   details?: Record<string, unknown>
 }
 

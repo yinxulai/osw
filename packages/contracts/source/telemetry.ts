@@ -192,8 +192,14 @@ export type TelemetryServiceFailureReason = (typeof TELEMETRY_SERVICE_FAILURE_RE
  * `failover_happened.attempts`：**分桶，不发精确次数**。
  *
  * 精确值对产品决策没有额外信息量，却是更细的行为指纹。
+ *
+ * 桶从 `2` 起，因为「转移」本身就意味着还有下一个候选要试：这个值记的是**转移之后落在
+ * 第几次尝试上**（第一次转移＝「改试第 2 个候选」），而不是已经失败的次数。
  */
 export const TELEMETRY_FAILOVER_ATTEMPT_BUCKETS = ['2', '3', '4+'] as const
+
+/** 供产出分桶的地方直接引用，不必写 `Extract<...>`。 */
+export type TelemetryFailoverAttemptBucket = (typeof TELEMETRY_FAILOVER_ATTEMPT_BUCKETS)[number]
 
 /** `rewrite_rule_created.kind`：规则来源。 */
 export const TELEMETRY_REWRITE_RULE_KINDS = ['builtin', 'custom'] as const
@@ -212,17 +218,61 @@ const TelemetryBooleanSchema = z.boolean()
  * 每一项是一句话能说清的产品事实，不是一次函数调用。判断标准见 telemetry.md §5.3：
  * 事件目录就是**需求边界**，表里没有的问题首版不加字段，先在文档里加一行再说。
  *
- * 命名只有两条规则，目的都是「这个名字在任何系统里都能原样使用」：
+ * ## 命名规则
  *
- * - 小写下划线、不带前缀——`$` 与 `_` 开头的名字是各家后端给自己留的；
- * - 是产品事实，不是函数名或界面元素名（`provider_created`，不是 `openCreateDialog`）。
+ * 名字一旦发出去就不能改（见下面「只增不删」），所以它必须一次就说清，而且在一张表里读起来
+ * 是**同一种句式**。规则有五条，每一条都由 `telemetry.test.ts` 机械检查——写成文字只是解释，
+ * 能不能通过看测试：
  *
- * 首版这 13 个名字与当前后端的保留名不冲突（它的保留名全部以 `$` 开头）。将来接一个新后端
- * 时如果撞上了，解决办法是在适配器里做映射，**不是把契约里的名字改掉**：名字发出去就不能变。
+ * 1. **形态是 `<主体>_<谓词>`。** 全小写 ASCII，只用字母、数字与下划线，以字母开头，
+ *    不带 `$` / `_` 前缀（那是各家后端给自己留的保留名），也不带 `-`、`.`、空格、版本号。
+ *    `provider.created` / `ProviderCreated` / `v2_provider_created` 都不是这里的样子。
+ * 2. **主体是产品名词的单数**，是这件事的主角：`provider` / `route_mode` / `request`。
+ *    不是界面元素，不是函数名，也不是「谁点的」（`provider_created`，而不是
+ *    `createDialogOpened`）——「谁触发的」是另一条事件或属性要回答的，不该编进名字里。
+ * 3. **谓词是过去分词。** 事件永远描述**已经发生**的事实：祈使式 / 现在时（`provider_create`）
+ *    在说「将要」，名词化的动名词（`provider_creation`）在说「一个东西」，都不是在说「发生了」。
+ *    唯一看上去像是例外的是 `run`（它的过去分词长得一样），但也就是它造成了歧义：
+ *    `provider_test_run` 读起来是「一次测试运行」，而这条事件说的是「测试过了」——
+ *    所以它叫 `provider_tested`，不叫 `provider_test_run`。
+ * 4. **谓词取自一张封闭的动词表**（`TELEMETRY_EVENT_PREDICATES`），一个意思只用一个词。
+ *    表外的动词要先加表、再加事件，两件事必须同一次改动。
  *
- * 两个名字（`popular_models` / `provider_model`）曾经存在又被撤掉，原因是同一个：它们要把
- * 模型名带出去，而那是用户自己写下的一段字符串（telemetry.md §3）。从未发出过的名字可以直接
- * 移除，不留「已停用」的占位——「只增不删」防的是历史数据失去解释，而不是防改动本身。
+ *    | 谓词 | 含义 | 现有用例 |
+ *    |------|------|---------|
+ *    | `started` | 进程 / 服务开始运行 | `app_started` |
+ *    | `finished` | 一段流程走到终点（含被跳过） | `onboarding_finished` |
+ *    | `failed` | 进程 / 服务以失败告终 | `service_start_failed` |
+ *    | `completed` | 一个工作单元被完整服务完（成功） | `request_completed` |
+ *    | `created` | 一个新的持久实体出现 | `provider_created` / `model_created` / `rewrite_rule_created` |
+ *    | `changed` | 一个既有设置 / 状态的取值变了 | `route_mode_changed` |
+ *    | `tested` | 一次探测性执行得出了结论 | `provider_tested` |
+ *    | `executed` | 一个执行步骤跑过 | `workflow_node_executed` |
+ *    | `used` | 一项产品能力被实际用上 | `protocol_conversion_used` |
+ *    | `happened` | 自动发生的中性事实，不是成功也不是失败，也不是谁的动作 | `failover_happened` |
+ *
+ *    「新建一个 Provider」与「添加一个模型端点」是同一件事，所以共用 `created`：早先后者叫
+ *    `model_added`，而 `added` 是 `created` 的同义词——同一张表里摆两个同义词，读的人只能
+ *    去猜它们有什么差别。
+ * 5. **属性名也是小写下划线**（`node_kind`，不是 `nodeKind`）。信封字段是例外：那几个是
+ *    camelCase，因为它们由我们自己的代码填、在两端都是同名的 TypeScript 标识符；而事件名
+ *    与事件属性是要长期发到线上、给分析侧看的**词表**，词表用下划线。同名属性在不同事件里
+ *    必须同义、同词表（`kind` 在 `provider_created` 与 `rewrite_rule_created` 里都是
+ *    `builtin` / `custom`）。
+ *
+ * 这些名字与当前后端的保留名不冲突（它的保留名全部以 `$` 开头）。将来接一个新后端时如果
+ * 撞上了，解决办法是在适配器里做映射，**不是把契约里的名字改掉**：名字发出去就不能变。
+ *
+ * 四个名字曾经存在又被撤掉，理由分两类：
+ *
+ * - `popular_models` / `provider_model` 要把**模型名**（用户自己写下的一段字符串）带出去；
+ * - `telemetry_toggled` / `logs_exported` 是**没有信息量的产品事实**：前者对应一个不存在的
+ *   开关（界面上没有任何入口，用户触发不到），后者只有一个恒为 `false` 的 `withContent`
+ *   ——「用户点过一次下载」不值得单独占一个事件名。
+ *
+ * 从未发出过的名字可以直接移除，不留「已停用」的占位——「只增不删」防的是历史数据失去解释，
+ * 而不是防改动本身。真需要时再加回来：`telemetry_toggled` 对应「界面上出现开关」这个功能，
+ * `logs_exported` 对应「有一种会带上用户内容的导出」，两者都是先有功能再有事件。
  */
 export const TelemetryEventSchema = z.discriminatedUnion('name', [
   /** 服务启动完成。 */
@@ -233,64 +283,117 @@ export const TelemetryEventSchema = z.discriminatedUnion('name', [
     name: z.literal('service_start_failed'),
     reason: z.enum(TELEMETRY_SERVICE_FAILURE_REASONS),
   }).strict(),
-  /** 用户改变统计开关。关闭时尽力发一次，否则只能看到「某天起不再出现」，区分不出关闭/卸载/断网。 */
-  z.object({
-    ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('telemetry_toggled'),
-    enabled: TelemetryBooleanSchema,
-  }).strict(),
   /** 引导走完或跳过。`skipped` 为真表示没走完就退出——它与「走完了」是两种不同的结果。 */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('onboarding_finished'),
     skipped: TelemetryBooleanSchema,
   }).strict(),
-  /** 生效模式切换。 */
+  /**
+   * 生效模式切换。**真的从一种切到另一种时发一条**：设置接口会把整个设置对象回写一遍，
+   * 按「收到这个字段」计数只会数出「保存过几次设置」。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('route_mode_changed'),
     mode: RouteModeSchema,
   }).strict(),
-  /** 新建 Provider。只发来源，不发名称与地址。 */
+  /**
+   * 新建 Provider。只发来源，不发名称与地址。
+   *
+   * `builtin` 指从内置预设（`provider-presets.ts`）起手建的，「从零手填」与导入都算 `custom`。
+   * 这个判定只有界面侧知道——core 收到的创建请求里没有「来源」这个概念，也不该有：
+   * 它描述的是用户怎么走到这一步的，不是服务端的事实。
+   *
+   * 导入是唯一一条由 core 自己判定的路径（它不经管理接口的创建入口）：包里的供应商在本地
+   * **还不存在**才算新建，按名覆盖已有的那条不发——那是一次更新，不是「建出来了」。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('provider_created'),
     kind: z.enum(['builtin', 'custom']),
   }).strict(),
-  /** 添加 ProviderModel。协议是产品能力维度，不是供应商标识。 */
+  /**
+   * 新建 ProviderModel（界面上就是「添加模型」）。协议是产品能力维度，不是供应商标识。
+   *
+   * 谓词用 `created` 而不是 `added`：它与 `provider_created` / `rewrite_rule_created` 是
+   * 同一件事（一个新实体落库了），共用同一个词才是那张动词表的意义（见上面的命名规则）。
+   *
+   * 事情的主体是**端点绑定**，不是那个模型行：一个模型可以同时绑多个协议端点，**每个端点
+   * 各发一条**，挑一个发等于把「这个模型支持哪几种协议」答成残缺的，而事件次数正是
+   * 「这类能力被接进来几次」的计数。因此一条端点都没配的模型不发——加进去的其实是
+   * 「一个还没有能力的壳」，而这条事件问的正是能力。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('model_added'),
+    name: z.literal('model_created'),
     protocol: ProtocolSchema,
   }).strict(),
-  /** 连接测试。 */
+  /**
+   * 连接测试（`provider` 是被测对象，`tested` 是发生在它身上的事）。
+   *
+   * **每个被测目标一条**：界面上点一次「测试全部模型」是若干个目标，界面侧把它们拆成若干次
+   * 服务端请求（`model-test.ts` 一次请求只测一个目标），拿到结论就发一条，`result` 说的是
+   * **那一个目标**的结论。事件次数因此是「测过多少个上游目标」，比「点了几次测试」更细，
+   * 也更接近要回答的问题——「这些接进来的端点真的连得上吗」。
+   *
+   * 中途被取消的那次不发：它没有结论，记成 `failed` 会把「用户点了取消」算进失败率里；
+   * 跑完了但一个结果都没有（一个候选都没落下来）同样不发。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('provider_test_run'),
+    name: z.literal('provider_tested'),
     result: z.enum(['success', 'failed']),
   }).strict(),
-  /** 新建请求改写规则。 */
+  /**
+   * 新建请求改写规则。
+   *
+   * 规则的来源在库里是三档（`user` / `builtin` / `imported`），这里只有两档：
+   * 内建模板是一种，用户自己写的与导入的都算自定义——这个属性要回答的是「内建规则有人用吗」。
+   *
+   * `source` 由界面在保存时写进请求体：按模板生成的草稿（以及它的副本）是 `builtin`，
+   * 空白规则是 `user`（见 `rule-presets.ts`）。core 只做映射，不去猜来源。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('rewrite_rule_created'),
     kind: z.enum(TELEMETRY_REWRITE_RULE_KINDS),
   }).strict(),
-  /** 一次请求发生了协议转换；两侧都记，否则「转换从哪来到哪去」这一格读不出来。 */
+  /**
+   * 一次请求发生了协议转换；两侧都记，否则「转换从哪来到哪去」这一格读不出来。
+   *
+   * **一次转换一条**：转移目标换了协议、或一次请求试了两个协议不同的候选，就是两次转换。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('protocol_conversion_used'),
     from: ProtocolSchema,
     to: ProtocolSchema,
   }).strict(),
-  /** 一次请求发生了故障转移。 */
+  /**
+   * 一次请求发生了故障转移。**每转移一次发一条**（一次请求可能发好几条）。
+   *
+   * 只有「确实还有下一个候选」才算转移：最后一个候选也失败时走的是「候选耗尽」，
+   * 那里没有可转移的对象，也就没有这条事件。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
     name: z.literal('failover_happened'),
     attempts: z.enum(TELEMETRY_FAILOVER_ATTEMPT_BUCKETS),
   }).strict(),
   /**
-   * 工作流节点执行。`nodeKind` 的取值**就是** `@common/router/types` 的 `WORKFLOW_NODE_KINDS`，
+   * 工作流节点执行。**每执行过一个节点发一条**，因此这是事件目录里量最大的一条：
+   * 一次请求可能连跑好几个节点，批量队列（见 §12）就是为它存在的。
+   *
+   * 「执行过」是字面意思：轨迹里还留着两种没跑过逻辑的步骤——**节点被禁用而跳过**，以及
+   * 图里没有输入节点时那条「初始化」占位。它们带 `executed: false`（`@common/router/types`
+   * 的 `WorkflowTrace`），发事件前先滤掉，否则「节点用得怎么样」里会混进没发生的事。
+   *
+   * `node_kind` 的取值**就是** `@common/router/types` 的 `WORKFLOW_NODE_KINDS`，
    * 不在这里再抄一份枚举：节点类型是路由领域的词，它变了这里跟着变才对。
+   *
+   * 属性名写 `node_kind` 而不是 `nodeKind`：事件属性是发到线上的词表，词表用下划线，
+   * camelCase 留给信封里那些由我们自己的代码填的字段（见上面的命名规则第 5 条）。
    *
    * 这一格必须是枚举而不是字符串。契约的红线是「不存在任何自由文本字段」（telemetry.md §3），
    * 而 40 个字符足够塞进一段 URL；节点类型清单收缩时老客户端会在这层被拒，那正是
@@ -298,19 +401,55 @@ export const TelemetryEventSchema = z.discriminatedUnion('name', [
    */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('workflow_node_run'),
-    nodeKind: z.enum(WORKFLOW_NODE_KINDS),
+    name: z.literal('workflow_node_executed'),
+    node_kind: z.enum(WORKFLOW_NODE_KINDS),
   }).strict(),
-  /** 导出日志。只发「带没带正文」，不发导了多少条、导到了哪。 */
+  /**
+   * 一次请求被本机代理处理成功。**每成功一次发一条，事件次数就是处理过的任务数。**
+   *
+   * 它是唯一一条没有任何属性的业务事件。这不是省事，而是唯一合法的形状：要回答「这台机器
+   * 一共处理了多少任务」，**数量只能由事件次数表达**——属性里没有位置能放数字，而自由文本
+   * 是被禁掉的（telemetry.md §3）。所以它也不带耗时、Token、状态码：那些是用户的业务数据，
+   * 属于本地观测（telemetry.md §15）。
+   *
+   * **只在处理成功时发。** 失败、被取消的请求不发：它们由 `failover_happened` /
+   * `service_start_failed` 之类的专门事件回答，混进计数里会让「处理了多少任务」失去意义。
+   *
+   * **只记客户端请求。** 产品自己发起的内部执行——连接测试、工作流的模型节点、能力自检——
+   * 走的是同一条代理执行链，但它们不是「替客户端处理的任务」：它们各自的用量由自己的事件
+   * 回答（`provider_tested` / `workflow_node_executed`），再计一次就把一次任务数成两次以上。
+   */
   z.object({
     ...TelemetryEnvelopeSchema.shape,
-    name: z.literal('logs_exported'),
-    withContent: TelemetryBooleanSchema,
+    name: z.literal('request_completed'),
   }).strict(),
 ])
 
 export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>
 export type TelemetryEventName = TelemetryEvent['name']
+
+/**
+ * 事件名允许的谓词，也就是 `<主体>_<谓词>` 里的最后一段。**这不是装饰性的清单**：
+ *
+ * - 每个名字都必须以表里的一项结尾（`telemetry.test.ts` 逐个比对）；
+ * - 表里的每一项都必须至少被一个名字用上——加一个词却不用事件去用，读的人只会以为漏了东西；
+ * - 一个意思只能用这个词：要表达「新建了某个东西」时，答案永远是 `created`，
+ *   不要再造一个 `added` / `registered` / `imported` 来和它并存。
+ *
+ * 表外的动词要先加这里、再加事件，两者必须同一次改动。每项的含义见上面的命名规则表。
+ */
+export const TELEMETRY_EVENT_PREDICATES = [
+  'started',
+  'finished',
+  'failed',
+  'completed',
+  'created',
+  'changed',
+  'tested',
+  'executed',
+  'used',
+  'happened',
+] as const
 
 /** 全部事件名。与 schema 同源，不是另抄一份名单。 */
 export const TELEMETRY_EVENT_NAMES = TelemetryEventSchema.options
@@ -345,7 +484,7 @@ const OMIT_ENVELOPE_FIELDS = {
  * 派生而不是另抄一份，是为了让「新增一个事件」只改上面那一处。
  *
  * 两个写法上的让步，都只是类型系统的形状问题，不影响运行期：
- * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十三项联合，
+ * - 回调参数标注成宽的 `ZodObject<ZodRawShape>`：`options` 的元素是十二项联合，
  *   直接 `.omit` 会因为「联合的签名互不兼容」而不通过（联合不整体可调用）；
  * - 前两项单独拆出来再展开剩余项：`z.union` 的签名要求「首个元素 + 第二项 + 其余」，
  *   而 `.map` 的返回值在类型上是数组，直接展开满足不了那个元组形状。

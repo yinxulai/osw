@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { runWorkflow } from '@common/router/engine'
 import { RouteContextInputSchema, WorkflowGraphSchema } from '@common/router/schemas'
 import { createRouteCapabilities } from '@server/proxy/capabilities/route-capabilities'
+import { reportWorkflowTrace } from '@server/telemetry/events'
 import { HttpRouter } from '@server/http-router'
 import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
@@ -25,5 +26,7 @@ export const routerRunRoutes = new HttpRouter<ManagementHandler>()
 async function handleRouterRun(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = RouterRunRequestSchema.parse(body)
   const result = await runWorkflow(input.graph, input.inputPayload, { capabilities: createRouteCapabilities() })
+  // 画布试跑也是「节点被执行了一次」，与代理路径同一口径（见 `proxy/routing/route-resolver.ts`）。
+  reportWorkflowTrace(result.trace)
   sendSuccess(res, result)
 }

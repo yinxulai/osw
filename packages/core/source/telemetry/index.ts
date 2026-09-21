@@ -86,7 +86,7 @@ async function start(config: RuntimeConfig, isCancelled: () => boolean): Promise
     const wasEnabled = settings?.telemetryEnabled === true
     settings = next
     if (next.telemetryEnabled === wasEnabled) return
-    void reportToggle(next.telemetryEnabled)
+    void applySwitch(next.telemetryEnabled)
   })
 
   if (loaded === null || !loaded.telemetryEnabled) return
@@ -184,13 +184,15 @@ export function previewTelemetry(): TelemetryPreview {
 }
 
 /**
- * 开关翻转时的最后一次机会。没有它，我们只能看到「某个安装从某天起不再出现」，而那既可能是
- * 关了统计，也可能是卸载或断网——区分不了就等于没这条数据（telemetry.md §13）。
+ * 开关翻转时的动作：开启就补建队列，关闭就把压着的那一批发出去。
  *
- * 它绕过开关本身（`queue.report` 不看开关），并且立刻发出、不等批量也不等间隔。开启时也
- * 发一条，这样服务端能看到「开了又关」的完整来回。
+ * 关闭那一下是队列里剩下的事件**最后的机会**：开关一翻，`isEnabled()` 就为假，之后再也不会有
+ * 新的入队，所以这里把已有的那一批先发出去。
+ *
+ * （早先这里还会跟着发一条 `telemetry_toggled`。删掉它是因为界面上从来没有这个开关——用户
+ * 触发不到的“产品事实”不占一个事件名，真加上开关时再加回来。见契约里的注释。）
  */
-async function reportToggle(enabled: boolean): Promise<void> {
+async function applySwitch(enabled: boolean): Promise<void> {
   // 启动时开关是关的，所以队列没建；刚被改写为开启——这里补建。
   if (enabled && (active === null || installId === null)) {
     const config = runtimeConfig
@@ -206,8 +208,7 @@ async function reportToggle(enabled: boolean): Promise<void> {
 
   const queue = active
   if (queue === null) return
-  queue.report({ name: 'telemetry_toggled', enabled })
-  queue.flush()
+  if (!enabled) queue.flush()
 }
 
 function isEnabled(): boolean {

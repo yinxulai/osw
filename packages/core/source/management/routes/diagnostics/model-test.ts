@@ -9,6 +9,7 @@ import { executeProxyRequest } from '../../../proxy/execution/attempt-executor'
 import { createRequestContext } from '../../../proxy/request/request-context'
 import { BufferedProxyResponse } from '../../../proxy/response/proxy-response'
 import { HttpRouter } from '@server/http-router'
+import { reportTelemetryEvent } from '@server/telemetry'
 import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
 import type { Protocol } from '@common/schemas'
@@ -135,6 +136,8 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
         }),
         targets: [target],
         response,
+        // 连接测试是内部执行：它的用量由 `provider_tested` 回答，不是客户端任务（见 `ExecutionOrigin`）。
+        origin: 'internal',
       })
       const success = response.statusCode >= 200 && response.statusCode < 400
       const usage = readUsage(response.body)
@@ -165,7 +168,14 @@ async function handleTestModels(req: IncomingMessage, res: ServerResponse, body:
     }
   }
 
+  const aborted = controller.signal.aborted
   req.removeListener('aborted', onClientAbort)
+  // 每个被测目标一条：界面侧把「测试全部模型」拆成若干次请求（一次请求只测一个目标，见
+  // `model-test-panel.tsx` 的 `runTasks`），因此这里的一条 `result` 就是那一个目标的结论。
+  // 被取消的那次不发——它没有结论，记成失败会把「用户点了取消」算进失败率里（契约注释）。
+  if (!aborted && results.length > 0) {
+    reportTelemetryEvent({ name: 'provider_tested', result: results.every(result => result.success) ? 'success' : 'failed' })
+  }
   // 客户端断开后 socket 已经没了，再写回去只会多一次无意义的写失败；能写就写。
   if (!res.writableEnded && !res.destroyed) sendSuccess(res, { results })
 }

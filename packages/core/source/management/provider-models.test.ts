@@ -3,11 +3,24 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createLogicalModel } from '@server/database/logical-model-store'
 import { providerModelRoutes } from './routes/catalog/provider-models'
 import { mockResponse } from './test-support'
+
+/**
+ * 新建模型会把端点接进来，这是「这项协议能力被接上了」的一次。粒度按**端点协议**分，
+ * 不按模型分：一个模型可以同时绑好几个协议的端点。
+ */
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
 
 function responseData(response: ServerResponse): Record<string, unknown> {
   const body = vi.mocked(response.end).mock.calls[0]?.[0]
@@ -19,6 +32,7 @@ let temporaryDirectory: string
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-provider-models-'))
   await initDatabases(temporaryDirectory)
+  reported.length = 0
 })
 
 afterEach(async () => {
@@ -41,6 +55,7 @@ describe('provider model routes', () => {
     })
     const created = responseData(createRes).data as { id: string }
     expect(created.id).toMatch(/^model_/)
+    expect(reported).toEqual([{ name: 'model_created', protocol: 'openai-responses' }])
 
     const listPoliciesRes = mockResponse()
     await providerModelRoutes.invoke('/api/scheduling-policy/list', listPoliciesRes, { logicalModelId: logicalModel.id })
@@ -59,6 +74,37 @@ describe('provider model routes', () => {
     const deleteRes = mockResponse()
     await providerModelRoutes.invoke('/api/scheduling-policy/delete', deleteRes, { logicalModelId: logicalModel.id, providerModelId: created.id })
     expect(responseData(deleteRes).data).toMatchObject({ logicalModelId: logicalModel.id, providerModelId: created.id })
+  })
+
+  it('reports one model_created per endpoint protocol', async () => {
+    const provider = await createProvider({ name: 'Multi Protocol Provider', apiKeyReference: 'key_multi_protocol', timeoutMilliseconds: 15_000, enabled: true })
+    const logicalModel = await createLogicalModel({ id: 'multi-protocol-model', name: 'multi-protocol-model', description: '' })
+
+    await providerModelRoutes.invoke('/api/provider-model/create', mockResponse(), {
+      providerId: provider.id,
+      modelName: 'multi-protocol',
+      logicalModelId: logicalModel.id,
+      endpoints: [
+        { protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions' },
+        { protocol: 'anthropic-messages', endpointUrl: 'https://example.com/v1/messages' },
+      ],
+    })
+
+    // 两个协议是两件事，不能只报第一个。
+    expect(reported).toEqual([
+      { name: 'model_created', protocol: 'openai-completions' },
+      { name: 'model_created', protocol: 'anthropic-messages' },
+    ])
+  })
+
+  it('does not report model_created when an existing model is edited', async () => {
+    const provider = await createProvider({ name: 'Edited Provider', apiKeyReference: 'key_edited_provider', timeoutMilliseconds: 15_000, enabled: true })
+    const model = await createModelWithEndpoint(provider.id, 'edited-model')
+    reported.length = 0
+
+    await providerModelRoutes.invoke('/api/provider-model/update', mockResponse(), { id: model.id, modelName: 'renamed-model' })
+
+    expect(reported).toEqual([])
   })
 })
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RouteMode, TransportKind } from '@common/schemas'
+import type { TelemetryEventInput } from '@common/telemetry'
 import { createDefaultPolicyGraph } from '@common/router/presets'
 import { createDefaultRouteRuleSet } from '@common/router/route-rules'
 import type { RouteRuleSet } from '@common/router/route-rules'
@@ -37,6 +38,16 @@ vi.mock('@server/proxy/capabilities/route-capabilities', () => ({
   createRouteCapabilities: () => ({}),
 }))
 
+// 请求真的走一遍图，就是「这些节点各被执行过一次」——与画布试跑同一口径
+// （见 `telemetry/events.ts`）。
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
+
 afterEach(() => {
   mocks.graph = undefined
   mocks.graphVersion = 0
@@ -44,6 +55,7 @@ afterEach(() => {
   mocks.ruleSetVersion = 0
   mocks.mode = 'workflow'
   mocks.models = []
+  reported.length = 0
 })
 
 function model(id: string, enabled = true): RuntimeLogicalModel {
@@ -75,6 +87,8 @@ describe('resolveRoute', () => {
     if (resolution.mode !== 'workflow') throw new Error('expected the workflow branch')
     expect(resolution.stopReason).toBe('output')
     expect(resolution.trace.length).toBeGreaterThan(0)
+    // 轨迹里每个节点各一条，与画布试跑一致。
+    expect(reported).toEqual(resolution.trace.map(step => ({ name: 'workflow_node_executed', node_kind: step.kind })))
   })
 
   it('falls back to the built-in default logical model when the request model is unknown', async () => {

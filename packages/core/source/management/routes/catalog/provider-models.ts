@@ -15,6 +15,7 @@ import {
   upsertSchedulingPolicy,
 } from '@server/database/logical-model-store'
 import { HttpRouter } from '@server/http-router'
+import { reportTelemetryEvent } from '@server/telemetry'
 import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
 
@@ -73,6 +74,12 @@ async function handleCreateProviderModel(_req: IncomingMessage, res: ServerRespo
   // 新模型的第一条绑定跟着模型本体走：模型建出来就是停用的，绑定不能默认打开
   // （`upsertSchedulingPolicy` 会拒绝为停用模型打开绑定）。
   await upsertSchedulingPolicy({ logicalModelId: input.logicalModelId, providerModelId: model.id, priority: input.priority, enabled: model.enabled })
+  // 一个模型可以同时绑多个协议的端点，每个端点都是一次「这项协议能力被接进来」：
+  // 逐个发，不发「第一个」——挑一个发等于把「这个模型支持哪几种协议」答成残缺的。
+  // （一个协议在模型上只会有一条绑定，是存储层按供应商端点唯一的约束保证的，见 `model-store.ts`。）
+  for (const endpoint of input.endpoints) {
+    reportTelemetryEvent({ name: 'model_created', protocol: endpoint.protocol })
+  }
   sendSuccess(res, await getProviderModel(model.id) ?? model)
 }
 

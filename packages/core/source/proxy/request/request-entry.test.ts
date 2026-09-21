@@ -1,6 +1,7 @@
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { TelemetryEventInput } from '@common/telemetry'
 import type { ModelWithProvider } from '@server/proxy/routing/router'
 import type * as RouterModule from '@server/proxy/routing/router'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
@@ -96,6 +97,27 @@ mocks.listRulesForProviderModel.mockResolvedValue([])
 import { handleProxyRequest } from './request-entry'
 import { getManualModel, setManualModel } from '../routing/manual-routing'
 
+/**
+ * 「处理了多少任务」这个数只由事件次数表达，所以这里盯的是**一次成功的客户端请求发几条**、
+ * 发的时候带什么属性。内部执行（连接测试、工作流模型节点）走的是同一条链，但用的是自己的事件，
+ * 所以它们不能在这里再被数一次。
+ */
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
+
+/**
+ * 模式是 `workflow` 时，路由求解本身会跑一遍图，那几条节点事件也是真的、也是该发的
+ * （在 `route-resolver` 自己的用例里断言），这里只看请求处理这条链上的事件。
+ */
+function requestEvents(): TelemetryEventInput[] {
+  return reported.filter(event => event.name !== 'workflow_node_executed')
+}
+
 const servers: http.Server[] = []
 type ManualModelOptions = { manualModelId?: string | null }
 
@@ -106,6 +128,7 @@ afterEach(async () => {
   mocks.captureRequestContent = false
   mocks.listRulesForProviderModel.mockResolvedValue([])
   vi.clearAllMocks()
+  reported.length = 0
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
 })
 
@@ -275,6 +298,8 @@ describe('handleProxyRequest', () => {
     expect(await response.json()).toEqual({ provider: 'second' })
     expect(secondHandler).toHaveBeenCalledOnce()
     expect(firstHandler).not.toHaveBeenCalled()
+    // 直接命中原生端点：没有转换，也没有转移，只有一次「处理成功」。
+    expect(requestEvents()).toEqual([{ name: 'request_completed' }])
   })
 
   it('does not fall back when the manually selected model fails', async () => {
@@ -1363,6 +1388,11 @@ describe('handleProxyRequest', () => {
     expect(mocks.createRequestAttempt).toHaveBeenCalledWith(expect.objectContaining({
       upstreamProtocol: 'openai-completions',
     }))
+    // 同样的两件事各回报一条：转换一次（两侧都记），然后这次请求处理成功。
+    expect(requestEvents()).toEqual([
+      { name: 'protocol_conversion_used', from: 'anthropic-messages', to: 'openai-completions' },
+      { name: 'request_completed' },
+    ])
   })
 
   it('rejects when no native or conversion-enabled endpoint exists', async () => {

@@ -190,7 +190,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   })
 
   console.debug(`[proxy] execution started requestId=${requestId} logicalModelId=${logicalModelId} targets=${plan.targets.length}`)
-  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), hooks })
+  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), hooks, origin: 'client' })
 }
 
 /**

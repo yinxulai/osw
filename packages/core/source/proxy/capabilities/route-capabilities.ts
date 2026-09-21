@@ -156,6 +156,9 @@ async function executePrompt(invocation: PromptInvocation): Promise<PromptInvoca
       }),
       targets: plan.targets,
       response,
+      // 工作流里的模型节点是内部执行：它总是挂在一次客户端请求下面（或画布试跑里），
+      // 本身不是「代理替客户端处理的一次请求」，再计一次任务就是重复计数。
+      origin: 'internal',
     })
 
     const durationMilliseconds = Date.now() - startedAt

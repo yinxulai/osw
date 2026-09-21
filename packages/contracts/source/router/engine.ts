@@ -742,7 +742,8 @@ function resolveModelSelection(node: ModelSelectNode, payload: Record<string, un
 }
 
 function buildMissingInputTrace(message: string): WorkflowTrace {
-  return { nodeId: '-', nodeName: '初始化', kind: 'input', success: false, message }
+  // `executed: false`：这不是图上的节点，是一个「这次执行根本没起来」的占位（见 `WorkflowTrace.executed`）。
+  return { nodeId: '-', nodeName: '初始化', kind: 'input', success: false, message, executed: false }
 }
 
 function edgeTarget(edges: Map<string, string>, nodeId: string, port = 'out'): string | undefined {
@@ -847,7 +848,8 @@ export async function runWorkflow(graph: WorkflowGraph, inputPayload: unknown, o
       steps += 1
 
       if (!current.enabled && current.kind !== 'input' && current.kind !== 'output') {
-        trace.push({ nodeId: current.id, nodeName: current.name, kind: current.kind, success: true, message: '节点禁用，跳过' })
+        // `executed: false`：路径走过了，但这条边上的逻辑一行都没跑（见 `WorkflowTrace.executed`）。
+        trace.push({ nodeId: current.id, nodeName: current.name, kind: current.kind, success: true, message: '节点禁用，跳过', executed: false })
         currentId = current.kind === 'protocol-discovery'
           ? resolveProtocolTarget(edges, current.id, 'unknown')
           : edgeTarget(edges, current.id, 'out')

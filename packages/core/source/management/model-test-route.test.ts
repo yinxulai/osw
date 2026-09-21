@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Protocol } from '@common/schemas'
+import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { createProvider, createProviderEndpoint } from '@server/database/provider-store'
 import {
@@ -35,12 +36,25 @@ vi.mock('../proxy/execution/attempt-executor', () => ({
   }),
 }))
 
+/**
+ * 「用户点了一次测试」是产品行为，粒度是**一次测试**（里面可能包含好几个模型）。
+ * 中途取消的不算：用户没看到结果，我也不能假装他看到了。
+ */
+const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
+
+vi.mock('@server/telemetry', () => ({
+  reportTelemetryEvent: (event: TelemetryEventInput) => {
+    reported.push(event)
+  },
+}))
+
 let temporaryDirectory: string
 
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-model-test-route-'))
   await initDatabases(temporaryDirectory)
   mockUpstreamHandler = null
+  reported.length = 0
 })
 
 afterEach(async () => {
@@ -129,6 +143,8 @@ describe('model test run route', () => {
     ])
     expect(results(response)[0].errorMessage).toBeUndefined()
     expect(typeof results(response)[0].durationMilliseconds).toBe('number')
+    // 一次测试一条事件，结果取整批的聚合值。
+    expect(reported).toEqual([{ name: 'provider_tested', result: 'success' }])
   })
 
   it('端点地址为空时借用供应商级地址', async () => {
@@ -167,6 +183,7 @@ describe('model test run route', () => {
       statusCode: 500,
       errorMessage: '上游返回了 500',
     })
+    expect(reported).toEqual([{ name: 'provider_tested', result: 'failed' }])
   })
 
   it('上游给 Anthropic 风格错误体时读嵌套 message', async () => {
@@ -238,6 +255,8 @@ describe('model test run route', () => {
     await run({ protocol: 'openai-completions' }, response)
 
     expect(results(response)).toEqual([])
+    // 一个模型都没跑，就没有「一次测试」可报（空结果与「全失败」是两回事）。
+    expect(reported).toEqual([])
   })
 
   it('协议转换开启后可以拿别的协议的模型做诊断', async () => {
@@ -292,6 +311,8 @@ describe('model test run route', () => {
 
     expect(results(response)).toEqual([])
     expect(request.removeListener).toHaveBeenCalledWith('aborted', expect.any(Function))
+    // 取消掉的测试不上报：既没有结果，也不该被算成一次「用户试过了」。
+    expect(reported).toEqual([])
   })
 
   it('响应已经结束时不再写回结果', async () => {

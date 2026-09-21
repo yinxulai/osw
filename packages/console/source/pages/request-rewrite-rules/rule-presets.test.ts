@@ -44,6 +44,9 @@ describe('内置规则模板', () => {
       expect(rule.actions[0].id.startsWith(rule.id)).toBe(true)
       expect(rule.testCases).toHaveLength(1)
       expect(rule.testCases[0].name).toBe(t('rules.presets.testCaseName'))
+      // 从模板起手必须记成 `builtin` 并在保存时原样传回去：这是遥测里
+      // 「内建模板有人用吗」唯一的信息来源（见 `@common/telemetry` 的 `rewrite_rule_created`）。
+      expect(rule.source, `${preset.id} 应从模板起手`).toBe('builtin')
     }
   })
 
@@ -53,5 +56,7 @@ describe('内置规则模板', () => {
     expect(rule.actions).toHaveLength(1)
     expect(rule.actions[0]).toMatchObject({ target: 'header', operation: 'set', path: '', value: '' })
     expect(rule.updatedTime).toBeNull()
+    // 自己写的就是 `user`：与模板草稿区分开，两者不能同档。
+    expect(rule.source).toBe('user')
   })
 })

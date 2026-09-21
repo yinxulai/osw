@@ -128,12 +128,12 @@ describe('Aptabase 下游', () => {
     })
 
     it('布尔属性保持布尔，不提前转成字符串', async () => {
-      const exported: TelemetryEvent = { ...appStarted(), name: 'logs_exported', withContent: true }
+      const finished: TelemetryEvent = { ...appStarted(), name: 'onboarding_finished', skipped: true }
 
-      const { event } = await forwardOne(exported)
+      const { event } = await forwardOne(finished)
 
       // 契约用原生 JSON 布尔；下游要把它规范化成 `'true'` 是下游的事，我们不做那道加工。
-      expect(event?.props.withContent).toBe(true)
+      expect(event?.props.skipped).toBe(true)
     })
 
     it('保留属性只填三项，其余留空', async () => {

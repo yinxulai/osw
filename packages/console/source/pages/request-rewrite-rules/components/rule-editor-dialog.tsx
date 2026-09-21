@@ -77,7 +77,8 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       enabled: props.rule.enabled,
       scope: props.rule.global ? 'global' : 'model',
       schemaVersion: 1,
-      source: 'user',
+      // 试跑用的临时报文：取值与保存时一致，免得两处对「这条规则是什么」说法不同。
+      source: props.rule.source,
       match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'] },
       testCases: [],
       actions: props.rule.actions.map(action => action.target === 'header'

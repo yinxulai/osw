@@ -9,6 +9,7 @@
 export type { HeaderMap } from './headers'
 export type { Frame, FrameSink, HeadFrame } from './frame'
 export type { RouteMatcher, RouteMethod } from './route-matcher'
+export type { ExecutionOrigin } from './execution'
 export type { AttemptView, ExchangeView } from './exchange'
 export type { Transport, TransportKind, UpstreamConnection, UpstreamTarget } from './transport'
 export type { BufferedPayload, Modifier, ModifierContext, ModifierDirection, ModifierFrameMode, ModifierScope } from './modifier'

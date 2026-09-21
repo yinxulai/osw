@@ -142,16 +142,19 @@ describe('startTelemetry', () => {
     expect(preview.installId).toBe(fs.readFileSync(idFilePath(dataDir), 'utf8').trim())
   })
 
-  it('reports telemetry_toggled and flushes it when the user turns the switch on', async () => {
-    // 关→开也要发一条：否则服务端只看到「关了」，看不到「开了又关」的来回。
+  it('starts collecting when the switch is turned on after start', async () => {
+    // 启动时开关是关的，所以队列没建；但监听已经挂上了，改写设置不重启也该生效。
+    // （这一步不发事件、也不发「开关被改了」那条——上报里没有这个事件名。）
     stop = startTelemetry(config)
     await settle()
 
     await updateSettings({ telemetryEnabled: true })
 
-    await vi.waitFor(() => expect(endpoint.batches).toHaveLength(1))
-    expect(endpoint.batches[0]?.events.map(event => event.name)).toEqual(['telemetry_toggled'])
-    expect(endpoint.batches[0]?.events[0]).toMatchObject({ enabled: true })
+    await vi.waitFor(() => expect(previewTelemetry().running).toBe(true))
+    reportTelemetryEvent({ name: 'route_mode_changed', mode: 'rules' })
+
+    expect(previewTelemetry().events.map(event => event.name)).toEqual(['route_mode_changed'])
+    expect(endpoint.batches).toEqual([])
   })
 
   it('flushes the last batch when the user turns the switch off', async () => {
@@ -162,9 +165,8 @@ describe('startTelemetry', () => {
     await updateSettings({ telemetryEnabled: false })
 
     await vi.waitFor(() => expect(endpoint.batches).toHaveLength(1))
-    // 关闭时把队列里还压着的一起发出去：那条 `app_started` 等的就是这个最后的机会。
-    expect(endpoint.batches[0]?.events.map(event => event.name)).toEqual(['app_started', 'telemetry_toggled'])
-    expect(endpoint.batches[0]?.events.at(-1)).toMatchObject({ enabled: false })
+    // 关闭那一下是队列里压着的事件最后的机会：开关一翻就不会再有新的入队了。
+    expect(endpoint.batches[0]?.events.map(event => event.name)).toEqual(['app_started'])
     expect(previewTelemetry().enabled).toBe(false)
   })
 
@@ -175,7 +177,7 @@ describe('startTelemetry', () => {
 
     stop()
     stop = null
-    reportTelemetryEvent({ name: 'logs_exported', withContent: false })
+    reportTelemetryEvent({ name: 'route_mode_changed', mode: 'rules' })
 
     expect(previewTelemetry()).toMatchObject({ running: false, source: 'sample', events: [] })
     expect(endpoint.batches).toEqual([])

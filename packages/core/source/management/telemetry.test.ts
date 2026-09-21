@@ -22,17 +22,16 @@ const GET_REQUEST = { method: 'GET' } as unknown as IncomingMessage
 const VALID_INPUTS: TelemetryEventInput[] = [
   { name: 'app_started' },
   { name: 'service_start_failed', reason: 'port' },
-  { name: 'telemetry_toggled', enabled: true },
   { name: 'onboarding_finished', skipped: false },
   { name: 'route_mode_changed', mode: 'rules' },
   { name: 'provider_created', kind: 'custom' },
-  { name: 'model_added', protocol: 'openai-completions' },
-  { name: 'provider_test_run', result: 'failed' },
+  { name: 'model_created', protocol: 'openai-completions' },
+  { name: 'provider_tested', result: 'failed' },
   { name: 'rewrite_rule_created', kind: 'builtin' },
   { name: 'protocol_conversion_used', from: 'openai-completions', to: 'anthropic-messages' },
   { name: 'failover_happened', attempts: '2' },
-  { name: 'workflow_node_run', nodeKind: 'condition' },
-  { name: 'logs_exported', withContent: true },
+  { name: 'workflow_node_executed', node_kind: 'condition' },
+  { name: 'request_completed' },
 ]
 
 describe('telemetry preview route', () => {
