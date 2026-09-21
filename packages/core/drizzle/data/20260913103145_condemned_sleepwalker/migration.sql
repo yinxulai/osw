@@ -126,6 +126,7 @@ CREATE TABLE `runtime_logs` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_attempt_contents_attempt` ON `attempt_contents` (`attemptId`);--> statement-breakpoint
+CREATE INDEX `idx_attempt_contents_created_time` ON `attempt_contents` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_attempt_usages_created_time` ON `attempt_usages` (`createdTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_request_attempts_request_order` ON `request_attempts` (`requestId`,`attemptIndex`);--> statement-breakpoint
 CREATE INDEX `idx_request_attempts_created_time` ON `request_attempts` (`createdTime`);--> statement-breakpoint
@@ -134,6 +135,7 @@ CREATE INDEX `idx_request_attempts_model_time` ON `request_attempts` (`providerM
 CREATE INDEX `idx_request_attributes_key_value` ON `request_attributes` (`key`,`value`);--> statement-breakpoint
 CREATE INDEX `idx_request_attributes_created_time` ON `request_attributes` (`createdTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_request_contents_request` ON `request_contents` (`requestId`);--> statement-breakpoint
+CREATE INDEX `idx_request_contents_created_time` ON `request_contents` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_created_time` ON `request_logs` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_status_created_time` ON `request_logs` (`status`,`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_logical_model` ON `request_logs` (`logicalModelId`);--> statement-breakpoint

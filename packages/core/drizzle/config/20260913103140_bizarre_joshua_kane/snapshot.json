@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "513da860-e6e2-41dc-aa6f-4d67da71a90b",
+  "id": "266e49ca-bcd2-4e8b-96db-975e8f441870",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -591,6 +591,16 @@
       "default": "true",
       "generated": null,
       "name": "enabled",
+      "entityType": "columns",
+      "table": "providers"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "sortOrder",
       "entityType": "columns",
       "table": "providers"
     },

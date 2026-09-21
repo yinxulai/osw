@@ -17,6 +17,10 @@
  * **日常的结构变化不走这条路**——为它加一条迁移就够了（`packages/core/drizzle/<role>/` 下每个目录
  * 是一条），否则每次加列都会把用户已经写好的配置甩在一张空表旁边。
  *
+ * **不换代也可以把迁移链压平，但基线目录名必须沿用原来的那一个**：运行时迁移器
+ * （`drizzle-orm` 的 `getMigrationsToRun`）只按**目录名**判断某条迁移是否已经应用过，
+ * 换名字等于在已有库眼里多出一条全新迁移，它会拿整份基线去 `CREATE TABLE` 已经存在的表。
+ *
  * 见 `docs/product/data-model.md` 的数据库初始化策略。
  */
 /**
@@ -35,6 +39,9 @@ export const DATABASE_ROLES: readonly DatabaseRole[] = ['config', 'data']
  *
  * 只在**应用大版本发布**时手动加一，而且要和「重新生成基线」一起做：加一等于换一个文件名，
  * 新文件从一个干净的首发基线建起，旧文件原地留下。日常改结构**不要**动这里——加一条迁移。
+ *
+ * 加一只在**主版本号变化**时做：`1.2.0` 相对 `1.1.0` 仍是主版本 1，换名会把用户已经写好的
+ * 配置甩在一张空表旁边，所以副版本发布里这个数字不动。
  */
 export const DATABASE_SCHEMA_VERSIONS: Record<DatabaseRole, number> = {
   config: 1,

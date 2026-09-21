@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "f566d298-b467-47f7-8871-d46d3808934f",
+  "id": "398eef1a-b0de-4d7f-ac11-0a5941fb3a90",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -1053,6 +1053,20 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
+      "name": "idx_attempt_contents_created_time",
+      "entityType": "indexes",
+      "table": "attempt_contents"
+    },
+    {
+      "columns": [
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
       "name": "idx_attempt_usages_created_time",
       "entityType": "indexes",
       "table": "attempt_usages"
@@ -1168,6 +1182,20 @@
       "where": null,
       "origin": "manual",
       "name": "idx_request_contents_request",
+      "entityType": "indexes",
+      "table": "request_contents"
+    },
+    {
+      "columns": [
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_contents_created_time",
       "entityType": "indexes",
       "table": "request_contents"
     },
