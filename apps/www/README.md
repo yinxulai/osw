@@ -117,7 +117,8 @@ apps/www/
       request-trace.tsx      # 首屏右侧的「请求轨迹」动效（产品主视觉）
       failover-section.tsx   # 故障转移判定口径表
       capabilities-section.tsx # 路由改写 / 可观测 / 协议识别
-      privacy-section.tsx    # 三条隐私承诺
+      screenshots-section.tsx # 界面预览（直接用 snapshot/ 里的真实截图）
+      privacy-section.tsx    # 四条隐私承诺（第四条是匿名统计）
       download-section.tsx   # 下载区（全站唯一主行动区）
       site-footer.tsx        # 页脚
       section-heading.tsx    # 区块标题组（小标签 + 标题 + 引言）
@@ -125,6 +126,7 @@ apps/www/
     i18n.ts          # i18next 初始化 + 英文资源表（中文是兜底语言，见下）
     downloads.ts     # 版本号 + 最新发布页地址
     platforms.ts     # 平台清单（下载区那一行平台标记用）
+    screenshots.ts   # 界面预览的图清单（外部 import snapshot/，不做副本）
     platform-icons.tsx # 三平台品牌标记（Simple Icons + 手绘 Windows 方标）
     feature-icons.tsx  # 能力图标（手绘 1.5px 描边，继承 currentColor）
     index.css        # Tailwind v4 入口 + 设计 token + 基础样式
@@ -150,5 +152,11 @@ apps/www/
 `.ring-gradient`（1px 渐变描边，替代 `border` 做卡片边缘）。滚动进场用 `[data-reveal]` + `Reveal` 组件，
 **默认可见**，JS 接管后才从下方浮入——JS 没跑起来时不会白屏。
 
-> 首屏的产品主视觉是**用 CSS 画的请求轨迹**，不是产品截图。原因：`snapshot/` 下的截图仍是旧版青色标志，
-> 与当前品牌不一致；而「渠道失败后发生了什么」这件事本身更适合画成一条有先后顺序的链。
+> 首屏的产品主视觉是**用 CSS 画的请求轨迹**，不是产品截图。原因：「渠道失败后发生了什么」
+> 这件事本身更适合画成一条有先后顺序的链，而不是贴一张静态图。
+>
+> 但网站上另有**一节专门的「界面预览」**（`screenshots-section.tsx`），让用户下载之前
+> 就知道界面是什么密度、什么色调。那一节**直接 `import` 仓库根的 `snapshot/*.png`**，不在
+> `public/` 里再摆一份副本——README 与官网共用同一个图源，改图只需改一处，Vite 构建时会
+> 自己把它们哈希进 `output/assets/`。顺带一个已知取舍：这批截图拍于图标改版之前，侧边栏还是
+> 旧版青色标志，与当前品牌不一致，但内容仍是真实界面，所以保留原图而不是重画。

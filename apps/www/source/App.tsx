@@ -5,6 +5,7 @@ import { DownloadSection } from './components/download-section'
 import { FailoverSection } from './components/failover-section'
 import { Hero } from './components/hero'
 import { PrivacySection } from './components/privacy-section'
+import { ScreenshotsSection } from './components/screenshots-section'
 import { SiteFooter } from './components/site-footer'
 import { SiteHeader } from './components/site-header'
 import type { Lang } from './i18n'
@@ -13,8 +14,8 @@ import type { Lang } from './i18n'
  * 落地页。整页只负责「背景层 + 区块顺序」，每节的实现都在 `components/` 下。
  *
  * 顺序即叙事：**是什么（首屏）→ 挂了怎么办（故障转移）→ 还能调什么（能力）
- * → 数据去哪（隐私）→ 怎么拿到（下载）**。旧版把六张功能卡平铺在一起，
- * 读者要先自己判断「哪条更重要」，这一版改成逐节回答一个具体问题。
+ * → 长什么样（界面预览）→ 数据去哪（隐私）→ 怎么拿到（下载）**。旧版把六张功能卡
+ * 平铺在一起，读者要先自己判断「哪条更重要」，这一版改成逐节回答一个具体问题。
  */
 export function App() {
   const { i18n } = useTranslation()
@@ -43,6 +44,7 @@ export function App() {
         <Hero />
         <FailoverSection />
         <CapabilitiesSection />
+        <ScreenshotsSection />
         <PrivacySection />
         <DownloadSection />
       </main>

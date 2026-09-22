@@ -7,6 +7,7 @@ import { LANGS, type Lang } from '../i18n'
 const ANCHORS = [
   { id: 'failover', key: 'nav.failover', fallback: '故障转移' },
   { id: 'capabilities', key: 'nav.capabilities', fallback: '能力' },
+  { id: 'screenshots', key: 'nav.screenshots', fallback: '界面' },
   { id: 'privacy', key: 'nav.privacy', fallback: '隐私' },
   { id: 'downloads', key: 'nav.downloads', fallback: '下载' },
 ]

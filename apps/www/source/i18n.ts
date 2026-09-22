@@ -24,6 +24,7 @@ const en = {
   nav: {
     failover: 'Failover',
     capabilities: 'Capabilities',
+    screenshots: 'Interface',
     privacy: 'Privacy',
     downloads: 'Download',
     download: 'Download',
@@ -97,7 +98,7 @@ const en = {
       body: 'After a request enters the gateway and before it leaves for an upstream, you decide where it goes and what it looks like.',
       p1: 'Draw the split in a node graph — combine model, client and header conditions freely',
       p2: 'A rule table for people who prefer writing config; switch between the two at any time',
-      p3: 'Every save becomes a version you can roll back in one click',
+      p3: 'Every save of the routing graph becomes a version you can roll back in one click',
       p4: 'Rewrite rules change headers, edit JSON fields or replace text without writing code',
     },
     observability: {
@@ -114,23 +115,57 @@ const en = {
       p2: 'OpenAI Chat Completions',
       p3: 'Anthropic Messages',
     },
-    more: 'The failover rules are in the section above; how your data stays on this machine is in the next one.',
+    more: 'The failover rules are in the section above; where your data goes is in the Privacy section below.',
+  },
+  screenshots: {
+    eyebrow: 'Interface',
+    title: 'What it actually looks like',
+    lead: 'Five of the main pages, all real screenshots from the app — nothing redrawn or mocked up.',
+    logicalModels: {
+      title: 'Logical models',
+      caption:
+        'Drag to set the order they are tried in. Every model carries its own recent record — TPS, first-token latency, consecutive failures.',
+    },
+    smartRouting: {
+      title: 'Smart Routing',
+      caption:
+        'Switch between a node graph and a plain rule table at any time; every save is a version you can roll back.',
+    },
+    requestLogs: {
+      title: 'Request logs',
+      caption:
+        'One row per request, expandable into the full execution detail: every attempt, the channel that really answered, usage and response rewrites.',
+    },
+    requestRewrite: {
+      title: 'Request rewrite',
+      caption:
+        'Headers, JSON fields and text replacement without writing any code; New rule ships with templates.',
+    },
+    analytics: {
+      title: 'Analytics',
+      caption:
+        'Success rate, latency, first-token latency, tokens per second, cache hits, model ranking and failure reasons.',
+    },
   },
   privacy: {
     eyebrow: 'Privacy',
-    title: 'Keys and request bodies never leave this machine',
-    lead: 'Handing company keys to a relay service you know nothing about is the problem this product exists to solve, so every default here assumes the network is untrusted.',
+    title: 'Your keys and request bodies reach nobody else',
+    lead: 'Handing company keys to a relay service you know nothing about is the problem this product exists to solve, so every default here assumes the network is untrusted. The one exception worth spelling out is right below.',
     listener: {
-      title: 'Binds to this machine only',
-      body: 'The gateway listens on 127.0.0.1, never on a LAN interface. Other devices on the same network cannot reach it.',
+      title: 'Binds to this machine by default',
+      body: 'The gateway binds 127.0.0.1 by default and never listens on a LAN interface, so other devices on the same network cannot reach it — unless you explicitly rebind it to 0.0.0.0 in the runtime settings, for example to reach it from WSL.',
     },
     keys: {
       title: 'Keys live in the OS keychain',
       body: 'Channel keys are stored in macOS Keychain / Windows Credential Manager / Linux Secret Service — not in a config file, and not in logs.',
     },
     upstream: {
-      title: 'Talks only to upstreams you configured',
-      body: 'No account system, no cloud sync, no relay server. Apart from the channel URLs you typed in yourself, it sends data nowhere.',
+      title: 'Requests go only to upstreams you configured',
+      body: 'No account system, no cloud sync, no relay server: requests go only to the channel URLs you typed in yourself. The one piece of traffic that leaves on its own is the anonymous statistics in the next card.',
+    },
+    telemetry: {
+      title: 'Anonymous statistics, stated plainly',
+      body: 'Enabled by default. It answers two questions only — how many people are using it, and which features are actually used. No request content, no device fingerprinting, no user profiles; the payload goes to api.osw.yinxulai.com.',
     },
   },
   downloads: {

@@ -29,7 +29,9 @@ export function Hero() {
               <span className="rounded-full bg-white/8 px-2 py-0.5 font-mono text-[11px] text-ink-2">
                 v{DOWNLOAD_VERSION}
               </span>
-              {t('hero.badge', '本地运行 · 开源可查')}
+              {/* 「开源」是错的：许可为 PolyForm Noncommercial，属源码可见而非 OSI 开源，
+                  英文侧一直写的 source-available，中文这句是漏改的。 */}
+              {t('hero.badge', '本地运行 · 源码可见')}
               <span
                 aria-hidden="true"
                 className="text-ink-4 transition-transform group-hover:translate-x-0.5"

@@ -40,8 +40,10 @@ const ROUTING: Capability = {
       text: '规则表模式给习惯写配置的人用，两种模式随时互切',
     },
     {
+      // 版本与回滚是**路由图**的能力（改写规则没有版本），原句没写主语，
+      // 紧跟在「重写规则」那一条前面，很容易被读成改写规则也能回滚。
       key: 'capabilities.routing.p3',
-      text: '每次保存生成一个版本，出问题一键回滚',
+      text: '路由图每次保存都是一个版本，出问题一键回滚',
     },
     {
       key: 'capabilities.routing.p4',
@@ -108,7 +110,7 @@ export function CapabilitiesSection() {
         <p className="mt-4 text-[12px] text-ink-4">
           {t(
             'capabilities.more',
-            '故障转移的判定口径见上一节；数据不出本机的说明见下一节。',
+            '故障转移的判定口径见上一节；数据去哪，见后面「隐私」一节。',
           )}
         </p>
       </Reveal>

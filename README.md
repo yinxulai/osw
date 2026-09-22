@@ -21,7 +21,7 @@ Your client only ever sees the attempt that succeeded.
 - **One entry point.** Clients only ever know one local address. Providers, accounts and models change behind it; nothing downstream ever has to be reconfigured again.
 - **Failure is normal.** Network hiccups, connection timeouts, rate limits, exhausted quotas, dead keys, upstream 5xx — a broken channel is the expected case, not the exception. Keeping you running through it is the product's job, not yours.
 - **Pass through by default.** No protocol parsing, no rewriting, no conversion unless you explicitly ask for it. The safest and fastest request is the one the proxy barely touches.
-- **Local only.** It listens on `127.0.0.1`, keeps keys in the OS keychain, and talks to nobody but the upstreams you configured. No account, no cloud sync, no relay.
+- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS keychain, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay. The one exception is anonymous usage statistics, which are on by default and carry no request content — see [docs/product/telemetry.md](./docs/product/telemetry.md).
 - **Everything is on the record.** Which provider, which model, which attempt finally succeeded, how long it took, how fast the first token arrived, how many tokens it cost — every request leaves a trace you can query.
 
 ---
