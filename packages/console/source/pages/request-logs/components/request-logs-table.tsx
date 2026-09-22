@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { PROTOCOL_LABEL, formatNumber, formatTime, formatTransport } from '../lib/format'
+import type { RequestLogsRow } from '../lib/rows'
+import { RequestExecutionRow } from './request-execution-row'
 import { RequestLogDetailRow, RequestStatusBadge } from './request-log-detail-row'
 
 interface CachedTokensCellProps {
@@ -26,8 +28,15 @@ interface RequestLogTableRowProps {
   toggleExpand: (id: string) => void
 }
 
+/**
+ * 请求列表。
+ *
+ * 表里混着两种行：**执行中**（读代理内存里的台账）与**已完成**（读落库的记录）。
+ * 它们共用同一套列，因为这一页只回答一个问题——「我发出去的请求现在怎么样了」，
+ * 而答案在时间上是连续的。合并顺序见 `buildRequestLogRows`，表格这里只负责按行取数。
+ */
 interface RequestLogsTableProps {
-  logs: RequestLogEntry[]
+  rows: RequestLogsRow[]
   loading: boolean
   error: string | null
   filtered: boolean
@@ -63,7 +72,7 @@ function formatModelSummary(log: RequestLogEntry): ModelSummary {
   }
 }
 
-export function CachedTokensCell(props: CachedTokensCellProps) {
+function CachedTokensCell(props: CachedTokensCellProps) {
   if (props.value === null) {
     return <span className="text-text-quaternary">—</span>
   }
@@ -241,7 +250,7 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
 
   if (props.loading) {
     body = <RequestLogsLoadingRows />
-  } else if (props.error !== null && props.logs.length === 0) {
+  } else if (props.error !== null && props.rows.length === 0) {
     body = (
       <TableStateRow colSpan={11} icon={AlertTriangle} tone="destructive" title={t('requestLogs.table.error.title')} description={props.error} action={
         <Button variant="outline" className="mt-1" onClick={props.onRetry}>
@@ -250,23 +259,33 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
         </Button>
       } />
     )
-  } else if (props.logs.length === 0) {
+  } else if (props.rows.length === 0) {
     body = props.filtered
       ? <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.empty.title')} description={t('requestLogs.table.empty.description')} />
       : <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.emptyAll.title')} description={t('requestLogs.table.emptyAll.description')} />
   } else {
-    body = props.logs.map(log => (
-      <RequestLogTableRow
-        key={log.id}
-        log={log}
-        expanded={props.expandedId === log.id}
-        detail={props.details[log.id]}
-        detailLoading={props.detailLoadingIds[log.id] ?? false}
-        detailError={props.detailErrors[log.id] || null}
-        modelName={props.getModelName(log.logicalModelId)}
-        toggleExpand={props.toggleExpand}
-      />
-    ))
+    body = props.rows.map(row => row.kind === 'execution'
+      ? (
+        <RequestExecutionRow
+          key={row.live.id}
+          live={row.live}
+          expanded={props.expandedId === row.live.id}
+          modelName={props.getModelName(row.live.logicalModelId)}
+          toggleExpand={props.toggleExpand}
+        />
+      )
+      : (
+        <RequestLogTableRow
+          key={row.log.id}
+          log={row.log}
+          expanded={props.expandedId === row.log.id}
+          detail={props.details[row.log.id]}
+          detailLoading={props.detailLoadingIds[row.log.id] ?? false}
+          detailError={props.detailErrors[row.log.id] || null}
+          modelName={props.getModelName(row.log.logicalModelId)}
+          toggleExpand={props.toggleExpand}
+        />
+      ))
   }
 
   return (

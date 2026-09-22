@@ -3,7 +3,8 @@ import type { Protocol, RequestAttribute, TransportKind } from '@common/schemas'
 import { getSettings } from '@server/database/settings-store'
 import { generateId } from '@common/utils'
 import { executeProxyRequest } from '../execution/attempt-executor'
-import { initializeRequestLogger, type RequestLogger } from '../observability/logging'
+import { initializeRequestLogger } from '../observability/logging'
+import type { RequestLogger } from '../observability/logging-types'
 import { NOOP_PROXY_OBSERVATION_HOOKS, type ProxyObservationHooks } from '../observability/hooks'
 import { NodeProxyResponse } from '../response/proxy-response'
 import { createRequestContext } from './request-context'
@@ -13,6 +14,7 @@ import { NO_LANDING_DETAIL, planLandingTargets } from '../routing/landing-planne
 import { parseRouteBody, resolveRoute, toRouteHeaders } from '../routing/route-resolver'
 import { resolveUpstreamTransport } from '../routing/upstream-url'
 import { collectRequestAttributes, extractClientRequestId } from '@server/proxy/observability/request-attribute-collector'
+import { liveRequestStore } from '../observability/live-request-store'
 
 /**
  * 一次交换在入口处就已确定、且不随拒绝原因变化的事实。
@@ -93,10 +95,21 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   const attributes = collectRequestAttributes(req.headers)
   // 交换标识在这里一次绑好：下面所有拒绝分支共用同一份，不必逐条重复。
   const identity: ExchangeIdentity = { requestId, method, path, headers: req.headers, attributes, startedAt, hooks }
-  /** 拒绝这次交换：回错误响应 + 记一条失败日志。 */
-  const reject = (refusal: ExchangeRefusal, resolution: ExchangeResolution) => rejectExchange(res, { ...identity, ...resolution, refusal })
+  // 台账在**第一件事**之前开张：这次请求从「连路径都还没认出来」开始就被人看着了。
+  // 协议与形态此刻还不知道，解析出来后再补（见 `live.update`）。
+  const live = liveRequestStore.begin({ id: requestId, method, path, transport: 'http', clientProtocol: null })
+  /** 拒绝这次交换：回错误响应 + 记一条失败日志。台账跟着落定，否则它会一直挂在「进行中」。 */
+  const reject = (refusal: ExchangeRefusal, resolution: ExchangeResolution) => {
+    live.update(resolution)
+    live.settle('failed', 'request.rejected', 'error', { errorCode: refusal.errorCode, httpStatus: refusal.statusCode })
+    return rejectExchange(res, { ...identity, ...resolution, refusal })
+  }
   /** 客户端中途断开：没有响应可写，只记一条已取消。 */
-  const abort = (resolution: ExchangeResolution) => recordAbortedExchange({ ...identity, ...resolution })
+  const abort = (resolution: ExchangeResolution) => {
+    live.update(resolution)
+    live.settle('cancelled', 'request.aborted', 'warn')
+    return recordAbortedExchange({ ...identity, ...resolution })
+  }
 
   // 入口匹配一次，同时定下协议、接口与封装描述；后面的模型读写与流式判定都问这个结果。
   const endpoint = matchProtocolEndpoint(method, path)
@@ -170,6 +183,9 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   const logicalModelId = plan.logicalModelId
+  // 路由结论落进台账：这一步之后界面才谈得上「实时看见路由到了谁、按什么顺序试」。
+  live.resolveRoute({ logicalModelId, clientProtocol: route.protocol, transport: route.transport, candidates: plan.targets })
+  live.setPhase('connecting')
   const controller = new AbortController()
   req.once('aborted', () => controller.abort())
   res.once('close', () => {
@@ -190,7 +206,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   })
 
   console.debug(`[proxy] execution started requestId=${requestId} logicalModelId=${logicalModelId} targets=${plan.targets.length}`)
-  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), hooks, origin: 'client' })
+  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), hooks, origin: 'client', live })
 }
 
 /**

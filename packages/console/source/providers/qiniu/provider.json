@@ -2,10 +2,13 @@
   "key": "qiniu",
   "name": "七牛云",
   "family": "qiniu",
-  "aliases": ["qiniu", "七牛", "七牛云", "modelink", "qnaigc"],
+  "aliases": ["qiniu", "七牛", "七牛云", "qnaigc"],
   "color": "#00bcd4",
+  "order": 9999,
+  "websiteUrl": "https://www.qiniu.com",
   "endpoints": {
-    "openai-completions": "https://api.qnaigc.com/v1/chat/completions",
-    "anthropic-messages": "https://api.qnaigc.com/v1/messages"
+    "openai-completions": "https://xapi.qnaigc.com/v1/chat/completions",
+    "anthropic-messages": "https://xapi.qnaigc.com/v1/messages",
+    "openai-responses": "https://xapi.qnaigc.com/v1/responses"
   }
 }

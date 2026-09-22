@@ -43,22 +43,25 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "default",
-  // 这里不再写 size 的参数默认值：写了会盖掉 cva 的 defaultVariants，
-  // 于是所有未指定尺寸的按钮都退回 h-7，和 h-8 的 Input / Select 对不齐。
-  size,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
+type ButtonProps = React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
-  }) {
+  }
+
+/**
+ * 必须 `forwardRef`：Radix 的 `asChild` 触发器（`DropdownMenuTrigger` 等）要把 ref
+ * 落到真实 DOM 上才拿得到浮层锚点。普通函数组件在 React 18 下接不住 ref，
+ * 锚点为空时浮层会被摆到视口外（`translate(0, -200%)`），看起来就是「点了没反应」。
+ */
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(params, ref) {
+  // size 不写参数默认值：写了会盖掉 cva 的 defaultVariants，
+  // 于是所有未指定尺寸的按钮都退回 h-7，和 h-8 的 Input / Select 对不齐。
+  const { className, variant = "default", size, asChild = false, ...props } = params
   const Comp = asChild ? Slot.Root : "button"
 
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       data-variant={variant}
       data-size={size}
@@ -66,6 +69,6 @@ function Button({
       {...props}
     />
   )
-}
+})
 
 export { Button, buttonVariants }

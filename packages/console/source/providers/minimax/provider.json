@@ -4,6 +4,8 @@
   "family": "minimax",
   "aliases": ["mini-max", "mini max"],
   "color": "#30c4a2",
+  "order": 55,
+  "websiteUrl": "https://www.minimaxi.com",
   "endpoints": {
     "openai-completions": "https://api.minimax.cn/v1/chat/completions"
   }

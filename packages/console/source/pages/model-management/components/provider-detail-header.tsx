@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import { useTranslation } from '@/i18n/provider'
 import { routePaths } from '@/routes'
 import { ProviderIcon } from './provider-icon'
+import { ProviderWebsiteLink } from './provider-website-link'
 import { findPresetByName } from '../lib/provider-presets'
 import type { Provider } from '@common/schemas'
 
@@ -20,7 +21,8 @@ interface ProviderDetailHeaderProps {
 export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
   const { provider, onToggleProviderEnabled, onEditProvider, onExportProvider, onRemoveProvider } = props
   const t = useTranslation()
-  const iconColor = findPresetByName(provider.name)?.color
+  const preset = findPresetByName(provider.name)
+  const iconColor = preset?.color
 
   return (
     <CardHeader className="flex-row justify-between gap-3 pb-2">
@@ -34,8 +36,12 @@ export function ProviderDetailHeader(props: ProviderDetailHeaderProps) {
         >
           <ProviderIcon name={provider.name} size={27} />
         </div>
-        <div>
-          <CardTitle>{provider.name}</CardTitle>
+        <div className="min-w-0">
+          {/* 官网跟着标题走：它是「这家厂商是谁」的一部分，不是对这家供应商的操作，所以不进右侧按钮组。 */}
+          <div className="flex min-w-0 items-center gap-2">
+            <CardTitle className="truncate">{provider.name}</CardTitle>
+            <ProviderWebsiteLink url={preset?.websiteUrl} />
+          </div>
           <CardDescription className="mt-1">
             {t('providers.detail.description')}
           </CardDescription>

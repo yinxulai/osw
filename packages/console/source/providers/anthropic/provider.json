@@ -4,6 +4,8 @@
   "family": "anthropic",
   "aliases": ["claude", "sonnet", "haiku", "opus"],
   "color": "#d97757",
+  "order": 95,
+  "websiteUrl": "https://www.anthropic.com",
   "endpoints": {
     "anthropic-messages": "https://api.anthropic.com/v1/messages"
   }

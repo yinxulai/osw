@@ -4,6 +4,8 @@
   "family": "openai",
   "aliases": ["gpt", "chatgpt", "azure-openai", "azure openai"],
   "color": "#10a37f",
+  "order": 100,
+  "websiteUrl": "https://openai.com",
   "endpoints": {
     "openai-completions": "https://api.openai.com/v1/chat/completions",
     "openai-responses": "https://api.openai.com/v1/responses"

@@ -1,7 +1,6 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Info } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { InfoHint } from '@/components/info-hint'
 import { cn } from '@/lib/utils'
 
 export interface MetricItem {
@@ -28,19 +27,7 @@ export function MetricGrid(props: MetricGridProps) {
           <div className="mb-1 flex items-center gap-1.5 system-xs-regular text-text-tertiary">
             {item.Icon && <item.Icon size={13} aria-hidden />}
             {item.label}
-            {item.info && (
-              <Tooltip>
-                {/* 图标是 16px 的方框、与这一行行高同高，加进来不会把标签行撞高；
-                    它不是内容，用最浅的一档，浮入才变深。 */}
-                <TooltipTrigger
-                  className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] text-text-quaternary outline-none transition-colors hover:text-text-secondary focus-visible:text-text-secondary focus-visible:ring-2 focus-visible:ring-state-accent-solid"
-                  aria-label={item.info}
-                >
-                  <Info size={12} aria-hidden />
-                </TooltipTrigger>
-                <TooltipContent>{item.info}</TooltipContent>
-              </Tooltip>
-            )}
+            {item.info && <InfoHint text={item.info} />}
           </div>
           <div className="system-xl-semibold tabular-nums text-text-primary">{item.value}</div>
         </div>

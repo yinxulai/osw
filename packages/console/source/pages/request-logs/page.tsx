@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -12,13 +11,7 @@ import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
   const t = useTranslation()
-  const { logs, total, providers, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
-
-  const providerOptions = useMemo(() => {
-    return providers
-      .map(p => ({ id: p.id, name: p.name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [providers])
+  const { rows, total, providerOptions, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -44,6 +37,7 @@ export function RequestLogsPage() {
         }
       />
       <PageContent>
+        {/* 进行中的请求就在下面这张表里：同一张表先说「现在」，再说「过去」。 */}
         <RequestLogsFilters
           filter={filter}
           providerOptions={providerOptions}
@@ -52,7 +46,7 @@ export function RequestLogsPage() {
           applyFilter={setFilter}
         />
         <RequestLogsTable
-          logs={logs}
+          rows={rows}
           loading={loading}
           error={error}
           filtered={filtered}

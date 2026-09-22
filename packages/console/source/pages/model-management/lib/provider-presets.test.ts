@@ -18,4 +18,18 @@ describe('provider presets', () => {
     expect(suggestions.some(preset => preset.name === 'OpenAI')).toBe(false)
     expect(suggestions.some(preset => preset.name === 'Anthropic')).toBe(true)
   })
+
+  it('orders built-in providers by descending order weight', () => {
+    const suggestions = getBuiltInProviderSuggestions([])
+    const orders = suggestions.map(preset => preset.order)
+    expect(orders).toEqual([...orders].sort((left, right) => right - left))
+    // 权重是逐个手填的：重复值不会报错（排序会按 key 兜底），但那是漏改的痕迹。
+    expect(new Set(orders).size).toBe(orders.length)
+  })
+
+  it('gives every built-in provider an https official website', () => {
+    for (const preset of getBuiltInProviderSuggestions([])) {
+      expect(preset.websiteUrl).toMatch(/^https:\/\/[^/]+\.[^/]+$/)
+    }
+  })
 })

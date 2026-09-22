@@ -9,6 +9,15 @@ export interface ProviderDefinition {
   aliases?: string[]
   color: string
   fallbackKey?: string
+  /**
+   * 展示权重：**数值大的排前面**。
+   *
+   * 只在内置厂商之间比较（预设快选、内置建议列表的顺序都由它决定）。
+   * 用户已添加的供应商顺序不属于这里——那是侧栏拖拽维护的本地顺序。
+   */
+  order: number
+  /** 厂商官网。给「去官网申请 Key / 看文档」这类跳转用；本地服务（Ollama）指向自己的官网。 */
+  websiteUrl?: string
   endpoints: Partial<Record<Protocol, string>>
   iconUrls: Record<ProviderIconTheme, string>
 }
@@ -57,7 +66,12 @@ const providerLegacyIconsByKey = Object.fromEntries(
 )
 
 export const PROVIDER_DEFINITIONS: ProviderDefinition[] = Object.keys(providerConfigsByKey)
-  .sort((left, right) => left.localeCompare(right))
+  // 顺序由 provider.json 的 `order` 决定（大的在前），同权重按 key 兜底，保证排序稳定。
+  // 不再按 key 字母序：那等于把厂商的曝光顺序交给目录名的拼写。
+  .sort((left, right) => {
+    const byOrder = (providerConfigsByKey[right]?.order ?? 0) - (providerConfigsByKey[left]?.order ?? 0)
+    return byOrder !== 0 ? byOrder : left.localeCompare(right)
+  })
   .map((key) => {
     const config = providerConfigsByKey[key]
     const lightIconUrl = providerLightIconsByKey[key] ?? providerLegacyIconsByKey[key]

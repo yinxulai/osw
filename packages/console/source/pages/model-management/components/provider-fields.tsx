@@ -2,6 +2,8 @@ import { KeyRound } from 'lucide-react'
 import { FormField } from '@/components/form-kit'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from '@/i18n/provider'
+import { ProviderWebsiteLink } from './provider-website-link'
+import { findPresetByName } from '../lib/provider-presets'
 
 interface ProviderFieldsProps {
   editingProviderId: string | null
@@ -16,10 +18,21 @@ interface ProviderFieldsProps {
 export function ProviderFields(props: ProviderFieldsProps) {
   const { editingProviderId, providerName, apiKey, timeout, setProviderName, setApiKey, setTimeout } = props
   const t = useTranslation()
+  // 名字能对上内置厂商时才给出官网：填 Key 前后最需要的就是「去哪家申请」这个入口。
+  const preset = findPresetByName(providerName)
 
   return (
     <div className="grid gap-4">
-      <FormField label={t('providers.fields.name')} htmlFor="provider-name">
+      <FormField
+        label={t('providers.fields.name')}
+        htmlFor="provider-name"
+        hint={preset?.websiteUrl ? (
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1">
+            {t('providers.fields.websiteHint')}
+            <ProviderWebsiteLink url={preset.websiteUrl} />
+          </span>
+        ) : undefined}
+      >
         <Input
           id="provider-name"
           value={providerName}

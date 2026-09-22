@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Protocol } from '@common/schemas'
+import { tokensPerSecondFromTotals } from '@common/metrics'
 import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { createProvider, createProviderEndpoint } from '@server/database/provider-store'
@@ -24,15 +25,29 @@ interface BufferedResponseLike {
   destroy: (error: Error) => void
 }
 
-let mockUpstreamHandler: ((response: BufferedResponseLike) => void) | null = null
-
 interface ExecuteProxyRequestInput {
+  context: { transport: string; headers: IncomingHttpHeaders }
   response: BufferedResponseLike
 }
 
+/** 上游替身。允许异步：速度诊断的分母是耗时，秒回的替身量不出速度。 */
+type MockUpstream = (response: BufferedResponseLike) => void | Promise<void>
+
+let mockUpstreamHandler: MockUpstream | null = null
+
+/**
+ * 传输形态是「诊断请求怎么写」的一部分：连通性走整包、流式与速度走分块，
+ * 这条断言只能从执行器入口看，替身把入口的参数留下来。
+ */
+const { reported, executeInputs } = vi.hoisted(() => ({
+  reported: [] as TelemetryEventInput[],
+  executeInputs: [] as ExecuteProxyRequestInput[],
+}))
+
 vi.mock('../proxy/execution/attempt-executor', () => ({
   executeProxyRequest: vi.fn(async (input: ExecuteProxyRequestInput) => {
-    mockUpstreamHandler?.(input.response)
+    executeInputs.push(input)
+    await mockUpstreamHandler?.(input.response)
   }),
 }))
 
@@ -40,7 +55,6 @@ vi.mock('../proxy/execution/attempt-executor', () => ({
  * 「用户点了一次测试」是产品行为，粒度是**一次测试**（里面可能包含好几个模型）。
  * 中途取消的不算：用户没看到结果，我也不能假装他看到了。
  */
-const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
 
 vi.mock('@server/telemetry', () => ({
   reportTelemetryEvent: (event: TelemetryEventInput) => {
@@ -55,6 +69,7 @@ beforeEach(async () => {
   await initDatabases(temporaryDirectory)
   mockUpstreamHandler = null
   reported.length = 0
+  executeInputs.length = 0
 })
 
 afterEach(async () => {
@@ -111,6 +126,18 @@ function jsonBody(value: unknown) {
     response.end()
   }
 }
+
+/** 上游以 SSE 逐帧回——流式诊断唯一合格的形态。 */
+function sseBody(...frames: string[]) {
+  return (response: BufferedResponseLike) => {
+    response.start(200, { 'content-type': 'text/event-stream' })
+    for (const frame of frames) response.write(`data: ${frame}\n\n`)
+    response.end()
+  }
+}
+
+const SSE_CONTENT = '{"choices":[{"delta":{"content":"1 "}}]}'
+const SSE_USAGE = '{"choices":[],"usage":{"prompt_tokens":20,"completion_tokens":400}}'
 
 function failure(statusCode: number, body: string) {
   return (response: BufferedResponseLike) => {
@@ -322,6 +349,99 @@ describe('model test run route', () => {
     const response = mockResponse({ writableEnded: true })
     await run({ protocol: 'openai-completions' }, response)
 
+    expect(response.end).not.toHaveBeenCalled()
+  })
+})
+
+describe('model test run route — 诊断模式', () => {
+  it('不给模式时按连通性跑：整包形态，也不报首字与速度', async () => {
+    await seedModel('default-mode', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    mockUpstreamHandler = jsonBody({ usage: { prompt_tokens: 1, completion_tokens: 2 } })
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions' }, response)
+
+    expect(executeInputs[0].context.transport).toBe('http')
+    expect(executeInputs[0].context.headers.accept).toBe('application/json')
+    expect(results(response)[0]).toMatchObject({
+      mode: 'connectivity',
+      success: true,
+      ttftMilliseconds: null,
+      tokensPerSecond: null,
+    })
+  })
+
+  it('流式诊断走分块形态，并要求上游按 SSE 回', async () => {
+    await seedModel('stream', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    // 起始帧只报角色：它不算首字，所以首字只能由后面那帧内容决定。
+    mockUpstreamHandler = sseBody('{"choices":[{"delta":{"role":"assistant"}}]}', SSE_CONTENT, SSE_USAGE)
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', mode: 'streaming' }, response)
+
+    expect(executeInputs[0].context.transport).toBe('http-stream')
+    expect(executeInputs[0].context.headers.accept).toBe('text/event-stream')
+    expect(results(response)[0]).toMatchObject({
+      mode: 'streaming',
+      success: true,
+      inputTokens: 20,
+      outputTokens: 400,
+    })
+    expect(typeof results(response)[0].ttftMilliseconds).toBe('number')
+    // 流式诊断不量速度：那是速度诊断的事，模式之间不能互相冒充。
+    expect(results(response)[0].tokensPerSecond).toBeNull()
+    expect(reported).toEqual([{ name: 'provider_tested', result: 'success' }])
+  })
+
+  it('上游没按 SSE 回时首字是 null，而不是 0', async () => {
+    await seedModel('buffered-stream', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    mockUpstreamHandler = jsonBody({ choices: [{ message: { content: 'Hi' } }] })
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', mode: 'streaming' }, response)
+
+    // 整包正文里解不出任何一帧，连用量也读不到——界面只能显示「不知道」。
+    expect(results(response)[0]).toMatchObject({ ttftMilliseconds: null, inputTokens: null, outputTokens: null })
+  })
+
+  it('速度诊断在流式用量上算出出字速度', async () => {
+    await seedModel('speed', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    mockUpstreamHandler = async response => {
+      // 分母是这次尝试的耗时：替身秒回的话耗时为 0，速度就成了无意义的数。
+      await new Promise(resolve => setTimeout(resolve, 5))
+      sseBody(SSE_CONTENT, SSE_USAGE)(response)
+    }
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', mode: 'speed' }, response)
+
+    const [result] = results(response)
+    const durationMilliseconds = result.durationMilliseconds as number
+    expect(result).toMatchObject({ mode: 'speed', success: true, outputTokens: 400 })
+    expect(typeof result.ttftMilliseconds).toBe('number')
+    expect(durationMilliseconds).toBeGreaterThan(0)
+    expect(result.tokensPerSecond as number).toBeGreaterThan(0)
+    // 与观测页同一口径：输出 Token 除以整次尝试耗时（含首字），不是除以「出字那段时间」，
+    // 也不是除以首字之后的耗时——换了分母，同一个渠道在诊断面板和观测页上就是两个数。
+    expect(result.tokensPerSecond).toBe(tokensPerSecondFromTotals(400, durationMilliseconds))
+  })
+
+  it('速度诊断拿不到输出 Token 时不编一个速度出来', async () => {
+    await seedModel('no-usage', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    mockUpstreamHandler = async response => {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      sseBody(SSE_CONTENT, '{"choices":[]}')(response)
+    }
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', mode: 'speed' }, response)
+
+    expect(results(response)[0]).toMatchObject({ success: true, outputTokens: null, tokensPerSecond: null })
+  })
+
+  it('未知模式在查模型之前就被拒掉', async () => {
+    const response = mockResponse()
+    await expect(run({ protocol: 'openai-completions', mode: 'turbo' }, response)).rejects.toThrow()
     expect(response.end).not.toHaveBeenCalled()
   })
 })

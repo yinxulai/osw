@@ -1,4 +1,4 @@
-import type { Protocol } from '@common/schemas'
+import type { ModelTestMode, Protocol } from '@common/schemas'
 import type { TranslateParams } from '@common/i18n'
 import { request } from './client'
 
@@ -7,6 +7,7 @@ export interface ModelTestResult {
   modelName: string
   providerId: string
   providerName: string
+  mode: ModelTestMode
   success: boolean
   statusCode?: number
   errorMessage?: string
@@ -14,14 +15,16 @@ export interface ModelTestResult {
   inputTokens?: number | null
   outputTokens?: number | null
   durationMilliseconds: number
+  ttftMilliseconds?: number | null
+  tokensPerSecond?: number | null
 }
 
 export interface ModelTestFilters { providerIds?: string[]; modelIds?: string[] }
 
 export const modelTestApi = {
-  run: (protocol: Protocol, filters: ModelTestFilters = {}, signal?: AbortSignal) => request<{ results: ModelTestResult[] }>(
+  run: (protocol: Protocol, mode: ModelTestMode, filters: ModelTestFilters = {}, signal?: AbortSignal) => request<{ results: ModelTestResult[] }>(
     '/model-test/run',
-    { protocol, ...filters },
+    { protocol, mode, ...filters },
     { signal },
   ),
 }

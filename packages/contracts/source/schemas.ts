@@ -12,6 +12,24 @@ export const ProtocolSchema = z.enum([
 export type Protocol = z.infer<typeof ProtocolSchema>
 
 /**
+ * 渠道诊断要回答哪个问题。
+ *
+ * 三种模式问的是同一件事的不同侧面，所以它们是**互斥的一次运行**，不是三个页面：
+ * - `connectivity`：这条链路通不通（等价于一次最小请求打穿到上游并拿到 2xx）；
+ * - `streaming`：上游**真的**按 SSE 逐帧回吗——形态不符（回整包）在诊断里就是失败，
+ *   而不是被悄悄当成「通」；
+ * - `speed`：首字节等多久、出字多快。它必须走流式：整包响应里没有「首字节」这个时刻，
+ *   出字速度也无从谈起。
+ *
+ * 词表放在 `@common` 的理由与 {@link TransportKindSchema} 相同：管理端与界面必须共用同一套，
+ * 各写一份迟早漂移。
+ */
+export const ModelTestModeSchema = z.enum(['connectivity', 'streaming', 'speed'])
+export type ModelTestMode = z.infer<typeof ModelTestModeSchema>
+/** 界面要按固定顺序列出这三种模式；列表与枚举同源，避免两处各写一份顺序。 */
+export const ALL_MODEL_TEST_MODES: ModelTestMode[] = [...ModelTestModeSchema.options]
+
+/**
  * 传输：一次对话在线上长什么样。**全仓唯一的「形态」词。**
  *
  * 它把「用哪种连接」与「字节怎么回来」合成一句话说 —— 因为这两件事在协议上本来就是同一件
@@ -593,6 +611,178 @@ export const RequestLogBodiesSchema = z.object({
   attemptContents: z.array(AttemptContentSchema),
 })
 export type RequestLogBodies = z.infer<typeof RequestLogBodiesSchema>
+
+// ========== 进行中的请求（内存态，不落库） ==========
+//
+// 与 `RequestLogEntry` 的关系：日志行是**落库的结论**，一个请求只有等它结束才写完整；
+// 这一组描述的是**还没结束的那个请求现在是什么样**。因此它只存在于代理进程的内存里，
+// 请求一落定就被丢弃，不参与保留期、不进导出、也不进统计——那些口径一律以数据库为准。
+//
+// 唯一的用途是让界面在请求进行中就能看见：路由到了谁、数据流到哪一步、当前状态如何。
+
+/**
+ * 一次请求当前走到了哪一步。与 `status` 是两个维度：`status` 说结局，阶段说过程。
+ *
+ * 阶段划到什么粒度是**照着可观测的事实**定的，不是照着一厢情愿的流程图：凡是代理进程
+ * 拿不到打点的地方就不立阶段（例如「请求体正在写往 socket」在现有传输层里没有回调，
+ * 因此没有 `sending`）。反过来，`awaiting-upstream` 与 `awaiting-first-byte` 一定要分开——
+ * 上游回了 `200` 却迟迟不吐字，和上游根本还没回头，是两种完全不同的卡法，
+ * 界面上合成一句「等上游」就没法归因了。
+ */
+export const LiveRequestPhaseSchema = z.enum([
+  /** 正在识别接口、求解路由、规划候选。 */
+  'routing',
+  /** 候选已选定，正在建立上游连接、准备这次尝试要发出去的请求。 */
+  'connecting',
+  /** 请求已发出，等上游返回响应头。 */
+  'awaiting-upstream',
+  /** 上游已经回头（响应头到了），但正文的第一个字节还没来。 */
+  'awaiting-first-byte',
+  /** 正文来了，正在把字节交给客户端。 */
+  'streaming',
+  /** 已出结果，等待从内存里移除。 */
+  'settled',
+])
+export type LiveRequestPhase = z.infer<typeof LiveRequestPhaseSchema>
+
+/**
+ * 一次尝试此刻走到了哪一步。
+ *
+ * 与落库的尝试行不同，这里没有 `pending`：尝试行是在真正要连上游的那一刻才被创建的
+ * （见 `LiveRequestStore.startAttempt`），因此它的起点是 `connecting`，不存在「已排队」。
+ */
+export const LiveRequestAttemptStateSchema = z.enum(['connecting', 'awaiting-upstream', 'streaming', 'success', 'failed', 'cancelled'])
+export type LiveRequestAttemptState = z.infer<typeof LiveRequestAttemptStateSchema>
+
+export const LiveRequestEventLevelSchema = z.enum(['info', 'success', 'warn', 'error'])
+export type LiveRequestEventLevel = z.infer<typeof LiveRequestEventLevelSchema>
+
+/**
+ * 时间线上的一条事件。
+ *
+ * 「谁在什么时候发生了什么」在这里是**追加写**的：一次请求的事件序列只会变长，已经写下的
+ * 条目不会被改写（只会从头部裁掉最旧的几条）。界面每次轮询拿到的是整份快照，但因为是
+ * 追加写，「同一条事件前后两次读到不一样的文字」不会发生。
+ */
+export const LiveRequestEventSchema = z.object({
+  /** 事件发生时刻（epoch ms）。 */
+  at: z.number().int(),
+  /** 相对请求开始的毫秒偏移；界面直接用它排时间轴。 */
+  offsetMilliseconds: z.number().int().nonnegative(),
+  /** 机器可读的事件类型（如 `route.resolved`、`upstream.head`）。 */
+  kind: z.string(),
+  level: LiveRequestEventLevelSchema,
+  /** 补充事实，供界面按事件类型取值插值。 */
+  detail: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).nullable(),
+})
+export type LiveRequestEvent = z.infer<typeof LiveRequestEventSchema>
+
+/** 进行中的一次尝试。字段是落库尝试行的子集，只保留「此刻能看见」的那些。 */
+export const LiveRequestAttemptSchema = z.object({
+  index: z.number().int().nonnegative(),
+  providerId: z.string(),
+  providerName: z.string(),
+  providerModelId: z.string(),
+  providerModelName: z.string(),
+  endpointProtocol: ProtocolSchema,
+  url: z.string(),
+  state: LiveRequestAttemptStateSchema,
+  httpStatus: z.number().int().nullable(),
+  upstreamTransport: TransportKindSchema.nullable(),
+  /** 发往上游的请求体字节数。 */
+  requestBytes: z.number().int().nonnegative(),
+  /**
+   * 本次尝试命中的请求改写规则**名字**（按命中顺序，可能为空数组）；读不到名字时回落成 id。
+   *
+   * 落库那条路径存的是 id，界面拿 id 回来查名字（见 `AppliedRequestRewriteRule`）；
+   * 实时侧没有那份字典，而这一格要回答的是「刚才哪个修改器动过这个请求」——
+   * 名字是人写的、也是人读的，所以这里直接带名字。
+   */
+  requestRewriteRuleNames: z.array(z.string()),
+  /** 从上游收到的字节数。 */
+  upstreamBytes: z.number().int().nonnegative(),
+  /** 实际写给客户端的字节数（可能是转换产物）。 */
+  downstreamBytes: z.number().int().nonnegative(),
+  /** 上游分块数。整包响应为 `1`。 */
+  chunkCount: z.number().int().nonnegative(),
+  /**
+   * **最近一个**上游分块开头的预览，**原文照抄、不解析**；还没有分块时为 `null`。
+   *
+   * 只留最新的一条是刻意的：这里要回答的是「上游此刻在回什么」（正常 SSE、报错页、
+   * 一串二进制），不是「这一路都回了些什么」——后者属于正文，正文只在落库那边按需取回。
+   * 保留一串历史分块既不会让判断更准，又要求界面处理「列表在跳动」，还要在内存里多存一份正文。
+   *
+   * 长度上限由台账给定（前 80 个字符，超出部分以 `…` 收尾），所以它永远只是开头那一段，
+   * 不是正文的副本。不参与任何统计与落库。
+   */
+  chunkPreview: z.string().nullable(),
+  /** 首字节时延；还没出内容时为 `null`。 */
+  ttftMilliseconds: z.number().int().nonnegative().nullable(),
+  /**
+   * 进行中读到的用量；上游还没报时为 `null`。
+   *
+   * 输入侧上游通常在第一个事件就报完，输出侧则是一路累加，所以两个字段都可能比最终值小。
+   * 它们只用来让「正在进行」的行也有数字可看，落库后一律以 `RequestLogEntry` 为准。
+   */
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+  /**
+   * 与落库尝试行同名的字段；实时侧目前只写 `errorMessage`，因此读它只会得到 `null`。
+   * 界面不要依赖它——错误码需要等执行器把失败原因（`conclusion`）也补进来才有。
+   */
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  startedAt: z.number().int(),
+  endedAt: z.number().int().nullable(),
+})
+export type LiveRequestAttempt = z.infer<typeof LiveRequestAttemptSchema>
+
+/** 规划出的一个候选；顺序即优先级。 */
+export const LiveRequestCandidateSchema = z.object({
+  providerId: z.string(),
+  providerName: z.string(),
+  providerModelId: z.string(),
+  providerModelName: z.string(),
+})
+export type LiveRequestCandidate = z.infer<typeof LiveRequestCandidateSchema>
+
+/** 一次进行中的请求此刻的完整快照。 */
+export const LiveRequestSchema = z.object({
+  id: z.string().startsWith('req_'),
+  /** 请求级结局；进行中恒为 `pending`。 */
+  status: RequestStatusSchema,
+  phase: LiveRequestPhaseSchema,
+  logicalModelId: z.string().nullable(),
+  clientProtocol: ProtocolSchema.nullable(),
+  transport: TransportKindSchema,
+  method: z.string(),
+  path: z.string(),
+  startedAt: z.number().int(),
+  /** 最近一次写入的时刻（请求级）；`LiveRequestStore.prune` 用它做保留期兼底。 */
+  updatedAt: z.number().int(),
+  endedAt: z.number().int().nullable(),
+  /** 尚未规划时为 `[]`，不是「没有候选」。 */
+  candidates: z.array(LiveRequestCandidateSchema),
+  attempts: z.array(LiveRequestAttemptSchema),
+  events: z.array(LiveRequestEventSchema),
+})
+export type LiveRequest = z.infer<typeof LiveRequestSchema>
+
+/**
+ * 一次「进行中的请求」的全量快照。
+ *
+ * 这个形状有两处用途，且刻意共用同一份定义：拉取式（`POST /api/request-log/live` 一次性返回）
+ * 与推送式（`POST /api/request-log/live/stream` 按行推 NDJSON）——推送流里的每一行就是一份
+ * 新的完整快照。共用形状意味着界面只有一套解析路径，也意味着「拉一次」和「订阅一段」
+ * 拿到的东西不会漂移。
+ *
+ * 同理，这里**不做增量**：进行中的请求是有限的一小撮（进行中的 + 刚结束的若干条），
+ * 全量重发比重放增量更不容易出错，而增量协议必须自己承担乱序、丢帧与重连后的对齐问题。
+ */
+export const LiveRequestSnapshotSchema = z.object({
+  requests: z.array(LiveRequestSchema),
+})
+export type LiveRequestSnapshot = z.infer<typeof LiveRequestSnapshotSchema>
 
 // ========== API 响应结构 ==========
 

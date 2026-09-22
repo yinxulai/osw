@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabases, initDatabases } from '../database'
-import { buildTestBody, modelTestRoutes, readUsage } from './routes/diagnostics/model-test'
+import { buildTestBody, modelTestRoutes, readUsage, StreamProbeResponse } from './routes/diagnostics/model-test'
 import { mockResponse } from './test-support'
 
 let temporaryDirectory: string
@@ -72,6 +72,36 @@ describe('model test payload', () => {
       input: [{ role: 'user', content: 'Hi' }],
     })
   })
+
+  it('不给模式时就是连通性：老的调用方写法一字不变', () => {
+    const bare = buildTestBody('openai-completions', 'gpt', false)
+    expect(buildTestBody('openai-completions', 'gpt', false, 'connectivity')).toBe(bare)
+    expect(JSON.parse(bare)).not.toHaveProperty('stream')
+  })
+
+  it('流式诊断在三种协议下都声明 stream: true', () => {
+    // 只靠 accept 头不够：三种协议都只认请求体里的 `stream`。
+    expect(JSON.parse(buildTestBody('openai-completions', 'gpt', false, 'streaming'))).toMatchObject({ stream: true })
+    expect(JSON.parse(buildTestBody('openai-responses', 'gpt', false, 'streaming'))).toMatchObject({ stream: true })
+    expect(JSON.parse(buildTestBody('anthropic-messages', 'claude', false, 'streaming'))).toMatchObject({ stream: true })
+  })
+
+  it('速度诊断同样流式，并且换成一段够长的提示词', () => {
+    const body = JSON.parse(buildTestBody('openai-completions', 'gpt', false, 'speed')) as {
+      stream?: boolean
+      messages: { content: string }[]
+    }
+    // 一句话的回答里，出字快慢全被首字节和连接开销盖住，所以速度诊断必须换提示词。
+    expect(body.stream).toBe(true)
+    expect(body.messages[0].content).not.toBe('Hi')
+    expect(body.messages[0].content.length).toBeGreaterThan(20)
+  })
+
+  it('直连 anthropic 测速度时把 max_tokens 放大，走转换时仍然不加', () => {
+    // 数到 200 会被 16 个 Token 掐断，测出来的就不是「出字速度」而是「上限速度」。
+    expect(JSON.parse(buildTestBody('anthropic-messages', 'claude', false, 'speed')).max_tokens).toBeGreaterThan(16)
+    expect(JSON.parse(buildTestBody('anthropic-messages', 'gpt', true, 'speed'))).not.toHaveProperty('max_tokens')
+  })
 })
 
 describe('model test usage parsing', () => {
@@ -90,5 +120,41 @@ describe('model test usage parsing', () => {
     expect(readUsage('{"choices":[]}')).toEqual({ inputTokens: null, outputTokens: null })
     expect(readUsage('not json')).toEqual({ inputTokens: null, outputTokens: null })
     expect(readUsage('{"usage":{"prompt_tokens":"12"}}')).toEqual({ inputTokens: null, outputTokens: null })
+  })
+})
+
+describe('model test stream probe', () => {
+  it('首字认的是真实内容，不是第一帧', () => {
+    const startedAt = Date.now()
+    const probe = new StreamProbeResponse()
+    // 起始帧只报角色、收尾帧只报用量，都不是用户看到的字；按字节打点会让首字虚低。
+    probe.write('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n')
+    expect(probe.firstOutputElapsed(startedAt)).toBeNull()
+    probe.write('data: {"choices":[{"delta":{"content":"1"}}]}\n\n')
+    expect(probe.firstOutputElapsed(startedAt)).not.toBeNull()
+  })
+
+  it('首字只记一次：后面每个字都往后推就变成「末字」了', () => {
+    const startedAt = Date.now()
+    const probe = new StreamProbeResponse()
+    probe.write('data: {"choices":[{"delta":{"content":"1"}}]}\n\n')
+    const first = probe.firstOutputElapsed(startedAt)
+    probe.write('data: {"choices":[{"delta":{"content":"2"}}]}\n\n')
+    expect(probe.firstOutputElapsed(startedAt)).toBe(first)
+  })
+
+  it('上游一个内容都没给时首字是 null，不是 0', () => {
+    const probe = new StreamProbeResponse()
+    probe.write('data: [DONE]\n\n')
+    expect(probe.firstOutputElapsed(Date.now())).toBeNull()
+    expect(probe.usage()).toEqual({ inputTokens: null, outputTokens: null })
+  })
+
+  it('用量从流里读，并且认得被切开的半截帧', () => {
+    const probe = new StreamProbeResponse()
+    probe.write('data: {"usage":{"prompt_tokens":12,')
+    probe.write('"completion_tokens":7}}\n\n')
+    probe.write('data: [DONE]\n\n')
+    expect(probe.usage()).toEqual({ inputTokens: 12, outputTokens: 7 })
   })
 })

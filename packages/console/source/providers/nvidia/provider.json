@@ -4,6 +4,8 @@
   "family": "nvidia",
   "aliases": ["nemotron", "nvidia-nims"],
   "color": "#76b900",
+  "order": 45,
+  "websiteUrl": "https://build.nvidia.com",
   "endpoints": {
     "openai-completions": "https://integrate.api.nvidia.com/v1/chat/completions"
   }

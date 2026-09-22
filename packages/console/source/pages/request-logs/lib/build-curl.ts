@@ -19,7 +19,8 @@ const DROPPED_HEADERS = new Set([
   'expect',
 ])
 
-export interface CurlRequestInput {
+/** 拼一份 cURL 命令需要的输入。 */
+interface CurlRequestInput {
   /** 完整请求地址（含 scheme 与端口），由调用方拼好。 */
   url: string
   method: string

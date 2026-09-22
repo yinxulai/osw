@@ -4,6 +4,8 @@
   "family": "deepseek",
   "aliases": ["deepseek-v3", "deepseek-r1"],
   "color": "#4f9cff",
+  "order": 85,
+  "websiteUrl": "https://www.deepseek.com",
   "endpoints": {
     "openai-completions": "https://api.deepseek.com/chat/completions"
   }

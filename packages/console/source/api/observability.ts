@@ -1,4 +1,4 @@
-import type { AnalyticsRange, AnalyticsSummary, LogEntry, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import type { AnalyticsRange, AnalyticsSummary, LiveRequestSnapshot, LogEntry, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
 export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; query?: string }
@@ -21,6 +21,8 @@ export const logsApi = {
 
 export const requestLogApi = {
   list: (params: ListRequestLogsParams = {}) => request<{ logs: RequestLogEntry[]; total: number }>('/request-log/list', params),
+  /** 进行中的请求：进程内存里的快照，不落库也不分页。 */
+  live: () => request<LiveRequestSnapshot>('/request-log/live', {}),
   prune: (params: PruneRequestLogsParams) => request<{ deletedLogs: number; deletedContents: number }>('/request-log/prune', params),
   detail: (id: string) => request<RequestLogDetail>('/request-log/detail', { id }),
   bodies: (id: string) => request<RequestLogBodies>('/request-log/bodies', { id }),

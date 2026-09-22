@@ -52,6 +52,29 @@ function buildHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' }
 }
 
+/**
+ * 打开一条管理 API 的推送流。
+ *
+ * 与 `request()` 的唯一区别是它**不读完整份响应**：管理服务会一直往里写，直到任一侧断开。
+ * 除这一点之外两者完全同路——同一个基地址、同一套请求头、同一个 `POST` 契约，
+ * 因此「只接 `/api/*` 的 `POST` + CORS 白名单」这条边界一条都没破。
+ *
+ * 非 2xx 的响应在这里就抛：把一张错误页当成流去逐行解析，只会在界面上留下一堆
+ * 莫名其妙的解析失败，而真正的原因（服务没起来、端点不存在）反而看不见了。
+ */
+export async function openStream(path: string, options: RequestOptions = {}): Promise<ReadableStream<Uint8Array>> {
+  const response = await fetch(`${resolveApiBase()}${path}`, {
+    method: 'POST',
+    headers: buildHeaders(),
+    body: JSON.stringify({}),
+    signal: options.signal,
+  })
+  if (!response.ok || response.body === null) {
+    throw new Error(`management service refused the stream (HTTP ${response.status})`)
+  }
+  return response.body
+}
+
 export async function request<T>(path: string, body: unknown = {}, options: RequestOptions = {}): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`${resolveApiBase()}${path}`, {

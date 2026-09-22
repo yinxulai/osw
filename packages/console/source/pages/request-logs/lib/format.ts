@@ -17,7 +17,7 @@ import type { AppTranslator } from '@/i18n/provider'
 export const PROTOCOL_LABEL: Record<string, string> = { ...PROTOCOL_DISPLAY_NAMES }
 
 /** 状态只存文案 key：同一枚徽标在两种界面语言下都要读得通。 */
-export const STATUS_LABEL_KEY: Record<string, UiCatalogKey> = {
+const STATUS_LABEL_KEY: Record<string, UiCatalogKey> = {
   pending: 'requestLogs.status.pending',
   success: 'requestLogs.status.success',
   failed: 'requestLogs.status.failed',
@@ -37,7 +37,7 @@ export function formatStatus(t: AppTranslator, status: string): string {
  * 「流式 / 非流式」是这根轴的常规叫法，比「增量 / 整包」少一层从字面到语义的翻译。
  * 加一个 `websocket` 只为让「声明了但没实现」在界面上也读得懂。
  */
-export const TRANSPORT_LABEL_KEY: Record<string, UiCatalogKey> = {
+const TRANSPORT_LABEL_KEY: Record<string, UiCatalogKey> = {
   'http': 'requestLogs.transport.http',
   'http-stream': 'requestLogs.transport.httpStream',
   websocket: 'requestLogs.transport.websocket',
@@ -59,6 +59,19 @@ export function formatNumber(n: number | null | undefined): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+/**
+ * 字节数。
+ *
+ * 与 `formatNumber` 的 `K`/`M` 不同：这里是**搬运量**，1KB = 1024 字节是读者的默认换算，
+ * 换成 1000 会让「下行 1.0 MB」和真实流量对不上。小数位只在需要时才给。
+ */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 /**

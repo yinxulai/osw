@@ -4,6 +4,8 @@
   "family": "google",
   "aliases": ["gemini", "vertex-ai", "vertex ai", "google-gemini"],
   "color": "#4285f4",
+  "order": 90,
+  "websiteUrl": "https://ai.google.dev",
   "endpoints": {
     "openai-completions": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
   }

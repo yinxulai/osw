@@ -4,6 +4,8 @@
   "family": "moonshot",
   "aliases": ["kimi", "moonshot-v1"],
   "color": "#8b5cf6",
+  "order": 70,
+  "websiteUrl": "https://www.moonshot.cn",
   "endpoints": {
     "openai-completions": "https://api.moonshot.cn/v1/chat/completions"
   }

@@ -10,7 +10,7 @@ export interface TextMatch {
   end: number
 }
 
-export interface HighlightSegment {
+interface HighlightSegment {
   text: string
   /** 命中在全局命中序列中的序号；普通文本为 `null`。 */
   matchIndex: number | null
@@ -49,7 +49,7 @@ function escapeRegExp(value: string): string {
  * 用正则而不是 `indexOf` + `toLowerCase`：某些字符转小写后长度会变（如 `İ`），
  * 那样得到的下标会和原串错位，切分高亮时就会截错文本。
  */
-export function findTextMatches(text: string, query: string): TextMatch[] {
+function findTextMatches(text: string, query: string): TextMatch[] {
   const needle = query.trim()
   if (!needle || !text) return []
 
@@ -62,7 +62,7 @@ export function findTextMatches(text: string, query: string): TextMatch[] {
 }
 
 /** 把一段正文按命中切成「普通段 + 命中段」，命中段带上全局序号。 */
-export function splitByMatches(text: string, matches: TextMatch[], matchIndexOffset: number): HighlightSegment[] {
+function splitByMatches(text: string, matches: TextMatch[], matchIndexOffset: number): HighlightSegment[] {
   const segments: HighlightSegment[] = []
   let cursor = 0
 

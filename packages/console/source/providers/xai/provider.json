@@ -4,6 +4,8 @@
   "family": "xai",
   "aliases": ["grok", "grok-2", "grok-3"],
   "color": "#000000",
+  "order": 75,
+  "websiteUrl": "https://x.ai",
   "fallbackKey": "openai",
   "endpoints": {
     "openai-completions": "https://api.x.ai/v1/chat/completions",

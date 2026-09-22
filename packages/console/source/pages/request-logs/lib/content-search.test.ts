@@ -1,44 +1,53 @@
 import { describe, expect, it } from 'vitest'
-import { findTextMatches, searchBlocks, splitByMatches } from './content-search'
+import { searchBlocks } from './content-search'
 
-describe('findTextMatches', () => {
+/**
+ * 只看一个块时，高亮分段就是把命中切开并按序编号本身。
+ * 切分与查找都是这个入口的内部实现，因此它们不单独导出，也就只能这样验。
+ */
+function segmentsOf(text: string, query: string) {
+  return searchBlocks([{ id: 'a', text }], query).highlights.get('a')?.segments ?? []
+}
+
+describe('searchBlocks', () => {
   it('finds every occurrence case-insensitively', () => {
-    expect(findTextMatches('Tool, tool, TOOL', 'tool')).toEqual([
-      { start: 0, end: 4 },
-      { start: 6, end: 10 },
-      { start: 12, end: 16 },
+    expect(segmentsOf('Tool, tool, TOOL', 'tool')).toEqual([
+      { text: 'Tool', matchIndex: 0 },
+      { text: ', ', matchIndex: null },
+      { text: 'tool', matchIndex: 1 },
+      { text: ', ', matchIndex: null },
+      { text: 'TOOL', matchIndex: 2 },
     ])
   })
 
   it('ignores empty queries and blocks', () => {
-    expect(findTextMatches('content', '   ')).toEqual([])
-    expect(findTextMatches('', 'content')).toEqual([])
+    expect(searchBlocks([{ id: 'a', text: 'content' }], '   ').highlights.size).toBe(0)
+    expect(segmentsOf('', 'content')).toEqual([])
   })
 
   it('treats the query as literal text rather than a pattern', () => {
-    expect(findTextMatches('a.c abc', 'a.c')).toEqual([{ start: 0, end: 3 }])
-  })
-})
-
-describe('splitByMatches', () => {
-  it('splits text around matches and numbers them globally', () => {
-    const text = 'aXbXc'
-
-    expect(splitByMatches(text, findTextMatches(text, 'x'), 2)).toEqual([
-      { text: 'a', matchIndex: null },
-      { text: 'X', matchIndex: 2 },
-      { text: 'b', matchIndex: null },
-      { text: 'X', matchIndex: 3 },
-      { text: 'c', matchIndex: null },
+    expect(segmentsOf('a.c abc', 'a.c')).toEqual([
+      { text: 'a.c', matchIndex: 0 },
+      { text: ' abc', matchIndex: null },
     ])
   })
 
-  it('keeps the text whole when there is no match', () => {
-    expect(splitByMatches('abc', [], 0)).toEqual([{ text: 'abc', matchIndex: null }])
-  })
-})
+  it('numbers matches continuously across the whole chain', () => {
+    const result = searchBlocks([
+      { id: 'a', text: 'aXbXc' },
+      { id: 'b', text: 'X' },
+    ], 'x')
 
-describe('searchBlocks', () => {
+    expect(result.highlights.get('a')?.segments).toEqual([
+      { text: 'a', matchIndex: null },
+      { text: 'X', matchIndex: 0 },
+      { text: 'b', matchIndex: null },
+      { text: 'X', matchIndex: 1 },
+      { text: 'c', matchIndex: null },
+    ])
+    expect(result.highlights.get('b')?.segments).toEqual([{ text: 'X', matchIndex: 2 }])
+    expect(result.matches).toEqual([{ sectionId: 'a' }, { sectionId: 'a' }, { sectionId: 'b' }])
+  })
   it('orders matches by block and keeps them across the whole chain', () => {
     const result = searchBlocks(
       [
@@ -66,5 +75,6 @@ describe('searchBlocks', () => {
 
     expect(result.matches).toEqual([])
     expect(result.highlights.size).toBe(0)
+    expect(segmentsOf('', 'model')).toEqual([])
   })
 })

@@ -22,6 +22,10 @@ export interface ProviderPreset {
   color: string
   /** 兜底图标键：如果当前主体缺少 icon，则回落到这个主体 */
   fallbackKey?: string
+  /** 展示权重：数值大的排前面（内置厂商之间比较，用户自建供应商的顺序由侧栏拖拽维护） */
+  order: number
+  /** 厂商官网，用于「去官网拿 Key / 看文档」 */
+  websiteUrl?: string
   /** 各协议默认完整接口地址 */
   endpoints: ProviderDefinition['endpoints']
 }

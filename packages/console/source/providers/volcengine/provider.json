@@ -4,6 +4,8 @@
   "family": "volcengine",
   "aliases": ["doubao", "豆包", "火山", "volc"],
   "color": "#ff7a00",
+  "order": 60,
+  "websiteUrl": "https://www.volcengine.com",
   "endpoints": {
     "openai-completions": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
     "openai-responses": "https://ark.cn-beijing.volces.com/api/v3/responses"

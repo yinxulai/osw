@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
+  ChevronDown,
   Circle,
   Cpu,
   FlaskConical,
@@ -15,14 +16,25 @@ import {
   TriangleAlert,
   XCircle,
 } from 'lucide-react'
-import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
+import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
+import { ALL_MODEL_TEST_MODES, type ModelTestMode, type Protocol, type Provider, type ProviderModelRoute } from '@common/schemas'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { CONVERTIBLE_PROTOCOLS, PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
 import { modelTestApi, type ModelTestResult } from '@/api/tools'
 import { InlineEmptyState } from '@/components/inline-empty-state'
 import { TableFrame, TableHeaderSurface, tableRowClass } from '@/components/table-primitives'
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import {
@@ -60,8 +72,22 @@ const PROTOCOL_LABELS: Record<Protocol, string> = { ...PROTOCOL_DISPLAY_NAMES }
 
 const TEST_CONCURRENCY = 3
 
-/** 结果表列宽模板：表头与数据行共用一份，避免两处列宽各改一半。 */
-const TASK_GRID_COLUMNS = 'md:grid-cols-[20px_minmax(150px,1.6fr)_minmax(92px,0.9fr)_60px_68px_minmax(84px,auto)]'
+/** 结果表列宽模板：表头与数据行共用一份，避免两处列宽各改一半。
+ *  首字与速度两列对所有模式都在：连通性只能填 `—`，但列数不跟着数据变——
+ *  同一张表在三种模式之间来回切时列宽就不该跳。 */
+const TASK_GRID_COLUMNS = 'md:grid-cols-[20px_minmax(140px,1.6fr)_minmax(88px,0.9fr)_56px_64px_60px_58px_minmax(84px,auto)]'
+
+const TEST_MODE_LABEL_KEYS: Record<ModelTestMode, UiCatalogKey> = {
+  connectivity: 'modelTest.mode.connectivity',
+  streaming: 'modelTest.mode.streaming',
+  speed: 'modelTest.mode.speed',
+}
+
+const TEST_MODE_HINT_KEYS: Record<ModelTestMode, UiCatalogKey> = {
+  connectivity: 'modelTest.mode.connectivityHint',
+  streaming: 'modelTest.mode.streamingHint',
+  speed: 'modelTest.mode.speedHint',
+}
 
 const TASK_STATUS_LABEL_KEYS: Record<TestTaskStatus, UiCatalogKey> = {
   queued: 'modelTest.status.queued',
@@ -116,7 +142,7 @@ function getProtocolButtonTitle(options: ProtocolButtonLabelOptions): string {
   return options.converted ? options.t('protocol.conversion.aria', { protocol: label }) : label
 }
 
-/** 响应列只放「HTTP 状态 + 输出 token」：耗时单独占一列，扫一眼就能横向比对。 */
+/** 响应列只放「HTTP 状态 + 输出 token」：耗时、首字与速度各自占一列，扫一眼就能横向比对。 */
 function getTaskResponseLabel(task: TestTask): string {
   if (!task.result) return '—'
   const status = task.result.statusCode ? `HTTP ${task.result.statusCode}` : '—'
@@ -125,7 +151,19 @@ function getTaskResponseLabel(task: TestTask): string {
 }
 
 function getTaskDurationLabel(task: TestTask): string {
-  return task.result ? `${task.result.durationMilliseconds}ms` : '—'
+  return task.result ? formatMilliseconds(task.result.durationMilliseconds) : '—'
+}
+
+/** 首字耗时只量得到流式：整包响应里没有「第一块」这个时刻，没量到就写 `—`，不编一个 0。 */
+function getTaskTtftLabel(task: TestTask): string {
+  return task.result ? formatMilliseconds(task.result.ttftMilliseconds) : '—'
+}
+
+/** 出字速度只有速度诊断会给：其余模式里分母是两个数减出来的，宁缺勿编。 */
+function getTaskSpeedLabel(task: TestTask): string {
+  if (!task.result) return '—'
+  const speed = formatOutputSpeed(task.result.tokensPerSecond)
+  return speed === '—' ? '—' : `${speed} t/s`
 }
 
 interface TaskStatusProps {
@@ -355,7 +393,9 @@ function TestTaskRow(props: TestTaskRowProps) {
         </span>
       </div>
       <div className={cn('system-2xs-medium', task.status === 'success' && 'text-text-success', task.status === 'failed' && 'text-text-destructive', task.status === 'running' && 'text-text-primary', task.status === 'cancelled' && 'text-text-tertiary')}>{t(TASK_STATUS_LABEL_KEYS[task.status])}</div>
+      <div className="font-mono system-2xs-regular tabular-nums text-text-tertiary md:text-right">{getTaskTtftLabel(task)}</div>
       <div className="font-mono system-2xs-regular tabular-nums text-text-tertiary md:text-right">{getTaskDurationLabel(task)}</div>
+      <div className="font-mono system-2xs-regular tabular-nums text-text-tertiary md:text-right">{getTaskSpeedLabel(task)}</div>
       <div className="font-mono system-2xs-regular tabular-nums text-text-tertiary md:text-right">{getTaskResponseLabel(task)}</div>
       {task.errorMessage && <div className="col-span-full wrap-break-word rounded-lg border border-module-border bg-destructive/8 px-2.5 py-2 font-mono system-2xs-regular leading-4 text-text-destructive md:ml-8">{task.errorMessage}</div>}
     </div>
@@ -387,6 +427,8 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<string>>(new Set())
   const [tasks, setTasks] = useState<TestTask[]>([])
   const [failedOnly, setFailedOnly] = useState(false)
+  /** 本轮诊断要问哪个问题。只影响「下一次开始」：已经有结论的行保留它自己跑的模式。 */
+  const [testMode, setTestMode] = useState<ModelTestMode>('connectivity')
   const [running, setRunning] = useState(false)
   const previousOpen = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -438,6 +480,9 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
     if (isOpening) {
       setTasks(current => (current.length === 0 ? current : []))
       setFailedOnly(false)
+      // 每次重新打开都从默认模式开始：上次点到「速度诊断」后关掉面板，
+      // 下次再进来时应该看到默认的连通性诊断，而不是一个没被注意到的长提示词诊断。
+      setTestMode('connectivity')
       setRunning(false)
     }
   }, [props.open, enabledModels, availableProviders])
@@ -460,6 +505,8 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
   }), [enabledModels, props.providers, selectedModelProtocols, selectedProviderIds])
 
   const hasResults = tasks.length > 0
+  /** 没有可测目标时「开始诊断」与右侧的模式箭头一起变灰：它是同一个控件的两半。 */
+  const startDisabled = plannedTasks.length === 0
   const successCount = tasks.filter(task => task.status === 'success').length
   const failureCount = tasks.filter(task => task.status === 'failed').length
   const cancelledCount = tasks.filter(task => task.status === 'cancelled').length
@@ -547,7 +594,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
         const task = pending[nextIndex++]
         setTasks(current => current.map(item => item.id === task.id ? { ...item, status: 'running' } : item))
         try {
-          const response = await modelTestApi.run(task.protocol, {
+          const response = await modelTestApi.run(task.protocol, testMode, {
             providerIds: [task.providerId],
             modelIds: [task.modelId],
           }, controller.signal)
@@ -665,9 +712,51 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                       <Square size={11} fill="currentColor" /> {t('modelTest.action.stop')}
                     </Button>
                   ) : (
-                    <Button size="sm" disabled={plannedTasks.length === 0} onClick={startTests}>
-                      <Play size={12} fill="currentColor" /> {t('modelTest.action.start')}
-                    </Button>
+                    /*
+                      分裂按钮：左半是「用当前模式开始」，右半那枚箭头展开模式本身。
+                      箭头紧贴在开始按钮右侧、与之同色同高，读起来是一个控件；
+                      单独拿出一枚圆角按钮会把「选模式」说成另一件事。
+                    */
+                    <ButtonGroup>
+                      <Button size="sm" disabled={startDisabled} onClick={startTests}>
+                        <Play size={12} fill="currentColor" /> {t('modelTest.action.start')}
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon-sm"
+                            disabled={startDisabled}
+                            aria-label={t('modelTest.mode.select', { mode: t(TEST_MODE_LABEL_KEYS[testMode]) })}
+                            title={t('modelTest.mode.select', { mode: t(TEST_MODE_LABEL_KEYS[testMode]) })}
+                          >
+                            <ChevronDown size={13} aria-hidden />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        {/* 浮层改成固定宽度：默认宽度跟随触发器（一枚 28px 的方块），两行文案会被挤成一列。 */}
+                        <DropdownMenuContent align="end" sideOffset={6} className="w-72 min-w-72">
+                          <DropdownMenuLabel>{t('modelTest.mode.label')}</DropdownMenuLabel>
+                          <DropdownMenuSeparator className="bg-components-panel-border" />
+                          <DropdownMenuRadioGroup
+                            value={testMode}
+                            onValueChange={value => {
+                              const next = ALL_MODEL_TEST_MODES.find(mode => mode === value)
+                              if (next) setTestMode(next)
+                            }}
+                          >
+                            {ALL_MODEL_TEST_MODES.map(mode => (
+                              <DropdownMenuRadioItem
+                                key={mode}
+                                value={mode}
+                                className="flex h-auto flex-col items-stretch gap-0.5 rounded-lg py-1.5 pl-2"
+                              >
+                                <span className="system-xs-medium text-text-primary">{t(TEST_MODE_LABEL_KEYS[mode])}</span>
+                                <span className="system-2xs-regular leading-4 text-text-tertiary">{t(TEST_MODE_HINT_KEYS[mode])}</span>
+                              </DropdownMenuRadioItem>
+                            ))}
+                          </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </ButtonGroup>
                   )}
                 </div>
               </div>
@@ -700,7 +789,9 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
                     <span>{t('modelTest.table.target')}</span>
                     <span>{t('modelTest.table.protocol')}</span>
                     <span>{t('modelTest.table.status')}</span>
+                    <span className="text-right">{t('modelTest.table.ttft')}</span>
                     <span className="text-right">{t('modelTest.table.duration')}</span>
+                    <span className="text-right">{t('modelTest.table.speed')}</span>
                     <span className="text-right">{t('modelTest.table.response')}</span>
                   </TableHeaderSurface>
                   {visibleTasks.map(task => <TestTaskRow key={task.id} task={task} />)}

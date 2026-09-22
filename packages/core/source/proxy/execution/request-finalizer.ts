@@ -14,6 +14,7 @@ import type { RequestContext } from '@server/proxy/request/request-context'
 import { reportTelemetryEvent } from '@server/telemetry'
 import { isClientRequestCancelled, LocalAttemptError, RecordedAttemptError, serializeLocalFailure } from './attempt-errors'
 import { formatTarget, healthFailureHints, recordHealthFailure, toRequestContentOutcome, type AttemptOutcome } from './attempt-outcome'
+import type { LiveRequestHandle } from '@server/proxy/observability/live-request-store'
 
 export interface RequestFinalizerOptions {
   context: RequestContext
@@ -25,6 +26,13 @@ export interface RequestFinalizerOptions {
   startedAt: number
   /** 见 `ProxyExecutionOptions.origin`：统计只把客户端请求算作「处理了一个任务」。 */
   origin: ExecutionOrigin
+  /**
+   * 进行中请求台账的写口。收尾是这次请求在**内存台账里**的最后一个动作：
+   * `finalizeRequestLog` 把事实落进数据库，`settle` 把它从「进行中」列表里拿下。
+   * 两者成对出现，不让任何一条分支只做一半——只落库不 settle 会在界面上留下永远
+   * 不会结束的请求，只 settle 不落库会把这次请求从记录里抹掉。
+   */
+  live?: LiveRequestHandle
 }
 
 /**
@@ -56,8 +64,13 @@ export interface RequestFinalizer {
 }
 
 export function createRequestFinalizer(options: RequestFinalizerOptions): RequestFinalizer {
-  const { context, targets, response, requestLogger, captureRequestContent, startedAt, origin } = options
+  const { context, targets, response, requestLogger, captureRequestContent, startedAt, origin, live } = options
   const { requestId, logicalModelId, clientProtocol: protocol } = context
+
+  /** 收尾：把这次请求移出「进行中」，并留下最后一条事件。 */
+  const settleLive = (status: 'success' | 'failed' | 'cancelled', kind: string, level: 'info' | 'success' | 'warn' | 'error', detail: Record<string, string | number | boolean>) => {
+    live?.settle(status, kind, level, detail)
+  }
 
   /**
    * 最后一个「上游自己回了非 2xx」的候选。
@@ -89,6 +102,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
         await requestLogger.finalizeRequestContent(toRequestContentOutcome(outcome))
         // 用量不在请求级收尾里写：它随着「服务该请求的那次尝试」一起落库。
         await requestLogger.finalizeRequestLog('success', startedAt)
+        settleLive('success', 'request.completed', 'success', { attempt: attemptIndex + 1, httpStatus: outcome.statusCode, durationMilliseconds: outcome.durationMilliseconds })
         // 本地任务量就在这里计：一次成功的转发就是一次被处理的任务，发一条、不带属性。
         // 内部执行不算任务：连接测试与工作流里的模型节点走的是同一条收尾，但它们不是
         // 「代理替客户端处理的一次请求」（见 `ExecutionOrigin`）。
@@ -103,6 +117,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
       )
       await requestLogger.finalizeRequestContent(toRequestContentOutcome(outcome))
       await requestLogger.finalizeRequestLog('failed', startedAt)
+      settleLive('failed', 'request.failed', 'error', { attempt: attemptIndex + 1, httpStatus: outcome.statusCode })
     },
 
     onFailover: async (target, outcome, attemptIndex) => {
@@ -120,6 +135,14 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
       // 因为正文要交给客户端的是最近一次上游原文。
       if (isClientAttributableStatus(failure.statusCode)) lastClientAttributableFailure = failure
       const healthScope = await recordHealthFailure(target, outcome.statusCode, healthFailureHints(outcome))
+      live?.pushEvent('route.failover', 'warn', {
+        attempt: attemptIndex + 1,
+        httpStatus: outcome.statusCode,
+        // 没有下一家时**不带这个键**，而不是带 `null`：`LiveRequestEvent.detail` 的值只允许标量，
+        // 而界面读「键不存在」与读「值是 null」是同一件事。
+        ...(nextTarget ? { nextProviderModelName: nextTarget.providerModelName } : {}),
+        healthFailureScope: healthScope,
+      })
       console.warn(
         `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.providerModelId ?? 'none'} healthFailureScope=${healthScope}`,
       )
@@ -139,6 +162,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
           await requestLogger.finalizeLocalErrorContent(422, response.headers(), responseBody)
         }
         await requestLogger.finalizeRequestLog('failed', startedAt)
+        settleLive('failed', 'request.rewrite_rejected', 'error', { errorCode: rootError.code, httpStatus: 422 })
         return false
       }
       if (isClientRequestCancelled(rootError)) {
@@ -168,6 +192,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
           console.error(`[proxy] failed to write the cancelled attempt log: ${(logError as Error).message}`)
         }
         await requestLogger.finalizeRequestLog('cancelled', startedAt)
+        settleLive('cancelled', 'request.cancelled', 'warn', { attempt: attemptIndex + 1 })
         return false
       }
       const nextTarget = targets[attemptIndex + 1]
@@ -230,6 +255,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
         }
         response.destroy(lastError)
         await requestLogger.finalizeRequestLog('failed', startedAt)
+        settleLive('failed', 'request.failed', 'error', { attempt: attemptIndex + 1, errorCode: 'UPSTREAM_ERROR' })
         return false
       }
       return true
@@ -238,6 +264,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
     onCancelled: async (_target, attemptIndex) => {
       console.debug(`[proxy] request execution cancelled requestId=${requestId} attempt=${attemptIndex} attempts=${attemptIndex + 1} totalDuration=${Date.now() - startedAt}ms`)
       await requestLogger.finalizeRequestLog('cancelled', startedAt)
+      settleLive('cancelled', 'request.cancelled', 'warn', { attempt: attemptIndex + 1 })
     },
 
     onExhausted: async lastError => {
@@ -256,6 +283,7 @@ export function createRequestFinalizer(options: RequestFinalizerOptions): Reques
         await requestLogger.finalizeLocalErrorContent(statusCode, response.headers(), responseBody)
       }
       await requestLogger.finalizeRequestLog('failed', startedAt)
+      settleLive('failed', 'request.exhausted', 'error', { attempts: targets.length, lastUpstreamStatus: lastUpstreamFailure?.statusCode ?? 'none' })
     },
   }
 }

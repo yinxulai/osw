@@ -2,12 +2,65 @@ import { findPresetByName } from '../lib/provider-presets'
 import type { ProviderIconTheme } from '../../../providers'
 import { PROVIDER_ICON_URL_BY_KEY } from '../../../providers'
 import { cn } from '@/lib/utils'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 interface ProviderIconProps {
   name: string
   size?: number
   className?: string
+}
+
+/** 标志画布与 `packages/console/public/icon.svg` 的 viewBox 一致；几何以那个文件为唯一真源。 */
+const BRAND_MARK_BOX = 256
+/** 标志墨迹（含 34 宽描边）实测 175 × 226，居中于画布。 */
+const BRAND_MARK_INK_HEIGHT = 226
+const BRAND_MARK_CENTER = BRAND_MARK_BOX / 2
+/**
+ * 各家供应商图标都把自己的图形 contain 在 120 画布的 65 内框里（≈54.2%）。
+ * 标志自带一圈画布留白（墨迹只占 226/256 高），若直接铺满会比它们大一圈；
+ * 这里按同一个内框折算缩放，让闪电四周的留白和别的 icon 一致。
+ */
+const BRAND_MARK_SCALE = (BRAND_MARK_BOX * (65 / 120)) / BRAND_MARK_INK_HEIGHT
+
+/** 应用标志：一道彩虹渐变的斜切闪电（`packages/console/public/icon.svg` 的内联版）。 */
+type BrandMarkProps = {
+  size: number
+  className?: string
+}
+
+function BrandMark(props: BrandMarkProps) {
+  const gradientId = `brand-mark-${useId().replace(/:/g, '')}`
+  const paint = `url(#${gradientId})`
+
+  return (
+    <svg
+      width={props.size}
+      height={props.size}
+      viewBox={`0 0 ${BRAND_MARK_BOX} ${BRAND_MARK_BOX}`}
+      className={cn('shrink-0', props.className)}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="41" y1="16" x2="215" y2="241">
+          <stop offset="0" stopColor="#FFE066" />
+          <stop offset="0.38" stopColor="#FF9500" />
+          <stop offset="0.72" stopColor="#F0297C" />
+          <stop offset="1" stopColor="#7C3AED" />
+        </linearGradient>
+      </defs>
+      <g
+        transform={`translate(${BRAND_MARK_CENTER} ${BRAND_MARK_CENTER}) scale(${BRAND_MARK_SCALE}) translate(${-BRAND_MARK_CENTER} ${-BRAND_MARK_CENTER})`}
+      >
+        <path
+          d="M186 33L58 148H114L84 224L198 108H142Z"
+          fill={paint}
+          stroke={paint}
+          strokeWidth="34"
+          strokeLinejoin="round"
+        />
+      </g>
+    </svg>
+  )
 }
 
 function getThemeFromDocument(): ProviderIconTheme {
@@ -29,7 +82,8 @@ function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): 
 
 /**
  * 供应商品牌图标。
- * 直接使用 packages/console/source/providers 中每个 provider 子目录的 icon.svg，缺失时回退到应用图标。
+ * 直接使用 packages/console/source/providers 中每个 provider 子目录的 icon.svg，
+ * 缺失时回退到应用标志（`packages/console/public/icon.svg` 里那道彩虹闪电）。
  */
 export function ProviderIcon(props: ProviderIconProps) {
   const { name, size = 17, className } = props
@@ -69,33 +123,9 @@ export function ProviderIcon(props: ProviderIconProps) {
       )
     }
 
-    return (
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 273 280"
-        fill="currentColor"
-        className={cn('shrink-0', className)}
-        aria-hidden="true"
-      >
-        <path d="M73.2385424,10.092098 L226.181257,101.190898 C233.298615,105.430281 235.631675,114.636738 231.392292,121.754096 C228.687178,126.29562 223.791297,129.078014 218.505175,129.078014 L40.6522875,129.078014 C32.3680162,129.078014 25.6522875,122.362285 25.6522875,114.078014 C25.6522875,112.741447 25.830925,111.410876 26.1834558,110.121638 L51.0936288,19.0228383 C53.2786748,11.0319232 61.5279213,6.32533649 69.5188363,8.51038258 C70.8244222,8.86738364 72.0756817,9.39945163 73.2385424,10.092098 Z" />
-        <path d="M52.2385424,161.092098 L205.181257,252.190898 C212.298615,256.430281 214.631675,265.636738 210.392292,272.754096 C207.687178,277.29562 202.791297,280.078014 197.505175,280.078014 L19.6522875,280.078014 C11.3680162,280.078014 4.65228746,273.362285 4.65228746,265.078014 C4.65228746,263.741447 4.83092505,262.410876 5.1834558,261.121638 L30.0936288,170.022838 C32.2786748,162.031923 40.5279213,157.325336 48.5188363,159.510383 C49.8244222,159.867384 51.0756817,160.399452 52.2385424,161.092098 Z" transform="translate(126, 215.539) scale(-1, -1) translate(-126, -215.539)" />
-      </svg>
-    )
+    return <BrandMark size={size} className={className} />
   }
 
-  // 兜底：使用应用图标（绿色双向开关造型）
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 273 280"
-      fill="currentColor"
-      className={cn('shrink-0', className)}
-      aria-hidden="true"
-    >
-      <path d="M73.2385424,10.092098 L226.181257,101.190898 C233.298615,105.430281 235.631675,114.636738 231.392292,121.754096 C228.687178,126.29562 223.791297,129.078014 218.505175,129.078014 L40.6522875,129.078014 C32.3680162,129.078014 25.6522875,122.362285 25.6522875,114.078014 C25.6522875,112.741447 25.830925,111.410876 26.1834558,110.121638 L51.0936288,19.0228383 C53.2786748,11.0319232 61.5279213,6.32533649 69.5188363,8.51038258 C70.8244222,8.86738364 72.0756817,9.39945163 73.2385424,10.092098 Z" />
-      <path d="M52.2385424,161.092098 L205.181257,252.190898 C212.298615,256.430281 214.631675,265.636738 210.392292,272.754096 C207.687178,277.29562 202.791297,280.078014 197.505175,280.078014 L19.6522875,280.078014 C11.3680162,280.078014 4.65228746,273.362285 4.65228746,265.078014 C4.65228746,263.741447 4.83092505,262.410876 5.1834558,261.121638 L30.0936288,170.022838 C32.2786748,162.031923 40.5279213,157.325336 48.5188363,159.510383 C49.8244222,159.867384 51.0756817,160.399452 52.2385424,161.092098 Z" transform="translate(126, 215.539) scale(-1, -1) translate(-126, -215.539)" />
-    </svg>
-  )
+  // 兜底：不在预设里的自建供应商，同样用应用标志，留白与其他供应商图标对齐。
+  return <BrandMark size={size} className={className} />
 }

@@ -4,6 +4,8 @@
   "family": "ollama",
   "aliases": ["ollama-local", "ollama local"],
   "color": "#000000",
+  "order": 40,
+  "websiteUrl": "https://ollama.com",
   "endpoints": {
     "openai-completions": "http://localhost:11434/v1/chat/completions",
     "openai-responses": "http://localhost:11434/v1/responses"

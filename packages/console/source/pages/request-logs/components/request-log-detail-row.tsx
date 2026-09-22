@@ -31,6 +31,7 @@ import {
   formatTransport,
 } from '../lib/format'
 import { RequestContentsSheet } from './request-contents-sheet'
+import { DetailSection, MetricCard, MetaFact, CopyIconButton, type MetricCardProps } from './request-detail-primitives'
 
 interface RequestLogDetailRowProps {
   log: RequestLogEntry | RequestLogDetail
@@ -60,26 +61,6 @@ interface ProviderRouteProps {
   /** 客户端跳声明的传输形态。**预期**：用来点出「要了增量却拿到整包」这种上游违约。 */
   transport: TransportKind
   onSelect: (attemptId: string) => void
-}
-
-interface MetricCardProps {
-  label: string
-  value: string
-}
-
-interface CopyIconButtonProps {
-  value: string
-  /** 可访问名，例如「复制请求 ID」。 */
-  label: string
-}
-
-interface MetaFactProps {
-  label: string
-  value: string
-  mono?: boolean
-  tone?: 'default' | 'warning'
-  /** 提供后在该事实右侧显示复制按钮。 */
-  copyValue?: string
 }
 
 const RUNTIME_LOG_RETENTION_DAYS = 3
@@ -113,7 +94,7 @@ interface RouteSummary {
 function summarizeRoute(attempts: RequestLogEntryAttempt[]): RouteSummary {
   const successIndex = attempts.findIndex(attempt => attempt.status === 'success')
   // 重试后成功时，前面的失败只是过程而不是结论：把它的错误信息留在行内，
-  // 不要提升成红字的路由摘要，否则会让人误判这次请求整体是失败的。
+  // 不要提升成路由结论，否则会让人误判这次请求整体是失败的。
   const failures = successIndex >= 0 ? [] : attempts.filter(attempt => attempt.status !== 'success')
   const messages = new Set(failures.map(attempt => attempt.errorMessage ?? '').filter(Boolean))
 
@@ -125,93 +106,39 @@ function summarizeRoute(attempts: RequestLogEntryAttempt[]): RouteSummary {
 }
 
 /**
- * 单个指标格。
+ * 路由结论的口径说明（悬停展开，不占正文）。
  *
- * 只有两行：标签 + 数值。不再加第三行的补充说明——「缓存是否命中」这类上下文
- * 在请求列表和下面的「原始 Usage」里都已经有落点，在数值底下再写一遍只会稀释数字本身。
- * 空值走最淡的一档灰，让有数字的格子自己浮出来。
+ * 这条结论是**从下面的尝试行归纳出来的**，而不是新数据：把「首次即成功 / 第几次成功 /
+ * 全部失败」固定写在标题下面，等于把下面那列已经逐行报过的结果再说一遍，而真正要看的
+ * 尝试列表被推下去一行。失败原因也一并归到这里——它本来就是「为什么这三行都红了」的答案，
+ * 行内的错误码与错误文本一格都没少。
+ *
+ * 没尝试记录时不写："0 次尝试全部失败" 不是信息，是噪声。
  */
-function MetricCard(props: MetricCardProps) {
-  // 指标块是请求详情卡片里的嵌套模块：只留边框，不再铺一层灰底。
-  const empty = props.value === '—'
-
-  return (
-    <div className="rounded-lg border border-module-border px-3 py-2.5">
-      <div className="system-2xs-medium-uppercase tracking-wider text-text-tertiary">{props.label}</div>
-      <div className={cn('mt-1 font-mono system-md-medium tabular-nums', empty ? 'text-text-quaternary' : 'text-text-primary')}>
-        {props.value}
-      </div>
-    </div>
-  )
+function routeSummaryHint(t: AppTranslator, summary: RouteSummary): string | undefined {
+  if (summary.count === 0) return undefined
+  const parts = [
+    summary.successIndex === null
+      ? t('requestLogs.route.allFailed', { count: summary.count })
+      : summary.successIndex === 0
+        ? t('requestLogs.route.firstSucceeded')
+        : t('requestLogs.route.succeededAt', { index: summary.successIndex + 1 }),
+  ]
+  // 只有一次尝试时不补次数：结论本身已经把"第一次就成功"说完了。
+  if (summary.count > 1 && summary.successIndex !== null) {
+    parts.push(t('requestLogs.route.totalAttempts', { count: summary.count }))
+  }
+  if (summary.commonErrorMessage !== null) parts.push(summary.commonErrorMessage)
+  return parts.join(' · ')
 }
 
 /**
- * 事实旁的小复制按钮。
- *
- * 复制成功的反馈留在按钮本身，不再弹 toast 打断排障视线。
+ * 「查看日志」原来是个无边框的小幽灵按钮，飘在大块留白里，与标题不成一体。
+ * 改成与标题同一行的 outline 按钮，并沿用侧边栏对 `/logs` 的称呼。
+ * 用 `Link` 而不是 `navigate()`：深链本身可被中键/右键新开，跳转语义正确。
  */
-function CopyIconButton(props: CopyIconButtonProps) {
-  const t = useTranslation()
-  const toast = useToast()
-  const [copied, setCopied] = React.useState(false)
-  const timerRef = React.useRef<number | null>(null)
-
-  React.useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-  }, [])
-
-  return (
-    <button
-      type="button"
-      aria-label={copied ? t('common.action.copied') : props.label}
-      title={copied ? t('common.action.copied') : props.label}
-      className={cn(
-        'inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-text-quaternary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid',
-        copied && 'text-text-success',
-      )}
-      onClick={async event => {
-        event.stopPropagation()
-        try {
-          await navigator.clipboard.writeText(props.value)
-          setCopied(true)
-          if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-          timerRef.current = window.setTimeout(() => setCopied(false), 1500)
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : t('common.action.copyFailed'))
-        }
-      }}
-    >
-      {copied ? <Check size={11} aria-hidden /> : <Copy size={11} aria-hidden />}
-    </button>
-  )
-}
-
-/** 摘要事实：标签 + 值成对，替代原来用 `·` 串起来的文本墙。 */
-function MetaFact(props: MetaFactProps) {
-  const t = useTranslation()
-  return (
-    <span className="inline-flex min-w-0 items-baseline gap-1">
-      <span className="shrink-0 text-text-quaternary">{props.label}</span>
-      <span
-        className={cn(
-          'min-w-0 truncate',
-          props.mono && 'font-mono',
-          props.tone === 'warning' ? 'text-text-warning' : 'text-text-secondary',
-        )}
-      >
-        {props.value}
-      </span>
-      {props.copyValue && <CopyIconButton label={t('requestLogs.detail.copyLabel', { label: props.label })} value={props.copyValue} />}
-    </span>
-  )
-}
-
 function RequestLogIdLink(props: RequestLogIdLinkProps) {
   const t = useTranslation()
-
-  // 「查看日志」原来是个无边框的小幽灵按钮，飘在大块留白里，与标题不成一体。
-  // 改成与标题同一行的 outline 按钮，并沿用侧边栏对 `/logs` 的称呼。
-  // 用 `Link` 而不是 `navigate()`：深链本身可被中键/右键新开，跳转语义正确。
   return (
     <Button asChild variant="outline" size="sm" className="shrink-0">
       <Link
@@ -399,36 +326,11 @@ function ProviderRoute(props: ProviderRouteProps) {
   const summary = React.useMemo(() => summarizeRoute(props.attempts), [props.attempts])
 
   return (
-    <section className="overflow-hidden rounded-lg border border-module-border">
-      <div className="border-b border-border/50 px-3 py-2.5">
-        <div className="flex items-center gap-1.5 system-sm-medium text-text-primary">
-          <Route size={13} aria-hidden className="text-text-quaternary" />
-          {t('requestLogs.route.title')}
-        </div>
-        {props.attempts.length > 0 && (
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 system-2xs-regular text-text-tertiary">
-            {summary.successIndex === null ? (
-              <span>{t('requestLogs.route.allFailed', { count: summary.count })}</span>
-            ) : (
-              <>
-                <span>{summary.successIndex === 0 ? t('requestLogs.route.firstSucceeded') : t('requestLogs.route.succeededAt', { index: summary.successIndex + 1 })}</span>
-                {summary.count > 1 && (
-                  <>
-                    <span aria-hidden className="text-text-quaternary">·</span>
-                    <span>{t('requestLogs.route.totalAttempts', { count: summary.count })}</span>
-                  </>
-                )}
-              </>
-            )}
-            {summary.commonErrorMessage && (
-              <>
-                <span aria-hidden className="text-text-quaternary">·</span>
-                <span className="wrap-break-word text-text-destructive">{summary.commonErrorMessage}</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+    <DetailSection
+      icon={Route}
+      title={t('requestLogs.route.title')}
+      info={routeSummaryHint(t, summary)}
+    >
       <div className="divide-y divide-border/50">
         {props.attempts.map((attempt, index) => (
           <AttemptRow
@@ -445,7 +347,7 @@ function ProviderRoute(props: ProviderRouteProps) {
           <div className="px-3 py-6 text-center system-xs-regular text-text-tertiary">{t('requestLogs.route.noAttempts')}</div>
         )}
       </div>
-    </section>
+    </DetailSection>
   )
 }
 
@@ -460,29 +362,24 @@ interface RawUsageProps {
  * 只是正文换成一句说明。否则同一张请求列表里「有用量」和「没用量」两种行长得完全不一样，
  * 上下滚动时整页都在跳。
  *
- * 副标题必须把口径写出来：这块展示的是**服务该请求的那次尝试**报回的用量，
- * 不是这个请求历次尝试用量的合并（详见 `recordAttemptUsage`）。
+ * 口径写在标题旁的 info 里而不是正文第一行：这块展示的是**服务该请求的那次尝试**报回的
+ * 用量，不是这个请求历次尝试用量的合并（详见 `recordAttemptUsage`）。
  */
 function RawUsage(props: RawUsageProps) {
   const t = useTranslation()
   const rawUsage = props.usage ? JSON.stringify(props.usage, null, 2) : null
 
   return (
-    <section className="overflow-hidden rounded-lg border border-module-border">
-      <div className="border-b border-border/50 px-3 py-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 system-sm-medium text-text-primary">
-            <Braces size={13} aria-hidden className="text-text-quaternary" />
-            {t('requestLogs.usage.title')}
-          </div>
-          {rawUsage && <CopyIconButton label={t('requestLogs.usage.copy')} value={rawUsage} />}
-        </div>
-        <div className="mt-1 system-2xs-regular text-text-tertiary">{t('requestLogs.usage.provenance')}</div>
-      </div>
+    <DetailSection
+      icon={Braces}
+      title={t('requestLogs.usage.title')}
+      info={t('requestLogs.usage.provenance')}
+      action={rawUsage ? <CopyIconButton label={t('requestLogs.usage.copy')} value={rawUsage} /> : undefined}
+    >
       {rawUsage
         ? <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all bg-inset p-3 font-mono system-2xs-regular text-text-secondary">{rawUsage}</pre>
         : <p className="px-3 py-3 system-xs-regular text-text-quaternary">{t('requestLogs.usage.empty')}</p>}
-    </section>
+    </DetailSection>
   )
 }
 
@@ -549,7 +446,12 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   return (
     <tr className="bg-inset">
       <td colSpan={11} className="border-b border-border/40 p-0">
-        <div className="bg-card px-5 py-4">
+        {/*
+         * `contain: inline-size` 同实时详情那一行：展开区里有错误信息、模型名这类长串，
+         * 而这张表是自动布局——跨列单元格里最长的那串会被算进列宽，把整张表掉宽、
+         * 掉到容器装不下时再冒出一条横向滚动条。加上它之后，这块的固有宽度不再参与列宽计算。
+         */}
+        <div className="bg-card px-5 py-4 contain-[inline-size]">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-border/50 pb-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
