@@ -82,7 +82,7 @@ const SHOTS: ShotSource[] = [
   },
 ]
 
-/** 第一张（逻辑模型）通栏放大，其余四张进两列网格。 */
+/** 进入页面时默认放大的那张（也是五个页面里最直接说明「这一步在解决什么」的一张）。 */
 export const LEADING_SHOT_ID = SHOTS[0].id
 
 export function screenshotsFor(lang: Lang): Screenshot[] {

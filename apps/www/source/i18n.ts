@@ -121,6 +121,7 @@ const en = {
     eyebrow: 'Interface',
     title: 'What it actually looks like',
     lead: 'Five of the main pages, all real screenshots from the app — nothing redrawn or mocked up.',
+    gallery: 'Interface screenshots',
     logicalModels: {
       title: 'Logical models',
       caption:

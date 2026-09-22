@@ -117,7 +117,7 @@ apps/www/
       request-trace.tsx      # 首屏右侧的「请求轨迹」动效（产品主视觉）
       failover-section.tsx   # 故障转移判定口径表
       capabilities-section.tsx # 路由改写 / 可观测 / 协议识别
-      screenshots-section.tsx # 界面预览（直接用 snapshot/ 里的真实截图）
+      screenshots-section.tsx # 界面预览（一张大图 + 五个页面的目录，图直接用 snapshot/ 里的真实截图）
       privacy-section.tsx    # 四条隐私承诺（第四条是匿名统计）
       download-section.tsx   # 下载区（全站唯一主行动区）
       site-footer.tsx        # 页脚
@@ -126,7 +126,7 @@ apps/www/
     i18n.ts          # i18next 初始化 + 英文资源表（中文是兜底语言，见下）
     downloads.ts     # 版本号 + 最新发布页地址
     platforms.ts     # 平台清单（下载区那一行平台标记用）
-    screenshots.ts   # 界面预览的图清单（外部 import snapshot/，不做副本）
+    screenshots.ts   # 界面预览的图清单（外部 import snapshot/，不做副本；LEADING_SHOT_ID 是默认放大的那张）
     platform-icons.tsx # 三平台品牌标记（Simple Icons + 手绘 Windows 方标）
     feature-icons.tsx  # 能力图标（手绘 1.5px 描边，继承 currentColor）
     index.css        # Tailwind v4 入口 + 设计 token + 基础样式
@@ -160,3 +160,15 @@ apps/www/
 > `public/` 里再摆一份副本——README 与官网共用同一个图源，改图只需改一处，Vite 构建时会
 > 自己把它们哈希进 `output/assets/`。顺带一个已知取舍：这批截图拍于图标改版之前，侧边栏还是
 > 旧版青色标志，与当前品牌不一致，但内容仍是真实界面，所以保留原图而不是重画。
+>
+> 这一节是**「一张大图 + 一份目录」**，不是五张平铺：五张 1139×696 的图铺进两列，一屏能滚出
+> 三屏，而读者滚完之后其实哪一张都没看清。现在一次只放大一张（右侧目录占掉 15rem，图约
+> 824×504），整节从约 1500px 降到约 800px；右边用五个页面名把全部内容列出来，「产品一共有
+> 几个页面」一眼仍然看得见。目录在 `lg` 断点从横排 chip 变竖排列表，说明文字钉在图片下沿，
+> 窄屏顺序是「图 → 目录 → 说明」。
+>
+> 图固定 `aspect-[1139/696] object-cover object-top`，首帧就占住位置（不抖），`object-top`
+> 是有意的：万一把字号调大压扁了图，留下的是应用顶部的侧边栏与标题栏——那才是「这是真截图」
+> 的证据。目录条目不加底框，只靠序号 + 一根品牌色游标表示可点（同一屏里灰盒子越少越好）。
+> 无障碍按标准 tablist 做：`role="tab"/"tabpanel"`、方向键在条目间移动并带走焦点、Home / End
+> 跳首尾、未选中的 `tabIndex={-1}`。
