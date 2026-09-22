@@ -5,9 +5,9 @@ import { LANGS, type Lang } from '../i18n'
 
 /** 顶栏里的锚点导航。id 对应各区块的 `id` 属性。 */
 const ANCHORS = [
-  { id: 'failover', key: 'nav.failover', fallback: '故障转移' },
-  { id: 'capabilities', key: 'nav.capabilities', fallback: '能力' },
   { id: 'screenshots', key: 'nav.screenshots', fallback: '界面' },
+  { id: 'capabilities', key: 'nav.capabilities', fallback: '能力' },
+  { id: 'failover', key: 'nav.failover', fallback: '故障转移' },
   { id: 'privacy', key: 'nav.privacy', fallback: '隐私' },
   { id: 'downloads', key: 'nav.downloads', fallback: '下载' },
 ]

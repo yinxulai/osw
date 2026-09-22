@@ -13,9 +13,12 @@ import type { Lang } from './i18n'
 /**
  * 落地页。整页只负责「背景层 + 区块顺序」，每节的实现都在 `components/` 下。
  *
- * 顺序即叙事：**是什么（首屏）→ 挂了怎么办（故障转移）→ 还能调什么（能力）
- * → 长什么样（界面预览）→ 数据去哪（隐私）→ 怎么拿到（下载）**。旧版把六张功能卡
+ * 顺序即叙事：**是什么（首屏）→ 长什么样（界面预览）→ 还能调什么（能力）
+ * → 挂了怎么办（故障转移）→ 数据去哪（隐私）→ 怎么拿到（下载）**。旧版把六张功能卡
  * 平铺在一起，读者要先自己判断「哪条更重要」，这一版改成逐节回答一个具体问题。
+ *
+ * 界面预览紧跟在首屏之后：读者还不知道细节、也还没被说服的时候，先让他看一眼界面
+ * 长什么样，比先讲一遍故障转移判定口径更有效。
  */
 export function App() {
   const { i18n } = useTranslation()
@@ -42,9 +45,9 @@ export function App() {
 
       <main className="relative mx-auto max-w-6xl px-6">
         <Hero />
-        <FailoverSection />
-        <CapabilitiesSection />
         <ScreenshotsSection />
+        <CapabilitiesSection />
+        <FailoverSection />
         <PrivacySection />
         <DownloadSection />
       </main>
