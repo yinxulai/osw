@@ -96,6 +96,7 @@ mocks.listRulesForProviderModel.mockResolvedValue([])
 
 import { handleProxyRequest } from './request-entry'
 import { getManualModel, setManualModel } from '../routing/manual-routing'
+import { liveRequestStore } from '../observability/live-request-store'
 
 /**
  * 「处理了多少任务」这个数只由事件次数表达，所以这里盯的是**一次成功的客户端请求发几条**、
@@ -127,6 +128,8 @@ afterEach(async () => {
   mocks.models = []
   mocks.captureRequestContent = false
   mocks.listRulesForProviderModel.mockResolvedValue([])
+  // 台账是进程内单例，且「刚结束的请求」会保留一分钟：不清掉，上一条用例的尝试会漏到下一条。
+  liveRequestStore.clear()
   vi.clearAllMocks()
   reported.length = 0
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))))
@@ -584,6 +587,76 @@ describe('handleProxyRequest', () => {
         errorMessage: 'Modifying a protected header is not allowed: Authorization',
       }),
     }))
+  })
+
+  /**
+   * 时间轴上要显示规则**名字**，而落库那条路只存 id、展示时再查库补名字；实时台账每来一帧都
+   * 去查一次配置库显然不行，所以名字必须在执行器手里还有规则表时就跟上。
+   *
+   * 断言的是名字而不是「命中了一条」——只数条数的话，存 id 也满足，等于没测到这件事。
+   */
+  it('names the rewrite rules that touched the request in the live ledger', async () => {
+    mocks.listRulesForProviderModel.mockResolvedValue([
+      {
+        id: 'rule_stamp_header',
+        name: 'Stamp the proxy header',
+        description: '',
+        enabled: true,
+        scope: 'model',
+        schemaVersion: 1,
+        source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] },
+        actions: [{ type: 'header-set', stage: 'request', name: 'X-Rewrite-Test', value: 'stamped' }],
+        testCases: [],
+        createdTime: 1,
+        updatedTime: 1,
+        deletedTime: null,
+      },
+      {
+        id: 'rule_disabled',
+        name: 'Disabled rule',
+        description: '',
+        enabled: false,
+        scope: 'model',
+        schemaVersion: 1,
+        source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] },
+        actions: [{ type: 'header-set', stage: 'request', name: 'X-Disabled-Test', value: 'never' }],
+        testCases: [],
+        createdTime: 1,
+        updatedTime: 1,
+        deletedTime: null,
+      },
+    ])
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const receivedHeaders: Array<string | string[] | undefined> = []
+    const upstream = await listen((req, res) => {
+      receivedHeaders.push(req.headers['x-rewrite-test'])
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+    mocks.models = [model('model_rewrite', 'prov_rewrite', `${upstream.url}/v1/completions`, 'rewrite-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+
+    expect(response.status).toBe(200)
+    // 先确认规则真的动过这次请求，否则下面断言的就只是「名字拼对了」。
+    expect(receivedHeaders).toEqual(['stamped'])
+    const requestId = mocks.createRequestLog.mock.calls[0]?.[0].id as string
+    const attempt = liveRequestStore.get(requestId)?.attempts[0]
+    // 命中的按名字出现，没命中的（这里是一条停用的规则）不出现。
+    expect(attempt?.requestRewriteRuleNames).toEqual(['Stamp the proxy header'])
   })
 
   it('discards a retryable response before forwarding the next successful response', async () => {
