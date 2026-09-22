@@ -253,3 +253,9 @@ OSW is released under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
 - **Personal and other noncommercial use is free.** Research, study, hobby projects, and use by charitable, educational, public research, public safety or health, environmental and government organizations are all permitted purposes.
 - **Commercial use is not allowed.** For commercial licensing, contact the author.
 - **The license travels with the code.** Anyone who receives a copy — modified or not — must also receive the license text and the `Required Notice:` line in [`LICENSE`](./LICENSE). The project may not be sublicensed or relicensed under other terms.
+
+---
+
+## Friends
+
+- [LINUX DO](https://linux.do/) — a Chinese community for developers and open-source projects.
