@@ -15,6 +15,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@osw/contracts": "workspace:*"
+    "@osw/contracts": "workspace:*",
+    "html-to-image": "^1.11.13",
+    "motion": "^13.4.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
   }
 }
