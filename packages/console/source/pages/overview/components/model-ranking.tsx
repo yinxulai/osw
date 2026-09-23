@@ -12,10 +12,19 @@ interface ModelRankingProps {
   stats: ModelStat[]
 }
 
+/**
+ * 排行榜只列前几名。
+ *
+ * 接口会多回一些模型行（账单要合并跨供应商的同名模型，得先拿到足够多的候选），
+ * 截断因此是榜单自己的事：它是「前 N 名」，不是「接口返回了多少行」。
+ */
+const MODEL_RANKING_LIMIT = 10
+
 export function ModelRanking(props: ModelRankingProps) {
   const { stats } = props
   const t = useTranslation()
   const locale = useLocale()
+  const rows = stats.slice(0, MODEL_RANKING_LIMIT)
 
   return (
     <Card className="w-full">
@@ -37,13 +46,13 @@ export function ModelRanking(props: ModelRankingProps) {
               </tr>
             </thead>
             <tbody>
-              {stats.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-10 text-center system-xs-regular text-text-tertiary">
                     {t('overview.models.empty')}
                   </td>
                 </tr>
-              ) : stats.map((m, idx) => (
+              ) : rows.map((m, idx) => (
                 <tr key={m.providerModelId} className={tableRowClass}>
                   <td className={cn(tableCellClass, 'px-4')}>
                     <span className={cn(

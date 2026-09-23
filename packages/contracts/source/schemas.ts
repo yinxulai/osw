@@ -1044,6 +1044,17 @@ export const ModelStatSchema = z.object({
    */
   avgOutputTokens: z.number().nonnegative().nullable(),
   cacheHitRate: z.number().min(0).max(1).nullable(),
+  /**
+   * 窗口内该模型**成功尝试**的用量合计，与上面几个派生值同源。
+   *
+   * 保留原始合计而不只给平均值，是因为账单要把跨供应商的同名模型合并成一行：
+   * 合计只能相加，平均与比率都得用合计重新算一遍，拿平均值去加权会得到
+   * 「按模型数量平均」的假命中率。三个字段一一对应 `cachedInputTokens ⊆ inputTokens`，
+   * 合并方不得自行推导其中一个。
+   */
+  outputTokens: z.number().nonnegative(),
+  inputTokens: z.number().nonnegative(),
+  cachedInputTokens: z.number().nonnegative(),
 })
 export type ModelStat = z.infer<typeof ModelStatSchema>
 

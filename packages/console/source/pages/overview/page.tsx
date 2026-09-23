@@ -22,10 +22,11 @@ import { ProviderDetail } from './components/provider-detail'
 import { ModelRanking } from './components/model-ranking'
 import { LatencyDistribution } from './components/latency-distribution'
 import { FailureReasons } from './components/failure-reasons'
-import { BillContent, type BillRow } from './components/bill-content'
+import { BillContent } from './components/bill-content'
 import { BillExportScene } from './components/bill-export-scene'
 import { ReceiptControls, ReceiptPullHint } from './components/receipt-controls'
 import { ReceiptPrinterPreview, type ReceiptPrinterStage, clampReceiptOffset, receiptMeters } from './components/receipt-printer-preview'
+import { buildBillRows } from './lib/bill-models'
 import { formatBillRangeLabel } from './lib/format'
 
 /**
@@ -175,21 +176,10 @@ export function OverviewPage() {
     [billModels],
   )
 
-  const billRows = useMemo<BillRow[]>(
-    () => billModels
-      .slice()
-      .sort((a, b) => {
-        const aUsage = a.avgOutputTokens == null ? 0 : a.avgOutputTokens * a.success
-        const bUsage = b.avgOutputTokens == null ? 0 : b.avgOutputTokens * b.success
-        return bUsage - aUsage
-      })
-      .slice(0, 12)
-      .map(item => ({
-        id: item.providerModelId,
-        name: item.providerModelName,
-        usageTokens: item.avgOutputTokens == null ? null : Math.round(item.avgOutputTokens * item.success),
-        cacheHitRate: item.cacheHitRate,
-      })),
+  // 明细行按模型名合并（理由见 `buildBillRows`）：账单没有「供应商」这一列，
+  // 同一个模型被几家供应商都接进来时，拆成几行会被读成好几笔消费。
+  const billRows = useMemo(
+    () => buildBillRows(billModels, 12),
     [billModels],
   )
 
