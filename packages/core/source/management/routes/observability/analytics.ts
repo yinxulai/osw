@@ -45,7 +45,10 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     getUsageHeat(buckets),
     getStatsSummary(sinceMs),
     getProviderStats(sinceMs),
-    getModelStats(sinceMs, 10),
+    // 多取一些行：同一个模型名可能同时挂在几家供应商名下，账单要把它们合并成一行，
+    // 合并前就在 SQL 里截到 10 行的话，被合并掉的名额会白占一个位置（第 11 名的模型
+    // 永远等不到出场）。截断交给各自的展示方：排行榜按篇幅收口，账单合并后再收口。
+    getModelStats(sinceMs, 200),
     getLatencyDistribution(sinceMs, buckets.latencyTargetBins),
     getFailureReasons(sinceMs),
     getRequestSourceStats(sinceMs),
@@ -148,5 +151,10 @@ function mapModelStat(model: DatabaseModelStat): ModelStat {
     avgOutputTokens: averageOutputTokensPerCall(model.outputTokens, model.success),
     // 缓存读取量本就是输入量的一部分，同口径相除才是命中率。
     cacheHitRate: cacheHitRate(model.cachedInputTokens, model.inputTokens),
+    // 原始合计随响应一起给出：账单要合并跨供应商的同名模型，只有合计能相加，
+    // 平均值与比率都得由合并方拿合计重算。
+    outputTokens: model.outputTokens,
+    inputTokens: model.inputTokens,
+    cachedInputTokens: model.cachedInputTokens,
   }
 }
