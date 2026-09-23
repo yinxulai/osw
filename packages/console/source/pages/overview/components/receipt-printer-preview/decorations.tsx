@@ -10,19 +10,20 @@
  * 全部 `pointer-events-none` + `aria-hidden`：它们不是内容，也不该接事件。
  */
 
-/** 出纸口那条压条，以及纸条上方那道折射出来的暗边。 */
+/**
+ * 出纸口上方那道折射出来的暗边。
+ *
+ * 出纸口本身（那道黑色胶囊）画在机身底边上，见 `machine.tsx`；这里只剩压在纸条顶端的那层暗边。
+ */
 export type ReceiptSlotDecorationsProps = {
-  /** 纸条上方那道折射出来的暗边。纸条还没出来时不需要。 */
+  /** 纸条还没出来时不需要这道暗边。 */
   showLip: boolean
 }
 
 export function ReceiptSlotDecorations(params: ReceiptSlotDecorationsProps) {
-  return (
-    <>
-      <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-0 z-0 h-1.5 rounded-md border border-[#0b1119] bg-[#1a2330]" />
-      {params.showLip ? <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 -top-1 z-30 h-2 bg-[#0f141c]/80 blur-[6px]" /> : null}
-    </>
-  )
+  return params.showLip ? (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-x-7 -top-1 z-30 h-2 bg-[#0a0c10]/70 blur-[6px]" />
+  ) : null
 }
 
 /** 纸条的投影，以及它落在台面上的那团阴影。 */
