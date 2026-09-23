@@ -16,6 +16,24 @@ Your client only ever sees the attempt that succeeded.
 
 **OSW is short for One Switch.** The name is the product: one switch for every channel you own — one local address going in, one place to configure providers, and one handle to flip when a channel breaks.
 
+---
+
+## Sponsors
+
+### Top-tier sponsor
+
+<p align="center">
+  <a href="https://www.qiniu.com">
+    <img src="./packages/console/source/providers/qiniu/icon.light.svg" width="56" height="56" alt="Qiniu Cloud" />
+  </a>
+  <br />
+  <a href="https://www.qiniu.com"><strong>Qiniu Cloud</strong></a>
+</p>
+
+Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tier. Qiniu offers object storage, CDN and large-model inference among its cloud services, and its AI inference service ships as a built-in provider preset in OSW — pick Qiniu under **Model Management**, paste an API key, and it works out of the box.
+
+---
+
 ## What we believe
 
 - **One entry point.** Clients only ever know one local address. Providers, accounts and models change behind it; nothing downstream ever has to be reconfigured again.

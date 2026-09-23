@@ -16,6 +16,24 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 
 **OSW 是 One Switch 的简称。** 名字就是产品本身：给你手上所有渠道装一个开关 —— 入口只有一个本地地址，供应商只需配在这一处，哪个渠道挂了就拨到下一个。
 
+---
+
+## 赞助商
+
+### 顶级赞助商
+
+<p align="center">
+  <a href="https://www.qiniu.com">
+    <img src="./packages/console/source/providers/qiniu/icon.light.svg" width="56" height="56" alt="七牛云" />
+  </a>
+  <br />
+  <a href="https://www.qiniu.com"><strong>七牛云</strong></a>
+</p>
+
+感谢 [七牛云](https://www.qiniu.com) 对 OSW 的顶级赞助。七牛云提供对象存储、CDN 与大模型推理等云服务，其 AI 推理服务已内置为 OSW 的供应商预设 —— 在 **模型管理** 里选择七牛云、填入 API Key，即可开箱使用。
+
+---
+
 ## 我们的理念
 
 - **一个入口。** 客户端只需要知道一个本地地址。供应商、账号、模型都在它后面换，下游再也不用跟着改。
