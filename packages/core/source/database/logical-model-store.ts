@@ -97,6 +97,22 @@ export async function deleteLogicalModel(id: string): Promise<void> {
     .run()
 }
 
+/**
+ * 把被软删除的逻辑模型重新算数。
+ *
+ * 单独一个函数而不是复用 `updateLogicalModel`：后者的 `where` 带 `isNull(deletedTime)`，
+ * 对已删除的行匹配不到任何记录，因此无法用来恢复。云同步拉取时可能带回本机刚刚删掉的 id，
+ * 那时需要的是「复活这一行」而不是「新建一行同名记录」（后者会因为主键冲突直接失败）。
+ */
+export async function restoreLogicalModel(id: string): Promise<void> {
+  const time = now()
+  getConfigDb()
+    .update(logicalModels)
+    .set({ deletedTime: null, updatedTime: time })
+    .where(eq(logicalModels.id, id))
+    .run()
+}
+
 function mapLogicalModel(row: typeof logicalModels.$inferSelect): LogicalModel {
   return {
     id: row.id,

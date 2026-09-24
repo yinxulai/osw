@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { DEFAULT_CLOUD_BACKUP_KIND, CloudBackupKindSchema } from './cloud-backup'
 import { LANGUAGE_PREFERENCES } from './i18n'
 
 // ========== 枚举 ==========
@@ -407,6 +408,34 @@ export const SettingsSchema = z.object({
    * 只是一个让本地调试不必污染生产数据的出口。
    */
   telemetryEndpoint: z.string().default(''),
+  /**
+   * 云同步：当前使用的**承载方式**（`CloudBackupKind`）。
+   *
+   * 它和下面两个字段是「本机绑到了哪儿」的三个坐标，必须一起看：承载方式换了，
+   * 另外两个就属于上一个后端，会被一起清掉。
+   *
+   * `catch` 而不是只写 `default`：旧版本写进去的 kind 可能比当前构建新（用户降级），
+   * 那时整份设置都不该因为一个字段读不出来而整体报错，退回默认后端即可。
+   */
+  cloudSyncProvider: CloudBackupKindSchema.default(DEFAULT_CLOUD_BACKUP_KIND).catch(DEFAULT_CLOUD_BACKUP_KIND),
+  /**
+   * 云同步：账号名（GitHub 上是 `@` 后面的那串），仅在凭据校验通过后写入。
+   *
+   * 存的是**缓存下来的展示值**，不是凭据——凭据本体在系统密钥库里（见 `security-privacy.md`），
+   * 这里只留一句「上次连上的是谁」。它过期的代价只是界面显示一个旧名字。
+   */
+  cloudSyncAccountLabel: z.string().default(''),
+  /**
+   * 云同步绑定的远端句柄（Gist 上是 Gist id）。空串表示还没绑定，首次上传时可能自动新建。
+   *
+   * 它必须落在设置里而不是只留在界面状态里：换台机器时用户手上只有「那个地址」，
+   * 而绑定关系要跟着本机走——同一台机器下次启动仍然指向同一个远端。
+   */
+  cloudSyncTarget: z.string().default(''),
+  /** 上次把配置推上去的时间。`0` 表示从未推送过，界面上显示成「从未」。 */
+  cloudSyncLastPushedTime: z.number().int().nonnegative().default(0),
+  /** 上次把配置拉下来的时间。`0` 表示从未拉取过。 */
+  cloudSyncLastPulledTime: z.number().int().nonnegative().default(0),
   updatedTime: z.number().int(),
 })
 export type Settings = z.infer<typeof SettingsSchema>
@@ -866,6 +895,17 @@ export const ApiErrorCodeSchema = z.enum([
   'UPSTREAM_MODELS_UNAVAILABLE',
   'CLIENT_REQUEST_ABORTED',
   'TRANSPORT_NOT_IMPLEMENTED',
+  // 客户端配置管理
+  'CLIENT_CONFIG_PATH_NOT_ALLOWED',
+  'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED',
+  'CLIENT_CONFIG_PARSE_FAILED',
+  'CLIENT_CONFIG_WRITE_FAILED',
+  // 云同步（承载方式无关：换后端不该换一套错误码）
+  'CLOUD_SYNC_NOT_CONFIGURED',
+  'CLOUD_SYNC_AUTH_FAILED',
+  'CLOUD_SYNC_UNREACHABLE',
+  'CLOUD_SYNC_REMOTE_FILE_MISSING',
+  'CLOUD_SYNC_REMOTE_FILE_INVALID',
 ])
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 

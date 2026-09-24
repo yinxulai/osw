@@ -3,6 +3,8 @@ import type { ManagementHandler } from './core/response'
 import { sendError } from './core/response'
 import {
   analyticsRoutes,
+  clientConfigRoutes,
+  cloudSyncRoutes,
   developmentRoutes,
   logRoutes,
   modelRoutes,
@@ -48,6 +50,8 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(requestRewriteRuleRoutes)
   .mount(developmentRoutes)
   .mount(storageRoutes)
+  .mount(clientConfigRoutes)
+  .mount(cloudSyncRoutes)
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')

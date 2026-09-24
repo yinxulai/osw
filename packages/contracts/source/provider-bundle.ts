@@ -43,7 +43,8 @@ const ProviderBundleSettingSchema = z.object({
   valueType: z.enum(['string', 'number', 'boolean', 'json']).default('string'),
 })
 
-const ProviderBundleProviderSchema = z.object({
+/** 单个供应商条目。云同步的配置快照直接复用同一份定义，因此这里导出。 */
+export const ProviderBundleProviderSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().default(''),
   enabled: z.boolean().default(true),

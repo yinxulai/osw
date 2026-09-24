@@ -8,6 +8,7 @@ import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { useRuntimeSettingsService } from './service'
 import { ListenConfigCard } from './components/listen-config-card'
 import { OutboundProxyCard } from './components/outbound-proxy-card'
+import { CloudSyncCard } from './components/cloud-sync-card'
 import { FailoverCard } from './components/failover-card'
 import { DataDirectoryCard } from './components/data-directory-card'
 import { LogRetentionCard } from './components/log-retention-card'
@@ -56,7 +57,7 @@ export function RuntimeSettingsPage() {
       <PageContent>
         {service.loading || !service.settings ? (
           <div className="space-y-3">
-            {Array.from({ length: 7 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <Card key={i} className="min-h-36 p-4">
                 <Skeleton className="mb-3 h-4 w-32" />
                 <Skeleton className="mb-5 h-3 w-52" />
@@ -120,6 +121,10 @@ export function RuntimeSettingsPage() {
               {import.meta.env.DEV && (
                 <DevelopmentCard onSeedDevelopment={() => void service.seedDevelopmentData()} />
               )}
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.section.sync')}>
+              <CloudSyncCard />
             </SettingsSection>
           </>
         )}
