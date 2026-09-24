@@ -12,7 +12,7 @@ interface ProviderWebsiteLinkProps {
 /**
  * 内置厂商官网的外链。
  *
- * 网址来自 `source/providers/<key>/provider.json` 的 `websiteUrl`，只在「当前这个名字能对上内置厂商」时存在；
+ * 网址来自 `source/catalog/providers/<key>/provider.json` 的 `websiteUrl`，只在「当前这个名字能对上内置厂商」时存在；
  * 对不上就没有这一块，因为自建供应商本来也没有官网可说，不编一个假的出来。
  *
  * 打开方式走 `getPlatformCapabilities().openExternal`：Electron 形态交给系统浏览器，

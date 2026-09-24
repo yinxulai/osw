@@ -1,5 +1,5 @@
 import { isWildcardHost, resolveProxyOrigin } from '@common/proxy-origin'
-import { useProxyStatus } from '@/features/proxy/hooks'
+import { useProxyStatus } from '@/data/proxy'
 import { useProxyToggle } from '../../logical-models/hooks/use-proxy-toggle'
 
 /**

@@ -1,6 +1,6 @@
 import { findPresetByName } from '../lib/provider-presets'
-import type { ProviderIconTheme } from '../../../providers'
-import { PROVIDER_ICON_URL_BY_KEY } from '../../../providers'
+import type { ProviderIconTheme } from '../../../catalog/providers'
+import { PROVIDER_ICON_URL_BY_KEY } from '../../../catalog/providers'
 import { cn } from '@/lib/utils'
 import { useEffect, useId, useState } from 'react'
 
@@ -82,7 +82,7 @@ function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): 
 
 /**
  * 供应商品牌图标。
- * 直接使用 packages/console/source/providers 中每个 provider 子目录的 icon.svg，
+ * 直接使用 packages/console/source/catalog/providers 中每个 provider 子目录的 icon.svg，
  * 缺失时回退到应用标志（`packages/console/public/icon.svg` 里那道彩虹闪电）。
  */
 export function ProviderIcon(props: ProviderIconProps) {

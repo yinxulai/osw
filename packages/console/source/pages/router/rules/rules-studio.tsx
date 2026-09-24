@@ -17,7 +17,7 @@ import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/components/ui/toast'
-import { useLogicalModels } from '@/features/logical-models/hooks'
+import { useLogicalModels } from '@/data/logical-models'
 import { useTranslation } from '@/i18n/provider'
 import type { RouteRuleRunResult } from '@common/router/route-rule-engine'
 import {

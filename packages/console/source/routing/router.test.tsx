@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { router } from '@/routing'
-import { routePaths } from '@/routes'
+import { router } from '@/routing/router'
+import { routePaths } from '@/routing/routes'
 
 // 这些用例只钉住「路径契约」，不渲染任何页面：
-// 路径字符串集中在 `routes.ts`，这里负责证明它们真的能在路由表里解析出来，
-// 避免出现「改了 `routes.ts` 却忘了改 `routing.tsx`」这类静默失效。
+// 路径字符串集中在 `./routes.ts`，这里负责证明它们真的能在路由表里解析出来，
+// 避免出现「改了 `./routes.ts` 却忘了改 `./router.tsx`」这类静默失效。
 const leafMatch = (path: string, search: Record<string, unknown> = {}) => {
   const matches = router.matchRoutes(path, search)
   return matches[matches.length - 1]

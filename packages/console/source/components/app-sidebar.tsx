@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths, type AppNavPath } from '@/routes'
+import { routePaths, type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 
 export type Theme = 'light' | 'dark'

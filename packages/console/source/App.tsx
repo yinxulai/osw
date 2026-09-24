@@ -10,9 +10,9 @@ import { OnboardingTopbar } from '@/pages/onboarding/onboarding-topbar'
 import { ONBOARDING_ACTION_BAR_CLEARANCE } from '@/pages/onboarding/page'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { useTranslation } from '@/i18n/provider'
-import { RouteModeDialog } from './features/route-mode/route-mode-dialog'
-import { useProxyStatus } from './features/proxy/hooks'
-import { routePaths } from './routes'
+import { RouteModeDialog } from '@/components/route-mode/route-mode-dialog'
+import { useProxyStatus } from '@/data/proxy'
+import { routePaths } from '@/routing/routes'
 
 function App() {
   const pathname = useRouterState({ select: state => state.location.pathname })

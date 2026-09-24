@@ -8,7 +8,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { resolveLocale, type Locale, type Translator } from '@common/i18n'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
-import { useSettings } from '@/features/settings/hooks'
+import { useSettings } from '@/data/settings'
 import { getTranslator } from './active'
 import { getSystemLocale, useLanguageStore } from './store'
 

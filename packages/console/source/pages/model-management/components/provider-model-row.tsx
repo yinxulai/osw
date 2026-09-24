@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { requestRewriteRuleApi, providerModelApi } from '@/api/models'
-import { useHealth } from '@/features/health/hooks'
+import { useHealth } from '@/data/health'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'

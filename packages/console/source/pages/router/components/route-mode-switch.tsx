@@ -1,7 +1,7 @@
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { routeModeOption } from '@/features/route-mode/route-mode-options'
-import { openRouteModeDialog, useRouteMode } from '@/features/route-mode/use-route-mode'
+import { routeModeOption } from '@/components/route-mode/route-mode-options'
+import { openRouteModeDialog, useRouteMode } from '@/components/route-mode/use-route-mode'
 import { useTranslation } from '@/i18n/provider'
 
 /**

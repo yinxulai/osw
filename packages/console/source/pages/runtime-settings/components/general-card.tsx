@@ -9,7 +9,7 @@ import { FormRow, FormSelect, type FormOption } from '@/components/form-kit'
 import { Switch } from '@/components/ui/switch'
 import type { ThemeMode } from '@/components/app-sidebar'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { useAppUiStore } from '@/store/app-ui-store'
 
 interface GeneralCardProps {

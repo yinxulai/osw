@@ -3,7 +3,7 @@
 内置 Agent 客户端注册表。与 `../providers` 同构：**每个客户端一个目录**，目录里放
 `agent.json`（描述 + 配置文件路径 + 字段 schema）和图标。
 
-```
+```text
 agent_clients/
   index.ts                 # 自动扫描 + 排序 + 导出（不用手改）
   claude-code/
@@ -22,7 +22,7 @@ agent_clients/
 
 ## 新增一个客户端
 
-1. 建目录 `agent_clients/<key>/`（`<key>` 用 kebab-case，如 `claude-code`）。
+1. 建目录 `catalog/agent_clients/<key>/`（`<key>` 用 kebab-case，如 `claude-code`）。
 2. 放 `agent.json`，字段见 `agent-clients.test.ts` 的断言：
    - 必填：`key` `name` `order` `description` `configDir` `files[]` `fields[]`
    - 可选：`aliases` `websiteUrl` `protocol`、`files[].envVar`

@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n/provider'

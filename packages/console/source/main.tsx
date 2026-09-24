@@ -2,10 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
-import { router } from './routing'
+import { router } from './routing/router'
 import { ErrorBoundary } from './components/error-boundary'
 import { I18nProvider } from './i18n/provider'
-import './index.css'
+import './styles/index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

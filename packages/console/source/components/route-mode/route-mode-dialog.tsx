@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ROUTE_MODE_OPTIONS } from '@/features/route-mode/route-mode-options'
-import { RouteModeOptionCard } from '@/features/route-mode/route-mode-option-card'
-import { useRouteMode, useRouteModeStore } from '@/features/route-mode/use-route-mode'
+import { ROUTE_MODE_OPTIONS } from '@/components/route-mode/route-mode-options'
+import { RouteModeOptionCard } from '@/components/route-mode/route-mode-option-card'
+import { useRouteMode, useRouteModeStore } from '@/components/route-mode/use-route-mode'
 import { useTranslation } from '@/i18n/provider'
 
 /**

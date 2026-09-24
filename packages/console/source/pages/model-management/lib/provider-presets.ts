@@ -1,4 +1,4 @@
-import { PROVIDER_DEFINITIONS, type ProviderDefinition } from '../../../providers'
+import { PROVIDER_DEFINITIONS, type ProviderDefinition } from '../../../catalog/providers'
 
 /**
  * 供应商预设：用于新建供应商时快速填充名称和接口地址，

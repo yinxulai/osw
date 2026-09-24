@@ -9,7 +9,7 @@ import { useLanguageStore } from '@/i18n/store'
 import { TrendChart } from './trend-chart'
 
 // `I18nProvider` 会读取服务端设置，单测里不需要也不该走 react-query。
-vi.mock('@/features/settings/hooks', () => ({ useSettings: () => null }))
+vi.mock('@/data/settings', () => ({ useSettings: () => null }))
 
 interface WrapperProps { children: ReactNode }
 

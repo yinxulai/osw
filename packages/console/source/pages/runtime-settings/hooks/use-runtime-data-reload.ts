@@ -1,10 +1,10 @@
 import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { settingsKeys } from '@/features/settings/hooks'
-import { providerKeys } from '@/features/providers/hooks'
-import { logicalModelKeys } from '@/features/logical-models/hooks'
-import { healthKeys } from '@/features/health/hooks'
-import { proxyKeys } from '@/features/proxy/hooks'
+import { settingsKeys } from '@/data/settings'
+import { providerKeys } from '@/data/providers'
+import { logicalModelKeys } from '@/data/logical-models'
+import { healthKeys } from '@/data/health'
+import { proxyKeys } from '@/data/proxy'
 
 /**
  * 重新拉取所有与运行时配置相关的查询。

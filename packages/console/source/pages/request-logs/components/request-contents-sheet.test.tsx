@@ -11,7 +11,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { RequestContentsSheet } from './request-contents-sheet'
 
 // `I18nProvider` 会读取服务端设置，单测里不需要也不该走 react-query。
-vi.mock('@/features/settings/hooks', () => ({ useSettings: () => null }))
+vi.mock('@/data/settings', () => ({ useSettings: () => null }))
 
 // 面板自己持有正文查询（正文是库里最大的列，点开才取），测试替掉它才能把
 // 「还没到 / 到了 / 取失败」三种状态分别摆到界面上验。

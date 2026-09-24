@@ -32,7 +32,7 @@ export function computeMaxPanelWidth(canvasWidth: number): number {
  * `data-[side=right]:sm:max-w-sm`（384px 上限，靠 `!` 顶掉，否则拉宽到 420px 以上会被压回去）。
  *
  * `workflow-node-panel` / `workflow-ui-surface` 两个作用域类必须挂在浮层元素自己身上：
- * `index.css` 里节点面板的输入框/圆角刻度靠它们生效，而浮层会被 portal 到 body，拿不到画布的祖先作用域。
+ * `styles/index.css` 里节点面板的输入框/圆角刻度靠它们生效，而浮层会被 portal 到 body，拿不到画布的祖先作用域。
  */
 const NODE_PANEL_CLASSNAME = cn(
   'workflow-node-panel workflow-ui-surface outline-hidden',

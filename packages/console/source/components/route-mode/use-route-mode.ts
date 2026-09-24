@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { settingsApi } from '@/api/runtime'
 import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
-import { settingsKeys, useSettings, useSettingsLoading } from '@/features/settings/hooks'
+import { settingsKeys, useSettings, useSettingsLoading } from '@/data/settings'
 import { useTranslation } from '@/i18n/provider'
 import type { RouteMode, Settings } from '@common/schemas'
 

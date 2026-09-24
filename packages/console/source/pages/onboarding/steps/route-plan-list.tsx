@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
-import { useRouteMode } from '@/features/route-mode/use-route-mode'
+import { useRouteMode } from '@/components/route-mode/use-route-mode'
 import { useRoutePlans } from '../hooks/use-route-plans'
 
 /**

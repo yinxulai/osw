@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { ProtocolIcons } from '@/components/protocol-icons'
 import { Switch } from '@/components/ui/switch'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { cn } from '@/lib/utils'
 import type { ProviderModelMetrics } from '../lib/model-metrics'
 

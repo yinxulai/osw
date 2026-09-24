@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { resolveProxyOrigin } from '@common/proxy-origin'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useProxyActions, useProxyStatus } from '@/features/proxy/hooks'
+import { useProxyActions, useProxyStatus } from '@/data/proxy'
 
 export function useProxyToggle() {
   const toast = useToast()

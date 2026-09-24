@@ -6,11 +6,11 @@ import type { ReactNode } from 'react'
 import { PROTOCOL_DISPLAY_NAMES, PROXY_INTERFACE_ENTRIES } from '@common/protocols'
 import { I18nProvider } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { InterfaceTableCard } from './interface-table-card'
 
 // `I18nProvider` 会读取服务端设置，单测里不需要也不该走 react-query。
-vi.mock('@/features/settings/hooks', () => ({ useSettings: () => null }))
+vi.mock('@/data/settings', () => ({ useSettings: () => null }))
 
 const navigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))

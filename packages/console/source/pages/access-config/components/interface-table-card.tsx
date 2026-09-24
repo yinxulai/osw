@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsCardHeader } from '@/components/settings-card-header'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { INTERFACE_DESCRIPTION_KEYS } from '../service-facts'
 
 /**

@@ -14,10 +14,10 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
-import { useProxyStatus } from '@/features/proxy/hooks'
+import { useProxyStatus } from '@/data/proxy'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { fetchRequestLogBodies } from '../queries'
 import { buildCurl } from '../lib/build-curl'
 import {

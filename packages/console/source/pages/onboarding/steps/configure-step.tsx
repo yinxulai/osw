@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths } from '@/routes'
+import { routePaths } from '@/routing/routes'
 import { AddressCard } from '@/pages/access-config/components/address-card'
 import { InterfaceTableCard } from '@/pages/access-config/components/interface-table-card'
 import { ServiceStatusBar } from '@/pages/access-config/components/service-status-bar'

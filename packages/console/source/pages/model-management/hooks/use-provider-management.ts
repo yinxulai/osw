@@ -5,7 +5,7 @@ import { unwrap } from '@/api/unwrap'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useProvidersActions } from '@/features/providers/hooks'
+import { useProvidersActions } from '@/data/providers'
 import type { Provider } from '@common/schemas'
 
 interface UseProviderManagementOptions { reload: () => Promise<void> }

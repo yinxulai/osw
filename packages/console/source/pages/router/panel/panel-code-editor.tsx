@@ -39,7 +39,7 @@ import type { SchemaFieldDescriptor } from '@common/router/types'
  * 正则打标记能力，两种模式因此共用同一套外观与交互。
  *
  * 外观全部写进 `EditorView.theme` / `HighlightStyle`（颜色一律取 CSS 变量），
- * 所以自动跟随明暗主题，也不需要在 `index.css` 里再开一套 CodeMirror 选择器。
+ * 所以自动跟随明暗主题，也不需要在 `styles/index.css` 里再开一套 CodeMirror 选择器。
  */
 export type PanelCodeLanguage = 'javascript' | 'template'
 
