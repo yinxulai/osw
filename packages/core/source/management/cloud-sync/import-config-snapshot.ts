@@ -1,7 +1,6 @@
 import { CONFIG_SNAPSHOT_FILE_NAME, ConfigSnapshotSchema } from '@common/cloud-sync'
 import type { ConfigSnapshot } from '@common/cloud-sync'
 import { PROVIDER_BUNDLE_FORMAT, PROVIDER_BUNDLE_VERSION } from '@common/provider-bundle'
-import type { ProviderBundleProvider } from '@common/provider-bundle'
 import { AppError } from '@server/errors'
 import {
   createLogicalModel,
@@ -16,7 +15,6 @@ import {
 import { listProviderModels } from '@server/database/model-store'
 import { listProviders } from '@server/database/provider-store'
 import { importProviderBundle } from '../provider-transfer/import-provider-bundle'
-import { decodeSecret } from './secret-codec'
 
 export interface ConfigSnapshotImportResult {
   /** 这份快照是什么时候导出的，用来告诉用户拉回来的是哪一版。 */
@@ -32,25 +30,23 @@ export interface ConfigSnapshotImportResult {
  * - 供应商按名称覆盖，并沿用供应商导入自己的规则（包内未提到的模型软删除）；
  * - 逻辑模型按 id 新建或更新，快照里没有的逻辑模型**不动**——从一个只同步了部分内容的
  *   快照推回来不该删掉本机多出来的东西；
- * - **绑定**只对快照里出现过的逻辑模型重写：这些逻辑模型上的绑定以快照为准（多出来的软删除），
- *   其余逻辑模型的绑定原样保留；
- * - **密钥**贴回各自同名的供应商：包里带了就覆盖本机的，没带（或解不出来）就沿用本机已有的。
+ * - 绑定只对快照里出现过的逻辑模型重写：这些逻辑模型上的绑定以快照为准（多出来的软删除），
+ *   其余逻辑模型的绑定原样保留。
  *
- * 逻辑模型与绑定这两条的取舍和供应商包是一致的：把一个供应商从队列里移掉要能同步过去，
- * 但对快照没提到的对象动刀就不是同步而是删除了。代价是「删掉一个逻辑模型」这个动作不会传播，
- * 见 `docs/product/cloud-sync.md`。
+ * 后两条的取舍和供应商包是一致的：把一个供应商从队列里移掉要能同步过去，但对快照没提到的
+ * 对象动刀就不是同步而是删除了。代价是「删掉一个逻辑模型」这个动作不会传播，见
+ * `docs/product/cloud-sync.md`。
  */
 export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapshotImportResult> {
   const snapshot = parseConfigSnapshot(input)
-  const providers = applySecrets(snapshot)
 
-  if (providers.length > 0) {
+  if (snapshot.providers.length > 0) {
     await importProviderBundle({
       bundle: {
         format: PROVIDER_BUNDLE_FORMAT,
         version: PROVIDER_BUNDLE_VERSION,
         exportedAt: snapshot.exportedAt,
-        providers,
+        providers: snapshot.providers,
       },
     })
   }
@@ -67,26 +63,6 @@ export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapsh
       bindings,
     },
   }
-}
-
-/**
- * 把 `secrets` 解回来贴到各自的供应商条目上。
- *
- * 供应商导入的规则是「包里有 `apiKey` 就写回，没有就沿用本机已有的」——所以**解不出来的密钥
- * 直接不贴**，天然退化成「沿用本机」。这也是旧快照（还没有 `secrets` 字段的那种）的行为。
- */
-function applySecrets(snapshot: ConfigSnapshot): ProviderBundleProvider[] {
-  const apiKeyByProviderName = new Map<string, string>()
-  for (const secret of snapshot.secrets) {
-    const apiKey = decodeSecret(secret.value)
-    if (apiKey === null) continue
-    apiKeyByProviderName.set(secret.providerName, apiKey)
-  }
-  if (apiKeyByProviderName.size === 0) return snapshot.providers
-  return snapshot.providers.map(entry => {
-    const apiKey = apiKeyByProviderName.get(entry.name)
-    return apiKey === undefined ? entry : { ...entry, apiKey }
-  })
 }
 
 /**

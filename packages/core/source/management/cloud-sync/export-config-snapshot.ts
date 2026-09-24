@@ -1,38 +1,33 @@
-import type { ConfigSnapshot, ConfigSnapshotSecret } from '@common/cloud-sync'
+import type { ConfigSnapshot } from '@common/cloud-sync'
 import { CONFIG_SNAPSHOT_FORMAT, CONFIG_SNAPSHOT_VERSION } from '@common/cloud-sync'
 import { listLogicalModels, listSchedulingPolicies } from '@server/database/logical-model-store'
 import { listProviderModels } from '@server/database/model-store'
 import { listProviders } from '@server/database/provider-store'
 import { exportProviderBundle } from '../provider-transfer/export-provider-bundle'
-import { encodeSecret } from './secret-codec'
+import { encodeSnapshotDocument } from './snapshot-codec'
 
 export interface ConfigSnapshotExportResult {
   snapshot: ConfigSnapshot
-  /** 序列化后的快照正文，直接作为远端文件内容写入。 */
+  /** 写进远端文件的内容：整份快照 JSON 的 base64（见 `snapshot-codec.ts`）。 */
   content: string
 }
 
 /**
  * 把本机配置整理成一份可传输的快照。
  *
- * **密钥一起走，但只做 base64。** 不同步密钥的话，「换台机器点一次拉取就能接着用」只成立一半：
- * 渠道都在，每一个还得重新去官网签一次 Key。所以密钥随快照走，代价是它落到了第三方手里——
- * 因此只给编码不给明文，并且这件事必须在界面上说清楚（见 `docs/product/cloud-sync.md`）。
+ * **整份正文 base64 后才写出去**（见 `snapshot-codec.ts`）：远端那个文件由第三方托管，
+ * 而快照里既有用户的部署信息，也有各供应商的 API Key。编码让这个文件一眼看不出内容，
+ * 但它只是编码——拿到文件的人解一下就还原了全部，包括密钥。
  *
- * 密钥单独放在 `secrets` 里、`providers` 保持脱敏：两件事分开写，读的人一眼就知道哪个是秘密。
- * 供应商部分直接复用供应商导出（同一份 schema、同一套规则），这里只额外补上供应商导出没有的
- * 维度：逻辑模型本身，以及「哪个供应商的哪个模型挂在哪个逻辑模型上」。
+ * 因此密钥是**带着走**的：不带的话「换台机器点一次拉取就能接着用」只成立一半——渠道都在，
+ * 每一个还得重新去官网签一次 Key。代价是密钥落到了托管方手里，所以这件事在界面上与
+ * `docs/product/cloud-sync.md` 里都写明了，不能只藏在代码里。
+ *
+ * 供应商部分直接复用供应商导出（同一份 schema、同一套规则，只是这里带上密钥），这里只额外补上
+ * 供应商导出没有的维度：逻辑模型本身，以及「哪个供应商的哪个模型挂在哪个逻辑模型上」。
  */
 export async function exportConfigSnapshot(): Promise<ConfigSnapshotExportResult> {
-  // 供应商导出自己支持带明文密钥，借它把密钥取出来，随即搬进 `secrets` 并从条目里抹掉。
   const { bundle } = await exportProviderBundle({ includeApiKeys: true })
-  const secrets: ConfigSnapshotSecret[] = []
-  const snapshotProviders = bundle.providers.map(entry => {
-    const { apiKey, ...rest } = entry
-    // 供应商导出在没取到密钥时会省掉整个字段，所以这里只可能是「没有」或者一个非空串。
-    if (apiKey) secrets.push({ providerName: entry.name, value: encodeSecret(apiKey) })
-    return rest
-  })
   const [logicalModels, providers, providerModels, policies] = await Promise.all([
     listLogicalModels(),
     listProviders(),
@@ -65,8 +60,7 @@ export async function exportConfigSnapshot(): Promise<ConfigSnapshotExportResult
     format: CONFIG_SNAPSHOT_FORMAT,
     version: CONFIG_SNAPSHOT_VERSION,
     exportedAt: Date.now(),
-    providers: snapshotProviders,
-    secrets,
+    providers: bundle.providers,
     logicalModels: logicalModels.map(model => ({
       id: model.id,
       name: model.name,
@@ -76,5 +70,6 @@ export async function exportConfigSnapshot(): Promise<ConfigSnapshotExportResult
     bindings,
   }
 
-  return { snapshot, content: JSON.stringify(snapshot, null, 2) }
+  // 不缩进：整份正文马上就要 base64，缩进只会把远端文件白撑大一圈而没人会直接读它。
+  return { snapshot, content: encodeSnapshotDocument(JSON.stringify(snapshot)) }
 }

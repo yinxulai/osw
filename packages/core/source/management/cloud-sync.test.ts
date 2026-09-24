@@ -96,6 +96,20 @@ function gistHolding(content: string): Record<string, unknown> {
   return { ...gistPayload(), files: { [CONFIG_SNAPSHOT_FILE_NAME]: { content } } }
 }
 
+/**
+ * 把一段「远端文件内容」走完整的拉取链路应用回本机（过 Gist 读写、base64 解码、导入）。
+ *
+ * 不直接调 `importConfigSnapshot`：那样会跳过 base64 这一段，而 base64 正是这里要验的东西。
+ */
+async function pullSnapshotFrom(content: string): Promise<void> {
+  mockGithub({
+    'GET /user': () => githubReply(200, { login: 'octocat' }),
+    [`GET /gists/${GIST_ID}`]: () => githubReply(200, gistHolding(content)),
+  })
+  await configureCloudSync({ credential: 'ghp_good', target: GIST_ID })
+  await pullConfigSnapshot()
+}
+
 async function expectAppError(run: () => Promise<unknown>, code: string): Promise<void> {
   const error = await run().then(() => undefined, (value: unknown) => value)
   expect(normalizeError(error).code).toBe(code)
@@ -113,7 +127,7 @@ async function seedLocalConfiguration(): Promise<void> {
 }
 
 describe('config snapshot', () => {
-  it('carries the api key as base64, never in the clear', async () => {
+  it('base64-encodes the whole document, so the remote file is unreadable', async () => {
     await seedLocalConfiguration()
     secrets.set('key_ref', 'sk-super-secret')
 
@@ -121,23 +135,26 @@ describe('config snapshot', () => {
 
     expect(snapshot.format).toBe(CONFIG_SNAPSHOT_FORMAT)
     expect(snapshot.version).toBe(CONFIG_SNAPSHOT_VERSION)
-    // `providers` 保持脱敏，密钥单独走 `secrets`：同一个字段名在两种文档里表示两种东西迟早要出错。
-    expect(snapshot.providers[0]).not.toHaveProperty('apiKey')
-    expect(snapshot.secrets).toEqual([
-      { providerName: 'OpenAI', value: Buffer.from('sk-super-secret', 'utf8').toString('base64') },
-    ])
-    // 这是编码不是加密：文件里看不到明文，但任何人都解得回来。别把它当成保护。
+    // 整份编码：文件里不该出现任何能读出来的东西——供应商名、字段名、密钥都算。
     expect(content).not.toContain('sk-super-secret')
-    expect(Buffer.from(snapshot.secrets[0].value, 'base64').toString('utf8')).toBe('sk-super-secret')
+    expect(content).not.toContain('apiKey')
+    expect(content).not.toContain('OpenAI')
+    expect(content).not.toContain('osw/config-snapshot')
+    expect(content).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
+    // 编码不是加密：任何人解一下就拿到全部内容，包括密钥。这里把这个事实钉在测试里。
+    const decoded = JSON.parse(Buffer.from(content, 'base64').toString('utf8'))
+    expect(decoded.format).toBe(CONFIG_SNAPSHOT_FORMAT)
+    expect(decoded.providers[0].apiKey).toBe('sk-super-secret')
   })
 
   it('writes the api key back onto a machine that never had one', async () => {
     await seedLocalConfiguration()
     secrets.set('key_ref', 'sk-super-secret')
-    const { snapshot } = await exportConfigSnapshot()
+    const { content } = await exportConfigSnapshot()
 
+    // 换一台机器：空目录重开，再用同一个远端文件拉回来。
     await restartWithEmptyDatabase()
-    await importConfigSnapshot(snapshot)
+    await pullSnapshotFrom(content)
 
     const [provider] = await listProviders()
     // 新机器上的供应商是新建的，密钥引用也是新的；密钥本身必须跟着快照过来。
@@ -145,31 +162,27 @@ describe('config snapshot', () => {
     expect(secrets.get(provider.apiKeyReference)).toBe('sk-super-secret')
   })
 
-  it('leaves the local api key alone when the snapshot carries none', async () => {
+  it('still reads a remote file written before the whole document was encoded', async () => {
     await seedLocalConfiguration()
-    secrets.set('key_ref', 'sk-local-secret')
+    secrets.set('key_ref', 'sk-super-secret')
     const { snapshot } = await exportConfigSnapshot()
 
-    // 旧版本推上来的快照没有 `secrets` 字段，不能因此把本机已经配好的密钥抹掉。
-    await importConfigSnapshot({ ...snapshot, secrets: [] })
+    // 旧版本推上去的就是 JSON 原文。升级后第一次拉取不该撞上「远端文件坏了」的假故障。
+    await restartWithEmptyDatabase()
+    await pullSnapshotFrom(JSON.stringify(snapshot))
 
     const [provider] = await listProviders()
-    expect(provider.apiKeyReference).toBe('key_ref')
-    expect(secrets.get('key_ref')).toBe('sk-local-secret')
+    expect(provider.name).toBe('OpenAI')
+    expect(secrets.get(provider.apiKeyReference)).toBe('sk-super-secret')
   })
 
-  it('falls back to the local api key when a secret in the snapshot cannot be decoded', async () => {
+  it('rejects a remote file that is neither base64 nor JSON', async () => {
     await seedLocalConfiguration()
-    secrets.set('key_ref', 'sk-local-secret')
-    const { snapshot } = await exportConfigSnapshot()
 
-    // 一段乱码要退化成「这份快照没带这把密钥」，而不是把乱码写进密钥库——
-    // 那要等到下一次请求才以一个看不懂的错误爆掉。
-    await importConfigSnapshot({ ...snapshot, secrets: [{ providerName: 'OpenAI', value: 'not base64!' }] })
-
-    expect(secrets.get('key_ref')).toBe('sk-local-secret')
+    await expectAppError(() => pullSnapshotFrom('not base64!'), 'CLOUD_SYNC_REMOTE_FILE_INVALID')
+    // 合法 base64 但解出来不是 JSON：报错要指向「文件坏了」，而不是「文件不存在」。
+    await expectAppError(() => pullSnapshotFrom(Buffer.from('hello', 'utf8').toString('base64')), 'CLOUD_SYNC_REMOTE_FILE_INVALID')
   })
-
   it('round-trips providers, models, logical models and bindings into a fresh database', async () => {
     await seedLocalConfiguration()
     const { snapshot } = await exportConfigSnapshot()
@@ -290,7 +303,11 @@ describe('cloud sync service', () => {
     expect(settings.cloudSyncTarget).toBe(GIST_ID)
     expect(settings.cloudSyncLastPushedTime).toBeGreaterThan(0)
     expect(createdBody).toMatchObject({ public: false })
-    expect(JSON.stringify(createdBody)).toContain(CONFIG_SNAPSHOT_FILE_NAME)
+    // 推上去的正文是整份 base64，不是能直接读的 JSON——供应商名不该在文件里露出来。
+    const files = (createdBody as { files: Record<string, { content: string }> }).files
+    const content = files[CONFIG_SNAPSHOT_FILE_NAME].content
+    expect(content).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
+    expect(content).not.toContain('OpenAI')
   })
 
   it('lists the storages the client may choose from and marks the active one', async () => {

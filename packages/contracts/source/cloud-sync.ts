@@ -61,23 +61,6 @@ const ConfigSnapshotBindingSchema = z.object({
 })
 
 /**
- * 快照里携带的一把密钥。
- *
- * **这是编码，不是加密。** `value` 是 API Key 的 base64 表示，拿到快照的人一条解码命令就能还原。
- * 用编码而不用明文，是为了不让密钥以 `sk-…` 的样子直接躺在远端文件里——那既会被肉眼扫到，
- * 也容易被密钥扫描器判成泄露。它挡不住任何有意的读取，别把「不是明文」当成「安全」。
- *
- * 单独开一个数组、而不是把 base64 塞进 `providers[].apiKey`：那个字段与供应商包共用，
- * 在供应商包里它是明文。同一个字段名在两种文档里表示两种东西，是迟早要出错的。
- */
-const ConfigSnapshotSecretSchema = z.object({
-  /** 指向 `providers` 里同名的条目。用名字而不是 id，理由与绑定相同：id 是本机的。 */
-  providerName: z.string().min(1).max(100),
-  /** API Key 的 base64。 */
-  value: z.string().min(1),
-})
-
-/**
  * 配置快照：一次云同步传输的完整内容。
  *
  * 与供应商包是超集关系：`providers` 直接用供应商包的供应商条目（同一份 schema，因此保存与
@@ -86,24 +69,19 @@ const ConfigSnapshotSecretSchema = z.object({
  *
  * 刻意**不包含**应用设置（监听地址、上游代理、日志保留……）：那些是「这台机器该怎么跑」，
  * 不是「有哪些渠道」。把它们一起同步，只会让换机时莫名其妙地改掉本机端口与代理。
- *
- * **包含供应商的 API Key**，放在 `secrets` 里且只做 base64。不带密钥的话，「换台机器点一次
- * 拉取就能接着用」只成立一半：渠道都在，每一个还得重新去官网签一次 Key。代价是密钥落到了
- * 托管方手里，因此只给编码、不给明文，且界面必须一直写明这件事（见 `docs/product/cloud-sync.md`）。
  */
 export const ConfigSnapshotSchema = z.object({
   format: z.literal(CONFIG_SNAPSHOT_FORMAT),
   version: z.literal(CONFIG_SNAPSHOT_VERSION),
   exportedAt: z.number().int(),
-  /** 供应商条目。永不含明文密钥：密钥走下面的 `secrets`。 */
-  providers: z.array(ProviderBundleProviderSchema).default([]),
   /**
-   * 各供应商的 API Key，逐个 base64 编码（见 `ConfigSnapshotSecretSchema`）。
+   * 供应商条目，**带着明文 API Key**（`apiKey` 字段）。
    *
-   * 允许缺席：没有这个字段的快照（旧版本推上来的、或用户手改过的）照样能解析，
-   * 拉取时那些供应商沿用本机已有的密钥。
+   * 写往远端时整份文档会做一次 base64（见 `packages/core/source/management/cloud-sync/snapshot-codec.ts`），
+   * 所以落到别人硬盘上的不是明文；但在内存与传输对象里它就是明文，别把这个字段当成已经加密。
+   * 远端文件被解出来之后，密钥跟着 `providers` 一起还原——这是「换台机器拉一次就能用」的前提。
    */
-  secrets: z.array(ConfigSnapshotSecretSchema).default([]),
+  providers: z.array(ProviderBundleProviderSchema).default([]),
   /** 逻辑模型。**数组顺序就是展示顺序**，队列次序靠它传递。 */
   logicalModels: z.array(ConfigSnapshotLogicalModelSchema).default([]),
   bindings: z.array(ConfigSnapshotBindingSchema).default([]),
@@ -185,7 +163,6 @@ export const CloudSyncPullResultSchema = z.object({
 export type ConfigSnapshot = z.infer<typeof ConfigSnapshotSchema>
 export type ConfigSnapshotLogicalModel = z.infer<typeof ConfigSnapshotLogicalModelSchema>
 export type ConfigSnapshotBinding = z.infer<typeof ConfigSnapshotBindingSchema>
-export type ConfigSnapshotSecret = z.infer<typeof ConfigSnapshotSecretSchema>
 export type CloudSyncStatus = z.infer<typeof CloudSyncStatusSchema>
 export type CloudSyncConfigureRequest = z.infer<typeof CloudSyncConfigureRequestSchema>
 export type CloudSyncTransferSummary = z.infer<typeof CloudSyncTransferSummarySchema>

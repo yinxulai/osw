@@ -16,6 +16,7 @@ import { cloudBackupCredentialReference, getCloudBackupProvider, listCloudBackup
 import type { CloudBackupProvider } from './backends/contract'
 import { exportConfigSnapshot } from './export-config-snapshot'
 import { importConfigSnapshot } from './import-config-snapshot'
+import { decodeSnapshotDocument } from './snapshot-codec'
 
 /**
  * 云同步的编排层：把「设置 + 密钥库 + 当前承载方式」拼成界面要的那几个动作。
@@ -217,19 +218,22 @@ function summarizeSnapshot(snapshot: ConfigSnapshot): CloudSyncTransferSummary {
 }
 
 /**
- * 把远端的文件正文解析成对象，只在这一步做 JSON 解析。
+ * 把远端的文件正文解析成对象。
  *
- * 解析失败要报「文件不是合法 JSON」而不是「文件不存在」：用户手改坏了文件是最常见的成因，
- * 而这句提示能直接把他指向那个文件。
+ * 两步都在这里，顺序不能反：先把整份 base64 解回 JSON 正文（`snapshot-codec.ts`，顺便兼容
+ * 之前没编码过的旧文件），再解析 JSON。两种失败分开报——「解不出编码」与「解出来不是 JSON」
+ * 是两种不同的坏文件，用户要改的地方也不一样。
  */
 function parseSnapshotContent(content: string): unknown {
   try {
-    return JSON.parse(content)
+    return JSON.parse(decodeSnapshotDocument(content))
   } catch (error) {
+    // 编码错误本身就是 `CLOUD_SYNC_REMOTE_FILE_INVALID`，直接放它过去，别包成一句 JSON 报错。
+    if (error instanceof AppError) throw error
     throw new AppError(
       'CLOUD_SYNC_REMOTE_FILE_INVALID',
       502,
-      `${CONFIG_SNAPSHOT_FILE_NAME} at the remote location is not valid JSON`,
+      `${CONFIG_SNAPSHOT_FILE_NAME} at the remote location is not valid JSON after base64 decoding`,
       { cause: error, details: { fileName: CONFIG_SNAPSHOT_FILE_NAME } },
     )
   }

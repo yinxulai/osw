@@ -193,8 +193,9 @@ export function CloudSyncCard() {
           />
         </div>
 
-        {/* 这条不是提示而是告知：密钥确实会一起上传，而且只是编码。不写出来就是在用户不知情时把密钥推出去。 */}
-        <FormHint className="pt-3">{t('settings.cloudSync.secretsNotice')}</FormHint>
+        {/* 这句不是可关闭的提示，是告知：密钥确实会一起上传，而且只是编码。
+            不写出来就等于在用户不知情的前提下把他的 Key 推出去。 */}
+        <FormHint className="pt-3" tone="warning">{t('settings.cloudSync.encodingNotice')}</FormHint>
 
         {sync.message && (
           <Alert className="mt-1 mb-1 border-0 bg-success/10 text-text-success">
