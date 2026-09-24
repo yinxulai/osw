@@ -1,0 +1,33 @@
+{
+  "key": "claude-code",
+  "name": "Claude Code",
+  "aliases": ["claude", "cc"],
+  "order": 100,
+  "websiteUrl": "https://www.anthropic.com/claude-code",
+  "description": "Anthropic's terminal coding agent. Talks the Anthropic Messages API; its endpoint, token and model all live in the `env` block of settings.json.",
+  "protocol": "anthropic-messages",
+  "configDir": "~/.claude",
+  "files": [
+    {
+      "path": "~/.claude/settings.json",
+      "format": "json",
+      "purpose": "Main config: `env` (endpoint/token/models) and the top-level `model`."
+    },
+    {
+      "path": "~/.claude/.credentials.json",
+      "format": "json",
+      "purpose": "Claude account OAuth credentials."
+    }
+  ],
+  "fields": [
+    { "key": "model", "path": "model", "type": "string", "description": "Default model." },
+    { "key": "baseUrl", "path": "env.ANTHROPIC_BASE_URL", "type": "string", "description": "Anthropic API base URL." },
+    { "key": "authToken", "path": "env.ANTHROPIC_AUTH_TOKEN", "type": "string", "description": "Token presented to the base URL." },
+    { "key": "mainModel", "path": "env.ANTHROPIC_MODEL", "type": "string", "description": "Main model while routed through a custom base URL." },
+    { "key": "opus", "path": "env.ANTHROPIC_DEFAULT_OPUS_MODEL", "type": "string", "description": "Model the `opus` alias resolves to." },
+    { "key": "sonnet", "path": "env.ANTHROPIC_DEFAULT_SONNET_MODEL", "type": "string", "description": "Model the `sonnet` alias resolves to." },
+    { "key": "haiku", "path": "env.ANTHROPIC_DEFAULT_HAIKU_MODEL", "type": "string", "description": "Model the `haiku` alias resolves to." },
+    { "key": "fable", "path": "env.ANTHROPIC_DEFAULT_FABLE_MODEL", "type": "string", "description": "Model the `fable` alias resolves to." },
+    { "key": "smallFast", "path": "env.ANTHROPIC_SMALL_FAST_MODEL", "type": "string", "description": "Model used for background/small work." }
+  ]
+}

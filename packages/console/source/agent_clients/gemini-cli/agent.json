@@ -1,0 +1,28 @@
+{
+  "key": "gemini-cli",
+  "name": "Gemini CLI",
+  "aliases": ["gemini"],
+  "order": 92,
+  "websiteUrl": "https://github.com/google-gemini/gemini-cli",
+  "description": "Google's Gemini CLI. Speaks only Google's own API; the auth mode and model live in settings.json, while the endpoint and key live in ~/.gemini/.env.",
+  "protocol": "gemini",
+  "configDir": "~/.gemini",
+  "files": [
+    {
+      "path": "~/.gemini/settings.json",
+      "format": "json",
+      "purpose": "Main config: `security.auth.selectedType` and `model.name`."
+    },
+    {
+      "path": "~/.gemini/.env",
+      "format": "env",
+      "purpose": "GOOGLE_GEMINI_BASE_URL and GEMINI_API_KEY, loaded by the CLI."
+    }
+  ],
+  "fields": [
+    { "key": "auth", "path": "security.auth.selectedType", "type": "string", "description": "How it authenticates: oauth-personal / gemini-api-key / vertex-ai." },
+    { "key": "model", "path": "model.name", "type": "string", "description": "Model to use." },
+    { "key": "baseUrl", "path": "GOOGLE_GEMINI_BASE_URL", "type": "string", "description": "Gemini API base URL (from .env)." },
+    { "key": "apiKey", "path": "GEMINI_API_KEY", "type": "string", "description": "Gemini API key (from .env)." }
+  ]
+}

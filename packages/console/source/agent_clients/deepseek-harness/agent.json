@@ -1,0 +1,27 @@
+{
+  "key": "deepseek-harness",
+  "name": "DeepSeek Harness",
+  "aliases": ["dsh"],
+  "order": 64,
+  "description": "DeepSeek Harness (dsh). Its config is a YAML patch list of {id, config} entries; the model lives in the `agent-loop` entry and the endpoint in `llm-deepseek`. The home directory is $DSH_HOME (default ~/.dsh).",
+  "configDir": "~/.dsh",
+  "files": [
+    {
+      "path": "~/.dsh/config.yaml",
+      "format": "yaml",
+      "envVar": "DSH_HOME",
+      "purpose": "Patch list replacing whole config rows, addressed by `id`."
+    },
+    {
+      "path": "~/.dsh/settings.yaml",
+      "format": "yaml",
+      "envVar": "DSH_HOME",
+      "purpose": "Personal settings; an llm-deepseek endpoint/key here overrides the patch list."
+    }
+  ],
+  "fields": [
+    { "key": "model", "path": "agent-loop.model", "type": "string", "description": "Model of the main agent loop." },
+    { "key": "endpoint", "path": "llm-deepseek.config.baseURL", "type": "string", "description": "DeepSeek endpoint base URL." },
+    { "key": "apiKey", "path": "llm-deepseek.config.apiKey", "type": "string", "description": "DeepSeek API key." }
+  ]
+}
