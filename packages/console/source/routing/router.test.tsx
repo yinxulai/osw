@@ -27,6 +27,8 @@ describe('路由路径契约', () => {
       // 父路由没有自己的页面，落到索引子路由上。
       [routePaths.overview, `${routePaths.overview}/`],
       ['/overview/demo', '/overview/$providerId'],
+      [routePaths.clientConfig, `${routePaths.clientConfig}/`],
+      ['/client-config/claude-code', '/client-config/$clientKey'],
     ]
     for (const [requested, expectedId] of cases) {
       expect(leafMatch(requested)?.routeId, requested).toBe(expectedId)
@@ -57,5 +59,13 @@ describe('路由路径契约', () => {
       search: { range: 'today' },
     }).href
     expect(href).toBe('/overview/abc?range=today')
+  })
+
+  it('客户端详情的链接会把客户端 key 写进路径', () => {
+    const href = router.buildLocation({
+      to: routePaths.clientConfigDetail,
+      params: { clientKey: 'gemini-cli' },
+    }).href
+    expect(href).toBe('/client-config/gemini-cli')
   })
 })

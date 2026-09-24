@@ -208,6 +208,47 @@ export const workflows = sqliteTable(
   ],
 )
 
+/**
+ * 客户端配置文件的版本快照。
+ *
+ * 用户的诉求是「每次提交前自动备份当前内容，基于 hash 去重：已经有这个版本就不新增」，
+ * 所以这张表的主键之外还有一条 **(clientKey, filePath, contentHash) 唯一索引**——
+ * 去重规则交给 SQLite 而不是靠先查后写（那中间有竞态，且重复提交会得到两条一模一样的行）。
+ * 写入用 `onConflictDoNothing`，冲突即代表「这个版本已在库里」，不更新、不新增。
+ *
+ * 为什么落在**配置库**：这是用户可回滚的备份数据——删掉它就等于用户自己写过的配置无法找回，
+ * 与「数据库整个删掉不影响功能」的前提正相反。但它**不是**每请求写入：只有用户点「应用/恢复」
+ * 时才各写一行，所以不违反这个文件顶部的第 2 条不变量。
+ *
+ * `content` 存的是整份原文（不是 diff）：配置文件都很小（几 KB），而整份原文才能保证
+ * 「恢复」是精确的——按 diff 回放一旦中间漏了一次写入就会错位。
+ */
+export const clientConfigVersions = sqliteTable(
+  'client_config_versions',
+  {
+    id: text('id').primaryKey(),
+    /** 注册表里的客户端 key，如 `claude-code`。 */
+    clientKey: text('clientKey').notNull(),
+    /** 注册表里声明的那条 `~/` 路径（原样存，不展开成绝对路径，便于跨机器）。 */
+    filePath: text('filePath').notNull(),
+    /** 内容摘要（sha256 十六进制），去重依据。 */
+    contentHash: text('contentHash').notNull(),
+    /** 该版本的完整文件内容。 */
+    content: text('content').notNull(),
+    /** 内容字节数，列表里用来展示体量。 */
+    sizeBytes: integer('sizeBytes').notNull().default(0),
+    /** 快照产生的原因：`apply`（提交覆盖前的备份）/ `restore`（恢复前的备份）。 */
+    origin: text('origin').notNull().default('apply'),
+    /** 备注，例如「应用 One Switch 地址前」。 */
+    note: text('note').notNull().default(''),
+    createdTime: integer('createdTime').notNull(),
+  },
+  table => [
+    uniqueIndex('idx_client_config_versions_hash').on(table.clientKey, table.filePath, table.contentHash),
+    index('idx_client_config_versions_file').on(table.clientKey, table.filePath, table.createdTime),
+  ],
+)
+
 export const schedulingPolicies = sqliteTable(
   'scheduling_policies',
   {

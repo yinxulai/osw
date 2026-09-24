@@ -1,3 +1,4 @@
+import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
 import type { ProxyInterfaceId } from '@common/protocols'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
@@ -17,7 +18,7 @@ import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
  *    类型写成 `Record<ProxyInterfaceId, …>` 而不是散落的对象字面量：契约层新增一个接口时，
  *    这里会编译失败，而不是让新接口在表里默默少一行说明。
  */
-export const SAMPLE_API_KEY = 'sk-osw'
+export const SAMPLE_API_KEY = CLIENT_CONFIG_SAMPLE_API_KEY
 
 export const SAMPLE_MODEL_NAME = BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME
 

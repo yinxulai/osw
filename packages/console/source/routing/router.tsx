@@ -23,6 +23,8 @@ import { LogsPage } from '@/pages/logs/page'
 import { RequestLogsPage } from '@/pages/request-logs/page'
 import { RequestRewriteRulesPage } from '@/pages/request-rewrite-rules/page'
 import { AccessConfigPage } from '@/pages/access-config/page'
+import { ClientConfigPage } from '@/pages/client-config/page'
+import { ClientConfigDetailPage } from '@/pages/client-config/detail'
 import { RouterPage } from '@/pages/router/page'
 
 /**
@@ -78,6 +80,11 @@ const overviewRoute = createRoute({
 const overviewIndexRoute = createRoute({ getParentRoute: () => overviewRoute, path: '/', component: OverviewPage })
 const overviewProviderRoute = createRoute({ getParentRoute: () => overviewRoute, path: '$providerId', component: OverviewPage })
 
+const clientConfigRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.clientConfig, component: Outlet })
+
+const clientConfigIndexRoute = createRoute({ getParentRoute: () => clientConfigRoute, path: '/', component: ClientConfigPage })
+const clientConfigDetailRoute = createRoute({ getParentRoute: () => clientConfigRoute, path: '$clientKey', component: ClientConfigDetailPage })
+
 interface LogsSearch {
   q?: string
 }
@@ -97,6 +104,7 @@ const routeTree = rootRoute.addChildren([
   logicalModelsRoute,
   modelManagementRoute,
   accessConfigRoute,
+  clientConfigRoute.addChildren([clientConfigIndexRoute, clientConfigDetailRoute]),
   requestRewriteRulesRoute,
   routerRoute,
   overviewRoute.addChildren([overviewIndexRoute, overviewProviderRoute]),

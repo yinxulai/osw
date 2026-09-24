@@ -26,6 +26,10 @@ export const routePaths = {
   requestRewriteRules: '/request-rewrite-rules',
   /** 接入配置 */
   accessConfig: '/access-config',
+  /** 客户端配置 */
+  clientConfig: '/client-config',
+  /** 客户端配置 · 单客户端详情编辑（带 `$clientKey` 路径参数） */
+  clientConfigDetail: '/client-config/$clientKey',
   /** 运行日志 */
   logs: '/logs',
   /** 设置 */
@@ -40,5 +44,5 @@ export const routePaths = {
  */
 export type AppNavPath = Exclude<
   (typeof routePaths)[keyof typeof routePaths],
-  typeof routePaths.overviewProvider | typeof routePaths.onboarding
+  typeof routePaths.overviewProvider | typeof routePaths.clientConfigDetail | typeof routePaths.onboarding
 >

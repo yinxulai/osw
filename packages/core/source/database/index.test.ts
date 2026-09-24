@@ -138,6 +138,7 @@ describe('schema split', () => {
 
     expect(tableNames(getConfigDb().$client)).toEqual([
       '__drizzle_migrations',
+      'client_config_versions',
       'logical_models',
       'protocol_converters',
       'provider_endpoints',
