@@ -36,7 +36,10 @@ export function ContentCard(props: ContentCardProps) {
       <SettingsCardHeader
         icon={<FileCode2 />}
         title={t('clientConfig.content.title')}
-        description={state.filePath}
+        // 卡头报**展开后的真实路径**：这块展示的就是磁盘上的原文，标它真正的落点比标注册表里的 `~/` 写法有用
+        // （契约里 `resolvedPath` 的注释也是这个意思）。声明路径另有其处——多文件客户端在「选择配置文件」的下拉里，
+        // 同一个串因此在界面上只会说到一次。
+        description={<span className="font-mono">{state.resolvedPath}</span>}
         actions={(
           <>
             <Button variant="outline" disabled={!dirty || saving} onClick={() => setDraft(state.content)}>
@@ -54,18 +57,18 @@ export function ContentCard(props: ContentCardProps) {
           <span className={state.exists ? undefined : 'text-text-quaternary'}>
             {state.exists ? t('clientConfig.content.exists') : t('clientConfig.content.missing')}
           </span>
+          {/* 文件不在就一律留 `—`：这里报什么都是「没有」，写 0 B 会让人以为文件在那儿但是空的。 */}
           <span>
-            {t('clientConfig.content.size')} <span className="font-mono text-text-secondary">{formatBytes(state.sizeBytes)}</span>
+            {t('clientConfig.content.size')}{' '}
+            <span className="font-mono text-text-secondary">
+              {state.exists ? formatBytes(state.sizeBytes) : t('clientConfig.emptyValue')}
+            </span>
           </span>
           <span>
             {t('clientConfig.content.modified')}{' '}
             <span className="font-mono text-text-secondary">
               {state.modifiedTime ? formatVersionTime(t, state.modifiedTime) : t('clientConfig.emptyValue')}
             </span>
-          </span>
-          <span className="flex min-w-0 items-center gap-1">
-            {t('clientConfig.content.path')}
-            <span className="min-w-0 truncate font-mono text-text-secondary">{state.resolvedPath}</span>
           </span>
         </div>
 

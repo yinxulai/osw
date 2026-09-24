@@ -20,17 +20,22 @@ const buttonVariants = cva(
           "bg-destructive/10 text-components-button-destructive-ghost-text hover:bg-destructive/20 focus-visible:ring-destructive/20",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      /*
+        尺寸四档按 4px 排开（24 / 28 / 32 / 36），水平内边距跟着档位走（8 / 12 / 12 / 16）：
+        矮的按钮留白也要跟着收，否则 28px 高的按钮里字是挤在框上的。
+        圆角只在小档位收一格——`rounded-md`（4px）留给 24px 的档位（6px 圆角在 24px 上就是胶囊），
+        其余档位继承根上的 `rounded-lg`（6px），与 `Input` / `Select` 同一个圆角刻度。
+      */
       size: {
         default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-[12px] leading-4 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[13px] leading-4 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-8 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        xs: "h-6 gap-1 rounded-md px-2 text-[12px] leading-4 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1.5 px-3 text-[13px] leading-4 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-9 gap-2 px-4 has-data-[icon=inline-end]:pr-3.5 has-data-[icon=inline-start]:pl-3.5",
         icon: "size-8",
         "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+          "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-7",
         "icon-lg": "size-9",
       },
     },

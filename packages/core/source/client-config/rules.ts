@@ -1,45 +1,39 @@
 /**
- * 「把某个客户端的配置指到本地服务」这件事的**逐客户端配方**。
+ * 「把某个客户端的配置指到本地服务」这一步的**执行器**。
  *
- * 为什么不能全靠注册表里那点声明自动推：注册表描述的是「这些键存在、它们是这个意思」，
- * 而改配置还需要知道注册表不该关心的事——
+ * 数据不在这里：每个客户端要改哪些键、provider 表项长什么样，都是注册表里
+ * `AgentClientDefinition.apply` 的一部分（`@common/clients`）。这里只做三件事——
  *
- *   - 哪些键应当一起被覆盖（Claude Code 的 `opus/sonnet/haiku` 别名都必须跟着改，
- *     否则用户切一下别名就跑到真实 Anthropic 去了）；
- *   - provider 表项长什么样（Codex 的 `[model_providers.osw]` 与 OpenCode 的
- *     `provider.osw.options` 是两套不同结构）；
- *   - 哪些键**必须放过**（`model_reasoning_effort`、`security.auth.selectedType`…）。
+ *   1. 把注册表里的**模板**（`{ base_url: '{{baseUrl}}' }` 这种纯数据）展开成真正的值；
+ *   2. 把角色翻译成要写进配置的字符串；
+ *   3. 与注册表对账（`rules.test.ts`）：注册表里的每个键要么有角色、要么被显式放过。
  *
- * 没有配方的客户端就是「没有可指向本地服务的地址字段」（Copilot CLI、Cursor CLI 只存模型名），
- * 或地址与 provider 定义分在两个文件里（Pi），此时自动填充不可用，界面引导用户手动编辑。
- * `rules.test.ts` 会校验：配方提到的 key 必须都在注册表里，且注册表里的每个 key
- * 要么有角色、要么在 `ignored` 里——加字段时忘了登记会直接测试失败。
+ * 为什么值得这样拆：这一层原先自己攥着一份逐客户端配方，与注册表并行维护；注册表加了一个
+ * 会读到真实厂商的键（模型别名是重灾区）而配方忘了登记，就没人发现。现在两边是同一份数据。
  */
 
-/** 写进客户端配置的 provider id / 名字。 */
-export const LOCAL_PROVIDER_ID = 'osw'
-export const LOCAL_PROVIDER_NAME = 'One Switch'
+import {
+  AGENT_CLIENT_DEFINITIONS,
+  LOCAL_PROVIDER_ID,
+  LOCAL_PROVIDER_NAME,
+  expandAgentClientTemplate,
+  findAgentClientApplyConfig,
+  type AgentClientApplyConfig,
+  type AgentClientFieldRole,
+  type AgentClientTemplateContext,
+} from '@common/clients'
 
-export type ClientFieldRole =
-  /** 指向本地服务的基础地址。 */
-  | 'baseUrl'
-  /** 本地服务不校验的调用方凭证。 */
-  | 'apiKey'
-  /** 主模型。 */
-  | 'model'
-  /** 小模型/后台模型，留空时回落主模型。 */
-  | 'smallModel'
-  /** 指向 provider 表项的 id。 */
-  | 'provider'
-  /** provider 表项本身（对象）。 */
-  | 'providerEntry'
-  /** 需要置为 true 的布尔标记（如 Cursor 的 `hasChangedDefaultModel`）。 */
-  | 'flagTrue'
+export { LOCAL_PROVIDER_ID, LOCAL_PROVIDER_NAME }
 
+/** 见 `AgentClientFieldRole`：注册表字段在自动填充时的角色。 */
+export type ClientFieldRole = AgentClientFieldRole
+
+/** 写一次配置需要的实值。 */
 export interface ClientApplyContext {
   baseUrl: string
   apiKey: string
   model: string
+  /** 已回落到主模型的小模型。 */
   smallModel: string
 }
 
@@ -48,7 +42,7 @@ export interface ClientApplyRule {
   roles: Record<string, ClientFieldRole>
   /** 明确放过、但确实属于这个客户端的键（有意的「不碰」清单）。 */
   ignored: string[]
-  /** provider 表项的路径与结构；`<id>` 会被替换成 `LOCAL_PROVIDER_ID`。 */
+  /** provider 表项的路径与结构；路径里的 `{{providerId}}` 由调用方替换。 */
   providerEntry?: {
     path: string
     build: (context: ClientApplyContext) => Record<string, unknown>
@@ -57,71 +51,37 @@ export interface ClientApplyRule {
   modelPrefix?: string
 }
 
-const RULES: Record<string, ClientApplyRule> = {
-  'claude-code': {
-    roles: {
-      model: 'model',
-      baseUrl: 'baseUrl',
-      authToken: 'apiKey',
-      mainModel: 'model',
-      // 五个模型别名一起改成同一个名字：base URL 已经指向本地了，别名再解析到真实
-      // Anthropic 的模型名就会绕过路由，用户在 CLI 里切 `haiku` 时最难发现这类漏改。
-      opus: 'model',
-      sonnet: 'model',
-      haiku: 'model',
-      fable: 'model',
-      smallFast: 'smallModel',
-    },
-    ignored: [],
-  },
-  codex: {
-    roles: {
-      model: 'model',
-      provider: 'provider',
-      providerTable: 'providerEntry',
-    },
-    // 推理档位与额外模型目录是用户自己的取舍，与「走哪个地址」无关。
-    ignored: ['effort', 'catalog'],
-    providerEntry: {
-      path: 'model_providers.<id>',
-      // 不写 `env_key`：本地服务不校验鉴权，而 `env_key` 一旦写了，Codex 会要求这个环境
-      // 变量必须存在，等于凭空给用户加一个必须导出的变量。
-      build: context => ({
-        name: LOCAL_PROVIDER_NAME,
-        base_url: context.baseUrl,
-        wire_api: 'responses',
-      }),
-    },
-  },
-  'gemini-cli': {
-    roles: {
-      model: 'model',
-      baseUrl: 'baseUrl',
-      apiKey: 'apiKey',
-    },
-    // 认证方式由用户自己决定（oauth / api-key / vertex）；我们只改地址与密钥。
-    ignored: ['auth'],
-  },
-  opencode: {
-    roles: {
-      model: 'model',
-      small: 'smallModel',
-      provider: 'providerEntry',
-    },
-    ignored: [],
-    modelPrefix: `${LOCAL_PROVIDER_ID}/`,
-    providerEntry: {
-      path: 'provider.<id>',
-      build: context => ({
-        npm: '@ai-sdk/openai-compatible',
-        name: LOCAL_PROVIDER_NAME,
-        options: { baseURL: context.baseUrl, apiKey: context.apiKey },
-        // OpenCode 只认 provider 里声明过的 model id，所以这里把它登记的模型一起写进去。
-        models: { [context.model]: {} },
-      }),
-    },
-  },
+/** 模板展开用的实值：配方里的占位符与它一一对应。 */
+function templateContext(context: ClientApplyContext): AgentClientTemplateContext {
+  return {
+    baseUrl: context.baseUrl,
+    apiKey: context.apiKey,
+    model: context.model,
+    smallModel: context.smallModel,
+    providerId: LOCAL_PROVIDER_ID,
+    providerName: LOCAL_PROVIDER_NAME,
+  }
 }
+
+/** 注册表里的配置 → 运行期的配方：唯一的翻译就是「模板变成展开函数」。 */
+function toRule(config: AgentClientApplyConfig): ClientApplyRule {
+  const rule: ClientApplyRule = { roles: config.roles, ignored: config.ignored }
+  if (config.modelPrefix !== undefined) rule.modelPrefix = config.modelPrefix
+  if (config.providerEntry) {
+    const { path, template } = config.providerEntry
+    rule.providerEntry = {
+      path,
+      build: context => expandAgentClientTemplate(template, templateContext(context)) as Record<string, unknown>,
+    }
+  }
+  return rule
+}
+
+const RULES: Record<string, ClientApplyRule> = Object.fromEntries(
+  AGENT_CLIENT_DEFINITIONS.filter(definition => definition.apply !== undefined).map(
+    definition => [definition.key, toRule(definition.apply!)] as const,
+  ),
+)
 
 export function getClientApplyRule(clientKey: string): ClientApplyRule | null {
   return RULES[clientKey] ?? null
@@ -156,9 +116,9 @@ export function resolveFieldValue(role: ClientFieldRole, context: ClientApplyCon
   }
 }
 
-/** provider 表项在某个客户端上使用的具体路径（把 `<id>` 换成真实 id）。 */
+/** provider 表项在某个客户端上使用的具体路径（把 `{{providerId}}` 换成真实 id）。 */
 export function concreteProviderEntryPath(rule: ClientApplyRule): string | null {
-  return rule.providerEntry ? rule.providerEntry.path.replace('<id>', LOCAL_PROVIDER_ID) : null
+  return rule.providerEntry ? rule.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID) : null
 }
 
 /**
@@ -171,4 +131,9 @@ export function stripModelPrefix(rule: ClientApplyRule, value: string): string {
   const prefix = rule.modelPrefix
   if (!prefix || !value.startsWith(prefix)) return value
   return value.slice(prefix.length)
+}
+
+/** 直接把注册表里的配置取出来（测试用：校验模板本身，而不是展开之后的函数）。 */
+export function getClientApplyConfig(clientKey: string): AgentClientApplyConfig | null {
+  return findAgentClientApplyConfig(clientKey)
 }

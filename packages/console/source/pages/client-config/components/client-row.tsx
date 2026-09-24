@@ -61,9 +61,14 @@ export function ClientRow(props: ClientRowProps) {
         <ChevronRight className="size-4 shrink-0 text-text-quaternary transition-colors group-hover:text-text-secondary" aria-hidden />
       </Link>
 
-      {/* 不支持自动填充的客户端连按钮都不给：「点了没反应」比没有按钮更让人困惑。 */}
+      {/*
+        不支持自动填充的客户端连按钮都不给：「点了没反应」比没有按钮更让人困惑。
+        这一颗**不用** `outline`：`outline` 是白底 + 0.5px 发丝浮雕边，
+        落在同样白底的卡片行上只剩一条几乎看不见的线，读起来是一个空盒子而不是按钮。
+        `secondary` 是浅灰实底，在白卡上第一眼就是个控件（列表行的次要动作走这一档）。
+      */}
       {item.coverage !== 'unavailable' && (
-        <Button variant="outline" size="sm" disabled={disabled} onClick={onFill}>
+        <Button variant="secondary" size="sm" disabled={disabled} onClick={onFill}>
           {t('clientConfig.fill.one')}
         </Button>
       )}

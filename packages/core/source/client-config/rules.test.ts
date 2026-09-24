@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY } from '@common/clients'
+import {
+  AGENT_CLIENT_DEFINITIONS,
+  AGENT_CLIENT_DEFINITION_BY_KEY,
+  agentClientModelSlots,
+  expandAgentClientTemplate,
+  resolveAgentClientSlotValue,
+  type AgentClientTemplateContext,
+} from '@common/clients'
 import {
   LOCAL_PROVIDER_ID,
   LOCAL_PROVIDER_NAME,
   type ClientApplyContext,
   type ClientApplyRule,
   concreteProviderEntryPath,
+  getClientApplyConfig,
   getClientApplyRule,
   getClientApplyRuleKeys,
   resolveFieldValue,
@@ -15,8 +23,11 @@ import {
 /**
  * 逐客户端配方。
  *
+ * 配方本身是注册表的一部分（`@common/clients` 里的 `apply`），这里测的是**执行器**：
+ * 注册表里面那份纯数据能不能被正确展开、覆盖是否完整。
+ *
  * 最容易出事的不是「写错值」，而是**漏写**：注册表里新加一个会读到真实厂商的键（模型别名是重灾区），
- * 配方里没登记就没人发现，直到用户切了个别名直接绕开本地路由。所以这里除了逐条检查配方的含义，
+ * 配方里没登记就没人发现，直到用户切了个别名直接绕开本地路由。所以下面除了逐条检查含义，
  * 更主要的是检查「覆盖完整」——注册表里的每个键都必须有明确归属（要么在 `roles` 里写，要么在
  * `ignored` 里显式放过），而没有配方的客户端必须是**我们已知的**那几个。
  */
@@ -26,6 +37,12 @@ const CONTEXT: ClientApplyContext = {
   apiKey: 'sk-osw',
   model: 'osw-model',
   smallModel: 'osw-small',
+}
+
+const TEMPLATE_CONTEXT: AgentClientTemplateContext = {
+  ...CONTEXT,
+  providerId: LOCAL_PROVIDER_ID,
+  providerName: LOCAL_PROVIDER_NAME,
 }
 
 /** 没有配方的客户端：地址与凭证不在同一个文件里（Pi），或压根没有可填的地址字段。 */
@@ -172,5 +189,82 @@ describe('stripModelPrefix', () => {
 
   it('does nothing for recipes without a prefix', () => {
     expect(stripModelPrefix(bare, 'osw/osw-model')).toBe('osw/osw-model')
+  })
+})
+
+describe('registry-declared recipes', () => {
+  it('keeps the recipe in the registry, not in this layer', () => {
+    // 两边一旦分家就会慢慢走样：注册表加了键、配方没跟，谁都不知道。
+    for (const key of getClientApplyRuleKeys()) {
+      expect(getClientApplyConfig(key), `${key} 的配方不在注册表里`).not.toBeNull()
+      expect(AGENT_CLIENT_DEFINITION_BY_KEY[key]!.apply).toBeDefined()
+    }
+  })
+
+  it('declares every provider entry path as a placeholder, never a literal id', () => {
+    for (const key of getClientApplyRuleKeys()) {
+      const entry = getClientApplyConfig(key)!.providerEntry
+      if (entry) expect(entry.path, `${key} 的表项路径写死了 provider id`).toContain('{{providerId}}')
+    }
+  })
+
+  it('expands placeholders written as object keys too', () => {
+    // OpenCode 拿模型名当 provider 的 model id（`models: { '{{model}}': {} }`）；
+    // 只替换值不替换键的话，它的模型列表永远是空的。
+    const template = getClientApplyConfig('opencode')!.providerEntry!.template
+
+    expect(expandAgentClientTemplate(template, { ...TEMPLATE_CONTEXT, model: 'gpt-5' })).toEqual({
+      npm: '@ai-sdk/openai-compatible',
+      name: LOCAL_PROVIDER_NAME,
+      options: { baseURL: CONTEXT.baseUrl, apiKey: CONTEXT.apiKey },
+      models: { 'gpt-5': {} },
+    })
+  })
+
+  it('refuses an unknown placeholder instead of writing it verbatim', () => {
+    // 拼错的占位符（`{{baseURL}}`）静默留成字面量的话，会直接写进用户的配置文件。
+    expect(() => expandAgentClientTemplate({ url: '{{baseURL}}' }, TEMPLATE_CONTEXT)).toThrow(/baseURL/)
+  })
+
+  it('leaves non-string leaves alone', () => {
+    const expanded = expandAgentClientTemplate({ enabled: true, count: 3, nothing: null }, TEMPLATE_CONTEXT)
+
+    expect(expanded).toEqual({ enabled: true, count: 3, nothing: null })
+  })
+})
+
+describe('model slots', () => {
+  it('collapses the claude-code aliases into two rows', () => {
+    // 五个别名写的是同一个值，表单上只能是**一行**：用户要决定的是「用哪个模型」。
+    expect(agentClientModelSlots(getClientApplyConfig('claude-code')!)).toEqual(['model', 'smallModel'])
+  })
+
+  it('keeps the main model first and the small model last', () => {
+    for (const key of getClientApplyRuleKeys()) {
+      const slots = agentClientModelSlots(getClientApplyConfig(key)!)
+      expect(slots[0], `${key} 的主模型槽位不在第一位`).toBe('model')
+      if (slots.includes('smallModel')) expect(slots.indexOf('smallModel')).toBe(slots.length - 1)
+    }
+  })
+
+  it('gives a client without a small model exactly one row', () => {
+    // 配方里没有 `smallModel` 的客户端不该出现一个写了也没人读的输入框。
+    expect(agentClientModelSlots(getClientApplyConfig('gemini-cli')!)).toEqual(['model'])
+  })
+
+  it('takes the current value from whichever alias actually has one', () => {
+    const claudeCode = getClientApplyConfig('claude-code')!
+
+    // `detected` 的键是注册表里的**语义名**（`service.ts` 按 `field.key` 回读），不是配置文件路径。
+    expect(resolveAgentClientSlotValue(claudeCode, { mainModel: 'sonnet-5' }, 'model')).toBe('sonnet-5')
+    expect(resolveAgentClientSlotValue(claudeCode, { model: 'haiku-5' }, 'model')).toBe('haiku-5')
+    // 一个都没有就是空串——界面按「读不到」渲染，不能当成「原来是空的」。
+    expect(resolveAgentClientSlotValue(claudeCode, {}, 'model')).toBe('')
+  })
+
+  it('strips the provider prefix before putting the value back in the box', () => {
+    const opencode = getClientApplyConfig('opencode')!
+
+    expect(resolveAgentClientSlotValue(opencode, { model: 'osw/gpt-5' }, 'model')).toBe('gpt-5')
   })
 })

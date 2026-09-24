@@ -23,6 +23,91 @@ export type AgentClientProtocol = 'anthropic-messages' | 'openai-responses' | 'o
 /** 配置文件的格式，决定读写时用哪套解析/序列化。 */
 export type AgentClientConfigFormat = 'json' | 'jsonc' | 'toml' | 'yaml' | 'env'
 
+/**
+ * 我们写进客户端配置里的 provider 身份。
+ *
+ * 是**我们自己**在别人配置里的名字，所以它属于契约：core 拿它拼 provider 表项的路径与内容，
+ * 控制台拿它拼需要展示的模型名，两边必须说同一个字符串。
+ */
+export const LOCAL_PROVIDER_ID = 'osw'
+export const LOCAL_PROVIDER_NAME = 'One Switch'
+
+/** 注册表里的一个字段在自动填充时被当成什么来写。 */
+export type AgentClientFieldRole =
+  /** 指向本地服务的基础地址。 */
+  | 'baseUrl'
+  /** 本地服务不校验的调用方凭证。 */
+  | 'apiKey'
+  /** 主模型。 */
+  | 'model'
+  /** 小模型/后台模型，留空时回落主模型。 */
+  | 'smallModel'
+  /** 指向 provider 表项的 id。 */
+  | 'provider'
+  /** provider 表项本身（对象）。 */
+  | 'providerEntry'
+  /** 需要置为 true 的布尔标记（如 Cursor 的 `hasChangedDefaultModel`）。 */
+  | 'flagTrue'
+
+/**
+ * 表单上要用户决定的两个模型槽位，见 `agentClientModelSlots`。
+ *
+ * 单独切出一个类型而不是复用 `AgentClientFieldRole`：界面按槽位渲染行、按槽位回读初值，
+ * 而「基础地址」这类角色永远不会成为一行（它由服务端固定写入），编译器应该替我们把这件事说清。
+ */
+export type AgentClientModelSlot = Extract<AgentClientFieldRole, 'model' | 'smallModel'>
+
+/**
+ * 模板里一个值：字面量，或者一个 `{{占位符}}`。
+ *
+ * 刻意用**纯数据**而不是函数表达「provider 表项长什么样」：它是这个客户端的一条事实，
+ * 和「它读哪个文件、有哪些键」属于同一份清单，分开住在两个包里只会让两边慢慢走样，
+ * 而控制台也没法拿一个函数去渲染表单。
+ */
+export type AgentClientTemplateValue = string | number | boolean | null | AgentClientTemplateValue[] | { [key: string]: AgentClientTemplateValue }
+
+/** 模板里可以引用的实值。 */
+export interface AgentClientTemplateContext {
+  /** 本机服务的监听地址。 */
+  baseUrl: string
+  /** 那个固定样例密钥。 */
+  apiKey: string
+  /** 用户选定的主模型。 */
+  model: string
+  /** 用户选定的小模型（已回落到主模型）。 */
+  smallModel: string
+  /** 见 `LOCAL_PROVIDER_ID`。 */
+  providerId: string
+  /** 见 `LOCAL_PROVIDER_NAME`。 */
+  providerName: string
+}
+
+export interface AgentClientProviderEntryTemplate {
+  /** 表项路径的点号写法；`{{providerId}}` 会被换成本地 provider id。 */
+  path: string
+  /** 表项骨架，键与值里的占位符在写入前统一替换。 */
+  template: Record<string, AgentClientTemplateValue>
+}
+
+/**
+ * 「把这个客户端的配置指到本机服务」的配方。
+ *
+ * 为什么注册表里那点声明不够、还需要这一块：注册表描述「这些键存在、它们是这个意思」，
+ * 而改配置还需要知道注册表不该关心的事——哪些键应当**一起**被覆盖（Claude Code 的
+ * `opus/sonnet/haiku` 别名必须跟着改，否则用户切一下别名就跑到真实 Anthropic 去了）、
+ * provider 表项长什么样、以及哪些键**必须放过**（推理档位、认证方式是用户自己的取舍）。
+ */
+export interface AgentClientApplyConfig {
+  /** 注册表 `fields[].key` → 要写什么。没列出的 key 不写。 */
+  roles: Record<string, AgentClientFieldRole>
+  /** 明确放过、但确实属于这个客户端的键（有意的「不碰」清单）。 */
+  ignored: string[]
+  /** 模型字段的值前缀，如 OpenCode 要求 `provider/model`。 */
+  modelPrefix?: string
+  /** provider 表项的路径与模板。 */
+  providerEntry?: AgentClientProviderEntryTemplate
+}
+
 /** 一个配置文件里的可寻址设置项，即该工具 schema 的一段。 */
 export interface AgentClientFieldDefinition {
   /** 语义名：model / provider / effort / small … */
@@ -92,6 +177,12 @@ export interface AgentClientDefinition {
   files: AgentClientFileDefinition[]
   /** 需要识别/改写的设置项。 */
   fields: AgentClientFieldDefinition[]
+  /**
+   * 「把配置指到本机服务」的配方。缺省表示自动填充不可用——要么没有可指向本地服务的地址字段
+   * （Copilot CLI、Cursor CLI 只存模型名），要么地址与 provider 定义分在两个文件里（Pi），
+   * 此时界面引导用户手动编辑。
+   */
+  apply?: AgentClientApplyConfig
 }
 
 /**
@@ -133,6 +224,22 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'fable', path: 'env.ANTHROPIC_DEFAULT_FABLE_MODEL', type: 'string', description: 'Model the `fable` alias resolves to.' },
       { key: 'smallFast', path: 'env.ANTHROPIC_SMALL_FAST_MODEL', type: 'string', description: 'Model used for background/small work.' },
     ],
+    apply: {
+      roles: {
+        model: 'model',
+        baseUrl: 'baseUrl',
+        authToken: 'apiKey',
+        mainModel: 'model',
+        // 五个模型别名一起改成同一个名字：base URL 已经指向本地了，别名再解析到真实
+        // Anthropic 的模型名就会绕过路由，用户在 CLI 里切 `haiku` 时最难发现这类漏改。
+        opus: 'model',
+        sonnet: 'model',
+        haiku: 'model',
+        fable: 'model',
+        smallFast: 'smallModel',
+      },
+      ignored: [],
+    },
   },
   {
     key: 'codex',
@@ -167,6 +274,25 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'catalog', path: 'model_catalog_json', type: 'string', description: 'Path to an extra model catalog file.' },
       { key: 'providerTable', path: 'model_providers.<id>', type: 'object', description: 'A provider entry: name, base_url, wire_api, token.' },
     ],
+    apply: {
+      roles: {
+        model: 'model',
+        provider: 'provider',
+        providerTable: 'providerEntry',
+      },
+      // 推理档位与额外模型目录是用户自己的取舍，与「走哪个地址」无关。
+      ignored: ['effort', 'catalog'],
+      providerEntry: {
+        path: 'model_providers.{{providerId}}',
+        // 不写 `env_key`：本地服务不校验鉴权，而 `env_key` 一旦写了，Codex 会要求这个环境
+        // 变量必须存在，等于凭空给用户加一个必须导出的变量。
+        template: {
+          name: '{{providerName}}',
+          base_url: '{{baseUrl}}',
+          wire_api: 'responses',
+        },
+      },
+    },
   },
   {
     key: 'gemini-cli',
@@ -195,6 +321,15 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'baseUrl', path: 'GOOGLE_GEMINI_BASE_URL', file: '~/.gemini/.env', type: 'string', description: 'Gemini API base URL (from .env).' },
       { key: 'apiKey', path: 'GEMINI_API_KEY', file: '~/.gemini/.env', type: 'string', description: 'Gemini API key (from .env).' },
     ],
+    apply: {
+      roles: {
+        model: 'model',
+        baseUrl: 'baseUrl',
+        apiKey: 'apiKey',
+      },
+      // 认证方式由用户自己决定（oauth / api-key / vertex）；我们只改地址与密钥。
+      ignored: ['auth'],
+    },
   },
   {
     key: 'opencode',
@@ -224,6 +359,25 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'small', path: 'small_model', type: 'string', description: 'Small/background `provider/model`.' },
       { key: 'provider', path: 'provider.<id>', type: 'object', description: 'A provider entry: npm, options (baseURL, apiKey), models.' },
     ],
+    apply: {
+      roles: {
+        model: 'model',
+        small: 'smallModel',
+        provider: 'providerEntry',
+      },
+      ignored: [],
+      modelPrefix: `${LOCAL_PROVIDER_ID}/`,
+      providerEntry: {
+        path: 'provider.{{providerId}}',
+        template: {
+          npm: '@ai-sdk/openai-compatible',
+          name: '{{providerName}}',
+          options: { baseURL: '{{baseUrl}}', apiKey: '{{apiKey}}' },
+          // OpenCode 只认 provider 里声明过的 model id，所以把用户选中的那个也登记进去。
+          models: { '{{model}}': {} },
+        },
+      },
+    },
   },
   {
     key: 'cursor-cli',
@@ -362,4 +516,102 @@ export function agentClientFieldsOfFile(client: AgentClientDefinition, filePath:
  */
 export function isKnownAgentClient(clientKey: string): boolean {
   return Object.prototype.hasOwnProperty.call(AGENT_CLIENT_DEFINITION_BY_KEY, clientKey)
+}
+
+/** 某个客户端的重写配方；没配方返回 `null`（界面据此给出「只能手改」）。 */
+export function findAgentClientApplyConfig(clientKey: string): AgentClientApplyConfig | null {
+  return AGENT_CLIENT_DEFINITION_BY_KEY[clientKey]?.apply ?? null
+}
+
+/** 有配方的客户端 key（即「哪些客户端能自动填充」）。 */
+export function agentClientApplyConfigKeys(): string[] {
+  return AGENT_CLIENT_DEFINITIONS.filter(client => client.apply !== undefined).map(client => client.key)
+}
+
+/**
+ * 表单上要用户填的模型槽位，固定「主模型在前、小模型在后」。
+ *
+ * 从配方**推**出来，而不是写死「永远两行」：配方里没有 `smallModel` 的客户端就只该出现一行；
+ * 而 Claude Code 那五个都映射到同一个值的模型别名，只该合成**一行**输入——
+ * 用户要决定的是「用哪个模型」，不是「有五个键要各填一遍」。
+ */
+export function agentClientModelSlots(config: AgentClientApplyConfig): AgentClientModelSlot[] {
+  const roles = new Set(Object.values(config.roles))
+  return (['model', 'smallModel'] as const).filter(role => roles.has(role))
+}
+
+/**
+ * 某个槽位在已回读的字段里的当前值。
+ *
+ * 一个槽位可能对应多个键（Claude Code 的主模型有五个别名），取**声明顺序里第一个有值的**：
+ * 顺序即优先级，与写入时「所有别名写同一个值」这件事同源。
+ */
+export function resolveAgentClientSlotValue(config: AgentClientApplyConfig, detected: Record<string, string>, role: AgentClientModelSlot): string {
+  for (const fieldKey of Object.keys(config.roles)) {
+    if (config.roles[fieldKey] !== role) continue
+    const value = detected[fieldKey]
+    if (value !== undefined && value.trim() !== '') return stripAgentClientModelPrefix(config, value)
+  }
+  return ''
+}
+
+/**
+ * 脱掉模型值上的 provider 前缀（`osw/gpt-5` → `gpt-5`）。
+ *
+ * 回填输入框时必须还原文：OpenCode 只认 `provider/model`，把读回来的整串再写回去会变成
+ * `osw/osw/gpt-5`。
+ */
+export function stripAgentClientModelPrefix(config: AgentClientApplyConfig, value: string): string {
+  const prefix = config.modelPrefix
+  if (prefix === undefined || prefix === '' || !value.startsWith(prefix)) return value
+  return value.slice(prefix.length)
+}
+
+/** provider 表项在该客户端上的具体路径（把 `{{providerId}}` 换成真实 id）。 */
+export function concreteAgentClientProviderEntryPath(config: AgentClientApplyConfig): string | null {
+  return config.providerEntry ? config.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID) : null
+}
+
+const TEMPLATE_PLACEHOLDER = /\{\{(\w+)\}\}/g
+
+function templatePlaceholderValue(context: AgentClientTemplateContext, name: string): string {
+  switch (name) {
+    case 'baseUrl':
+      return context.baseUrl
+    case 'apiKey':
+      return context.apiKey
+    case 'model':
+      return context.model
+    case 'smallModel':
+      return context.smallModel
+    case 'providerId':
+      return context.providerId
+    case 'providerName':
+      return context.providerName
+    default:
+      // 拼错的占位符（`{{baseURL}}`）静默留成字面量的话，会直接写进用户的配置文件里。
+      throw new Error(`Unknown agent client template placeholder: {{${name}}}`)
+  }
+}
+
+/**
+ * 展开模板：把键与值里的 `{{占位符}}` 换成实值，对象与数组递归。
+ *
+ * 键也要替换——OpenCode 的 provider 表项用**模型名当键**（`models: { '{{model}}': {} }`），
+ * 只换值的话它的模型列表永远是空的。
+ */
+export function expandAgentClientTemplate(value: AgentClientTemplateValue, context: AgentClientTemplateContext): AgentClientTemplateValue {
+  if (typeof value === 'string') {
+    return value.replace(TEMPLATE_PLACEHOLDER, (_match, name: string) => templatePlaceholderValue(context, name))
+  }
+  if (Array.isArray(value)) return value.map(item => expandAgentClientTemplate(item, context))
+  if (value !== null && typeof value === 'object') {
+    const expanded: Record<string, AgentClientTemplateValue> = {}
+    for (const [key, item] of Object.entries(value)) {
+      const expandedKey = expandAgentClientTemplate(key, context)
+      expanded[String(expandedKey)] = expandAgentClientTemplate(item, context)
+    }
+    return expanded
+  }
+  return value
 }
