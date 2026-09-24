@@ -2,12 +2,14 @@ import { useState } from 'react'
 import type { CloudBackupKind } from '@common/cloud-backup'
 import { ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Cloud, ExternalLink, Link2, Loader2, PlugZap, XCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { SettingsCardHeader } from '@/components/settings-card-header'
-import { FormHint, FormRow, FormSelect, type FormOption } from '@/components/form-kit'
+import { FormRow, FormSelect, type FormOption } from '@/components/form-kit'
 import { tryTranslate } from '@/i18n/active'
 import { getPlatformCapabilities } from '@/platform/capabilities'
 import { useTranslation } from '@/i18n/provider'
@@ -27,8 +29,13 @@ import { useCloudSync } from '../hooks/use-cloud-sync'
 export function CloudSyncCard() {
   const sync = useCloudSync()
   const t = useTranslation()
+  const confirm = useConfirm()
   const [credentialInput, setCredentialInput] = useState('')
   const [targetInput, setTargetInput] = useState('')
+  // 已连接 / 已绑定的行默认收起输入框：一个空输入框摆在「已连接为 @x」旁边，
+  // 谁也说不清它是要改、还是没填完。要改再点「更换」，输入框才出来。
+  const [editingCredential, setEditingCredential] = useState(false)
+  const [editingTarget, setEditingTarget] = useState(false)
 
   const status = sync.status
   const descriptor = sync.descriptor
@@ -56,6 +63,20 @@ export function CloudSyncCard() {
   const targetReason = status.target
     ? undefined
     : descriptor.createsTarget ? t('settings.cloudSync.targetRequiredAuto') : t('settings.cloudSync.targetRequired')
+  // 备份没绑定也能做（后端可以顺手建一个），恢复则必须有确切的来源。
+  const canPush = status.credentialConfigured && (Boolean(status.target) || descriptor.createsTarget)
+  const canPull = status.credentialConfigured && Boolean(status.target)
+
+  /** 恢复会整份盖掉本机的供应商、模型与绑定，盖完没法撤销：先问一句再动手。 */
+  const handleRestore = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: t('settings.cloudSync.restoreConfirmTitle'),
+      description: t('settings.cloudSync.restoreConfirmDescription'),
+      confirmLabel: t('settings.cloudSync.downloadAction'),
+      variant: 'destructive',
+    })
+    if (confirmed) await sync.pull()
+  }
 
   return (
     <Card>
@@ -63,6 +84,11 @@ export function CloudSyncCard() {
         icon={<Cloud />}
         title={t('settings.cloudSync.title')}
         description={t('settings.cloudSync.description')}
+        actions={(
+          <Badge variant={status.credentialConfigured ? 'success' : 'muted'}>
+            {status.credentialConfigured ? t('settings.cloudSync.statusConnected') : t('settings.cloudSync.statusDisconnected')}
+          </Badge>
+        )}
       />
       <CardContent className="px-4">
         <div className="divide-y divide-border/50">
@@ -80,20 +106,43 @@ export function CloudSyncCard() {
                   // 换后端后，输入框里那半截旧后端的凭据/句柄没有任何意义，先清掉。
                   setCredentialInput('')
                   setTargetInput('')
+                  setEditingCredential(false)
+                  setEditingTarget(false)
                   void sync.selectProvider(value as CloudBackupKind)
                 }}
               />
             )}
           />
 
+          {/* 未连接（或正在更换）才是输入框；连上之后这一行只报告「连成了谁」，
+              想换再点「更换」。这样摆着空输入框的歧义（要填？要改？）就没了。 */}
           <FormRow
             title={text(descriptor.credential.labelKey)}
-            description={status.credentialConfigured
+            description={status.credentialConfigured && !editingCredential
               ? status.accountLabel
                 ? t('settings.cloudSync.credentialConnected', { account: status.accountLabel })
                 : t('settings.cloudSync.credentialMissing')
               : text(descriptor.credential.hintKey)}
-            control={(
+            control={status.credentialConfigured && !editingCredential ? (
+              <>
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => { setEditingCredential(true); setCredentialInput('') }}
+                >
+                  {t('settings.cloudSync.credentialChange')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => { void sync.clearCredential().then(() => setEditingCredential(false)) }}
+                >
+                  {t('settings.cloudSync.credentialClear')}
+                </Button>
+              </>
+            ) : (
               <>
                 <Input
                   type="password"
@@ -107,26 +156,61 @@ export function CloudSyncCard() {
                   variant="outline"
                   className="shrink-0"
                   disabled={busy || credentialInput.trim().length === 0}
-                  onClick={() => { void sync.saveCredential(credentialInput).then(saved => { if (saved) setCredentialInput('') }) }}
+                  onClick={() => { void sync.saveCredential(credentialInput).then(saved => { if (saved) { setCredentialInput(''); setEditingCredential(false) } }) }}
                 >
                   <PlugZap className="size-3.5" />
-                  {t('settings.cloudSync.credentialSave')}
+                  {t(status.credentialConfigured ? 'settings.cloudSync.credentialSave' : 'settings.cloudSync.credentialConnect')}
                 </Button>
                 {status.credentialConfigured && (
-                  <Button variant="ghost" className="shrink-0" disabled={busy} onClick={() => void sync.clearCredential()}>
-                    {t('settings.cloudSync.credentialClear')}
+                  <Button
+                    variant="ghost"
+                    className="shrink-0"
+                    disabled={busy}
+                    onClick={() => { setEditingCredential(false); setCredentialInput('') }}
+                  >
+                    {t('common.confirm.cancelLabel')}
                   </Button>
                 )}
               </>
             )}
           />
 
+          {/* 与凭据行同一套规则：绑好了就只显示绑在哪儿，输入框收起来。 */}
           <FormRow
             title={text(descriptor.target.labelKey)}
-            description={status.target
+            description={status.target && !editingTarget
               ? t('settings.cloudSync.targetBound', { target: status.target })
               : text(descriptor.target.hintKey)}
-            control={(
+            control={status.target && !editingTarget ? (
+              <>
+                {status.targetUrl && (
+                  <Button
+                    variant="ghost"
+                    className="shrink-0"
+                    aria-label={t('settings.cloudSync.targetOpen')}
+                    onClick={() => getPlatformCapabilities().openExternal(status.targetUrl)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => { setEditingTarget(true); setTargetInput(status.target) }}
+                >
+                  {t('settings.cloudSync.targetChange')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => { void sync.bindTarget('').then(bound => { if (bound) { setEditingTarget(false); setTargetInput('') } }) }}
+                >
+                  {t('settings.cloudSync.targetUnbind')}
+                </Button>
+              </>
+            ) : (
               <>
                 <Input
                   aria-label={text(descriptor.target.labelKey)}
@@ -139,19 +223,19 @@ export function CloudSyncCard() {
                   variant="outline"
                   className="shrink-0"
                   disabled={busy || targetInput.trim().length === 0}
-                  onClick={() => { void sync.bindTarget(targetInput).then(bound => { if (bound) setTargetInput('') }) }}
+                  onClick={() => { void sync.bindTarget(targetInput).then(bound => { if (bound) { setTargetInput(''); setEditingTarget(false) } }) }}
                 >
                   <Link2 className="size-3.5" />
                   {t('settings.cloudSync.targetBind')}
                 </Button>
-                {status.targetUrl && (
+                {status.target && (
                   <Button
                     variant="ghost"
                     className="shrink-0"
-                    aria-label={t('settings.cloudSync.targetOpen')}
-                    onClick={() => getPlatformCapabilities().openExternal(status.targetUrl)}
+                    disabled={busy}
+                    onClick={() => { setEditingTarget(false); setTargetInput('') }}
                   >
-                    <ExternalLink className="size-3.5" />
+                    {t('common.confirm.cancelLabel')}
                   </Button>
                 )}
               </>
@@ -160,30 +244,30 @@ export function CloudSyncCard() {
 
           <FormRow
             title={t('settings.cloudSync.transferLabel')}
-            description={status.lastPushedTime === 0 && status.lastPulledTime === 0
-              ? t('settings.cloudSync.neverSynced')
-              : t('settings.cloudSync.lastSynced', {
-                  uploaded: formatTime(status.lastPushedTime, t('settings.cloudSync.timeNever')),
-                  downloaded: formatTime(status.lastPulledTime, t('settings.cloudSync.timeNever')),
-                })}
+            description={t('settings.cloudSync.lastSynced', {
+              uploaded: formatTime(status.lastPushedTime, t('settings.cloudSync.timeNever')),
+              downloaded: formatTime(status.lastPulledTime, t('settings.cloudSync.timeNever')),
+            })}
             control={(
               <>
                 <Button
                   variant="outline"
                   className="shrink-0"
-                  disabled={busy || !status.credentialConfigured}
-                  title={credentialReason ?? actionTitle}
+                  disabled={busy || !canPush}
+                  title={credentialReason ?? targetReason ?? actionTitle}
                   onClick={() => void sync.push()}
                 >
                   {sync.pending === 'push' ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUpFromLine className="size-3.5" />}
-                  {t('settings.cloudSync.uploadAction')}
+                  {status.target || !descriptor.createsTarget
+                    ? t('settings.cloudSync.uploadAction')
+                    : t('settings.cloudSync.uploadCreateAction')}
                 </Button>
                 <Button
                   variant="outline"
                   className="shrink-0"
-                  disabled={busy || !status.credentialConfigured || !status.target}
+                  disabled={busy || !canPull}
                   title={credentialReason ?? targetReason ?? actionTitle}
-                  onClick={() => void sync.pull()}
+                  onClick={() => void handleRestore()}
                 >
                   {sync.pending === 'pull' ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowDownToLine className="size-3.5" />}
                   {t('settings.cloudSync.downloadAction')}
@@ -192,10 +276,6 @@ export function CloudSyncCard() {
             )}
           />
         </div>
-
-        {/* 这句不是可关闭的提示，是告知：密钥确实会一起上传，而且只是编码。
-            不写出来就等于在用户不知情的前提下把他的 Key 推出去。 */}
-        <FormHint className="pt-3" tone="warning">{t('settings.cloudSync.encodingNotice')}</FormHint>
 
         {sync.message && (
           <Alert className="mt-1 mb-1 border-0 bg-success/10 text-text-success">
