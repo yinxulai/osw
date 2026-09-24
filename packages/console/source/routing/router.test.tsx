@@ -19,7 +19,6 @@ describe('路由路径契约', () => {
       [routePaths.router, routePaths.router],
       [routePaths.logicalModels, routePaths.logicalModels],
       [routePaths.modelManagement, routePaths.modelManagement],
-      [routePaths.accessConfig, routePaths.accessConfig],
       [routePaths.requestRewriteRules, routePaths.requestRewriteRules],
       [routePaths.requestLogs, routePaths.requestLogs],
       [routePaths.runtimeSettings, routePaths.runtimeSettings],
@@ -36,7 +35,7 @@ describe('路由路径契约', () => {
   })
 
   it('已废弃的路径不再匹配任何页面', () => {
-    for (const legacy of ['/providers', '/access', '/rules', '/requests', '/settings']) {
+    for (const legacy of ['/providers', '/access', '/access-config', '/rules', '/requests', '/settings']) {
       expect(leafMatch(legacy)?.routeId, legacy).toBe('__root__')
     }
   })

@@ -6,16 +6,14 @@ import { Card } from '@/components/ui/card'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { Plug, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { useTranslation } from '@/i18n/provider'
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { restrictToWindowEdges } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useLogicalModelControlService } from './service'
 import { useLogicalModels, useLogicalModelsActions } from '@/data/logical-models'
-import { routePaths } from '@/routing/routes'
 import { LogicalModelCard } from './components/logical-model-card'
 import { LogicalModelSummary } from './components/logical-model-summary'
 import { SortableLogicalModel } from './components/sortable-logical-model'
@@ -152,11 +150,6 @@ export function LogicalModelsPage() {
           <div className="flex items-center gap-2">
             <Button onClick={() => setCreateLogicalModelOpen(true)}>
               <Plus size={13} /> {t('logicalModels.create.open')}
-            </Button>
-            <Button asChild variant="outline">
-              <Link to={routePaths.accessConfig}>
-                <Plug size={13} /> {t('logicalModels.goToAccess')}
-              </Link>
             </Button>
             <ProxyToggleButton running={proxyRunning} onToggle={service.toggleProxy} />
           </div>

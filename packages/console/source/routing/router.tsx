@@ -22,7 +22,6 @@ import { RuntimeSettingsPage } from '@/pages/runtime-settings/page'
 import { LogsPage } from '@/pages/logs/page'
 import { RequestLogsPage } from '@/pages/request-logs/page'
 import { RequestRewriteRulesPage } from '@/pages/request-rewrite-rules/page'
-import { AccessConfigPage } from '@/pages/access-config/page'
 import { ClientConfigPage } from '@/pages/client-config/page'
 import { ClientConfigDetailPage } from '@/pages/client-config/detail'
 import { RouterPage } from '@/pages/router/page'
@@ -57,7 +56,6 @@ const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: rou
 
 const logicalModelsRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.logicalModels, component: LogicalModelsPage })
 const modelManagementRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.modelManagement, component: ModelManagementPage })
-const accessConfigRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.accessConfig, component: AccessConfigPage })
 const requestRewriteRulesRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.requestRewriteRules, component: RequestRewriteRulesPage })
 const routerRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.router, component: RouterPage })
 const requestLogsRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.requestLogs, component: RequestLogsPage })
@@ -103,7 +101,6 @@ const routeTree = rootRoute.addChildren([
   onboardingRoute,
   logicalModelsRoute,
   modelManagementRoute,
-  accessConfigRoute,
   clientConfigRoute.addChildren([clientConfigIndexRoute, clientConfigDetailRoute]),
   requestRewriteRulesRoute,
   routerRoute,

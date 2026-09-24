@@ -11,7 +11,7 @@ interface SettingsCardHeaderProps {
 
 /**
  * 卡片头部统一形态：白底 + 一条发丝分隔线，图标是唯一的装饰元素。
- * 放在共享目录里，业务页面（设置、接入配置……）不再各自拼一遍卡片头。
+ * 放在共享目录里，业务页面（设置、引导……）不再各自拼一遍卡片头。
  */
 export function SettingsCardHeader(props: SettingsCardHeaderProps) {
   const { title, description, icon, actions, className } = props

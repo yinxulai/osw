@@ -1,9 +1,9 @@
 import { isWildcardHost, resolveProxyOrigin } from '@common/proxy-origin'
 import { useProxyStatus } from '@/data/proxy'
-import { useProxyToggle } from '../../logical-models/hooks/use-proxy-toggle'
+import { useProxyToggle } from '@/pages/logical-models/hooks/use-proxy-toggle'
 
 /**
- * 接入配置页的数据源：把监听 host / port 收敛成客户端能直接使用的**服务根地址**。
+ * 「客户端怎么连上本机服务」那一组卡片的数据源：把监听 host / port 收敛成客户端能直接使用的**服务根地址**。
  *
  * 监听通配地址时它本身不是可访问地址，回落到 127.0.0.1，并把情况告诉调用方。
  * 这里只产出根地址（`http://host:port`）：各协议的 Base URL / 完整接口地址是
