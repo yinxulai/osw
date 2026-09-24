@@ -64,8 +64,8 @@ async function handleFill(_req: IncomingMessage, res: ServerResponse, body: unkn
 }
 
 async function handleApply(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { clientKey, filePath, baseUrl, apiKey, model, smallModel } = ClientConfigApplyRequestSchema.parse(body)
-  sendSuccess(res, await applyClientConfigOverrides(clientKey, filePath, { baseUrl, apiKey, model, smallModel }))
+  const { clientKey, filePath, model, smallModel } = ClientConfigApplyRequestSchema.parse(body)
+  sendSuccess(res, await applyClientConfigOverrides(clientKey, filePath, { model, smallModel }))
 }
 
 async function handleSave(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

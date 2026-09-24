@@ -10,11 +10,11 @@ import type {
 import { request } from './client'
 
 /**
- * 自动填充要写入的值——与 `ClientConfigApplyRequestSchema` 对齐，只差文件定位那两个字段。
+ * 「按本地服务改写」要写入的值——与 `ClientConfigApplyRequestSchema` 对齐，只差文件定位那两个字段。
+ *
+ * 不含地址与密钥：它们由服务端按本机监听设置自己填，界面既不展示也不传。
  */
 export interface ClientConfigApplyValues {
-  baseUrl: string
-  apiKey: string
   model: string
   smallModel?: string
 }

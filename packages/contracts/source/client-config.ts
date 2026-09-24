@@ -15,8 +15,8 @@ import { z } from 'zod'
  * 自动填充时照抄的 API Key。
  *
  * 不是密钥：OSW 不签发调用方凭证，本地服务也不校验鉴权（见 `docs/product/security-privacy.md`），
- * 这个值只在转发时被换成渠道自己的密钥。给一个固定值让用户照抄，比自己编一个更省事；
- * 与接入说明页共用同一个字面量，避免两处各写一份。
+ * 这个值只在转发时被换成渠道自己的密钥。写入客户端配置时由服务端就地取用，不需要用户填；
+ * 唯一会把它摆到台面上的地方是引导页第三步的「要填的值」，那里得给用户一个能照抄的字符串。
  */
 export const CLIENT_CONFIG_SAMPLE_API_KEY = 'sk-osw'
 
@@ -136,9 +136,14 @@ export const ClientConfigSaveRequestSchema = ClientConfigFileRequestSchema.exten
   note: z.string().optional(),
 })
 
+/**
+ * 一次「按本地服务改写」的请求体。
+ *
+ * 只有模型名是用户能决定的：地址与密钥由本机服务固定给出（`listening host:port` 加上那个
+ * 固定样例密钥），不接受调用方覆盖，也不在界面上出现——客户端要指向的就是我们自己，
+ * 这件事没有第二种正确答案，开放成参数只会多出一种「填错了」的失败。
+ */
 export const ClientConfigApplyRequestSchema = ClientConfigFileRequestSchema.extend({
-  baseUrl: z.string().min(1),
-  apiKey: z.string(),
   model: z.string().min(1),
   /** 小模型/后台模型；留空时回落到 `model`。 */
   smallModel: z.string().optional(),

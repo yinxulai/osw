@@ -6,6 +6,7 @@ import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY } from '@commo
 import type { AppError } from '../errors'
 import { closeDatabases, initDatabases } from '../database'
 import { hashClientConfigContent } from '../database/client-config-version-store'
+import { updateSettings } from '../database/settings-store'
 import {
   applyClientConfigDefaults,
   applyClientConfigOverrides,
@@ -66,7 +67,13 @@ function syncErrorCode(run: () => unknown): string {
   return 'NO_ERROR'
 }
 
-const VALUES = { baseUrl: 'http://127.0.0.1:9300', apiKey: 'sk-osw', model: 'osw-model' }
+/**
+ * 调用方唯一能决定的事：模型名。
+ *
+ * 地址与密钥不在入参里——它们由服务端按本机监听设置（这里默认是 `127.0.0.1:9300`）
+ * 与固定样例密钥自己填。客户端要指向的就是本机服务本身，没有第二种正确答案。
+ */
+const MODEL = { model: 'osw-model' }
 
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-client-config-'))
@@ -224,7 +231,7 @@ describe('saveClientConfigContent', () => {
 
 describe('applyClientConfigOverrides', () => {
   it('points a fresh claude-code config at the local service', async () => {
-    const result = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, VALUES)
+    const result = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
 
     expect(JSON.parse(readFile(CLAUDE_FILE))).toEqual({
       model: 'osw-model',
@@ -246,7 +253,7 @@ describe('applyClientConfigOverrides', () => {
   })
 
   it('keeps a separate small model when one is given', async () => {
-    await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, { ...VALUES, smallModel: 'osw-small' })
+    await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, { ...MODEL, smallModel: 'osw-small' })
 
     expect(JSON.parse(readFile(CLAUDE_FILE)).env.ANTHROPIC_SMALL_FAST_MODEL).toBe('osw-small')
   })
@@ -254,17 +261,18 @@ describe('applyClientConfigOverrides', () => {
   it('reports what each key looked like before', async () => {
     writeFile(CLAUDE_FILE, JSON.stringify({ model: 'opus', permissions: { allow: ['Read'] } }))
 
-    const result = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, VALUES)
+    const result = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
 
     expect(result.backedUp).not.toBeNull()
     expect(result.changes).toContainEqual({ path: 'model', before: 'opus', after: 'osw-model' })
-    expect(result.changes).toContainEqual({ path: 'env.ANTHROPIC_BASE_URL', before: null, after: VALUES.baseUrl })
+    // 地址不受调用方影响：它总是本机服务当前的监听地址。
+    expect(result.changes).toContainEqual({ path: 'env.ANTHROPIC_BASE_URL', before: null, after: 'http://127.0.0.1:9300' })
     // 别人的键一个不动。
     expect(JSON.parse(readFile(CLAUDE_FILE)).permissions).toEqual({ allow: ['Read'] })
   })
 
   it('rewrites only the fields of the target file', async () => {
-    const result = await applyClientConfigOverrides('gemini-cli', GEMINI_ENV_FILE, VALUES)
+    const result = await applyClientConfigOverrides('gemini-cli', GEMINI_ENV_FILE, MODEL)
 
     expect(readFile(GEMINI_ENV_FILE)).toBe('GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:9300\nGEMINI_API_KEY=sk-osw\n')
     // `model` 在 settings.json 里，不该被写进 .env。
@@ -275,7 +283,7 @@ describe('applyClientConfigOverrides', () => {
   it('leaves the untouched keys of the same file alone', async () => {
     writeFile(GEMINI_FILE, JSON.stringify({ security: { auth: { selectedType: 'gemini-api-key' } }, theme: 'dark' }))
 
-    await applyClientConfigOverrides('gemini-cli', GEMINI_FILE, VALUES)
+    await applyClientConfigOverrides('gemini-cli', GEMINI_FILE, MODEL)
 
     expect(JSON.parse(readFile(GEMINI_FILE))).toEqual({
       security: { auth: { selectedType: 'gemini-api-key' } },
@@ -290,7 +298,7 @@ describe('applyClientConfigOverrides', () => {
       ['model = "gpt-5"', 'model_provider = "openai"', 'model_reasoning_effort = "high"', '', '[model_providers.openai]', 'name = "OpenAI"', 'base_url = "https://api.openai.com/v1"', ''].join('\n'),
     )
 
-    const result = await applyClientConfigOverrides('codex', CODEX_FILE, VALUES)
+    const result = await applyClientConfigOverrides('codex', CODEX_FILE, MODEL)
     const content = readFile(CODEX_FILE)
 
     expect(content).toContain('model = "osw-model"')
@@ -303,7 +311,7 @@ describe('applyClientConfigOverrides', () => {
   })
 
   it('spells the opencode model with its provider prefix', async () => {
-    await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...VALUES, smallModel: 'osw-small' })
+    await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...MODEL, smallModel: 'osw-small' })
 
     expect(JSON.parse(readFile(OPENCODE_FILE))).toEqual({
       model: 'osw/osw-model',
@@ -319,15 +327,18 @@ describe('applyClientConfigOverrides', () => {
     })
   })
 
-  it('refuses a base URL that is not a full URL', async () => {
-    await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, { ...VALUES, baseUrl: 'localhost:9300' })).rejects.toMatchObject({
+  it('refuses when the local service address is not usable', async () => {
+    // 地址读不出来时宁可不写：一个拼不出来的地址会在客户端里变成一个语焉不详的报错。
+    await updateSettings({ listenHost: '' })
+
+    await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     })
     expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
   })
 
   it('refuses a client without a recipe', async () => {
-    await expect(applyClientConfigOverrides('pi', '~/.pi/agent/settings.json', VALUES)).rejects.toMatchObject({
+    await expect(applyClientConfigOverrides('pi', '~/.pi/agent/settings.json', MODEL)).rejects.toMatchObject({
       code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED',
     })
   })
@@ -335,7 +346,7 @@ describe('applyClientConfigOverrides', () => {
   it('refuses to overwrite a file it cannot parse', async () => {
     writeFile(CLAUDE_FILE, '{"model":')
 
-    await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, VALUES)).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PARSE_FAILED' })
+    await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PARSE_FAILED' })
     // 没有解析成功就不能动文件，也不该留下一个「改动前」的版本。
     expect(readFile(CLAUDE_FILE)).toBe('{"model":')
     expect(listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])

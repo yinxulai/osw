@@ -39,12 +39,25 @@ export interface ClientConfigTarget {
 /**
  * 自动填充的入参——就是 HTTP 请求体里除「文件定位」外的部分。
  *
+ * 只有模型是调用方给的：地址与密钥由 `resolveClientConfigDefaults()` 就地填上，
+ * 与「一键生效」用的是同一个来源。
+ *
  * 与 `ClientApplyContext` 的差别只在 `smallModel`：这里是用户填的原文（可空），
  * 那里是回落主模型后的最终值，写配置时只认后者。
  */
 export interface ClientApplyValues {
   baseUrl: string
   apiKey: string
+  model: string
+  smallModel?: string
+}
+
+/**
+ * 「按本地服务改写」时**调用方唯一能决定的事**：模型名。
+ *
+ * 地址与密钥不在其中，因为客户端要指向的就是本机服务本身（见 `ClientConfigApplyRequestSchema`）。
+ */
+export interface ClientApplyOverrides {
   model: string
   smallModel?: string
 }
@@ -256,10 +269,11 @@ async function planClientConfigChanges(target: ClientConfigTarget, values: Clien
 /**
  * 把客户端配置直接指到本地服务。
  *
- * 只改**属于本次目标文件**的字段：Gemini CLI 的模型在 settings.json、地址与密钥在 .env，
- * 往 `.env` 里写 `model` 会写出一个工具根本不读的键。
+ * 地址与密钥由 `resolveClientConfigDefaults()` 就地取（用户不需要、也无法在这里指定它们），
+ * 调用方只给模型名。只改**属于本次目标文件**的字段：Gemini CLI 的模型在 settings.json、
+ * 地址与密钥在 .env，往 `.env` 里写 `model` 会写出一个工具根本不读的键。
  */
-export async function applyClientConfigOverrides(clientKey: string, filePath: string, values: ClientApplyValues): Promise<ClientConfigApplyResult> {
+export async function applyClientConfigOverrides(clientKey: string, filePath: string, overrides: ClientApplyOverrides): Promise<ClientConfigApplyResult> {
   const target = resolveClientConfigTarget(clientKey, filePath)
   const client = findAgentClient(clientKey)!
   const rule = getClientApplyRule(clientKey)
@@ -270,6 +284,8 @@ export async function applyClientConfigOverrides(clientKey: string, filePath: st
     })
   }
 
+  const defaults = await resolveClientConfigDefaults()
+  const values: ClientApplyValues = { baseUrl: defaults.origin, apiKey: defaults.apiKey, model: overrides.model, smallModel: overrides.smallModel }
   const plan = await planClientConfigChanges(target, values, rule, client)
   // 一处都不用改就直接返回：没有改动就不该落盘，也不该多出一个版本，
   // 否则反复点按钮会往历史里塞一堆内容相同的记录。
@@ -309,11 +325,12 @@ export async function restoreClientConfigVersion(clientKey: string, filePath: st
 // ========== 列表页与一键生效 ==========
 
 /**
- * 一键生效时由服务端自己填的那套默认值。
+ * 「本机服务给客户端的那套固定值」——地址、密钥、兜底模型。
  *
- * 地址取自本机监听设置而不是界面：用户点「一键生效」的时候并不想回答「写哪个地址」，
- * 该写的就是我们自己的地址。密钥是那个固定的样例值（本地服务不校验鉴权），
- * 模型是内置默认逻辑模型——只在文件里读不到模型名时才用得上。
+ * 地址取自本机监听设置而不是界面：写进客户端配置的地址就是我们自己，
+ * 用户没有第二选择，所以「一键生效」与详情页的直接改写都从这里取，不经过请求体。
+ * 密钥是那个固定的样例值（本地服务不校验鉴权），模型是内置默认逻辑模型
+ * ——只在文件里读不到模型名时才用得上。
  */
 interface ClientConfigDefaults {
   origin: string

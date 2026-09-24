@@ -7,7 +7,7 @@ import type {
   ClientConfigVersionSummary,
   ClientConfigWriteResult,
 } from '@common/client-config'
-import { clientConfigApi } from '@/api/client-config'
+import { clientConfigApi, type ClientConfigApplyValues } from '@/api/client-config'
 import { unwrap } from '@/api/unwrap'
 
 export const clientConfigKeys = {
@@ -73,7 +73,7 @@ export function useClientConfigActions(clientKey: string, filePath: string) {
     ])
   }
 
-  const apply = useMutation<ClientConfigApplyResult, Error, { baseUrl: string; apiKey: string; model: string; smallModel?: string }>({
+  const apply = useMutation<ClientConfigApplyResult, Error, ClientConfigApplyValues>({
     mutationFn: values => unwrap(clientConfigApi.apply(clientKey, filePath, values)),
     onSuccess: invalidate,
   })

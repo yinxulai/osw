@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { CircleSlash, Zap } from 'lucide-react'
 import type { ClientConfigChange, ClientConfigVersionSummary } from '@common/client-config'
-import { resolveProxyOrigin } from '@common/proxy-origin'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -10,7 +9,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useProxyStatus } from '@/data/proxy'
 import {
   useClientConfigActions,
   useClientConfigFile,
@@ -58,9 +56,6 @@ export function ClientConfigDetailPage() {
   const versionsLoading = useClientConfigVersionsLoading(clientKey, filePath)
   const actions = useClientConfigActions(clientKey, filePath)
   const fill = useClientConfigFill()
-
-  const proxyStatus = useProxyStatus()
-  const defaultBaseUrl = resolveProxyOrigin(proxyStatus?.host ?? '', proxyStatus?.port ?? null) ?? ''
 
   // 备份结果要说清「为什么没存」：文件本来不存在，和内容已经在历史里，是两件事。
   // 前者没什么可备份的，后者说明这份内容早就是某个版本了——判断靠写入前的存在性，所以要提前记下来。
@@ -188,7 +183,6 @@ export function ClientConfigDetailPage() {
               autoFill={state.autoFill}
               changes={changes}
               clientKey={clientKey}
-              defaultBaseUrl={defaultBaseUrl}
               defaultModel={BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME}
               detected={state.detected}
               onApply={applyValues}

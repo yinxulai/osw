@@ -71,10 +71,9 @@ describe('client config routes', () => {
   })
 
   it('applies the local endpoint and reports the changes', async () => {
+    // 调用方只能选模型名；地址与密钥由服务端按自己的监听设置填，所以请求体里没有它们。
     const response = await clientConfigRoutes.request('/api/client-config/apply', {
       ...fileBody(),
-      baseUrl: 'http://127.0.0.1:9300',
-      apiKey: 'sk-osw',
       model: 'osw-model',
     })
     const body = response.json<SuccessBody<{ state: ClientConfigFileState; changes: unknown[] }>>()
@@ -125,8 +124,6 @@ describe('client config routes', () => {
       clientConfigRoutes.request('/api/client-config/apply', {
         clientKey: 'pi',
         filePath: '~/.pi/agent/settings.json',
-        baseUrl: 'http://127.0.0.1:9300',
-        apiKey: 'sk-osw',
         model: 'osw-model',
       }),
     ).rejects.toMatchObject({ code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED' })
