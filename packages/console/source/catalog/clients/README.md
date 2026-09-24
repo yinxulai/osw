@@ -30,8 +30,10 @@ clients/
    - 可选：`aliases` `websiteUrl` `protocol`、`files[].envVar`
    - `configDir` 与 `files[].path` 一律以 `~/` 开头（`~` 由消费者展开为真实主目录）。
    - `order` 数值大的排前面，且各客户端之间必须唯一。
-2. 建目录 `catalog/clients/<key>/`（`<key>` 用 kebab-case，如 `claude-code`），放图标
-   `icon.svg`（自适应主题的单色图标）或 `icon.light.svg` / `icon.dark.svg`。
+2. 建目录 `catalog/clients/<key>/`（`<key>` 用 kebab-case，如 `claude-code`），放图标：
+   - 自带品牌色的标志：一张 `icon.svg` 即可，两套主题共用。
+   - 单色标志：必须给 `icon.svg`（深色，亮色主题用）+ `icon.dark.svg`（浅色，暗色主题用）。
+     这两份就是纯黑白两色，别指望 `fill="currentColor"` 跟着主题走——见下。
 3. 跑 `pnpm test`、`pnpm typecheck`、`pnpm lint`。
 
 `index.ts` 会自动扫描目录，**不需要**在代码里登记新客户端。
@@ -55,5 +57,13 @@ clients/
 | `deepseek-harness` | <https://usemagpie.ai/icons/deepseek-color.svg> |
 
 抓取时是逐字节拷贝，只规整了文件名，各 SVG 保持原本 `viewBox="0 0 24 24"`。
-其中 `pi` / `opencode` / `cursor-cli` / `copilot-cli` 用 `fill="currentColor"` 继承前景色，
-其余自带品牌色；本仓库的 `icon.svg` 是它们的主题自适应单色化版本。
+其中 `pi` / `opencode` / `cursor-cli` / `copilot-cli` 用 `fill="currentColor"`，
+其余自带品牌色。
+
+⚠️ **`currentColor` 在 `client-icon.tsx` 的 `<img>` 里不会继承页面文字色**：
+`<img>` 里的 SVG 是独立文档，没有可继承的 `color`，浏览器按初始值解析成**纯黑**。
+亮色主题下正好，暗色主题下就是黑底黑图（实测这四个图标的像素恒为 `rgb(0,0,0)`）。
+所以这四个客户端各带了一份 `icon.dark.svg`：几何逐字节相同，只把根节点的
+`fill="currentColor"` 换成 `fill="#ffffff"`。想改单色图标的形状，两份要一起改。
+（`opencode` 的图是方形外框、`cursor-cli` 是棱形、`pi` 是块状 P、`copilot-cli` 是幽灵剪影，
+四个都是实心剪影，白底/黑底上都读得清。）
