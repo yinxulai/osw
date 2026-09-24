@@ -149,7 +149,7 @@
 - [x] 阶段 0：`SettingsSchema` 增 `language`、i18n 核心、目录骨架、`I18nProvider`、设置页语言行
 - [x] 阶段 1：日志与错误英文化（`errors.ts`、管理 API、代理层、运行日志），错误码收窄为 `ApiErrorCode`，渲染层按错误码本地化
 - [x] 阶段 2：外壳与通用组件（侧栏、layout、设置页、通用表单 / 列表状态）
-- [x] 阶段 3：业务页逐页迁移（overview / request-logs / logs / logical-models / model-management / router / request-rewrite-rules / access-config）
+- [x] 阶段 3：业务页逐页迁移（overview / request-logs / logs / logical-models / model-management / router / request-rewrite-rules / client-config）
 - [x] 阶段 4：原生托盘 / 菜单 / 对话框本地化
 - [x] 阶段 5：门禁与清理（`no-hardcoded-cjk` ESLint 规则、目录一致性检查、移除硬编码中文）
 

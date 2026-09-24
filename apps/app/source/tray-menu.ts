@@ -14,7 +14,7 @@ export interface TrayProxySnapshot {
 }
 
 /**
- * 托盘列出的两个接入基址，与「接入配置」页同口径。
+ * 托盘列出的两个接入基址，与引导页第三步展示的地址同口径。
  *
  * 这里给的是**客户端要填的 Base URL**，不是完整接口地址：OpenAI 兼容客户端要带 `/v1`，
  * Anthropic 客户端只填到端口（它自己会补上 `/v1/messages`）。

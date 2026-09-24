@@ -6,7 +6,7 @@
 ## 服务基本信息
 
 - 默认监听 `127.0.0.1` 的可配置端口，不暴露到局域网
-- 客户端只需配置一个统一的服务根地址（如 `http://127.0.0.1:port`），无需按协议区分；填进客户端的 Base URL 按客户端习惯补路径——OpenAI 兼容客户端填 `<origin>/v1`（它自己拼 `/chat/completions` 等），Anthropic 客户端填 `<origin>`（它自己拼 `/v1/messages`），见 [desktop.md](./desktop.md) §接入配置页
+- 客户端只需配置一个统一的服务根地址（如 `http://127.0.0.1:port`），无需按协议区分；填进客户端的 Base URL 按客户端习惯补路径——OpenAI 兼容客户端填 `<origin>/v1`（它自己拼 `/chat/completions` 等），Anthropic 客户端填 `<origin>`（它自己拼 `/v1/messages`），见 [desktop.md](./desktop.md) §引导第三步
 - 支持普通 HTTP 请求和 SSE 流式响应透传
 - 不强制接管系统代理；推荐用户在 AI 工具中配置本地 Base URL
 - 可选的应用级上游出站代理用于 OSW 访问模型供应商，覆盖真实模型请求、连接测试和模型列表获取；协议、绕过规则和安全边界详见 [outbound-proxy.md](./outbound-proxy.md)

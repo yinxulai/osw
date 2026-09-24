@@ -121,7 +121,7 @@ Things worth doing while you're here:
 
 ### 3. Repoint your client
 
-**Access Config** is a three-step guide: confirm the service is running, pick your client type, copy the address it asks for. Addresses are built from the current listener, and every one of them has a copy button.
+Step 3 of the setup guide is the reference sheet for this local service: one address, the values a client needs, and the paths it accepts. Addresses are built from the current listener, and every one of them has a copy button. On a machine that already has a client installed, open **Client Config** and hit **Apply to all** to have those files written for you.
 
 | Your client | Base URL |
 | --- | --- |
