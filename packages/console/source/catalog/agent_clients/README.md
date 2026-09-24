@@ -38,4 +38,19 @@ agent_clients/
 `files` 与 `fields` 取自 [yetone/magpie](https://github.com/yetone/magpie) 各
 `internal/agent/<client>.go` 的权威实现（它管理的正是同一批客户端），并经其
 `internal/agent/legacy_test.go` 的真实配置样本核对。图标取自
-<https://usemagpie.ai/>，来源清单见 `docs/design/agent-icons/README.md`。
+<https://usemagpie.ai/> 的 "EVERY AGENT" 区块，逐个对应关系：
+
+| 客户端 | 原始 URL |
+| --- | --- |
+| `claude-code` | <https://usemagpie.ai/icons/claudecode-color.svg> |
+| `codex` | <https://usemagpie.ai/icons/codex-color.svg> |
+| `gemini-cli` | <https://usemagpie.ai/icons/geminicli-color.svg> |
+| `opencode` | <https://usemagpie.ai/icons/opencode.svg> |
+| `pi` | <https://usemagpie.ai/icons/pi.svg> |
+| `cursor-cli` | <https://usemagpie.ai/icons/cursor.svg> |
+| `copilot-cli` | <https://usemagpie.ai/icons/githubcopilot.svg> |
+| `deepseek-harness` | <https://usemagpie.ai/icons/deepseek-color.svg> |
+
+抓取时是逐字节拷贝，只规整了文件名，各 SVG 保持原本 `viewBox="0 0 24 24"`。
+其中 `pi` / `opencode` / `cursor-cli` / `copilot-cli` 用 `fill="currentColor"` 继承前景色，
+其余自带品牌色；本仓库的 `icon.svg` 是它们的主题自适应单色化版本。
