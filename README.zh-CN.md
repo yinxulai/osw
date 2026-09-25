@@ -24,7 +24,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 
 <p align="center">
   <a href="https://www.qiniu.com">
-    <img src="./packages/console/source/providers/qiniu/icon.light.svg" width="56" height="56" alt="七牛云" />
+    <img src="./packages/console/source/catalog/providers/qiniu/icon.light.svg" width="56" height="56" alt="七牛云" />
   </a>
   <br />
   <a href="https://www.qiniu.com"><strong>七牛云</strong></a>

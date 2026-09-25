@@ -24,7 +24,7 @@ Your client only ever sees the attempt that succeeded.
 
 <p align="center">
   <a href="https://www.qiniu.com">
-    <img src="./packages/console/source/providers/qiniu/icon.light.svg" width="56" height="56" alt="Qiniu Cloud" />
+    <img src="./packages/console/source/catalog/providers/qiniu/icon.light.svg" width="56" height="56" alt="Qiniu Cloud" />
   </a>
   <br />
   <a href="https://www.qiniu.com"><strong>Qiniu Cloud</strong></a>
