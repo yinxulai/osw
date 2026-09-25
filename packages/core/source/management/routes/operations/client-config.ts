@@ -14,6 +14,7 @@ import {
   applyClientConfigOverrides,
   listClientConfigFileVersions,
   listClientConfigOverview,
+  previewClientConfigOverrides,
   readClientConfigFile,
   readClientConfigVersion,
   restoreClientConfigVersion,
@@ -34,6 +35,7 @@ import { sendSuccess } from '../../core/response'
 export const clientConfigRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/client-config/get', handleGetFile)
   .post('/api/client-config/overview', handleOverview)
+  .post('/api/client-config/preview', handlePreview)
   .post('/api/client-config/apply', handleApply)
   .post('/api/client-config/fill', handleFill)
   .post('/api/client-config/save', handleSave)
@@ -68,6 +70,17 @@ async function handleApply(_req: IncomingMessage, res: ServerResponse, body: unk
   sendSuccess(res, await applyClientConfigOverrides(clientKey, filePath, { model, smallModel }))
 }
 
+/**
+ * 预览一次改写：同一个请求体、同一个规划，只是不落盘。
+ *
+ * 界面在用户改模型或换文件时调它，把返回的内容直接摆到下方文本里——「写入文件」那一颗按钮
+ * 因此不必存在：看到的就是会写进去的，剩下要用户按的只有保存。
+ */
+async function handlePreview(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const { clientKey, filePath, model, smallModel } = ClientConfigApplyRequestSchema.parse(body)
+  sendSuccess(res, await previewClientConfigOverrides(clientKey, filePath, { model, smallModel }))
+}
+
 async function handleSave(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { clientKey, filePath, content, note } = ClientConfigSaveRequestSchema.parse(body)
   sendSuccess(res, await saveClientConfigContent(clientKey, filePath, content, note))
@@ -75,7 +88,7 @@ async function handleSave(_req: IncomingMessage, res: ServerResponse, body: unkn
 
 async function handleListVersions(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { clientKey, filePath } = ClientConfigFileRequestSchema.parse(body)
-  sendSuccess(res, listClientConfigFileVersions(clientKey, filePath))
+  sendSuccess(res, await listClientConfigFileVersions(clientKey, filePath))
 }
 
 async function handleGetVersion(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

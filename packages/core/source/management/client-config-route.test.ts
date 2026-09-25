@@ -6,7 +6,7 @@ import type {
   ClientConfigFileState,
   ClientConfigFillResultItem,
   ClientConfigOverviewItem,
-  ClientConfigVersionSummary,
+  ClientConfigVersionEntry,
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { closeDatabases, initDatabases } from '../database'
@@ -87,8 +87,10 @@ describe('client config routes', () => {
     await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"a":2}' })
 
     const listed = await clientConfigRoutes.request('/api/client-config/versions', fileBody())
-    const [version] = listed.json<SuccessBody<ClientConfigVersionSummary[]>>().data
+    const [version] = listed.json<SuccessBody<ClientConfigVersionEntry[]>>().data
     expect(version).toMatchObject({ preview: '{"a":1}', origin: 'manual' })
+    // 列表给的是「回退到这一版后哪些值会变」，不是这一版开头的字符（那永远是一个 `{`）。
+    expect(version!.diff).toEqual([{ before: 'a: 2', after: 'a: 1' }])
 
     const found = await clientConfigRoutes.request('/api/client-config/version/get', { id: version!.id })
     expect(found.json<SuccessBody<{ content: string }>>().data.content).toBe('{"a":1}')
@@ -102,7 +104,7 @@ describe('client config routes', () => {
     await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"a":1}' })
     await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"a":2}' })
     const listed = await clientConfigRoutes.request('/api/client-config/versions', fileBody())
-    const [version] = listed.json<SuccessBody<ClientConfigVersionSummary[]>>().data
+    const [version] = listed.json<SuccessBody<ClientConfigVersionEntry[]>>().data
 
     const restored = await clientConfigRoutes.request('/api/client-config/version/restore', { ...fileBody(), id: version!.id })
 

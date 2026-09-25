@@ -9,9 +9,10 @@ import type {
   ClientConfigFileState,
   ClientConfigFillResultItem,
   ClientConfigOverviewItem,
+  ClientConfigPreviewResult,
   ClientConfigVersion,
+  ClientConfigVersionEntry,
   ClientConfigVersionOrigin,
-  ClientConfigVersionSummary,
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { resolveProxyOrigin } from '@common/proxy-origin'
@@ -20,7 +21,7 @@ import { AppError } from '../errors'
 import {
   getClientConfigVersion,
   hashClientConfigContent,
-  listClientConfigVersions,
+  listClientConfigVersionsWithContent,
   saveClientConfigVersion,
   summarizeClientConfigVersions,
 } from '../database/client-config-version-store'
@@ -28,6 +29,7 @@ import { getSettings } from '../database/settings-store'
 import { ConfigParseError, createConfigEditor, supportsAutoFill, type ConfigEditor } from './formats'
 import { resolveClientConfigPath } from './paths'
 import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, stripModelPrefix, type ClientApplyContext, type ClientApplyRule, type ClientFieldRole } from './rules'
+import { diffClientConfigContent } from './version-diff'
 
 export interface ClientConfigTarget {
   clientKey: string
@@ -199,10 +201,14 @@ interface ClientConfigPlan {
 /**
  * 把客户端配置改成指到本地服务，**只算不写**。
  *
- * 抽出来是为了让「一键生效」与列表页的覆盖状态共用同一条判断：列表说「已生效」的定义就是
- * 这里算出来的改动为空。否则状态和按钮迟早会各说各话。
+ * 抽出来是为了让「一键生效」、列表页的覆盖状态与界面上的预览共用同一条判断：
+ * 列表说「已生效」的定义就是这里算出来的改动为空，界面显示「下面会变成这样」
+ * 用的也正是这里的 `nextContent`。否则状态、预览与按钮迟早会各说各话。
+ *
+ * 基线是**调用方给的文本**而不是就地读盘：预览要的是「这段内容 + 这些值 = 什么」，
+ * 让调用方决定拿哪段内容来算，读盘只剩调用方那一步。
  */
-async function planClientConfigChanges(target: ClientConfigTarget, values: ClientApplyValues, rule: ClientApplyRule, client: AgentClientDefinition): Promise<ClientConfigPlan> {
+function planClientConfigChanges(target: ClientConfigTarget, text: string, values: ClientApplyValues, rule: ClientApplyRule, client: AgentClientDefinition): ClientConfigPlan {
   assertHttpBaseUrl(values.baseUrl)
 
   const context: ClientApplyContext = {
@@ -213,12 +219,11 @@ async function planClientConfigChanges(target: ClientConfigTarget, values: Clien
     smallModel: values.smallModel?.trim() ? values.smallModel : values.model,
   }
 
-  const raw = await readRaw(target.resolvedPath)
   const fields = agentClientFieldsOfFile(client, target.filePath)
 
   let editor
   try {
-    editor = createConfigEditor(target.file.format, raw.content)
+    editor = createConfigEditor(target.file.format, text)
   } catch (error) {
     if (error instanceof ConfigParseError) {
       throw new AppError('CLIENT_CONFIG_PARSE_FAILED', 400, `Cannot parse ${target.filePath} as ${target.file.format}`, {
@@ -286,7 +291,8 @@ export async function applyClientConfigOverrides(clientKey: string, filePath: st
 
   const defaults = await resolveClientConfigDefaults()
   const values: ClientApplyValues = { baseUrl: defaults.origin, apiKey: defaults.apiKey, model: overrides.model, smallModel: overrides.smallModel }
-  const plan = await planClientConfigChanges(target, values, rule, client)
+  const raw = await readRaw(target.resolvedPath)
+  const plan = planClientConfigChanges(target, raw.content, values, rule, client)
   // 一处都不用改就直接返回：没有改动就不该落盘，也不该多出一个版本，
   // 否则反复点按钮会往历史里塞一堆内容相同的记录。
   if (plan.changes.length === 0) {
@@ -297,9 +303,45 @@ export async function applyClientConfigOverrides(clientKey: string, filePath: st
   return { ...result, changes: plan.changes }
 }
 
-export function listClientConfigFileVersions(clientKey: string, filePath: string): ClientConfigVersionSummary[] {
-  resolveClientConfigTarget(clientKey, filePath)
-  return listClientConfigVersions(clientKey, filePath)
+/**
+ * 「这些模型值写进去之后，这份文件会长成什么样」——只算不写，**不产生版本、不碰磁盘**。
+ *
+ * 与 `applyClientConfigOverrides` 是同一个规划的两个用法：那边算完就落盘，这边只把结果交回界面。
+ * 界面拿它渲染下方的内容，用户改模型/切文件时看到的就是「如果现在保存，文件会变成这样」。
+ */
+export async function previewClientConfigOverrides(clientKey: string, filePath: string, overrides: ClientApplyOverrides): Promise<ClientConfigPreviewResult> {
+  const target = resolveClientConfigTarget(clientKey, filePath)
+  const client = findAgentClient(clientKey)!
+  const rule = getClientApplyRule(clientKey)
+  if (!rule) {
+    throw new AppError('CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', 400, `Automatic filling is not available for ${client.name}`, {
+      details: { clientName: client.name },
+    })
+  }
+
+  const defaults = await resolveClientConfigDefaults()
+  const values: ClientApplyValues = { baseUrl: defaults.origin, apiKey: defaults.apiKey, model: overrides.model, smallModel: overrides.smallModel }
+  const raw = await readRaw(target.resolvedPath)
+  const plan = planClientConfigChanges(target, raw.content, values, rule, client)
+  return { content: plan.nextContent, changes: plan.changes }
+}
+
+/**
+ * 某个文件的版本列表。
+ *
+ * 每条的摘要都带「与当前文件相比改了哪几行」：列表原来显示这一版开头的若干字符，
+ * 而配置文件的开头往往只是一个 `{`，于是八条历史长得一模一样、谁也没说出自己是什么。
+ * 算差异要把当前文件读出来（个别时候读不到，就当空内容——那正好把这一版写着的行全列出来），
+ * 所以这个函数是 async 的。只读文件：不写、不产生新版本。
+ */
+export async function listClientConfigFileVersions(clientKey: string, filePath: string): Promise<ClientConfigVersionEntry[]> {
+  const target = resolveClientConfigTarget(clientKey, filePath)
+  const versions = listClientConfigVersionsWithContent(clientKey, filePath)
+  const raw = await readRaw(target.resolvedPath)
+  return versions.map(version => {
+    const { content, ...summary } = version
+    return { ...summary, diff: diffClientConfigContent(raw.content, content) }
+  })
 }
 
 /** 读取某个历史版本的完整内容（界面展开预览用）。 */
@@ -414,7 +456,7 @@ async function readClientConfigCoverage(client: AgentClientDefinition, defaults:
     if (raw.exists) exists = true
     try {
       const values = await clientConfigFillValues(target, client, rule, defaults)
-      const plan = await planClientConfigChanges(target, values, rule, client)
+      const plan = planClientConfigChanges(target, raw.content, values, rule, client)
       pendingChanges += plan.changes.length
     } catch {
       return { coverage: 'unavailable', pendingChanges }

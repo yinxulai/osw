@@ -91,6 +91,38 @@ export const ClientConfigVersionSchema = ClientConfigVersionSummarySchema.extend
 
 export type ClientConfigVersion = z.infer<typeof ClientConfigVersionSchema>
 
+/**
+ * 一个版本与**当前文件内容**之间的一处差异。
+ *
+ * 版本列表要回答的是「退回这一版会让文件哪里变样」，而不是「这一版开头长什么样」——
+ * 配置文件的头几行往往只是一个 `{`，对辨认版本毫无用处。
+ * 所以摘要按差异算：`before` 是现在的内容、`after` 是这一版的内容，
+ * 方向就是「点下回退之后，这一处会从 before 变成 after」。
+ *
+ * 纯结构行（`{`、`}`、空行）不参与比较：它们在任何两版之间都可能不同，却什么也没说明。
+ */
+export const ClientConfigVersionDiffSchema = z.object({
+  /** 当前文件里的行；这一版没有对应行时为 null（回退会去掉它）。 */
+  before: z.string().nullable(),
+  /** 这一版里的行；当前文件没有对应行时为 null（回退会加上它）。 */
+  after: z.string().nullable(),
+})
+
+export type ClientConfigVersionDiff = z.infer<typeof ClientConfigVersionDiffSchema>
+
+/**
+ * 版本列表里的一条。
+ *
+ * 与 `ClientConfigVersionSummary` 只差 `diff`：那个形状同时被「刚落盘的那一份备份」复用
+ * （见 `ClientConfigWriteResultSchema`），那时没有「当前内容」可比较，算不出差异。
+ */
+export const ClientConfigVersionEntrySchema = ClientConfigVersionSummarySchema.extend({
+  /** 相对当前文件内容的差异，最多若干处；内容一样时是空数组。 */
+  diff: z.array(ClientConfigVersionDiffSchema),
+})
+
+export type ClientConfigVersionEntry = z.infer<typeof ClientConfigVersionEntrySchema>
+
 // ========== 一次改动的结果 ==========
 
 export const ClientConfigChangeSchema = z.object({
@@ -123,6 +155,23 @@ export const ClientConfigApplyResultSchema = ClientConfigWriteResultSchema.exten
 })
 
 export type ClientConfigApplyResult = z.infer<typeof ClientConfigApplyResultSchema>
+
+/**
+ * 一次**尚未落盘**的改写预览。
+ *
+ * 与 `ClientConfigApplyResult` 的差别只有「没有写」：同样的值、同样的配方、同样的默认地址与密钥，
+ * 因此这里的内容就是真按下保存时会写进文件的那一段。界面「改模型 → 下面文本跟着变」
+ * 依赖的正是这一点：预览与实际写入共用同一次规划（见 core 的 `planClientConfigChanges`），
+ * 而不是让界面自己再推一遍——两份实现迟早会各说各话。
+ */
+export const ClientConfigPreviewResultSchema = z.object({
+  /** 这些值写进去之后，文件将会是什么内容。 */
+  content: z.string(),
+  /** 相对当前文件会被改动的键；为空表示这组值已经写好了。 */
+  changes: z.array(ClientConfigChangeSchema),
+})
+
+export type ClientConfigPreviewResult = z.infer<typeof ClientConfigPreviewResultSchema>
 
 // ========== 请求体 ==========
 

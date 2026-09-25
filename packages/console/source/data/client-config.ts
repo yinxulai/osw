@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
-  ClientConfigApplyResult,
   ClientConfigFileState,
   ClientConfigFillResultItem,
   ClientConfigOverviewItem,
-  ClientConfigVersionSummary,
+  ClientConfigPreviewResult,
+  ClientConfigVersionEntry,
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { clientConfigApi, type ClientConfigApplyValues } from '@/api/client-config'
@@ -15,6 +15,8 @@ export const clientConfigKeys = {
   overview: () => ['client-config', 'overview'] as const,
   file: (clientKey: string, filePath: string) => ['client-config', 'file', clientKey, filePath] as const,
   versions: (clientKey: string, filePath: string) => ['client-config', 'versions', clientKey, filePath] as const,
+  preview: (clientKey: string, filePath: string, model: string, smallModel: string) =>
+    ['client-config', 'preview', clientKey, filePath, model, smallModel] as const,
 }
 
 /**
@@ -39,7 +41,7 @@ export function useClientConfigFileStatus(clientKey: string, filePath: string): 
   return { loading: query.isPending, error: query.error?.message ?? null }
 }
 
-export function useClientConfigVersions(clientKey: string, filePath: string): ClientConfigVersionSummary[] {
+export function useClientConfigVersions(clientKey: string, filePath: string): ClientConfigVersionEntry[] {
   const query = useQuery({
     queryKey: clientConfigKeys.versions(clientKey, filePath),
     queryFn: () => unwrap(clientConfigApi.listVersions(clientKey, filePath)),
@@ -73,11 +75,6 @@ export function useClientConfigActions(clientKey: string, filePath: string) {
     ])
   }
 
-  const apply = useMutation<ClientConfigApplyResult, Error, ClientConfigApplyValues>({
-    mutationFn: values => unwrap(clientConfigApi.apply(clientKey, filePath, values)),
-    onSuccess: invalidate,
-  })
-
   const save = useMutation<ClientConfigWriteResult, Error, { content: string; note?: string }>({
     mutationFn: ({ content, note }) => unwrap(clientConfigApi.save(clientKey, filePath, content, note)),
     onSuccess: invalidate,
@@ -88,7 +85,24 @@ export function useClientConfigActions(clientKey: string, filePath: string) {
     onSuccess: invalidate,
   })
 
-  return { apply, save, restore, refresh: invalidate }
+  return { save, restore, refresh: invalidate }
+}
+
+/**
+ * 「这些模型值写进去，文件会变成什么样」——只算不写。
+ *
+ * 值没被改动（`values` 为 null）时不发请求：那时候下面的内容就是文件原文，
+ * 没什么可预览的。请求本身是幂等的，同一组值重复问也只得到一个答案。
+ */
+export function useClientConfigPreview(clientKey: string, filePath: string, values: ClientConfigApplyValues | null): ClientConfigPreviewResult | null {
+  const model = values?.model ?? ''
+  const smallModel = values?.smallModel ?? ''
+  const query = useQuery({
+    queryKey: clientConfigKeys.preview(clientKey, filePath, model, smallModel),
+    queryFn: () => unwrap(clientConfigApi.preview(clientKey, filePath, { model, smallModel: smallModel || undefined })),
+    enabled: values !== null && clientKey !== '' && filePath !== '',
+  })
+  return query.data ?? null
 }
 
 const useOverviewQuery = () =>

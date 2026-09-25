@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { FileCode2 } from 'lucide-react'
 import type { ClientConfigFileState } from '@common/client-config'
 import { Button } from '@/components/ui/button'
@@ -12,24 +11,32 @@ import { formatVersionTime } from '../lib/relative-time'
 interface ContentCardProps {
   state: ClientConfigFileState
   saving: boolean
+  /**
+   * 当前要提交的内容：文件原文，或者「模型值写进去之后」的预览。
+   *
+   * 由上层给而不是自己 `useState`：上方的模型选择改的也是这一段文字，两个入口编辑同一份东西，
+   * 各存一半就会出现「上面的选择已经生效、下面的文本还是旧的」这种自相矛盾的状态。
+   */
+  value: string
+  onChange: (content: string) => void
+  /** 丢弃全部改动，回到磁盘上的原文——包括上方模型选择带来的那部分。 */
+  onDiscard: () => void
   onSave: (content: string) => void
 }
 
 /**
- * 文件的**原文**。
+ * 文件的**内容**：磁盘上真正躺着的东西，以及即将写回去的东西。
  *
- * 这一页的另一半是「按本机服务改写」（地址与密钥由服务端填，界面只决定模型名）——那是替用户写；
- * 写不了、或者用户要自己改的场合，就得让他看到磁盘上真正躺着什么。所以这里渲染的是文件全文，
- * 和自动填充共用同一份备份与版本：手动保存走的是同一条「先存版本、再落盘」的路。
+ * 两个来源汇到同一个草稿：上方模型选择算出的预览（地址、密钥由服务端填，界面只决定模型名）
+ * 与用户在这里的直接编辑。它们不是两件事——「改模型」就是用另一种方式改这段文字，
+ * 所以保存与撤销也只有一套：先存版本、再落盘。
  *
- * 改动只在本地草稿里累积，`dirty` 才亮起保存/撤销。全文对比而不是逐字段 diff：
- * 原文是给人读的，行级高亮在这个密度下只会变成噪音。
+ * 全文对比而不是逐字段 diff：原文是给人读的，行级高亮在这个密度下只会变成噪音。
  */
 export function ContentCard(props: ContentCardProps) {
-  const { state, saving, onSave } = props
+  const { state, saving, value, onChange, onDiscard, onSave } = props
   const t = useTranslation()
-  const [draft, setDraft] = useState(state.content)
-  const dirty = draft !== state.content
+  const dirty = value !== state.content
 
   return (
     <Card>
@@ -42,10 +49,11 @@ export function ContentCard(props: ContentCardProps) {
         description={<span className="font-mono">{state.resolvedPath}</span>}
         actions={(
           <>
-            <Button variant="outline" disabled={!dirty || saving} onClick={() => setDraft(state.content)}>
+            {/* 撤销同时把上方模型选择拉回文件里的值：它们编辑的是同一段内容，只退一半就不一致了。 */}
+            <Button variant="outline" disabled={!dirty || saving} onClick={onDiscard}>
               {t('clientConfig.discard')}
             </Button>
-            <Button disabled={!dirty || saving} onClick={() => onSave(draft)}>
+            <Button disabled={!dirty || saving} onClick={() => onSave(value)}>
               {saving ? t('clientConfig.saving') : t('clientConfig.saveContent')}
             </Button>
           </>
@@ -77,8 +85,8 @@ export function ContentCard(props: ContentCardProps) {
           className="min-h-72 font-mono"
           placeholder={t('clientConfig.content.placeholder')}
           spellCheck={false}
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
+          value={value}
+          onChange={event => onChange(event.target.value)}
         />
       </CardContent>
     </Card>

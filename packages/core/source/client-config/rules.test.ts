@@ -45,7 +45,12 @@ const TEMPLATE_CONTEXT: AgentClientTemplateContext = {
   providerName: LOCAL_PROVIDER_NAME,
 }
 
-/** 没有配方的客户端：地址与凭证不在同一个文件里（Pi），或压根没有可填的地址字段。 */
+/**
+ * 没有配方的客户端，两种情形：地址与凭证分在两个文件里、或者配置是按条目打补丁的
+ * （Pi、DeepSeek Harness，我们能读但写不对），以及压根没有可填的地址字段
+ * （Copilot CLI、Cursor CLI 只存模型名）。两边的界面表现相同——详情页不摆「要写入的模型」，
+ * 只让用户直接编辑文件。
+ */
 const CLIENTS_WITHOUT_RULE = ['copilot-cli', 'cursor-cli', 'deepseek-harness', 'pi']
 
 describe('rule coverage', () => {
@@ -100,8 +105,9 @@ describe('rule coverage', () => {
 
   it('sends every model alias to the local service', () => {
     // 漏掉任何一个别名，用户在 CLI 里切到它就会绕过本地路由——这是最难被发现的一类漏改。
+    // 别名清单来自 Claude Code 自己的环境变量写法（含子代理用的 `CLAUDE_CODE_SUBAGENT_MODEL`）。
     const claudeCode = getClientApplyRule('claude-code')!
-    for (const alias of ['mainModel', 'opus', 'sonnet', 'haiku', 'fable']) {
+    for (const alias of ['mainModel', 'opus', 'sonnet', 'haiku', 'fable', 'subagent']) {
       expect(claudeCode.roles[alias]).toBe('model')
     }
     expect(claudeCode.roles['smallFast']).toBe('smallModel')

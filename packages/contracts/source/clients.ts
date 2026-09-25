@@ -178,9 +178,12 @@ export interface AgentClientDefinition {
   /** 需要识别/改写的设置项。 */
   fields: AgentClientFieldDefinition[]
   /**
-   * 「把配置指到本机服务」的配方。缺省表示自动填充不可用——要么没有可指向本地服务的地址字段
-   * （Copilot CLI、Cursor CLI 只存模型名），要么地址与 provider 定义分在两个文件里（Pi），
-   * 此时界面引导用户手动编辑。
+   * 「把配置指到本机服务」的配方。缺省表示自动填充不可用，详情页因此**不摆**「要写入的模型」那一块。
+   *
+   * 缺省的两种情形：一是没有可指向本地服务的地址字段（Copilot CLI、Cursor CLI 只存模型名）；
+   * 二是地址与 provider 定义分在两个文件里、或者配置是按条目打补丁的（Pi、DeepSeek Harness）。
+   * 两者都是「我们写不对」，不是「用户接不上」——所以界面不摆空表单，而是让用户直接编辑文件，
+   * 并在客户端列表页顶部给出地址与受理路径（见控制台的 `ManualSetupBand`）。
    */
   apply?: AgentClientApplyConfig
 }
@@ -223,6 +226,7 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'haiku', path: 'env.ANTHROPIC_DEFAULT_HAIKU_MODEL', type: 'string', description: 'Model the `haiku` alias resolves to.' },
       { key: 'fable', path: 'env.ANTHROPIC_DEFAULT_FABLE_MODEL', type: 'string', description: 'Model the `fable` alias resolves to.' },
       { key: 'smallFast', path: 'env.ANTHROPIC_SMALL_FAST_MODEL', type: 'string', description: 'Model used for background/small work.' },
+      { key: 'subagent', path: 'env.CLAUDE_CODE_SUBAGENT_MODEL', type: 'string', description: 'Model used by subagents the main session spawns.' },
     ],
     apply: {
       roles: {
@@ -237,6 +241,9 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
         haiku: 'model',
         fable: 'model',
         smallFast: 'smallModel',
+        // 子代理干的是正文里的活，不是 `smallFast` 那类「起个标题」的小任务，所以归 `model`：
+        // 分法沿用文件里已有的两档，不在这里重新判断什么算「小」。
+        subagent: 'model',
       },
       ignored: [],
     },
@@ -400,6 +407,9 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'displayName', path: 'model.displayName', type: 'string', description: 'Model name as shown in the UI.' },
       { key: 'hasChangedDefaultModel', path: 'hasChangedDefaultModel', type: 'boolean', description: 'Whether the user overrode the default model.' },
     ],
+    // 不提供 `apply`：这个配置文件里没有任何「指向哪个地址」的字段，模型名与它的展示字段就是全部。
+    // 要换上游只能靠 `HTTP_PROXY` / `HTTPS_PROXY` 这类进程环境变量，那不在文件里，我们不改用户的环境。
+    // 官方文档里能改的也只有编辑器行为与权限（version / editor / permissions），所以是「真的没得配」。
   },
   {
     key: 'copilot-cli',
@@ -419,6 +429,8 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
     fields: [
       { key: 'model', path: 'model', type: 'string', description: 'Selected model, or `auto`.' },
     ],
+    // 不提供 `apply`：settings.json 里只有一个模型名，没有地址也没有 provider 表。
+    // 鉴权走 `/login` 或 `COPILOT_GITHUB_TOKEN` 这类环境变量，同样不在文件里。
   },
   {
     key: 'pi',
@@ -450,6 +462,12 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'model', path: 'defaultModel', type: 'string', description: 'Default model id.' },
       { key: 'thinking', path: 'defaultThinkingLevel', type: 'string', description: 'Startup thinking level (off/minimal/low/medium/high/xhigh/max).' },
     ],
+    /*
+     * 不提供 `apply`：这个客户端**是**能接上的（models.json 里 `providers.<id>` 收 `api`/`baseUrl`/`apiKey`），
+     * 但模型选在 settings.json、provider 定义在 models.json，而配方目前只能把 provider 表写进
+     * 「模型字段所在的那个文件」（`AgentClientProviderEntryTemplate.path` 是同一个文件里的点号路径），
+     * 摆不下这种跨文件组合。要补的话得先扩配方的形状，而不是在这里写一个会写歪的配方。
+     */
   },
   {
     key: 'deepseek-harness',
@@ -477,6 +495,12 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
       { key: 'endpoint', path: 'llm-deepseek.config.baseURL', type: 'string', description: 'DeepSeek endpoint base URL.' },
       { key: 'apiKey', path: 'llm-deepseek.config.apiKey', type: 'string', description: 'DeepSeek API key.' },
     ],
+    /*
+     * 不提供 `apply`：上面那三个点号路径是**读**出来的位置，而写入要的是「按 id 打补丁」
+     * ——config.yaml 里每一行都是一个 `{id, config}` 条目，改一个键要连着 id 一起重建整行，
+     * 还得跟用户自己写的条目共存。配方（点号路径 + 模板整块替换）表达不了这种形状，
+     * 所以宁可让用户手动改，也不拿「看起来对」的补丁去覆盖别人的配置。
+     */
   },
 ]
 

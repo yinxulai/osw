@@ -8,6 +8,9 @@ import { useProxyToggle } from '@/pages/logical-models/hooks/use-proxy-toggle'
  * 监听通配地址时它本身不是可访问地址，回落到 127.0.0.1，并把情况告诉调用方。
  * 这里只产出根地址（`http://host:port`）：各协议的 Base URL / 完整接口地址是
  * 「根地址 + 协议路径」的纯拼接，属于展示逻辑，放在卡片里算，不在这里预拼。
+ *
+ * 共享而不是各页自己拼：引导页与客户端配置页给的是同一组事实，
+ * 两处各算一遍，迟早会算出两个地址（见 `@common/proxy-origin`）。
  */
 export function useAccessConfig() {
   const proxyStatus = useProxyStatus()

@@ -212,8 +212,10 @@ describe('saveClientConfigContent', () => {
     expect(result.backedUp).toMatchObject({ contentHash: hashClientConfigContent('{"a":1}'), preview: '{"a":1}', origin: 'manual', note: '改成 2' })
     expect(readFile(CLAUDE_FILE)).toBe('{"a":2}')
 
-    const versions = listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)
+    const versions = await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)
     expect(versions.map(version => version.preview)).toEqual(['{"a":1}'])
+    // 摘要要交代「回退到这一版会让哪个值变成什么」：当前是 2，这一版是 1。
+    expect(versions[0]!.diff).toEqual([{ before: 'a: 2', after: 'a: 1' }])
   })
 
   it('does not grow the history when the same content is committed again', async () => {
@@ -225,7 +227,7 @@ describe('saveClientConfigContent', () => {
     expect(first.backedUp).toMatchObject({ preview: '{"a":1}' })
     // 同一份内容只存一次：反复点提交，历史里也只有一条。
     expect(again.backedUp).toBeNull()
-    expect(listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toHaveLength(1)
+    expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toHaveLength(1)
   })
 })
 
@@ -245,10 +247,12 @@ describe('applyClientConfigOverrides', () => {
         ANTHROPIC_DEFAULT_SONNET_MODEL: 'osw-model',
         ANTHROPIC_DEFAULT_HAIKU_MODEL: 'osw-model',
         ANTHROPIC_DEFAULT_FABLE_MODEL: 'osw-model',
+        // 子代理也走本地：漏一个就会有一部分请求绕回去找真实上游。
+        CLAUDE_CODE_SUBAGENT_MODEL: 'osw-model',
       },
     })
     expect(result.state.autoFill).toBe('ready')
-    expect(result.changes).toHaveLength(9)
+    expect(result.changes).toHaveLength(10)
     expect(result.changes[0]).toEqual({ path: 'model', before: null, after: 'osw-model' })
   })
 
@@ -349,7 +353,7 @@ describe('applyClientConfigOverrides', () => {
     await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PARSE_FAILED' })
     // 没有解析成功就不能动文件，也不该留下一个「改动前」的版本。
     expect(readFile(CLAUDE_FILE)).toBe('{"model":')
-    expect(listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])
+    expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])
   })
 })
 
@@ -357,7 +361,7 @@ describe('history', () => {
   it('restores an earlier version and keeps the one it replaced', async () => {
     await saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')
     await saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":2}')
-    const [earlier] = listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)
+    const [earlier] = await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)
 
     expect(readClientConfigVersion(earlier!.id)!.content).toBe('{"a":1}')
 
@@ -365,7 +369,7 @@ describe('history', () => {
 
     expect(readFile(CLAUDE_FILE)).toBe('{"a":1}')
     expect(result.backedUp).toMatchObject({ preview: '{"a":2}', origin: 'restore' })
-    expect(listClientConfigFileVersions(CLAUDE, CLAUDE_FILE).map(version => version.preview).sort()).toEqual(['{"a":1}', '{"a":2}'])
+    expect((await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).map(version => version.preview).sort()).toEqual(['{"a":1}', '{"a":2}'])
   })
 
   it('refuses an unknown version', async () => {
@@ -376,13 +380,14 @@ describe('history', () => {
     // 备份的是**改动前**的内容，所以同一个文件要存两次才会留下第一个版本。
     await saveClientConfigContent(CLAUDE, '~/.claude/.credentials.json', '{"a":1}')
     await saveClientConfigContent(CLAUDE, '~/.claude/.credentials.json', '{"a":2}')
-    const [stored] = listClientConfigFileVersions(CLAUDE, '~/.claude/.credentials.json')
+    const [stored] = await listClientConfigFileVersions(CLAUDE, '~/.claude/.credentials.json')
 
     await expect(restoreClientConfigVersion(CLAUDE, CLAUDE_FILE, stored!.id)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
-  it('refuses a disallowed path', () => {
-    expect(syncErrorCode(() => listClientConfigFileVersions(CLAUDE, '~/.ssh/id_rsa'))).toBe('CLIENT_CONFIG_PATH_NOT_ALLOWED')
+  it('refuses a disallowed path', async () => {
+    // 白名单先于读文件生效：拒掉的路径不会被读、更不会被写。
+    await expect(listClientConfigFileVersions(CLAUDE, '~/.ssh/id_rsa')).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PATH_NOT_ALLOWED' })
   })
 
   it('returns null for an unknown version id', () => {

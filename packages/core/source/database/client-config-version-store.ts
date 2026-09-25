@@ -55,6 +55,10 @@ function toSummary(row: ClientConfigVersionRow): ClientConfigVersionSummary {
   }
 }
 
+function toVersion(row: ClientConfigVersionRow): ClientConfigVersion {
+  return { ...toSummary(row), content: row.content }
+}
+
 export interface SaveClientConfigVersionInput {
   clientKey: string
   filePath: string
@@ -102,8 +106,7 @@ export function saveClientConfigVersion(input: SaveClientConfigVersionInput): Cl
   return created ? toSummary(created) : null
 }
 
-/** 某个文件的历史版本，新的在前。 */
-export function listClientConfigVersions(clientKey: string, filePath: string, limit = 100): ClientConfigVersionSummary[] {
+function selectVersionRows(clientKey: string, filePath: string, limit: number): ClientConfigVersionRow[] {
   const db = getConfigDb()
   return db
     .select(SUMMARY_COLUMNS)
@@ -112,7 +115,21 @@ export function listClientConfigVersions(clientKey: string, filePath: string, li
     .orderBy(desc(clientConfigVersions.createdTime), desc(clientConfigVersions.id))
     .limit(limit)
     .all()
-    .map(toSummary)
+}
+
+/** 某个文件的历史版本，新的在前。 */
+export function listClientConfigVersions(clientKey: string, filePath: string, limit = 100): ClientConfigVersionSummary[] {
+  return selectVersionRows(clientKey, filePath, limit).map(toSummary)
+}
+
+/**
+ * 同上，但带着**完整内容**回来。
+ *
+ * 版本列表要按「与当前文件相比改了哪几行」作摘要（见 `version-diff.ts`），那就得拿到两边的内容；
+ * 一次查询把内容一起捎上，比每行再回头查一次省得多。
+ */
+export function listClientConfigVersionsWithContent(clientKey: string, filePath: string, limit = 100): ClientConfigVersion[] {
+  return selectVersionRows(clientKey, filePath, limit).map(toVersion)
 }
 
 /** 取一个版本的完整内容（恢复时用）。 */
@@ -120,7 +137,7 @@ export function getClientConfigVersion(id: string): ClientConfigVersion | null {
   const db = getConfigDb()
   const row = db.select(SUMMARY_COLUMNS).from(clientConfigVersions).where(eq(clientConfigVersions.id, id)).get()
   if (!row) return null
-  return { ...toSummary(row), content: row.content }
+  return toVersion(row)
 }
 
 /** 版本总数，用于展示与「历史被清空了吗」这类判断。 */

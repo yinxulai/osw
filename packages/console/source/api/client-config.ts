@@ -1,10 +1,10 @@
 import type {
-  ClientConfigApplyResult,
   ClientConfigFileState,
   ClientConfigFillResultItem,
   ClientConfigOverviewItem,
+  ClientConfigPreviewResult,
   ClientConfigVersion,
-  ClientConfigVersionSummary,
+  ClientConfigVersionEntry,
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { request } from './client'
@@ -34,14 +34,21 @@ export const clientConfigApi = {
   /** 一键生效。不带 `clientKey` 是全部客户端，带上就是列表行内那一颗。 */
   fill: (clientKey?: string) => request<ClientConfigFillResultItem[]>('/client-config/fill', { clientKey }),
 
-  apply: (clientKey: string, filePath: string, values: ClientConfigApplyValues) =>
-    request<ClientConfigApplyResult>('/client-config/apply', { clientKey, filePath, ...values }),
+  /**
+   * 预览一次「按本地服务改写」：只算不写。
+   *
+   * 界面在用户改模型 / 换文件时调它，把结果直接摆到下方的内容里；真正落盘仍然只走 `save`
+   * ——「改一下就写进磁盘」在配置文件上太危险，中间那一步确认得留给用户。
+   */
+  preview: (clientKey: string, filePath: string, values: ClientConfigApplyValues) =>
+    request<ClientConfigPreviewResult>('/client-config/preview', { clientKey, filePath, ...values }),
 
   save: (clientKey: string, filePath: string, content: string, note?: string) =>
     request<ClientConfigWriteResult>('/client-config/save', { clientKey, filePath, content, note }),
 
+  /** 版本列表：每条都带「与当前文件相比改了哪几行」，供菜单直接展示差异。 */
   listVersions: (clientKey: string, filePath: string) =>
-    request<ClientConfigVersionSummary[]>('/client-config/versions', { clientKey, filePath }),
+    request<ClientConfigVersionEntry[]>('/client-config/versions', { clientKey, filePath }),
 
   // 版本可能已经被清理掉，此时服务端回 `null`——「这个版本不在了」是正常状态，不是错误。
   getVersion: (id: string) => request<ClientConfigVersion | null>('/client-config/version/get', { id }),

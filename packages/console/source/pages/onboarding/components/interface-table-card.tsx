@@ -1,12 +1,12 @@
 import { useNavigate } from '@tanstack/react-router'
 import { ListTree, ScrollText } from 'lucide-react'
 import { PROTOCOL_DISPLAY_NAMES, PROXY_INTERFACE_ENTRIES } from '@common/protocols'
+import { INTERFACE_DESCRIPTION_KEYS } from '@/components/interface-entries'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsCardHeader } from '@/components/settings-card-header'
 import { useTranslation } from '@/i18n/provider'
 import { routePaths } from '@/routing/routes'
-import { INTERFACE_DESCRIPTION_KEYS } from '../service-facts'
 
 /**
  * 本服务的接口面：一张「哪些路径会被受理」的表。
@@ -19,6 +19,9 @@ import { INTERFACE_DESCRIPTION_KEYS } from '../service-facts'
  * 页面上**不列任何工具的名字**：工具的产品名、菜单路径、字段叫法都由别人定义、随时会变，
  * 追着它们更新等于把维护成本建在别人的排期上。这里只回答「服务对外长什么样」，
  * 用户拿这三个事实去对任何一种客户端都成立。
+ *
+ * 与客户端配置页那张协议卡共用同一份清单与同一份说明（`@/components/interface-entries`）：
+ * 那边一行一个协议，这边铺全部写法与每行的归属协议，但「有哪些接口」只能有一个出处。
  */
 export function InterfaceTableCard() {
   const t = useTranslation()

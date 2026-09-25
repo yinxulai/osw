@@ -3,9 +3,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
+import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
 import { I18nProvider } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
-import { SAMPLE_API_KEY, SAMPLE_MODEL_NAME } from '../service-facts'
 import { AddressCard } from './address-card'
 
 // `I18nProvider` 会读取服务端设置，单测里不需要也不该走 react-query。
@@ -30,8 +31,8 @@ describe('AddressCard', () => {
 
     // 地址是全页唯一的主角，另一种写法是一句说明，不是第二条值。
     expect(screen.getAllByText(ORIGIN)).toHaveLength(1)
-    expect(screen.getByText(SAMPLE_API_KEY)).not.toBeNull()
-    expect(screen.getByText(SAMPLE_MODEL_NAME)).not.toBeNull()
+    expect(screen.getByText(CLIENT_CONFIG_SAMPLE_API_KEY)).not.toBeNull()
+    expect(screen.getByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)).not.toBeNull()
   })
 
   it('地址读不出来时摆占位符并把复制按钮禁用，而不是收掉这一行', () => {
@@ -51,8 +52,21 @@ describe('AddressCard', () => {
 
     expect(onCopy.mock.calls).toEqual([
       ['origin', ORIGIN],
-      ['apiKey', SAMPLE_API_KEY],
-      ['modelName', SAMPLE_MODEL_NAME],
+      ['apiKey', CLIENT_CONFIG_SAMPLE_API_KEY],
+      ['modelName', BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME],
     ])
+  })
+
+  it('不摆模型名时那一行整条不在，复制入口也跟着少一个', () => {
+    render(
+      <AddressCard origin={ORIGIN} copiedKey={null} onCopy={() => {}} showModelName={false} />,
+      { wrapper: Wrapper },
+    )
+
+    expect(screen.queryByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy model name' })).toBeNull()
+    // 地址与密钥不受影响：少了模型名不等于这张卡变空。
+    expect(screen.getAllByText(ORIGIN)).toHaveLength(1)
+    expect(screen.getByText(CLIENT_CONFIG_SAMPLE_API_KEY)).not.toBeNull()
   })
 })

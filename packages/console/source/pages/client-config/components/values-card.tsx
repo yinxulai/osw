@@ -25,10 +25,14 @@ interface ValuesCardProps {
   detected: Record<string, string>
   /** 兜底模型名（内置默认逻辑模型），文件里读不到模型时用它。 */
   defaultModel: string
-  applying: boolean
-  /** 本页最近一次写入实际改了几处；还没写过、或刚换了文件时是 0。 */
-  appliedCount: number
-  onApply: (values: ClientConfigValues) => void
+  /**
+   * 任意一个槽位被改动时上报**整组值**。
+   *
+   * 这张卡不自己写文件：改动交给上层去问「这样会写成什么」再把结果摆到下方的内容里。
+   * 写入仍然只有「保存内容」一个按钮（见 `content-card.tsx`）——模型选择是内容编辑的一种方式，
+   * 不是第二个落盘入口。
+   */
+  onChange: (values: ClientConfigValues) => void
 }
 
 /** 下拉里一条可选的逻辑模型。只取用得到的三个字段，不把整个 `LogicalModel` 拖进这张卡。 */
@@ -43,24 +47,33 @@ interface ModelOption {
  *
  * 这一页只让用户决定**模型**：它属于用户自己的取舍。地址与密钥恰好相反——客户端要指向的就是
  * 本机服务本身，那两个值只有一种正确答案，所以既不给输入框也不做展示，直接由服务端写入
- * （见 `ClientConfigApplyRequestSchema`）。需要看那两个值的人去引导页第三步看，那里才是它们该出现的地方。
+ * （见 `ClientConfigApplyRequestSchema`）。需要看那两个值的人去引导页第三步、或者客户端列表页
+ * 顶部那条手动接入说明看，那里才是它们该出现的地方。
+ *
+ * 这里**没有「写入」按钮**：改动一发生就交给上层去算「这份文件会变成什么样」，
+ * 结果直接长在下方的内容里，用户看到的就是保存时会写进去的那一段。落盘只剩一个入口。
  *
  * 出现**几行**、每行叫什么、从哪个键回读初值，全部由配方（`AgentClientApplyConfig`）推出来，
  * 不在这里按客户端逐个铺开：Claude Code 那五个写同一个值的模型别名合成一行、只认 `model` 的客户端
  * 就只有一行——它们是同一个事实的两种形态，界面不该自己记一遍。
+ *
+ * **没有配方就不渲染**：配方是这张卡存在的全部理由（行数、初值、可写的键都来自它）。
+ * 注册表里那些只存模型名、或者地址与 provider 定义分在两个文件里的客户端，这一块没有内容可摆，
+ * 摆一张只有标题的空卡反而像加载失败。判断在上层（`detail.tsx`）做，因为它还要同步骨架的形状；
+ * 这里不自己长一个「空则不渲染」的分支，免得两处各判断一遍。
  *
  * 初值只做**回填**，不替用户拍板模型名：文件里读得到就沿用（用户原来的模型选择必须保住），
  * 读不到才落回内置默认逻辑模型。回填只能靠配方给的声明顺序（`resolveAgentClientSlotValue`）——
  * 「写什么」的权威表在 core 的 `client-config/rules.ts`，控制台不该、也不能反推它。
  */
 export function ValuesCard(props: ValuesCardProps) {
-  const { clientKey, autoFill, detected, defaultModel, applying, appliedCount, onApply } = props
+  const { clientKey, autoFill, detected, defaultModel, onChange } = props
   const t = useTranslation()
-  // 配方是「这几个键一起写」的唯一出处；没有配方时整张卡只读（服务端也不会让它填）。
+  // 配方是「这几个键一起写」的唯一出处；上层已经保证它存在（没有配方就不渲染这张卡）。
   const applyConfig = findAgentClientApplyConfig(clientKey)
   const logicalModels = useLogicalModels()
   const ready = autoFill === 'ready'
-  const disabled = !ready || applying
+  const disabled = !ready
 
   const slots = useMemo(() => (applyConfig ? agentClientModelSlots(applyConfig) : []), [applyConfig])
   const options = useMemo(() => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })), [logicalModels])
@@ -75,11 +88,12 @@ export function ValuesCard(props: ValuesCardProps) {
     return initial
   })
 
-  const setValue = (role: AgentClientModelSlot, next: string) => setValues(current => ({ ...current, [role]: next }))
+  const setValue = (role: AgentClientModelSlot, next: string) => {
+    const updated = { ...values, [role]: next }
+    setValues(updated)
+    onChange({ model: (updated.model ?? '').trim(), smallModel: (updated.smallModel ?? '').trim() })
+  }
 
-  // 「还有没有要写的东西」直接用差额回答：表单跟文件一样就没什么可写的，此时按钮只报上一回写了几处。
-  const dirty = slots.some(role => (values[role] ?? '') !== detectedOf(role))
-  const model = (values.model ?? '').trim()
   const hint = AUTO_FILL_HINT_KEYS[autoFill]
 
   return (
@@ -87,47 +101,38 @@ export function ValuesCard(props: ValuesCardProps) {
       {/*
         卡头不报客户端名：页标题、面包屑、「选择配置文件」的下拉里都已经写着它，
         同一屏再说第二遍只是噪音——这张卡要说的事，标题已经说完了。
+
+        能自动改写的文件也不再说「这份配置可以自动写入」：下面「改一下就跟着动」已经是这句话本身，
+        再写一行只是把同一件事说两遍。反而写不了的那几种才需要一句解释——它得说清是为什么、
+        以及用户接下来能做什么，所以那句话只在不是 `ready` 的时候出现。
       */}
-      <SettingsCardHeader icon={<SlidersHorizontal />} title={t('clientConfig.step.values')} />
+      <SettingsCardHeader
+        icon={<SlidersHorizontal />}
+        title={t('clientConfig.step.values')}
+        description={hint === undefined ? undefined : t(hint)}
+      />
 
-      <CardContent className="px-4">
-        <div className="divide-y divide-border/50">
-          {slots.map(role => {
-            const descriptionKey = SLOT_HINT_KEYS[role]
-            return (
-              <FormRow
-                key={role}
-                title={t(SLOT_LABEL_KEYS[role])}
-                description={descriptionKey === undefined ? undefined : t(descriptionKey)}
-                control={(
-                  <ModelField
-                    ariaLabel={t(SLOT_LABEL_KEYS[role])}
-                    disabled={disabled}
-                    options={options}
-                    placeholder={t('clientConfig.model.placeholder')}
-                    value={values[role] ?? ''}
-                    onChange={next => setValue(role, next)}
-                  />
-                )}
-              />
-            )
-          })}
-        </div>
-
-        <div className="flex items-center justify-between gap-4 border-t border-border/50 py-3">
-          <p className="system-xs-regular text-text-tertiary">{t(hint)}</p>
-          {/*
-            按钮自己就是状态行：表单与文件一致时它没什么可干的，那就把「上一回写了几处」报出来；
-            一旦用户改了模型，它就变回一颗可扣的「写入」。上一版把改动清单单铺一块，
-            等于用一整行去说一句可以长在按钮上的话。
-          */}
-          <Button
-            disabled={disabled || !dirty || model === ''}
-            onClick={() => onApply({ model, smallModel: (values.smallModel ?? '').trim() })}
-          >
-            {applying ? t('clientConfig.applying') : !dirty && appliedCount > 0 ? t('clientConfig.appliedChanges', { count: appliedCount }) : t('clientConfig.applyValues')}
-          </Button>
-        </div>
+      <CardContent className="px-4 divide-y divide-border/50">
+        {slots.map(role => {
+          const descriptionKey = SLOT_HINT_KEYS[role]
+          return (
+            <FormRow
+              key={role}
+              title={t(SLOT_LABEL_KEYS[role])}
+              description={descriptionKey === undefined ? undefined : t(descriptionKey)}
+              control={(
+                <ModelField
+                  ariaLabel={t(SLOT_LABEL_KEYS[role])}
+                  disabled={disabled}
+                  options={options}
+                  placeholder={t('clientConfig.model.placeholder')}
+                  value={values[role] ?? ''}
+                  onChange={next => setValue(role, next)}
+                />
+              )}
+            />
+          )
+        })}
       </CardContent>
     </Card>
   )
@@ -209,8 +214,11 @@ function ModelField(props: ModelFieldProps) {
   )
 }
 
-const AUTO_FILL_HINT_KEYS: Record<ClientConfigAutoFill, UiCatalogKey> = {
-  ready: 'clientConfig.autoFill.ready',
+/**
+ * 写不了的时候要说清是哪一种（语法坏了 / 格式不支持 / 这个客户端没有可指的地方），
+ * 三种要用户做的事完全不一样。写得了的文件不给提示——下方内容跟着动就是那句提示本身。
+ */
+const AUTO_FILL_HINT_KEYS: Partial<Record<ClientConfigAutoFill, UiCatalogKey>> = {
   unparsable: 'clientConfig.autoFill.unparsable',
   'unsupported-format': 'clientConfig.autoFill.unsupportedFormat',
   'unsupported-client': 'clientConfig.autoFill.unsupportedClient',

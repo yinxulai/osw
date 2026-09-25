@@ -7,6 +7,9 @@ const FEEDBACK_DURATION = 1500
 /**
  * 复制到剪贴板，并用 key 记录当前处于「已复制」状态的按钮，
  * 让同一页面上多个复制入口各自独立反馈，不会互相点亮。
+ *
+ * 与 `CopyButton` 一起放在共用位置：地址这一组值出现在引导页与客户端配置页两处，
+ * 回执时长、失败提示都得是同一套。
  */
 export function useCopyToClipboard() {
   const toast = useToast()
