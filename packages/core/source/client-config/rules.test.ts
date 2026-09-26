@@ -117,7 +117,6 @@ describe('rule coverage', () => {
 
   it('keeps the user own choices out of the rewrite', () => {
     expect(getClientApplyRule('codex')!.ignored).toEqual(['effort', 'catalog'])
-    expect(getClientApplyRule('gemini-cli')!.ignored).toEqual(['auth'])
   })
 })
 
@@ -126,7 +125,6 @@ describe('provider entries', () => {
     expect(concreteProviderEntryPath(getClientApplyRule('codex')!)).toBe('model_providers.osw')
     expect(concreteProviderEntryPath(getClientApplyRule('opencode')!)).toBe('provider.osw')
     expect(concreteProviderEntryPath(getClientApplyRule('claude-code')!)).toBeNull()
-    expect(concreteProviderEntryPath(getClientApplyRule('gemini-cli')!)).toBeNull()
   })
 
   it('builds the codex table without an env_key', () => {
@@ -255,7 +253,7 @@ describe('model slots', () => {
 
   it('gives a client without a small model exactly one row', () => {
     // 配方里没有 `smallModel` 的客户端不该出现一个写了也没人读的输入框。
-    expect(agentClientModelSlots(getClientApplyConfig('gemini-cli')!)).toEqual(['model'])
+    expect(agentClientModelSlots(getClientApplyConfig('codex')!)).toEqual(['model'])
   })
 
   it('takes the current value from whichever alias actually has one', () => {

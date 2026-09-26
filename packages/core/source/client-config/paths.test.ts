@@ -72,6 +72,20 @@ describe('expandDeclaredPath', () => {
     ).toBe(join(configHome, 'opencode', 'opencode.json'))
   })
 
+  it('accepts a declared prefix that is written without the home marker', () => {
+    // `replaces` 与 `declaredPath` 是两个来源，只有规范里的那把尺子要求带 `~/`；
+    // 注册表把前缀写成 `.config` 时，比对的仍然是同一段目录，不能因此就不覆盖。
+    const envVar = { name: 'XDG_CONFIG_HOME', replaces: '.config' }
+
+    expect(expandDeclaredPath('~/.config/opencode/opencode.json', envVar, home, { XDG_CONFIG_HOME: configHome })).toBe(
+      join(configHome, 'opencode', 'opencode.json'),
+    )
+    // 前缀本身写错（多一层、少一层）则一律不覆盖，退回主目录。
+    expect(expandDeclaredPath('~/.config/opencode/opencode.json', { name: 'XDG_CONFIG_HOME', replaces: '.configuration' }, home, { XDG_CONFIG_HOME: configHome })).toBe(
+      join(home, '.config', 'opencode', 'opencode.json'),
+    )
+  })
+
   it('refuses a declared path that is not home-relative', () => {
     expect(() => expandDeclaredPath('/etc/passwd', undefined, home, {})).toThrow(/must start with "~\/"/)
     expect(() => expandDeclaredPath('relative/x.json', undefined, home, {})).toThrow(/must start with "~\/"/)

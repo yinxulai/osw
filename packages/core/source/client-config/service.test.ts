@@ -12,6 +12,7 @@ import {
   applyClientConfigOverrides,
   listClientConfigFileVersions,
   listClientConfigOverview,
+  previewClientConfigOverrides,
   readClientConfigFile,
   readClientConfigVersion,
   resolveClientConfigTarget,
@@ -37,8 +38,7 @@ vi.mock('node:os', async importOriginal => {
 const CLAUDE = 'claude-code'
 const CLAUDE_FILE = '~/.claude/settings.json'
 const CODEX_FILE = '~/.codex/config.toml'
-const GEMINI_FILE = '~/.gemini/settings.json'
-const GEMINI_ENV_FILE = '~/.gemini/.env'
+const CODEX_AUTH_FILE = '~/.codex/auth.json'
 const OPENCODE_FILE = '~/.config/opencode/opencode.json'
 
 let temporaryDirectory: string
@@ -153,13 +153,14 @@ describe('readClientConfigFile', () => {
     })
   })
 
-  it('only reports the fields that live in the requested file', async () => {
-    writeFile(GEMINI_ENV_FILE, 'GOOGLE_GEMINI_BASE_URL=https://example.com\nGEMINI_API_KEY=sk-1\n')
+  it('reports only the fields that live in the requested file', async () => {
+    writeFile(CODEX_AUTH_FILE, JSON.stringify({ tokens: { access_token: 'x' } }))
 
-    const state = await readClientConfigFile('gemini-cli', GEMINI_ENV_FILE)
+    const state = await readClientConfigFile('codex', CODEX_AUTH_FILE)
 
-    // `model` 与 `auth` 在 settings.json 里；往 .env 上回读它们只会读出空。
-    expect(state.detected).toEqual({ baseUrl: 'https://example.com', apiKey: 'sk-1' })
+    // `model`、`provider` 都在 config.toml 上；凭证文件本身没有一个可改写的设置项。
+    expect(state.detected).toEqual({})
+    expect(state.autoFill).toBe('ready')
   })
 
   it('reports an unparsable file instead of throwing', async () => {
@@ -192,6 +193,14 @@ describe('readClientConfigFile', () => {
 
   it('refuses a disallowed path', async () => {
     await expect(readClientConfigFile(CLAUDE, '~/.ssh/id_rsa')).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PATH_NOT_ALLOWED' })
+  })
+
+  it('surfaces a read error that is not simply a missing file', async () => {
+    // 只有 `ENOENT` 是「还没建」；这里目录占着这个路径，读它得到的是 EISDIR。
+    // 把它当成空文件会把「读不了」静悄悄地说成「没有」，界面会给用户一个错的下一步。
+    fs.mkdirSync(fullPath(CLAUDE_FILE), { recursive: true })
+
+    await expect(readClientConfigFile(CLAUDE, CLAUDE_FILE)).rejects.toMatchObject({ code: 'EISDIR' })
   })
 })
 
@@ -228,6 +237,23 @@ describe('saveClientConfigContent', () => {
     // 同一份内容只存一次：反复点提交，历史里也只有一条。
     expect(again.backedUp).toBeNull()
     expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toHaveLength(1)
+  })
+
+  it('reports a write the filesystem refused instead of pretending it worked', async () => {
+    // 备份已经登记、临时文件却写不下去（目录只读）：这个错误必须抛出来。
+    // 吞掉它会让界面显示「已保存」而磁盘上什么也没变。
+    const directory = path.dirname(fullPath(CLAUDE_FILE))
+    fs.mkdirSync(directory, { recursive: true })
+    fs.chmodSync(directory, 0o500)
+    try {
+      await expect(saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')).rejects.toMatchObject({
+        code: 'CLIENT_CONFIG_WRITE_FAILED',
+        statusCode: 500,
+      })
+      expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
+    } finally {
+      fs.chmodSync(directory, 0o700)
+    }
   })
 })
 
@@ -275,27 +301,6 @@ describe('applyClientConfigOverrides', () => {
     expect(JSON.parse(readFile(CLAUDE_FILE)).permissions).toEqual({ allow: ['Read'] })
   })
 
-  it('rewrites only the fields of the target file', async () => {
-    const result = await applyClientConfigOverrides('gemini-cli', GEMINI_ENV_FILE, MODEL)
-
-    expect(readFile(GEMINI_ENV_FILE)).toBe('GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:9300\nGEMINI_API_KEY=sk-osw\n')
-    // `model` 在 settings.json 里，不该被写进 .env。
-    expect(result.changes.map(change => change.path).sort()).toEqual(['GEMINI_API_KEY', 'GOOGLE_GEMINI_BASE_URL'])
-    expect(fs.existsSync(fullPath(GEMINI_FILE))).toBe(false)
-  })
-
-  it('leaves the untouched keys of the same file alone', async () => {
-    writeFile(GEMINI_FILE, JSON.stringify({ security: { auth: { selectedType: 'gemini-api-key' } }, theme: 'dark' }))
-
-    await applyClientConfigOverrides('gemini-cli', GEMINI_FILE, MODEL)
-
-    expect(JSON.parse(readFile(GEMINI_FILE))).toEqual({
-      security: { auth: { selectedType: 'gemini-api-key' } },
-      theme: 'dark',
-      model: { name: 'osw-model' },
-    })
-  })
-
   it('writes a codex provider table next to the existing one', async () => {
     writeFile(
       CODEX_FILE,
@@ -314,9 +319,20 @@ describe('applyClientConfigOverrides', () => {
     expect(result.changes).toContainEqual({ path: 'model_providers.osw', before: null, after: expect.any(String) })
   })
 
+  it('leaves a file that carries none of the fillable fields alone', async () => {
+    // codex 的凭证文件也声明在这个客户端上，但 `model`、`provider` 都落在 config.toml：
+    // 逐文件写入到这儿不该凭空造出一张 provider 表，也不该写任何别的键。
+    writeFile(CODEX_AUTH_FILE, JSON.stringify({ tokens: { access_token: 'x' } }))
+
+    const result = await applyClientConfigOverrides('codex', CODEX_AUTH_FILE, MODEL)
+
+    expect(result.changes).toEqual([])
+    expect(result.backedUp).toBeNull()
+    expect(JSON.parse(readFile(CODEX_AUTH_FILE))).toEqual({ tokens: { access_token: 'x' } })
+  })
+
   it('spells the opencode model with its provider prefix', async () => {
     await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...MODEL, smallModel: 'osw-small' })
-
     expect(JSON.parse(readFile(OPENCODE_FILE))).toEqual({
       model: 'osw/osw-model',
       small_model: 'osw/osw-small',
@@ -354,6 +370,53 @@ describe('applyClientConfigOverrides', () => {
     // 没有解析成功就不能动文件，也不该留下一个「改动前」的版本。
     expect(readFile(CLAUDE_FILE)).toBe('{"model":')
     expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])
+  })
+})
+
+describe('previewClientConfigOverrides', () => {
+  it('shows the file that apply would write, without writing it', async () => {
+    writeFile(CLAUDE_FILE, JSON.stringify({ model: 'opus' }))
+
+    const preview = await previewClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+
+    expect(JSON.parse(preview.content)).toMatchObject({ model: 'osw-model', env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9300' } })
+    expect(preview.changes).toContainEqual({ path: 'model', before: 'opus', after: 'osw-model' })
+    // 预览不落盘、不产生版本：它只看，不动。
+    expect(readFile(CLAUDE_FILE)).toBe(JSON.stringify({ model: 'opus' }))
+    expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])
+  })
+
+  it('lists exactly the changes that the real apply then performs', async () => {
+    writeFile(CLAUDE_FILE, JSON.stringify({ model: 'opus' }))
+
+    const preview = await previewClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+    const applied = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+
+    // 预览与落盘必须出自同一份规划：两处各算一遍，界面说「会改 3 处」而按钮只改 2 处。
+    expect(applied.changes).toEqual(preview.changes)
+    expect(readFile(CLAUDE_FILE)).toBe(preview.content)
+  })
+
+  it('plans a file that does not exist yet without creating it', async () => {
+    const preview = await previewClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+
+    expect(preview.changes.length).toBeGreaterThan(0)
+    expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
+  })
+
+  it('is empty once the file already points at the local service', async () => {
+    await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+
+    const preview = await previewClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+
+    // 列表页的「已生效」就是这个空数组。
+    expect(preview.changes).toEqual([])
+  })
+
+  it('refuses a client without a recipe', async () => {
+    await expect(previewClientConfigOverrides('pi', '~/.pi/agent/settings.json', MODEL)).rejects.toMatchObject({
+      code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED',
+    })
   })
 })
 
@@ -427,6 +490,14 @@ describe('listClientConfigOverview', () => {
     expect(await overviewOf('pi')).toMatchObject({ coverage: 'unavailable', pendingChanges: 0 })
   })
 
+  it('calls a file whose own syntax is broken unavailable', async () => {
+    // 解析不了就不是「差几处改动」，而是要用户先动手修语法。状态必须区分这两件事，
+    // 否则界面会给出一个治不了病的「一键生效」按钮。
+    writeFile(CLAUDE_FILE, '{"model":')
+
+    expect(await overviewOf(CLAUDE)).toMatchObject({ coverage: 'unavailable', pendingChanges: 0 })
+  })
+
   it('marks a file that already points at the local service as applied', async () => {
     await applyClientConfigDefaults(CLAUDE)
 
@@ -484,6 +555,18 @@ describe('applyClientConfigDefaults', () => {
     expect(JSON.parse(readFile(OPENCODE_FILE))).toMatchObject({ model: 'osw/my-model' })
   })
 
+  it('reuses the model a codex config already names', async () => {    writeFile(CODEX_FILE, 'model = "gpt-5"\n')
+
+    const [codex] = await applyClientConfigDefaults('codex')
+
+    // 模型名以文件里已有的为准；codex 没有小模型这一档，读它时找不到对应字段，
+    // 那既不是报错也不该把模型写成兜底值。
+    expect(codex).toMatchObject({ status: 'applied' })
+    const content = readFile(CODEX_FILE)
+    expect(content).toContain('model = "gpt-5"')
+    expect(content).toContain('[model_providers.osw]')
+  })
+
   it('skips a client it has no recipe for, naming the client', async () => {
     const [pi] = await applyClientConfigDefaults('pi')
 
@@ -495,11 +578,23 @@ describe('applyClientConfigDefaults', () => {
     await expect(applyClientConfigDefaults('nope')).rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 })
   })
 
+  it('reports the file it could not fill instead of failing the whole run', async () => {
+    writeFile(CLAUDE_FILE, '{"model":')
+
+    const [claude] = await applyClientConfigDefaults(CLAUDE)
+
+    // 一个文件坏了不影响其余客户端继续生效；但这一条必须把失败说出来，
+    // 而不是报成「没有改动」——那是两种完全不同的下一步。
+    expect(claude).toMatchObject({ clientKey: CLAUDE, status: 'failed', changeCount: 0, filePaths: [] })
+    expect(claude!.message).toContain(CLAUDE_FILE)
+    expect(readFile(CLAUDE_FILE)).toBe('{"model":')
+  })
+
   it('touches every fillable client when no key is given', async () => {
     const items = await applyClientConfigDefaults()
 
     expect(items.map(item => item.clientKey)).toEqual(AGENT_CLIENT_DEFINITIONS.map(client => client.key))
-    expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['claude-code', 'codex', 'gemini-cli', 'opencode'])
+    expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['claude-code', 'codex', 'opencode'])
     expect(items.filter(item => item.status === 'skipped').map(item => item.clientKey)).toEqual(['cursor-cli', 'copilot-cli', 'pi', 'deepseek-harness'])
   })
 })

@@ -18,7 +18,7 @@
  */
 
 /** 客户端原生使用的上游协议。不确定时不填，避免编造。 */
-export type AgentClientProtocol = 'anthropic-messages' | 'openai-responses' | 'openai-completions' | 'gemini'
+export type AgentClientProtocol = 'anthropic-messages' | 'openai-responses' | 'openai-completions'
 
 /** 配置文件的格式，决定读写时用哪套解析/序列化。 */
 export type AgentClientConfigFormat = 'json' | 'jsonc' | 'toml' | 'yaml' | 'env'
@@ -118,9 +118,8 @@ export interface AgentClientFieldDefinition {
    * 这个字段属于哪个文件（注册表里的 `files[].path`）。
    *
    * 缺省时归属**第一个文件**，因为绝大多数客户端只有一份配置文件带设置项。
-   * 必须写死的场合是「一份客户端的设置项分散在两个文件里」——Gemini CLI 的模型在
-   * settings.json，而地址与密钥在 `.env`；不写 `file` 的话，改 `.env` 时会连带往它里面写 `model`，
-   * 写出一个工具根本不读的键。
+   * 必须写死的场合是「一份客户端的设置项分散在两个文件里」：不写 `file` 的话，
+   * 改后一个文件时会连带往它里面写本属于前一个文件的键，写出一个工具根本不读的键。
    */
   file?: string
   /** 值类型。 */
@@ -183,7 +182,7 @@ export interface AgentClientDefinition {
    * 缺省的两种情形：一是没有可指向本地服务的地址字段（Copilot CLI、Cursor CLI 只存模型名）；
    * 二是地址与 provider 定义分在两个文件里、或者配置是按条目打补丁的（Pi、DeepSeek Harness）。
    * 两者都是「我们写不对」，不是「用户接不上」——所以界面不摆空表单，而是让用户直接编辑文件，
-   * 并在客户端列表页顶部给出地址与受理路径（见控制台的 `ManualSetupBand`）。
+   * 并在这一页给出地址与受理路径（见控制台的 `AddressCard` / `ProtocolCard`）。
    */
   apply?: AgentClientApplyConfig
 }
@@ -299,43 +298,6 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
           wire_api: 'responses',
         },
       },
-    },
-  },
-  {
-    key: 'gemini-cli',
-    name: 'Gemini CLI',
-    aliases: ['gemini'],
-    order: 92,
-    websiteUrl: 'https://github.com/google-gemini/gemini-cli',
-    description: "Google's Gemini CLI. Speaks only Google's own API; the auth mode and model live in settings.json, while the endpoint and key live in ~/.gemini/.env.",
-    protocol: 'gemini',
-    configDir: '~/.gemini',
-    files: [
-      {
-        path: '~/.gemini/settings.json',
-        format: 'json',
-        purpose: 'Main config: `security.auth.selectedType` and `model.name`.',
-      },
-      {
-        path: '~/.gemini/.env',
-        format: 'env',
-        purpose: 'GOOGLE_GEMINI_BASE_URL and GEMINI_API_KEY, loaded by the CLI.',
-      },
-    ],
-    fields: [
-      { key: 'auth', path: 'security.auth.selectedType', type: 'string', description: 'How it authenticates: oauth-personal / gemini-api-key / vertex-ai.' },
-      { key: 'model', path: 'model.name', type: 'string', description: 'Model to use.' },
-      { key: 'baseUrl', path: 'GOOGLE_GEMINI_BASE_URL', file: '~/.gemini/.env', type: 'string', description: 'Gemini API base URL (from .env).' },
-      { key: 'apiKey', path: 'GEMINI_API_KEY', file: '~/.gemini/.env', type: 'string', description: 'Gemini API key (from .env).' },
-    ],
-    apply: {
-      roles: {
-        model: 'model',
-        baseUrl: 'baseUrl',
-        apiKey: 'apiKey',
-      },
-      // 认证方式由用户自己决定（oauth / api-key / vertex）；我们只改地址与密钥。
-      ignored: ['auth'],
     },
   },
   {

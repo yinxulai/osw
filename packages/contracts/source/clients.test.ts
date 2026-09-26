@@ -7,6 +7,8 @@ import {
   findAgentClient,
   findAgentClientFile,
   isKnownAgentClient,
+  type AgentClientDefinition,
+  type AgentClientFieldDefinition,
 } from './clients'
 
 /**
@@ -19,7 +21,7 @@ import {
  */
 
 const CONFIG_FORMATS = ['json', 'jsonc', 'toml', 'yaml', 'env']
-const PROTOCOLS = ['anthropic-messages', 'openai-responses', 'openai-completions', 'gemini']
+const PROTOCOLS = ['anthropic-messages', 'openai-responses', 'openai-completions']
 
 describe('agent client registry', () => {
   it('lists at least one client', () => {
@@ -134,17 +136,6 @@ describe('agent client registry', () => {
     }
   })
 
-  it('declares the owning file when a client spreads its fields across files', () => {
-    // Gemini CLI 的模型在 settings.json、地址与密钥在 .env；不写 `file` 的话，
-    // 改 `.env` 时会连带往它里面写 `model`，写出一个工具根本不读的键。
-    const gemini = AGENT_CLIENT_DEFINITION_BY_KEY['gemini-cli']!
-    const fromEnv = agentClientFieldsOfFile(gemini, '~/.gemini/.env').map(field => field.key)
-    const fromSettings = agentClientFieldsOfFile(gemini, '~/.gemini/settings.json').map(field => field.key)
-
-    expect(fromEnv.sort()).toEqual(['apiKey', 'baseUrl'])
-    expect(fromSettings.sort()).toEqual(['auth', 'model'])
-  })
-
   it('overrides a file directory only through a variable that covers its path', () => {
     for (const client of AGENT_CLIENT_DEFINITIONS) {
       for (const file of client.files) {
@@ -185,6 +176,15 @@ describe('registry lookups', () => {
     const model = codex.fields.find(field => field.key === 'model')!
 
     expect(agentClientFieldFile(codex, model)).toBe('~/.codex/config.toml')
+  })
+
+  it('honours the file a field names over the first file', () => {
+    // 一份客户端的设置项分散在两个文件里时，`field.file` 就是唯一能说清归属的地方：
+    // 认错了文件，回读会读到空、写入会往不读它的那个文件里塞键。
+    const client = { key: 'x', name: 'X', order: 1, description: 'd', configDir: '~/.x', files: [{ path: '~/.x/a.json', format: 'json' }, { path: '~/.x/b.json', format: 'json' }], fields: [] } as unknown as AgentClientDefinition
+    const field: AgentClientFieldDefinition = { key: 'k', path: 'k', file: '~/.x/b.json', description: 'd' }
+
+    expect(agentClientFieldFile(client, field)).toBe('~/.x/b.json')
   })
 
   it('lists the fields of a file', () => {

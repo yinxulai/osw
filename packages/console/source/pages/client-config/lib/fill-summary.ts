@@ -13,7 +13,7 @@ const FILL_KEYS: Record<ClientConfigFillStatus, UiCatalogKey> = {
  * 一键生效的结果读成一句话。
  *
  * 逐状态计数，而不是笼统回一句「完成」：用户最需要知道的是**有几个本来就对、有几个被跳过**，
- * 否则点完看到一句绿色提示，会以为八个客户端都被改了。
+ * 否则点完看到一句绿色提示，会以为七个客户端都被改了。
  */
 export function describeFill(t: AppTranslator, results: ClientConfigFillResultItem[]): string {
   const parts: string[] = []

@@ -245,11 +245,11 @@ function planClientConfigChanges(target: ClientConfigTarget, text: string, value
     if (!role || role === 'providerEntry') continue
     const value = resolveFieldValue(role, context, rule)
     if (value === null) continue
-    const before = editor.get(field.path)
-    const after = String(value)
-    if (before === after) continue
-    editor.set(field.path, value)
-    record(field.path, before, after)
+    // 「改前」由编辑器回传，不再自己 `get` 一次：内容里的值可能是数字或布尔（`true`），
+    // `get` 交回来的是它的字符串形态，写下去的是真正的 `true`——两次读到的字面写法不一样，
+    // 会让「只改缩进的键」被算成一处改动。编辑器手里有那段原文，让它直接给。
+    const before = editor.set(field.path, value)
+    record(field.path, before, String(value))
   }
 
   if (rule.providerEntry) {
@@ -257,14 +257,12 @@ function planClientConfigChanges(target: ClientConfigTarget, text: string, value
     const owned = path !== null && fields.some(field => rule.roles[field.key] === 'providerEntry')
     if (path && owned) {
       const entry = rule.providerEntry.build(context)
-      // 对象字段没有标量可读（`get` 对对象返回 null），所以只能拿整份文本比：
-      // 不变就不算改动，否则「已生效」的客户端会永远显示成待写入。
       const snapshot = editor.serialize()
-      editor.setObject(path, entry)
-      if (editor.serialize() !== snapshot) {
-        // 对象字段没法用「前后两个字符串」讲清楚，这里只承诺「这一项被整体重写了」。
-        record(path, null, JSON.stringify(entry))
-      }
+      // 「改前」由编辑器回传（`get` 只认标量，读不到一个对象），但**算不算改动要看文本有没有变**：
+      // 回传的是原文那一截、写进去的是规范写法，两者空白不同不等于值变了；
+      // 只比值又会漏掉「一键生效点两次」这种真正没动的场合，白记一笔改动。
+      const before = editor.setObject(path, entry)
+      if (editor.serialize() !== snapshot) record(path, before, JSON.stringify(entry))
     }
   }
 
@@ -275,8 +273,8 @@ function planClientConfigChanges(target: ClientConfigTarget, text: string, value
  * 把客户端配置直接指到本地服务。
  *
  * 地址与密钥由 `resolveClientConfigDefaults()` 就地取（用户不需要、也无法在这里指定它们），
- * 调用方只给模型名。只改**属于本次目标文件**的字段：Gemini CLI 的模型在 settings.json、
- * 地址与密钥在 .env，往 `.env` 里写 `model` 会写出一个工具根本不读的键。
+ * 调用方只给模型名。只改**属于本次目标文件**的字段：往 A 文件里写本属于 B 文件的键，
+ * 会写出一个工具根本不读的东西。
  */
 export async function applyClientConfigOverrides(clientKey: string, filePath: string, overrides: ClientApplyOverrides): Promise<ClientConfigApplyResult> {
   const target = resolveClientConfigTarget(clientKey, filePath)
@@ -479,7 +477,7 @@ export async function listClientConfigOverview(): Promise<ClientConfigOverviewIt
   for (const client of AGENT_CLIENT_DEFINITIONS) {
     const primary = client.files[0]
     if (!primary) continue
-    // 主文件的状态就是这一行的状态：多文件的客户端（Gemini CLI）在详情页里再看逐文件。
+    // 主文件的状态就是这一行的状态：声明了多个文件的客户端在详情页里再看逐文件。
     const state = await readClientConfigFile(client.key, primary.path)
     const versions = summarizeClientConfigVersions(client.key)
     const report = await readClientConfigCoverage(client, defaults)
@@ -504,7 +502,7 @@ export async function listClientConfigOverview(): Promise<ClientConfigOverviewIt
 /**
  * 一键生效：把客户端配置指到本地服务。
  *
- * 一个客户端可能有多个可写文件（Gemini CLI 的 settings.json 与 .env），逐个走同一条
+ * 一个客户端可能有多个可写文件，逐个走同一条
  * 「先备份再写」的路径；单个文件出错不中断其余——用户要的是「能生效的先生效」，
  * 而不是因为某个文件语法坏了就一个都不改。
  */

@@ -49,7 +49,6 @@ clients/
 | --- | --- |
 | `claude-code` | <https://usemagpie.ai/icons/claudecode-color.svg> |
 | `codex` | <https://usemagpie.ai/icons/codex-color.svg> |
-| `gemini-cli` | <https://usemagpie.ai/icons/geminicli-color.svg> |
 | `opencode` | <https://usemagpie.ai/icons/opencode.svg> |
 | `pi` | <https://usemagpie.ai/icons/pi.svg> |
 | `cursor-cli` | <https://usemagpie.ai/icons/cursor.svg> |

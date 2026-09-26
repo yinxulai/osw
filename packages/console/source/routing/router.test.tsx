@@ -63,8 +63,8 @@ describe('路由路径契约', () => {
   it('客户端详情的链接会把客户端 key 写进路径', () => {
     const href = router.buildLocation({
       to: routePaths.clientConfigDetail,
-      params: { clientKey: 'gemini-cli' },
+      params: { clientKey: 'claude-code' },
     }).href
-    expect(href).toBe('/client-config/gemini-cli')
+    expect(href).toBe('/client-config/claude-code')
   })
 })

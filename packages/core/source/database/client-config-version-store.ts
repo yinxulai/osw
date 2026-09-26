@@ -158,7 +158,7 @@ export interface ClientConfigVersionSummaryCount {
 /**
  * 某个客户端**名下所有文件**的版本数与最近一次备份时间。
  *
- * 列表页一行一个客户端，而版本是按文件存的（Gemini CLI 有两个文件），
+ * 列表页一行一个客户端，而版本是按文件存的，
  * 所以这里按客户端聚合，而不是复用 `countClientConfigVersions` 去数某一个文件。
  */
 export function summarizeClientConfigVersions(clientKey: string): ClientConfigVersionSummaryCount {

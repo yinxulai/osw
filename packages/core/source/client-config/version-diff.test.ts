@@ -71,6 +71,21 @@ describe('diffClientConfigContent', () => {
     expect(diffClientConfigContent(current, version)).toEqual([{ before: 'model = "gpt"', after: 'model = "claude"' }])
   })
 
+  it('reports a key that only the earlier content has', () => {
+    // 退回这一版会把 `b` 加回文件里；只说「多了个 b」是没用的，得说清是回退会加上的。
+    expect(diffClientConfigContent('{"a":1,"b":2}', '{"a":1}')).toEqual([{ before: 'b: 2', after: null }])
+  })
+
+  it('falls back to comparing lines for JSON that is not an object', () => {
+    // 顶层是数组、数字、`null` 都不是「键值对」；摊不成键路径就退回按行比，
+    // 不能因为 `JSON.parse` 没抛错就当它是一份能按键比对的配置。
+    expect(diffClientConfigContent('[1,2]', '[1,3]')).toEqual([{ before: '[1,2]', after: '[1,3]' }])
+    expect(diffClientConfigContent('42', '43')).toEqual([{ before: '42', after: '43' }])
+    // 只有一边摊不成键路径时照样退回按行比：这时两版是两种写法（`null` 与一份对象），
+    // 按键比会把它们当成「同一份配置的两种缩进」而什么也不报。
+    expect(diffClientConfigContent('null', '{"a":1}')).toEqual([{ before: 'null', after: '{"a":1}' }])
+  })
+
   it('counts a key that moved as no change at all', () => {
     // 按键比较的意义就在这里：重排、缩进、换行都不是「改动」。
     expect(diffClientConfigContent('{"a":1,"b":2}', '{ "b": 2, "a": 1 }')).toEqual([])

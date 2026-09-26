@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
 import { Server } from 'lucide-react'
 import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
 import { CopyButton } from './copy-button'
 import { FormRow } from './form-kit'
+import { InfoHint } from './info-hint'
 import { SettingsCardHeader } from './settings-card-header'
 import { Card, CardContent } from './ui/card'
 import { useTranslation } from '@/i18n/provider'
@@ -22,6 +24,32 @@ interface AddressCardProps {
    * 「模型名是可选的」这件事重新变得含糊。所以这一行由调用方决定要不要。
    */
   showModelName?: boolean
+  /**
+   * 两行长说明的摆法。
+   *
+   * `'paragraph'`（默认）：摆在字段标题下面，占满行宽。客户端配置页用这一档——它是并排两张参考卡，
+   * 读者就是来查「这个值是什么」的，说明摊开正好。
+   *
+   * `'icon'`：收进标题行那枚小图标，浮入/聚焦才展开。新手引导用这一档：那一步的主线是
+   * 「把值填进客户端」，用户此刻并不需要知道「本地不校验鉴权」「模型名只是路由输入」这两件事的来龙去脉，
+   * 两段长说明却各占两三行、把卡片撑得比地址本身还重。收进图标后默认视图只剩「值 + 复制」，
+   * 想知道为什么的人点开就能读到同一句话。
+   *
+   * 为什么做成参数而不是在引导页另写一张卡：地址怎么拼、密钥是什么、模型名兜底用哪个，
+   * 这三件事的推导只能有一处（见下面那段说明），摆法才该由调用方选。
+   */
+  hintStyle?: 'paragraph' | 'icon'
+  /**
+   * 卡片底部的一条收尾行（`border-t` 分隔、贴着卡片下边缘）。
+   *
+   * 引导页用它把「还有一条不用手抄的路」并进这张卡：那件事与地址卡说的是**同一件事的两面**
+   * （照抄 / 代抄），原设计也要求两者必须挨着摆、中间不插别的内容。
+   * 单独摆成第二张卡会让它和地址卡平起平坐，读者先看到的是「有两张卡」而不是「有一组值」；
+   * 收进同一张卡的收尾行里，值仍然是这一屏唯一的主体。
+   *
+   * 做成槽位而不是布尔开关：这一行放什么由调用方决定，卡片只负责给它一条分割线与贴边留白。
+   */
+  footer?: ReactNode
 }
 
 /**
@@ -42,8 +70,13 @@ interface AddressCardProps {
  * 不靠换一种按钮来说——一列值里混着两种复制按钮，读起来像是两种不同的操作。
  */
 export function AddressCard(props: AddressCardProps) {
-  const { origin, copiedKey, onCopy, title, description, showModelName = true } = props
+  const { origin, copiedKey, onCopy, title, description, showModelName = true, hintStyle = 'paragraph', footer } = props
   const t = useTranslation()
+  const hintAsIcon = hintStyle === 'icon'
+
+  /** 标题行右侧那枚口径图标；`'paragraph'` 档下返回 `undefined`，说明改走 `FormRow` 的 description 位。 */
+  const hintIcon = (key: 'access.field.apiKey.hint' | 'access.field.model.hint') =>
+    hintAsIcon ? <InfoHint text={t(key)} /> : undefined
 
   return (
     <Card>
@@ -67,12 +100,18 @@ export function AddressCard(props: AddressCardProps) {
               label={t('access.address.copy')}
             />
           </div>
+          {/* 这一句常驻：它不是口径，而是**唯一会抄错的那个值**怎么抄都对这件事本身。 */}
           <p className="mt-1.5 system-xs-regular text-text-tertiary">{t('access.address.hint')}</p>
         </div>
 
         <FormRow
-          title={t('access.field.apiKey.label')}
-          description={t('access.field.apiKey.hint')}
+          title={(
+            <span className="inline-flex items-center gap-1.5">
+              {t('access.field.apiKey.label')}
+              {hintIcon('access.field.apiKey.hint')}
+            </span>
+          )}
+          description={hintAsIcon ? undefined : t('access.field.apiKey.hint')}
           control={(
             <ValueWithCopy
               itemKey="apiKey"
@@ -86,8 +125,13 @@ export function AddressCard(props: AddressCardProps) {
 
         {showModelName ? (
           <FormRow
-            title={t('access.field.model.label')}
-            description={t('access.field.model.hint')}
+            title={(
+              <span className="inline-flex items-center gap-1.5">
+                {t('access.field.model.label')}
+                {hintIcon('access.field.model.hint')}
+              </span>
+            )}
+            description={hintAsIcon ? undefined : t('access.field.model.hint')}
             control={(
               <ValueWithCopy
                 itemKey="modelName"
@@ -100,6 +144,9 @@ export function AddressCard(props: AddressCardProps) {
           />
         ) : null}
       </CardContent>
+
+      {/* 收尾行贴在卡片下边缘：与上面几行同一条发丝线分隔，左右留白也与内容区对齐。 */}
+      {footer ? <div className="border-t border-border/50 px-4 py-3">{footer}</div> : null}
     </Card>
   )
 }
