@@ -7,6 +7,7 @@ import { createAppTranslator } from '@common/i18n/catalogs'
 import { PROXY_INTERFACE_ENTRIES } from '@common/protocols'
 import { I18nProvider } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { routePaths } from '@/routing/routes'
 import { ConfigureStep } from './configure-step'
 
@@ -38,8 +39,13 @@ vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 
 interface WrapperProps { children: ReactNode }
 
+/** 地址卡在引导页用 `hintStyle="icon"`，那两枚图标需要 `Tooltip` 的 Provider（真实应用里在 `App.tsx`）。 */
 function Wrapper(props: WrapperProps) {
-  return <I18nProvider>{props.children}</I18nProvider>
+  return (
+    <I18nProvider>
+      <TooltipProvider>{props.children}</TooltipProvider>
+    </I18nProvider>
+  )
 }
 
 const en = createAppTranslator('en')

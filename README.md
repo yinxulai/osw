@@ -123,7 +123,7 @@ Things worth doing while you're here:
 
 Step 3 of the setup guide is the reference sheet for this local service: one address, the values a client needs, and the paths it accepts. The address is built from the current listener and has a copy button — only **one** address is shown, and the other spelling (with or without `/v1`) is demoted to a sentence of explanation, because two addresses that differ by a single `/v1` sitting side by side is the most expensive mistake to make here. The accepted-path table starts collapsed as a single "Show the N accepted paths" row; expand it when a client won't connect and you suspect a wrong path.
 
-Right below it sits the same question answered the other way — a machine that already has a client installed can go to **Client Config** and hit **Apply to all**, and the app edits that client's own config file, keeping a restorable version beforehand.
+The same card also answers the other half of the question — a machine that already has a client installed can go to **Client Config** and hit **Apply to all**, and the app edits that client's own config file, keeping a restorable version beforehand. It is one row under the address rather than a card of its own: it is the same question answered the other way, and two cards side by side would read as "there are two things here" instead of "here is one set of values".
 
 | Your client | Base URL |
 | --- | --- |

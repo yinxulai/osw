@@ -112,27 +112,15 @@ describe('AddressCard', () => {
 
     const card = screen.getByText(ORIGIN).closest('[data-slot="card"]')
     expect(card?.textContent).toContain('Every write keeps a version')
+    // 收尾行是卡片的最后一个孩子，不另起一张卡：它说的就是这张卡里那几个值的事。
+    expect(card?.lastElementChild?.getAttribute('data-slot')).toBe('card-footer')
   })
 
-  it('不传 footer 时不留下空的收尾行', () => {
+  it('不传 footer 时卡片下边缘就是最后一行，不留空档', () => {
     render(<AddressCard origin={ORIGIN} copiedKey={null} onCopy={() => {}} />, { wrapper: Wrapper })
 
     const card = screen.getByText(ORIGIN).closest('[data-slot="card"]')
-    // 卡片下边缘就是最后一行：多一条空行会让卡片看上去少了一行内容。
-    expect(card?.textContent).toBe([
-      'Local service address',
-      'The one address a client should point at',
-      ORIGIN,
-      'Copy address',
-      'Add /v1 or leave it out, either works: every accepted path is registered in both forms',
-      'API Key',
-      'Auth is not checked locally, so this value only has to be non-empty',
-      CLIENT_CONFIG_SAMPLE_API_KEY,
-      'Copy API Key',
-      'Model name',
-      'Not a fixed value: any non-empty model name is accepted, because it only feeds routing — which logical model it hits, and which upstream that lands on, are both decided by routing. If unsure, use default, the fallback one',
-      BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME,
-      'Copy model name',
-    ].join(''))
+    expect(card?.lastElementChild?.getAttribute('data-slot')).toBe('card-content')
+    expect(card?.textContent).toContain(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)
   })
 })

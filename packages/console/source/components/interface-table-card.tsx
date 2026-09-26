@@ -106,7 +106,10 @@ export function InterfaceTableCard(props: InterfaceTableCardProps) {
      这一页不碰；请求记录里有没有这条请求是客观的，且不需要再多一个字段。
      它是**唯一常驻**的一行，因为它回答的正是「接不上怎么办」，而那才是用户回到这一步的原因。 */
   const footer = (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/50 px-4 py-3">
+    <div
+      data-slot="card-footer"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/50 px-4 py-3"
+    >
       <span className="min-w-0 system-xs-regular text-text-tertiary">
         {t('access.interface.verifyHint')}
       </span>
@@ -125,7 +128,7 @@ export function InterfaceTableCard(props: InterfaceTableCardProps) {
   if (variant === 'flat') return <>{body}{footer}</>
 
   return (
-    <Card className="pb-0">
+    <Card>
       <SettingsCardHeader
         icon={<ListTree />}
         title={t('access.interface.title')}

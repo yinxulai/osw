@@ -145,8 +145,13 @@ export function AddressCard(props: AddressCardProps) {
         ) : null}
       </CardContent>
 
-      {/* 收尾行贴在卡片下边缘：与上面几行同一条发丝线分隔，左右留白也与内容区对齐。 */}
-      {footer ? <div className="border-t border-border/50 px-4 py-3">{footer}</div> : null}
+      {/* 收尾行贴在卡片下边缘：`data-slot="card-footer"` 让卡片自己去掉底部留白（见 `ui/card`），
+          与上面几行同一条发丝线分隔，左右留白也与内容区对齐。 */}
+      {footer ? (
+        <div data-slot="card-footer" className="border-t border-border/50 px-4 py-3">
+          {footer}
+        </div>
+      ) : null}
     </Card>
   )
 }
