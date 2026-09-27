@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { settingsKeys } from '@/data/settings'
 import { useTranslation, useLocale } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
+import { useUrlOverrideActions } from '@/routing/url-overrides'
 import type { Theme } from '@/components/app-sidebar'
 import type { Locale } from '@common/i18n'
 import type { Settings } from '@common/schemas'
@@ -40,6 +41,9 @@ const ONBOARDING_LOCALES: Locale[] = ['en', 'zh-CN']
  * 设置到达时被覆盖回旧值。写回的同时更新设置缓存，界面立刻换语言；失败只提示，不阻断引导 ——
  * 引导途中改不了语言，比语言没改成严重得多。
  *
+ * 另外还要**清掉地址栏里的语言段**（`/zh-CN/onboarding` 那种）：那一层优先级高于偏好，
+ * 不清的话用户点「English」会看到界面纹丝不动，而这恰好发生在最输不起的一步上。
+ *
  * 选中态标的是**当前生效的语言**（`locale`），不是偏好值：偏好为 `system` 时按系统解析出来的那个
  * 语言才是用户此刻正在读的东西，两个按钮都不亮会让人以为语言没设上。
  */
@@ -49,12 +53,15 @@ export function OnboardingTopbar(props: OnboardingTopbarProps) {
   const toast = useToast()
   const client = useQueryClient()
   const locale = useLocale()
-  const preference = useLanguageStore(state => state.preference)
   const setPreference = useLanguageStore(state => state.setPreference)
+  const { clearLang } = useUrlOverrideActions()
 
   const changeLanguage = async (next: Locale) => {
-    if (next === preference) return
-    // 先写本地偏好让界面立刻切换，再持久化。
+    // 和**生效语言**比，不是和偏好比：地址栏覆盖生效时，preference 可能已经等于 next，
+    // 而界面上显示的还是另一个语言 —— 这时必须继续往下走，才能把覆盖清掉。
+    if (next === locale) return
+    clearLang()
+    // 写本地偏好让界面立刻切换（乐观预览），再持久化。
     setPreference(next)
     try {
       const updated = await unwrap(settingsApi.update({ language: next }))

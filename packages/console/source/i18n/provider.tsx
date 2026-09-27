@@ -3,12 +3,21 @@
  *
  * 上下文值必须 memo（`locale` 变了才换新对象）：provider 在树的高处，每次渲染都换新值
  * 会让所有 `useTranslation()` 的组件跟着重渲染。
+ *
+ * 语言有**三层**来源，优先级从高到低：
+ * 1. 地址栏路径里的语言段（`/zh-CN/router`）—— 临时覆盖，不落盘；
+ * 2. 已应用的偏好（服务端 `settings.language` / 本地 `useLanguageStore`）；
+ * 3. 系统语言。
+ *
+ * 第 1 层之所以能在这里读到，是因为 provider 位于 `RouterProvider` **之上**（根路由的报错兜底也要取词），
+ * 拿不到路由的 `useParams()`，只能直接读 history —— 见 `@/routing/url-overrides`。
  */
 
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { resolveLocale, type Locale, type Translator } from '@common/i18n'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { useSettings } from '@/data/settings'
+import { useUrlOverrides } from '@/routing/url-overrides'
 import { getTranslator } from './active'
 import { getSystemLocale, useLanguageStore } from './store'
 
@@ -27,13 +36,19 @@ export function I18nProvider(props: I18nProviderProps) {
   const preference = useLanguageStore(state => state.preference)
   const setPreference = useLanguageStore(state => state.setPreference)
   const settings = useSettings()
+  const { lang: urlLang } = useUrlOverrides()
 
   // 服务端设置是权威来源。设置页的改动会先写进本地状态作为预览，保存后再从这里回填（值相同，幂等）。
+  // 注意「预览」只影响这里的 preference：地址栏里的语言段是另算一层，不会被写回偏好。
   useEffect(() => {
     if (settings) setPreference(settings.language)
   }, [settings, setPreference])
 
-  const locale = useMemo(() => resolveLocale(preference, getSystemLocale()), [preference])
+  // URL 优先，其次偏好，最后系统语言。
+  const locale = useMemo(
+    () => urlLang ?? resolveLocale(preference, getSystemLocale()),
+    [urlLang, preference],
+  )
 
   // `getTranslator` 是模块级缓存：同一语言返回同一实例，所以这个 value 只在语言变化时换新。
   // 顺便把「当前语言」同步给 React 树之外（错误构造、格式化工具）使用。

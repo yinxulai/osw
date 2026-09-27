@@ -34,8 +34,10 @@ vi.mock('@/hooks/use-copy-to-clipboard', () => ({
   useCopyToClipboard: () => ({ copiedKey: null, copy: () => {} }),
 }))
 
+// 只替换 `useNavigate`：整体 mock 会把 `createHashHistory`、`Navigate` 等真实导出一起抹掉，
+// 而 `I18nProvider` 这条链上确实要用到它们。
 const navigate = vi.hoisted(() => vi.fn())
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+vi.mock('@tanstack/react-router', async importOriginal => ({ ...(await importOriginal<object>()), useNavigate: () => navigate }))
 
 interface WrapperProps { children: ReactNode }
 

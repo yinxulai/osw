@@ -1,15 +1,51 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OSW</title>
     <script>
-      const savedTheme = localStorage.getItem('theme')
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      const isDark = savedTheme === 'dark' || (savedTheme !== 'light' && (savedTheme === 'system' || !savedTheme) && prefersDark)
-      document.documentElement.classList.toggle('dark', isDark)
+      /*
+       * 绘制前把主题与语言定下来，避免「先闪一下白底再变深色」「先闪英文再变中文」。
+       *
+       * 优先级必须和 `App.tsx` / `I18nProvider` 完全一致：
+       *   主题：URL 里的 `?theme=` > 持久化偏好（`osw-ui`）> 系统
+       *   语言：URL 路径里的语言段 > 持久化偏好（`osw-language`）> 浏览器语言
+       *
+       * 这里只能手写：内联脚本在模块加载前执行，拿不到任何 `import`。
+       * 挂载后 `I18nProvider` 会以服务端设置为准重算一遍，这段只为「第一帧」负责。
+       */
+      ;(function () {
+        var readPersisted = function (key) {
+          try {
+            var raw = localStorage.getItem(key)
+            return raw ? JSON.parse(raw).state : null
+          } catch (error) {
+            return null
+          }
+        }
+
+        var hash = location.hash.replace(/^#/, '')
+        var queryIndex = hash.indexOf('?')
+        // 语言段只看路径里的第一段，`?theme=` 只看查询串，两者互不干扰。
+        var pathname = queryIndex === -1 ? hash : hash.slice(0, queryIndex)
+        var query = queryIndex === -1 ? '' : hash.slice(queryIndex + 1)
+        var segment = pathname.split('/').filter(Boolean)[0] || ''
+
+        var urlTheme = new URLSearchParams(query).get('theme')
+        var ui = readPersisted('osw-ui') || {}
+        var mode = urlTheme === 'light' || urlTheme === 'dark' ? urlTheme : ui.themeMode || 'system'
+        var isDark = mode === 'dark'
+          || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', isDark)
+
+        var urlLang = /^zh/i.test(segment) ? 'zh-CN' : /^en/i.test(segment) ? 'en' : null
+        var preference = (readPersisted('osw-language') || {}).preference
+        var persistedLang = preference === 'zh-CN' || preference === 'en' ? preference : null
+        var locale = urlLang || persistedLang || navigator.language || 'en'
+        document.documentElement.lang = /^zh/i.test(locale) ? 'zh-CN' : 'en'
+      })()
     </script>
   </head>
   <body>

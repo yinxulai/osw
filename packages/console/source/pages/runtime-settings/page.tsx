@@ -19,6 +19,8 @@ import { UpdateCard } from './components/update-card'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { useLanguageStore } from '@/i18n/store'
 import { useTranslation } from '@/i18n/provider'
+import { useUrlOverrideActions, useUrlOverrides } from '@/routing/url-overrides'
+import type { ThemeMode } from '@/components/app-sidebar'
 
 interface SettingsSectionProps {
   title: string
@@ -40,16 +42,34 @@ export function RuntimeSettingsPage() {
   const themeMode = useAppUiStore(state => state.themeMode)
   const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const setLanguagePreference = useLanguageStore(state => state.setPreference)
+  const { lang: urlLang, theme: urlTheme } = useUrlOverrides()
+  const { clearLang, clearTheme } = useUrlOverrideActions()
 
   /**
    * 语言变更要立刻生效，不能等用户点保存：
    * 一是切完看不出变化会让人以为没生效，二是“保存”按钮本身也不知道该用什么语言写。
    * 所以同时写进本地偏好（立即重渲染）和表单草稿（等保存持久化）。
+   *
+   * 还要**清掉地址栏里的语言段**：那一层的优先级高于偏好，不清的话用户刚选的这个会被
+   * 地址栏里原来的那个盖住，表现成「选了没反应」。清除是幂等的（没有语言段就不跳转），
+   * 所以这里无脑调用即可，不用先判断。
    */
   const handleLanguageChange = (language: LanguagePreference) => {
     service.updateField('language', language)
     setLanguagePreference(language)
+    clearLang()
   }
+
+  /** 主题同理：写偏好（记住），清掉 `?theme=`（别盖住刚写的偏好）。 */
+  const handleThemeModeChange = (mode: ThemeMode) => {
+    setThemeMode(mode)
+    clearTheme()
+  }
+
+  // 下拉框显示**当前生效**的值，而不是偏好值：地址栏里可能正压着一个覆盖，
+  // 那时候屏幕上显示的语言/主题与偏好并不一致，照偏好显示会让人以为选错了。
+  const effectiveThemeMode = urlTheme ?? themeMode
+  const effectiveLanguage = urlLang ?? service.settings?.language
 
   return (
     <PageLayout className="flex min-h-full flex-col">
@@ -71,9 +91,9 @@ export function RuntimeSettingsPage() {
               <GeneralCard
                 autoLaunch={service.settings.autoLaunch}
                 onAutoLaunchChange={value => service.updateField('autoLaunch', value)}
-                themeMode={themeMode}
-                onThemeModeChange={setThemeMode}
-                language={service.settings.language}
+                themeMode={effectiveThemeMode}
+                onThemeModeChange={handleThemeModeChange}
+                language={effectiveLanguage ?? service.settings.language}
                 onLanguageChange={handleLanguageChange}
               />
               <UpdateCard />
