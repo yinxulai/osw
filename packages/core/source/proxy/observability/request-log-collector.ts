@@ -1,5 +1,5 @@
-import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
 import type { RequestStatus } from '@common/schemas'
+import type { ClientDelivery } from '@server/proxy/contracts'
 import { getSettings } from '@server/database/settings-store'
 import {
   createRequestContent,
@@ -147,13 +147,15 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
     }
   }
 
-  const finalizeLocalErrorContent = async (statusCode: number, responseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, responseBody: string) => {
+  const finalizeLocalErrorContent = async (delivered: ClientDelivery) => {
     await finalizeRequestContent({
       perspective: 'client',
-      statusCode,
+      statusCode: delivered.statusCode,
+      // 代理自己生成的错误响应必定是完整的一份：它在本进程里一次成形，
+      // 因此不受 `delivered.complete` 影响。
       captureStatus: 'captured',
-      responseHeaders: serializeCapturedHeaders(responseHeaders),
-      responseBody,
+      responseHeaders: serializeCapturedHeaders(delivered.headers),
+      responseBody: delivered.body,
     })
   }
 

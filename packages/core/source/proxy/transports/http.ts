@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { CLIENT_REQUEST_ABORTED_MESSAGE } from '@common/error-codes'
 import { coreNetworkClient } from '@server/infrastructure/network/core-network'
 import type { AttemptView, ExchangeView, Frame, HeaderMap, Transport, UpstreamConnection, UpstreamTarget } from '@server/proxy/contracts'
 import { FrameQueue } from './frame-queue'
@@ -8,9 +9,6 @@ export const CONNECTION_TIMEOUT_MESSAGE = 'Connection timeout'
 
 /** 静默超时错误文案；与既有行为一致。 */
 export const IDLE_TIMEOUT_MESSAGE = 'Idle timeout'
-
-/** 客户端取消时销毁上游请求用的文案；执行器按它区分取消与真实故障。 */
-export const CLIENT_ABORTED_MESSAGE = 'CLIENT_REQUEST_ABORTED'
 
 /** 上游正文搬到一半就断了连接时的文案。 */
 export const UPSTREAM_CLOSED_MESSAGE = 'Upstream closed the connection before finishing the response'
@@ -90,18 +88,18 @@ function connectHttp(target: UpstreamTarget, exchange: ExchangeView, attempt: At
     }
     const onSignalAbort = () => {
       if (!settled) {
-        bail(new Error(CLIENT_ABORTED_MESSAGE))
+        bail(new Error(CLIENT_REQUEST_ABORTED_MESSAGE))
         return
       }
       // 已建立连接：销毁上游请求，帧序列会以 error 帧收尾。
-      request.destroy(new Error(CLIENT_ABORTED_MESSAGE))
+      request.destroy(new Error(CLIENT_REQUEST_ABORTED_MESSAGE))
     }
 
     const request = coreNetworkClient.requestHttp(url, requestOptions, exchange.body, {
       onResponse: upstreamResponse => {
         if (settled) {
           // 连接早已被中止/拒绝：不要留下一条没人消费的上游响应。
-          upstreamResponse.destroy(new Error(CLIENT_ABORTED_MESSAGE))
+          upstreamResponse.destroy(new Error(CLIENT_REQUEST_ABORTED_MESSAGE))
           return
         }
         response = upstreamResponse
@@ -112,8 +110,8 @@ function connectHttp(target: UpstreamTarget, exchange: ExchangeView, attempt: At
           abort(reason?: Error) {
             clearTimer()
             queue.cancel()
-            upstreamResponse.destroy(reason ?? new Error(CLIENT_ABORTED_MESSAGE))
-            request.destroy(reason ?? new Error(CLIENT_ABORTED_MESSAGE))
+            upstreamResponse.destroy(reason ?? new Error(CLIENT_REQUEST_ABORTED_MESSAGE))
+            request.destroy(reason ?? new Error(CLIENT_REQUEST_ABORTED_MESSAGE))
           },
         })
         queue.push({

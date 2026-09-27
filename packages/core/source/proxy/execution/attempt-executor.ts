@@ -1,6 +1,6 @@
 import type { TransportKind } from '@common/schemas'
 import type { ExecutionOrigin, UpstreamTarget } from '@server/proxy/contracts'
-import { createDeliveryDecisionRef } from '@server/proxy/contracts'
+import { bodyDeliveryShape, createDeliveryDecisionRef } from '@server/proxy/contracts'
 import { isEventStreamResponse } from '@server/proxy/adapters/http-response-sink'
 import { runAttempts } from '@server/proxy/execution/attempt-runner'
 import { relayAttempt, type RelayAttemptResult } from '@server/proxy/kernel/relay'
@@ -13,7 +13,7 @@ import { ClientRequestCancelledError, isClientRequestCancelled, LocalAttemptErro
 import { concludeDeliveredAttempt, concludeInterruptedAttempt, concludeUndeliverableAttempt, type AttemptConclusionInput } from './attempt-conclusion'
 import type { AttemptOutcome } from './attempt-outcome'
 import { prepareAttempt, type PreparedAttempt } from './attempt-preparation'
-import { createRequestFinalizer } from './request-finalizer'
+import { createRequestFinalizer } from './request-finalizer-handlers'
 import { extractUpstreamRequestId } from './request-id'
 
 export interface ProxyExecutionOptions {
@@ -204,8 +204,9 @@ async function executeRelay(prepared: PreparedAttempt): Promise<AttemptExecution
 }
 
 async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExecution): Promise<AttemptOutcome> {
-  const { context, response, target, attemptIndex, sink, observer, attemptLogger, responseEvaluation, delivery } = prepared
+  const { context, target, attemptIndex, sink, observer, attemptLogger, responseEvaluation, delivery } = prepared
   const { requestId } = context
+  const mode = bodyDeliveryShape(context.transport)
   const failure = execution.relay.error
   const deliverable = delivery.decision.kind === 'deliver'
   const deliveredSuccessfully = delivery.decision.kind === 'deliver' && delivery.decision.successful
@@ -213,7 +214,6 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
     attemptLogger,
     observer,
     sink,
-    response,
     statusCode: execution.statusCode,
     disposition: execution.disposition,
     upstreamTransport: execution.upstreamTransport,
@@ -228,7 +228,7 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
   if (isClientRequestCancelled(failure) || (failure === null && !execution.relay.ended && context.signal.aborted)) {
     if (execution.relay.head !== null && deliveredSuccessfully) {
       console.debug(`[proxy] client finished early requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} duration=${execution.durationMilliseconds}ms`)
-      return await concludeDeliveredAttempt({ ...conclusion, streamInterrupted: false, deliveryComplete: false })
+      return await concludeDeliveredAttempt({ ...conclusion, mode, streamInterrupted: false })
     }
     throw new ClientRequestCancelledError()
   }
@@ -237,15 +237,17 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
     await concludeInterruptedAttempt({
       ...conclusion,
       failure,
-      deliveryStarted: deliverable && response.headersSent,
+      deliveryStarted: deliverable && (sink.delivery() !== null),
     })
   }
   if (!deliverable) return await concludeUndeliverableAttempt(conclusion)
 
-  if (context.transport === 'http-stream') {
-    console.debug(`[proxy] response rewrite skipped requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} transport=http-stream rules=${prepared.rules.length} reason=modifier-not-applicable`)
+  // 规则是否生效是**交付形态**的函数，不是「客户端跳的形态是不是 http」的函数：
+  // 两者在今天的取值域里同义，但那条同义是巧合，而这里说的是规则引擎真正的前提。
+  if (mode === 'incremental') {
+    console.debug(`[proxy] response rewrite skipped requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} mode=${mode} rules=${prepared.rules.length} reason=modifier-not-applicable`)
   } else {
-    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} transport=${context.transport} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'}`)
+    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'}`)
   }
-  return await concludeDeliveredAttempt({ ...conclusion, deliveryComplete: true })
+  return await concludeDeliveredAttempt({ ...conclusion, mode })
 }

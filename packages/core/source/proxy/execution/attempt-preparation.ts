@@ -13,6 +13,7 @@ import type {
   UpstreamTarget,
 } from '@server/proxy/contracts'
 import { createHttpResponseSink, type HttpResponseSink } from '@server/proxy/adapters/http-response-sink'
+import { bodyDeliveryShape } from '@server/proxy/contracts'
 import { notifyObservers } from '@server/proxy/kernel/observer-notifications'
 import { createRequestModifiers, type RewriteEvaluation } from '@server/proxy/modifiers/request-modifiers'
 import { createResponseModifiers } from '@server/proxy/modifiers/response-modifiers'
@@ -55,7 +56,6 @@ export interface PrepareAttemptInput {
  */
 export interface PreparedAttempt {
   readonly context: RequestContext
-  readonly response: ProxyResponse
   readonly target: UpstreamTarget
   readonly attemptIndex: number
   readonly attemptStartedAt: number
@@ -151,7 +151,9 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   const observers = [observer, liveObserver]
   const sink = createHttpResponseSink({
     response,
-    transport: context.transport,
+    // 交付形态在这里算一次、往下传：出口与响应修改器必须得到同一个答案，
+    // 各判一次就会分叉（见 `BodyDeliveryShape`）。
+    mode: bodyDeliveryShape(context.transport),
     captureEnabled: session.settings.captureRequestContent,
     onDeliveredChunk: chunk => notifyObservers(observers, current => current.onDownstreamChunk?.(exchange, attempt, chunk)),
   })
@@ -215,7 +217,6 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   })
   return {
     context,
-    response,
     target,
     attemptIndex,
     attemptStartedAt,

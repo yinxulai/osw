@@ -1,4 +1,4 @@
-import type { Frame, FrameSink, HeadFrame, HeaderMap, TransportKind } from '@server/proxy/contracts'
+import type { BodyDeliveryShape, ClientDelivery, Frame, FrameSink, HeadFrame, HeaderMap } from '@server/proxy/contracts'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 
 /**
@@ -27,14 +27,17 @@ export function serializeChunkSnapshot(chunks: readonly string[]): string {
 export interface HttpResponseSinkOptions {
   response: ProxyResponse
   /**
-   * 客户端跳的传输形态。
+   * 这次交付的正文形态（见 `BodyDeliveryShape`）。
    *
-   * 它是**预期**，也是出口唯一的交付依据：`http-stream` 才边收边发，否则攒完再发。
-   * 上游回了一个非 SSE 的 2xx 时，执行器已经在上游响应头落地的那一刻把这次尝试判成
+   * 它是出口唯一的交付依据：`incremental` 才边收边发，否则攒完再发。取这个值而不是
+   * 自己再判一次客户端跳的 `transport`，是为了与响应修改器共用同一个判定——两处各判一次
+   * 就会出现两个答案，而两个答案不一致时 `content-length` 与实际写出的字节数不符。
+   *
+   * 上游回了一个与预期不符的形态时，执行器已经在上游响应头落地的那一刻把这次尝试判成
    * failover（见 `attempt-executor.ts`），因此出口不需要、也不允许再去读上游响应头
-   * 来重新回答「这次到底该不该边收边发」（§1.2）。
+   * 来重新回答「这次到底该不该边收边发」。
    */
-  transport: TransportKind
+  mode: BodyDeliveryShape
   /** 是否记录写出的字节。关闭时只保留缓冲分支的兜底正文。 */
   captureEnabled: boolean
   /**
@@ -44,6 +47,12 @@ export interface HttpResponseSinkOptions {
    */
   onDeliveredChunk?: (chunk: Buffer) => void
 }
+
+/**
+ * 「客户端到底收到了什么」的原子快照。见 `ClientDelivery`：四个字段同进同出，
+ * 拆开读等于允许它们描不同的时刻。
+ */
+export type { ClientDelivery }
 
 /**
  * 帧出口：把内核吐出的帧写到 HTTP 响应上。
@@ -58,10 +67,13 @@ export interface HttpResponseSinkOptions {
 export interface HttpResponseSink extends FrameSink {
   /** 放弃交付（failover 提前放弃）：之后不再写任何字节。 */
   discard(): void
-  /** 客户端视角已写出的正文；从未写出时为 `null`。 */
-  downstreamBody(): string | null
-  /** 已写出的部分正文；未采集或尚未写出任何内容时为 `null`。 */
-  partialDownstreamBody(): string | null
+  /**
+   * 客户端视角的交付事实；从未向客户端写出响应头时为 `null`。
+   *
+   * 出口是唯一同时知道「状态码、响应头、正文、完整与否」的地方，因此这个快照只能由它给出。
+   * 让调用方自己拼（状态码从执行器取、正文从出口取）会把一件事实拆到两个不再同步的源上。
+   */
+  delivery(): ClientDelivery | null
   /** 交付过程中观察到的失败。 */
   failure(): Error | null
 }
@@ -79,6 +91,8 @@ class HttpFrameSink implements HttpResponseSink {
   private readonly captured: Buffer[] = []
   private readonly buffered: Buffer[] = []
   private bufferedWritten: string | null = null
+  /** 见 `ClientDelivery.complete`：收尾走完了没有，只有出口自己知道。 */
+  private complete = false
 
   constructor(options: HttpResponseSinkOptions) {
     this.options = options
@@ -92,11 +106,11 @@ class HttpFrameSink implements HttpResponseSink {
     if (this.finished || this.discarded) return
     if (frame.kind === 'head') {
       this.head = frame
-      if (this.options.transport === 'http-stream') this.startDownstream()
+      if (this.incremental) this.startDownstream()
       return
     }
     if (frame.kind === 'data') {
-      if (this.options.transport !== 'http-stream') {
+      if (!this.incremental) {
         this.buffered.push(frame.body)
         return
       }
@@ -119,19 +133,45 @@ class HttpFrameSink implements HttpResponseSink {
     this.discarded = true
   }
 
-  downstreamBody(): string | null {
-    if (this.options.transport === 'http-stream') {
-      return serializeChunkSnapshot(this.captured.map(chunk => chunk.toString('utf8')))
+  /**
+   * 客户端视角的交付事实。
+   *
+   * 响应头从出口的账本取（不是从帧里取）：帧里的头是**打算**发出去的那一份，账本里
+   * 才是真发出去的那一份，两者在「响应已结束、头没来得及发」时会不一样。
+   */
+  delivery(): ClientDelivery | null {
+    const sent = this.options.response.sentHead()
+    if (!sent) return null
+    return {
+      statusCode: sent.statusCode,
+      headers: sent.headers,
+      body: this.deliveredBody(),
+      complete: this.complete,
     }
-    return this.captured.length > 0 ? Buffer.concat(this.captured).toString('utf8') : this.bufferedWritten
-  }
-
-  partialDownstreamBody(): string | null {
-    return this.captured.length > 0 ? Buffer.concat(this.captured).toString('utf8') : null
   }
 
   failure(): Error | null {
     return this.failed
+  }
+
+  get incremental(): boolean {
+    return this.options.mode === 'incremental'
+  }
+
+  /**
+   * 已交付的正文。
+   *
+   * 整包交付记原文，增量交付记分块列表——两者各自只有一个来源，不互相兜底：
+   * - 整包交付时正文只有一份（收尾时写出），因此取 {@link bufferedWritten}；
+   * - 增量交付时正文是逐块写出的，只有**记录过**才有快照；关掉采集就是 `null`
+   *   （**没有记录**），而不是一个「记录了零块」的空快照——后者会把一次真实交付记成空正文。
+   *
+   * 没写出过正文时两者都是 `null`，这与「这次交付没有正文」是同一件事。
+   */
+  private deliveredBody(): string | null {
+    if (!this.incremental) return this.bufferedWritten
+    if (!this.options.captureEnabled) return null
+    return serializeChunkSnapshot(this.captured.map(chunk => chunk.toString('utf8')))
   }
 
   private startDownstream(): void {
@@ -150,20 +190,28 @@ class HttpFrameSink implements HttpResponseSink {
     if (!head || this.discarded) return
     const sink = this.options.response
     // 增量交付时数据帧已经逐条写出去了，收尾只需关掉响应。
-    if (this.options.transport === 'http-stream') {
+    if (this.incremental) {
       if (!sink.writableEnded) sink.end()
+      this.complete = true
       return
     }
     const body = Buffer.concat(this.buffered)
-    // 已写出的正文与响应是否还能写无关：客户端视角的记录不该因为连接已关闭而消失。
-    this.bufferedWritten = body.length > 0 ? body.toString('utf8') : null
+    // 响应已经关掉了就一个字节都没写出去，因此这里不能记正文：记了就会让「客户端视角」
+    // 声称收到过一份从未发出的正文。这与 `writeDownstream` 里同一处判断必须一致。
     if (sink.writableEnded) return
     if (!sink.headersSent) sink.start(head.status, head.headers)
     if (body.length === 0) {
       sink.end()
+      this.complete = true
       return
     }
+    // 整包交付下采集关了也要留正文：客户端视角的记录表达的是「这次交付发了什么」，
+    // 它由整包交付本身决定，不随采集开关变化。
+    this.bufferedWritten = body.toString('utf8')
     const pending = this.writeDownstream(body)
+    // 收尾是否完整在上游那边（`body` 已经全部交给出口了）就已经确定，因此先标上再等背压：
+    // 否则一个慢客户端会把「完整的一份正文」记成半截。
+    this.complete = true
     if (!pending) {
       sink.end()
       return

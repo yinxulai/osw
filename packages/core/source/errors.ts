@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CLIENT_REQUEST_ABORTED, CLIENT_REQUEST_ABORTED_MESSAGE } from '@common/error-codes'
 import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
 import type { ApiErrorCode, Protocol } from '@common/schemas'
 
@@ -36,8 +37,8 @@ export function normalizeError(error: unknown): AppError {
   }
 
   // 取消是调用方主动结束，不是故障，用固定的哨兵文本识别（见 proxy 执行层）。
-  if (error instanceof Error && error.message === 'CLIENT_REQUEST_ABORTED') {
-    return new AppError('CLIENT_REQUEST_ABORTED', 499, 'Client aborted the request', { cause: error })
+  if (error instanceof Error && error.message === CLIENT_REQUEST_ABORTED_MESSAGE) {
+    return new AppError(CLIENT_REQUEST_ABORTED, 499, 'Client aborted the request', { cause: error })
   }
 
   return new AppError('INTERNAL_ERROR', 500, 'Internal server error', {

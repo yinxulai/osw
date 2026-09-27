@@ -1255,6 +1255,41 @@ describe('handleProxyRequest', () => {
     }))
   })
 
+  it('stores the response headers the client actually received', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json', 'x-upstream': 'provider-1' })
+      res.end('{"ok":true}')
+    })
+    mocks.models = [model('model_headers', 'prov_headers', `${upstream.url}/v1/completions`, 'headers-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', prompt: 'Hello' }),
+    })
+    await response.text()
+
+    // 「返回客户端的响应」有正文没响应头是最常见的残缺：正文取自出口缓冲，一直都在，
+    // 而响应头是从已发出的响应里回读的。头一旦在发出时没被登记住，日志就只剩一半。
+    // 同一个 id 会被更新多次（先是请求侧，再是响应侧），因此要的是最后那一次。
+    const requestUpdates = mocks.updateRequestContent.mock.calls.filter(([id]) => id === 'content_request')
+    const requestContent = requestUpdates[requestUpdates.length - 1]?.[1]
+    expect(requestContent).toEqual(expect.objectContaining({ captureStatus: 'captured', responseStatus: 200 }))
+    expect(JSON.parse(String(requestContent?.responseHeaders))).toEqual(expect.objectContaining({
+      'content-type': 'application/json',
+      'x-upstream': 'provider-1',
+    }))
+  })
+
   it('accepts an Anthropic path without /v1 while keeping the configured upstream endpoint', async () => {
     configureSecretStore({
       set: async () => undefined,

@@ -1,4 +1,5 @@
 import type { Protocol, TransportKind } from '@common/schemas'
+import type { BodyDeliveryShape } from './delivery'
 import type { Frame, HeadFrame } from './frame'
 import type { HeaderMap } from './headers'
 import type { AttemptView, ExchangeView } from './exchange'
@@ -52,6 +53,15 @@ export interface ModifierContext {
 export interface ModifierScope {
   /** **客户端跳**的传输形态。省略表示不限。 */
   readonly transports?: readonly TransportKind[]
+  /**
+   * 本次交付的正文形态（见 `BodyDeliveryShape`）。省略表示不限。
+   *
+   * 「这种形态下没有它能做的事」有时候不取决于哪一跳、而取决于正文怎么发出去：
+   * 响应改写规则在一整份 JSON 上按路径取值，逐块交付时手里只有一段段 SSE 文本，
+   * 因此它声明 `['whole']`。用 `transports` 表达同一件事会失真——同一档传输上
+   * 正文的形态由 `bodyDeliveryShape` 统一决定，两处各判一次就会出现两个答案。
+   */
+  readonly shapes?: readonly BodyDeliveryShape[]
 }
 
 /**

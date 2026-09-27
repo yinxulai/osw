@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { CLIENT_REQUEST_ABORTED } from '@common/error-codes'
 import { OutboundProxyModeSchema } from '@common/schemas'
 import { AppError } from '../../../errors'
 import { createCoreNetworkClient } from '../../../infrastructure/network/core-network'
@@ -48,7 +49,7 @@ async function handleOutboundProxyTest(req: IncomingMessage, res: ServerResponse
   const networkClient = createCoreNetworkClient(connector)
   const startedAt = Date.now()
   let activeRequest: ReturnType<typeof networkClient.requestHttp> | null = null
-  const onClientAbort = () => activeRequest?.destroy(new AppError('CLIENT_REQUEST_ABORTED', 499, 'The client cancelled the request'))
+  const onClientAbort = () => activeRequest?.destroy(new AppError(CLIENT_REQUEST_ABORTED, 499, 'The client cancelled the request'))
   req.once('aborted', onClientAbort)
 
   try {

@@ -1,4 +1,5 @@
 import type { Modifier, ModifierContext, ModifierFrameMode, ModifierScope } from '@server/proxy/contracts'
+import { bodyDeliveryShape } from '@server/proxy/contracts'
 
 /**
  * 修改器的**结构性筛选**：方向一致、粒度一致、`scope` 覆盖本次交换的形态，按 `order` 升序
@@ -30,5 +31,6 @@ export function selectCandidates(modifiers: readonly Modifier[], context: Modifi
 export function matchesModifierScope(scope: ModifierScope | undefined, context: ModifierContext): boolean {
   if (!scope) return true
   if (scope.transports && !scope.transports.includes(context.exchange.transport)) return false
+  if (scope.shapes && !scope.shapes.includes(bodyDeliveryShape(context.exchange.transport))) return false
   return true
 }

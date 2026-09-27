@@ -1,9 +1,10 @@
+import { CLIENT_REQUEST_ABORTED, CLIENT_REQUEST_ABORTED_MESSAGE, UPSTREAM_ERROR } from '@common/error-codes'
 import type { AttemptLogger } from '@server/proxy/observability/logging-types'
 import type { AttemptOutcome } from './attempt-outcome'
 
 /** 客户端自己走了：这次尝试的失败不是上游的问题，也不该触发 failover。 */
 export class ClientRequestCancelledError extends Error {
-  readonly code = 'CLIENT_REQUEST_ABORTED'
+  readonly code = CLIENT_REQUEST_ABORTED
 
   constructor() {
     super('The client cancelled the request')
@@ -49,11 +50,11 @@ export class LocalAttemptError extends Error {
  * 恰恰是原因，因此把本地观察到的原因写进响应侧，并用 `localFailure` 标记它不是上游内容。
  */
 export function serializeLocalFailure(error: Error): string {
-  return JSON.stringify({ localFailure: true, errorCode: 'UPSTREAM_ERROR', errorMessage: error.message })
+  return JSON.stringify({ localFailure: true, errorCode: UPSTREAM_ERROR, errorMessage: error.message })
 }
 
 export function isClientRequestCancelled(error: unknown): boolean {
   return error instanceof ClientRequestCancelledError || (
-    error instanceof Error && error.message === 'CLIENT_REQUEST_ABORTED'
+    error instanceof Error && error.message === CLIENT_REQUEST_ABORTED_MESSAGE
   )
 }

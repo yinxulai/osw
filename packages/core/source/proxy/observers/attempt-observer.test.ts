@@ -130,12 +130,4 @@ describe('attempt observer', () => {
     expect(Buffer.byteLength(raw)).toBe(UNCAPTURED_RAW_BODY_LIMIT_BYTES)
     expect(raw.endsWith('data: tail\n\n')).toBe(true)
   })
-
-  it('keeps the partial upstream body when the attempt dies mid-stream', () => {
-    const { observer, head, send } = setup('http-stream')
-    head(SSE_HEADERS)
-    send('data: {"choices":[{"delta":{"content":"a"}}]}\n\n')
-    // 没有 end 帧：上游断在半路，已经收到的部分照样要能落库。
-    expect(observer.partialUpstreamBody()).toBe(serializeChunkSnapshot(['data: {"choices":[{"delta":{"content":"a"}}]}\n\n']))
-  })
 })

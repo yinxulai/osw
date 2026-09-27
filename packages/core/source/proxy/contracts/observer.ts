@@ -10,8 +10,6 @@ import type { UpstreamTarget } from './transport'
  */
 export interface Observer {
   readonly id: string
-  /** 交换开始，尚未连接上游。 */
-  onExchangeStart?(exchange: ExchangeView): void
   onAttemptStart?(exchange: ExchangeView, attempt: AttemptView, target: UpstreamTarget): void
   /** 上游响应头落地。 */
   onUpstreamHead?(exchange: ExchangeView, attempt: AttemptView, status: number, headers: HeaderMap): void
@@ -19,16 +17,9 @@ export interface Observer {
   /** 客户端侧实际写出的字节（可能是转换产物，也可能原样）。 */
   onDownstreamChunk?(exchange: ExchangeView, attempt: AttemptView, chunk: Buffer): void
   onAttemptEnd?(exchange: ExchangeView, attempt: AttemptView, outcome: AttemptOutcomeView): void
-  onExchangeEnd?(exchange: ExchangeView, outcome: ExchangeOutcomeView): void
 }
 
 export interface AttemptOutcomeView {
   readonly status: number | null
   readonly durationMilliseconds: number
-  readonly errorCode?: string
-}
-
-export interface ExchangeOutcomeView {
-  readonly status: number | null
-  readonly attempts: number
 }

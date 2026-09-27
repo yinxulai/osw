@@ -1,4 +1,5 @@
 import type { DeliveryDecisionRef, Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
+import { bodyDeliveryShape } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
 import type { ProtocolAdapter, ProtocolConversionAdapter, StreamConverter } from '@server/proxy/protocols/shared/types'
 import type { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
@@ -25,7 +26,7 @@ export interface ResponseModifierOptions {
  * 2. 协议转换：只有客户端协议与上游协议不同、且这次响应要交付时才介入；用哪个解析器
  *    由上游响应的分帧格式决定（**事实**）。
  * 3. 响应改写：用户规则在最后改「已经是客户端协议」的报文。它只声明了
- *    `scope.deliveries: ['buffered']`——增量交付下手里的字节是一段段 SSE 文本，
+ *    `scope.shapes: ['whole']`——增量交付下手里的字节是一段段 SSE 文本，
  *    而规则动作是在一整份 JSON 上按路径取值，这是**没有它能做的事**，因此交给内核代筛，
  *    不写在 `match` 里。
  *
@@ -52,10 +53,11 @@ function createDownstreamHeadModifier(options: ResponseModifierOptions): Modifie
       if (frame.kind !== 'head') return frame
       const headers = createDownstreamHeaders(frame.headers)
       // 正文可能被转换或改写，`content-length` 已经不是上游那个长度了。
-      // 读的是客户端跳声明的形态（**预期**），不是「上游实际是不是 SSE」：
-      // 增量交付时正文逐帧原样透传，长度仍然可信；反过来，上游没兼现形态时
-      // 这次尝试根本不会交付（执行器已判 failover），这个头也不会发出去。
-      if (convertible || context.exchange.transport !== 'http-stream') delete headers['content-length']
+      // 读的是**交付形态**，而不是「客户端跳的 transport」：判断的是「这份正文还会不会
+      // 被重写 / 是不是一整块」，而出口选边收边发还是攒完再发用的正是同一根轴
+      // （见 `BodyDeliveryShape`）。增量交付时正文逐帧原样透传，长度仍然可信；
+      // 反过来，上游没兼现形态时这次尝试根本不会交付（执行器已判 failover），这个头也不会发出去。
+      if (convertible || bodyDeliveryShape(context.exchange.transport) === 'whole') delete headers['content-length']
       return { kind: 'head', status: frame.status, headers }
     },
   }
@@ -143,8 +145,11 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
      * 一整份 JSON 上按路径取值（见 `request-rewrite-engine.ts` 的 `applyBody`）。
      * 这是「这种形态下它没有职责」的静态陈述，在头帧之前就能算出来，因此写在 `scope` 上
      * 交给内核代筛，而不是让它在 `match` 里自己读一根轴。
+     *
+     * 它限制的是**交付形态**而不是「客户端跳的 transport」：同一个事实，取后者只是
+     * 在当前取值域下恰好同义（见 `BodyDeliveryShape`）。
      */
-    scope: { transports: ['http'] },
+    scope: { shapes: ['whole'] },
     match: (context: ModifierContext) => {
       // 还没拿到响应头就还没有「响应」可言；它也是 `applyFrame` 攒正文的起点。
       return options.delivery.decision.kind === 'deliver' && options.delivery.decision.successful && context.upstreamHead !== null
@@ -165,8 +170,8 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
         clientProtocol: context.clientProtocol,
         upstreamProtocol: context.upstreamProtocol,
         // `scope` 已经保证这里是整包交付；这里再把形态传一遍不是冗余，而是规则引擎
-        // 自主回答「这份正文能不能逐块改」时的唯一依据（见 `RequestRewriteContext.transport`）。
-        transport: context.exchange.transport,
+        // 自主回答「这份正文能不能逐块改」时的唯一依据（见 `RequestRewriteContext.shape`）。
+        shape: bodyDeliveryShape(context.exchange.transport),
       })
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,

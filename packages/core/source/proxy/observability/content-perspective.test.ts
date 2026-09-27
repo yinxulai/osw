@@ -92,7 +92,7 @@ describe('内容记录的视角隔离', () => {
   it('关掉请求日志开关时整条链路都不写库', async () => {
     const logger = await initializeRequestLogger({ ...requestLoggingInput(), captureRequestLogs: false })
     await logger.finalizeRequestLog('success', Date.now())
-    await logger.finalizeLocalErrorContent(500, {}, '{"error":"local"}')
+    await logger.finalizeLocalErrorContent({ statusCode: 500, headers: {}, body: '{"error":"local"}', complete: true })
 
     expect(logger.requestContentId).toBeNull()
     expect(mocks.createRequestLog).not.toHaveBeenCalled()
@@ -217,7 +217,7 @@ describe('内容记录的视角隔离', () => {
     const logger = await initializeRequestLogger(requestLoggingInput())
     vi.clearAllMocks()
 
-    await logger.finalizeLocalErrorContent(502, { 'content-type': 'application/json' }, '{"success":false}')
+    await logger.finalizeLocalErrorContent({ statusCode: 502, headers: { 'content-type': 'application/json' }, body: '{"success":false}', complete: true })
 
     expect(mocks.updateRequestContent).toHaveBeenCalledTimes(1)
     const [contentId, input] = mocks.updateRequestContent.mock.calls[0]! as unknown as [string, Record<string, unknown>]

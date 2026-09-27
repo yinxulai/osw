@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema, TransportKindSchema } from '@common/schemas'
 import { createRequestRewriteRule, deleteRequestRewriteRule, getRequestRewriteRule, listProviderModelRequestRewriteRules, listRequestRewriteRules, replaceProviderModelRequestRewriteRuleBindings, updateRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
 import { applyRequestRewriteRules } from '@server/proxy/request-rewrite/request-rewrite-engine'
+import { bodyDeliveryShape } from '@server/proxy/contracts'
 import { HttpRouter } from '@server/http-router'
 import { reportTelemetryEvent } from '@server/telemetry'
 import type { ManagementHandler } from '../../core/response'
@@ -24,8 +25,10 @@ export const requestRewriteRuleRoutes = new HttpRouter<ManagementHandler>()
     const input = TestSchema.parse(body)
     const parsedBody = JSON.parse(input.testCase.body) as object
     const parsedHeaders = JSON.parse(input.testCase.headers) as Record<string, string | string[] | undefined>
-    // 试跑入参是传输形态本身（与落库的用例字段同名），引擎只认 `transport`，直接透传。
-    const result = applyRequestRewriteRules(Buffer.from(JSON.stringify(parsedBody)), parsedHeaders, [input.rule], { stage: input.testCase.stage, clientProtocol: input.testCase.clientProtocol as Parameters<typeof applyRequestRewriteRules>[3]['clientProtocol'], upstreamProtocol: input.testCase.upstreamProtocol as Parameters<typeof applyRequestRewriteRules>[3]['upstreamProtocol'], transport: input.testCase.transport })
+    // 试跑入参是传输形态本身（与落库的用例字段同名），引擎认的是**交付形态**，
+    // 因此在这里换算一次：用例里存的是「客户端跳的 transport」，而规则能不能动手
+    // 取决于「手里有没有一整份正文」（见 `BodyDeliveryShape`）。
+    const result = applyRequestRewriteRules(Buffer.from(JSON.stringify(parsedBody)), parsedHeaders, [input.rule], { stage: input.testCase.stage, clientProtocol: input.testCase.clientProtocol as Parameters<typeof applyRequestRewriteRules>[3]['clientProtocol'], upstreamProtocol: input.testCase.upstreamProtocol as Parameters<typeof applyRequestRewriteRules>[3]['upstreamProtocol'], shape: bodyDeliveryShape(input.testCase.transport) })
     sendSuccess(res, { ...result, body: result.body.toString('utf8') })
   })
   .post('/api/request-rewrite-rule/bindings', async (_req, res, body) => sendSuccess(res, await listProviderModelRequestRewriteRules(ModelSchema.parse(body).providerModelId)))

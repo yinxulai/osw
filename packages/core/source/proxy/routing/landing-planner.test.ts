@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@server/proxy/planners/target-planner', () => ({
+  // 落点规划器与目标规划器共用同一句兜底说明（`landing-planner.ts` 的 `NO_PROVIDER_DETAIL`），
+  // 这里必须一并交出来，否则被 mock 的模块给不出这个导出。
+  NO_MODEL_DETAIL: 'This logical model has no enabled and healthy provider model',
   proxyTargetPlanner: {
     id: 'test-planner',
     plan: async (input: PlannerInput) => {

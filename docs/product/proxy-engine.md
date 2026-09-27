@@ -66,7 +66,7 @@
 - `request_logs.transport`：客户端跳的形态，即**预期**，原值落库（不是布尔）；
 - `request_attempts.upstreamTransport`：上游这一跳实际是什么形态，即**事实**，没拿到响应时为 `null`——因此「上游没回」与「上游回了非流式」在库里是两件事。
 
-改写规则试跑接口的 `testCase.transport` 同样是轴上的取值：库里存的就是原生取值，读取端也不做投影或兼容别名，所以不存在「旧值」需要映射。
+改写规则试跑接口的 `testCase.transport` 同样是轴上的取值：库里存的就是原生取值，读取端也不做投影或兼容别名，所以不存在「旧值」需要映射。它进引擎前会换算成交付形态（见 §1.3）——换算发生在接口边界，库与线格式都保持原生取值。
 
 ### 1.2 响应头不能决定「做什么」
 
@@ -93,16 +93,46 @@
 
 | 调用点 | 需要的是哪半边 | 取值 |
 | --- | --- | --- |
-| `http-response-sink.ts` 出口是否边收边发 | 预期（客户端跳 `transport`） | 构造时传入的 `transport` ✅ |
+| `http-response-sink.ts` 出口是否边收边发 | 预期（客户端跳 `transport`） | 交付形态 `BodyDeliveryShape`（§1.3） ✅ |
 | `attempt-observer.ts` 正文快照存什么形状 | 预期（客户端跳 `transport`） | `exchange.transport` ✅ |
-| `downstream-head` 要不要删 `content-length` | 预期（客户端跳 `transport`） | `context.exchange.transport` ✅ |
-| `response-rewrite` 规则要不要跳过 | 预期（客户端跳 `transport`） | 声明 `scope.transports: ['http']`，内核直接排除 ✅ |
+| `downstream-head` 要不要删 `content-length` | 预期（客户端跳 `transport`） | 交付形态 `BodyDeliveryShape` ✅ |
+| `response-rewrite` 规则要不要跳过 | 预期（客户端跳 `transport`） | 声明 `scope.shapes: ['whole']`，内核直接排除 ✅ |
 | `protocol-conversion` 用哪个解析器 | 事实（`isEventStreamResponse`） | `isEventStreamResponse(head.headers)` ✅ |
 | `request_attempts.upstreamTransport` 落库 | 事实（`isEventStreamResponse`） | `isEventStreamResponse(head.headers)` ✅ |
+需要「预期」的调用点，输入都是**同一个函数**（客户端跳 `transport` → 交付形态），而不是各自重新解释一次 `transport` 字符串。
 
 「预期落空」本身成了一个显式的失败状态：响应是 2xx、但响应头里的流式形态与客户端声明的 `transport` 不符（客户端要流式却拿到整包，或客户端要非流式却拿到 SSE）时，执行器记 `transportMismatch`，按 failover 换下一个候选，并按 `provider-model` 记一次健康失败（上游违约是上游的事，不该算成客户端的错，也不该算成这个模型「健康但没用」）。
 
 「两者是否一致」是**一次比较**，用完即弃：不需要任何常驻的合成量。
+### 1.3 交付形态是一根派生的轴，不是一个散落的判断
+`TransportKind` 说的是**线上那一跳的字节长什么样**（§1.1，`websocket` 也在词表里）；出口、`downstream-head`、改写引擎真正关心的却是另一件事：**手里有没有一整份正文**。`websocket` 与 `http-stream` 在这件事上是同一档，`http` 是另一档。
+把这件事写成 `transport === 'http-stream'` 之类的判断，会让同一件事实在多个调用点各写一遍、写法巧合地等价；正确做法是**给它一个名字**：
+```ts
+/** 这次交付的正文是一整块发出去，还是逐块发出去。 */
+export type BodyDeliveryShape = 'whole' | 'incremental'
+export function bodyDeliveryShape(transport: TransportKind): BodyDeliveryShape {
+  return transport === 'http-stream' ? 'incremental' : 'whole'
+}
+```
+它是**派生量**，不是新的独立事实：源头仍然只有客户端跳的 `transport`（§1.1），因此不引入第二根会漂移的轴。它出现在三个地方，各管一件具体的事：
+| 位置 | 表达式 | 说明 |
+| --- | --- | --- |
+| 出口构造 | `createHttpResponseSink({ mode: BodyDeliveryShape })` | 边收边发还是攒齐再发；出口不再自己解释 `transport` |
+| 修改器静态能力 | `ModifierScope.shapes?: readonly BodyDeliveryShape[]` | `response-rewrite` 声明 `scope: { shapes: ['whole'] }`，内核在选候选时直接排除 |
+| 改写引擎 | `RequestRewriteContext.shape?: BodyDeliveryShape` | 响应阶段的字段改写只在 `whole` 下成立 |
+它与 `scope.transports` 的分工是**语义层级**：`transports` 说「这种传输形态」，`shapes` 说「这种交付形态」。需要按交付形态分流时用后者——写成前者要求每个读的人自己知道 `['http']` 就是「非流式」，而且新增一档传输（比如未来的 WS 同步回包）时要逐个回来改。
+#### 交付快照：`ClientDelivery`
+「客户端到底收到了什么」必须是**一份**自动成立的事实。此前它被拆成两个各自可取的东西——状态码与响应头分别读、正文另外算、完整与否由调用方自己传——三者之间没有任何机制保证一致，而响应头那一半是从宿主（`ServerResponse`）回读的：`writeHead(status, headers)` 把头交出去之后 `getHeaders()` 只剩空对象，头确实发出去了却读不回来，于是日志里「返回客户端的响应」只剩正文（这正是本节的起因）。现在：
+```ts
+export interface ClientResponseHead { readonly statusCode: number; readonly headers: OutgoingHttpHeaders }
+export interface ClientDelivery extends ClientResponseHead {
+  readonly body: string | null
+  readonly complete: boolean
+}
+```
+- **出口自己记账**：`ProxyResponse.sentHead()` 返回自己 `start()` 时交出去的那一份（原子快照，两者同时成立或同时为空），**不回读宿主**。回读依赖一个宿主没有承诺过的契约，这类依赖整体不存在了。
+- **完整与否由出口报告**：`HttpResponseSink.delivery()` 把「发出去的头」与「已经写出去的正文」拼成一个快照，并在收尾时把 `complete` 置真。中断、放弃（`discard`）时它照实回报 `false` / `null`，调用方不必自己维护一个可能传错的布尔值。
+- **只有一个入参**：`finalizeLocalErrorContent(delivered: ClientDelivery)`、`response.fail(...)` 都交回同一份快照，因此「响应头、正文、状态码写在不同地方」「代理自己生成的失败响应缺响应头」这类不一致在类型上就无法表达。
 
 ## 二、目标架构
 
@@ -122,7 +152,7 @@ flowchart TD
     K[Exchange<br/>FramePipe<br/>Stage 调度]
   end
   subgraph L2[契约层 contracts]
-    C[Transport · ProtocolDescriptor<br/>Observer · Modifier<br/>AttemptPlanner · LocalHandler]
+    C[Transport · ProtocolDescriptor<br/>Observer · Modifier<br/>AttemptPlanner · LocalEndpoint]
   end
   subgraph L1[适配层 adapters]
     A1[HttpTransport]
@@ -149,7 +179,7 @@ flowchart TD
 | `Observer` | 只读观察接口（上游头、上游块、已交付块、尝试结果） | `observability/hooks.ts` 已删除；当前由 `contracts/observer.ts` 单一契约承载 |
 | `Modifier` | 读写修改接口（请求方向 / 响应方向，可选逐帧） | 取代重写规则、协议转换、认证注入、默认值注入 |
 | `AttemptPlanner` | 产出候选序列（按上游端点的协议与地址筛选） | 取代 `routing/router.ts` + `routing/routing.ts` |
-| `LocalHandler` | 本地端点，不透传上游 | 取代 `proxy-runtime.ts` 里硬编码的 `/v1/models` |
+| `LocalEndpoint` | 本地端点，不透传上游 | 取代 `proxy-runtime.ts` 里硬编码的 `/v1/models` |
 
 ### 2.3 两根正交轴：Protocol × 传输形态
 
@@ -188,8 +218,9 @@ ingress(protocol, 客户端跳形态) ──protocol→protocol 转换──► 
 
 以下为 `packages/core/source/proxy/contracts/` 应包含的全部类型。类型定义即为接口文档，实现不得扩张契约。
 
-> 契约文件：`contracts/frame.ts`、`exchange.ts`、`transport.ts`、`modifier.ts`、`observer.ts`、`protocol.ts`、`planner.ts`、`local-handler.ts`、`route-matcher.ts`、`headers.ts`（+ `index.ts` barrel）。
+> 契约文件：`contracts/frame.ts`、`exchange.ts`、`transport.ts`、`modifier.ts`、`observer.ts`、`protocol.ts`、`planner.ts`、`route-matcher.ts`、`headers.ts`（+ `index.ts` barrel）。
 > `ExchangeView.transport` 是客户端跳的传输形态，也是全仓唯一的传输字段名（§1.1）。
+> 本地端点不进契约层：它是 `local/local-endpoint.ts` 对 `IncomingMessage` / `ServerResponse` 的薄包装（§3.6）。
 > 依赖方向是硬的：实现只 import `@server/proxy/contracts`，契约层不 import 任何实现。下方代码块是设计说明，字段以代码为准。
 
 ### 3.1 Frame：唯一的搬运单位
@@ -326,16 +357,18 @@ export interface ProtocolEnvelope {
 ```ts
 export interface Observer {
   readonly id: string
-  onExchangeStart?(exchange: ExchangeView): void
   onAttemptStart?(exchange: ExchangeView, attempt: AttemptView, target: UpstreamTarget): void
   onUpstreamHead?(exchange: ExchangeView, attempt: AttemptView, status: number, headers: HeaderMap): void
   onUpstreamChunk?(exchange: ExchangeView, attempt: AttemptView, chunk: Buffer): void
   /** 客户端侧**已经写出**的字节；转换器的产出尚未被出口接受时不算。 */
   onDownstreamChunk?(exchange: ExchangeView, attempt: AttemptView, chunk: Buffer): void
   onAttemptEnd?(exchange: ExchangeView, attempt: AttemptView, outcome: AttemptOutcomeView): void
-  onExchangeEnd?(exchange: ExchangeView, outcome: ExchangeOutcomeView): void
 }
 ```
+
+观察粒度是**尝试**，不是交换：请求级的行由入口写、尝试级的行由 `onAttemptEnd` 收，
+两者之间不需要第三个「交换开始 / 交换结束」钩子——多一个没人订阅的钩子，只会在
+每次新增观察者时多一个必须回答「要不要实现它」的空位。
 
 契约（必须由内核强制，不能靠约定）：
 
@@ -395,6 +428,8 @@ export interface ModifierContext {
 export interface ModifierScope {
   /** **客户端跳**的传输形态。省略表示不限。 */
   readonly transports?: readonly TransportKind[]
+  /** 正文的交付形态（§1.3）。需要「手里有一整份正文」才能干的活写在这里，省略表示不限。 */
+  readonly shapes?: readonly BodyDeliveryShape[]
 }
 ```
 
@@ -404,11 +439,11 @@ export interface ModifierScope {
 2. **`frame` 是流式改写与流式转换的统一形式**。当前 `StreamConverter { push, flush, finish }` 增量解析 SSE 的做法，落位为一个 `frameMode: 'frame'` 的转换修改器，内部状态由它自己持有。
 3. **失败语义显式**。修改器抛错 → 内核产出带 `modifierId` 的 `ModifierError`；由 `AttemptPlanner` / 切换策略决定「本次尝试失败并切换」还是「直接回客户端 4xx」。当前 `RequestRewriteError` 被硬编码成 422 的分支（`attempt-executor.ts` 的 `onError`），就是这个语义被写死在内核里的后果。
 4. **`skip` 必须显式声明而不是静默跳过**。观察者需要知道「本规则在本形态下未生效」，才能如实写日志。
-5. **修改器不得用上游响应头决定「做什么」**。响应头只能用来选**解析器**（手里这堆字节是 SSE 还是整包 JSON），不能用来决定形态、能不能改写、要不要跳过。一旦允许，改写规则是否生效就变成了上游实现细节的函数——同一条规则、同一个请求，换台机器结果不同（见 §1.2）。需要按形态分流时读 `context.exchange.transport`（**预期**），需要确认上游是否兑现时读 `context.upstreamHead`（**事实**），两者不一致是失败，不是分支。
-6. **能排除的形态是声明出来的**。`ModifierScope.transports` 是静态能力声明：内核在选候选时就按它排除，修改器自己不必再判断这根轴——这正是「hooks 基于 protocol 与 transport 处理数据，且不需要自己去判断」的落地方式。它与 `match` 的分工是语义而不是效果：前者说「这种形态下根本没有它能做的事」（结论要进日志），后者说「这一条请求不满足它的条件」。今天只有 `response-rewrite` 声明了 `scope: { transports: ['http'] }`——说的就是「只有非流式那一档才有它能做的事」；请求侧的三个修改器都不声明，因为形态说的是响应怎么回来，而请求总是整份读完再发，没有哪个形态能让他们无事可做。
+5. **修改器不得用上游响应头决定「做什么」**。响应头只能用来选**解析器**（手里这堆字节是 SSE 还是整包 JSON），不能用来决定形态、能不能改写、要不要跳过。一旦允许，改写规则是否生效就变成了上游实现细节的函数——同一条规则、同一个请求，换台机器结果不同（见 §1.2）。需要按交付形态分流时读交付形态 `BodyDeliveryShape`（**预期**，§1.3），需要确认上游是否兑现时读 `context.upstreamHead`（**事实**），两者不一致是失败，不是分支。
+6. **能排除的形态是声明出来的**。`ModifierScope.transports` 与 `ModifierScope.shapes` 都是静态能力声明：内核在选候选时就按它们排除，修改器自己不必再判断这两根轴——这正是「hooks 基于 protocol 与 transport 处理数据，且不需要自己去判断」的落地方式。它与 `match` 的分工是语义而不是效果：前者说「这种形态下根本没有它能做的事」（结论要进日志），后者说「这一条请求不满足它的条件」。今天只有 `response-rewrite` 声明了 `scope: { shapes: ['whole'] }`——说的就是「只有拿得到一整份正文时才有它能做的事」；请求侧的三个修改器都不声明，因为形态说的是响应怎么回来，而请求总是整份读完再发，没有哪个形态能让他们无事可做。
 现有修改能力的落位：`modifiers/auth.ts`（认证头注入）、`modifiers/endpoint-defaults.ts`（`include_usage` 等接口默认值）、`modifiers/protocol-conversion.ts`（协议转换，一对 ingress/egress）、`modifiers/rewrite-rules.ts`（请求重写规则，`buffered` 或 `frame`）。
 
-### 3.6 AttemptPlanner 与 LocalHandler：两个装配点
+### 3.6 AttemptPlanner 与 LocalEndpoint：两个装配点
 
 ```ts
 export interface AttemptPlanner {
@@ -460,17 +495,22 @@ export interface PlanResult {
 - **`ExchangeView.transport` 是客户端跳的显式事实（§1.1）**。规划器看不见也不需要看见 `stream: true`，因此「客户端偏好」的取值绝不能变成路由输入；把它做成一根显式命名的轴（而非布尔），是让这件事从字面上就能看出来。它**只在客户端跳**：上游跳的形态由 `resolveUpstreamTransport` 从地址现算，不进 `PlannerInput`（§2.3.1）。
 
 ```ts
-export interface LocalHandler {
-  readonly id: string
-  readonly match: readonly RouteMatcher[]
-  handle(exchange: ExchangeView, egress: EgressWriter): Promise<void>
+export interface LocalEndpoint {
+  readonly method: HttpMethod
+  /** 入口路径。入口匹配器会归一化查询串与首尾多余斜杠。 */
+  readonly path: string
+  handle(input: LocalEndpointInput): void | Promise<void>
 }
 ```
 
-- `/v1/models` 成为 `local-handlers/models.ts`；未来的 `/healthz`、`/metrics`、`/v1/live` 同样注册即可。
-- 内核的入口匹配一次做完：先匹配 `LocalHandler`，再匹配 `EndpointSpec`，都不中才回 404（且走统一的拒绝收尾）。
+- `/v1/models` 是第一个 `LocalEndpoint`（`local/models-endpoint.ts`）；未来的 `/healthz`、`/metrics`、`/v1/live` 同样往 `local/registry.ts` 的数组里加一条即可。
+- 内核的入口匹配一次做完：先匹配 `LocalEndpoint`，再匹配 `EndpointSpec`，都不中才回 404（且走统一的拒绝收尾）。
 
-本地端点是声明式注册：`proxy/local/` 的 `LocalEndpoint { method, path, handle(input) }`，`/v1/models` 是它的第一个用户，`runtime/proxy-runtime.ts` 里没有任何路径字面量。上面那版 `LocalHandler`（`match: RouteMatcher[]` + `ExchangeView/EgressWriter`）是更宽的目标形态：等 `Exchange` 与 `EgressWriter` 存在，`LocalEndpoint.handle` 的入参从 `{ request, response }` 换成它们即可，声明与匹配部分不需要再动。
+本地端点是声明式注册：`proxy/local/` 的 `LocalEndpoint { method, path, handle(input) }`，
+`/v1/models` 是它的第一个用户，`runtime/proxy-runtime.ts` 里没有任何路径字面量。
+入参是 `IncomingMessage` / `ServerResponse` 而不是 `ExchangeView`：本地端点由代理自己应答、
+不经过候选与尝试，因此没有可尝试的上游，也就没有交换可给。将来若真的需要共享
+「客户端跳的形态」这类事实，再给它一个只读视图；在此之前少一层间接比多一层抽象更值钱。
 
 ## 四、一次请求的执行流
 
@@ -478,8 +518,8 @@ export interface LocalHandler {
 flowchart TD
   A[Transport 入口<br/>HTTP request] --> B[构建 Exchange<br/>读 body / 归一 egress]
   B --> C{入口匹配}
-  C -->|LocalHandler| D[本地端点处理]
-  C -->|EndpointSpec| E[Observer.onExchangeStart<br/>落库观察者写请求行]
+  C -->|LocalEndpoint| D[本地端点处理]
+  C -->|EndpointSpec| E[入口落库<br/>写请求行]
   C -->|无匹配| R[统一拒绝收尾]
   E --> F[AttemptPlanner.plan<br/>候选 + 手动起点 + 健康过滤]
   F --> G{尝试循环}
@@ -490,7 +530,7 @@ flowchart TD
   J --> K[FramePipe<br/>上游帧 → Egress Modifier 链 → 客户端]
   K --> L[Observer 逐帧<br/>上游帧 / 下游帧]
   K --> M[尝试收尾<br/>Observer.onAttemptEnd]
-  M -->|成功| P[Observer.onExchangeEnd]
+  M -->|成功| P[请求收尾<br/>落库请求行]
   M -->|可切换| N[下一候选]
   N --> G
 ```
@@ -560,7 +600,7 @@ flowchart TD
 - [x] 形态不是匹配条件：`RouteMatcher` 只有 `(method, path)`，封装描述里没有形态字段；同一个 `(method, path)` 会同时接受 `http` 与 `http-stream`（形态由 `Envelope.resolveTransport` 从请求体读出，`json-envelope.test.ts` 断言 `stream: true` → `http-stream`）
 - [x] 客户端跳的形态是显式事实：`ExchangeView.transport` / `RequestContext.transport` 由入口从封装描述写入，`request-entry` 有断言
 - [x] 双向交换与单工尝试共用同一份搬运与收尾：`relayAttempt` 与 `relayConnected` 共用 `runRelay`，上游只断一次是内核不变式（`kernel/relay.test.ts` 断言 abort 次数为 1）
-- [x] `/v1/models` 由 `LocalHandler` 提供，`proxy-runtime.ts` 不再包含任何业务分支
+- [x] `/v1/models` 由 `LocalEndpoint` 提供（`local/registry.ts` 是唯一声明处），`proxy-runtime.ts` 不再包含任何业务分支
 - [x] 路由决策只有一处：`planners/target-planner.ts` 是 `AttemptPlanner` 的唯一实现，入口只把规划结果翻成拒绝码；执行器与传输层只见 `UpstreamTarget`（`target-planner.test.ts` 覆盖原生优先、HTTP 转换候选、WS 仅原生、三种空候选原因、字段映射与坏 URL 不下传抛错）
 - [x] 多个落点优先批量规划：`planLandingTargets` 优先调用 `planMany`，`getAvailableModelsBatch` 与单点版本在过滤、健康排序和手动锁定上保持一致（`router.test.ts`、`landing-planner.test.ts`、`target-planner.test.ts`）
 - [x] 请求级的设置、开始时间与日志器只有一个来源：`ProxyRequestSession` 从入口贯穿执行与收尾（`request-entry.test.ts`）

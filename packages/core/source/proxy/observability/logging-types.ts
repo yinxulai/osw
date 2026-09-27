@@ -1,7 +1,7 @@
 import type http from 'node:http'
-import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
+import type { IncomingHttpHeaders } from 'node:http'
 import type { AttemptStatus, Protocol, RawUsage, RequestAttribute, RequestStatus } from '@common/schemas'
-import type { TransportKind, UpstreamTarget } from '@server/proxy/contracts'
+import type { ClientDelivery, TransportKind, UpstreamTarget } from '@server/proxy/contracts'
 
 export interface RequestLogContext {
   /** 解析出的逻辑模型；`null` 表示尚未（或未能）解析出逻辑模型。 */
@@ -167,7 +167,14 @@ export interface RequestLogger {
    */
   finalizeRequestLog(status: RequestStatus, startedAt: number): Promise<void>
   finalizeRequestContent(outcome: RequestContentOutcome): Promise<void>
-  finalizeLocalErrorContent(statusCode: number, responseHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, responseBody: string): Promise<void>
+  /**
+   * 记录一条由代理自己生成的错误响应。
+   *
+   * 入参就是 {@link ClientDelivery}：这条响应同样是「客户端收到的东西」，它的状态码、
+   * 响应头与正文必须来自出口的同一份快照。代理生成与转发自上游的响应在这里没有区别，
+   * 因此不该有一条只给前者用的旁路。
+   */
+  finalizeLocalErrorContent(delivered: ClientDelivery): Promise<void>
 }
 
 /** attempt 级日志器：一次性写入这次尝试的全部事实与上游视角正文。 */

@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Protocol, RequestAttribute, TransportKind } from '@common/schemas'
+import type { ClientDelivery } from '@server/proxy/contracts'
 import { generateId } from '@common/utils'
 import { executeProxyRequest } from '../execution/attempt-executor'
-import { NodeProxyResponse } from '../response/proxy-response'
+import { NodeProxyResponse, PROXY_ERROR_HEADERS, proxyErrorBody } from '../response/proxy-response'
 import { createRequestContext } from './request-context'
 import { proxyTargetPlanner } from '../planners/target-planner'
 import { matchProtocolEndpoint } from '../protocols/registry'
@@ -230,9 +231,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
 
 /** 拒绝收尾：回一条错误响应，再记一条失败日志。入口处所有拒绝分支共用。 */
 async function rejectExchange(res: ServerResponse, input: RejectedExchange, session: ProxyRequestSession): Promise<void> {
-  const responseBody = writeJsonError(res, input.refusal.statusCode, input.refusal.errorCode, input.refusal.errorMessage)
   await session.logger.updateRequest(input)
-  await session.logger.finalizeLocalErrorContent(input.refusal.statusCode, res.getHeaders(), responseBody)
+  await session.logger.finalizeLocalErrorContent(writeJsonError(res, input.refusal))
   await session.logger.finalizeRequestLog('failed', session.startedAt)
 }
 
@@ -270,10 +270,19 @@ function readRequestBody(req: IncomingMessage): Promise<RequestBodyReadResult> {
   })
 }
 
-function writeJsonError(res: ServerResponse, statusCode: number, errorCode: string, errorMessage: string): string {
-  const responseBody = JSON.stringify({ success: false, errorCode, errorMessage })
-  res.statusCode = statusCode
-  res.setHeader('Content-Type', 'application/json')
-  res.end(responseBody)
-  return responseBody
+/**
+ * 写出一条拒绝响应，并交回它的交付事实。
+ *
+ * 这入口里唯一的响应写出点，因此也是唯一需要记账的地方：交回的快照就是客户端收到的
+ * 状态码、响应头与正文。**不能**用 `res.getHeaders()` 事后回读——它是宿主内部状态，
+ * 而客户端视角的记录要的是我们交出去的那一份。
+ */
+function writeJsonError(res: ServerResponse, refusal: ExchangeRefusal): ClientDelivery {
+  const body = proxyErrorBody(refusal.errorCode, refusal.errorMessage)
+  const headers = PROXY_ERROR_HEADERS
+  res.statusCode = refusal.statusCode
+  for (const [name, value] of Object.entries(headers)) res.setHeader(name, value)
+  res.end(body)
+  // 代理自己生成的拒绝响应必定是完整的一份：它在本进程里一次成形。
+  return { statusCode: refusal.statusCode, headers, body, complete: true }
 }

@@ -525,7 +525,7 @@ core 是纯 Node 进程，拿不到渲染层的 `__APP_VERSION__`，也没有 `e
 | `packages/core/source/telemetry/queue.ts` | 内存队列：容量上限、批量阈值、定时冲刷、`unref()` 定时器 |
 | `packages/core/source/telemetry/sender.ts` | 直连发送：`createOutboundConnector(直连配置)` + `createCoreNetworkClient()`，非 2xx 视为失败 |
 | `packages/core/source/telemetry/index.ts` | 生命周期：开发档短路、开关订阅（开时补建队列、关时冲刷尾部）、补信封字段、`app_started`、启动失败直发、预览 |
-| `packages/core/source/proxy/execution/request-finalizer.ts` | 请求级统计埋点：处理成功时发一条 `request_completed`（事件次数即处理过的任务数） |
+| `packages/core/source/proxy/execution/request-finalizer-handlers.ts` | 请求级统计埋点：处理成功时发一条 `request_completed`（事件次数即处理过的任务数） |
 | `packages/core/source/database/analytics-store.ts` | 控制台图表的取数：延迟分布、模型统计等；**不参与上报**（§3 不再有任何自由文本字段，上报侧也不需要读本地库） |
 | `packages/core/source/runtime/server-runtime.ts` | 启动上报循环、停机清理、启动失败原因分类 |
 | `packages/core/source/management/routes/operations/telemetry.ts` | 预览接口 `/api/telemetry/preview` 与静默接受接口 `/api/telemetry/report` |

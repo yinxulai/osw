@@ -1,6 +1,6 @@
 import type { Protocol } from '@common/schemas'
 import type { PlanExhaustedReason, PlannerInput, PlanResult, UpstreamTarget } from '../contracts'
-import { proxyTargetPlanner } from '../planners/target-planner'
+import { proxyTargetPlanner, NO_MODEL_DETAIL } from '../planners/target-planner'
 import { getManualModel } from './manual-routing'
 
 /**
@@ -15,7 +15,7 @@ import { getManualModel } from './manual-routing'
  */
 
 /** 落点都不可用时的兜底说明：规划器没给 detail 时用它，避免错误信息出现空白。 */
-const NO_PROVIDER_DETAIL = 'This logical model has no enabled and healthy provider model'
+const NO_PROVIDER_DETAIL = NO_MODEL_DETAIL
 
 /** 图没有产出任何落点。 */
 export const NO_LANDING_DETAIL = 'The routing graph selected no landing logical model'

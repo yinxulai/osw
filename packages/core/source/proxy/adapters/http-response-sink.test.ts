@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Frame, TransportKind } from '@server/proxy/contracts'
+import type { BodyDeliveryShape, Frame } from '@server/proxy/contracts'
 import { BufferedProxyResponse } from '@server/proxy/response/proxy-response'
 import { createHttpResponseSink, isEventStreamResponse, serializeChunkSnapshot } from './http-response-sink'
 
 const JSON_HEAD: Frame = { kind: 'head', status: 200, headers: { 'content-type': 'application/json' } }
-const SSE_HEAD: Frame = { kind: 'head', status: 200, headers: { 'content-type': 'text/event-stream' } }
+const SSE_HEAD: Frame = { kind: 'head', status: 200, headers: { 'content-type': 'text/event-stream', 'x-upstream': 'provider-1' } }
 
 function data(text: string): Frame {
   return { kind: 'data', body: Buffer.from(text) }
@@ -12,15 +12,15 @@ function data(text: string): Frame {
 
 const END: Frame = { kind: 'end' }
 
-function setup(transport: TransportKind, captureEnabled = true) {
+function setup(mode: BodyDeliveryShape, captureEnabled = true) {
   const response = new BufferedProxyResponse()
-  const sink = createHttpResponseSink({ response, transport, captureEnabled })
+  const sink = createHttpResponseSink({ response, mode, captureEnabled })
   return { response, sink }
 }
 
 describe('upstream SSE detection', () => {
-  // 这是**事实**检测（上游怎么回的），只用来选解析器。传输行为不看它：那个由
-  // 客户端声明的 transport 决定，上游没兜住就是执行器那一步的 failover（§1.2）。
+  // 这是**事实**检测（上游怎么回的），只用来选解析器。交付行为不看它：那个由
+  // `BodyDeliveryShape` 决定，上游没兜住就是执行器那一步的 failover（§1.2）。
   it('detects SSE from the content type regardless of parameter case', () => {
     expect(isEventStreamResponse({ 'content-type': 'text/event-stream; charset=utf-8' })).toBe(true)
     expect(isEventStreamResponse({ 'content-type': 'application/json' })).toBe(false)
@@ -30,42 +30,53 @@ describe('upstream SSE detection', () => {
 
 describe('http response sink', () => {
   it('buffers the whole body and writes it once the stream ends', () => {
-    const { response, sink } = setup('http')
+    const { response, sink } = setup('whole')
     sink.write(JSON_HEAD)
     sink.write(data('{"ok":'))
-    // 整包传输下正文在头帧之后就到齐了，但一个字节都不能提前写出，否则头就落后于正文了。
+    // 整包交付下正文在头帧之后就到齐了，但一个字节都不能提前写出，否则头就落后于正文了。
     expect(response.headersSent).toBe(false)
     sink.write(data('true}'))
     sink.write(END)
     expect(response.statusCode).toBe(200)
     expect(response.body).toBe('{"ok":true}')
     expect(response.writableEnded).toBe(true)
-    expect(sink.downstreamBody()).toBe('{"ok":true}')
     expect(sink.closed).toBe(true)
+    // 快照必须与客户端看到的一模一样：状态码、响应头、正文、完整与否都从同一个时刻取。
+    expect(sink.delivery()).toEqual({
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: '{"ok":true}',
+      complete: true,
+    })
   })
 
   it('starts the response on the head frame and forwards every chunk when streaming', () => {
-    const { response, sink } = setup('http-stream')
+    const { response, sink } = setup('incremental')
     sink.write(SSE_HEAD)
     expect(response.headersSent).toBe(true)
     sink.write(data('data: one\n\n'))
-    // 增量传输必须边收边发，首字节不能等整段结束。
+    // 增量交付必须边收边发，首字节不能等整段结束。
     expect(response.body).toBe('data: one\n\n')
     sink.write(data('data: two\n\n'))
     sink.write(END)
     expect(response.writableEnded).toBe(true)
-    expect(sink.downstreamBody()).toBe(serializeChunkSnapshot(['data: one\n\n', 'data: two\n\n']))
+    expect(sink.delivery()).toEqual({
+      statusCode: 200,
+      headers: { 'content-type': 'text/event-stream', 'x-upstream': 'provider-1' },
+      body: serializeChunkSnapshot(['data: one\n\n', 'data: two\n\n']),
+      complete: true,
+    })
   })
 
   it('does not write to the response after it has already ended', () => {
-    const { response, sink } = setup('http-stream')
+    const { response, sink } = setup('incremental')
     sink.write(SSE_HEAD)
     sink.write(data('first'))
     response.end()
     sink.write(data('second'))
     sink.write(END)
     expect(response.body).toBe('first')
-    expect(sink.downstreamBody()).toBe(serializeChunkSnapshot(['first']))
+    expect(sink.delivery()?.body).toBe(serializeChunkSnapshot(['first']))
   })
 
   it('downstreams nothing at all once the attempt is discarded', () => {
@@ -73,7 +84,7 @@ describe('http response sink', () => {
     const response = new BufferedProxyResponse()
     const sink = createHttpResponseSink({
       response,
-      transport: 'http',
+      mode: 'whole',
       captureEnabled: true,
       onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
     })
@@ -82,7 +93,8 @@ describe('http response sink', () => {
     sink.write(data('{"ok":true}'))
     sink.write(END)
     expect(response.writableEnded).toBe(false)
-    expect(sink.downstreamBody()).toBeNull()
+    // 放弃的尝试从未写出响应头，因此根本不存在「客户端收到过什么」。
+    expect(sink.delivery()).toBeNull()
     expect(sink.failure()).toBeNull()
     expect(delivered).toEqual([])
   })
@@ -92,7 +104,7 @@ describe('http response sink', () => {
     const response = new BufferedProxyResponse()
     const sink = createHttpResponseSink({
       response,
-      transport: 'http',
+      mode: 'whole',
       captureEnabled: true,
       onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
     })
@@ -104,23 +116,29 @@ describe('http response sink', () => {
     expect(delivered).toEqual(['{"ok":true}'])
   })
 
-  it('keeps the entire body even when capture is disabled but drops the chunk snapshots', () => {
-    const entire = setup('http', false)
+  it('keeps the whole body but reports no snapshot when capture is disabled', () => {
+    const entire = setup('whole', false)
     entire.sink.write(JSON_HEAD)
     entire.sink.write(data('{"ok":true}'))
     entire.sink.write(END)
-    expect(entire.sink.downstreamBody()).toBe('{"ok":true}')
+    expect(entire.sink.delivery()).toEqual({
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: '{"ok":true}',
+      complete: true,
+    })
 
-    const incremental = setup('http-stream', false)
+    const incremental = setup('incremental', false)
     incremental.sink.write(SSE_HEAD)
     incremental.sink.write(data('data: one\n\n'))
     incremental.sink.write(END)
     expect(incremental.response.body).toBe('data: one\n\n')
-    expect(incremental.sink.downstreamBody()).toBe(serializeChunkSnapshot([]))
+    // 关掉采集时「没有记录」与「记录了一个零块快照」是两件事，不能混。
+    expect(incremental.sink.delivery()?.body).toBeNull()
   })
 
   it('reports the failure frame without touching the response', () => {
-    const { response, sink } = setup('http')
+    const { response, sink } = setup('whole')
     const failure = new Error('upstream went away')
     sink.write(SSE_HEAD)
     sink.write({ kind: 'error', error: failure })
@@ -130,12 +148,19 @@ describe('http response sink', () => {
     expect(response.writableEnded).toBe(false)
   })
 
-  it('reports the partial downstream body only for what was actually written', () => {
-    const { sink } = setup('http-stream')
-    expect(sink.partialDownstreamBody()).toBeNull()
+  it('reports delivery as incomplete for whatever was written before an interruption', () => {
+    const { sink } = setup('incremental')
+    // 还没写下任何字节时，连「响应头发出去了」都还不成立。
+    expect(sink.delivery()).toBeNull()
     sink.write(SSE_HEAD)
     sink.write(data('data: one\n\n'))
-    expect(sink.partialDownstreamBody()).toBe('data: one\n\n')
+    expect(sink.delivery()).toEqual({
+      statusCode: 200,
+      headers: { 'content-type': 'text/event-stream', 'x-upstream': 'provider-1' },
+      body: serializeChunkSnapshot(['data: one\n\n']),
+      // 没走到收尾：这份正文是半截的。
+      complete: false,
+    })
   })
 
   it('waits for the client to drain before the streaming write is considered done', async () => {
@@ -145,7 +170,7 @@ describe('http response sink', () => {
     const delivered: string[] = []
     const sink = createHttpResponseSink({
       response,
-      transport: 'http-stream',
+      mode: 'incremental',
       captureEnabled: true,
       onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
     })
@@ -172,7 +197,7 @@ describe('http response sink', () => {
 
   it('ends the buffered response only after the client drained the whole body', async () => {
     const response = new BackpressuredResponse()
-    const sink = createHttpResponseSink({ response, transport: 'http', captureEnabled: true })
+    const sink = createHttpResponseSink({ response, mode: 'whole', captureEnabled: true })
     sink.write(JSON_HEAD)
     sink.write(data('{"ok":true}'))
 

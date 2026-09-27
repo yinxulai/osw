@@ -1,12 +1,13 @@
 import type { Protocol, TransportKind } from '@common/schemas'
+import type { BodyDeliveryShape } from '@server/proxy/contracts'
 import type { HttpResponseSink } from '@server/proxy/adapters/http-response-sink'
 import type { AttemptObserver } from '@server/proxy/observers/attempt-observer'
 import type { AttemptLogger, UpstreamContentInput } from '@server/proxy/observability/logging-types'
-import type { ProxyResponse } from '@server/proxy/response/proxy-response'
+import { serializeCapturedHeaders } from '@server/proxy/response/headers'
 import type { UpstreamStatusDisposition } from '@server/proxy/response/response'
 import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import { RecordedAttemptError } from './attempt-errors'
-import { serializeSentResponseHeaders, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
+import { type ClientResponseCapture, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
 import { extractRequestIdFromBody } from './request-id'
 
 /**
@@ -20,10 +21,14 @@ export interface AttemptConclusionInput {
   readonly attemptLogger: AttemptLogger
   /** 上游视角观察者：上游返回了什么从它取。 */
   readonly observer: AttemptObserver
-  /** 客户端出口：客户端真正收到了什么由它决定。 */
+  /**
+   * 客户端出口：客户端真正收到了什么由它决定。
+   *
+   * 刻意不接受 `ProxyResponse`：出口已经把「状态码 + 响应头 + 正文 + 完整与否」收成一个
+   * 快照（{@link HttpResponseSink.delivery}），收尾再拿响应对象自己拼一遍，等于同一件
+   * 事实有两个源，而它们会分叉（头已发出 / 正文只搬了一半，就是两种不同的分叉）。
+   */
   readonly sink: HttpResponseSink
-  /** 客户端响应对象：响应头是否已经发出，只有它知道。 */
-  readonly response: ProxyResponse
   readonly statusCode: number
   readonly disposition: UpstreamStatusDisposition
   /** 上游跳实际是什么形态。**纯上游事实**，与客户端跳的要求无关。 */
@@ -50,17 +55,13 @@ export interface InterruptedAttemptInput extends AttemptConclusionInput {
 /** 交付收尾：响应确实写出了客户端。 */
 export interface DeliveredAttemptInput extends AttemptConclusionInput {
   /**
-   * 这次交付是否完整走到了收尾。
+   * 这次交付的正文形态（见 `BodyDeliveryShape`）。
    *
-   * 为假表示正文只搬了一部分就断了：上游中途断流，或客户端拿到自己需要的输出后提前关流。
-   * 两种情况下「上游视角」与「客户端视角」的正文都是半截，因此正文记录状态必须是
-   * `partial`——详情页据此说明这份正文不完整，而不是把它当完整采集展示。
-   *
-   * 它和 `streamInterrupted` 问的不是同一件事，不能互相顶替：后者问「这算不算上游的故障」
-   * （客户端主动关流不算，那时它必须是假），这里问「这份正文完不完整」
-   * （客户端主动关流时确实是假）。
+   * 与旧实现相比，这里不再接收「交付完不完整」：那个事实已经随
+   * {@link HttpResponseSink.delivery} 从出口一起交出来——它是唯一知道「收尾跑完了没有」
+   * 的地方，调用方转述只会多一处可能说错的转述。
    */
-  readonly deliveryComplete: boolean
+  readonly mode: BodyDeliveryShape
 }
 
 function upstreamContent(captureStatus: 'captured' | 'partial', statusCode: number, observer: AttemptObserver, body: string | null): UpstreamContentInput {
@@ -69,6 +70,24 @@ function upstreamContent(captureStatus: 'captured' | 'partial', statusCode: numb
     responseStatus: statusCode,
     responseHeaders: observer.head()?.headers ?? null,
     responseBody: body,
+  }
+}
+
+/**
+ * 把出口交出的交付事实装箱成客户端视角正文。
+ *
+ * 两个字段同进同出：出口说没发过头，就没有「客户端视角的响应」——头与正文一起为 `null`，
+ * 不能一边写「客户端收到了 200」一边写「正文不知道」。
+ */
+function clientCapture(sink: HttpResponseSink): ClientResponseCapture {
+  const delivered = sink.delivery()
+  if (!delivered) return { captureStatus: 'partial', responseHeaders: null, responseBody: null }
+  return {
+    // 半截正文不是完整采集：这份记录存在的意义就是告诉详情页「你看到的正文是半截的」，
+    // 标成 captured 等于把它伪装成一份完整记录。
+    captureStatus: delivered.complete ? 'captured' : 'partial',
+    responseHeaders: serializeCapturedHeaders(delivered.headers),
+    responseBody: delivered.body,
   }
 }
 
@@ -132,11 +151,9 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
     upstreamResponseBody: partialBody,
     streamInterrupted: input.streamInterrupted,
     responseConversionFailed,
-    clientResponse: {
-      captureStatus: 'partial',
-      responseHeaders: serializeSentResponseHeaders(input.response),
-      responseBody: input.sink.partialDownstreamBody(),
-    },
+    // 中断的交付永远是「半截」：它没有收尾，正文只搬了一部分。这里不读出口的快照，
+    // 因为出口还会说「这是我记的全部正文」，而这一段对话的完整度已经由这个事实定死了。
+    clientResponse: { ...clientCapture(input.sink), captureStatus: 'partial' },
   })
 }
 
@@ -180,13 +197,11 @@ export async function concludeUndeliverableAttempt(input: AttemptConclusionInput
  */
 export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Promise<DeliveredAttemptOutcome> {
   const successful = input.disposition === 'success'
+  const client = clientCapture(input.sink)
   const upstreamBody = input.observer.upstreamBody()
   const resolvedBody = successful ? upstreamBody : input.observer.rawBody()
   const upstreamRequestId = input.upstreamRequestId ?? extractRequestIdFromBody(resolvedBody)
   const ttftMilliseconds = input.observer.ttftMilliseconds()
-  // 只搬了一半就断掉的正文不是「完整采集」：这份记录存在的意义就是告诉详情页
-  // 「你看到的正文是半截的」，标成 captured 等于把它伪装成一份完整记录。
-  const captureStatus = input.deliveryComplete ? 'captured' : 'partial'
   await input.attemptLogger.finalizeAttempt({
     status: successful ? 'success' : 'failed',
     httpStatus: input.statusCode,
@@ -198,7 +213,7 @@ export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Pr
     errorMessage: successful ? undefined : `Upstream responded with ${input.statusCode}`,
     upstreamRequestId,
     usage: input.observer.usage(),
-    upstreamContent: upstreamContent(captureStatus, input.statusCode, input.observer, upstreamBody),
+    upstreamContent: upstreamContent(client.captureStatus, input.statusCode, input.observer, upstreamBody),
     responseRewriteRuleIds: input.responseRewriteRuleIds,
     ttftMilliseconds,
   })
@@ -211,10 +226,6 @@ export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Pr
     ttftMilliseconds: ttftMilliseconds ?? undefined,
     upstreamProtocol: input.upstreamProtocol,
     upstreamResponseBody: resolvedBody,
-    clientResponse: {
-      captureStatus,
-      responseHeaders: serializeSentResponseHeaders(input.response),
-      responseBody: input.sink.downstreamBody(),
-    },
+    clientResponse: client,
   }
 }

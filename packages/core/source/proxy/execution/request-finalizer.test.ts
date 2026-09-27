@@ -5,7 +5,7 @@ import type { RequestLogger } from '@server/proxy/observability/logging-types'
 import type { RequestContext } from '@server/proxy/request/request-context'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import type { DeliveredAttemptOutcome, DiscardedAttemptOutcome } from './attempt-outcome'
-import { createRequestFinalizer } from './request-finalizer'
+import { createRequestFinalizer } from './request-finalizer-handlers'
 
 /**
  * 统计埋点在这一层关心两件事：**成功时报一条，不成功时不报**；转移与任务计数都只在

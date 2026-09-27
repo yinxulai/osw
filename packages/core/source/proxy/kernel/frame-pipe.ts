@@ -90,16 +90,6 @@ export async function pipeFrames(input: FramePipeInput): Promise<FramePipeResult
 }
 
 /**
- * 参与本次管道的修改器：结构性筛选 + `match` 通过，按 `order` 升序。
- *
- * 管道内部不调它——管道把两段分开：结构性筛选算一次，`match` 在每一帧上现算。
- * 它留给「想知道这个上下文下谁会上场」的调用方（管理端的诊断、测试）。
- */
-export function selectFrameModifiers(modifiers: readonly Modifier[], context: ModifierContext): readonly Modifier[] {
-  return selectCandidates(modifiers, context, 'frame').filter(modifier => modifier.match(context))
-}
-
-/**
  * 逐个修改器串联作用在一帧上：`match` 在这里现算（它可能依赖 `upstreamHead`），然后按 `order` 串联。
  * 修改器返回 `null` 表示丢弃这一帧；返回数组表示把一帧拆成多帧（例如 SSE 一次读到多条事件）；
  * 未实现 `applyFrame` 的修改器原样透传。

@@ -1,8 +1,10 @@
 import type { Server } from 'node:http'
 import http from 'node:http'
 import { handleProxyRequest } from '@server/proxy/request/request-entry'
+import { PROXY_ERROR_HEADERS, proxyErrorBody } from '@server/proxy/response/proxy-response'
 import { matchLocalEndpoint } from '@server/proxy/local/registry'
 import { getErrorResponseMessage, isErrorCode, normalizeError } from '@server/errors'
+import { CLIENT_REQUEST_ABORTED } from '@common/error-codes'
 
 export interface ProxyEndpoint {
   host: string
@@ -130,7 +132,7 @@ export class ProxyRuntime {
         await handleProxyRequest(req, res)
       } catch (error) {
         const normalized = normalizeError(error)
-        if (isErrorCode(normalized, 'CLIENT_REQUEST_ABORTED')) {
+        if (isErrorCode(normalized, CLIENT_REQUEST_ABORTED)) {
           if (!res.writableEnded) res.destroy()
           return
         }
@@ -201,6 +203,6 @@ function close(server: Server | null): Promise<void> {
 function writeJsonError(res: http.ServerResponse, statusCode: number, errorCode: string, errorMessage: string): void {
   if (res.writableEnded) return
   res.statusCode = statusCode
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify({ success: false, errorCode, errorMessage }))
+  for (const [name, value] of Object.entries(PROXY_ERROR_HEADERS)) res.setHeader(name, value)
+  res.end(proxyErrorBody(errorCode, errorMessage))
 }

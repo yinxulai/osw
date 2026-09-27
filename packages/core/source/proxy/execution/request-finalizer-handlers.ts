@@ -1,9 +1,13 @@
 import type { TelemetryFailoverAttemptBucket } from '@common/telemetry'
+import { CLIENT_REQUEST_ABORTED, UPSTREAM_ERROR } from '@common/error-codes'
 import { isOutboundProxyConnectionError } from '@server/infrastructure/network/outbound-connector'
-import type { UpstreamTarget } from '@server/proxy/contracts'
+import type { ExecutionOrigin, UpstreamTarget } from '@server/proxy/contracts'
 import { createAttemptLogger } from '@server/proxy/observability/logging'
 import type { LiveRequestHandle } from '@server/proxy/observability/live-request-store'
+import type { RequestLogger } from '@server/proxy/observability/logging-types'
+import type { RequestContext } from '@server/proxy/request/request-context'
 import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
+import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { isClientAttributableStatus, type HealthFailureScope } from '@server/proxy/response/response'
 import { markProviderModelSuccess, markProviderSuccess } from '@server/proxy/upstream/health'
 // 统计埋点直连遥测入口，**不经过请求日志器**：记录日志是用户可关的调试功能（观测口径），
@@ -11,13 +15,47 @@ import { markProviderModelSuccess, markProviderSuccess } from '@server/proxy/ups
 import { reportTelemetryEvent } from '@server/telemetry'
 import { isClientRequestCancelled, LocalAttemptError, RecordedAttemptError, serializeLocalFailure } from './attempt-errors'
 import { formatTarget, healthFailureHints, recordHealthFailure, toRequestContentOutcome } from './attempt-outcome'
-import type { RequestFinalizer, RequestFinalizerOptions } from './request-finalizer'
+import type { DeliveredAttemptOutcome, DiscardedAttemptOutcome } from './attempt-outcome'
+
+/**
+ * 请求级收尾的统一入口。
+ *
+ * 执行器只按顺序试，试完把结局交给这里；六类结局各自独立、不共享控制流，
+ * 每种只负责把自己的事实写进日志、健康度与实时台账。
+ */
+export interface RequestFinalizer {
+  onSuccess(target: UpstreamTarget, outcome: DeliveredAttemptOutcome, attemptIndex: number): Promise<void>
+  onTerminal(target: UpstreamTarget, outcome: DeliveredAttemptOutcome, attemptIndex: number): Promise<void>
+  onFailover(target: UpstreamTarget, outcome: DiscardedAttemptOutcome, attemptIndex: number): Promise<void>
+  onError(target: UpstreamTarget, error: unknown, attemptIndex: number): Promise<boolean>
+  onCancelled(target: UpstreamTarget, attemptIndex: number): Promise<void>
+  onExhausted(lastError: Error | null): Promise<void>
+}
+
+export interface RequestFinalizerOptions {
+  context: RequestContext
+  /** 计划中的全部上游，顺序即优先级；收尾只看「下一个是谁」。 */
+  targets: readonly UpstreamTarget[]
+  response: ProxyResponse
+  requestLogger: RequestLogger
+  captureRequestContent: boolean
+  startedAt: number
+  /** 见 `ProxyExecutionOptions.origin`：统计只把客户端请求算作「处理了一个任务」。 */
+  origin: ExecutionOrigin
+  /**
+   * 进行中请求台账的写口。收尾是这次请求在**内存台账里**的最后一个动作：
+   * `finalizeRequestLog` 把事实落进数据库，`settle` 把它从「进行中」列表里拿下。
+   * 两者成对出现，不让任何一条分支只做一半——只落库不 settle 会在界面上留下永远
+   * 不会结束的请求，只 settle 不落库会把这次请求从记录里抹掉。
+   */
+  live?: LiveRequestHandle
+}
 
 /**
  * 请求级收尾的六个结局各自独立，不共享控制流，只共享一份“最后一次失败”的归因状态。
  * 执行器只负责按顺序试；这里只负责把最终事实写进日志、健康度与实时台账。
  */
-export function createRequestFinalizerHandlers(options: RequestFinalizerOptions): RequestFinalizer {
+export function createRequestFinalizer(options: RequestFinalizerOptions): RequestFinalizer {
   const runtime = createRuntime(options)
   return {
     onSuccess: createSuccessHandler(runtime),
@@ -162,10 +200,10 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
     if (rootError instanceof RequestRewriteError) {
       console.warn(`[proxy] request rewrite rejected requestId=${requestId} providerModelId=${target.providerModelId} ruleId=${rootError.ruleId ?? 'unknown'} error=${rootError.message}`)
       if (!response.headersSent) {
-        const responseBody = response.fail(422, rootError.code, rootError.message)
         // 响应体确实写给了客户端，就必须留证：否则这次失败在记录里只剩一个「failed」
         // 状态，看不出代理回了什么，也就无从判断客户端为什么报错。
-        await requestLogger.finalizeLocalErrorContent(422, response.headers(), responseBody)
+        // 状态码、响应头、正文一并从出口取回：它们是**同一次交付**的三个字段。
+        await requestLogger.finalizeLocalErrorContent(response.fail(422, rootError.code, rootError.message))
       }
       await requestLogger.finalizeRequestLog('failed', startedAt)
       settleLive({
@@ -227,7 +265,7 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
         status: 'failed',
         kind: 'request.failed',
         level: 'error',
-        detail: { attempt: attemptIndex + 1, errorCode: 'UPSTREAM_ERROR' },
+        detail: { attempt: attemptIndex + 1, errorCode: UPSTREAM_ERROR },
       })
       return false
     }
@@ -258,8 +296,8 @@ function createExhaustedHandler(runtime: FinalizerRuntime): RequestFinalizer['on
       console.error(
         `[proxy] all providers failed requestId=${requestId} method=${context.method} path=${context.path} clientProtocol=${protocol} logicalModelId=${logicalModelId} attempts=${targets.length} clientStatus=${statusCode} lastUpstreamStatus=${runtime.lastUpstreamFailure?.statusCode ?? 'none'} totalDuration=${Date.now() - startedAt}ms error=${message}`,
       )
-      const responseBody = response.fail(statusCode, 'ALL_PROVIDERS_FAILED', message)
-      await requestLogger.finalizeLocalErrorContent(statusCode, response.headers(), responseBody)
+      const delivered = response.fail(statusCode, 'ALL_PROVIDERS_FAILED', message)
+      await requestLogger.finalizeLocalErrorContent(delivered)
     }
     await requestLogger.finalizeRequestLog('failed', startedAt)
     settleLive({
@@ -294,7 +332,7 @@ async function recordCancelledAttempt(runtime: FinalizerRuntime, target: Upstrea
       upstreamTransport: null,
       // 客户端什么都没收到，因此不承担请求级用量。
       servesRequest: false,
-      errorCode: 'CLIENT_REQUEST_ABORTED',
+      errorCode: CLIENT_REQUEST_ABORTED,
       errorMessage: error.message,
     })
   } catch (logError) {
@@ -334,7 +372,7 @@ async function recordFailedAttempt(input: FailedAttemptInput): Promise<void> {
       // 连接层面的失败往往连响应头都没拿到，无从判断上游跳是什么形态。
       upstreamTransport: null,
       servesRequest: false,
-      errorCode: 'UPSTREAM_ERROR',
+      errorCode: UPSTREAM_ERROR,
       errorMessage: lastError.message,
       upstreamContent: {
         captureStatus: 'partial',

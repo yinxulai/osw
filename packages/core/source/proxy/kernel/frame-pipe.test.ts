@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Frame, FrameSink, Modifier, ModifierContext } from '@server/proxy/contracts'
-import { pipeFrames, selectFrameModifiers } from './frame-pipe'
+import { pipeFrames } from './frame-pipe'
 
 function createSink(): FrameSink & { readonly frames: Frame[] } {
   const frames: Frame[] = []
@@ -142,16 +142,6 @@ describe('frame pipe', () => {
     expect(result.stopped).toBe(true)
     expect(result.frameCount).toBe(0)
     expect(consumed).toBe(1)
-  })
-
-  it('selects frame modifiers in a stable order', () => {
-    const context = createContext()
-    const modifiers = [
-      createModifier({ id: 'b', order: 5 }),
-      createModifier({ id: 'a', order: 5 }),
-      createModifier({ id: 'first', order: 1 }),
-    ]
-    expect(selectFrameModifiers(modifiers, context).map(modifier => modifier.id)).toEqual(['first', 'b', 'a'])
   })
 
   it('keeps moving bytes when an observer throws', async () => {

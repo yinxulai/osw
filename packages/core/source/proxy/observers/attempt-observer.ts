@@ -40,8 +40,6 @@ export interface AttemptObserver extends Observer {
   upstreamBody(): string | null
   /** 原文字节；流式下发时为完整 SSE 文本（与分块快照相对，用于健康度判定）。 */
   rawBody(): string | null
-  /** 出错时用的上游视角正文：已经收到的部分照记。 */
-  partialUpstreamBody(): string | null
   /** 上游上报的用量。 */
   usage(): ExtractedUsage
   /** 首字节时延；上游没有真实输出时为 `null`。 */
@@ -79,10 +77,6 @@ class ObserverState implements AttemptObserver {
 
   rawBody(): string | null {
     return this.raw || null
-  }
-
-  partialUpstreamBody(): string | null {
-    return this.upstreamBody()
   }
 
   usage(): ExtractedUsage {

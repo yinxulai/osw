@@ -2,9 +2,7 @@ import type { Protocol } from '@common/schemas'
 import type { HealthFailureHints, HealthFailureScope, UpstreamStatusDisposition } from '@server/proxy/response/response'
 import { classifyHealthFailure } from '@server/proxy/response/response'
 import { markProviderFailure, markProviderModelFailure } from '@server/proxy/upstream/health'
-import { serializeCapturedHeaders } from '@server/proxy/response/headers'
 import type { UpstreamTarget } from '@server/proxy/contracts'
-import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import type { RequestContentOutcome } from '@server/proxy/observability/logging-types'
 
 /**
@@ -17,8 +15,6 @@ import type { RequestContentOutcome } from '@server/proxy/observability/logging-
 interface AttemptOutcomeBase {
   statusCode: number
   durationMilliseconds: number
-  errorCode?: string
-  errorMessage?: string
   upstreamRequestId: string | null
   ttftMilliseconds?: number
   /**
@@ -93,16 +89,6 @@ export interface ClientResponseCapture {
 
 export function formatTarget(target: UpstreamTarget): string {
   return `${target.providerName}/${target.providerModelName} [providerId=${target.providerId}, providerModelId=${target.providerModelId}]`
-}
-
-/**
- * 序列化已经真正写出到客户端的响应头。
- *
- * 只读 `response.headers()`：响应头尚未发出时返回 `null` —— 此时根本不存在
- * 「返回给客户端的响应」，不应用上游头回退值把它伪装成已返回。
- */
-export function serializeSentResponseHeaders(response: ProxyResponse): string | null {
-  return serializeCapturedHeaders(response.headers())
 }
 
 /**

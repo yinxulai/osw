@@ -254,7 +254,7 @@ describe('downstream head modifier', () => {
 })
 
 describe('response rewrite modifier', () => {
-  it('按声明的传输形态被内核排除，不需要自己去判断', () => {
+  it('按声明的交付形态被内核排除，不需要自己去判断', () => {
     const modifiers = createResponseModifiers({
       adapter: nativeAdapter(),
       delivery: DELIVERED,

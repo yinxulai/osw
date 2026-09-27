@@ -39,7 +39,7 @@ export const proxyTargetPlanner: AttemptPlanner = {
 const MANUAL_UNAVAILABLE_DETAIL = 'The manually selected ProviderModel is not available for this protocol'
 
 /** 一个候选都没有且不是手动锁定时：既没有绑定模型、又都不可用。 */
-const NO_MODEL_DETAIL = 'This logical model has no enabled and healthy provider model'
+export const NO_MODEL_DETAIL = 'This logical model has no enabled and healthy provider model'
 
 export async function planProxyTargets(input: PlannerInput): Promise<PlanResult> {
   const { logicalModelId, clientProtocol: protocol, manualModelId } = input

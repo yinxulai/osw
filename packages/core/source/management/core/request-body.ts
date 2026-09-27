@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http'
+import { CLIENT_REQUEST_ABORTED_MESSAGE } from '@common/error-codes'
 import { AppError } from '@server/errors'
 
 /**
@@ -47,7 +48,7 @@ export async function parseJsonBody(req: IncomingMessage): Promise<unknown> {
       }
     })
 
-    req.on('aborted', () => fail(new Error('CLIENT_REQUEST_ABORTED')))
+    req.on('aborted', () => fail(new Error(CLIENT_REQUEST_ABORTED_MESSAGE)))
     req.on('error', error => fail(error))
   })
 }

@@ -1,4 +1,5 @@
-import type { Protocol, RequestRewriteRule, RequestRewriteRuleAction, TransportKind } from '@common/schemas'
+import type { Protocol, RequestRewriteRule, RequestRewriteRuleAction } from '@common/schemas'
+import type { BodyDeliveryShape } from '@server/proxy/contracts'
 
 const PROTECTED_HEADERS = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding'])
 /**
@@ -17,14 +18,13 @@ export interface RequestRewriteContext {
   clientProtocol: Protocol
   upstreamProtocol: Protocol
   /**
-   * 响应阶段这一跳的传输形态（{@link TransportKind}）。只有响应阶段会用到。
+   * 响应阶段这一次交付的正文形态（{@link BodyDeliveryShape}）。只有响应阶段会用到。
    *
-   * 必须传客户端声明的**预期**，不能传「客户端要增量 **且** 上游是 SSE」之类的合成值：
-   * 合成量在预期落空时语义未定义——客户端要增量而上游回了整包 JSON 时，合成值为假，
-   * 规则会被当成「手里是完整正文」而放行，改写了一整份 JSON 却以分块方式发出去（§1.2）。
-   * 反过来，上游回 SSE 而客户端只要整包时，两份正文的形状本来就不一样，跳过才是对的。
+   * 取的是**交付形态**而不是「客户端跳的 transport」：规则能不能动手，取决于手里这堆字节
+   * 是不是一整份（见 `bodyDeliveryShape`）。两者今天恰好同义，但这里问的是前者，
+   * 因此不能写成一个只在这套取值域下成立的等价式。
    */
-  transport?: TransportKind
+  shape?: BodyDeliveryShape
 }
 
 export interface RequestRewriteResult {
@@ -51,7 +51,7 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
     if (!rule.enabled || rule.deletedTime !== null) { skippedRuleIds.push(rule.id); continue }
     const actions = rule.actions.filter(action => action.stage === context.stage)
     if (actions.length === 0 || !matches(rule, context)) { skippedRuleIds.push(rule.id); continue }
-    if (context.stage === 'response' && context.transport === 'http-stream') { skippedRuleIds.push(rule.id); continue }
+    if (context.stage === 'response' && context.shape === 'incremental') { skippedRuleIds.push(rule.id); continue }
     if (actions.length > MAX_ACTIONS) throw new RequestRewriteError('Too many rule actions', rule.id)
     for (const action of actions) {
       if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as Extract<RequestRewriteRuleAction, { type: `header-${string}` }>, rule.id)
