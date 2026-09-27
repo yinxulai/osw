@@ -471,10 +471,8 @@ export const RequestLogSchema = z.object({
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
   cachedInputTokens: z.number().int().nonnegative().nullable(),
-  reasoningTokens: z.number().int().nonnegative().nullable().optional(),
+  reasoningTokens: z.number().int().nonnegative().nullable(),
   cacheCreationInputTokens: z.number().int().nonnegative().nullable(),
-  /** 派生值：请求级 `cachedInputTokens > 0`。缓存是否命中不是独立事实。 */
-  promptCacheHit: z.boolean().nullable(),
   rawUsage: RawUsageSchema.nullable(),
   /**
    * 请求级派生值：取**服务该请求的那次尝试**（尝试顺序里的最后一条）的
@@ -755,11 +753,7 @@ export const LiveRequestAttemptSchema = z.object({
    */
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
-  /**
-   * 与落库尝试行同名的字段；实时侧目前只写 `errorMessage`，因此读它只会得到 `null`。
-   * 界面不要依赖它——错误码需要等执行器把失败原因（`conclusion`）也补进来才有。
-   */
-  errorCode: z.string().nullable(),
+  /** 失败原因的人类可读摘要；结构化错误码只存在于落库后的尝试记录。 */
   errorMessage: z.string().nullable(),
   startedAt: z.number().int(),
   endedAt: z.number().int().nullable(),
@@ -939,7 +933,6 @@ export const RequestLogEntrySchema = z.object({
   outputTokens: z.number().int().nonnegative().nullable(),
   cachedInputTokens: z.number().int().nonnegative().nullable(),
   cacheCreationInputTokens: z.number().int().nonnegative().nullable(),
-  promptCacheHit: z.boolean().nullable(),
   rawUsage: RawUsageSchema.nullable(),
   ttftMilliseconds: z.number().int().nonnegative().nullable(),
   createdTime: z.number().int(),

@@ -2,19 +2,6 @@ import { z } from 'zod'
 import { LiveRequestSchema } from './schemas'
 
 /**
- * 一次「进行中的请求」的全量快照。
- *
- * 拉取式接口（`POST /api/request-log/live`）直接返回这个形状；推送式接口
- * （`POST /api/request-log/live/stream`）把它包进版本化的 `snapshot` 消息里。
- * 两者共用 `requests` 的定义，但不再共用「传输消息」这一层：
- * 「从哪里取到一份状态」与「这条状态沿推送协议怎么送达」是两件事。
- */
-export const LiveRequestSnapshotSchema = z.object({
-  requests: z.array(LiveRequestSchema),
-})
-export type LiveRequestSnapshot = z.infer<typeof LiveRequestSnapshotSchema>
-
-/**
  * 实时推送协议版本。
  *
  * 版本写在每一条消息里而不是握手一次：NDJSON 没有协商阶段，单条消息可独立判断。
@@ -36,7 +23,7 @@ const LiveRequestStreamEnvelopeSchema = z.object({
  */
 export const LiveRequestStreamSnapshotMessageSchema = LiveRequestStreamEnvelopeSchema.extend({
   type: z.literal('snapshot'),
-  requests: LiveRequestSnapshotSchema.shape.requests,
+  requests: z.array(LiveRequestSchema),
 })
 export type LiveRequestStreamSnapshotMessage = z.infer<typeof LiveRequestStreamSnapshotMessageSchema>
 

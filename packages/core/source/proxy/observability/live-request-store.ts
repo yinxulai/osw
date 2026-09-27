@@ -288,7 +288,6 @@ export class LiveRequestStore {
           ttftMilliseconds: null,
           inputTokens: null,
           outputTokens: null,
-          errorCode: null,
           errorMessage: null,
           startedAt,
           endedAt: null,

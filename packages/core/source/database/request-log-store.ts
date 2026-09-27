@@ -164,7 +164,6 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
     reasoningTokens: null,
     cachedInputTokens: null,
     cacheCreationInputTokens: null,
-    promptCacheHit: null,
     rawUsage: null,
     ttftMilliseconds: null,
     createdTime: time,
@@ -590,7 +589,6 @@ function mapRequestLogs(rows: Array<typeof requestLogs.$inferSelect>): RequestLo
       cachedInputTokens: usage.cachedInputTokens,
       cacheCreationInputTokens: usage.cacheCreationInputTokens,
       // 是否命中缓存是派生判断：拿到了缓存输入 token 就是命中；没拿到就不下结论。
-      promptCacheHit: usage.cachedInputTokens === null ? null : usage.cachedInputTokens > 0,
       rawUsage: usage.rawUsage,
       ttftMilliseconds: ttftByRequest.get(row.id) ?? null,
       createdTime: Number(row.createdTime),

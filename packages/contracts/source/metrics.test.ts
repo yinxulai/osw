@@ -38,7 +38,6 @@ function logOf(overrides: LogOverrides = {}): RequestLogEntry {
     outputTokens: overrides.outputTokens ?? null,
     cachedInputTokens: null,
     cacheCreationInputTokens: null,
-    promptCacheHit: null,
     rawUsage: null,
     ttftMilliseconds: overrides.ttftMilliseconds ?? null,
     createdTime: 0,

@@ -62,7 +62,6 @@ describe('request log persistence boundaries', () => {
       reasoningTokens: null,
       cachedInputTokens: null,
       cacheCreationInputTokens: null,
-      promptCacheHit: null,
       rawUsage: null,
       ttftMilliseconds: null,
       createdTime: log.createdTime,

@@ -43,7 +43,7 @@ const TRANSPORT_LABEL_KEY: Record<string, UiCatalogKey> = {
   websocket: 'requestLogs.transport.websocket',
 }
 
-export function formatTransport(t: AppTranslator, transport: string | null | undefined): string {
+export function formatTransport(t: AppTranslator, transport: string | null): string {
   if (transport == null) return t('common.state.unknown')
   const key = TRANSPORT_LABEL_KEY[transport]
   return key ? t(key) : transport

@@ -190,8 +190,6 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   if (requestEvaluation.appliedRuleIds.length > 0 || adapter.kind === 'conversion') {
     live?.pushEvent('request.prepared', 'info', {
       attempt: attemptIndex + 1,
-      providerModelName: target.providerModelName,
-      appliedRules: requestEvaluation.appliedRuleIds.length,
       protocolConverted: adapter.kind === 'conversion',
       requestBytes: preparedRequest.body.length,
     })

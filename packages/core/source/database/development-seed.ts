@@ -203,7 +203,6 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         outputTokens: failed ? null : outputTokens,
         cachedInputTokens: failed ? null : index % 3 === 0 ? 256 : 0,
         cacheCreationInputTokens: failed ? null : index % 5 === 0 ? 128 : 0,
-        promptCacheHit: failed ? null : index % 3 === 0,
         ttftMilliseconds: failed ? null : 110 + (index * 31) % 420,
         // 客户端跳声明的形态：请求体里就有这个事实。
         transport: index % 4 === 0 ? 'http-stream' as const : 'http' as const,

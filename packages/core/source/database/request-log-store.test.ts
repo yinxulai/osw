@@ -229,7 +229,6 @@ describe('request log store persistence', () => {
       totalTokens: null,
       rawUsage: null,
       ttftMilliseconds: null,
-      promptCacheHit: null,
     })
 
     await createRequestContent({

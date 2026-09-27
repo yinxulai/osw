@@ -316,44 +316,6 @@ describe('live request management', () => {
     liveRequestStore.clear()
   })
 
-  it('lists in-flight requests without touching the database', async () => {
-    const handle = liveRequestStore.begin({ id: 'req_live', method: 'POST', path: '/v1/messages', transport: 'http', clientProtocol: null })
-    handle.resolveRoute({ logicalModelId: 'default', clientProtocol: 'anthropic-messages', transport: 'http-stream', candidates: [] })
-    const res = mockResponse()
-
-    await requestLogRoutes.invoke('/api/request-log/live', res, {})
-
-    expect(res.statusCode).toBe(200)
-    expect(responseData(res)).toEqual({
-      success: true,
-      data: {
-        requests: [expect.objectContaining({
-          id: 'req_live',
-          status: 'pending',
-          logicalModelId: 'default',
-          clientProtocol: 'anthropic-messages',
-          transport: 'http-stream',
-        })],
-      },
-    })
-  })
-
-  it('drops a request once it settles', async () => {
-    const handle = liveRequestStore.begin({ id: 'req_live', method: 'POST', path: '/v1/messages', transport: 'http', clientProtocol: null })
-    handle.settle('failed', 'request.failed', 'error', { httpStatus: 502 })
-    const res = mockResponse()
-
-    await requestLogRoutes.invoke('/api/request-log/live', res, {})
-
-    // 落定的请求仍在保留区里（界面靠它把「进行中」原地变成「已结束」），但状态已经变了。
-    expect(responseData(res)).toEqual({
-      success: true,
-      data: {
-        requests: [expect.objectContaining({ id: 'req_live', status: 'failed', phase: 'settled' })],
-      },
-    })
-  })
-
   it('pushes the live ledger as NDJSON until the client hangs up', async () => {
     const written: string[] = []
     const closeListeners: (() => void)[] = []
@@ -377,7 +339,7 @@ describe('live request management', () => {
     // 禁掉缓存与任何改写型中间层：这份数据只在「此刻」有意义。
     expect(vi.mocked(res.setHeader)).toHaveBeenCalledWith('Content-Type', 'application/x-ndjson; charset=utf-8')
     expect(vi.mocked(res.setHeader)).toHaveBeenCalledWith('Cache-Control', 'no-store, no-transform')
-    // 连上就先给一条 snapshot，业务 payload 与拉取式端点一致。
+    // 连上就先给一条完整 snapshot，客户端不必为空状态等待第一个心跳。
     expect(written).toHaveLength(1)
     const frame = JSON.parse(written[0] ?? '{}') as { protocolVersion: number; type: string; requests: { id: string }[] }
     expect(frame).toMatchObject({

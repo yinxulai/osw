@@ -267,7 +267,11 @@ function createExhaustedHandler(runtime: FinalizerRuntime): RequestFinalizer['on
       status: 'failed',
       kind: 'request.exhausted',
       level: 'error',
-      detail: { attempts: targets.length, lastUpstreamStatus: runtime.lastUpstreamFailure?.statusCode ?? 'none' },
+      detail: {
+        attempts: targets.length,
+        // 没有上游回过头时省略字段；界面不需要一个与真实状态码同形状的字符串哨兵。
+        ...(runtime.lastUpstreamFailure === null ? {} : { lastUpstreamStatus: runtime.lastUpstreamFailure.statusCode }),
+      },
     })
   }
 }
