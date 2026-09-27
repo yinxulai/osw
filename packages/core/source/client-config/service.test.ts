@@ -41,6 +41,21 @@ const CODEX_FILE = '~/.codex/config.toml'
 const CODEX_AUTH_FILE = '~/.codex/auth.json'
 const OPENCODE_FILE = '~/.config/opencode/opencode.json'
 
+/**
+ * 注册表里声明了「目录可被环境变量改道」的变量名（OpenCode 的 XDG、DeepSeek Harness 的 DSH_HOME）。
+ *
+ * 这些变量在 CI 上是**预设好的**——GitHub Actions 的 ubuntu runner 就带着 `XDG_CONFIG_HOME`——
+ * 于是 `resolveClientConfigPath` 会把文件指到临时主目录之外：写入落到真实用户目录里，
+ * 用例自己的 `fullPath()` 却还在临时目录里找，于是报「文件不存在」；更糟的是那份残留会跨用例
+ * 存活，下一个用例读到上一个用例写下的值，算出「无需改动」。本机没配这些变量时一切正常，
+ * 所以这是一个只在 CI 上复现的失败。
+ *
+ * 从注册表推导而不是手抄变量名：以后新增带 `envVar` 的客户端会自动被覆盖。
+ */
+const ENV_OVERRIDE_NAMES = [
+  ...new Set(AGENT_CLIENT_DEFINITIONS.flatMap(client => client.files.flatMap(file => (file.envVar ? [file.envVar.name] : [])))),
+]
+
 let temporaryDirectory: string
 
 function fullPath(declaredPath: string): string {
@@ -76,6 +91,8 @@ function syncErrorCode(run: () => unknown): string {
 const MODEL = { model: 'osw-model' }
 
 beforeEach(async () => {
+  // 主目录说了算：把改道变量清空，写入才会落在本用例的临时目录里（见 `ENV_OVERRIDE_NAMES`）。
+  for (const name of ENV_OVERRIDE_NAMES) vi.stubEnv(name, '')
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-client-config-'))
   mocks.home = temporaryDirectory
   await initDatabases(temporaryDirectory)
@@ -85,6 +102,7 @@ afterEach(async () => {
   await closeDatabases()
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
   mocks.home = ''
+  vi.unstubAllEnvs()
 })
 
 describe('resolveClientConfigTarget', () => {
