@@ -9,20 +9,29 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type PersistStorage } from 'zustand/middleware'
 import type { LanguagePreference } from '@common/i18n'
+import { createLocalStorage } from '@/lib/persist-storage'
 
 interface LanguageState {
   preference: LanguagePreference
   setPreference: (preference: LanguagePreference) => void
 }
 
+type PersistedLanguageState = Pick<LanguageState, 'preference'>
+
+const languageStorage: PersistStorage<PersistedLanguageState> | undefined = createLocalStorage<PersistedLanguageState>()
+
 export const useLanguageStore = create<LanguageState>()(persist(
   set => ({
     preference: 'system',
     setPreference: preference => set({ preference }),
   }),
-  { name: 'osw-language' },
+  {
+    name: 'osw-language',
+    storage: languageStorage,
+    partialize: state => ({ preference: state.preference }),
+  },
 ))
 
 /** 渲染进程能拿到的系统语言；Electron 会把应用 locale 透传到 `navigator.language`。 */

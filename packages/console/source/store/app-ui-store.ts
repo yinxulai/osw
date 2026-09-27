@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type PersistStorage } from 'zustand/middleware'
 import type { ThemeMode } from '@/components/app-sidebar'
+import { createLocalStorage } from '@/lib/persist-storage'
 
 interface AppUiState {
   themeMode: ThemeMode
@@ -28,6 +29,10 @@ interface AppUiState {
   setSidebarPinned: (pinned: boolean) => void
 }
 
+type PersistedAppUiState = Pick<AppUiState, 'themeMode' | 'onboardingComplete' | 'sidebarPinned'>
+
+const appUiStorage: PersistStorage<PersistedAppUiState> | undefined = createLocalStorage<PersistedAppUiState>()
+
 export const useAppUiStore = create<AppUiState>()(persist(
   set => ({
     themeMode: 'system',
@@ -39,5 +44,11 @@ export const useAppUiStore = create<AppUiState>()(persist(
   }),
   {
     name: 'osw-ui',
+    storage: appUiStorage,
+    partialize: state => ({
+      themeMode: state.themeMode,
+      onboardingComplete: state.onboardingComplete,
+      sidebarPinned: state.sidebarPinned,
+    }),
   },
 ))
