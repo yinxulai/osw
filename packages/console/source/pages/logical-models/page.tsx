@@ -13,6 +13,9 @@ import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type 
 import { restrictToWindowEdges } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useLogicalModelControlService } from './service'
+import type { LiveActivity } from '@/data/live-activity'
+import { logicalModelActivities } from '@/data/live-request-selectors'
+import { useLiveRequests } from '@/data/live-requests'
 import { useLogicalModels, useLogicalModelsActions } from '@/data/logical-models'
 import { LogicalModelCard } from './components/logical-model-card'
 import { LogicalModelSummary } from './components/logical-model-summary'
@@ -28,12 +31,14 @@ interface LogicalModelColumnProps {
   logicalModel: LogicalModel
   dragHandleProps?: Record<string, unknown>
   dragging?: boolean
+  /** 当前活动；只影响卡片边框，不参与排序或调度。 */
+  activity: LiveActivity | null
   /** 改名/改说明或删除之后刷新逻辑模型列表（列表变了，卡片才会跟着走）。 */
   onChanged: () => void
 }
 
 function LogicalModelColumn(props: LogicalModelColumnProps) {
-  const { logicalModel, dragHandleProps, dragging, onChanged } = props
+  const { logicalModel, dragHandleProps, dragging, activity, onChanged } = props
   const service = useLogicalModelControlService(logicalModel.id)
   const confirm = useConfirm()
   const toast = useToast()
@@ -99,6 +104,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
         onDelete={builtIn ? undefined : () => void deleteLogicalModel()}
         dragHandleProps={dragHandleProps}
         dragging={dragging}
+        activity={activity}
       />
       <AddProviderModelDialog open={addModelOpen} logicalModelId={logicalModel.id} onOpenChange={setAddModelOpen} onAdded={() => void service.reload()} />
       <EditLogicalModelDialog
@@ -115,12 +121,14 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
 export function LogicalModelsPage() {
   const toast = useToast()
   const logicalModels = useLogicalModels()
+  const liveRequests = useLiveRequests()
   const { refresh: refreshLogicalModels, reorder: reorderLogicalModels } = useLogicalModelsActions()
   const service = useLogicalModelControlService('default')
   const t = useTranslation()
   const [createLogicalModelOpen, setCreateLogicalModelOpen] = useState(false)
   const proxyRunning = service.proxyStatus?.running ?? false
   const enabledLogicalModels = logicalModels.filter(model => model.enabled)
+  const modelActivities = useMemo(() => logicalModelActivities(liveRequests.data), [liveRequests.data])
   const enabledIds = useMemo(() => logicalModels.filter(model => model.enabled).map(model => model.id), [logicalModels])
 
   const sensors = useSensors(
@@ -205,6 +213,7 @@ export function LogicalModelsPage() {
                             logicalModel={model}
                             dragHandleProps={handleProps}
                             dragging={dragging}
+                            activity={modelActivities.get(model.id) ?? null}
                             onChanged={refreshLogicalModels}
                           />
                         )}

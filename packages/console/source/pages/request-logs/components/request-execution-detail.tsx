@@ -3,6 +3,8 @@ import { useMemo, type ReactNode } from 'react'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import type { LiveRequest, LiveRequestPhase, RequestStatus } from '@common/schemas'
+import { ActivityPulse } from '@/components/activity-pulse'
+import type { LiveActivity } from '@/data/live-activity'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { executionSnapshotOf, type ExecutionSnapshot } from '../lib/execution'
@@ -71,7 +73,7 @@ const TONE_MARKER_CLASS: Record<TimelineTone, string> = {
   neutral: 'text-text-quaternary',
   active: 'text-text-accent',
   success: 'text-text-success',
-  warn: 'text-text-warning',
+  warning: 'text-text-warning',
   error: 'text-text-destructive',
 }
 
@@ -85,7 +87,7 @@ const TONE_TITLE_CLASS: Record<TimelineTone, string> = {
   neutral: 'text-text-secondary',
   active: 'text-text-primary',
   success: 'text-text-success',
-  warn: 'text-text-warning',
+  warning: 'text-text-warning',
   error: 'text-text-destructive',
 }
 
@@ -95,6 +97,8 @@ interface RequestExecutionDetailRowProps {
   modelName: string
   /** 由所在的行统一提供，保证同一块里几处耗时说的是同一个时刻。 */
   now: number
+  /** 由所在的行统一提供，折叠态与展开态共享同一次活动语义。 */
+  activity: LiveActivity | null
 }
 
 export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps) {
@@ -120,6 +124,7 @@ export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps)
             modelName={props.modelName}
             snapshot={snapshot}
             running={running}
+            activity={props.activity}
           />
           <ExecutionTimeline live={live} snapshot={snapshot} running={running} />
         </div>
@@ -133,6 +138,7 @@ interface ExecutionHeadlineProps {
   modelName: string
   snapshot: ExecutionSnapshot
   running: boolean
+  activity: LiveActivity | null
 }
 
 /**
@@ -160,9 +166,7 @@ function ExecutionHeadline(props: ExecutionHeadlineProps) {
               OUTCOME_MARKER_CLASS[live.status],
             )}
           >
-            {props.running && (
-              <span className="absolute size-1.5 rounded-full bg-current opacity-60 motion-safe:animate-ping" />
-            )}
+            <ActivityPulse activity={props.activity} />
             <span className="relative size-1.5 rounded-full bg-current" />
           </span>
           <span className="system-sm-medium text-text-primary">{headline}</span>

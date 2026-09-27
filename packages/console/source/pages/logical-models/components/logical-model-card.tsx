@@ -18,8 +18,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
+import type { LiveActivity } from '@/data/live-activity'
 import { SortableProviderModel } from './sortable-provider-model'
 import { ProviderModelRow } from './provider-model-row'
+import { LogicalModelActivityOverlay } from './logical-model-activity-overlay'
 import { providerModelMetricKey, type ProviderModelMetrics } from '../lib/model-metrics'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION } from '@common/schemas'
 import type { LogicalModelProviderModel, Provider, ProviderHealth, ProviderModelHealth } from '@common/schemas'
@@ -55,6 +57,8 @@ interface LogicalModelCardProps {
   onDelete?: () => void
   dragHandleProps?: Record<string, unknown>
   dragging?: boolean
+  /** 当前活动；同时表达“是否忙碌”和最新事件语义，为空时卡片完全静止。 */
+  activity: LiveActivity | null
 }
 
 export function LogicalModelCard(props: LogicalModelCardProps) {
@@ -81,8 +85,10 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
     onDelete,
     dragHandleProps,
     dragging,
+    activity,
   } = props
   const t = useTranslation()
+  const busy = activity !== null
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -243,7 +249,11 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
     // 那条空带既没有发丝线收尾，也不属于任何一行，看着就像列表没铺满（用户原话：
     // 「下面都没挨着边，还留着一块空白」）。去掉后最后一行直接与卡片下边缘齐平，
     // 浮入底色也能一路铺到圆角处（Card 自带 overflow-hidden，会被圆角裁掉）。
-    <Card className={cn('group overflow-hidden pb-0', dragging && 'bg-accent')}>
+    <Card
+      className={cn('group relative overflow-hidden pb-0', busy && 'logical-model-card-busy', dragging && 'bg-accent')}
+      aria-busy={busy || undefined}
+    >
+      <LogicalModelActivityOverlay activity={activity} />
       {renderHeader()}
       <CardContent className="p-0">
         {renderContent()}

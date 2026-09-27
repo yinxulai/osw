@@ -3,8 +3,11 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import type { LiveRequest, LiveRequestPhase } from '@common/schemas'
+import { ActivityPulse } from '@/components/activity-pulse'
 import { tableCellClass } from '@/components/table-primitives'
 import { Badge } from '@/components/ui/badge'
+import type { LiveActivity } from '@/data/live-activity'
+import { liveRequestActivity } from '@/data/live-request-selectors'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { executionSnapshotOf } from '../lib/execution'
@@ -66,6 +69,7 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
   const t = useTranslation()
   const { live } = props
   const running = live.status === 'pending'
+  const activity = liveRequestActivity(live)
   const now = useTickingNow(running)
   const snapshot = executionSnapshotOf(live, now)
   const { attempt } = snapshot
@@ -84,7 +88,7 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
           {props.expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         </td>
         <td className={tableCellClass}>
-          <PhaseBadge phase={live.phase} running={running} />
+          <PhaseBadge phase={live.phase} activity={activity} />
         </td>
         <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-text-tertiary')}>
           {formatTime(locale, live.startedAt)}
@@ -139,14 +143,21 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
           <span className={cn(tps !== '—' && 'text-foreground')}>{tps}</span>
         </td>
       </tr>
-      {props.expanded && <RequestExecutionDetailRow live={live} modelName={props.modelName} now={now} />}
+      {props.expanded && (
+        <RequestExecutionDetailRow
+          live={live}
+          modelName={props.modelName}
+          now={now}
+          activity={activity}
+        />
+      )}
     </Fragment>
   )
 }
 
 interface PhaseBadgeProps {
   phase: LiveRequestPhase
-  running: boolean
+  activity: LiveActivity | null
 }
 
 /**
@@ -154,14 +165,14 @@ interface PhaseBadgeProps {
  *
  * 已结束的请求用状态徽标（成功/失败/已取消），因为它只需要回答结果；而一条还在路上的请求
  * 唯一有价值的答案是它现在卡在哪——是还在挑上游、已经发出去了、还是已经在往客户端写了。
- * 圆点在做的事是让「它还在动」这件事不用读文字就能看出来。
+ * 实心圆点表达「仍在进行」，事件到达时才扩散一次，让「刚刚推进了一步」也能被看见。
  */
 function PhaseBadge(props: PhaseBadgeProps) {
   const t = useTranslation()
   return (
-    <Badge variant={props.running ? 'info' : 'muted'} className="gap-1.5 font-normal">
+    <Badge variant={props.activity === null ? 'muted' : 'info'} className="gap-1.5 font-normal">
       <span className="relative flex size-1.5 items-center justify-center">
-        {props.running && <span className="absolute size-1.5 rounded-full bg-current opacity-60 motion-safe:animate-ping" />}
+        <ActivityPulse activity={props.activity} />
         <span className="relative size-1.5 rounded-full bg-current" />
       </span>
       {t(PHASE_LABEL_KEY[props.phase])}

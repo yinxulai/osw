@@ -1,4 +1,5 @@
-import type { LiveRequest, LiveRequestEvent, LiveRequestEventLevel } from '@common/schemas'
+import type { LiveRequest, LiveRequestEvent } from '@common/schemas'
+import { liveActivityToneOf, type LiveActivityTone } from '@/data/live-activity'
 
 /**
  * 「执行中的请求」那条时间轴。
@@ -12,7 +13,7 @@ import type { LiveRequest, LiveRequestEvent, LiveRequestEventLevel } from '@comm
  */
 
 /** 节点语气，决定圆点与文字的颜色。`active` 不出现在事件里，只留给时间轴末端那个「此刻」。 */
-export type TimelineTone = 'neutral' | 'active' | 'success' | 'warn' | 'error'
+export type TimelineTone = LiveActivityTone | 'active'
 
 /** 上游这一次应答的去向（`upstream.head` 的结论）。 */
 export type UpstreamDisposition = 'success' | 'failover' | 'terminal'
@@ -76,13 +77,6 @@ export interface TimelineNode {
   message: TimelineMessage
 }
 
-const TONE_BY_LEVEL: Record<LiveRequestEventLevel, TimelineTone> = {
-  info: 'neutral',
-  success: 'success',
-  warn: 'warn',
-  error: 'error',
-}
-
 /**
  * 把一份台账快照摊成时间轴。
  *
@@ -104,7 +98,7 @@ export function timelineOf(live: LiveRequest): TimelineNode[] {
     nodes.push({
       key: `${event.at}-${index}`,
       offsetMilliseconds: event.offsetMilliseconds,
-      tone: TONE_BY_LEVEL[event.level],
+      tone: liveActivityToneOf(event.level),
       message: messageOf(event, live),
     })
   })

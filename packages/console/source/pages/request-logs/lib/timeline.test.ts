@@ -100,7 +100,7 @@ describe('timelineOf', () => {
     ]))
 
     expect(nodes.map(node => node.offsetMilliseconds)).toEqual([0, 5, 300])
-    expect(nodes.map(node => node.tone)).toEqual(['neutral', 'neutral', 'warn'])
+    expect(nodes.map(node => node.tone)).toEqual(['neutral', 'neutral', 'warning'])
   })
 
   it('numbers attempts for humans instead of for arrays', () => {

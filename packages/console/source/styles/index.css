@@ -669,6 +669,113 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
   }
 }
 
+/* 逻辑模型忙碌边框：静态底边表示仍在进行，事件高光按语义事件重挂载后播放一圈。 */
+@property --logical-model-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.logical-model-card-busy::before {
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: hsl(var(--primary) / 0.3);
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.logical-model-card-event {
+  --activity-color: hsl(var(--primary));
+  --activity-color-soft: hsl(var(--primary) / 0.3);
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--logical-model-border-angle),
+    transparent 0deg 275deg,
+    var(--activity-color-soft) 305deg,
+    var(--activity-color) 338deg,
+    transparent 358deg 360deg
+  );
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: logical-model-border-event 900ms cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+}
+
+@keyframes logical-model-border-event {
+  0% {
+    --logical-model-border-angle: 0deg;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+   to {
+    --logical-model-border-angle: 360deg;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logical-model-card-event {
+    display: none;
+  }
+}
+
+/* 状态圆点只在语义事件到达时扩散一次；持续状态由实心圆点表达。 */
+.status-event-pulse {
+  --activity-color: currentColor;
+  animation: status-event-pulse 700ms cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+  color: var(--activity-color);
+}
+
+:is(.status-event-pulse, .logical-model-card-event)[data-activity-tone="success"] {
+  --activity-color: hsl(var(--success));
+  --activity-color-soft: hsl(var(--success) / 0.3);
+}
+
+:is(.status-event-pulse, .logical-model-card-event)[data-activity-tone="warning"] {
+  --activity-color: hsl(var(--warning));
+  --activity-color-soft: hsl(var(--warning) / 0.3);
+}
+
+:is(.status-event-pulse, .logical-model-card-event)[data-activity-tone="error"] {
+  --activity-color: hsl(var(--destructive));
+  --activity-color-soft: hsl(var(--destructive) / 0.3);
+}
+
+@keyframes status-event-pulse {
+  from {
+    transform: scale(0.7);
+    opacity: 0.7;
+  }
+
+  to {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-event-pulse {
+    animation: none;
+    opacity: 0.45;
+    transform: none;
+  }
+}
+
 .workflow-reactflow .react-flow__node {
   will-change: transform;
 }
