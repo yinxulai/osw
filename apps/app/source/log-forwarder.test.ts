@@ -36,4 +36,25 @@ describe('host log forwarding', () => {
     ])
     for (const line of lines) expect(typeof line.timestamp).toBe('number')
   })
+
+  it('re-buffers output when the sink disconnects and flushes it on reconnect', () => {
+    installLogForwarding()
+
+    const beforeDisconnect: ForwardedLogLine[] = []
+    setLogSink(line => beforeDisconnect.push(line))
+    console.log('delivered before disconnect')
+
+    setLogSink(null)
+    console.warn('buffered during disconnect')
+
+    const afterReconnect: ForwardedLogLine[] = []
+    setLogSink(line => afterReconnect.push(line))
+    console.error('delivered after reconnect')
+
+    expect(beforeDisconnect.map(line => line.message)).toEqual(['delivered before disconnect'])
+    expect(afterReconnect.map(line => [line.level, line.message])).toEqual([
+      ['warn', 'buffered during disconnect'],
+      ['error', 'delivered after reconnect'],
+    ])
+  })
 })

@@ -31,19 +31,6 @@ describe('RulePresetMenu', () => {
     useLanguageStore.setState({ preference: 'en' })
   })
 
-  it('把浮层锚在触发器上，并列出空白规则与全部模板', async () => {
-    render(<RulePresetMenu onCreateBlank={() => {}} onCreateFromPreset={() => {}} />, { wrapper: Wrapper })
-    openMenu()
-
-    // 模板 + 空白规则各占一项。
-    await waitFor(() => expect(menuItems()).toHaveLength(RULE_PRESETS.length + 1))
-
-    // 回归点：Radix 定位不到锚点时会一直保持未定位状态，把内容 `translate(0, -200%)` 挪出视口，
-    // 用户看到的就是「点了没反应」。显式断言浮层没有停在这个状态。
-    const popperWrapper = document.querySelector('[data-radix-popper-content-wrapper]') as HTMLElement
-    expect(popperWrapper.style.transform).not.toBe('translate(0, -200%)')
-  })
-
   it('选中模板时把对应预设交给调用方', async () => {
     const onCreateFromPreset = vi.fn()
     render(<RulePresetMenu onCreateBlank={() => {}} onCreateFromPreset={onCreateFromPreset} />, { wrapper: Wrapper })

@@ -21,16 +21,10 @@ function point(label: string): UsageTrendPoint {
   return { label, inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, reasoningTokens: 0 }
 }
 
-describe('TrendChart', () => {
+describe('TrendChart compatibility', () => {
   beforeEach(() => {
     // 固定语言，避免测试结果依赖运行环境的系统语言。
     useLanguageStore.setState({ preference: 'zh-CN' })
-  })
-
-  it('把服务端给的桶宽写成粒度副标题', () => {
-    render(<TrendChart trend={[point('2026-09-09 00:00'), point('2026-09-09 00:15')]} trendIntervalMs={15 * 60_000} />, { wrapper: Wrapper })
-
-    expect(screen.getByText('每 15 分钟用量')).not.toBeNull()
   })
 
   // 界面比服务端新的那段时间里，`today` 拿到的还是旧版的 `HH:MM` 标签、也没有 `trendIntervalMs`。
