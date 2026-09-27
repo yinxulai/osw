@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   updateRequestContent: vi.fn(),
   updateAttemptContent: vi.fn(),
   updateRequestLogStatus: vi.fn(),
+  updateRequestLogContext: vi.fn(),
   recordAttemptUsage: vi.fn(),
   pruneRequestLogs: vi.fn(),
   pruneRequestContents: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@server/database/request-log-store', () => ({
   updateAttemptContent: mocks.updateAttemptContent,
   recordAttemptUsage: mocks.recordAttemptUsage,
   updateRequestLogStatus: mocks.updateRequestLogStatus,
+  updateRequestLogContext: mocks.updateRequestLogContext,
   pruneRequestLogs: mocks.pruneRequestLogs,
   pruneRequestContents: mocks.pruneRequestContents,
 }))
@@ -79,7 +81,6 @@ function attemptLoggingInput(): AttemptLoggingInput {
     requestRewriteRuleIds: ['rule_request'],
     customAuthHeader: 'authorization',
     captureRequestContent: true,
-    hooks: {},
   }
 }
 

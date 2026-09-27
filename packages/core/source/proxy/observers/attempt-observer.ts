@@ -12,6 +12,12 @@ export interface AttemptObserverOptions {
 }
 
 /**
+ * 关闭正文采集时，观察者仍要保留一小段原文供健康度分类和错误归因；它不应随着
+ * 长连接无限增长。窗口取尾部，因为上游错误通常在输出末尾给出结论。
+ */
+export const UNCAPTURED_RAW_BODY_LIMIT_BYTES = 64 * 1024
+
+/**
  * 一次尝试的观察者：把「上游怎么回的」变成可落库的事实。
  *
  * 它是响应侧唯一的字节读者，因此也是替换 `ResponsePipeline` 里那半份观测职责的落点：
@@ -53,6 +59,9 @@ class ObserverState implements AttemptObserver {
   private readonly upstreamChunks: string[] = []
   private headFrame: HeadFrame | null = null
   private raw = ''
+  private rawByteLength = 0
+  /** 非流式 JSON 的用量只能整包解析；它不参与正文保留，解析完即可释放。 */
+  private wholeBody = ''
   private firstOutputAt: number | null = null
 
   constructor(options: AttemptObserverOptions) {
@@ -91,10 +100,13 @@ class ObserverState implements AttemptObserver {
 
   onUpstreamChunk(_exchange: ExchangeView, _attempt: AttemptView, chunk: Buffer): void {
     const text = chunk.toString('utf8')
-    this.raw += text
+    this.appendRaw(text)
     if (this.options.captureEnabled) this.upstreamChunks.push(text)
     // 非流式正文在收尾时一次性解析：中途的半截 JSON 解析不出任何东西。
-    if (!this.expectsStreaming()) return
+    if (!this.expectsStreaming()) {
+      this.wholeBody += text
+      return
+    }
     if (this.tracker.consumeSseChunk(text)) this.markFirstOutput()
   }
 
@@ -103,7 +115,8 @@ class ObserverState implements AttemptObserver {
       if (this.tracker.flush()) this.markFirstOutput()
       return
     }
-    this.tracker.consumeJson(this.raw)
+    this.tracker.consumeJson(this.wholeBody)
+    this.wholeBody = ''
   }
 
   /** 客户端跳声明的形态是不是 `http-stream`。**预期**，与上游实际怎么回的无关。 */
@@ -113,5 +126,17 @@ class ObserverState implements AttemptObserver {
 
   private markFirstOutput(): void {
     if (this.firstOutputAt === null) this.firstOutputAt = Date.now()
+  }
+
+  private appendRaw(text: string): void {
+    this.raw += text
+    this.rawByteLength += Buffer.byteLength(text)
+    if (this.options.captureEnabled || this.rawByteLength <= UNCAPTURED_RAW_BODY_LIMIT_BYTES) return
+
+    const buffer = Buffer.from(this.raw)
+    let start = buffer.length - UNCAPTURED_RAW_BODY_LIMIT_BYTES
+    while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) start += 1
+    this.raw = buffer.subarray(start).toString('utf8')
+    this.rawByteLength = Buffer.byteLength(this.raw)
   }
 }

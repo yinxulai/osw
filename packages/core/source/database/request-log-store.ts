@@ -37,6 +37,12 @@ interface CreateRequestLogInput {
   attributes?: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
 }
 
+interface RequestLogContextUpdate {
+  logicalModelId: string | null
+  clientProtocol: Protocol | null
+  transport: TransportKind
+}
+
 /** 用量数值。请求级与尝试级共用同一形状，只是存在不同的表里。 */
 export interface UsageValues {
   inputTokens: number | null
@@ -225,6 +231,15 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
   getDataDb().update(requestLogs).set(fields).where(eq(requestLogs.id, id)).run()
 }
 
+/** 请求仍在解析或执行时补齐路由身份；状态与耗时仍只由 {@link updateRequestLogStatus} 收尾。 */
+export async function updateRequestLogContext(id: string, update: RequestLogContextUpdate): Promise<void> {
+  getDataDb().update(requestLogs).set({
+    logicalModelId: update.logicalModelId,
+    clientProtocol: update.clientProtocol,
+    transport: update.transport,
+  }).where(eq(requestLogs.id, id)).run()
+}
+
 export async function listRequestLogs(limit = 50, offset = 0, filter?: RequestLogFilter): Promise<RequestLog[]> {
   const conditions = requestLogFilterConditions(filter)
   const rows = getDataDb().select().from(requestLogs)
@@ -303,7 +318,16 @@ export async function createRequestAttempt(input: CreateRequestAttemptInput): Pr
 }
 
 type CreateRequestContentInput = Omit<RequestContent, 'id' | 'createdTime' | 'updatedTime' | 'responseStatus' | 'responseHeaders' | 'responseBody'> & Partial<Pick<RequestContent, 'responseStatus' | 'responseHeaders' | 'responseBody'>>
-type UpdateRequestContentInput = Partial<Pick<RequestContent, 'captureStatus' | 'responseStatus' | 'responseHeaders' | 'responseBody'>>
+type UpdateRequestContentInput = Partial<Pick<RequestContent,
+  | 'captureStatus'
+  | 'requestMethod'
+  | 'requestPath'
+  | 'requestHeaders'
+  | 'requestBody'
+  | 'responseStatus'
+  | 'responseHeaders'
+  | 'responseBody'
+>>
 
 export async function createRequestContent(input: CreateRequestContentInput): Promise<RequestContent> {
   const id = generateId('content_')

@@ -23,7 +23,7 @@ export async function runAttempts<T, O extends AttemptRunnerResult>(options: Att
 
   for (const target of options.targets) {
     if (options.signal.aborted) {
-      await options.onCancelled(options.targets[0], attemptIndex)
+      await options.onCancelled(target, attemptIndex)
       return
     }
 

@@ -37,6 +37,12 @@ export interface HttpResponseSinkOptions {
   transport: TransportKind
   /** 是否记录写出的字节。关闭时只保留缓冲分支的兜底正文。 */
   captureEnabled: boolean
+  /**
+   * 一块正文已经交给客户端出口之后调用。
+   *
+   * 它不从帧管道触发：修改器产出一帧不代表出口接受它，更不代表被放弃的尝试真的写出过字节。
+   */
+  onDeliveredChunk?: (chunk: Buffer) => void
 }
 
 /**
@@ -70,8 +76,8 @@ class HttpFrameSink implements HttpResponseSink {
   private discarded = false
   private finished = false
   private failed: Error | null = null
-  private readonly captured: string[] = []
-  private readonly buffered: string[] = []
+  private readonly captured: Buffer[] = []
+  private readonly buffered: Buffer[] = []
   private bufferedWritten: string | null = null
 
   constructor(options: HttpResponseSinkOptions) {
@@ -90,12 +96,11 @@ class HttpFrameSink implements HttpResponseSink {
       return
     }
     if (frame.kind === 'data') {
-      const text = frame.body.toString('utf8')
       if (this.options.transport !== 'http-stream') {
-        this.buffered.push(text)
+        this.buffered.push(frame.body)
         return
       }
-      const pending = this.writeDownstream(text)
+      const pending = this.writeDownstream(frame.body)
       if (pending) await pending
       return
     }
@@ -115,12 +120,14 @@ class HttpFrameSink implements HttpResponseSink {
   }
 
   downstreamBody(): string | null {
-    if (this.options.transport === 'http-stream') return serializeChunkSnapshot(this.captured)
-    return this.captured.join('') || this.bufferedWritten
+    if (this.options.transport === 'http-stream') {
+      return serializeChunkSnapshot(this.captured.map(chunk => chunk.toString('utf8')))
+    }
+    return this.captured.length > 0 ? Buffer.concat(this.captured).toString('utf8') : this.bufferedWritten
   }
 
   partialDownstreamBody(): string | null {
-    return this.captured.length > 0 ? this.captured.join('') : null
+    return this.captured.length > 0 ? Buffer.concat(this.captured).toString('utf8') : null
   }
 
   failure(): Error | null {
@@ -147,12 +154,12 @@ class HttpFrameSink implements HttpResponseSink {
       if (!sink.writableEnded) sink.end()
       return
     }
-    const body = this.buffered.join('')
+    const body = Buffer.concat(this.buffered)
     // 已写出的正文与响应是否还能写无关：客户端视角的记录不该因为连接已关闭而消失。
-    this.bufferedWritten = body || null
+    this.bufferedWritten = body.length > 0 ? body.toString('utf8') : null
     if (sink.writableEnded) return
     if (!sink.headersSent) sink.start(head.status, head.headers)
-    if (!body) {
+    if (body.length === 0) {
       sink.end()
       return
     }
@@ -172,13 +179,15 @@ class HttpFrameSink implements HttpResponseSink {
    * 客户端收不走时必须等：继续把上游的字节往内核缓冲区里塞，等于把「客户端有多慢」
    * 换算成「我们能占多少内存」。等待期间管道不再拉下一帧，上游随之被暂停（`FrameQueue`）。
    */
-  private writeDownstream(chunk: string): void | Promise<void> {
+  private writeDownstream(chunk: Buffer): void | Promise<void> {
     const sink = this.options.response
     // 已经收尾的响应不能再写；此时连「客户端视角」也不该记账，因为它并没有收到。
     if (sink.writableEnded) return
     if (this.options.captureEnabled) this.captured.push(chunk)
     const accepted = sink.write(chunk)
-    if (accepted === false && sink.drained) return sink.drained()
+    const notify = () => this.options.onDeliveredChunk?.(chunk)
+    if (accepted === false && sink.drained) return sink.drained().then(notify)
+    notify()
     return undefined
   }
 }

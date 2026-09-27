@@ -43,4 +43,29 @@ describe('attempt runner', () => {
 
     expect(events).toEqual(['failed'])
   })
+
+  it('attributes cancellation to the candidate that would run next', async () => {
+    const controller = new AbortController()
+    const cancelled: string[] = []
+
+    await runAttempts<string, { disposition: 'success' | 'failover' | 'terminal'; statusCode: number }>({
+      signal: controller.signal,
+      targets: ['first', 'second'],
+      attempt: async target => {
+        if (target === 'first') {
+          controller.abort()
+          return { disposition: 'failover', statusCode: 503 }
+        }
+        return { disposition: 'success', statusCode: 200 }
+      },
+      onFailover: async () => undefined,
+      onSuccess: async () => undefined,
+      onTerminal: async () => undefined,
+      onError: async () => true,
+      onCancelled: async target => { cancelled.push(target) },
+      onExhausted: async () => undefined,
+    })
+
+    expect(cancelled).toEqual(['second'])
+  })
 })

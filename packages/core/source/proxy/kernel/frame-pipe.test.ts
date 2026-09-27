@@ -174,12 +174,12 @@ describe('frame pipe', () => {
       ],
     })
 
-    expect(calls).toEqual(['head', 'upstream', 'downstream', 'healthy'])
+    expect(calls).toEqual(['head', 'upstream'])
     expect(result.error).toBeNull()
     expect(result.byteCount).toBe(5)
     expect(sink.frames.map(frame => frame.kind)).toEqual(['head', 'data', 'end'])
     // 静默吞掉异常会让「观察者挂了」变成不可诊断问题，所以只丢记录、留日志。
-    expect(warnings).toHaveBeenCalledTimes(3)
+    expect(warnings).toHaveBeenCalledTimes(2)
     expect(warnings.mock.calls[0][0]).toContain('observer 挂了')
     warnings.mockRestore()
   })

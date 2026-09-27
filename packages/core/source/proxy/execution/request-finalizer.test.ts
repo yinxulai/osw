@@ -4,7 +4,7 @@ import type { ExecutionOrigin, UpstreamTarget } from '@server/proxy/contracts'
 import type { RequestLogger } from '@server/proxy/observability/logging-types'
 import type { RequestContext } from '@server/proxy/request/request-context'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
-import type { AttemptOutcome } from './attempt-outcome'
+import type { DeliveredAttemptOutcome, DiscardedAttemptOutcome } from './attempt-outcome'
 import { createRequestFinalizer } from './request-finalizer'
 
 /**
@@ -52,9 +52,33 @@ const context = {
 function createLogger(): RequestLogger {
   return {
     requestContentId: null,
+    updateRequest: vi.fn(async () => {}),
     finalizeRequestLog: vi.fn(async () => {}),
     finalizeRequestContent: vi.fn(async () => {}),
     finalizeLocalErrorContent: vi.fn(async () => {}),
+  }
+}
+
+function delivered(disposition: DeliveredAttemptOutcome['disposition'], statusCode: number): DeliveredAttemptOutcome {
+  return {
+    delivery: 'delivered',
+    disposition,
+    statusCode,
+    durationMilliseconds: 12,
+    upstreamRequestId: null,
+    upstreamResponseBody: null,
+    clientResponse: { captureStatus: 'captured', responseHeaders: null, responseBody: null },
+  }
+}
+
+function discarded(statusCode: number): DiscardedAttemptOutcome {
+  return {
+    delivery: 'discarded',
+    disposition: 'failover',
+    statusCode,
+    durationMilliseconds: 12,
+    upstreamRequestId: null,
+    upstreamResponseBody: null,
   }
 }
 
@@ -81,7 +105,7 @@ beforeEach(() => {
 
 describe('request_completed reporting', () => {
   it('reports once when a request is forwarded successfully', async () => {
-    const outcome: AttemptOutcome = { disposition: 'success', statusCode: 200, durationMilliseconds: 12 }
+    const outcome = delivered('success', 200)
 
     await createFinalizer().onSuccess(target, outcome, 0)
 
@@ -91,7 +115,7 @@ describe('request_completed reporting', () => {
 
   it('stays silent when the same hook is called without a successful disposition', async () => {
     // `onSuccess` 也会被「上游回了非 2xx」这类结局用到，那时不能算处理成功。
-    const outcome: AttemptOutcome = { disposition: 'terminal', statusCode: 503, durationMilliseconds: 12 }
+    const outcome = delivered('terminal', 503)
 
     await createFinalizer().onSuccess(target, outcome, 0)
 
@@ -100,7 +124,7 @@ describe('request_completed reporting', () => {
 
   it('does not count a failed or cancelled request', async () => {
     const finalizer = createFinalizer()
-    const outcome: AttemptOutcome = { disposition: 'terminal', statusCode: 503, durationMilliseconds: 12 }
+    const outcome = delivered('terminal', 503)
 
     await finalizer.onTerminal(target, outcome, 0)
     await finalizer.onCancelled(target, 0)
@@ -110,7 +134,7 @@ describe('request_completed reporting', () => {
 
   it('does not count an internal execution as a processed task', async () => {
     // 连接测试、工作流里的模型节点走的也是这条收尾，但它们不是替客户端处理的任务。
-    const outcome: AttemptOutcome = { disposition: 'success', statusCode: 200, durationMilliseconds: 12 }
+    const outcome = delivered('success', 200)
 
     await createFinalizer([target], 'internal').onSuccess(target, outcome, 0)
 
@@ -120,7 +144,7 @@ describe('request_completed reporting', () => {
 
 describe('failover_happened reporting', () => {
   async function failover(targets: readonly UpstreamTarget[], attemptIndex: number): Promise<void> {
-    const outcome: AttemptOutcome = { disposition: 'failover', statusCode: 503, durationMilliseconds: 12 }
+    const outcome = discarded(503)
     await createFinalizer(targets).onFailover(targets[attemptIndex], outcome, attemptIndex)
   }
 
@@ -146,7 +170,7 @@ describe('failover_happened reporting', () => {
   })
 
   it('does not report failover for an internal execution', async () => {
-    const outcome: AttemptOutcome = { disposition: 'failover', statusCode: 503, durationMilliseconds: 12 }
+    const outcome = discarded(503)
 
     await createFinalizer([target, secondTarget], 'internal').onFailover(target, outcome, 0)
 

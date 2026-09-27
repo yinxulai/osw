@@ -43,7 +43,6 @@ export function createAttemptLogger(input: AttemptLoggingInput): AttemptLogger {
         responseHeaders: serializeCapturedHeaders(content.responseHeaders),
         responseBody: content.responseBody,
       })
-      await input.hooks.onContentCaptured?.({ requestId: input.requestId, perspective: 'upstream' })
     } catch (error) {
       console.error(`[proxy] failed to write the request body: ${(error as Error).message}`)
     }
@@ -89,7 +88,6 @@ export function createAttemptLogger(input: AttemptLoggingInput): AttemptLogger {
         cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
         rawUsage: usage?.rawUsage ?? null,
       })
-      await input.hooks.onAttemptRecorded?.({ requestId: input.requestId, attemptId: attempt.id })
       if (finalization.upstreamContent) await recordUpstreamContent(attempt.id, finalization.upstreamContent)
     } catch (error) {
       console.error(`[proxy] failed to write the request attempt log: ${(error as Error).message}`)

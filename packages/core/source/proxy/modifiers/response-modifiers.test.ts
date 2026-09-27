@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Frame, FrameSink, HeadFrame, ModifierContext } from '@server/proxy/contracts'
+import type { DeliveryDecisionRef, Frame, FrameSink, HeadFrame, ModifierContext } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
 import type { ProtocolAdapter } from '@server/proxy/protocols/shared/types'
 import type { ProtocolConversionAdapter, NativeProtocolAdapter } from '@server/proxy/protocols/shared/types'
 import { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
+import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import { pipeFrames } from '@server/proxy/kernel/frame-pipe'
 import { selectCandidates } from '@server/proxy/kernel/modifier-selection'
-import { createResponseModifiers, type AttemptRouting } from './response-modifiers'
+import { createResponseModifiers } from './response-modifiers'
 
 const JSON_HEAD: HeadFrame = { kind: 'head', status: 200, headers: { 'content-type': 'application/json', 'content-length': '18' } }
 const SSE_HEAD: HeadFrame = { kind: 'head', status: 200, headers: { 'content-type': 'text/event-stream' } }
 
 /** 正常交付：上游 2xx，字节给客户端。 */
-const DELIVERED: AttemptRouting = { deliverable: true, successful: true }
+const DELIVERED: DeliveryDecisionRef = { decision: { kind: 'deliver', successful: true } }
 /**
  * 执行器已经判定的 failover：这次响应一个字节都不交付。
  *
@@ -20,7 +21,7 @@ const DELIVERED: AttemptRouting = { deliverable: true, successful: true }
  * （见 `docs/product/proxy-engine.md` §1.2）。因此这里的修改器必须原样透传，绝不能自己
  * 攒一份整包再发出去。
  */
-const ABANDONED: AttemptRouting = { deliverable: false, successful: false }
+const ABANDONED: DeliveryDecisionRef = { decision: { kind: 'discard', reason: 'status' } }
 
 function nativeAdapter(): NativeProtocolAdapter {
   return {
@@ -112,10 +113,16 @@ function dataFrames(frames: readonly Frame[]): string[] {
   return frames.filter(frame => frame.kind === 'data').map(frame => (frame as { body: Buffer }).body.toString('utf8'))
 }
 
+function errorFrames(frames: readonly Frame[]): ProtocolConversionError[] {
+  return frames
+    .filter((frame): frame is Extract<Frame, { kind: 'error' }> => frame.kind === 'error')
+    .map(frame => frame.error as ProtocolConversionError)
+}
+
 type RunInput = {
   frames: Frame[]
   adapter: ProtocolAdapter
-  routing: AttemptRouting
+  delivery: DeliveryDecisionRef
   context: ModifierContext
   rules?: readonly RequestRewriteRule[]
 }
@@ -125,11 +132,10 @@ async function run(input: RunInput) {
   const onRewriteEvaluated = vi.fn()
   const modifiers = createResponseModifiers({
     adapter: input.adapter,
-    routing: input.routing,
+    delivery: input.delivery,
     rules: input.rules ?? [],
     toolNames: new ToolNameRegistry(),
     onRewriteEvaluated,
-    onConversionError: vi.fn(),
   })
   const result = await pipeFrames({ frames: frameSource(input.frames), sink, context: input.context, modifiers })
   return { frames: sink.frames, result, onRewriteEvaluated }
@@ -141,7 +147,7 @@ describe('protocol conversion modifier', () => {
     const { frames } = await run({
       frames: [JSON_HEAD, { kind: 'data', body: Buffer.from(body) }, { kind: 'end' }],
       adapter: conversionAdapter(),
-      routing: DELIVERED,
+      delivery: DELIVERED,
       context: createContext({ transport: 'http' }),
     })
 
@@ -158,7 +164,7 @@ describe('protocol conversion modifier', () => {
         { kind: 'end' },
       ],
       adapter: conversionAdapter(),
-      routing: DELIVERED,
+      delivery: DELIVERED,
       context: createContext({ transport: 'http-stream' }),
     })
 
@@ -171,13 +177,58 @@ describe('protocol conversion modifier', () => {
     const { frames } = await run({
       frames: [JSON_HEAD, { kind: 'data', body: Buffer.from(body) }, { kind: 'end' }],
       adapter: conversionAdapter(onConvert),
-      routing: ABANDONED,
+      delivery: ABANDONED,
       context: createContext({ transport: 'http-stream' }),
     })
 
     // 这次尝试已被执行器判为 failover：转换器根本不该被选中，字节按上游给的样子透传。
     expect(onConvert).not.toHaveBeenCalled()
     expect(dataFrames(frames)).toEqual([body])
+  })
+
+  it('整流转换失败时输出错误帧，绝不透传未转换的上游正文', async () => {
+    const adapter = conversionAdapter()
+    adapter.convertResponse = () => { throw new Error('invalid upstream payload') }
+
+    const { frames, result } = await run({
+      frames: [JSON_HEAD, { kind: 'data', body: Buffer.from('{"secret":"raw upstream"}') }, { kind: 'end' }],
+      adapter,
+      delivery: DELIVERED,
+      context: createContext({ transport: 'http' }),
+    })
+
+    const [failure] = errorFrames(frames)
+    expect(dataFrames(frames)).toEqual([])
+    expect(failure).toBeInstanceOf(ProtocolConversionError)
+    expect(failure).toMatchObject({
+      code: 'PROTOCOL_CONVERSION_FAILED',
+      phase: 'whole-body',
+      from: 'anthropic-messages',
+      to: 'openai-completions',
+    })
+    expect(result.error).toBe(failure)
+  })
+
+  it('流式转换器抛错时立即终止并输出错误帧', async () => {
+    const adapter: ProtocolConversionAdapter = {
+      ...conversionAdapter(),
+      createStreamConverter: () => ({
+        push() { throw new Error('invalid SSE chunk') },
+        flush: () => '',
+      }),
+    }
+
+    const { frames, result } = await run({
+      frames: [SSE_HEAD, { kind: 'data', body: Buffer.from('data: raw\n\n') }, { kind: 'end' }],
+      adapter,
+      delivery: DELIVERED,
+      context: createContext({ transport: 'http-stream' }),
+    })
+
+    const [failure] = errorFrames(frames)
+    expect(dataFrames(frames)).toEqual([])
+    expect(failure).toMatchObject({ code: 'PROTOCOL_CONVERSION_FAILED', phase: 'stream-chunk' })
+    expect(result.error).toBe(failure)
   })
 })
 
@@ -186,13 +237,13 @@ describe('downstream head modifier', () => {
     const entire = await run({
       frames: [JSON_HEAD, { kind: 'data', body: Buffer.from('{"text":"original"}') }, { kind: 'end' }],
       adapter: nativeAdapter(),
-      routing: ABANDONED,
+      delivery: ABANDONED,
       context: createContext({ transport: 'http' }),
     })
     const incremental = await run({
       frames: [JSON_HEAD, { kind: 'data', body: Buffer.from('{"text":"original"}') }, { kind: 'end' }],
       adapter: nativeAdapter(),
-      routing: ABANDONED,
+      delivery: ABANDONED,
       context: createContext({ transport: 'http-stream' }),
     })
 
@@ -206,11 +257,10 @@ describe('response rewrite modifier', () => {
   it('按声明的传输形态被内核排除，不需要自己去判断', () => {
     const modifiers = createResponseModifiers({
       adapter: nativeAdapter(),
-      routing: DELIVERED,
+      delivery: DELIVERED,
       rules: [],
       toolNames: new ToolNameRegistry(),
       onRewriteEvaluated: vi.fn(),
-      onConversionError: vi.fn(),
     })
 
     const entire = selectCandidates(modifiers, createContext({ transport: 'http' }), 'frame').map(modifier => modifier.id)
@@ -226,7 +276,7 @@ describe('response rewrite modifier', () => {
     const { frames, onRewriteEvaluated } = await run({
       frames: [JSON_HEAD, { kind: 'data', body: Buffer.from('{"text":"original"}') }, { kind: 'end' }],
       adapter: nativeAdapter(),
-      routing: DELIVERED,
+      delivery: DELIVERED,
       context: createContext({ transport: 'http' }),
       rules: [responseRule()],
     })
@@ -241,7 +291,7 @@ describe('response rewrite modifier', () => {
     const { frames, onRewriteEvaluated } = await run({
       frames: [SSE_HEAD, { kind: 'data', body: Buffer.from('data: {"text":"original"}\n\n') }, { kind: 'end' }],
       adapter: nativeAdapter(),
-      routing: DELIVERED,
+      delivery: DELIVERED,
       context: createContext({ transport: 'http-stream' }),
       rules: [responseRule()],
     })
@@ -254,7 +304,7 @@ describe('response rewrite modifier', () => {
     const { frames, onRewriteEvaluated } = await run({
       frames: [{ kind: 'head', status: 500, headers: { 'content-type': 'application/json' } }, { kind: 'end' }],
       adapter: nativeAdapter(),
-      routing: ABANDONED,
+      delivery: ABANDONED,
       context: createContext({ transport: 'http' }),
       rules: [responseRule()],
     })

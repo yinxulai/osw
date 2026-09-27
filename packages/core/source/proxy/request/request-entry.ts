@@ -1,11 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Protocol, RequestAttribute, TransportKind } from '@common/schemas'
-import { getSettings } from '@server/database/settings-store'
 import { generateId } from '@common/utils'
 import { executeProxyRequest } from '../execution/attempt-executor'
-import { initializeRequestLogger } from '../observability/logging'
-import type { RequestLogger } from '../observability/logging-types'
-import { NOOP_PROXY_OBSERVATION_HOOKS, type ProxyObservationHooks } from '../observability/hooks'
 import { NodeProxyResponse } from '../response/proxy-response'
 import { createRequestContext } from './request-context'
 import { proxyTargetPlanner } from '../planners/target-planner'
@@ -15,6 +11,7 @@ import { parseRouteBody, resolveRoute, toRouteHeaders } from '../routing/route-r
 import { resolveUpstreamTransport } from '../routing/upstream-url'
 import { collectRequestAttributes, extractClientRequestId } from '@server/proxy/observability/request-attribute-collector'
 import { liveRequestStore } from '../observability/live-request-store'
+import { createProxyRequestSession, type ProxyRequestSession } from './request-session'
 
 /**
  * 一次交换在入口处就已确定、且不随拒绝原因变化的事实。
@@ -29,7 +26,6 @@ interface ExchangeIdentity {
   headers: IncomingMessage['headers']
   attributes: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
   startedAt: number
-  hooks: ProxyObservationHooks
 }
 
 /** 入口阶段已解析出的事实；尚未解析到时为 `null`。 */
@@ -87,28 +83,47 @@ interface RequestBodyReadResult {
  * 图读到的就是这次请求本身（路径 / 方法 / 头 / 体），产出一串按优先级排的落点逻辑模型，
  * 入口拿着这串落点去问规划器谁能用。策略是图，规则就只存在于图里。
  */
-export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse, hooks: ProxyObservationHooks = NOOP_PROXY_OBSERVATION_HOOKS): Promise<void> {
+export async function handleProxyRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const startedAt = Date.now()
   const requestId = generateId('req_')
   const method = req.method ?? 'POST'
   const path = req.url ?? '/'
   const attributes = collectRequestAttributes(req.headers)
   // 交换标识在这里一次绑好：下面所有拒绝分支共用同一份，不必逐条重复。
-  const identity: ExchangeIdentity = { requestId, method, path, headers: req.headers, attributes, startedAt, hooks }
+  const identity: ExchangeIdentity = { requestId, method, path, headers: req.headers, attributes, startedAt }
   // 台账在**第一件事**之前开张：这次请求从「连路径都还没认出来」开始就被人看着了。
   // 协议与形态此刻还不知道，解析出来后再补（见 `live.update`）。
   const live = liveRequestStore.begin({ id: requestId, method, path, transport: 'http', clientProtocol: null })
+  const controller = new AbortController()
+  const abortRequest = () => controller.abort()
+  req.once('aborted', abortRequest)
+  res.once('close', () => {
+    if (!res.writableEnded) abortRequest()
+  })
+  if (req.aborted || res.destroyed) abortRequest()
+  const session = await createProxyRequestSession({
+    requestId,
+    logicalModelId: null,
+    clientProtocol: null,
+    method,
+    path,
+    headers: req.headers,
+    attributes,
+    requestBody: NO_REQUEST_BODY,
+    transport: 'http',
+    startedAt,
+  })
   /** 拒绝这次交换：回错误响应 + 记一条失败日志。台账跟着落定，否则它会一直挂在「进行中」。 */
-  const reject = (refusal: ExchangeRefusal, resolution: ExchangeResolution) => {
+  const reject = async (refusal: ExchangeRefusal, resolution: ExchangeResolution) => {
     live.update(resolution)
     live.settle('failed', 'request.rejected', 'error', { errorCode: refusal.errorCode, httpStatus: refusal.statusCode })
-    return rejectExchange(res, { ...identity, ...resolution, refusal })
+    return rejectExchange(res, { ...identity, ...resolution, refusal }, session)
   }
   /** 客户端中途断开：没有响应可写，只记一条已取消。 */
-  const abort = (resolution: ExchangeResolution) => {
+  const abort = async (resolution: ExchangeResolution) => {
     live.update(resolution)
     live.settle('cancelled', 'request.aborted', 'warn')
-    return recordAbortedExchange({ ...identity, ...resolution })
+    return recordAbortedExchange({ ...identity, ...resolution }, session)
   }
 
   // 入口匹配一次，同时定下协议、接口与封装描述；后面的模型读写与流式判定都问这个结果。
@@ -135,6 +150,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   console.debug(`[proxy] request accepted requestId=${requestId} clientRequestId=${clientRequestId ?? 'none'} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} endpoint=${endpoint.endpointId} bodyBytes=${requestBody.length}`)
   const envelopeInput = readEnvelope(requestBody)
   const transport = endpoint.envelope.resolveTransport(envelopeInput)
+  await session.logger.updateRequest({ logicalModelId: null, clientProtocol: protocol, method, path, headers: req.headers, requestBody, transport })
   const modelResult = endpoint.envelope.readModel(envelopeInput)
   if (!modelResult.ok) {
     console.warn(`[proxy] invalid model request requestId=${requestId} protocol=${protocol} reason=${modelResult.reason}`)
@@ -157,9 +173,13 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     transport,
     traceId: requestId,
   })
+  if (controller.signal.aborted) {
+    await abort({ logicalModelId: route.logicalModelIds[0] ?? null, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    return
+  }
   if (route.logicalModelIds.length === 0) {
     console.error(`[proxy] no landing logical model requestId=${requestId} clientModel=${modelResult.model.trim()} mode=${route.mode} definitionVersion=${route.definitionVersion} stopReason=${route.stopReason}`)
-    await reject({ statusCode: 503, errorCode: 'NO_MODEL_CONFIGURED', errorMessage: NO_LANDING_DETAIL }, { logicalModelId: null, clientProtocol: protocol, requestBody, transport })
+    await reject({ statusCode: 503, errorCode: 'NO_MODEL_CONFIGURED', errorMessage: NO_LANDING_DETAIL }, { logicalModelId: null, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
   console.debug(`[proxy] route resolved requestId=${requestId} clientModel=${modelResult.model.trim()} mode=${route.mode} definitionVersion=${route.definitionVersion} stopReason=${route.stopReason} landingModels=${route.logicalModelIds.join(',')}`)
@@ -173,12 +193,16 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     // 落点一个都没成，但图确实选过落点：日志照记首选落点，否则「路由到了谁」会被记成空白。
     const landing = route.logicalModelIds[0]
     if (plan.reason === 'manual-model-unavailable') {
-      console.warn(`[proxy] manual provider model unavailable requestId=${requestId} protocol=${protocol} detail=${plan.detail}`)
-      await reject({ statusCode: 409, errorCode: 'MANUAL_MODEL_UNAVAILABLE', errorMessage: plan.detail }, { logicalModelId: landing, clientProtocol: protocol, requestBody, transport })
+      console.warn(`[proxy] manual provider model unavailable requestId=${requestId} protocol=${route.protocol} detail=${plan.detail}`)
+      await reject({ statusCode: 409, errorCode: 'MANUAL_MODEL_UNAVAILABLE', errorMessage: plan.detail }, { logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
       return
     }
-    console.warn(`[proxy] no available upstream provider: ${method} ${path} (protocol=${protocol}, landingModels=${route.logicalModelIds.join(',')}, mode=${route.mode}, definitionVersion=${route.definitionVersion}, requestId=${requestId}, reason=${plan.reason}, detail=${plan.detail})`)
-    await reject({ statusCode: 503, errorCode: 'NO_AVAILABLE_PROVIDER', errorMessage: `No available upstream provider: ${plan.detail}` }, { logicalModelId: landing, clientProtocol: protocol, requestBody, transport })
+    console.warn(`[proxy] no available upstream provider: ${method} ${path} (protocol=${route.protocol}, landingModels=${route.logicalModelIds.join(',')}, mode=${route.mode}, definitionVersion=${route.definitionVersion}, requestId=${requestId}, reason=${plan.reason}, detail=${plan.detail})`)
+    await reject({ statusCode: 503, errorCode: 'NO_AVAILABLE_PROVIDER', errorMessage: `No available upstream provider: ${plan.detail}` }, { logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    return
+  }
+  if (controller.signal.aborted) {
+    await abort({ logicalModelId: plan.logicalModelId, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
 
@@ -186,17 +210,12 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   // 路由结论落进台账：这一步之后界面才谈得上「实时看见路由到了谁、按什么顺序试」。
   live.resolveRoute({ logicalModelId, clientProtocol: route.protocol, transport: route.transport, candidates: plan.targets })
   live.setPhase('connecting')
-  const controller = new AbortController()
-  req.once('aborted', () => controller.abort())
-  res.once('close', () => {
-    if (!res.writableEnded) controller.abort()
-  })
   const context = createRequestContext({
     requestId,
     logicalModelId,
-    clientProtocol: protocol,
+    clientProtocol: route.protocol,
     // 客户端跳的形态就是入口解析出来的那一个：换层不换词。
-    transport,
+    transport: route.transport,
     method,
     path,
     headers: req.headers,
@@ -206,44 +225,21 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   })
 
   console.debug(`[proxy] execution started requestId=${requestId} logicalModelId=${logicalModelId} targets=${plan.targets.length}`)
-  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), hooks, origin: 'client', live })
-}
-
-/**
- * 打开这次交换的日志器，并补齐「是否采集正文」这个唯一来自设置的字段。
- *
- * 入口阶段的两条出口（拒绝、中断）都从这里拿日志器，保证这个判断只有一个点。
- */
-async function openExchangeLogger(input: ExchangeIdentity & ExchangeResolution): Promise<RequestLogger> {
-  const settings = await getSettings()
-  return initializeRequestLogger({
-    requestId: input.requestId,
-    logicalModelId: input.logicalModelId,
-    clientProtocol: input.clientProtocol,
-    method: input.method,
-    path: input.path,
-    headers: input.headers,
-    attributes: input.attributes,
-    requestBody: input.requestBody,
-    transport: input.transport,
-    captureRequestLogs: settings.captureRequestLogs,
-    captureRequestContent: settings.captureRequestContent,
-    hooks: input.hooks,
-  })
+  await executeProxyRequest({ context, targets: plan.targets, response: new NodeProxyResponse(res), session, origin: 'client', live })
 }
 
 /** 拒绝收尾：回一条错误响应，再记一条失败日志。入口处所有拒绝分支共用。 */
-async function rejectExchange(res: ServerResponse, input: RejectedExchange): Promise<void> {
+async function rejectExchange(res: ServerResponse, input: RejectedExchange, session: ProxyRequestSession): Promise<void> {
   const responseBody = writeJsonError(res, input.refusal.statusCode, input.refusal.errorCode, input.refusal.errorMessage)
-  const logger = await openExchangeLogger(input)
-  await logger.finalizeLocalErrorContent(input.refusal.statusCode, res.getHeaders(), responseBody)
-  await logger.finalizeRequestLog('failed', input.startedAt)
+  await session.logger.updateRequest(input)
+  await session.logger.finalizeLocalErrorContent(input.refusal.statusCode, res.getHeaders(), responseBody)
+  await session.logger.finalizeRequestLog('failed', session.startedAt)
 }
 
 /** 中断收尾：写入一条被客户端中断的记录，没有响应写出，因此不写客户端正文的响应侧。 */
-async function recordAbortedExchange(input: AbortedExchange): Promise<void> {
-  const logger = await openExchangeLogger(input)
-  await logger.finalizeRequestLog('cancelled', input.startedAt)
+async function recordAbortedExchange(input: AbortedExchange, session: ProxyRequestSession): Promise<void> {
+  await session.logger.updateRequest(input)
+  await session.logger.finalizeRequestLog('cancelled', session.startedAt)
 }
 
 /**

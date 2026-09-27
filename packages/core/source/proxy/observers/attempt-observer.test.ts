@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttemptOutcomeView, AttemptView, ExchangeView, TransportKind } from '@server/proxy/contracts'
 import { serializeChunkSnapshot } from '@server/proxy/adapters/http-response-sink'
-import { createAttemptObserver } from './attempt-observer'
+import { createAttemptObserver, UNCAPTURED_RAW_BODY_LIMIT_BYTES } from './attempt-observer'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 const SSE_HEADERS = { 'content-type': 'text/event-stream' }
@@ -118,6 +118,17 @@ describe('attempt observer', () => {
     // 健康度判定读原文，因此关掉采集也不能丢它。
     expect(observer.rawBody()).toBe('data: {"choices":[{"delta":{"content":"a"}}]}\n\n')
     expect(observer.upstreamBody()).toBe(serializeChunkSnapshot([]))
+  })
+
+  it('bounds the diagnostic raw body when capture is disabled', () => {
+    const { observer, head, send } = setup('http-stream', false)
+    head(SSE_HEADERS)
+    send(`data: ${'a'.repeat(UNCAPTURED_RAW_BODY_LIMIT_BYTES)}\n\n`)
+    send('data: tail\n\n')
+
+    const raw = observer.rawBody() ?? ''
+    expect(Buffer.byteLength(raw)).toBe(UNCAPTURED_RAW_BODY_LIMIT_BYTES)
+    expect(raw.endsWith('data: tail\n\n')).toBe(true)
   })
 
   it('keeps the partial upstream body when the attempt dies mid-stream', () => {

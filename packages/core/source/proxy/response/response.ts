@@ -17,6 +17,12 @@ export interface HealthFailureInput {
    * 与 `transportMismatch` 同样的道理：失败的事实不在状态码里，只说给调用方听。
    */
   streamInterrupted?: boolean
+  /**
+   * 上游返回了 2xx，但响应不符合它自己声明的协议，转换器无法解析。
+   *
+   * 这同样是状态码之外的事实：模型回了错形状的 200，不代表模型健康。
+   */
+  responseConversionFailed?: boolean
 }
 
 /** 状态码之外的失败事实；`recordHealthFailure` 用它把「这次失败长什么样」整份传下去。 */
@@ -55,11 +61,12 @@ export function isClientAttributableStatus(statusCode: number): boolean {
 }
 
 export function classifyHealthFailure(input: HealthFailureInput): HealthFailureScope {
-  const { statusCode, responseBody, transportMismatch, streamInterrupted } = input
+  const { statusCode, responseBody, transportMismatch, streamInterrupted, responseConversionFailed } = input
   // 「没兼现要求」与「正文没搬完」都是**这个模型**没做到：同样的请求在别的候选上可能就能做到，
   // 因此冷却的粒度是 provider-model，而不是整个 provider。
   if (transportMismatch) return 'provider-model'
   if (streamInterrupted) return 'provider-model'
+  if (responseConversionFailed) return 'provider-model'
   if (statusCode === null) return 'provider'
   if (statusCode === 401 || statusCode === 403) return 'provider'
   if (statusCode === 429) {

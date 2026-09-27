@@ -1,5 +1,6 @@
 import type { AttemptView, ExchangeView, Frame, FrameSink, HeadFrame, Modifier, ModifierContext, ModifierDirection, Observer, Transport, UpstreamConnection, UpstreamTarget } from '@server/proxy/contracts'
 import { pipeFrames, type FramePipeResult } from './frame-pipe'
+import { notifyObservers } from './observer-notifications'
 
 /**
  * 双向交换的客户端侧输入。
@@ -95,23 +96,6 @@ export async function relayAttempt(input: RelayAttemptInput): Promise<RelayAttem
 export async function relayConnected(input: RelayConnectedInput): Promise<RelayAttemptResult> {
   notifyObservers(input.observers, observer => observer.onAttemptStart?.(input.exchange, input.attempt, input.target))
   return runRelay(input)
-}
-
-/**
- * 通知所有观察者。
- *
- * 与 `frame-pipe` 里那份实现是同一条不变式：观察者只能「看」，它的异常只能丢掉自己这一条记录。
- * 这里必须**逐个**兜住——一个观察者抛错就中断循环，等于让排在它后面的观察者因为别人失败而失声，
- * 而抛穿出去更糟：一次开关的开场/收尾就把这次尝试弄成失败。
- */
-function notifyObservers(observers: readonly Observer[], notify: (observer: Observer) => void): void {
-  for (const observer of observers) {
-    try {
-      notify(observer)
-    } catch (error) {
-      console.warn(`[proxy] observer failed: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
 }
 
 /**

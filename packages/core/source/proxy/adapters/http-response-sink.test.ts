@@ -69,7 +69,14 @@ describe('http response sink', () => {
   })
 
   it('downstreams nothing at all once the attempt is discarded', () => {
-    const { response, sink } = setup('http')
+    const delivered: string[] = []
+    const response = new BufferedProxyResponse()
+    const sink = createHttpResponseSink({
+      response,
+      transport: 'http',
+      captureEnabled: true,
+      onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
+    })
     sink.write(JSON_HEAD)
     sink.discard()
     sink.write(data('{"ok":true}'))
@@ -77,6 +84,24 @@ describe('http response sink', () => {
     expect(response.writableEnded).toBe(false)
     expect(sink.downstreamBody()).toBeNull()
     expect(sink.failure()).toBeNull()
+    expect(delivered).toEqual([])
+  })
+
+  it('notifies delivered chunks only after the response actually accepts them', () => {
+    const delivered: string[] = []
+    const response = new BufferedProxyResponse()
+    const sink = createHttpResponseSink({
+      response,
+      transport: 'http',
+      captureEnabled: true,
+      onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
+    })
+
+    sink.write(JSON_HEAD)
+    sink.write(data('{"ok":true}'))
+    expect(delivered).toEqual([])
+    sink.write(END)
+    expect(delivered).toEqual(['{"ok":true}'])
   })
 
   it('keeps the entire body even when capture is disabled but drops the chunk snapshots', () => {
@@ -117,19 +142,28 @@ describe('http response sink', () => {
     // 出口的 `write` 只有在客户端收得下时才同步完成：收不下就必须挂住，内核据此停止拉下一帧，
     // 上游随之被暂停。少了这一步，慢客户端会被换算成无界的进程内存。
     const response = new BackpressuredResponse()
-    const sink = createHttpResponseSink({ response, transport: 'http-stream', captureEnabled: true })
+    const delivered: string[] = []
+    const sink = createHttpResponseSink({
+      response,
+      transport: 'http-stream',
+      captureEnabled: true,
+      onDeliveredChunk: chunk => delivered.push(Buffer.from(chunk).toString('utf8')),
+    })
     sink.write(SSE_HEAD)
 
     let done = false
     const pending = Promise.resolve(sink.write(data('data: one\n\n'))).then(() => { done = true })
     expect(response.written).toEqual(['data: one\n\n'])
+    expect(delivered).toEqual([])
     await Promise.resolve()
     expect(done).toBe(false)
+    expect(delivered).toEqual([])
 
     response.drain()
     await pending
 
     expect(done).toBe(true)
+    expect(delivered).toEqual(['data: one\n\n'])
     const second = sink.write(data('data: two\n\n'))
     expect(response.written).toEqual(['data: one\n\n', 'data: two\n\n'])
     response.drain()
@@ -158,8 +192,8 @@ class BackpressuredResponse extends BufferedProxyResponse {
   readonly written: string[] = []
   private release: (() => void) | null = null
 
-  override write(chunk: string): boolean {
-    this.written.push(chunk)
+  override write(chunk: string | Uint8Array): boolean {
+    this.written.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
     return false
   }
 

@@ -10,7 +10,7 @@ export interface ResponseSink {
    * 调用方应当等 `drained()` 之后再继续写。不表达背压的实现可以返回 `void`
    * （内存缓冲与测试替身没有这个状态）。
    */
-  write(chunk: string): boolean | void
+  write(chunk: string | Uint8Array): boolean | void
   /** 等到内核缓冲区排空；只在上一次 `write` 返回 `false` 之后调用。 */
   drained?(): Promise<void>
   end(): void
@@ -42,7 +42,7 @@ export class NodeProxyResponse implements ProxyResponse {
     if (!this.response.headersSent) this.response.writeHead(statusCode, headers)
   }
 
-  write(chunk: string): boolean { return this.response.write(chunk) }
+  write(chunk: string | Uint8Array): boolean { return this.response.write(chunk) }
 
   /**
    * 等客户端把内核缓冲区读空。
@@ -78,7 +78,7 @@ export class NodeProxyResponse implements ProxyResponse {
 }
 
 export class BufferedProxyResponse implements ProxyResponse {
-  private chunks: string[] = []
+  private chunks: Uint8Array[] = []
   private responseHeaders: OutgoingHttpHeaders = {}
   private status = 0
   private ended = false
@@ -88,7 +88,8 @@ export class BufferedProxyResponse implements ProxyResponse {
   get headersSent(): boolean { return this.status !== 0 }
   get destroyed(): boolean { return this.failure !== null }
   get statusCode(): number { return this.status }
-  get body(): string { return this.chunks.join('') }
+  get body(): string { return Buffer.concat(this.chunks).toString('utf8') }
+  get bodyBytes(): Buffer { return Buffer.concat(this.chunks) }
   get failureMessage(): string | undefined { return this.failure?.message }
 
   start(statusCode: number, headers: OutgoingHttpHeaders): void {
@@ -97,7 +98,10 @@ export class BufferedProxyResponse implements ProxyResponse {
     this.responseHeaders = { ...headers }
   }
 
-  write(chunk: string): boolean { this.chunks.push(chunk); return true }
+  write(chunk: string | Uint8Array): boolean {
+    this.chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : Uint8Array.from(chunk))
+    return true
+  }
   end(): void { this.ended = true }
   destroy(error: Error): void { this.failure = error; this.ended = true }
   headers(): OutgoingHttpHeaders { return this.responseHeaders }

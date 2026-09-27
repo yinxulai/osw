@@ -4,8 +4,9 @@ import type { AttemptObserver } from '@server/proxy/observers/attempt-observer'
 import type { AttemptLogger, UpstreamContentInput } from '@server/proxy/observability/logging-types'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import type { UpstreamStatusDisposition } from '@server/proxy/response/response'
+import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import { RecordedAttemptError } from './attempt-errors'
-import { serializeSentResponseHeaders, type AttemptOutcome } from './attempt-outcome'
+import { serializeSentResponseHeaders, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
 import { extractRequestIdFromBody } from './request-id'
 
 /**
@@ -42,8 +43,8 @@ export interface AttemptConclusionInput {
 /** 中断收尾：上游已经发过响应头，搬运中途断了。 */
 export interface InterruptedAttemptInput extends AttemptConclusionInput {
   readonly failure: Error
-  /** 本次尝试是否已经向客户端交付了内容；为假表示它已被放弃、一个字节都没给客户端。 */
-  readonly deliverable: boolean
+  /** 本次尝试是否已经真正开始向客户端交付；为假表示响应头都还没写出。 */
+  readonly deliveryStarted: boolean
 }
 
 /** 交付收尾：响应确实写出了客户端。 */
@@ -79,7 +80,11 @@ function upstreamContent(captureStatus: 'captured' | 'partial', statusCode: numb
  */
 export async function concludeInterruptedAttempt(input: InterruptedAttemptInput): Promise<never> {
   const partialBody = input.observer.upstreamBody()
-  if (!input.deliverable) {
+  const errorCode = input.failure instanceof ProtocolConversionError
+    ? input.failure.code
+    : 'UPSTREAM_STREAM_ERROR'
+  const responseConversionFailed = input.failure instanceof ProtocolConversionError
+  if (!input.deliveryStarted) {
     await input.attemptLogger.finalizeAttempt({
       status: 'failed',
       httpStatus: input.statusCode,
@@ -87,18 +92,20 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
       upstreamTransport: input.upstreamTransport,
       // 本次尝试已被放弃，客户端未收到任何响应，因此不承担请求级用量。
       servesRequest: false,
-      errorCode: 'UPSTREAM_STREAM_ERROR',
+      errorCode,
       errorMessage: input.failure.message,
       upstreamRequestId: input.upstreamRequestId,
       upstreamContent: upstreamContent('partial', input.statusCode, input.observer, partialBody),
     })
     throw new RecordedAttemptError(input.failure, {
+      delivery: 'discarded',
       disposition: 'failover',
       statusCode: input.statusCode,
       durationMilliseconds: input.durationMilliseconds,
       upstreamRequestId: input.upstreamRequestId,
       upstreamResponseBody: partialBody,
       transportMismatch: input.transportMismatch,
+      responseConversionFailed,
     })
   }
   await input.attemptLogger.finalizeAttempt({
@@ -108,7 +115,7 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
     upstreamTransport: input.upstreamTransport,
     // 响应已经开始写出客户端，部分内容已经到达，因此它仍然是服务这个请求的尝试。
     servesRequest: true,
-    errorCode: 'UPSTREAM_STREAM_ERROR',
+    errorCode,
     errorMessage: input.failure.message,
     upstreamRequestId: input.upstreamRequestId,
     usage: input.observer.usage(),
@@ -117,12 +124,14 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
     ttftMilliseconds: input.observer.ttftMilliseconds(),
   })
   throw new RecordedAttemptError(input.failure, {
+    delivery: 'delivered',
     disposition: input.disposition,
     statusCode: input.statusCode,
     durationMilliseconds: input.durationMilliseconds,
     upstreamRequestId: input.upstreamRequestId,
     upstreamResponseBody: partialBody,
     streamInterrupted: input.streamInterrupted,
+    responseConversionFailed,
     clientResponse: {
       captureStatus: 'partial',
       responseHeaders: serializeSentResponseHeaders(input.response),
@@ -137,7 +146,7 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
  * 这种尝试必须能被下一次尝试接替，因此它不承担请求级用量，也不带客户端视角快照：
  * 客户端什么都没收到。健康度判定用的是上游原文，所以结果里回传原文。
  */
-export async function concludeUndeliverableAttempt(input: AttemptConclusionInput): Promise<AttemptOutcome> {
+export async function concludeUndeliverableAttempt(input: AttemptConclusionInput): Promise<DiscardedAttemptOutcome> {
   const upstreamBody = input.observer.upstreamBody()
   const upstreamRequestId = input.upstreamRequestId ?? extractRequestIdFromBody(input.observer.rawBody())
   await input.attemptLogger.finalizeAttempt({
@@ -153,6 +162,7 @@ export async function concludeUndeliverableAttempt(input: AttemptConclusionInput
   })
   // 本次尝试已被放弃，客户端未收到任何响应，因此不携带 clientResponse。
   return {
+    delivery: 'discarded',
     disposition: 'failover',
     statusCode: input.statusCode,
     durationMilliseconds: input.durationMilliseconds,
@@ -168,7 +178,7 @@ export async function concludeUndeliverableAttempt(input: AttemptConclusionInput
  * 「上游视角正文」与「健康度判定用的正文」在下发流式时并不相同：前者是分块快照，
  * 后者是原文。因此成功尝试用快照，非成功尝试用原文——健康度需要看到完整错误信息。
  */
-export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Promise<AttemptOutcome> {
+export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Promise<DeliveredAttemptOutcome> {
   const successful = input.disposition === 'success'
   const upstreamBody = input.observer.upstreamBody()
   const resolvedBody = successful ? upstreamBody : input.observer.rawBody()
@@ -193,6 +203,7 @@ export async function concludeDeliveredAttempt(input: DeliveredAttemptInput): Pr
     ttftMilliseconds,
   })
   return {
+    delivery: 'delivered',
     disposition: input.disposition,
     statusCode: input.statusCode,
     durationMilliseconds: input.durationMilliseconds,

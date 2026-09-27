@@ -1,5 +1,6 @@
 import type { Frame, FrameSink, HeadFrame, Modifier, ModifierContext, Observer } from '@server/proxy/contracts'
 import { selectCandidates } from './modifier-selection'
+import { notifyObservers } from './observer-notifications'
 
 export interface FramePipeInput {
   /** 上游帧序列。 */
@@ -69,16 +70,15 @@ export async function pipeFrames(input: FramePipeInput): Promise<FramePipeResult
     }
     const context: ModifierContext = { ...input.context, upstreamHead }
     if (frame.kind === 'head') {
-      for (const observer of observers) notify(() => observer.onUpstreamHead?.(context.exchange, context.attempt, frame.status, frame.headers))
+      notifyObservers(observers, observer => observer.onUpstreamHead?.(context.exchange, context.attempt, frame.status, frame.headers))
     } else if (frame.kind === 'data') {
-      for (const observer of observers) notify(() => observer.onUpstreamChunk?.(context.exchange, context.attempt, frame.body))
+      notifyObservers(observers, observer => observer.onUpstreamChunk?.(context.exchange, context.attempt, frame.body))
     }
     for (const next of await applyFrameModifiers(candidates, context, frame)) {
       if (next.kind === 'head') emittedHead = next
       else if (next.kind === 'data') {
         frameCount += 1
         byteCount += next.body.length
-        for (const observer of observers) notify(() => observer.onDownstreamChunk?.(context.exchange, context.attempt, next.body))
       } else if (next.kind === 'end') ended = true
       else if (next.kind === 'error') error = next.error
       await input.sink.write(next)
@@ -97,20 +97,6 @@ export async function pipeFrames(input: FramePipeInput): Promise<FramePipeResult
  */
 export function selectFrameModifiers(modifiers: readonly Modifier[], context: ModifierContext): readonly Modifier[] {
   return selectCandidates(modifiers, context, 'frame').filter(modifier => modifier.match(context))
-}
-
-/**
- * 通知观察者。
- *
- * 观察者只能「看」，因此它的异常只能丢掉自己这一条记录：抛穿出去会变成一次搬运失败，
- * 于是「多接一个观察者」就等价于「有概率弄挂请求」。
- */
-function notify(action: () => void): void {
-  try {
-    action()
-  } catch (error) {
-    console.warn(`[proxy] observer failed: ${error instanceof Error ? error.message : String(error)}`)
-  }
 }
 
 /**

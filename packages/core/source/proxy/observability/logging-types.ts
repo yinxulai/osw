@@ -2,10 +2,8 @@ import type http from 'node:http'
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
 import type { AttemptStatus, Protocol, RawUsage, RequestAttribute, RequestStatus } from '@common/schemas'
 import type { TransportKind, UpstreamTarget } from '@server/proxy/contracts'
-import type { ProxyObservationHooks } from '@server/proxy/observability/hooks'
 
-export interface RequestLoggingInput {
-  requestId: string
+export interface RequestLogContext {
   /** 解析出的逻辑模型；`null` 表示尚未（或未能）解析出逻辑模型。 */
   logicalModelId: string | null
   /** 客户端请求协议；`null` 表示连 API 路径都无法识别。 */
@@ -22,10 +20,13 @@ export interface RequestLoggingInput {
    * 而「上游跳是不是同一个形态」是另一回事（落在尝试行的 `upstreamTransport`）。
    */
   transport: TransportKind
+}
+
+export interface RequestLoggingInput extends RequestLogContext {
+  requestId: string
   /** 是否记录请求日志。关掉时整条日志链路（请求行、尝试行、用量、正文）都不落库。 */
   captureRequestLogs: boolean
   captureRequestContent: boolean
-  hooks?: ProxyObservationHooks
 }
 
 /**
@@ -112,7 +113,6 @@ export interface AttemptLoggingInput {
   requestRewriteRuleIds?: string[]
   customAuthHeader?: string | null
   captureRequestContent: boolean
-  hooks: ProxyObservationHooks
 }
 
 /**
@@ -153,6 +153,13 @@ export interface AttemptFinalizationInput {
 
 export interface RequestLogger {
   readonly requestContentId: string | null
+  /**
+   * 请求身份或路由事实更新后同步请求行。
+   *
+   * 入口可以在正文读取、路由求解前先建立请求行，因此日志器必须允许后续补齐协议、逻辑模型、
+   * 形态与客户端正文，而不是等到执行阶段才决定“这次请求有没有日志”。
+   */
+  updateRequest(context: RequestLogContext): Promise<void>
   /**
    * 收尾请求日志：只落状态与总耗时。用量不在其中——它属于「服务该请求的那次尝试」。
    *

@@ -7,11 +7,11 @@ import {
   pruneRequestContents,
   pruneRequestLogs,
   updateRequestContent,
+  updateRequestLogContext,
   updateRequestLogStatus,
 } from '@server/database/request-log-store'
 import { serializeCapturedHeaders } from '@server/proxy/response/headers'
-import { NOOP_PROXY_OBSERVATION_HOOKS } from '@server/proxy/observability/hooks'
-import type { RequestContentOutcome, RequestLogger, RequestLoggingInput } from '@server/proxy/observability/logging-types'
+import type { RequestContentOutcome, RequestLogger, RequestLogContext, RequestLoggingInput } from '@server/proxy/observability/logging-types'
 
 /**
  * 过期清理的节流间隔。
@@ -44,6 +44,7 @@ async function pruneRequestLogsThrottled(): Promise<void> {
  */
 const NOOP_REQUEST_LOGGER: RequestLogger = {
   requestContentId: null,
+  updateRequest: async () => {},
   finalizeRequestLog: async () => {},
   finalizeRequestContent: async () => {},
   finalizeLocalErrorContent: async () => {},
@@ -84,9 +85,35 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
 }
 
 function createRequestLogger(requestContentId: string | null, input: RequestLoggingInput): RequestLogger {
-  const hooks = input.hooks ?? NOOP_PROXY_OBSERVATION_HOOKS
   /** 已经收尾过：取消竞态下两条路径会先后调用同一个 logger。 */
   let finalized = false
+
+  const updateRequest = async (context: RequestLogContext) => {
+    input.logicalModelId = context.logicalModelId
+    input.clientProtocol = context.clientProtocol
+    input.transport = context.transport
+    input.method = context.method
+    input.path = context.path
+    input.headers = context.headers
+    input.requestBody = context.requestBody
+    try {
+      await updateRequestLogContext(input.requestId, {
+        logicalModelId: context.logicalModelId,
+        clientProtocol: context.clientProtocol,
+        transport: context.transport,
+      })
+      if (requestContentId) {
+        await updateRequestContent(requestContentId, {
+          requestMethod: context.method,
+          requestPath: context.path,
+          requestHeaders: serializeCapturedHeaders(context.headers),
+          requestBody: context.requestBody.toString('utf8'),
+        })
+      }
+    } catch (error) {
+      console.error(`[proxy] failed to update the request log: ${(error as Error).message}`)
+    }
+  }
 
   const finalizeRequestLog = async (status: RequestStatus, startedAt: number) => {
     // 后到的收尾是重复的事实，不是新的事实：不重写状态，也不重复触发清理。
@@ -115,7 +142,6 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
         responseHeaders: outcome.responseHeaders ?? null,
         responseBody: outcome.responseBody ?? null,
       })
-      await hooks.onContentCaptured?.({ requestId: input.requestId, perspective: 'client' })
     } catch (error) {
       console.error(`[proxy] failed to update the request body: ${(error as Error).message}`)
     }
@@ -133,6 +159,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
 
   return {
     requestContentId,
+    updateRequest,
     finalizeRequestLog,
     finalizeRequestContent,
     finalizeLocalErrorContent,

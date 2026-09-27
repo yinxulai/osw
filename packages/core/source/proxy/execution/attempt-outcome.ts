@@ -14,13 +14,12 @@ import type { RequestContentOutcome } from '@server/proxy/observability/logging-
  * 协议转换、响应改写之后写出去的字节与上游返回的字节完全可以不同。落库时按视角取用，
  * 不要在读取处再判断一次——读的地方判断，就一定会有人判错。
  */
-export interface AttemptOutcome {
-  disposition: UpstreamStatusDisposition
+interface AttemptOutcomeBase {
   statusCode: number
   durationMilliseconds: number
   errorCode?: string
   errorMessage?: string
-  upstreamRequestId?: string | null
+  upstreamRequestId: string | null
   ttftMilliseconds?: number
   /**
    * 真正发往上游的协议；只有发生了协议转换时非空。
@@ -34,7 +33,7 @@ export interface AttemptOutcome {
    * 这是「上游视角」的数据，只用于错误分类与健康度判定；写入客户端视角
    * 日志时必须使用 {@link AttemptOutcome.clientResponse}。
    */
-  upstreamResponseBody?: string | null
+  upstreamResponseBody: string | null
   /**
    * 这次尝试的失败是不是「上游跳没兼现客户端跳要求的形态」（要 `http-stream` 却回了非 SSE，或反之）。
    *
@@ -49,11 +48,39 @@ export interface AttemptOutcome {
    */
   streamInterrupted?: boolean
   /**
-   * 客户端视角的最终响应；仅当响应真正写出客户端时存在。
-   * failover 中途放弃、请求改写被拒等场景下为 `undefined`。
+   * 上游响应无法按声明的协议解析。它和流中断一样无法从状态码看出来，必须显式参与健康度分类。
    */
-  clientResponse?: ClientResponseCapture | null
+  responseConversionFailed?: boolean
 }
+
+/**
+ * 已经写出客户端的尝试。
+ *
+ * `clientResponse` 在这里是必填而不是可选：只有这个类型才能进入「客户端正文」的写入路径，
+ * 上游视角的字段无法在类型上冒充客户端实际收到的内容。
+ */
+export interface DeliveredAttemptOutcome extends AttemptOutcomeBase {
+  readonly delivery: 'delivered'
+  readonly disposition: UpstreamStatusDisposition
+  /**
+   * 客户端视角的最终响应。写入客户端正文时必须使用它。
+   */
+  readonly clientResponse: ClientResponseCapture
+}
+
+/**
+ * 没有向客户端交付任何字节、可以继续尝试其它候选的结局。
+ *
+ * `clientResponse` 被显式禁止：放弃的响应可能已经完整读过，但客户端从未收到它，
+ * 不能因为上游有正文就让请求级记录看起来像成功返回过。
+ */
+export interface DiscardedAttemptOutcome extends AttemptOutcomeBase {
+  readonly delivery: 'discarded'
+  readonly disposition: 'failover'
+  readonly clientResponse?: never
+}
+
+export type AttemptOutcome = DeliveredAttemptOutcome | DiscardedAttemptOutcome
 
 /** 一次尝试中真正返回给客户端的内容快照。 */
 export interface ClientResponseCapture {
@@ -84,14 +111,14 @@ export function serializeSentResponseHeaders(response: ProxyResponse): string | 
  * 状态码只在「响应真正写出客户端」时才回填；否则为 `null`，避免拿上游状态码
  * 冒充客户端看到的响应。
  */
-export function toRequestContentOutcome(outcome: AttemptOutcome): RequestContentOutcome {
+export function toRequestContentOutcome(outcome: DeliveredAttemptOutcome): RequestContentOutcome {
   const capture = outcome.clientResponse
   return {
     perspective: 'client',
-    statusCode: capture ? outcome.statusCode : null,
-    captureStatus: capture?.captureStatus ?? 'partial',
-    responseHeaders: capture?.responseHeaders ?? null,
-    responseBody: capture?.responseBody ?? null,
+    statusCode: outcome.statusCode,
+    captureStatus: capture.captureStatus,
+    responseHeaders: capture.responseHeaders,
+    responseBody: capture.responseBody,
   }
 }
 
@@ -109,5 +136,6 @@ export function healthFailureHints(outcome: AttemptOutcome): HealthFailureHints 
     responseBody: outcome.upstreamResponseBody,
     transportMismatch: outcome.transportMismatch,
     streamInterrupted: outcome.streamInterrupted,
+    responseConversionFailed: outcome.responseConversionFailed,
   }
 }

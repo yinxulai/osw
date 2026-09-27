@@ -1,34 +1,20 @@
-import type { Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
+import type { DeliveryDecisionRef, Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
 import type { ProtocolAdapter, ProtocolConversionAdapter, StreamConverter } from '@server/proxy/protocols/shared/types'
 import type { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
 import { isEventStreamResponse } from '@server/proxy/adapters/http-response-sink'
 import { createDownstreamHeaders } from '@server/proxy/response/headers'
 import { applyRequestRewriteRules } from '@server/proxy/request-rewrite/request-rewrite-engine'
+import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import type { RewriteEvaluation } from './request-modifiers'
-
-/**
- * 这次尝试要不要交付、算不算成功。
- *
- * 只有响应头落地之后才成立，因此用可变对象在头帧到达时填入；修改器在 `match` 里读它，
- * 于是「failover 的响应一个字节都不给客户端」「只有成功才做响应改写」都由这里决定，
- * 而不用在内核里到处传布尔值。
- */
-export interface AttemptRouting {
-  /** 响应是否交付客户端；failover 提前放弃时为 `false`。 */
-  deliverable: boolean
-  /** 上游是否成功返回（2xx）。 */
-  successful: boolean
-}
 
 export interface ResponseModifierOptions {
   adapter: ProtocolAdapter
-  routing: AttemptRouting
+  delivery: DeliveryDecisionRef
   rules: readonly RequestRewriteRule[]
   /** 本次尝试的请求上下文，与请求侧共享同一个实例；响应体转换靠它还原展平过的工具名。 */
   toolNames: ToolNameRegistry
   onRewriteEvaluated(result: RewriteEvaluation): void
-  onConversionError(error: Error): void
 }
 
 /**
@@ -85,13 +71,13 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
     order: 20,
     direction: 'response',
     frameMode: 'frame',
-    match: (context: ModifierContext) => adapter !== null && options.routing.deliverable && context.upstreamHead !== null,
+    match: (context: ModifierContext) => adapter !== null && options.delivery.decision.kind === 'deliver' && context.upstreamHead !== null,
     applyFrame(context: ModifierContext, frame: Frame): Frame | readonly Frame[] | null {
       if (!adapter) return frame
       const head = context.upstreamHead as HeadFrame
       // 响应头在这里只用来选**解析器**（手里这堆字节是 SSE 还是整包 JSON），不决定要不要转换、
-      // 也不决定交付行为：客户端要增量而上游回整包时，执行器已经把它判成 failover
-      // （`options.routing.deliverable` 为假），转换器根本不会被选中。
+      // 也不决定交付行为：客户端要增量而上游回整包时，执行器已经把它判成 discard，
+      // 转换器根本不会被选中。
       // 于是 `accumulateWholeBody` 只会落到它唯一合法的那一半：上游确实发了一整包、而这次又要转协议。
       if (isEventStreamResponse(head.headers)) return convertStream(adapter, frame)
       return accumulateWholeBody(adapter, frame)
@@ -106,25 +92,33 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
     if (frame.kind !== 'end') return frame
     if (!wholeBody) return frame
     const raw = Buffer.from(wholeBody)
-    // 整体转换只在拿到完整正文后做一次；转不动就退回原文，绝不让客户端收到空响应。
+    // 整体转换只在拿到完整正文后做一次。失败必须成为一条 error 帧：如果退回上游原文，
+    // 客户端会拿到一份协议不匹配的 200，比明确失败更难诊断，也会掩盖上游故障。
     try {
       return [{ kind: 'data', body: adapter.convertResponse(raw, options.toolNames) }, frame]
     } catch (error) {
-      options.onConversionError(error instanceof Error ? error : new Error(String(error)))
-      return [{ kind: 'data', body: raw }, frame]
+      return [{ kind: 'error', error: new ProtocolConversionError('response', 'whole-body', adapter.endpointProtocol, adapter.clientProtocol, error) }]
     }
   }
 
   function convertStream(adapter: ProtocolConversionAdapter, frame: Frame): Frame | readonly Frame[] | null {
     if (frame.kind === 'head') return frame
     if (frame.kind === 'data') {
-      const converted = requireConverter(adapter).push(frame.body.toString('utf8'))
-      return converted ? [{ kind: 'data', body: Buffer.from(converted) }] : null
+      try {
+        const converted = requireConverter(adapter).push(frame.body.toString('utf8'))
+        return converted ? [{ kind: 'data', body: Buffer.from(converted) }] : null
+      } catch (error) {
+        return { kind: 'error', error: new ProtocolConversionError('response', 'stream-chunk', adapter.endpointProtocol, adapter.clientProtocol, error) }
+      }
     }
     if (frame.kind !== 'end') return frame
     const converter = requireConverter(adapter)
-    const tail = adapter.finishStream(converter)
-    return tail ? [{ kind: 'data', body: Buffer.from(tail) }, frame] : frame
+    try {
+      const tail = adapter.finishStream(converter)
+      return tail ? [{ kind: 'data', body: Buffer.from(tail) }, frame] : frame
+    } catch (error) {
+      return { kind: 'error', error: new ProtocolConversionError('response', 'stream-finish', adapter.endpointProtocol, adapter.clientProtocol, error) }
+    }
   }
 
   function requireConverter(adapter: ProtocolConversionAdapter): StreamConverter {
@@ -153,7 +147,7 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
     scope: { transports: ['http'] },
     match: (context: ModifierContext) => {
       // 还没拿到响应头就还没有「响应」可言；它也是 `applyFrame` 攒正文的起点。
-      return options.routing.successful && context.upstreamHead !== null
+      return options.delivery.decision.kind === 'deliver' && options.delivery.decision.successful && context.upstreamHead !== null
     },
     applyFrame(context: ModifierContext, frame: Frame): Frame | readonly Frame[] | null {
       if (frame.kind === 'head') {

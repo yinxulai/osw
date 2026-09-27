@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   updateRequestContent: vi.fn(),
   updateAttemptContent: vi.fn(),
   updateRequestLogStatus: vi.fn(),
+  updateRequestLogContext: vi.fn(),
   recordAttemptUsage: vi.fn(),
   pruneRequestLogs: vi.fn(),
   pruneRequestContents: vi.fn(),
@@ -33,6 +34,14 @@ vi.mock('@server/proxy/routing/router', async importOriginal => {
     getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId
       ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
       : mocks.models,
+    getAvailableModelsBatch: async (inputs: BatchPlannerInput[]) => new Map(
+      inputs.map(input => [
+        input.logicalModelId,
+        input.manualModelId
+          ? mocks.models.filter(candidate => candidate.model.id === input.manualModelId)
+          : mocks.models,
+      ]),
+    ),
   }
 })
 
@@ -83,6 +92,7 @@ vi.mock('@server/database/request-log-store', () => ({
   updateRequestContent: mocks.updateRequestContent,
   updateAttemptContent: mocks.updateAttemptContent,
   updateRequestLogStatus: mocks.updateRequestLogStatus,
+  updateRequestLogContext: mocks.updateRequestLogContext,
   recordAttemptUsage: mocks.recordAttemptUsage,
   pruneRequestLogs: mocks.pruneRequestLogs,
   pruneRequestContents: mocks.pruneRequestContents,
@@ -121,6 +131,7 @@ function requestEvents(): TelemetryEventInput[] {
 
 const servers: http.Server[] = []
 type ManualModelOptions = { manualModelId?: string | null }
+type BatchPlannerInput = { logicalModelId: string; manualModelId: string | null }
 
 afterEach(async () => {
   setManualModel('default', null)
@@ -169,6 +180,10 @@ async function expectRejectionRecorded(input: RejectionRecordExpectation): Promi
   expect(mocks.createRequestLog).toHaveBeenCalledTimes(1)
   expect(mocks.createRequestLog).toHaveBeenCalledWith(expect.objectContaining({
     status: 'pending',
+    clientProtocol: null,
+    logicalModelId: null,
+  }))
+  expect(mocks.updateRequestLogContext).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
     clientProtocol: input.clientProtocol,
     logicalModelId: input.logicalModelId,
   }))
@@ -1468,6 +1483,58 @@ describe('handleProxyRequest', () => {
     ])
   })
 
+  it('fails over when an entire response cannot be converted, without exposing the upstream payload', async () => {
+    mocks.captureRequestContent = true
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const invalidHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('raw-unconverted-upstream-body')
+    })
+    const validHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        id: 'chatcmpl_fallback',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'fallback' }, finish_reason: 'stop' }],
+      }))
+    })
+    const invalid = await listen(invalidHandler)
+    const valid = await listen(validHandler)
+    mocks.models = [
+      convertibleModel('model_invalid_conversion', 'prov_invalid_conversion', `${invalid.url}/v1/chat/completions`, 'invalid-model', 'openai-completions'),
+      convertibleModel('model_valid_conversion', 'prov_valid_conversion', `${valid.url}/v1/chat/completions`, 'valid-model', 'openai-completions'),
+    ]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', max_tokens: 32, messages: [{ role: 'user', content: 'hi' }] }),
+    })
+
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(JSON.parse(text).content).toEqual([{ type: 'text', text: 'fallback' }])
+    expect(text).not.toContain('raw-unconverted-upstream-body')
+    expect(invalidHandler).toHaveBeenCalledOnce()
+    expect(validHandler).toHaveBeenCalledOnce()
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      httpStatus: 200,
+      status: 'failed',
+      retryable: true,
+      errorCode: 'PROTOCOL_CONVERSION_FAILED',
+    }))
+    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      status: 'success',
+      errorCode: null,
+    }))
+  })
+
   it('rejects when no native or conversion-enabled endpoint exists', async () => {
     configureSecretStore({
       set: async () => undefined,
@@ -1577,15 +1644,14 @@ describe('handleProxyRequest', () => {
     expect(parsed[3]).toMatchObject({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'y' } })
     expect(parsed[5]).toMatchObject({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 3, output_tokens: 2 } })
     expect(text.trimEnd().endsWith('data: [DONE]')).toBe(false)
-    const requestContent = mocks.createRequestContent.mock.calls[0]?.[0]
-    expect(requestContent).toEqual(expect.objectContaining({
-      captureStatus: 'partial',
+    const requestContentUpdate = mocks.updateRequestContent.mock.calls.find(([id]) => id === 'content_request')?.[1]
+    expect(requestContentUpdate).toEqual(expect.objectContaining({
       requestMethod: 'POST',
       requestPath: '/v1/messages',
       requestHeaders: expect.any(String),
       requestBody: JSON.stringify({ model: 'default', messages: [], max_tokens: 16, stream: true }),
     }))
-    expect(JSON.parse(String(requestContent?.requestHeaders))).toEqual(expect.objectContaining({
+    expect(JSON.parse(String(requestContentUpdate?.requestHeaders))).toEqual(expect.objectContaining({
       authorization: '[REDACTED]',
       cookie: '[REDACTED]',
       'content-type': 'application/json',
@@ -1602,15 +1668,18 @@ describe('handleProxyRequest', () => {
       upstreamProtocol: 'openai-completions',
       upstreamTransport: 'http-stream',
     }))
-    expect(JSON.parse(String(attemptContent?.responseBody))).toEqual({
-      schemaVersion: 1,
-      chunks: [
-        'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"y"}}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\ndata: [DONE]\n\n',
-      ],
-    })
-    const requestUpdate = mocks.updateRequestContent.mock.calls.find(([id]) => id === 'content_request')?.[1]
+    const upstreamCapture = JSON.parse(String(attemptContent?.responseBody)) as { schemaVersion: number; chunks: string[] }
+    expect(upstreamCapture.schemaVersion).toBe(1)
+    // TCP 不保证 write 与 read 的边界一一对应；观察者记录的是实际收到的分块，
+    // 用例只验证字节序列完整，不把运行时调度当成协议的一部分。
+    expect(upstreamCapture.chunks.join('')).toBe([
+      'data: {"choices":[{"delta":{"content":"he"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"y"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\n',
+      'data: [DONE]\n\n',
+    ].join(''))
+    const requestUpdates = mocks.updateRequestContent.mock.calls.filter(([id]) => id === 'content_request')
+    const requestUpdate = requestUpdates[requestUpdates.length - 1]?.[1]
     expect(requestUpdate).toEqual(expect.objectContaining({ captureStatus: 'captured', responseStatus: 200 }))
     const convertedCapture = JSON.parse(String(requestUpdate?.responseBody)) as { schemaVersion: number; chunks: string[] }
     expect(convertedCapture.schemaVersion).toBe(1)
@@ -1806,8 +1875,11 @@ describe('handleProxyRequest', () => {
     )))
     expect(mocks.createRequestLog).toHaveBeenCalledTimes(1)
     expect(mocks.createRequestLog).toHaveBeenCalledWith(expect.objectContaining({
-      clientProtocol: 'openai-completions',
+      clientProtocol: null,
       status: 'pending',
+    }))
+    expect(mocks.updateRequestLogContext).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      clientProtocol: 'openai-completions',
     }))
     expect(mocks.updateRequestContent).not.toHaveBeenCalled()
   })
