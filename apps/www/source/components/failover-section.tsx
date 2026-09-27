@@ -65,7 +65,7 @@ const VERDICT_STYLE: Record<Verdict, { label: string; className: string }> = {
   },
   pass: {
     label: '原样返回',
-    className: 'border-line-strong bg-white/4 text-ink-3',
+    className: 'border-line-strong bg-ink/4 text-ink-3',
   },
   abort: {
     label: '终止请求',
@@ -102,7 +102,7 @@ export function FailoverSection() {
               return (
                 <li
                   key={rule.id}
-                  className="grid gap-x-6 gap-y-2 border-b border-line px-6 py-4 transition-colors last:border-b-0 hover:bg-white/2.5 sm:grid-cols-[minmax(0,1.3fr)_auto_minmax(0,1fr)] sm:items-center"
+                  className="grid gap-x-6 gap-y-2 border-b border-line px-6 py-4 transition-colors last:border-b-0 hover:bg-ink/2.5 sm:grid-cols-[minmax(0,1.3fr)_auto_minmax(0,1fr)] sm:items-center"
                 >
                   <code className="font-mono text-[13px] text-ink-2">
                     {t(`failover.rule.${rule.id}.trigger`, rule.trigger)}

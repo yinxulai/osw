@@ -1,14 +1,25 @@
 import type { Lang } from './i18n'
-import analyticsEn from '../../../snapshot/en/04-analytics.png'
-import logicalModelsEn from '../../../snapshot/en/01-logical-models.png'
-import requestLogsEn from '../../../snapshot/en/03-request-logs.png'
-import requestRewriteEn from '../../../snapshot/en/05-request-rewrite.png'
-import smartRoutingEn from '../../../snapshot/en/02-smart-routing.png'
-import analyticsZh from '../../../snapshot/zh-CN/04-analytics.png'
-import logicalModelsZh from '../../../snapshot/zh-CN/01-logical-models.png'
-import requestLogsZh from '../../../snapshot/zh-CN/03-request-logs.png'
-import requestRewriteZh from '../../../snapshot/zh-CN/05-request-rewrite.png'
-import smartRoutingZh from '../../../snapshot/zh-CN/02-smart-routing.png'
+import type { Theme } from './theme'
+import analyticsEnDark from '../../../snapshot/en/dark/04-analytics.png'
+import analyticsEnLight from '../../../snapshot/en/light/04-analytics.png'
+import logicalModelsEnDark from '../../../snapshot/en/dark/01-logical-models.png'
+import logicalModelsEnLight from '../../../snapshot/en/light/01-logical-models.png'
+import requestLogsEnDark from '../../../snapshot/en/dark/03-request-logs.png'
+import requestLogsEnLight from '../../../snapshot/en/light/03-request-logs.png'
+import requestRewriteEnDark from '../../../snapshot/en/dark/05-request-rewrite.png'
+import requestRewriteEnLight from '../../../snapshot/en/light/05-request-rewrite.png'
+import smartRoutingEnDark from '../../../snapshot/en/dark/02-smart-routing.png'
+import smartRoutingEnLight from '../../../snapshot/en/light/02-smart-routing.png'
+import analyticsZhDark from '../../../snapshot/zh-CN/dark/04-analytics.png'
+import analyticsZhLight from '../../../snapshot/zh-CN/light/04-analytics.png'
+import logicalModelsZhDark from '../../../snapshot/zh-CN/dark/01-logical-models.png'
+import logicalModelsZhLight from '../../../snapshot/zh-CN/light/01-logical-models.png'
+import requestLogsZhDark from '../../../snapshot/zh-CN/dark/03-request-logs.png'
+import requestLogsZhLight from '../../../snapshot/zh-CN/light/03-request-logs.png'
+import requestRewriteZhDark from '../../../snapshot/zh-CN/dark/05-request-rewrite.png'
+import requestRewriteZhLight from '../../../snapshot/zh-CN/light/05-request-rewrite.png'
+import smartRoutingZhDark from '../../../snapshot/zh-CN/dark/02-smart-routing.png'
+import smartRoutingZhLight from '../../../snapshot/zh-CN/light/02-smart-routing.png'
 
 /**
  * 界面预览用的截图。
@@ -38,8 +49,8 @@ export interface Screenshot {
 
 interface ShotSource {
   id: string
-  en: string
-  zh: string
+  light: Record<Lang, string>
+  dark: Record<Lang, string>
   title: string
   caption: string
 }
@@ -47,36 +58,36 @@ interface ShotSource {
 const SHOTS: ShotSource[] = [
   {
     id: 'logicalModels',
-    en: logicalModelsEn,
-    zh: logicalModelsZh,
+    light: { en: logicalModelsEnLight, zh: logicalModelsZhLight },
+    dark: { en: logicalModelsEnDark, zh: logicalModelsZhDark },
     title: '逻辑模型',
     caption: '拖拽决定尝试顺序，每个模型都带着自己的近期战绩 —— TPS、首字延迟、连续失败次数。',
   },
   {
     id: 'smartRouting',
-    en: smartRoutingEn,
-    zh: smartRoutingZh,
+    light: { en: smartRoutingEnLight, zh: smartRoutingZhLight },
+    dark: { en: smartRoutingEnDark, zh: smartRoutingZhDark },
     title: '智能路由',
     caption: '顶部在节点图与规则表之间切换，两者随时互切；每次保存都是一个能回滚的版本。',
   },
   {
     id: 'requestLogs',
-    en: requestLogsEn,
-    zh: requestLogsZh,
+    light: { en: requestLogsEnLight, zh: requestLogsZhLight },
+    dark: { en: requestLogsEnDark, zh: requestLogsZhDark },
     title: '请求日志',
     caption: '一行一次请求，展开就是完整执行明细：每次尝试、真正命中的渠道、用量与响应改写。',
   },
   {
     id: 'requestRewrite',
-    en: requestRewriteEn,
-    zh: requestRewriteZh,
+    light: { en: requestRewriteEnLight, zh: requestRewriteZhLight },
+    dark: { en: requestRewriteEnDark, zh: requestRewriteZhDark },
     title: '请求改写',
     caption: '改 Header、改 JSON 字段、替换文本，都不需要写代码；新建规则自带模板。',
   },
   {
     id: 'analytics',
-    en: analyticsEn,
-    zh: analyticsZh,
+    light: { en: analyticsEnLight, zh: analyticsZhLight },
+    dark: { en: analyticsEnDark, zh: analyticsZhDark },
     title: '统计分析',
     caption: '成功率、延迟、首字延迟、每秒 token、缓存命中、模型排行与失败原因。',
   },
@@ -85,10 +96,10 @@ const SHOTS: ShotSource[] = [
 /** 进入页面时默认放大的那张（也是五个页面里最直接说明「这一步在解决什么」的一张）。 */
 export const LEADING_SHOT_ID = SHOTS[0].id
 
-export function screenshotsFor(lang: Lang): Screenshot[] {
+export function screenshotsFor(lang: Lang, theme: Theme): Screenshot[] {
   return SHOTS.map((shot) => ({
     id: shot.id,
-    src: lang === 'zh' ? shot.zh : shot.en,
+    src: shot[theme][lang],
     title: shot.title,
     caption: shot.caption,
   }))

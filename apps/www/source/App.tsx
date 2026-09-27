@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CapabilitiesSection } from './components/capabilities-section'
 import { DownloadSection } from './components/download-section'
@@ -9,6 +9,7 @@ import { ScreenshotsSection } from './components/screenshots-section'
 import { SiteFooter } from './components/site-footer'
 import { SiteHeader } from './components/site-header'
 import type { Lang } from './i18n'
+import { applyTheme, initialTheme, syncThemeUrl, type Theme } from './theme'
 
 /**
  * 落地页。整页只负责「背景层 + 区块顺序」，每节的实现都在 `components/` 下。
@@ -23,11 +24,17 @@ import type { Lang } from './i18n'
 export function App() {
   const { i18n } = useTranslation()
   const lang = i18n.language as Lang
+  const [theme, setTheme] = useState<Theme>(initialTheme)
 
   // 让 `<html lang>` 跟随界面语言（无障碍与搜索引擎用）。
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
   }, [lang])
+
+  useEffect(() => {
+    applyTheme(theme)
+    syncThemeUrl(theme)
+  }, [theme])
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-void text-ink">
@@ -37,15 +44,15 @@ export function App() {
         className="pointer-events-none absolute inset-x-0 top-0 h-184"
       >
         <div className="bg-grid absolute inset-0" />
-        <div className="animate-drift absolute inset-x-0 top-0 h-120 bg-[radial-gradient(52%_100%_at_50%_-8%,rgb(124_58_237/0.20),transparent_70%)]" />
-        <div className="absolute inset-x-0 top-0 h-88 bg-[radial-gradient(38%_100%_at_68%_0%,rgb(240_41_124/0.13),transparent_72%)]" />
+        <div className="animate-drift absolute inset-x-0 top-0 h-120 bg-[radial-gradient(52%_100%_at_50%_-8%,var(--color-glow-violet),transparent_70%)]" />
+        <div className="absolute inset-x-0 top-0 h-88 bg-[radial-gradient(38%_100%_at_68%_0%,var(--color-glow-brand),transparent_72%)]" />
       </div>
 
-      <SiteHeader />
+      <SiteHeader theme={theme} onThemeChange={setTheme} />
 
       <main className="relative mx-auto max-w-6xl px-6">
         <Hero />
-        <ScreenshotsSection />
+        <ScreenshotsSection theme={theme} />
         <CapabilitiesSection />
         <FailoverSection />
         <PrivacySection />

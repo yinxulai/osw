@@ -81,25 +81,47 @@ Next: [Up and running in three steps](#up-and-running-in-three-steps).
 
 ## Screenshots
 
+The images below follow your GitHub theme and show the English interface.
+
 Logical models: drag to set priority, and every model carries its own recent track record.
 
-![Logical models: channel queue with live metrics](./snapshot/en/01-logical-models.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/01-logical-models.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/01-logical-models.png" />
+  <img src="./snapshot/en/dark/01-logical-models.png" alt="Logical models: channel queue with live metrics" />
+</picture>
 
 Smart Routing: the header switches between a node graph and a plain rule table — two interchangeable modes for "which requests land in which channel group" — and every save is a version you can roll back.
 
-![Smart Routing: node graph and request matching](./snapshot/en/02-smart-routing.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/02-smart-routing.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/02-smart-routing.png" />
+  <img src="./snapshot/en/dark/02-smart-routing.png" alt="Smart Routing: node graph and request matching" />
+</picture>
 
 Request Logs: one row per request, expandable into the full execution detail and raw usage.
 
-![Request Logs: per-attempt detail and usage](./snapshot/en/03-request-logs.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/03-request-logs.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/03-request-logs.png" />
+  <img src="./snapshot/en/dark/03-request-logs.png" alt="Request Logs: per-attempt detail and usage" />
+</picture>
 
 Analytics: success rate, latency, TTFT, TPS, cache hits, model ranking, failure reasons.
 
-![Analytics: metric cards, usage distribution and model ranking](./snapshot/en/04-analytics.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/04-analytics.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/04-analytics.png" />
+  <img src="./snapshot/en/dark/04-analytics.png" alt="Analytics: metric cards, usage distribution and model ranking" />
+</picture>
 
 Request Rewrite: stat cards, the rule list, and the templates behind **New rule**.
 
-![Request Rewrite: rule list and template menu](./snapshot/en/05-request-rewrite.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/05-request-rewrite.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/05-request-rewrite.png" />
+  <img src="./snapshot/en/dark/05-request-rewrite.png" alt="Request Rewrite: rule list and template menu" />
+</picture>
 
 ## Up and running in three steps
 

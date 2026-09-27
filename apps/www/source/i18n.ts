@@ -28,6 +28,8 @@ const en = {
     privacy: 'Privacy',
     downloads: 'Download',
     download: 'Download',
+    themeLight: 'Switch to light theme',
+    themeDark: 'Switch to dark theme',
   },
   hero: {
     badge: 'Runs locally · source-available',

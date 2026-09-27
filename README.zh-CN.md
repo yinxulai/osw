@@ -81,25 +81,47 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 
 ## 界面预览
 
+下面的截图会跟随 GitHub 主题在暗色与亮色之间切换，界面语言是中文。
+
 渠道队列：拖拽排优先级，每个模型旁边是它最近的真实表现。
 
-![逻辑模型：渠道队列与实时指标](./snapshot/zh-CN/01-logical-models.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/01-logical-models.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/01-logical-models.png" />
+  <img src="./snapshot/zh-CN/dark/01-logical-models.png" alt="逻辑模型：渠道队列与实时指标" />
+</picture>
 
 路由工作台：页头就能在节点图与一张从上往下读的规则表之间切换，两种模式回答同一个问题——「什么样的请求，落到哪个渠道组」；每次保存留一个版本，随时回滚。
 
-![智能路由：节点图与请求命中判定](./snapshot/zh-CN/02-smart-routing.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/02-smart-routing.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/02-smart-routing.png" />
+  <img src="./snapshot/zh-CN/dark/02-smart-routing.png" alt="智能路由：节点图与请求命中判定" />
+</picture>
 
 请求日志：每次请求一行，展开就是完整的执行详情和原始用量。
 
-![请求日志：尝试级别详情与 Usage](./snapshot/zh-CN/03-request-logs.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/03-request-logs.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/03-request-logs.png" />
+  <img src="./snapshot/zh-CN/dark/03-request-logs.png" alt="请求日志：尝试级别详情与 Usage" />
+</picture>
 
 统计分析：成功率、延迟、TTFT、TPS、缓存命中、模型排行、失败原因。
 
-![统计分析：指标卡、用量分布与模型排行](./snapshot/zh-CN/04-analytics.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/04-analytics.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/04-analytics.png" />
+  <img src="./snapshot/zh-CN/dark/04-analytics.png" alt="统计分析：指标卡、用量分布与模型排行" />
+</picture>
 
 请求重写：统计卡、规则列表，以及「新建规则」里的模板菜单。
 
-![请求重写：规则列表与模板菜单](./snapshot/zh-CN/05-request-rewrite.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/05-request-rewrite.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/05-request-rewrite.png" />
+  <img src="./snapshot/zh-CN/dark/05-request-rewrite.png" alt="请求重写：规则列表与模板菜单" />
+</picture>
 
 ## 三步上手
 

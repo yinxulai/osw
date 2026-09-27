@@ -24,11 +24,11 @@ export function DownloadSection() {
           {/* 品牌色光晕：这是全站唯一一处大面积上色，用在主行动区。 */}
           <div
             aria-hidden="true"
-            className="animate-drift pointer-events-none absolute -top-24 left-1/2 h-56 w-136 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(240_41_124/0.22),transparent)] blur-2xl"
+            className="animate-drift pointer-events-none absolute -top-24 left-1/2 h-56 w-136 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--color-glow-brand-strong),transparent)] blur-2xl"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-28 left-1/2 h-52 w-120 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(124_58_237/0.16),transparent)] blur-2xl"
+            className="pointer-events-none absolute -bottom-28 left-1/2 h-52 w-120 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--color-glow-violet-strong),transparent)] blur-2xl"
           />
 
           <div className="relative">
@@ -59,7 +59,7 @@ export function DownloadSection() {
                 href={RELEASE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group inline-flex h-12 w-full max-w-sm items-center justify-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-void transition-colors hover:bg-white"
+                className="group inline-flex h-12 w-full max-w-sm items-center justify-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-void transition-colors hover:bg-ink/85"
               >
                 {t('downloads.action', '下载最新版本')}
                 <span

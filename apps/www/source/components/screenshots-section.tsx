@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Lang } from '../i18n'
 import { LEADING_SHOT_ID, screenshotsFor, type Screenshot } from '../screenshots'
+import type { Theme } from '../theme'
 import { Reveal } from './reveal'
 import { SectionHeading } from './section-heading'
 
@@ -17,13 +18,14 @@ import { SectionHeading } from './section-heading'
  * 只放大一张（宽度让给目录之后约 500px 高，整节从 1500px 降到 700px 上下），
  * 右边用五个页面名把全部内容列出来 —— 「产品一共有几个页面」一眼仍然看得见。
  *
- * 图本身已经是深色的，套一层 `ring-gradient` 就够和页面底色分开了；
+ * 图会跟随页面主题在暗亮两套里切，套一层 `ring-gradient` 就够和页面底色分开；
  * 不垫灰底，也不给目录条目加底框 —— 一根品牌色游标加序号，已经足够说明
  * 这一列是可点的，再包一层灰盒子就是「白底上又放白块」。
  */
-export function ScreenshotsSection() {
+export function ScreenshotsSection(props: ScreenshotsSectionProps) {
+  const { theme } = props
   const { t, i18n } = useTranslation()
-  const shots = screenshotsFor(i18n.language as Lang)
+  const shots = screenshotsFor(i18n.language as Lang, theme)
   const [activeId, setActiveId] = useState(LEADING_SHOT_ID)
   const active = shots.find((shot) => shot.id === activeId) ?? shots[0]
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
@@ -130,4 +132,8 @@ export function ScreenshotsSection() {
       </Reveal>
     </section>
   )
+}
+
+interface ScreenshotsSectionProps {
+  theme: Theme
 }

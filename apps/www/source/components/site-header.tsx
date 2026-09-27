@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { RELEASE_URL, REPO_URL } from '../downloads'
 import { LANGS, type Lang } from '../i18n'
+import type { Theme } from '../theme'
 
 /** 顶栏里的锚点导航。id 对应各区块的 `id` 属性。 */
 const ANCHORS = [
@@ -18,7 +20,8 @@ const ANCHORS = [
  * 与旧版的差别：滚动过首屏后加一层底色与发丝线，让「内容从栏下滑过」这件事
  * 看得见；页内锚点让长页面可跳转（旧版只有一个 logo 和语言开关，导航栏是空的）。
  */
-export function SiteHeader() {
+export function SiteHeader(props: SiteHeaderProps) {
+  const { theme, onThemeChange } = props
   const { t, i18n } = useTranslation()
   const lang = i18n.language as Lang
   const [scrolled, setScrolled] = useState(false)
@@ -33,7 +36,7 @@ export function SiteHeader() {
   return (
     <header
       className={`sticky top-0 z-30 transition-colors duration-300 ${scrolled
-          ? 'border-b border-line bg-void/72 backdrop-blur-xl'
+          ? 'border-b border-line bg-surface-chrome backdrop-blur-xl'
           : 'border-b border-transparent'
         }`}
     >
@@ -51,17 +54,19 @@ export function SiteHeader() {
             <a
               key={anchor.id}
               href={`#${anchor.id}`}
-              className="rounded-md px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-white/4 hover:text-ink"
+              className="rounded-md px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-ink/4 hover:text-ink"
             >
               {t(anchor.key, anchor.fallback)}
             </a>
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <ThemeToggle theme={theme} onChange={onThemeChange} />
           <LangSwitch
             current={lang}
             onChange={(next) => void i18n.changeLanguage(next)}
+            compact
           />
           <a
             href={REPO_URL}
@@ -76,7 +81,7 @@ export function SiteHeader() {
             href={RELEASE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-8 items-center rounded-lg bg-ink px-3.5 text-[13px] font-semibold text-void transition-colors hover:bg-white"
+            className="inline-flex h-8 items-center rounded-lg bg-ink px-3.5 text-[13px] font-semibold text-void transition-colors hover:bg-ink/85"
           >
             {t('nav.download', '下载')}
           </a>
@@ -86,14 +91,52 @@ export function SiteHeader() {
   )
 }
 
+interface SiteHeaderProps {
+  theme: Theme
+  onThemeChange: (theme: Theme) => void
+}
+
+interface ThemeToggleProps {
+  theme: Theme
+  onChange: (theme: Theme) => void
+}
+
+function ThemeToggle(params: ThemeToggleProps) {
+  const { theme, onChange } = params
+  const { t } = useTranslation()
+  const next = theme === 'dark' ? 'light' : 'dark'
+  const label =
+    next === 'light'
+      ? t('nav.themeLight', '切换到亮色主题')
+      : t('nav.themeDark', '切换到暗色主题')
+
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(next)}
+      aria-label={label}
+      title={label}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-3 transition-colors hover:border-line-strong hover:bg-ink/4 hover:text-ink"
+    >
+      {theme === 'dark' ? (
+        <Sun className="h-4 w-4" aria-hidden="true" />
+      ) : (
+        <Moon className="h-4 w-4" aria-hidden="true" />
+      )}
+    </button>
+  )
+}
+
 interface LangSwitchProps {
   current: Lang
   onChange: (next: Lang) => void
+  /** 窄屏只显示当前语言，避免 `English + 中文 + 主题 + 下载` 把顶栏挤出屏幕。 */
+  compact?: boolean
 }
 
 /** 语言开关：两档分段控件，选中项用实心底。 */
 function LangSwitch(params: LangSwitchProps) {
-  const { current, onChange } = params
+  const { current, onChange, compact = false } = params
   return (
     <div className="flex items-center rounded-lg border border-line p-0.5">
       {LANGS.map((item) => (
@@ -102,7 +145,7 @@ function LangSwitch(params: LangSwitchProps) {
           type="button"
           onClick={() => onChange(item.id)}
           aria-pressed={item.id === current}
-          className={`rounded-md px-2.5 py-1 text-[12px] transition-colors ${item.id === current
+          className={`${compact && item.id !== current ? 'hidden sm:block' : ''} rounded-md px-2 py-1 text-[12px] transition-colors sm:px-2.5 ${item.id === current
               ? 'bg-ink text-void'
               : 'text-ink-3 hover:text-ink'
             }`}

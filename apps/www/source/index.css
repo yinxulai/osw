@@ -25,10 +25,14 @@
   --color-surface-0: #0a0c11;
   --color-surface-1: #101219;
   --color-surface-2: #171a23;
+  --color-surface-chrome: rgb(6 7 10 / 0.72);
 
   /* 发丝边框：line 是常态，line-strong 用于 hover / 需要强调的分隔。 */
   --color-line: rgb(255 255 255 / 0.07);
   --color-line-strong: rgb(255 255 255 / 0.15);
+  --color-grid-line: rgb(255 255 255 / 0.032);
+  --color-ring-line: rgb(255 255 255 / 0.16);
+  --color-ring-line-soft: rgb(255 255 255 / 0.02);
 
   /* 文字：4 档。最淡的 ink-4 也保持在 4:1 以上——它是说明文字的下限，
      不再往下压（旧版 0.55 透明度的灰在暗底上只有 3:1 左右，读起来发虚）。 */
@@ -48,8 +52,45 @@
   --color-rose: #f2555a;
   --color-sand: #e8a33d;
 
+  /* 页面顶部与下载区的大面积光晕；亮色下单独降低强度，避免糊成彩色底。 */
+  --color-glow-violet: rgb(124 58 237 / 0.2);
+  --color-glow-brand: rgb(240 41 124 / 0.13);
+  --color-glow-violet-strong: rgb(124 58 237 / 0.16);
+  --color-glow-brand-strong: rgb(240 41 124 / 0.22);
+
   --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-drift: drift 14s ease-in-out infinite;
+}
+
+/* 亮色是同一套语义 token 的另一种取值：页面变白、层级改用浅灰，品牌与状态色不动。 */
+:root[data-theme='light'] {
+  --color-void: #f7f8fa;
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f3f4f6;
+  --color-surface-2: #eaecf0;
+  --color-surface-chrome: rgb(255 255 255 / 0.82);
+
+  --color-line: rgb(6 7 10 / 0.09);
+  --color-line-strong: rgb(6 7 10 / 0.18);
+  --color-grid-line: rgb(6 7 10 / 0.04);
+  --color-ring-line: rgb(6 7 10 / 0.16);
+  --color-ring-line-soft: rgb(6 7 10 / 0.02);
+
+  --color-ink: #111318;
+  --color-ink-2: #363b45;
+  --color-ink-3: #5d6675;
+  --color-ink-4: #7c8491;
+
+  --color-mint: #18845f;
+  --color-rose: #c9414b;
+  --color-sand: #a96a18;
+
+  --color-glow-violet: rgb(124 58 237 / 0.12);
+  --color-glow-brand: rgb(240 41 124 / 0.08);
+  --color-glow-violet-strong: rgb(124 58 237 / 0.1);
+  --color-glow-brand-strong: rgb(240 41 124 / 0.14);
+
+  color-scheme: light;
 }
 
 @keyframes rise {
@@ -93,7 +134,7 @@ body {
 
 ::selection {
   background: color-mix(in oklab, var(--color-brand) 40%, transparent);
-  color: #fff;
+  color: var(--color-ink);
 }
 
 /* 键盘焦点：全站统一一个可见环，不再逐个元素各写一份。 */
@@ -103,9 +144,9 @@ body {
   border-radius: 6px;
 }
 
-/* 滚动条跟着底色走，否则亮色系统主题下会在暗色页面右侧挂一条白条。 */
+/* 滚动条跟着底色走。 */
 * {
-  scrollbar-color: rgb(255 255 255 / 0.16) transparent;
+  scrollbar-color: var(--color-ring-line) transparent;
 }
 
 /* 关键词用的品牌渐变文字。四段色标与 `public/icon.svg` 的 linearGradient 同源。 */
@@ -126,8 +167,8 @@ body {
    纯 CSS 画，不引图片：省一次请求，也不会在 2x 屏上糊。 */
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.032) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.032) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid-line) 1px, transparent 1px);
   background-size: 54px 54px;
   mask-image: radial-gradient(
     ellipse 90% 62% at 50% 0%,
@@ -149,8 +190,8 @@ body {
   padding: 1px;
   background: linear-gradient(
     140deg,
-    rgb(255 255 255 / 0.16),
-    rgb(255 255 255 / 0.02) 42%,
+    var(--color-ring-line),
+    var(--color-ring-line-soft) 42%,
     transparent 70%
   );
   -webkit-mask:

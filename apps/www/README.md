@@ -112,7 +112,7 @@ apps/www/
   source/            # React 应用
     App.tsx          # 页面骨架：背景层 + 区块顺序（各节实现在 components/ 下）
     components/      # 逐节拆分的区块
-      site-header.tsx        # 常驻顶栏（锚点导航 + 语言开关 + 下载按钮）
+      site-header.tsx        # 常驻顶栏（锚点导航 + 明暗 / 语言开关 + 下载按钮）
       hero.tsx               # 首屏：承诺 + 两个动作 + 右侧轨迹
       request-trace.tsx      # 首屏右侧的「请求轨迹」动效（产品主视觉）
       failover-section.tsx   # 故障转移判定口径表
@@ -126,7 +126,8 @@ apps/www/
     i18n.ts          # i18next 初始化 + 英文资源表（中文是兜底语言，见下）
     downloads.ts     # 版本号 + 最新发布页地址
     platforms.ts     # 平台清单（下载区那一行平台标记用）
-    screenshots.ts   # 界面预览的图清单（外部 import snapshot/，不做副本；LEADING_SHOT_ID 是默认放大的那张）
+    screenshots.ts   # 界面预览的图清单（按语言 + 明暗四套组合外部 import snapshot/，不做副本）
+    theme.ts         # 明暗主题：首帧解析、应用到根节点、写回 `?theme=` 查询串
     platform-icons.tsx # 三平台品牌标记（Simple Icons + 手绘 Windows 方标）
     feature-icons.tsx  # 能力图标（手绘 1.5px 描边，继承 currentColor）
     index.css        # Tailwind v4 入口 + 设计 token + 基础样式
@@ -158,8 +159,8 @@ apps/www/
 > 但网站上另有**一节专门的「界面预览」**（`screenshots-section.tsx`），让用户下载之前
 > 就知道界面是什么密度、什么色调。那一节**直接 `import` 仓库根的 `snapshot/*.png`**，不在
 > `public/` 里再摆一份副本——README 与官网共用同一个图源，改图只需改一处，Vite 构建时会
-> 自己把它们哈希进 `output/assets/`。顺带一个已知取舍：这批截图拍于图标改版之前，侧边栏还是
-> 旧版青色标志，与当前品牌不一致，但内容仍是真实界面，所以保留原图而不是重画。
+> 自己把它们哈希进 `output/assets/`。截图按 `en|zh-CN` × `light|dark` 四个目录维护，页面主题
+> 和语言变化时同步换图；首帧在 `index.html` 里先定主题，避免亮色用户看到一瞬暗色。
 >
 > 这一节是**「一张大图 + 一份目录」**，不是五张平铺：五张 1139×696 的图铺进两列，一屏能滚出
 > 三屏，而读者滚完之后其实哪一张都没看清。现在一次只放大一张（右侧目录占掉 15rem，图约

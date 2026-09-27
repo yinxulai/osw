@@ -26,7 +26,7 @@ export function Hero() {
               rel="noopener noreferrer"
               className="group inline-flex items-center gap-2 rounded-full border border-line bg-surface-1/60 py-1 pr-3.5 pl-1.5 text-[12px] text-ink-3 transition-colors hover:border-line-strong hover:text-ink-2"
             >
-              <span className="rounded-full bg-white/8 px-2 py-0.5 font-mono text-[11px] text-ink-2">
+              <span className="rounded-full bg-ink/8 px-2 py-0.5 font-mono text-[11px] text-ink-2">
                 v{DOWNLOAD_VERSION}
               </span>
               {/* 「开源」是错的：许可为 PolyForm Noncommercial，属源码可见而非 OSI 开源，
@@ -64,7 +64,7 @@ export function Hero() {
                 href={RELEASE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group relative inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-void transition-colors hover:bg-white"
+                className="group relative inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-void transition-colors hover:bg-ink/85"
               >
                 {t('hero.download', '下载最新版本')}
                 <span
@@ -78,7 +78,7 @@ export function Hero() {
                 href={REPO_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-line px-5 text-sm font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-white/4 hover:text-ink"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-line px-5 text-sm font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-ink/4 hover:text-ink"
               >
                 {t('hero.source', '查看源码')}
               </a>

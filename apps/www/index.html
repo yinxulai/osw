@@ -9,6 +9,18 @@
   <meta name="description"
     content="OSW is local AI routing and failover: point every AI client at one local address, route requests however you want, and let a failing channel hand over automatically. Download for macOS, Windows and Linux." />
   <meta name="theme-color" content="#06070a" />
+  <script>
+    (() => {
+      const queryTheme = new URLSearchParams(window.location.search).get('theme')
+      const theme = queryTheme === 'light' || queryTheme === 'dark'
+        ? queryTheme
+        : window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+      document.documentElement.dataset.theme = theme
+      document.documentElement.style.colorScheme = theme
+      document.querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', theme === 'light' ? '#f7f8fa' : '#06070a')
+    })();
+  </script>
   <link rel="canonical" href="https://osw.yinxulai.com/" />
 
   <!-- 分享卡片。图是仓库里现成的品牌预览图，直接复制进 public/，不额外画一张。 -->
