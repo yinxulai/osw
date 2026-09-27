@@ -23,7 +23,6 @@ function attemptOf(overrides: Partial<LiveRequestAttempt> = {}): LiveRequestAtte
     ttftMilliseconds: 120,
     inputTokens: 12,
     outputTokens: 42,
-    errorCode: null,
     errorMessage: null,
     startedAt: 1_000,
     endedAt: null,
@@ -199,8 +198,6 @@ describe('timelineOf', () => {
     expect(eventMessagesOf([
       eventOf('request.prepared', 'info', {
         attempt: 2,
-        providerModelName: 'model-two',
-        appliedRules: 2,
         protocolConverted: true,
         requestBytes: 4_096,
       }),
@@ -208,7 +205,6 @@ describe('timelineOf', () => {
       {
         kind: 'prepared',
         requestBytes: 4_096,
-        appliedRules: 2,
         appliedRuleNames: ['Remove Date Suffix', 'Set Temperature'],
         converted: true,
         protocolFrom: 'openai-responses',
@@ -217,12 +213,18 @@ describe('timelineOf', () => {
     ])
   })
 
-  it('falls back to the count when the ledger has no rule names', () => {
-    // 第一次尝试的台账里没带名字：这一格少几个字，但不能连「改过」这件事都不说。
+  it('keeps a protocol conversion visible when no rewrite rule matched', () => {
     expect(eventMessagesOf([
-      eventOf('request.prepared', 'info', { attempt: 1, appliedRules: 3, protocolConverted: false }),
+      eventOf('request.prepared', 'info', { attempt: 1, protocolConverted: true, requestBytes: 4_096 }),
     ])).toEqual([
-      { kind: 'prepared', requestBytes: 0, appliedRules: 3, appliedRuleNames: [], converted: false, protocolFrom: 'openai-responses', protocolTo: 'openai-responses' },
+      {
+        kind: 'prepared',
+        requestBytes: 4_096,
+        appliedRuleNames: [],
+        converted: true,
+        protocolFrom: 'openai-responses',
+        protocolTo: 'openai-responses',
+      },
     ])
   })
 
@@ -255,7 +257,7 @@ describe('timelineOf', () => {
       { kind: 'attemptStart', providerModelName: null, attemptNumber: 1 },
       { kind: 'routeResolved', candidates: [] },
       { kind: 'firstByte', providerModelName: null, ttftMilliseconds: null },
-      { kind: 'prepared', requestBytes: 0, appliedRules: 0, appliedRuleNames: [], converted: false, protocolFrom: 'openai-responses', protocolTo: null },
+      { kind: 'prepared', requestBytes: 0, appliedRuleNames: [], converted: false, protocolFrom: 'openai-responses', protocolTo: null },
     ])
   })
 

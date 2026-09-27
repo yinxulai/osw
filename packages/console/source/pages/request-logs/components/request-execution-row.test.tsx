@@ -43,7 +43,6 @@ function attemptOf(overrides: Partial<LiveRequestAttempt> = {}): LiveRequestAtte
     ttftMilliseconds: 120,
     inputTokens: 12,
     outputTokens: 42,
-    errorCode: null,
     errorMessage: null,
     startedAt: 1_000,
     endedAt: null,
@@ -192,24 +191,16 @@ describe('RequestExecutionRow', () => {
     renderRow(liveRequestOf({
       attempts: [attemptOf({ requestRewriteRuleNames: ['Remove Date Suffix', 'Set Temperature'] })],
       events: [
-        { at: 1_000, offsetMilliseconds: 0, kind: 'request.prepared', level: 'info', detail: { attempt: 1, appliedRules: 2, protocolConverted: false } },
+        { at: 1_000, offsetMilliseconds: 0, kind: 'request.prepared', level: 'info', detail: { attempt: 1, protocolConverted: false } },
       ],
     }), { expanded: true })
 
     // 命中多条时要点名：只说「命中 2 条」回答不了「是哪两个修改器动过我的请求」，
     // 而那正好是看到「请求被改过」之后的下一个问题。
     expect(screen.getByText('Rules applied: Remove Date Suffix, Set Temperature')).toBeTruthy()
-  })
-
-  it('falls back to the rule count when the ledger carries no names', () => {
-    renderRow(liveRequestOf({
-      events: [
-        { at: 1_000, offsetMilliseconds: 0, kind: 'request.prepared', level: 'info', detail: { attempt: 1, appliedRules: 1 } },
-      ],
-    }), { expanded: true })
-
-    // 名字还没带上来的快照：少几个字，但「改过」这件事照说。
-    expect(screen.getByText('1 rewrite rules applied')).toBeTruthy()
+    expect(screen.getByText('Applied modifiers')).toBeTruthy()
+    expect(screen.getByText('Remove Date Suffix')).toBeTruthy()
+    expect(screen.getByText('Set Temperature')).toBeTruthy()
   })
 
   it('keeps only the newest chunk, because older ones have already been read', () => {

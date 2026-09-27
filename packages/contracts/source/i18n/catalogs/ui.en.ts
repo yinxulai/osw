@@ -319,7 +319,6 @@ export const uiEn = {
   'requestLogs.execution.candidates': '{count} candidates',
   'requestLogs.execution.waitingFirstByte': 'Awaiting first byte',
   'requestLogs.execution.firstByteLatency': 'First byte after {value}',
-  'requestLogs.execution.ruleApplied': '{count} rewrite rules applied',
   'requestLogs.execution.rulesApplied': 'Rules applied: {names}',
   'requestLogs.execution.protocolConverted': 'Protocol {from} → {to}',
   'requestLogs.execution.headStreamed': 'Answered in streaming shape',

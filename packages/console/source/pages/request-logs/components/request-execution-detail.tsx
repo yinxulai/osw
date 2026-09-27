@@ -16,7 +16,7 @@ import {
   type TimelineNode,
   type TimelineTone,
 } from '../lib/timeline'
-import { DetailSection, MetaFact } from './request-detail-primitives'
+import { AppliedRules, DetailSection, MetaFact } from './request-detail-primitives'
 
 /**
  * 进行中请求的展开区。
@@ -105,6 +105,11 @@ export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps)
   const { live } = props
   const running = live.status === 'pending'
   const snapshot = executionSnapshotOf(live, props.now)
+  const ruleNames = snapshot.attempt?.requestRewriteRuleNames
+  const appliedRules = useMemo(
+    () => ruleNames?.map((name, index) => ({ key: `${index}:${name}`, name })) ?? [],
+    [ruleNames],
+  )
 
   return (
     <tr className="bg-inset">
@@ -126,6 +131,11 @@ export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps)
             running={running}
             activity={props.activity}
           />
+          {appliedRules.length > 0 && (
+            <div className="mb-4">
+              <AppliedRules rules={appliedRules} />
+            </div>
+          )}
           <ExecutionTimeline live={live} snapshot={snapshot} running={running} />
         </div>
       </td>
@@ -401,11 +411,9 @@ function describeNode(message: TimelineMessage, t: AppTranslator): DescriptionOf
     case 'prepared': {
       const parts: string[] = []
       // 命中的修改器要**点名**：只说「命中 2 条」回答不了「是哪两个修改器动过我的请求」，
-      // 而那正是看到「请求被改过」之后的下一个问题。名字还没带上来的老快照才回落成计数。
+      // 而那正是看到「请求被改过」之后的下一个问题。
       if (message.appliedRuleNames.length > 0) {
         parts.push(t('requestLogs.execution.rulesApplied', { names: message.appliedRuleNames.join(', ') }))
-      } else if (message.appliedRules > 0) {
-        parts.push(t('requestLogs.execution.ruleApplied', { count: message.appliedRules }))
       }
       // 协议转换只在两跳都读得到时才写出来：只说「转换过」而不说是哪两跳，等于说了半句。
       if (message.converted && message.protocolFrom !== null && message.protocolTo !== null) {

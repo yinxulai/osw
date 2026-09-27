@@ -34,8 +34,7 @@ export type TimelineMessage =
   | {
       kind: 'prepared'
       requestBytes: number
-      appliedRules: number
-      /** 命中的改写规则名；台账没带上名字时为 `[]`（此时只看 `appliedRules` 的个数）。 */
+      /** 本次尝试命中的改写规则名；按命中顺序排列。 */
       appliedRuleNames: string[]
       converted: boolean
       /** 客户端跳的协议与上游跳的协议；任一侧读不到时不给展示。 */
@@ -128,12 +127,11 @@ function messageOf(event: LiveRequestEvent, live: LiveRequest): TimelineMessage 
 
     case 'request.prepared': {
       // 这一格只在「真的改了什么」时才有（命中改写规则 / 做了协议转换），因此它出现就是事实。
-      // 名字与协议两跳都得从台账里查：事件里只带一个计数、一个布尔。
+      // 名字与协议两跳都得从台账里查：事件只带尝试序号与布尔值。
       const attempt = numberAt(detail, 'attempt')
       return {
         kind: 'prepared',
         requestBytes: numberAt(detail, 'requestBytes') ?? 0,
-        appliedRules: numberAt(detail, 'appliedRules') ?? 0,
         appliedRuleNames: ruleNamesByAttempt(live, attempt),
         converted: booleanAt(detail, 'protocolConverted'),
         protocolFrom: live.clientProtocol,
@@ -198,7 +196,6 @@ function messageOf(event: LiveRequestEvent, live: LiveRequest): TimelineMessage 
       return {
         kind: 'exhausted',
         attemptCount: numberAt(detail, 'attempts'),
-        // 没有上游回过头时核心侧写的是字面量 `'none'`，`numberAt` 会把它读成 `null`。
         lastUpstreamStatus: numberAt(detail, 'lastUpstreamStatus'),
       }
 

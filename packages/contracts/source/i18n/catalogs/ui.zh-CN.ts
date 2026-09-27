@@ -322,7 +322,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.execution.candidates': '{count} 个候选',
   'requestLogs.execution.waitingFirstByte': '等待首字节',
   'requestLogs.execution.firstByteLatency': '首字延迟 {value}',
-  'requestLogs.execution.ruleApplied': '命中 {count} 条改写规则',
   'requestLogs.execution.rulesApplied': '命中改写规则 {names}',
   'requestLogs.execution.protocolConverted': '协议 {from} → {to}',
   'requestLogs.execution.headStreamed': '按增量形态应答',

@@ -123,6 +123,41 @@ export function CopyIconButton(props: CopyIconButtonProps) {
   )
 }
 
+export interface AppliedRule {
+  /** 稳定 key；实时侧没有规则 id 时由调用方按出现位置构造。 */
+  key: string
+  name: string
+}
+
+interface AppliedRulesProps {
+  rules: readonly AppliedRule[]
+}
+
+/** 请求阶段实际命中的修改器。实时与落库详情共用同一种读法。 */
+export function AppliedRules(props: AppliedRulesProps) {
+  const t = useTranslation()
+  if (props.rules.length === 0) return null
+
+  return (
+    <section className="rounded-lg border border-module-border bg-info/8 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="system-xs-medium text-text-primary">{t('requestLogs.contents.appliedRules.title')}</span>
+        <CopyIconButton
+          label={t('requestLogs.contents.appliedRules.copy')}
+          value={props.rules.map(rule => rule.name).join('\n')}
+        />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {props.rules.map(rule => (
+          <span key={rule.key} className="rounded-md bg-info/15 px-1.5 py-0.5 system-2xs-medium text-info">
+            {rule.name}
+          </span>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export interface MetaFactProps {
   label: string
   value: string

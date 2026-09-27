@@ -195,6 +195,17 @@ describe('deferred bodies', () => {
     expect(screen.getByText('Request sent to the real channel')).toBeTruthy()
   })
 
+  it('keeps every stage collapsed until its card is opened', () => {
+    renderSheet()
+
+    expect(screen.queryByText('Request body · OpenAI Responses')).toBeNull()
+
+    fireEvent.click(screen.getByText('Original client request'))
+
+    expect(screen.getByText('Request body · OpenAI Responses')).toBeTruthy()
+    expect(screen.getByText(/"model": "default"/)).toBeTruthy()
+  })
+
   it('offers a retry when the bodies failed to load, and does not call it "no bodies"', () => {
     renderSheet({ bodiesError: 'request failed' })
 

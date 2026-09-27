@@ -234,7 +234,8 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
       </tr>
       {props.expanded && (
         <RequestLogDetailRow
-          log={props.detail ?? props.log}
+          log={props.log}
+          detail={props.detail ?? null}
           modelName={props.modelName}
           detailLoading={props.detailLoading}
           detailError={props.detailError}

@@ -34,7 +34,10 @@ import { RequestContentsSheet } from './request-contents-sheet'
 import { DetailSection, MetricCard, MetaFact, CopyIconButton, type MetricCardProps } from './request-detail-primitives'
 
 interface RequestLogDetailRowProps {
-  log: RequestLogEntry | RequestLogDetail
+  /** 列表接口已经拿到的基础记录；详情接口还没回来时也能渲染头部与尝试列表。 */
+  log: RequestLogEntry
+  /** 展开后才按需取回的详情；正文摘要与改写规则名字都在这里。 */
+  detail: RequestLogDetail | null
   modelName: string
   detailLoading: boolean
   detailError: string | null
@@ -413,19 +416,19 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   const t = useTranslation()
   const locale = useLocale()
   const proxyStatus = useProxyStatus()
-  const { log, modelName } = props
+  const log = props.detail ?? props.log
+  const { modelName } = props
   // 服务该请求的那次尝试恒为最后一次：故障转移一旦交付就停止，被放弃的尝试不会排在它后面。
   // 它是这张详情卡片全部尝试级口径的来源，也是「有成功记录时必然是那一条」的原因。
   const servingAttempt = servingAttemptOf(log)
   // 上游协议是尝试级事实：故障转移的请求可能先后朝不同协议发出过请求，
   // 头部只标出真正交付那次尝试用的是哪个上游协议，与客户端拿到什么形态的响应无关
   // （那是请求级 `transport` 与尝试级 `upstreamTransport` 说的事）。
-  const upstreamProtocol = servingAttempt?.upstreamProtocol
-    ?? log.attempts[0]?.upstreamProtocol
+  const upstreamProtocol = servingAttempt?.upstreamProtocol ?? null
   // 速度按 `@common/metrics` 的唯一定义现算，与列表行、统计分析三处一致。
   const tps = formatOutputSpeed(requestOutputTokensPerSecond(log))
-  const contents = 'contents' in log ? log.contents : null
-  const requestRewriteRules = 'requestRewriteRules' in log ? log.requestRewriteRules : null
+  const contents = props.detail?.contents ?? null
+  const requestRewriteRules = props.detail?.requestRewriteRules ?? null
   const [selectedAttemptId, setSelectedAttemptId] = React.useState<string | null>(null)
   // 正文不在这一层取，交给侧滑面板自己按需拉（库里最大的列，见 issue #23）：
   // 面板只在用户点开某个尝试的正文时才挂载，请求还挂着时也由面板自己轮询。
@@ -504,13 +507,12 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           </div>
           <RequestContentsSheet
             contents={contents}
-            attemptContents={'attemptContents' in log ? log.attemptContents : null}
+            attemptContents={props.detail?.attemptContents ?? null}
             requestId={log.id}
             pollBodies={log.status === 'pending'}
             attempts={log.attempts}
             requestRewriteRules={requestRewriteRules}
             clientProtocol={log.clientProtocol}
-            upstreamProtocol={upstreamProtocol}
             loading={props.detailLoading}
             error={props.detailError}
             selectedAttemptId={selectedAttemptId}

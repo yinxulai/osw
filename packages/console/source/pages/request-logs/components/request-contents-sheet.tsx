@@ -14,6 +14,7 @@ import { useRequestLogBodiesQuery } from '../queries'
 import { searchBlocks, type ContentSearchResult, type SectionHighlight } from '../lib/content-search'
 import { formatContent, isLocalFailureBody } from '../lib/format-content'
 import { PROTOCOL_LABEL, distinctAttemptErrorCode, distinctAttemptErrorMessage, formatAttemptOutcome, formatTransport } from '../lib/format'
+import { AppliedRules } from './request-detail-primitives'
 
 interface ContentSectionProps {
   id: string
@@ -48,6 +49,7 @@ interface RequestStageSection {
 }
 
 interface RequestStageProps {
+  id: string
   title: string
   /** 已经本地化的协议名。 */
   protocol: string
@@ -61,6 +63,8 @@ interface RequestStageProps {
    */
   partialCapture?: boolean
   sections: RequestStageSection[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
   sectionStates: Record<string, boolean>
   onSectionOpenChange: (id: string, open: boolean) => void
   search: ContentSearchResult
@@ -75,11 +79,6 @@ interface RequestStageProps {
    * 而且和「有正文的请求」长得完全不一样；改成照旧画出来，里面用 `—` 占位。
    */
   empty: boolean
-}
-
-interface AppliedRulesProps {
-  ruleIds: string[]
-  rules: AppliedRequestRewriteRule[] | null
 }
 
 interface AttemptErrorProps {
@@ -102,7 +101,6 @@ interface RequestContentsSheetProps {
   requestRewriteRules: AppliedRequestRewriteRule[] | null
   /** 客户端协议；`null` 表示该请求连 API 路径都未识别。 */
   clientProtocol: string | null
-  upstreamProtocol?: string | null
   loading: boolean
   error: string | null
   selectedAttemptId: string | null
@@ -115,10 +113,6 @@ interface RequestContentsSheetProps {
    */
   servingAttemptId: string | null
   onClose: () => void
-}
-
-function sectionKey(title: string, label: string) {
-  return `${title}::${label}`
 }
 
 /** 协议枚举值转展示名；`null` 表示这次请求根本没识别出该协议。 */
@@ -351,28 +345,6 @@ function ContentSection(props: ContentSectionProps) {
   )
 }
 
-function AppliedRules(props: AppliedRulesProps) {
-  const t = useTranslation()
-  if (props.ruleIds.length === 0) return null
-  const ruleNames = new Map(props.rules?.map(rule => [rule.id, rule.name]) ?? [])
-  // 规则名可能重复，因此展示按 id 去重、复制按名字拼接。
-  const appliedRules = props.ruleIds.map(id => ({ id, name: ruleNames.get(id) ?? id }))
-
-  // `bg-info/8` 在亮色下叠白后几乎不可见，因此和 `AttemptFacts` 一样补一圈模块边框，
-  // 让「已应用修改器」明确成块。
-  return (
-    <section className="rounded-lg border border-module-border bg-info/8 px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <span className="system-xs-medium text-text-primary">{t('requestLogs.contents.appliedRules.title')}</span>
-        <CopyButton className="ml-auto" label={t('requestLogs.contents.appliedRules.copy')} value={appliedRules.map(rule => rule.name).join('\n')} />
-      </div>
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        {appliedRules.map(rule => <span key={rule.id} className="rounded-md bg-info/15 px-1.5 py-0.5 system-2xs-medium text-info">{rule.name}</span>)}
-      </div>
-    </section>
-  )
-}
-
 function RequestStage(props: RequestStageProps) {
   const t = useTranslation()
   const sections = props.sections.filter(section => section.value)
@@ -386,54 +358,63 @@ function RequestStage(props: RequestStageProps) {
   // 铺灰底会和 Sheet 的 bg-card 形成「白 → 灰 → 白 → 灰」的交替填充，
   // 而白 100% 与灰 92% 只差 8 点明度，边界几乎看不见，整屏就糊成一片。
   return (
-    <section className="overflow-hidden rounded-lg border border-module-border">
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5 system-sm-medium text-text-primary">
-        <span>{props.title}</span>
-        <span className="font-mono system-xs-regular text-text-tertiary">· {props.protocol}</span>
-        {(props.statusLabel || props.partialCapture) && (
-          /* 两个尾部徽标合成一个右对齐组：状态码并不是总有（如上游一个字节都没回），
-             各自带 `ml-auto` 会让「谁在右边」随数据有无而变。 */
-          <div className="ml-auto flex items-center gap-1.5">
-            {props.statusLabel && (
-              <span className="rounded-md bg-inset px-1.5 py-0.5 font-mono system-2xs-regular text-text-tertiary">
-                {props.statusLabel}
-              </span>
-            )}
-            {props.partialCapture && (
-              /* 徽标本身就是悬停靶点：不再另加一个 info 图标——多一个图标反而要人先猜到它能点。 */
-              <Tooltip>
-                <TooltipTrigger className="rounded-md bg-warning/10 px-1.5 py-0.5 system-2xs-medium text-text-warning transition-colors hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid">
-                  {t('requestLogs.contents.capture.partial')}
-                </TooltipTrigger>
-                <TooltipContent side="top">{t('requestLogs.contents.capture.partialHint')}</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="divide-y divide-border/50">
-        {sections.length === 0 && !props.loading
-          ? props.sections.map(section => (
-            <div key={section.id} className="flex items-center gap-2 px-3 py-2.5 system-xs-regular">
-              <span className="text-text-tertiary">{section.label}</span>
-              <span className="ml-auto font-mono text-text-quaternary">—</span>
+    <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
+      <section className="overflow-hidden rounded-lg border border-module-border">
+        <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left system-sm-medium text-text-primary transition-colors hover:bg-state-base-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-state-accent-solid">
+          <ChevronDown
+            size={14}
+            aria-hidden
+            className={cn('shrink-0 text-text-quaternary transition-transform', !props.open && '-rotate-90')}
+          />
+          <span>{props.title}</span>
+          <span className="font-mono system-xs-regular text-text-tertiary">· {props.protocol}</span>
+          {(props.statusLabel || props.partialCapture) && (
+            /* 两个尾部徽标合成一个右对齐组：状态码并不是总有（如上游一个字节都没回），
+               各自带 `ml-auto` 会让「谁在右边」随数据有无而变。 */
+            <div className="ml-auto flex items-center gap-1.5">
+              {props.statusLabel && (
+                <span className="rounded-md bg-inset px-1.5 py-0.5 font-mono system-2xs-regular text-text-tertiary">
+                  {props.statusLabel}
+                </span>
+              )}
+              {props.partialCapture && (
+                /* 徽标本身就是悬停靶点：不再另加一个 info 图标——多一个图标反而要人先猜到它能点。 */
+                <Tooltip>
+                  <TooltipTrigger className="rounded-md bg-warning/10 px-1.5 py-0.5 system-2xs-medium text-text-warning transition-colors hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid">
+                    {t('requestLogs.contents.capture.partial')}
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t('requestLogs.contents.capture.partialHint')}</TooltipContent>
+                </Tooltip>
+              )}
             </div>
-          ))
-          : renderedSections.map(section => (
-            <ContentSection
-              key={section.id}
-              id={section.id}
-              label={section.label}
-              value={section.value ?? ''}
-              open={props.sectionStates[section.id] ?? true}
-              onOpenChange={open => props.onSectionOpenChange(section.id, open)}
-              highlight={props.search.highlights.get(section.id) ?? null}
-              activeMatchIndex={props.activeMatchIndex}
-              loading={props.loading}
-            />
-          ))}
-      </div>
-    </section>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="divide-y divide-border/50 border-t border-border/50">
+            {sections.length === 0 && !props.loading
+              ? props.sections.map(section => (
+                <div key={section.id} className="flex items-center gap-2 px-3 py-2.5 system-xs-regular">
+                  <span className="text-text-tertiary">{section.label}</span>
+                  <span className="ml-auto font-mono text-text-quaternary">—</span>
+                </div>
+              ))
+              : renderedSections.map(section => (
+                <ContentSection
+                  key={section.id}
+                  id={section.id}
+                  label={section.label}
+                  value={section.value ?? ''}
+                  open={props.sectionStates[section.id] ?? true}
+                  onOpenChange={open => props.onSectionOpenChange(section.id, open)}
+                  highlight={props.search.highlights.get(section.id) ?? null}
+                  activeMatchIndex={props.activeMatchIndex}
+                  loading={props.loading}
+                />
+              ))}
+          </div>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   )
 }
 
@@ -471,7 +452,7 @@ function AttemptError(props: AttemptErrorProps) {
 }
 
 // `loading` 不在数据里：正文是四个阶段共用的一次取数，渲染时由面板统一给（见 `stages.map`）。
-type RequestStageData = Omit<RequestStageProps, 'sectionStates' | 'onSectionOpenChange' | 'search' | 'activeMatchIndex' | 'empty' | 'loading'>
+type RequestStageData = Omit<RequestStageProps, 'open' | 'onOpenChange' | 'sectionStates' | 'onSectionOpenChange' | 'search' | 'activeMatchIndex' | 'empty' | 'loading'>
 
 type RequestStageBuilderInput = {
   /** 客户端视角正文。 */
@@ -510,24 +491,27 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
   //   发送到供应商的请求 / 供应商响应   -> attempt_contents（上游视角）
   const stages: RequestStageData[] = [
     {
+      id: 'client-request',
       title: clientRequestTitle,
       protocol: clientLabel,
       statusLabel: null,
       sections: [
-        { id: sectionKey(clientRequestTitle, t('requestLogs.contents.section.requestHeader', { protocol: clientLabel })), label: t('requestLogs.contents.section.requestHeader', { protocol: clientLabel }), value: clientContent?.requestHeaders ?? null },
-        { id: sectionKey(clientRequestTitle, t('requestLogs.contents.section.requestBody', { protocol: clientLabel })), label: t('requestLogs.contents.section.requestBody', { protocol: clientLabel }), value: clientContent?.requestBody ?? null },
+        { id: 'client-request.headers', label: t('requestLogs.contents.section.requestHeader', { protocol: clientLabel }), value: clientContent?.requestHeaders ?? null },
+        { id: 'client-request.body', label: t('requestLogs.contents.section.requestBody', { protocol: clientLabel }), value: clientContent?.requestBody ?? null },
       ],
     },
     {
+      id: 'upstream-request',
       title: upstreamRequestTitle,
       protocol: upstreamLabel,
       statusLabel: null,
       sections: [
-        { id: sectionKey(upstreamRequestTitle, t('requestLogs.contents.section.requestHeader', { protocol: upstreamLabel })), label: t('requestLogs.contents.section.requestHeader', { protocol: upstreamLabel }), value: attemptContent?.requestHeaders ?? null },
-        { id: sectionKey(upstreamRequestTitle, t('requestLogs.contents.section.requestBody', { protocol: upstreamLabel })), label: t('requestLogs.contents.section.requestBody', { protocol: upstreamLabel }), value: attemptContent?.requestBody ?? null },
+        { id: 'upstream-request.headers', label: t('requestLogs.contents.section.requestHeader', { protocol: upstreamLabel }), value: attemptContent?.requestHeaders ?? null },
+        { id: 'upstream-request.body', label: t('requestLogs.contents.section.requestBody', { protocol: upstreamLabel }), value: attemptContent?.requestBody ?? null },
       ],
     },
     {
+      id: 'upstream-response',
       title: upstreamResponseTitle,
       protocol: upstreamLabel,
       statusLabel: attemptContent
@@ -535,9 +519,9 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
         : null,
       partialCapture: attemptContent?.captureStatus === 'partial',
       sections: [
-        { id: sectionKey(upstreamResponseTitle, t('requestLogs.contents.section.responseHeader', { protocol: upstreamLabel })), label: t('requestLogs.contents.section.responseHeader', { protocol: upstreamLabel }), value: attemptContent?.responseHeaders ?? null },
+        { id: 'upstream-response.headers', label: t('requestLogs.contents.section.responseHeader', { protocol: upstreamLabel }), value: attemptContent?.responseHeaders ?? null },
         {
-          id: sectionKey(upstreamResponseTitle, t('requestLogs.contents.section.responseBody', { protocol: upstreamLabel })),
+          id: 'upstream-response.body',
           label: upstreamResponseBodyIsLocalFailure
             ? t('requestLogs.contents.section.localFailure')
             : t('requestLogs.contents.section.responseBody', { protocol: upstreamLabel }),
@@ -553,6 +537,7 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
   // 失败归因，也让搜索与复制混进不属于这次尝试的正文。
   if (servesClient) {
     stages.push({
+      id: 'client-response',
       title: clientResponseTitle,
       protocol: clientLabel,
       statusLabel: clientContent
@@ -560,8 +545,8 @@ function buildRequestStages(t: AppTranslator, input: RequestStageBuilderInput): 
         : null,
       partialCapture: clientContent?.captureStatus === 'partial',
       sections: [
-        { id: sectionKey(clientResponseTitle, t('requestLogs.contents.section.responseHeader', { protocol: clientLabel })), label: t('requestLogs.contents.section.responseHeader', { protocol: clientLabel }), value: clientContent?.responseHeaders ?? null },
-        { id: sectionKey(clientResponseTitle, t('requestLogs.contents.section.responseBody', { protocol: clientLabel })), label: t('requestLogs.contents.section.responseBody', { protocol: clientLabel }), value: clientContent?.responseBody ?? null },
+        { id: 'client-response.headers', label: t('requestLogs.contents.section.responseHeader', { protocol: clientLabel }), value: clientContent?.responseHeaders ?? null },
+        { id: 'client-response.body', label: t('requestLogs.contents.section.responseBody', { protocol: clientLabel }), value: clientContent?.responseBody ?? null },
       ],
     })
   }
@@ -599,6 +584,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     responseBody: clientBody?.responseBody ?? null,
   }
   const [search, setSearch] = React.useState('')
+  const [stageStates, setStageStates] = React.useState<Record<string, boolean>>({})
   const [sectionStates, setSectionStates] = React.useState<Record<string, boolean>>({})
   const [activeMatchIndex, setActiveMatchIndex] = React.useState(0)
   const contentRef = React.useRef<HTMLDivElement | null>(null)
@@ -619,6 +605,15 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     servesClient,
   }), [t, clientContent, attemptContent, clientProtocol, upstreamProtocol, converted, servesClient])
 
+  const appliedRules = React.useMemo(() => {
+    if (selectedAttempt === null) return []
+    const namesById = new Map(props.requestRewriteRules?.map(rule => [rule.id, rule.name]) ?? [])
+    return [...new Set([
+      ...selectedAttempt.requestRewriteRuleIds,
+      ...selectedAttempt.responseRewriteRuleIds,
+    ])].map(id => ({ key: id, name: namesById.get(id) ?? id }))
+  }, [props.requestRewriteRules, selectedAttempt])
+
   const sections = React.useMemo(
     () => stages.flatMap(stage => stage.sections).filter(section => section.value !== null),
     [stages],
@@ -637,6 +632,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     // 切换 attempt 就清空搜索与展开态。两个 setter 都先比对再写：
     // 写 `{}` 这种新对象即使内容一样也会被判定为新 state，白白多一轮重渲染。
     setSearch(current => (current === '' ? current : ''))
+    setStageStates(current => (Object.keys(current).length === 0 ? current : {}))
     setSectionStates(current => (Object.keys(current).length === 0 ? current : {}))
   }, [props.selectedAttemptId])
 
@@ -646,6 +642,20 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     setActiveMatchIndex(current => (current === 0 ? current : 0))
     const matchedIds = new Set(searchResult.matches.map(match => match.sectionId))
     if (matchedIds.size === 0) return
+    const matchedStageIds = new Set(stages
+      .filter(stage => stage.sections.some(section => matchedIds.has(section.id)))
+      .map(stage => stage.id))
+    setStageStates(current => {
+      let changed = false
+      const next = { ...current }
+      matchedStageIds.forEach(id => {
+        if (!next[id]) {
+          next[id] = true
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
     setSectionStates(current => {
       let changed = false
       const next = { ...current }
@@ -657,7 +667,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
       })
       return changed ? next : current
     })
-  }, [searchResult])
+  }, [searchResult, stages])
 
   // 命中所在的块可能刚刚被展开才挂到 DOM 上，因此 sectionStates 变化也要重新定位。
   React.useEffect(() => {
@@ -665,19 +675,23 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     contentRef.current
       ?.querySelector<HTMLElement>(`[data-search-match="${activeMatchIndex}"]`)
       ?.scrollIntoView({ block: 'center' })
-  }, [activeMatchIndex, totalMatches, sectionStates])
+  }, [activeMatchIndex, totalMatches, sectionStates, stageStates])
 
   const jumpToMatch = (delta: number) => {
     if (totalMatches === 0) return
     const next = (activeMatchIndex + delta + totalMatches) % totalMatches
     const sectionId = searchResult.matches[next]?.sectionId
     // 手动折叠过的块，定位到它时要先展开。
-    if (sectionId) setSectionStates(current => (current[sectionId] ? current : { ...current, [sectionId]: true }))
+    if (sectionId) {
+      const stageId = stages.find(stage => stage.sections.some(section => section.id === sectionId))?.id
+      if (stageId) setStageStates(current => (current[stageId] ? current : { ...current, [stageId]: true }))
+      setSectionStates(current => (current[sectionId] ? current : { ...current, [sectionId]: true }))
+    }
     setActiveMatchIndex(next)
   }
 
-  // 展开/折叠要覆盖「每一节」而不是「已经有正文的节」：正文没到时分节骨架占着同样的 id，
-  // 否则加载中这两个按钮一直是灰的。
+  // 展开/折叠覆盖阶段与分节；正文没到时也保留同一批稳定 id，按钮不会因加载而失效。
+  const visibleStageIds = stages.map(stage => stage.id)
   const visibleSectionIds = stages.flatMap(stage => stage.sections).map(section => section.id)
   // 一条正文都没有：被保留策略清掉了，或采集正文的开关一直是关的。
   // 这两种情况在数据上无法区分（都是「没有行」），因此只说事实、不猜原因。
@@ -741,12 +755,11 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               variant="outline"
               size="sm"
               className="h-8"
-              disabled={visibleSectionIds.length === 0}
-              onClick={() => setSectionStates(current => {
-                const next = { ...current }
-                visibleSectionIds.forEach(id => { next[id] = true })
-                return next
-              })}
+              disabled={visibleStageIds.length === 0}
+              onClick={() => {
+                setStageStates(Object.fromEntries(visibleStageIds.map(id => [id, true])))
+                setSectionStates(Object.fromEntries(visibleSectionIds.map(id => [id, true])))
+              }}
             >
               {t('requestLogs.contents.expandAll')}
             </Button>
@@ -755,12 +768,11 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
               variant="outline"
               size="sm"
               className="h-8"
-              disabled={visibleSectionIds.length === 0}
-              onClick={() => setSectionStates(current => {
-                const next = { ...current }
-                visibleSectionIds.forEach(id => { next[id] = false })
-                return next
-              })}
+              disabled={visibleStageIds.length === 0}
+              onClick={() => {
+                setStageStates(Object.fromEntries(visibleStageIds.map(id => [id, false])))
+                setSectionStates(Object.fromEntries(visibleSectionIds.map(id => [id, false])))
+              }}
             >
               {t('requestLogs.contents.collapseAll')}
             </Button>
@@ -777,7 +789,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           )}
           {selectedAttempt && <AttemptError attempt={selectedAttempt} />}
           {selectedAttempt && <AttemptFacts attempt={selectedAttempt} />}
-          <AppliedRules ruleIds={selectedAttempt ? [...selectedAttempt.requestRewriteRuleIds, ...selectedAttempt.responseRewriteRuleIds] : []} rules={props.requestRewriteRules} />
+          <AppliedRules rules={appliedRules} />
           {contentsLoading && (
             <div role="status" className="flex items-center gap-2 system-xs-regular text-text-tertiary">
               <LoaderCircle size={13} aria-hidden className="animate-spin" />
@@ -815,8 +827,10 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           )}
           {!bodiesError && stages.map(stage => (
             <RequestStage
-              key={stage.title}
+              key={stage.id}
               {...stage}
+              open={stageStates[stage.id] ?? false}
+              onOpenChange={open => setStageStates(current => ({ ...current, [stage.id]: open }))}
               sectionStates={sectionStates}
               onSectionOpenChange={(id, open) => setSectionStates(current => ({ ...current, [id]: open }))}
               search={searchResult}
