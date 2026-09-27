@@ -1,5 +1,5 @@
 import { useLocale, useTranslation } from '@/i18n/provider'
-import { formatBillCount, formatBillPercent, formatBillTokens } from '../lib/format'
+import { formatBillCount, formatBillTokens, formatPercent } from '../lib/format'
 
 /** 账单里的一行用量：`usageTokens` / `cacheHitRate` 为 `null` 时按「无数据」占位，不隐藏整行。 */
 export type BillRow = {
@@ -62,7 +62,7 @@ export function BillContent(props: BillContentProps) {
         {rows.map(row => (
           <div key={row.id} className="flex justify-between gap-4">
             <dt className="min-w-0 truncate">{row.name}</dt>
-            <dd className="tabular-nums">{row.usageTokens == null ? '—' : formatBillTokens(row.usageTokens)} / {row.cacheHitRate == null ? '—' : formatBillPercent(row.cacheHitRate)}</dd>
+            <dd className="tabular-nums">{row.usageTokens == null ? '—' : formatBillTokens(row.usageTokens)} / {row.cacheHitRate == null ? '—' : formatPercent(row.cacheHitRate)}</dd>
           </div>
         ))}
       </dl>
@@ -72,11 +72,11 @@ export function BillContent(props: BillContentProps) {
       <dl className="space-y-2 text-xs">
         <div className="flex justify-between gap-4 opacity-70">
           <dt>{t('overview.stats.successRate')}</dt>
-          <dd className="tabular-nums">{formatBillPercent(successRate)}</dd>
+          <dd className="tabular-nums">{formatPercent(successRate)}</dd>
         </div>
         <div className="flex justify-between gap-4 opacity-70">
           <dt>{t('overview.stats.cacheHitRate')}</dt>
-          <dd className="tabular-nums">{cacheHitRate == null ? '—' : formatBillPercent(cacheHitRate)}</dd>
+          <dd className="tabular-nums">{cacheHitRate == null ? '—' : formatPercent(cacheHitRate)}</dd>
         </div>
         <div className="flex justify-between gap-4 opacity-70">
           <dt>{t('overview.stats.totalRequests')}</dt>

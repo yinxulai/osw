@@ -6,7 +6,7 @@ import { CardSectionHeader } from '@/components/card-section-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
-import { formatCount } from '../lib/format'
+import { formatCount, formatPercent } from '../lib/format'
 
 interface ModelRankingProps {
   stats: ModelStat[]
@@ -68,10 +68,10 @@ export function ModelRanking(props: ModelRankingProps) {
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatMilliseconds(m.avgTtftMs)}</td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatOutputSpeed(m.avgTps)}</td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatAverageOutput(m.avgOutputTokens)}</td>
-                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.cacheHitRate == null ? '—' : `${(m.cacheHitRate * 100).toFixed(1)}%`}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{m.cacheHitRate == null ? '—' : formatPercent(m.cacheHitRate)}</td>
                   <td className={cn(tableCellClass, 'px-4 text-right')}>
                     <Badge variant={m.successRate >= 0.95 ? 'success' : m.successRate >= 0.8 ? 'warning' : 'destructive'} className="h-5 px-1.5 font-mono">
-                      {(m.successRate * 100).toFixed(1)}%
+                      {formatPercent(m.successRate)}
                     </Badge>
                   </td>
                 </tr>

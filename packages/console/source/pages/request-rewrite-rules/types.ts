@@ -1,4 +1,5 @@
 ﻿import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
+import { ProtocolSchema } from '@common/schemas'
 import type { Protocol, TransportKind } from '@common/schemas'
 
 export type RuleStage = 'request' | 'response'
@@ -70,11 +71,7 @@ export function parseJsonActionValue(value: string | undefined): unknown {
 }
 
 /** 匹配协议与协议选择器都按枚举取值流转，展示时才经 `PROTOCOL_LABELS` 变成名字。 */
-export const PROTOCOL_OPTIONS: Protocol[] = [
-  'openai-completions',
-  'openai-responses',
-  'anthropic-messages',
-]
+export const PROTOCOL_OPTIONS: Protocol[] = [...ProtocolSchema.options]
 
 /** 协议标识是供应商的产品名，两种界面语言下写法相同，因此不进翻译目录。 */
 export const PROTOCOL_LABELS: Record<Protocol, string> = { ...PROTOCOL_DISPLAY_NAMES }

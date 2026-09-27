@@ -4,7 +4,7 @@ import type { UsageHeatBucket } from '@common/schemas'
 import { formatTrendTooltipLabel, resolveUsageHeatLevels, trendCrossesDays } from '@common/analytics-buckets'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import { formatCount, formatTokens } from '../lib/format'
+import { formatCount, formatPercent, formatTokens } from '../lib/format'
 
 /** 热力档 → 类名。写成字面量数组而不是 `` `bg-heat-${level}` ``：Tailwind 扫不出拼接出来的类名。 */
 const HEAT_CLASSES = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'] as const
@@ -169,7 +169,7 @@ function HeatTooltip(props: HeatTooltipProps) {
       <div className="mt-1.5 grid gap-1">
         <TooltipRow label={t('overview.heat.tooltip.requests')} value={formatCount(locale, bucket.requests)} />
         {/* 没有请求时成功率无意义，让位给「—」，而不是写一个 0% 出来。 */}
-        <TooltipRow label={t('overview.heat.tooltip.successRate')} value={bucket.requests > 0 ? `${((bucket.success / bucket.requests) * 100).toFixed(1)}%` : '—'} />
+        <TooltipRow label={t('overview.heat.tooltip.successRate')} value={bucket.requests > 0 ? formatPercent(bucket.success / bucket.requests) : '—'} />
         <TooltipRow label={t('overview.heat.tooltip.tokens')} value={bucket.requests > 0 ? formatTokens(bucket.totalTokens) : '—'} />
       </div>
     </div>

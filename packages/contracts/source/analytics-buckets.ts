@@ -166,7 +166,7 @@ export function trendBucketLabelAt(anchorDayMs: number, index: number, intervalM
 }
 
 /** 桶起点的本地时间戳；日期进位的规范化交给 `Date`，跨月跨年与夏令时都对。 */
-export function trendBucketStartMs(anchorDayMs: number, index: number, intervalMs: number): number {
+function trendBucketStartMs(anchorDayMs: number, index: number, intervalMs: number): number {
   const totalMinutes = index * (intervalMs / MINUTE_MS)
   const minuteOfDay = ((totalMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
   const dayOffset = Math.floor(totalMinutes / MINUTES_PER_DAY)
@@ -470,7 +470,7 @@ function pad2(value: number): string {
    ========================================================================== */
 
 /** 热力档数（不含「没有请求」这一档）。贡献图的口径就是 4 档，再多一档颜色就难分了。 */
-export const HEAT_LEVELS = 4
+const HEAT_LEVELS = 4
 
 /**
  * 把每桶的用量映射到 0 ~ {@link HEAT_LEVELS} 档。

@@ -6,7 +6,7 @@ import { MetricGrid } from '@/components/metric-grid'
 import { Badge } from '@/components/ui/badge'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
-import { formatCount, formatTokens } from '../lib/format'
+import { formatCount, formatPercent, formatTokens } from '../lib/format'
 import { FailureReasons } from './failure-reasons'
 import { LatencyDistribution } from './latency-distribution'
 import { TrendChart } from './trend-chart'
@@ -27,9 +27,9 @@ export function ProviderDetail(props: ProviderDetailProps) {
           没有输入时写 `—`。这里不放平均延迟：同一页的模型表已经用 TTFT 与 TPS 说了「快不快」。 */}
       <MetricGrid className="sm:grid-cols-5" items={[
         { label: t('overview.providerDetail.attempts'), value: formatCount(locale, summary.attempts), Icon: BarChart3 },
-        { label: t('overview.providerDetail.successRate'), value: `${(summary.successRate * 100).toFixed(1)}%`, Icon: CheckCircle2 },
+        { label: t('overview.providerDetail.successRate'), value: formatPercent(summary.successRate), Icon: CheckCircle2 },
         { label: t('overview.providerDetail.failed'), value: formatCount(locale, summary.failed), Icon: TriangleAlert },
-        { label: t('overview.providerDetail.cacheHitRate'), value: cacheHitRate == null ? '—' : `${(cacheHitRate * 100).toFixed(1)}%`, Icon: DatabaseZap, info: t('overview.providerDetail.cacheHitRateHint') },
+        { label: t('overview.providerDetail.cacheHitRate'), value: cacheHitRate == null ? '—' : formatPercent(cacheHitRate), Icon: DatabaseZap, info: t('overview.providerDetail.cacheHitRateHint') },
         { label: t('overview.providerDetail.usage'), value: formatTokens(summary.totalTokens), Icon: Coins },
       ]} />
 
@@ -48,8 +48,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatMilliseconds(model.avgTtftMs)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatOutputSpeed(model.avgTps)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatAverageOutput(model.avgOutputTokens)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{model.cacheHitRate == null ? '—' : `${(model.cacheHitRate * 100).toFixed(1)}%`}</td>
-                  <td className="px-4 py-2.5 text-right"><Badge variant={model.successRate >= 0.95 ? 'success' : model.successRate >= 0.8 ? 'warning' : 'destructive'} className="h-5 px-1.5 font-mono">{(model.successRate * 100).toFixed(1)}%</Badge></td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{model.cacheHitRate == null ? '—' : formatPercent(model.cacheHitRate)}</td>
+                  <td className="px-4 py-2.5 text-right"><Badge variant={model.successRate >= 0.95 ? 'success' : model.successRate >= 0.8 ? 'warning' : 'destructive'} className="h-5 px-1.5 font-mono">{formatPercent(model.successRate)}</Badge></td>
                 </tr>
               ))}</tbody>
             </table>
