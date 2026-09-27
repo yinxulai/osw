@@ -60,7 +60,18 @@ interface ElectronAPI {
   openExternal: (url: string) => void
   /** 用系统文件管理器打开数据目录。失败时 reject（例如系统没有默认文件管理器）。 */
   openDataDirectory: () => Promise<void>
+  /** 把渲染层当前生效的亮暗主题告知主进程；老版本 preload 可能没有。 */
+  setTheme?: (theme: 'light' | 'dark') => void
   updater: UpdaterAPI
+}
+
+interface TrayPanelAPI {
+  getState: () => Promise<import('@common/tray-panel').TrayPanelState>
+  toggleProxy: () => Promise<import('@common/tray-panel').TrayPanelState>
+  copyEndpoint: (endpoint: import('@common/tray-panel').TrayPanelEndpointId) => Promise<void>
+  openMainWindow: () => Promise<void>
+  quit: () => Promise<void>
+  onStateChanged: (callback: (state: import('@common/tray-panel').TrayPanelState) => void) => () => void
 }
 
 /**
@@ -77,5 +88,7 @@ interface OswRuntime {
 interface Window {
   /** 只有 Electron 形态（preload 注入）才有；浏览器形态是 `undefined` 。 */
   electronAPI?: ElectronAPI
+  /** 只有托盘面板窗口使用；主控制台不依赖它。 */
+  trayPanel?: TrayPanelAPI
   __OSW__?: OswRuntime
 }

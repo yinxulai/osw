@@ -21,8 +21,8 @@ export interface TrayProxySnapshot {
  * 协议名是专有名词，不进文案表，所以标签是拼出来的动态文本。
  */
 export const TRAY_ENDPOINTS = [
-  { label: 'OpenAI', path: '/v1' },
-  { label: 'Anthropic', path: '' },
+  { id: 'openai', label: 'OpenAI', path: '/v1' },
+  { id: 'anthropic', label: 'Anthropic', path: '' },
 ] as const
 
 export interface TrayMenuActions {

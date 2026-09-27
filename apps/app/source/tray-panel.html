@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OSW</title>
+    <style>
+      :root {
+        --osw-panel: light-dark(#ffffff, #1c1c1f);
+        --osw-raised: light-dark(#f7f7f8, #242428);
+        --osw-soft: light-dark(#f1f1f3, #2a2a2f);
+        --osw-text: light-dark(#18181b, #f4f4f5);
+        --osw-muted: light-dark(#696974, #a1a1aa);
+        --osw-faint: light-dark(#94949e, #777781);
+        --osw-line: light-dark(rgba(24, 24, 27, 0.12), rgba(255, 255, 255, 0.13));
+        --osw-line-soft: light-dark(rgba(24, 24, 27, 0.075), rgba(255, 255, 255, 0.08));
+        --osw-accent: light-dark(#1d1d21, #f4f4f5);
+        --osw-accent-text: light-dark(#ffffff, #18181b);
+        --osw-success: light-dark(#168653, #48d597);
+        --osw-success-soft: light-dark(rgba(22, 134, 83, 0.1), rgba(72, 213, 151, 0.12));
+        --osw-shadow: 0 18px 48px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.09);
+        color-scheme: light;
+        --osw-danger: light-dark(#b4232c, #ff6b72);
+      }
+
+      :root[data-theme="dark"] { color-scheme: dark; }
+
+      *,
+      *::before,
+      *::after { box-sizing: border-box; }
+
+      html,
+      body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+
+      [hidden] { display: none !important; }
+
+      body {
+        padding: 8px;
+        color: var(--osw-text);
+        font-family: "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        user-select: none;
+      }
+
+      button {
+        border: 0;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--osw-success) 65%, transparent);
+        outline-offset: 2px;
+      }
+
+      .panel {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border: 1px solid var(--osw-line);
+        border-radius: 14px;
+        background: var(--osw-panel);
+        box-shadow: var(--osw-shadow);
+      }
+
+      .header {
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+      }
+
+      .app-icon {
+        width: 30px;
+        height: 30px;
+        display: block;
+        flex: none;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+
+      .title-stack { min-width: 0; flex: 1; }
+      .title { display: block; font-size: 14px; font-weight: 650; line-height: 1.15; }
+      .subtitle { display: block; margin-top: 3px; color: var(--osw-faint); font-size: 11px; font-weight: 500; }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+        padding: 0 9px;
+        border: 1px solid var(--osw-line-soft);
+        border-radius: 999px;
+        color: var(--osw-muted);
+        background: var(--osw-soft);
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--osw-faint); }
+      [data-running="true"] .status { color: var(--osw-success); border-color: color-mix(in srgb, var(--osw-success) 26%, transparent); background: var(--osw-success-soft); }
+      [data-running="true"] .status-dot { background: var(--osw-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--osw-success) 12%, transparent); }
+
+      .body { padding: 4px 16px 14px; }
+
+      .state {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 15px;
+        border: 1px solid var(--osw-line-soft);
+        border-radius: 11px;
+        background: var(--osw-raised);
+        transition: opacity 160ms ease;
+      }
+
+      [data-running="false"] .state { opacity: 0.68; }
+      .state-label { color: var(--osw-muted); font-size: 11px; font-weight: 600; }
+      .address { margin-top: 5px; font: 600 13px/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+      .state-note { margin-top: 5px; color: var(--osw-faint); font-size: 11px; }
+
+      .power {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        color: var(--osw-muted);
+        background: var(--osw-soft);
+        box-shadow: inset 0 0 0 1px var(--osw-line);
+        transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+      }
+
+      .power:hover { transform: translateY(-1px); }
+      .power svg { width: 19px; height: 19px; }
+      [data-running="true"] .power { color: var(--osw-accent-text); background: var(--osw-accent); box-shadow: inset 0 0 0 1px transparent, 0 0 0 6px color-mix(in srgb, var(--osw-accent) 8%, transparent); }
+      .power[disabled] { cursor: wait; opacity: 0.62; }
+
+      .section { margin-top: 16px; }
+      .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+      .section-title { margin: 0; font-size: 12px; font-weight: 650; }
+      .section-note { color: var(--osw-faint); font-size: 11px; }
+      .endpoints { display: grid; gap: 7px; }
+
+      .endpoint {
+        width: 100%;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 11px;
+        border: 1px solid var(--osw-line-soft);
+        border-radius: 9px;
+        text-align: left;
+        color: var(--osw-text);
+        background: var(--osw-panel);
+      }
+
+      .endpoint:hover { background: var(--osw-raised); }
+      .endpoint-name { color: var(--osw-muted); font-size: 11px; font-weight: 650; }
+      .endpoint-value { min-width: 0; overflow: hidden; font: 500 11px/1.35 ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+      .endpoint svg { width: 14px; height: 14px; color: var(--osw-faint); }
+      .endpoint .check { display: none; color: var(--osw-success); }
+      .endpoint[data-copied="true"] .copy { display: none; }
+      .endpoint[data-copied="true"] .check { display: block; }
+
+      .actions { display: grid; grid-template-columns: 1fr auto; gap: 7px; margin-top: 16px; }
+      .action {
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 12px;
+        border: 1px solid var(--osw-line-soft);
+        border-radius: 9px;
+        color: var(--osw-muted);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .action:hover { color: var(--osw-text); background: var(--osw-soft); }
+      .action-primary { color: var(--osw-accent-text); border-color: transparent; background: var(--osw-accent); }
+      .action-primary:hover { color: var(--osw-accent-text); background: color-mix(in srgb, var(--osw-accent) 88%, var(--osw-text)); }
+      .action-icon { width: 40px; padding: 0; }
+      .action svg { width: 15px; height: 15px; flex: none; }
+
+      .footnote { margin: 8px 0 0; color: var(--osw-faint); font-size: 10px; line-height: 1.45; text-align: center; }
+      .panel[data-error="true"] .footnote { color: var(--osw-danger); }
+
+      .toast {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        z-index: 2;
+        transform: translate(-50%, 8px);
+        padding: 7px 10px;
+        border: 1px solid var(--osw-line);
+        border-radius: 8px;
+        color: var(--osw-text);
+        background: var(--osw-panel);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.13);
+        font-size: 11px;
+        font-weight: 600;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      .panel[data-toast="true"] .toast { opacity: 1; transform: translate(-50%, 0); }
+
+      @media (prefers-reduced-motion: reduce) {
+        .state,
+        .power,
+        .toast { transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel" id="panel" aria-label="OSW">
+      <header class="header">
+        <img class="app-icon" id="app-icon" alt="" hidden />
+        <span class="title-stack">
+          <strong class="title">OSW</strong>
+          <span class="subtitle" id="subtitle"></span>
+        </span>
+        <span class="status" id="status" aria-live="polite" hidden>
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-text"></span>
+        </span>
+      </header>
+
+      <div class="body">
+        <section class="state">
+          <div>
+            <div class="state-label" id="state-label">—</div>
+            <div class="address" id="address">—</div>
+            <div class="state-note" id="state-note">—</div>
+          </div>
+          <button class="power" id="power" type="button" aria-label="OSW">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
+          </button>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h2 class="section-title" id="section-title">—</h2>
+            <span class="section-note" id="section-note">Base URL</span>
+          </div>
+          <div class="endpoints" id="endpoints"></div>
+        </section>
+
+        <div class="actions">
+          <button class="action action-primary" id="open" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /></svg>
+            <span id="open-label">...</span>
+          </button>
+          <button class="action action-icon" id="quit" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
+          </button>
+        </div>
+
+        <p class="footnote" id="footnote" role="status"></p>
+      </div>
+      <div class="toast" id="toast" role="status"></div>
+    </main>
+
+    <script>
+      (() => {
+        const api = window.trayPanel
+        const elements = {
+          appIcon: document.getElementById("app-icon"),
+          subtitle: document.getElementById("subtitle"),
+          statusPill: document.getElementById("status"),
+          status: document.getElementById("status-text"),
+          stateLabel: document.getElementById("state-label"),
+          address: document.getElementById("address"),
+          stateNote: document.getElementById("state-note"),
+          power: document.getElementById("power"),
+          sectionTitle: document.getElementById("section-title"),
+          sectionNote: document.getElementById("section-note"),
+          endpoints: document.getElementById("endpoints"),
+          open: document.getElementById("open"),
+          openLabel: document.getElementById("open-label"),
+          quit: document.getElementById("quit"),
+          footnote: document.getElementById("footnote"),
+          panel: document.getElementById("panel"),
+          toast: document.getElementById("toast"),
+        }
+
+        const systemIsChinese = navigator.language.toLowerCase().startsWith("zh")
+        const fallbackCopy = systemIsChinese
+          ? {
+              unavailable: "主进程不可用",
+              note: "请打开主界面或重试",
+              openApp: "打开主界面",
+              quit: "退出 OSW",
+              sectionTitle: "接入地址",
+              failed: "操作失败",
+              loadFailed: "OSW 无法加载托盘状态",
+            }
+          : {
+              unavailable: "Main process unavailable",
+              note: "Open the main window or try again",
+              openApp: "Open app",
+              quit: "Quit OSW",
+              sectionTitle: "Endpoints",
+              failed: "The action failed",
+              loadFailed: "OSW could not load the tray state",
+            }
+
+        let state = null
+        let toastTimer = null
+
+        function showToast(message) {
+          elements.toast.textContent = message
+          elements.panel.dataset.toast = "true"
+          window.clearTimeout(toastTimer)
+          toastTimer = window.setTimeout(() => {
+            elements.panel.dataset.toast = "false"
+          }, 1200)
+        }
+
+        function makeIcon(paths) {
+          const namespace = "http://www.w3.org/2000/svg"
+          const icon = document.createElementNS(namespace, "svg")
+          icon.setAttribute("viewBox", "0 0 24 24")
+          icon.setAttribute("fill", "none")
+          icon.setAttribute("stroke", "currentColor")
+          icon.setAttribute("stroke-width", "2")
+          icon.setAttribute("stroke-linecap", "round")
+          icon.setAttribute("stroke-linejoin", "round")
+          icon.setAttribute("aria-hidden", "true")
+          for (const pathData of paths) {
+            const path = document.createElementNS(namespace, "path")
+            path.setAttribute("d", pathData)
+            icon.appendChild(path)
+          }
+          return icon
+        }
+
+        function renderEndpoints(nextState) {
+          elements.endpoints.replaceChildren()
+          for (const endpoint of nextState.endpoints) {
+            const button = document.createElement("button")
+            button.type = "button"
+            button.className = "endpoint"
+            button.dataset.url = endpoint.url
+            button.setAttribute("aria-label", endpoint.url)
+
+            const name = document.createElement("span")
+            name.className = "endpoint-name"
+            name.textContent = endpoint.label
+
+            const value = document.createElement("span")
+            value.className = "endpoint-value"
+            value.textContent = endpoint.url.replace(/^https?:\/\//, "")
+
+            const copy = makeIcon(["M8 8h11v11H8z", "M5 16V5h11"])
+            copy.classList.add("copy")
+            copy.setAttribute("aria-hidden", "true")
+            const check = makeIcon(["m5 12 4 4L19 6"])
+            check.classList.add("check")
+            check.setAttribute("aria-hidden", "true")
+
+            button.append(name, value, copy, check)
+            button.addEventListener("click", async () => {
+              try {
+                await api.copyEndpoint(endpoint.id)
+                button.dataset.copied = "true"
+                showToast(state.labels.copied)
+                window.setTimeout(() => { button.dataset.copied = "false" }, 1200)
+              } catch {
+                showToast(state.labels.actionFailed)
+              }
+            })
+            elements.endpoints.appendChild(button)
+          }
+        }
+
+        function renderUnavailable() {
+          const scheme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+          document.documentElement.dataset.theme = scheme
+          document.documentElement.lang = systemIsChinese ? "zh-CN" : "en"
+          elements.panel.dataset.error = "true"
+          elements.panel.dataset.running = "false"
+          elements.subtitle.textContent = "OSW"
+          elements.statusPill.hidden = false
+          elements.status.textContent = "—"
+          elements.stateLabel.textContent = fallbackCopy.unavailable
+          elements.address.textContent = "—"
+          elements.stateNote.textContent = fallbackCopy.note
+          elements.power.disabled = true
+          elements.power.setAttribute("aria-label", fallbackCopy.unavailable)
+          elements.sectionTitle.textContent = fallbackCopy.sectionTitle
+          elements.sectionNote.textContent = "Base URL"
+          elements.openLabel.textContent = fallbackCopy.openApp
+          elements.quit.setAttribute("aria-label", fallbackCopy.quit)
+          elements.quit.title = fallbackCopy.quit
+          elements.footnote.textContent = fallbackCopy.loadFailed
+          elements.endpoints.replaceChildren()
+        }
+
+        function render(nextState) {
+          if (!nextState) return
+          state = nextState
+          const { labels } = state
+          document.documentElement.dataset.theme = state.theme
+          elements.panel.dataset.error = "false"
+          elements.statusPill.hidden = false
+          elements.power.disabled = false
+          document.documentElement.lang = state.locale
+          elements.appIcon.src = state.iconUrl
+          elements.appIcon.hidden = false
+          elements.subtitle.textContent = labels.subtitle
+          elements.status.textContent = state.running ? labels.running : labels.stopped
+          elements.stateLabel.textContent = labels.listeningAddress
+          elements.address.textContent = state.address
+          elements.stateNote.textContent = state.running ? labels.ready : labels.unavailable
+          const powerLabel = state.running ? labels.stopProxy : labels.startProxy
+          elements.power.setAttribute("aria-label", powerLabel)
+          elements.power.title = powerLabel
+          elements.sectionTitle.textContent = labels.quickCopy
+          elements.sectionNote.textContent = labels.baseUrl
+          elements.openLabel.textContent = labels.openApp
+          elements.quit.setAttribute("aria-label", labels.quit)
+          elements.quit.title = labels.quit
+          elements.footnote.textContent = labels.footnote
+          elements.panel.dataset.running = String(state.running)
+          renderEndpoints(state)
+        }
+
+        function actionFailed() {
+          if (state) showToast(state.labels.actionFailed)
+          else {
+            elements.panel.dataset.error = "true"
+            elements.footnote.textContent = fallbackCopy.failed
+          }
+        }
+
+        if (!api) {
+          renderUnavailable()
+          return
+        }
+
+        elements.power.addEventListener("click", async () => {
+          if (!state) return
+          const previous = state
+          elements.power.disabled = true
+          try {
+            render(await api.toggleProxy())
+          } catch {
+            state = previous
+            actionFailed()
+          } finally {
+            elements.power.disabled = false
+          }
+        })
+
+        elements.open.addEventListener("click", async () => {
+          if (state) showToast(state.labels.opening)
+          try {
+            await api.openMainWindow()
+          } catch {
+            actionFailed()
+          }
+        })
+
+        elements.quit.addEventListener("click", () => api.quit())
+        api.onStateChanged(render)
+        api.getState().then(render).catch(error => {
+          renderUnavailable()
+          console.error("[tray] failed to initialize panel", error)
+        })
+      })()
+    </script>
+  </body>
+</html>

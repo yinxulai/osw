@@ -77,6 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 打开数据目录。路径由主进程自己取（渲染进程送路径等于把「打开任意目录」交回给页面），
   // 所以这里没有参数；失败时把拒绝原样透给调用方，由界面提示。
   openDataDirectory: (): Promise<void> => ipcRenderer.invoke('open-data-directory'),
+  // 主题保存在渲染层的本地偏好里，主进程不能直接读；渲染层在主题变化时把生效值
+  // 推过来，只用于托盘面板与主窗口保持一致。
+  setTheme: (theme: 'light' | 'dark'): void => ipcRenderer.send('appearance:set-theme', theme),
   updater: updaterApi,
 })
 

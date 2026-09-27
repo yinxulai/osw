@@ -7,6 +7,7 @@ import type { UserConfig } from 'vite'
 
 export const mainEntry = fileURLToPath(new URL('./source/index.ts', import.meta.url))
 export const preloadEntry = fileURLToPath(new URL('./source/preload.ts', import.meta.url))
+export const trayPanelPreloadEntry = fileURLToPath(new URL('./source/tray-panel-preload.ts', import.meta.url))
 
 // 核心服务进程入口。产物落在 `output/command` 里，和主进程同一层，理由是这里的路径都是
 // `__dirname` 相关的运行期路径，typecheck / lint / 单测都照不到：

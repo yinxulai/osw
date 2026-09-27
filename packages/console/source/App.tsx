@@ -15,6 +15,7 @@ import { LiveRequestsProvider } from '@/data/live-requests'
 import { useProxyStatus } from '@/data/proxy'
 import { routePaths } from '@/routing/routes'
 import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
+import { getPlatformCapabilities } from '@/platform/capabilities'
 
 function App() {
   const pathname = useRouterState({ select: state => state.location.pathname })
@@ -31,6 +32,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    getPlatformCapabilities().setTheme?.(theme)
   }, [theme])
 
   // 引导页是覆盖整个应用的「特殊层」：不带侧边栏、右上角固定主题与语言切换。

@@ -8,7 +8,7 @@ import { log } from '../../../packages/toolkit/scripts/lib/log.mjs'
 // 宿主开发会话。
 //
 // 拆成两个包之后，「开发」不再是单个 `vite` 能搞定的事：渲染层由 `packages/console` 的
-// dev server 提供，主进程、preload 与服务进程由本包构建成 `output/command`，最后 Electron 把三者接起来。
+// dev server 提供，主进程、两个 preload 与服务进程由本包构建成 `output/command`，最后 Electron 把它们接起来。
 // 顺序在 turbo 里表达不出来——`dev` 是长驻任务，turbo 只会并行启动它，不会等对方就绪——
 // 所以「等控制台起来了再启动 Electron」这件事由这个脚本负责。
 
@@ -16,9 +16,10 @@ const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const repositoryRoot = path.resolve(appDirectory, '..', '..')
 const outputDirectory = path.join(appDirectory, 'output', 'command')
 const mainBundlePath = path.join(outputDirectory, 'index.js')
-// preload 与服务进程的入口也必须在，两个名字都是运行期约定（由各自的 vite 配置钉死）：
-// preload 缺了窗口没有桥，服务脚本缺了核心起不来。
+// preload 与服务进程的入口也必须在，名字都是运行期约定（由各自的 vite 配置钉死）：
+// 主 preload 缺了窗口没有桥，托盘 preload 缺了面板没有桥，服务脚本缺了核心起不来。
 const preloadBundlePath = path.join(outputDirectory, 'preload.js')
+const trayPanelPreloadBundlePath = path.join(outputDirectory, 'tray-panel-preload.js')
 const serviceBundlePath = path.join(outputDirectory, 'service-main.mjs')
 
 // 渲染层 dev server 地址。`packages/console/vite.config.ts` 里端口是写死的（strictPort），
@@ -51,9 +52,9 @@ async function waitForConsoleServer() {
   throw new Error(`Console dev server is not reachable at ${consoleDevUrl}`)
 }
 
-/** 本包三份产物的就绪信号。缺一个就不用起 Electron 了。 */
+/** 本包四份产物的就绪信号。缺一个就不用起 Electron 了。 */
 async function waitForBundles() {
-  const required = [mainBundlePath, preloadBundlePath, serviceBundlePath]
+  const required = [mainBundlePath, preloadBundlePath, trayPanelPreloadBundlePath, serviceBundlePath]
   for (let attempt = 1; attempt <= 1200; attempt += 1) {
     if (required.every(bundle => fs.existsSync(bundle))) return
     await sleep(100)
@@ -107,7 +108,7 @@ function watchOutputDirectory() {
 }
 
 /**
- * 三个监听器：主进程、preload、服务进程是三份配置、三次构建，但写入同一个目录。
+ * 四个监听器：主进程、两个 preload、服务进程是四份配置、四次构建，但写入同一个目录。
  * `shell: true` 而不是自己拼 `cmd.exe /c`：这里只需要长驻子进程，
  * 不需要 `packages/toolkit/scripts/lib/run.mjs` 那套退出码与信号转发。
  */
@@ -115,6 +116,7 @@ function startViteWatchers() {
   const commands = [
     'pnpm exec vite build --watch',
     'pnpm exec vite build --watch --config vite.preload.config.ts',
+    'pnpm exec vite build --watch --config vite.tray-panel.config.ts',
     'pnpm exec vite build --watch --config vite.server.config.ts',
   ]
   for (const command of commands) {
@@ -155,9 +157,9 @@ function startElectron() {
 
 function scheduleRestart() {
   if (restartTimer) clearTimeout(restartTimer)
-  // 一次改动会引发一串文件事件，而且三份构建是先后完成的：主进程约 0.1s、preload 约 1s、
-  // 服务进程约 1.2s，每次写入都会重置这个计时器，所以等到最后一次写入后 1.5s 才真的重启——一次编辑只有一次
-  // 重启。窗口给短了（试过 300ms）就会变成「主进程构建完重启一次、preload 构建完再重启一次」。
+  // 一次改动会引发一串文件事件，而且四份构建是先后完成的：主进程约 0.1s、两个 preload
+  // 约 1s、服务进程约 1.2s，每次写入都会重置这个计时器，所以等到最后一次写入后 1.5s
+  // 才真的重启——一次编辑只会重启一次。窗口给短了（试过 300ms）就会变成「主进程构建完重启一次、preload 构建完再重启一次」。
   restartTimer = setTimeout(() => {
     restartTimer = null
     if (!fs.existsSync(mainBundlePath)) return

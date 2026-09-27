@@ -36,6 +36,12 @@ const mocks = vi.hoisted(() => {
     app: { quit: vi.fn(), dock: { show: vi.fn(), hide: vi.fn() } },
     clipboard: { writeText: vi.fn() },
     buildFromTemplate: vi.fn((template: MenuItemConstructorOptions[]) => ({ template })),
+    handle: vi.fn(),
+    removeHandler: vi.fn(),
+    onIpc: vi.fn(),
+    offIpc: vi.fn(),
+    nativeTheme: { shouldUseDarkColors: false, on: vi.fn(), off: vi.fn() },
+    screen: { getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },
     getProxyServerStatus: vi.fn(),
     startProxyServer: vi.fn(),
     stopProxyServer: vi.fn(),
@@ -48,11 +54,15 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
   Menu: { buildFromTemplate: mocks.buildFromTemplate },
   clipboard: mocks.clipboard,
+  ipcMain: { handle: mocks.handle, removeHandler: mocks.removeHandler, on: mocks.onIpc, off: mocks.offIpc },
+  nativeTheme: mocks.nativeTheme,
+  screen: mocks.screen,
 }))
 
 vi.mock('./tray-icon', () => ({ generateTrayIcon: () => ({}) }))
 
 vi.mock('./i18n', () => ({
+  nativeLocale: () => 'zh-CN',
   nativeTranslator: () => createAppTranslator('zh-CN'),
   onNativeLocaleChanged: () => () => undefined,
 }))
@@ -64,14 +74,15 @@ vi.mock('./server-host', () => ({
 }))
 
 import { TrayManager } from './tray-manager'
+import { TrayPanelManager, buildTrayPanelState } from './tray-panel'
 
 type MenuItem = MenuItemConstructorOptions
 
 /** 最近一次挂到托盘上的菜单模板。 */
 function lastTemplate(): MenuItem[] {
-  const call = mocks.tray.setContextMenu.mock.calls.at(-1) as [{ template: MenuItem[] }] | undefined
-  if (!call) throw new Error('tray menu was never set')
-  return call[0].template
+  const call = mocks.buildFromTemplate.mock.calls.at(-1)
+  if (!call) throw new Error('tray menu was never built')
+  return call[0]
 }
 
 /** 只看有文案的条目：分隔线与 macOS 分组标题不参与顺序断言。 */
@@ -96,7 +107,7 @@ function click(item: MenuItem): void {
 async function initRunning(): Promise<TrayManager> {
   const manager = new TrayManager()
   manager.init(mocks.mainWindow as unknown as BrowserWindow)
-  await vi.waitFor(() => expect(mocks.tray.setContextMenu).toHaveBeenCalled())
+  await vi.waitFor(() => expect(mocks.buildFromTemplate).toHaveBeenCalled())
   return manager
 }
 
@@ -128,6 +139,47 @@ afterEach(() => {
   manager?.destroy()
   manager = null
   vi.clearAllMocks()
+})
+
+describe('托盘面板状态', () => {
+  it('把应用图标、主题、语言与可复制的 Base URL 一次装进状态', () => {
+    const state = buildTrayPanelState({ running: true, host: '0.0.0.0', port: 19300 }, 'dark')
+
+    expect(state).toEqual(expect.objectContaining({
+      running: true,
+      address: '127.0.0.1:19300',
+      theme: 'dark',
+      locale: 'zh-CN',
+    }))
+    expect(state.iconUrl).toBeTruthy()
+    expect(state.endpoints).toEqual([
+      { id: 'openai', label: 'OpenAI', url: 'http://127.0.0.1:19300/v1' },
+      { id: 'anthropic', label: 'Anthropic', url: 'http://127.0.0.1:19300' },
+    ])
+  })
+
+  it('启停 IPC 返回完整面板状态，而不是只回一份裸快照', async () => {
+    const actions = {
+      getSnapshot: () => ({ running: false, host: '127.0.0.1', port: 19301 }),
+      toggleProxy: async () => undefined,
+      openMainWindow: async () => undefined,
+      quit: () => undefined,
+    }
+    const panelManager = new TrayPanelManager(mocks.tray as unknown as import('electron').Tray, actions)
+    panelManager.init()
+
+    const handler = mocks.handle.mock.calls.find(([channel]) => channel === 'tray-panel:toggle')?.[1] as (() => Promise<unknown>) | undefined
+    expect(handler).toBeTypeOf('function')
+    await expect(handler?.()).resolves.toEqual(expect.objectContaining({
+      running: false,
+      endpoints: [
+        { id: 'openai', label: 'OpenAI', url: 'http://127.0.0.1:19301/v1' },
+        { id: 'anthropic', label: 'Anthropic', url: 'http://127.0.0.1:19301' },
+      ],
+    }))
+
+    panelManager.destroy()
+  })
 })
 
 describe('托盘菜单结构', () => {
@@ -180,6 +232,16 @@ describe('托盘菜单结构', () => {
     expect(mocks.clipboard.writeText).toHaveBeenCalledWith('http://127.0.0.1:19300')
     expect(mocks.tray.setToolTip).toHaveBeenLastCalledWith('接入地址已复制')
   })
+
+  it('右键仍打开同一份原生菜单', async () => {
+    mocks.getProxyServerStatus.mockResolvedValue({ running: true, host: '127.0.0.1', port: 19300 })
+    manager = await initRunning()
+
+    const listener = mocks.tray.on.mock.calls.find(([event]) => event === 'right-click')?.[1] as (() => void) | undefined
+    listener?.()
+
+    expect(mocks.tray.popUpContextMenu).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('托盘启停与轮询', () => {
@@ -212,13 +274,13 @@ describe('托盘启停与轮询', () => {
   it('状态没变就不重建菜单，避免把正开着的菜单顶掉', async () => {
     mocks.getProxyServerStatus.mockResolvedValue({ running: true, host: '127.0.0.1', port: 19300 })
     manager = await initRunning()
-    expect(mocks.tray.setContextMenu).toHaveBeenCalledTimes(1)
+    expect(mocks.buildFromTemplate).toHaveBeenCalledTimes(1)
 
     // 白盒调用私有轮询：定时器本身不在这里验。
     const poll = (manager as unknown as { refreshStatus: () => Promise<void> }).refreshStatus
     await poll.call(manager)
 
-    expect(mocks.tray.setContextMenu).toHaveBeenCalledTimes(1)
+    expect(mocks.buildFromTemplate).toHaveBeenCalledTimes(1)
   })
 
   it('状态读取失败时保留上一份快照，不会把菜单说成「已停止」', async () => {
@@ -230,7 +292,7 @@ describe('托盘启停与轮询', () => {
     await poll.call(manager)
 
     expect(labels()).toContain('运行中 · 19300')
-    expect(mocks.tray.setContextMenu).toHaveBeenCalledTimes(1)
+    expect(mocks.buildFromTemplate).toHaveBeenCalledTimes(1)
   })
 
   it('状态一次都没读到过时只挂兜底菜单，托盘不能变成死路', async () => {
@@ -238,7 +300,7 @@ describe('托盘启停与轮询', () => {
     manager = new TrayManager()
     manager.init(mocks.mainWindow as unknown as BrowserWindow)
 
-    await vi.waitFor(() => expect(mocks.tray.setContextMenu).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.buildFromTemplate).toHaveBeenCalled())
     expect(labels()).toEqual(['打开主界面', '退出 OSW'])
   })
 })

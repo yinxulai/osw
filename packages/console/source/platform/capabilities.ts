@@ -18,6 +18,8 @@ export interface PlatformCapabilities {
   os: PlatformOs
   /** 应用内更新。浏览器形态没有这个概念（产物是托管在本地服务上的静态文件）。 */
   updater: UpdaterAPI | null
+  /** 把渲染层当前生效的亮暗主题告知宿主；浏览器形态不需要。 */
+  setTheme: ((theme: 'light' | 'dark') => void) | null
   /** 用系统默认方式打开外部链接。 */
   openExternal: (url: string) => void
   /**
@@ -42,6 +44,7 @@ function detectCapabilities(): PlatformCapabilities {
       os: normalizeOs(electronApi.platform),
       // `?? null`：老版本的 preload 可能没暴露 updater，缺能力不代表崩。
       updater: electronApi.updater ?? null,
+      setTheme: electronApi.setTheme ? theme => electronApi.setTheme?.(theme) : null,
       openExternal: url => electronApi.openExternal(url),
       // 同理：preload 与渲染层是两份产物，版本能对不上。
       openDataDirectory: electronApi.openDataDirectory
@@ -53,6 +56,7 @@ function detectCapabilities(): PlatformCapabilities {
     name: 'web',
     os: detectBrowserOs(),
     updater: null,
+    setTheme: null,
     openExternal: url => {
       if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer')
     },

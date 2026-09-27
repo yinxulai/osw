@@ -1,6 +1,7 @@
 import { app, Tray, Menu, BrowserWindow, clipboard } from 'electron'
 import { generateTrayIcon } from './tray-icon'
 import { buildTrayMenuTemplate, type TrayProxySnapshot } from './tray-menu'
+import { TrayPanelManager } from './tray-panel'
 import { nativeTranslator, onNativeLocaleChanged } from './i18n'
 import {
   getProxyServerStatus,
@@ -9,7 +10,7 @@ import {
 } from './server-host'
 
 /**
- * 「已复制」的回执只能借用 tooltip：菜单项点完就关，没有别的地方能显示反馈。
+ * 「已复制」的回执只能借用 tooltip：原生菜单项点完就关，没有别的地方能显示反馈。
  * 时长与引导页复制按钮（`CopyButton`）保持一致。
  */
 const COPY_FEEDBACK_MS = 1500
@@ -23,6 +24,8 @@ export class TrayManager {
   private tray: Tray | null = null
   private mainWindow: BrowserWindow | null = null
   private snapshot: TrayProxySnapshot = { running: false, host: null, port: null }
+  private panel: TrayPanelManager | null = null
+  private contextMenu: Menu | null = null
   /** 当前菜单渲染自哪份快照；`null` 表示还没渲染过（首次读状态后必定渲染一次）。 */
   private renderedSignature: string | null = null
   private statusPoller: NodeJS.Timeout | null = null
@@ -40,6 +43,19 @@ export class TrayManager {
     const icon = generateTrayIcon()
     this.tray = new Tray(icon)
     this.tray.setToolTip(nativeTranslator()('app.windowTitle'))
+    this.panel = new TrayPanelManager(this.tray, {
+      getSnapshot: () => this.snapshot,
+      toggleProxy: async () => {
+        const toggled = await this.toggleProxy()
+        if (!toggled) throw new Error('tray proxy toggle failed')
+      },
+      openMainWindow: async () => {
+        this.panel?.hide()
+        await this.showWindow()
+      },
+      quit: () => this.quitApp(),
+    })
+    this.panel.init()
 
     // 菜单由首次状态读取渲染，不在 `init` 里先铺一份占位菜单——
     // 否则「已停止 / 启动代理服务」会先闪一下再翻成真实状态。
@@ -50,12 +66,16 @@ export class TrayManager {
     this.unsubscribeLocale = onNativeLocaleChanged(() => {
       this.refreshTooltip()
       this.renderMenu()
+      this.panel?.refresh()
     })
 
-    // macOS 会直接展示关联菜单；其他平台也允许左键打开菜单。
-    if (process.platform !== 'darwin') {
-      this.tray.on('click', () => {
-        this.tray?.popUpContextMenu()
+    // macOS 与 Windows 上左键开面板，右键仍开原生菜单：主路径更顺手，但键盘与
+    // 无障碍用户还有一条不依赖自绘 UI 的路径。Linux 的 StatusNotifierItem 对自定义
+    // 弹层支持不稳定，保留原来的 setContextMenu 行为。
+    if (process.platform !== 'linux') {
+      this.tray.on('click', () => this.panel?.show())
+      this.tray.on('right-click', () => {
+        if (this.contextMenu) this.tray?.popUpContextMenu(this.contextMenu)
       })
     }
 
@@ -81,7 +101,10 @@ export class TrayManager {
       clearTimeout(this.copyFeedbackTimer)
       this.copyFeedbackTimer = null
     }
+    this.panel?.destroy()
+    this.panel = null
     if (this.tray) {
+      this.contextMenu = null
       this.tray.destroy()
       this.tray = null
     }
@@ -119,7 +142,8 @@ export class TrayManager {
       },
     })
 
-    this.tray.setContextMenu(Menu.buildFromTemplate(template))
+    this.contextMenu = Menu.buildFromTemplate(template)
+    if (process.platform === 'linux') this.tray.setContextMenu(this.contextMenu)
   }
 
   private copyEndpoint(endpoint: string): void {
@@ -145,7 +169,7 @@ export class TrayManager {
   private renderFallbackMenu(): void {
     if (!this.tray) return
     const t = nativeTranslator()
-    this.tray.setContextMenu(Menu.buildFromTemplate([
+    this.contextMenu = Menu.buildFromTemplate([
       {
         label: t('native.tray.openWindow'),
         click: () => {
@@ -157,10 +181,11 @@ export class TrayManager {
         label: t('native.tray.quit'),
         click: () => this.quitApp(),
       },
-    ]))
+    ])
+    if (process.platform === 'linux') this.tray.setContextMenu(this.contextMenu)
   }
 
-  private async toggleProxy(): Promise<void> {
+  private async toggleProxy(): Promise<boolean> {
     try {
       const status = await getProxyServerStatus()
       if (status.running) {
@@ -169,8 +194,10 @@ export class TrayManager {
         await startProxyServer()
       }
       await this.refreshStatus()
+      return true
     } catch (error) {
       console.error('[tray] toggle proxy failed', error)
+      return false
     }
   }
 
@@ -234,6 +261,7 @@ export class TrayManager {
       this.renderedSignature = signature
       this.refreshTooltip()
       this.renderMenu()
+      this.panel?.refresh()
     } catch (error) {
       if (!this.statusReadFailed) {
         this.statusReadFailed = true
@@ -241,7 +269,10 @@ export class TrayManager {
       }
       // 读失败时保留上一份快照：菜单继续显示最后一次读到的真实状态。
       // 但若一次都没读到过，就连状态行也没有，只挂兜底菜单。
-      if (this.renderedSignature === null) this.renderFallbackMenu()
+      if (this.renderedSignature === null) {
+        this.renderFallbackMenu()
+        this.panel?.refresh()
+      }
     }
   }
 
