@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Outlet, useMatchRoute, useRouterState } from '@tanstack/react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
 import { ConfirmProvider } from '@/components/ui/confirm-dialog'
 import { AppLayout } from '@/components/layout'
 import { ErrorBoundary, ErrorFallback } from '@/components/error-boundary'
-import { AppSidebar, type Theme } from '@/components/app-sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
 import { OnboardingTopbar } from '@/pages/onboarding/onboarding-topbar'
 import { ONBOARDING_ACTION_BAR_CLEARANCE } from '@/pages/onboarding/page'
 import { useAppUiStore } from '@/store/app-ui-store'
@@ -13,56 +13,30 @@ import { useTranslation } from '@/i18n/provider'
 import { RouteModeDialog } from '@/components/route-mode/route-mode-dialog'
 import { useProxyStatus } from '@/data/proxy'
 import { routePaths } from '@/routing/routes'
-import { useUrlOverrideActions, useUrlOverrides } from '@/routing/url-overrides'
+import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
 
 function App() {
   const pathname = useRouterState({ select: state => state.location.pathname })
   const matchRoute = useMatchRoute()
-  const themeMode = useAppUiStore(state => state.themeMode)
-  const setThemeMode = useAppUiStore(state => state.setThemeMode)
   const sidebarPinned = useAppUiStore(state => state.sidebarPinned)
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
-  const { theme: urlTheme } = useUrlOverrides()
-  const { clearTheme } = useUrlOverrideActions()
-  const [systemTheme, setSystemTheme] = useState<Theme>('light')
+  const { theme, toggleTheme } = useAppearance()
   const proxyStatus = useProxyStatus()
   const t = useTranslation()
 
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const updateSystemTheme = () => setSystemTheme(media.matches ? 'dark' : 'light')
-    updateSystemTheme()
-    media.addEventListener('change', updateSystemTheme)
-    return () => media.removeEventListener('change', updateSystemTheme)
-  }, [])
-
-  // `?theme=` 是这一次渲染的临时覆盖，压过偏好里存的主题；没有覆盖、且偏好是 `system` 时才看系统。
-  const effectiveThemeMode = urlTheme ?? themeMode
-  const theme: Theme = effectiveThemeMode === 'system' ? systemTheme : effectiveThemeMode
+  // 地址栏的补齐只在这里挂一次（理由见 hook 内部注释），避免每个用到 `useAppearance`
+  // 的组件各自发一次跳转。
+  useAppearanceUrlSync()
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  /**
-   * 按钮改的是**偏好**，不是地址栏。
-   *
-   * 点一下主题开关，用户的真实意思是「以后都这样」，所以写 `useAppUiStore`；
-   * 顺手 `clearTheme()` 是因为地址栏里可能正压着一个 `?theme=`，不清掉的话
-   * 新的偏好会被它盖住，表现为「点了没反应」。清完这条覆盖，界面才真的切过去。
-   *
-   * 反过来，手改 URL 里的 `?theme=` 只影响这一次渲染、不落盘 —— 两条路各自独立。
-   */
-  const toggleTheme = () => {
-    setThemeMode(theme === 'dark' ? 'light' : 'dark')
-    clearTheme()
-  }
-
   // 引导页是覆盖整个应用的「特殊层」：不带侧边栏、右上角固定主题与语言切换。
   // 不经过 AppLayout，因此它压在任何普通页面之上。
   //
-  // 用 `matchRoute` 而不是比较 `pathname`：`routePaths` 里每一项都是 `{-$lang}` 模板，
-  // 直接比字符串永远不相等；而 `matchRoute` 天然同时认下 `/onboarding` 与 `/zh-CN/onboarding`。
+  // 用 `matchRoute` 而不是比较 `pathname`：`routePaths` 里是干净的路径，语言与主题在查询串里，
+  // 于是 `/onboarding?lang=zh-CN` 也能被认出来，`matchRoute` 已经处理了这一点。
   const isOnboarding = Boolean(matchRoute({ to: routePaths.onboarding }))
 
   return (

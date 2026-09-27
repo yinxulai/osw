@@ -2,15 +2,12 @@
 
 import { describe, expect, it } from 'vitest'
 import { router } from '@/routing/router'
-import { routePaths, SHELL_PREFIX } from '@/routing/routes'
-import { langParams, parseOverrides } from '@/routing/url-overrides'
+import { routePaths } from '@/routing/routes'
+import { isThemeParam, parseOverrides } from '@/routing/url-overrides'
 
 // 这些用例只钉住「路径契约」，不渲染任何页面：
 // 路径字符串集中在 `./routes.ts`，这里负责证明它们真的能在路由表里解析出来，
 // 避免出现「改了 `./routes.ts` 却忘了改 `./router.tsx`」这类静默失效。
-//
-// 期望值里出现 `{-$lang}` 是刻意的：这是路由表里的**模板形态**，`routeId` 本来就长这样。
-// 用户看到的地址（`/router`、`/zh-CN/router`）不在这里断言，而在下面的「带语言与不带语言」用例里。
 /** 这里只关心三件事：命中的路由 id、路径参数、以及解析后的 search。 */
 interface LeafMatch {
   routeId: string
@@ -20,10 +17,8 @@ interface LeafMatch {
 
 const leafMatch = (path: string, search: Record<string, unknown> = {}): LeafMatch => {
   const matches = router.matchRoutes(path, search)
-  return matches[matches.length - 1] as LeafMatch
+  return matches[matches.length - 1] as unknown as LeafMatch
 }
-
-const withLang = (lang: string, path: string) => `${SHELL_PREFIX.replace('{-$lang}', lang)}${path.slice(SHELL_PREFIX.length)}`
 
 describe('路由路径契约', () => {
   it('每个声明过的路径都解析到自己', () => {
@@ -38,43 +33,50 @@ describe('路由路径契约', () => {
       [routePaths.logs, routePaths.logs],
       // 父路由没有自己的页面，落到索引子路由上。
       [routePaths.overview, `${routePaths.overview}/`],
-      ['/overview/demo', `${SHELL_PREFIX}/overview/$providerId`],
+      ['/overview/demo', `${routePaths.overview}/$providerId`],
       [routePaths.clientConfig, `${routePaths.clientConfig}/`],
-      ['/client-config/claude-code', `${SHELL_PREFIX}/client-config/$clientKey`],
+      ['/client-config/claude-code', `${routePaths.clientConfig}/$clientKey`],
     ]
     for (const [requested, expectedId] of cases) {
       expect(leafMatch(requested)?.routeId, requested).toBe(expectedId)
     }
   })
 
-  it('带语言段与不带语言段落到同一条路由', () => {
+  it('路径里不含语言段：语言是查询参数，不参与匹配', () => {
+    // 这是把语言从路径段挪进查询串的核心收益：路径表只回答「哪个页面」，
+    // 于是同一个页面永远只有一个地址形态，不需要「同一棵树吃下两种路径」的额外设计。
     for (const path of [routePaths.router, routePaths.runtimeSettings, routePaths.clientConfig]) {
-      // 两种地址是**同一条**叶子路由：语言段只体现在 `params.lang` 上，路由表里没有第二套。
-      const bare = leafMatch(path)
-      const prefixed = leafMatch(withLang('zh-CN', path))
-      expect(prefixed?.routeId, path).toBe(bare?.routeId)
-      expect(prefixed?.params.lang, path).toBe('zh-CN')
+      expect(leafMatch(path)?.params).toEqual({})
     }
   })
 
-  it('已废弃的路径只会落到外壳索引，不再匹配任何页面', () => {
-    for (const legacy of ['/providers', '/access', '/access-config', '/rules', '/requests', '/settings']) {
-      // `/providers` 里的 `providers` 会被这一步当成语言段吃进 `params.lang`，
-      // 但外壳的 `beforeLoad` 随后会把它判为非法语言并抛 `notFound`（见下一条用例），
-      // 因此这些旧地址既不会渲染出页面，也不会把不认识的语言留在地址栏里。
-      expect(leafMatch(legacy)?.routeId, legacy).toBe(`${SHELL_PREFIX}/`)
+  it('语言与主题都不影响命中的页面', () => {
+    for (const path of [routePaths.router, routePaths.logs, routePaths.overview]) {
+      expect(leafMatch(path, { lang: 'zh-CN', theme: 'dark' })?.routeId, path).toBe(leafMatch(path)?.routeId)
     }
   })
 
   it('统计分析的时间范围会被校验并兜底到 7d', () => {
-    expect(leafMatch(routePaths.overview, { range: 'today' })?.search).toEqual({ range: 'today' })
-    expect(leafMatch(routePaths.overview, { range: 'nope' })?.search).toEqual({ range: '7d' })
-    expect(leafMatch('/overview/demo', { range: '30d' })?.search).toEqual({ range: '30d' })
+    expect(leafMatch(routePaths.overview, { range: 'today' })?.search).toEqual({ range: 'today', lang: undefined, theme: undefined })
+    expect(leafMatch(routePaths.overview, { range: 'nope' })?.search).toEqual({ range: '7d', lang: undefined, theme: undefined })
+    expect(leafMatch('/overview/demo', { range: '30d' })?.search.range).toBe('30d')
   })
 
   it('运行日志的关键词会被裁剪，空值直接丢弃', () => {
-    expect(leafMatch(routePaths.logs, { q: '  abc  ' })?.search).toEqual({ q: 'abc' })
-    expect(leafMatch(routePaths.logs, { q: '   ' })?.search).toEqual({ q: undefined })
+    expect(leafMatch(routePaths.logs, { q: '  abc  ' })?.search.q).toBe('abc')
+    expect(leafMatch(routePaths.logs, { q: '   ' })?.search.q).toBeUndefined()
+  })
+
+  it('认不出的语言会被丢掉而不是拦住地址，写错的主题同样被丢掉', () => {
+    // 查询参数里的语言写错，后果只是「这一项没值」→ 界面退回偏好语言；
+    // 换成路径段时代价是整段路径 404，这正是这次收敛要消掉的分叉。
+    const matched = leafMatch(routePaths.router, { lang: 'fr', theme: 'blue' })
+    expect(matched?.routeId).toBe(routePaths.router)
+    expect(matched?.search).toEqual({ lang: undefined, theme: undefined })
+  })
+
+  it('中文变体会被归一成 zh-CN', () => {
+    expect(leafMatch(routePaths.router, { lang: 'zh-TW' })?.search.lang).toBe('zh-CN')
   })
 
   it('供应商下钻的链接会同时带上路径参数与时间范围', () => {
@@ -94,97 +96,79 @@ describe('路由路径契约', () => {
     expect(href).toBe('/client-config/claude-code')
   })
 
-  it('带上语言参数后，构建出的链接会把语言段写进路径', () => {
+  it('语言与主题会作为查询参数写进链接', () => {
     const href = router.buildLocation({
       to: routePaths.logs,
-      params: langParams('zh-CN'),
+      search: { lang: 'zh-CN', theme: 'dark' },
     }).href
-    expect(href).toBe('/zh-CN/logs')
+    expect(href).toBe('/logs?lang=zh-CN&theme=dark')
   })
 })
 
 /**
- * 下面这些用例必须真的走一次导航（而不是只解析路径），因为要验证的东西全都发生在
- * `beforeLoad` 与中间件里 —— 光看 `matchRoutes` 的结果看不到语言继承和 theme 保留。
+ * 下面这些用例必须真的走一次导航（而不是只解析路径），因为要验证的东西挂在
+ * `validateSearch` 与中间件上 —— 光看 `matchRoutes` 的结果看不到跨页保留。
  */
 describe('地址栏浏览行为', () => {
-  /** 导航到某个绝对地址，返回落地后的地址与各层匹配的状态。 */
+  /**
+   * 模拟「在地址栏里敲一条地址」：直接写 history 再让路由重新解析。
+   *
+   * 不能用 `navigate({ to })` 代替 —— `to` 是**路径**，整条 `?a=b` 会被当成路径的一部分
+   * 转义进 URL，落成的地址是 `/router?x=%3F...`。手改地址栏走的是 history，
+   * 这里也只有走 history 才是在测真实入口。
+   */
   const go = async (href: string) => {
-    await router.navigate({ to: href as never, replace: true }).catch(() => undefined)
-    return {
-      href: router.state.location.href,
-      statuses: router.state.matches.map(match => `${match.routeId}:${match.status}`),
-    }
+    router.history.replace(href)
+    await router.load()
+    return router.state.location.href
   }
 
-  /** 外壳那一层的匹配状态：`notFound` 就是闸门拦下了这个地址。 */
-  const shellStatus = () => router.state.matches.find(match => match.routeId === SHELL_PREFIX)?.status
-
-  it('外壳有语言段且语言合法时，页面正常渲染', async () => {
-    const landed = await go('/zh-CN/router')
-    expect(landed.href).toBe('/zh-CN/router')
-    expect(landed.statuses).toContain(`${routePaths.router}:success`)
-  })
-
-  it('语言段认不出时外壳判定为找不到，合法语言段才通过', async () => {
-    // 外壳那一层进 `notFound`，渲染时由外层的 notFound 边界接管（`defaultNotFoundComponent` 拉回首页），
-    // 于是「语言不认识但页面照开」这个状态不会出现。合法语言段则一路 success。
-    await go('/fr/router')
-    expect(shellStatus()).toBe('notFound')
-
-    await go('/zh-CN/router')
-    expect(shellStatus()).toBe('success')
-  })
-
-  it('除掉语言段之外的旧地址也会被闸门拦下', async () => {
-    await go('/providers')
-    expect(shellStatus()).toBe('notFound')
-  })
-
-  it('从带语言段的地址跳到别的页面时会带上同一个语言段', async () => {
-    await go('/zh-CN/router')
+  it('语言与主题在跨页跳转之间被保留', async () => {
+    await go('/router?lang=zh-CN&theme=dark')
     await router.navigate({ to: routePaths.logs, replace: true })
-    expect(router.state.location.href).toBe('/zh-CN/logs')
+    expect(router.state.location.href).toBe('/logs?lang=zh-CN&theme=dark')
   })
 
-  it('theme 在同级跳转之间被保留，语言段同时被带上', async () => {
-    await go('/zh-CN/router?theme=dark')
-    await router.navigate({ to: routePaths.logs, search: {}, replace: true })
-    expect(router.state.location.href).toBe('/zh-CN/logs?theme=dark')
+  it('跳转时不显式带上主题，同页的其它搜索参数也不会被误伤', async () => {
+    await go('/overview?range=today&lang=en&theme=light')
+    await router.navigate({ to: '.', search: { range: '30d' }, replace: true })
+    const search = new URLSearchParams(router.state.location.search)
+    expect(search.get('range')).toBe('30d')
+    expect(search.get('lang')).toBe('en')
+    expect(search.get('theme')).toBe('light')
   })
 
-  it('写进语言段与清掉语言段都能原地生效', async () => {
-    await go('/router')
-    await router.navigate({ to: routePaths.router, params: { lang: 'zh-CN' }, replace: true })
-    expect(router.state.location.pathname).toBe('/zh-CN/router')
-    await router.navigate({ to: '.', params: { lang: undefined }, replace: true })
-    expect(router.state.location.pathname).toBe('/router')
+  it('手改地址栏可以指定语言与主题', async () => {
+    const href = await go('/router?lang=zh-CN&theme=light')
+    expect(href).toBe('/router?lang=zh-CN&theme=light')
+    expect(parseOverrides(href)).toEqual({ lang: 'zh-CN', theme: 'light' })
   })
 })
 
 describe('地址栏覆盖值解析', () => {
-  it('从 href 里读出语言段与主题', () => {
-    expect(parseOverrides('#/zh-CN/router?theme=dark')).toEqual({ lang: 'zh-CN', theme: 'dark' })
+  it('从 href 里读出语言与主题', () => {
+    expect(parseOverrides('#/router?lang=zh-CN&theme=dark')).toEqual({ lang: 'zh-CN', theme: 'dark' })
   })
 
   it('没有覆盖时两项都是 null', () => {
     expect(parseOverrides('#/router')).toEqual({ lang: null, theme: null })
   })
 
-  it('不受支持的语言段与非法主题都算作没有覆盖', () => {
-    expect(parseOverrides('#/fr/router?theme=blue')).toEqual({ lang: null, theme: null })
+  it('不受支持的语言与非法主题都算作没有覆盖', () => {
+    expect(parseOverrides('#/router?lang=fr&theme=blue')).toEqual({ lang: null, theme: null })
   })
 
-  it('只看第一个路径段，普通参数里的语言名不算覆盖', () => {
+  it('语言在查询串里，路径参数不会被误认成语言', () => {
     expect(parseOverrides('#/overview/zh-CN')).toEqual({ lang: null, theme: null })
   })
 
   it('中文变体会被归一到 zh-CN', () => {
-    expect(parseOverrides('#/zh/router').lang).toBe('zh-CN')
+    expect(parseOverrides('#/zh/router?lang=zh').lang).toBe('zh-CN')
   })
 
-  it('langParams(null) 表示去掉语言段', () => {
-    expect(langParams(null)).toEqual({ lang: undefined })
-    expect(langParams('en')).toEqual({ lang: 'en' })
+  it('「跟随系统」是合法的主题值，不是「没有值」', () => {
+    expect(parseOverrides('#/router?theme=system').theme).toBe('system')
+    expect(isThemeParam('system')).toBe(true)
+    expect(isThemeParam('blue')).toBe(false)
   })
 })
