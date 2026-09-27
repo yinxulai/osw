@@ -1,4 +1,5 @@
-import type { AnalyticsRange, AnalyticsSummary, LiveRequestSnapshot, LogEntry, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import type { LiveRequestSnapshot } from '@common/live-request-stream'
+import type { AnalyticsRange, AnalyticsSummary, LogEntry, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
 export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; query?: string }

@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LIVE_REQUEST_STREAM_PROTOCOL_VERSION, type LiveRequestStreamMessage, type LiveRequestStreamSnapshotMessage } from '@common/live-request-stream'
 import { liveRequestStore } from '@server/proxy/observability/live-request-store'
 import { attachLiveRequestStream } from './infrastructure/live-request-stream'
 import { mockResponse } from './test-support'
@@ -50,11 +51,17 @@ function responseOf(canWrite: (payload: string) => boolean = () => true): FakeSt
   }
 }
 
-function frameOf(payload: string | undefined): { requests: { id: string }[] } {
+function messageOf(payload: string | undefined): LiveRequestStreamMessage {
   if (payload === undefined) throw new Error('expected a frame to have been written')
   // 一帧就是一行，行尾必须有换行——客户端靠它分帧。
   expect(payload.endsWith('\n')).toBe(true)
-  return JSON.parse(payload.trimEnd()) as { requests: { id: string }[] }
+  return JSON.parse(payload.trimEnd()) as LiveRequestStreamMessage
+}
+
+function snapshotOf(payload: string | undefined): LiveRequestStreamSnapshotMessage {
+  const message = messageOf(payload)
+  if (message.type !== 'snapshot') throw new Error(`expected a snapshot, received ${message.type}`)
+  return message
 }
 
 function beginRequest(id: string, store = liveRequestStore) {
@@ -87,7 +94,11 @@ describe('attachLiveRequestStream', () => {
     attach(res)
 
     expect(written).toHaveLength(1)
-    expect(frameOf(written[0])).toEqual({ requests: [] })
+    expect(messageOf(written[0])).toEqual({
+      protocolVersion: LIVE_REQUEST_STREAM_PROTOCOL_VERSION,
+      type: 'snapshot',
+      requests: [],
+    })
   })
 
   it('台账变了以后最多每 150ms 推一帧，突变被合流成一份快照', () => {
@@ -104,8 +115,8 @@ describe('attachLiveRequestStream', () => {
     vi.advanceTimersByTime(150)
     expect(written).toHaveLength(2)
     // 一帧是全量快照：两次事件、两条写入都在里面，不需要客户端重放增量。
-    expect(frameOf(written[1])?.requests).toEqual([expect.objectContaining({ id: 'req_1' })])
-    expect(frameOf(written[1])?.requests[0]).toMatchObject({ phase: 'routing' })
+    expect(snapshotOf(written[1]).requests).toEqual([expect.objectContaining({ id: 'req_1' })])
+    expect(snapshotOf(written[1]).requests[0]).toMatchObject({ phase: 'routing' })
 
     // 台账没再变，就不该重复推同一份快照。
     vi.advanceTimersByTime(150)
@@ -124,6 +135,10 @@ describe('attachLiveRequestStream', () => {
     // 满 10 秒一定有一帧，哪怕台账一个字都没变。
     vi.advanceTimersByTime(1_200)
     expect(written).toHaveLength(3)
+    expect(messageOf(written[2])).toEqual({
+      protocolVersion: LIVE_REQUEST_STREAM_PROTOCOL_VERSION,
+      type: 'heartbeat',
+    })
   })
 
   it('新客户端插队时给它的那份快照不能替老客户端吃掉待推的一帧', () => {
@@ -139,7 +154,7 @@ describe('attachLiveRequestStream', () => {
 
     vi.advanceTimersByTime(150)
     // 老客户端也必须在同一个节拍里看到这次变更，否则它要等到心跳（最多 10 秒）才发现台账变了。
-    expect(frameOf(first.written[1])?.requests).toEqual([expect.objectContaining({ id: 'req_1' })])
+    expect(snapshotOf(first.written[1]).requests).toEqual([expect.objectContaining({ id: 'req_1' })])
   })
 
   it('被背压挡住的订阅者先跳过，等 drain 再补一帧', () => {
@@ -158,7 +173,7 @@ describe('attachLiveRequestStream', () => {
     emitDrain()
     vi.advanceTimersByTime(150)
     expect(written).toHaveLength(2)
-    expect(frameOf(written[1])?.requests).toEqual([expect.objectContaining({ id: 'req_1' })])
+    expect(snapshotOf(written[1]).requests).toEqual([expect.objectContaining({ id: 'req_1' })])
   })
 
   it('没吃完缓冲区的那个人被跳过，其他人照样按时收到', () => {

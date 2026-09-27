@@ -1,4 +1,5 @@
 import type { ServerResponse } from 'node:http'
+import { LIVE_REQUEST_STREAM_PROTOCOL_VERSION, type LiveRequestStreamMessage } from '@common/live-request-stream'
 import { liveRequestStore } from '@server/proxy/observability/live-request-store'
 
 /**
@@ -21,9 +22,14 @@ import { liveRequestStore } from '@server/proxy/observability/live-request-store
  *
  * ## 帧的形状
  *
- * 每帧一行 `LiveRequestSnapshot` 的 JSON 文本，即**全量快照**，不做增量。理由见契约注释：
- * 进行中的请求是有限的一小撮，全量重发比在客户端重放增量简单得多，也天然免疫乱序与丢帧——
- * 一个慢客户端丢掉几帧之后，拿到的下一帧仍然是完整的、当下的真相。
+ * 每帧一行版本化的 `LiveRequestStreamMessage`：
+ *
+ * - `snapshot` 携带完整状态，连接建立后的第一帧必定是它；
+ * - `heartbeat` 只证明连接还活着，不携带也不暗示任何业务状态。
+ *
+ * 数据仍走全量快照，不做增量。理由见契约注释：进行中的请求是有限的一小撮，全量重发比在
+ * 客户端重放增量简单得多，也天然免疫乱序与丢帧——一个慢客户端丢掉几帧之后，拿到的下一帧
+ * 仍然是完整的、当下的真相。
  *
  * ## 内存与连接
  *
@@ -108,12 +114,15 @@ function tick(): void {
     stopTimer()
     return
   }
-  if (dirty || Date.now() - lastFrameAt >= HEARTBEAT_MILLISECONDS) writeFrame()
+  if (dirty) {
+    writeFrame(snapshotFrameOf())
+    return
+  }
+  if (Date.now() - lastFrameAt >= HEARTBEAT_MILLISECONDS) writeFrame(heartbeatFrame)
 }
 
-/** 给所有人推一帧。快照只取一次、只序列化一次，多个订阅者共用同一份字节。 */
-function writeFrame(): void {
-  const payload = frameOf()
+/** 给所有人推同一帧。调用方负责把内容序列化一次，多个订阅者共用同一份字节。 */
+function writeFrame(payload: string): void {
   lastFrameAt = Date.now()
   dirty = false
   // 先拷贝一份再遍历：写失败会就地摘人，边遍历边改集合会漏掉后面的订阅者。
@@ -129,7 +138,7 @@ function writeFrameTo(subscriber: LiveStreamSubscriber): void {
   // 而这一帧只发给了刚连上来的那个人，别的人还没拿到——清了就等于替他们吃掉一次变更，
   // 他们要一直等到下一次心跳（最多 10 秒）才发现台账早就变了。
   lastFrameAt = Date.now()
-  writeTo(subscriber, frameOf())
+  writeTo(subscriber, snapshotFrameOf())
 }
 
 function writeTo(subscriber: LiveStreamSubscriber, payload: string): void {
@@ -147,7 +156,22 @@ function writeTo(subscriber: LiveStreamSubscriber, payload: string): void {
   }
 }
 
-/** 一帧的字节：一行完整的快照。行尾必须有换行，客户端按行分帧。 */
-function frameOf(): string {
-  return `${JSON.stringify({ requests: liveRequestStore.list() })}\n`
+/** 一帧的字节：一条版本化消息。行尾必须有换行，客户端按行分帧。 */
+function frameOf(message: LiveRequestStreamMessage): string {
+  return `${JSON.stringify(message)}\n`
 }
+
+/** 当前台账的一份完整快照消息。 */
+function snapshotFrameOf(): string {
+  return frameOf({
+    protocolVersion: LIVE_REQUEST_STREAM_PROTOCOL_VERSION,
+    type: 'snapshot',
+    requests: liveRequestStore.list(),
+  })
+}
+
+/** 无状态心跳只序列化一次；所有连接、所有心跳共用同一份字节。 */
+const heartbeatFrame = frameOf({
+  protocolVersion: LIVE_REQUEST_STREAM_PROTOCOL_VERSION,
+  type: 'heartbeat',
+})

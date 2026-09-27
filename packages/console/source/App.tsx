@@ -11,6 +11,7 @@ import { ONBOARDING_ACTION_BAR_CLEARANCE } from '@/pages/onboarding/page'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { useTranslation } from '@/i18n/provider'
 import { RouteModeDialog } from '@/components/route-mode/route-mode-dialog'
+import { LiveRequestsProvider } from '@/data/live-requests'
 import { useProxyStatus } from '@/data/proxy'
 import { routePaths } from '@/routing/routes'
 import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
@@ -38,6 +39,7 @@ function App() {
   // 用 `matchRoute` 而不是比较 `pathname`：`routePaths` 里是干净的路径，语言与主题在查询串里，
   // 于是 `/onboarding?lang=zh-CN` 也能被认出来，`matchRoute` 已经处理了这一点。
   const isOnboarding = Boolean(matchRoute({ to: routePaths.onboarding }))
+  const needsLiveRequests = pathname === routePaths.logicalModels || pathname === routePaths.requestLogs
 
   return (
     <ToastProvider bottomOffset={isOnboarding ? ONBOARDING_ACTION_BAR_CLEARANCE : undefined}>
@@ -65,39 +67,41 @@ function App() {
               </div>
             </>
           ) : (
-            <AppLayout
-              sidebarPinned={sidebarPinned}
-              sidebar={(
-                <AppSidebar
-                  theme={theme}
-                  onToggleTheme={toggleTheme}
-                  proxyPort={proxyStatus?.port}
-                  proxyRunning={proxyStatus?.running ?? false}
-                  pinned={sidebarPinned}
-                  onTogglePinned={() => setSidebarPinned(!sidebarPinned)}
-                />
-              )}
-            >
-              {/*
-               * 内层再兜一道：路由级错误会被这里拦截，侧栏与顶部导航继续可用，
-               * 用户切到别的页面就自动恢复（`resetKeys` 是当前路径）。
-               * `routing.tsx` 里的根路由 `errorComponent` 是外层保险，
-               * 作用于 App 自身（包括侧栏、各种 Provider）抛错的情况。
-               */}
-              <ErrorBoundary
-                resetKeys={[pathname]}
-                fallback={fallbackProps => (
-                  <ErrorFallback
-                    {...fallbackProps}
-                    embedded
-                    title={t('common.error.pageTitle')}
-                    description={t('common.error.pageDescription')}
+            <LiveRequestsProvider enabled={needsLiveRequests}>
+              <AppLayout
+                sidebarPinned={sidebarPinned}
+                sidebar={(
+                  <AppSidebar
+                    theme={theme}
+                    onToggleTheme={toggleTheme}
+                    proxyPort={proxyStatus?.port}
+                    proxyRunning={proxyStatus?.running ?? false}
+                    pinned={sidebarPinned}
+                    onTogglePinned={() => setSidebarPinned(!sidebarPinned)}
                   />
                 )}
               >
-                <Outlet />
-              </ErrorBoundary>
-            </AppLayout>
+                {/*
+                 * 内层再兜一道：路由级错误会被这里拦截，侧栏与顶部导航继续可用，
+                 * 用户切到别的页面就自动恢复（`resetKeys` 是当前路径）。
+                 * `routing.tsx` 里的根路由 `errorComponent` 是外层保险，
+                 * 作用于 App 自身（包括侧栏、各种 Provider）抛错的情况。
+                 */}
+                <ErrorBoundary
+                  resetKeys={[pathname]}
+                  fallback={fallbackProps => (
+                    <ErrorFallback
+                      {...fallbackProps}
+                      embedded
+                      title={t('common.error.pageTitle')}
+                      description={t('common.error.pageDescription')}
+                    />
+                  )}
+                >
+                  <Outlet />
+                </ErrorBoundary>
+              </AppLayout>
+            </LiveRequestsProvider>
           )}
 
           {/*

@@ -377,9 +377,13 @@ describe('live request management', () => {
     // 禁掉缓存与任何改写型中间层：这份数据只在「此刻」有意义。
     expect(vi.mocked(res.setHeader)).toHaveBeenCalledWith('Content-Type', 'application/x-ndjson; charset=utf-8')
     expect(vi.mocked(res.setHeader)).toHaveBeenCalledWith('Cache-Control', 'no-store, no-transform')
-    // 连上就先给一帧，和拉取式端点吐的是同一种快照。
+    // 连上就先给一条 snapshot，业务 payload 与拉取式端点一致。
     expect(written).toHaveLength(1)
-    const frame = JSON.parse(written[0] ?? '{}') as { requests: { id: string }[] }
+    const frame = JSON.parse(written[0] ?? '{}') as { protocolVersion: number; type: string; requests: { id: string }[] }
+    expect(frame).toMatchObject({
+      protocolVersion: 1,
+      type: 'snapshot',
+    })
     expect(frame.requests.map(request => request.id)).toEqual(['req_live'])
 
     // 连接没断，处理函数就不该返回：否则访问日志会把一条长连接记成一次瞬时请求。

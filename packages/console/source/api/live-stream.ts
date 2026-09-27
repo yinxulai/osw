@@ -1,20 +1,21 @@
-import type { LiveRequestSnapshot } from '@common/schemas'
+import { LIVE_REQUEST_STREAM_PROTOCOL_VERSION, type LiveRequestStreamMessage } from '@common/live-request-stream'
 import { openStream } from './client'
 
 export interface LiveRequestStreamOptions {
   signal: AbortSignal
-  onSnapshot: (snapshot: LiveRequestSnapshot) => void
+  onMessage: (message: LiveRequestStreamMessage) => void
 }
 
 /**
  * 逐帧读取「进行中的请求」推送流。
  *
- * 传输是 NDJSON：服务端每帧写一行完整快照加一个换行。这里只负责分帧，不校验形状——
- * 与 `request<T>` 一致，形状由 `@osw/contracts` 定义，运行时不再验第二遍。
+ * 传输是 NDJSON：服务端每帧写一条版本化消息加一个换行。这里负责分帧与版本边界，
+ * 业务 payload 仍与 `request<T>` 一样由 `@osw/contracts` 定义，不在热路径深拷贝校验。
  *
  * 半行是真实存在的（连接会在任意一个字节上被掐断），因此解析失败的行直接丢掉：
- * 下一帧本来就是全量的，丢掉半行不会丢任何状态，而为一个畸形帧把整条推送打断则是纯损失。
- * 但 `onSnapshot` 自己抛出的异常不受这份宽容保护——那是消费方的问题，会被原样上抛。
+ * 下一条 `snapshot` 本来就是全量的，丢掉半行不会留下不一致，而为一条残帧把整条推送打断
+ * 则是纯损失。版本、消息类型与快照容器必须完整，缺一项就不交给消费方猜测。
+ * 但 `onMessage` 自己抛出的异常不受这份宽容保护——那是消费方的问题，会被原样上抛。
  *
  * 结束即返回（正常断开与 `signal` 中止都算），重连交给调用方——退避策略属于「谁在用它」，
  * 不属于「怎么读它」。
@@ -34,7 +35,7 @@ export async function readLiveRequestStream(options: LiveRequestStreamOptions): 
         const line = buffer.slice(0, newline)
         buffer = buffer.slice(newline + 1)
         newline = buffer.indexOf('\n')
-        deliver(line, options.onSnapshot)
+        deliver(line, options.onMessage)
       }
     }
   } finally {
@@ -44,16 +45,34 @@ export async function readLiveRequestStream(options: LiveRequestStreamOptions): 
   }
 }
 
-function deliver(line: string, onSnapshot: (snapshot: LiveRequestSnapshot) => void): void {
+function deliver(line: string, onMessage: (message: LiveRequestStreamMessage) => void): void {
   if (line.length === 0) return
-  let snapshot: LiveRequestSnapshot
+  let message: unknown
   try {
-    snapshot = JSON.parse(line) as LiveRequestSnapshot
+    message = JSON.parse(line) as unknown
   } catch {
     console.warn('[console] dropped a malformed live request frame')
     return
   }
+  if (!isLiveRequestStreamMessage(message)) {
+    console.warn('[console] dropped an unsupported live request stream message')
+    return
+  }
   // 消费方抛错**不属于**畸形帧：把两者放在同一个 try 里，会把「界面渲染崩了」记成
   // 「收到一帧坏数据」，还会把真正的异常吞掉。它照旧往上抛，由调用方决定重连还是收摊。
-  onSnapshot(snapshot)
+  onMessage(message)
+}
+
+/**
+ * 只守住线路协议边界，不逐字段校验 `requests`。
+ *
+ * 这个服务与界面同版本发布、只监听回环地址；业务字段可信度沿用其他管理 API 的约定。
+ * 这里负责拒绝旧协议或未知消息，避免它们被静默解释成一次状态替换。
+ */
+function isLiveRequestStreamMessage(value: unknown): value is LiveRequestStreamMessage {
+  if (typeof value !== 'object' || value === null) return false
+  const message = value as { protocolVersion?: unknown; type?: unknown; requests?: unknown }
+  if (message.protocolVersion !== LIVE_REQUEST_STREAM_PROTOCOL_VERSION) return false
+  if (message.type === 'heartbeat') return true
+  return message.type === 'snapshot' && Array.isArray(message.requests)
 }

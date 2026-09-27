@@ -60,7 +60,11 @@ describe('推送通道走真实的 HTTP 连接', () => {
     const reader = response.body!.getReader()
     const first = await nextLine(reader, 'first')
     expect(first.endsWith('\n')).toBe(true)
-    expect(JSON.parse(first)).toEqual({ requests: [] })
+    expect(JSON.parse(first)).toEqual({
+      protocolVersion: 1,
+      type: 'snapshot',
+      requests: [],
+    })
 
     // 台账变了以后**同一条连接**上还能再收到一帧：连接没有在推完第一帧就结束。
     liveRequestStore.begin({
@@ -71,7 +75,11 @@ describe('推送通道走真实的 HTTP 连接', () => {
       clientProtocol: null,
     })
     const second = await nextLine(reader, 'second')
-    expect(JSON.parse(second)).toMatchObject({ requests: [{ id: 'req_http' }] })
+    expect(JSON.parse(second)).toMatchObject({
+      protocolVersion: 1,
+      type: 'snapshot',
+      requests: [{ id: 'req_http' }],
+    })
 
     await reader.cancel()
   })
@@ -93,7 +101,11 @@ describe('推送通道走真实的 HTTP 连接', () => {
     // 订阅者与节拍器都是模块级状态：上一个客户端走了之后，下一个人仍然能连上、能收帧。
     const response = await fetch(`${baseUrl}${STREAM_PATH}`, { method: 'POST', body: '{}' })
     const reader = response.body!.getReader()
-    expect(JSON.parse(await nextLine(reader, 'reconnect'))).toEqual({ requests: [] })
+    expect(JSON.parse(await nextLine(reader, 'reconnect'))).toEqual({
+      protocolVersion: 1,
+      type: 'snapshot',
+      requests: [],
+    })
 
     liveRequestStore.begin({
       id: 'req_after',
@@ -103,7 +115,11 @@ describe('推送通道走真实的 HTTP 连接', () => {
       clientProtocol: null,
     })
     expect(JSON.parse(await nextLine(reader, 'reconnect-later')))
-      .toMatchObject({ requests: [{ id: 'req_after' }] })
+      .toMatchObject({
+        protocolVersion: 1,
+        type: 'snapshot',
+        requests: [{ id: 'req_after' }],
+      })
 
     await reader.cancel()
   })

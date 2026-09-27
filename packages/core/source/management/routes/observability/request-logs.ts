@@ -45,8 +45,8 @@ const RequestLogIdSchema = z.object({ id: z.string().trim().min(1) })
  * 进行中的请求（内存态，不落库）——拉取一次。
  *
  * 它是推送通道（`/api/request-log/live/stream`）的**退路**，不是主路：真实使用时界面订阅推送，
- * 只有在推送建不起来（旧版服务、代理调试）时才回到这里拉一次。两个端点吐的是同一种快照，
- * 所以保留它不增加任何形状负担。
+ * 只有在推送建不起来（旧版服务、代理调试）时才回到这里拉一次。两个端点共用同一份业务快照
+ * 定义，所以保留它不增加任何业务形状负担。
  */
 async function handleListLiveRequests(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendSuccess(res, { requests: liveRequestStore.list() })
@@ -55,8 +55,9 @@ async function handleListLiveRequests(_req: IncomingMessage, res: ServerResponse
 /**
  * 进行中的请求——持续推送。
  *
- * 一条长响应，每帧一行完整快照（NDJSON）。它在契约上仍是一个普通管理 API：`POST`、`/api/` 前缀、
- * 同样过守卫与 CORS。与拉取式的唯一差别是它**不结束**——不结束正是它的全部意义。
+ * 一条长响应，每帧一行版本化的 `LiveRequestStreamMessage`（NDJSON）。它在契约上仍是一个普通
+ * 管理 API：`POST`、`/api/` 前缀、同样过守卫与 CORS。与拉取式的唯一差别是它**不结束**——
+ * 不结束正是它的全部意义。
  *
  * 处理函数要一直等到连接关掉才返回：管理服务的访问日志以「处理函数返回」为一条请求的完成，
  * 提前返回会让一条活了三分钟的连接在日志里被记成几毫秒就结束了。

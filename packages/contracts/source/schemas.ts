@@ -797,22 +797,6 @@ export const LiveRequestSchema = z.object({
 })
 export type LiveRequest = z.infer<typeof LiveRequestSchema>
 
-/**
- * 一次「进行中的请求」的全量快照。
- *
- * 这个形状有两处用途，且刻意共用同一份定义：拉取式（`POST /api/request-log/live` 一次性返回）
- * 与推送式（`POST /api/request-log/live/stream` 按行推 NDJSON）——推送流里的每一行就是一份
- * 新的完整快照。共用形状意味着界面只有一套解析路径，也意味着「拉一次」和「订阅一段」
- * 拿到的东西不会漂移。
- *
- * 同理，这里**不做增量**：进行中的请求是有限的一小撮（进行中的 + 刚结束的若干条），
- * 全量重发比重放增量更不容易出错，而增量协议必须自己承担乱序、丢帧与重连后的对齐问题。
- */
-export const LiveRequestSnapshotSchema = z.object({
-  requests: z.array(LiveRequestSchema),
-})
-export type LiveRequestSnapshot = z.infer<typeof LiveRequestSnapshotSchema>
-
 // ========== API 响应结构 ==========
 
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
