@@ -34,4 +34,12 @@ export interface PlanResult {
 export interface AttemptPlanner {
   readonly id: string
   plan(input: PlannerInput): PlanResult | Promise<PlanResult>
+  /**
+   * 批量规划可选口。
+   *
+   * 路由图可能给出多个有序落点，落点规划器必须一次回答完它们的候选，才能避免
+   * 「每个落点重新查一遍模型、供应商、健康状态」的 N+1。实现必须在输入顺序上返回结果；
+   * 不实现时调用方会逐条回退到 `plan()`。
+   */
+  planMany?(inputs: readonly PlannerInput[]): Promise<readonly PlanResult[]>
 }

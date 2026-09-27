@@ -1,5 +1,6 @@
-import { listProviderModelsForLogicalModel } from '@server/database/model-store'
-import { getProvider } from '@server/database/provider-store'
+import { listProviderModelsForLogicalModel, listProviderModelsForLogicalModels } from '@server/database/model-store'
+import { getProvider, listProviders } from '@server/database/provider-store'
+import { listProviderHealth, listProviderModelHealth } from '@server/database/health-store'
 import { isConvertible } from '@common/protocols'
 import type { ProviderModelRoute, Provider, Protocol } from '@common/schemas'
 import { isProviderAvailable, isProviderModelAvailable } from '@server/proxy/upstream/health'
@@ -44,6 +45,63 @@ export async function getAvailableModels(logicalModelId = 'default', options: Av
   }
 
   return [...availableModels, ...unavailableModels]
+}
+
+export interface BatchAvailableModelsInput {
+  readonly logicalModelId: string
+  readonly manualModelId: string | null
+}
+
+/**
+ * 批量规划多个落点的可用模型。
+ *
+ * 一次读取全部绑定、供应商与健康状态，把「每个落点各查一次」压缩为固定次数的查询。
+ * 每个落点仍遵守与单点版本完全相同的过滤与稳定排序规则。
+ */
+export async function getAvailableModelsBatch(inputs: readonly BatchAvailableModelsInput[]): Promise<Map<string, ModelWithProvider[]>> {
+  const result = new Map<string, ModelWithProvider[]>()
+  if (inputs.length === 0) return result
+
+  const [modelsByLogicalModel, providers, providerHealth, providerModelHealth] = await Promise.all([
+    listProviderModelsForLogicalModels(inputs.map(input => input.logicalModelId), false, true),
+    listProviders(),
+    listProviderHealth(),
+    listProviderModelHealth(),
+  ])
+  const providersById = new Map(providers.map(provider => [provider.id, provider]))
+  const providerCooldowns = new Map(providerHealth.map(health => [health.providerId, health.cooldownUntilTime]))
+  const modelCooldowns = new Map(providerModelHealth.map(health => [health.providerModelId, health.cooldownUntilTime]))
+  const now = Date.now()
+
+  for (const input of inputs) {
+    const availableModels: ModelWithProvider[] = []
+    const unavailableModels: ModelWithProvider[] = []
+    for (const model of modelsByLogicalModel.get(input.logicalModelId) ?? []) {
+      if (input.manualModelId !== null && model.id !== input.manualModelId) continue
+      if (input.manualModelId === null && !model.enabled) continue
+
+      const provider = providersById.get(model.providerId)
+      if (!provider || provider.deletedTime !== null) continue
+
+      const candidate = { model, provider }
+      if (input.manualModelId !== null) {
+        availableModels.push(candidate)
+        break
+      }
+      if (!provider.enabled) continue
+
+      const providerCoolingDown = isCoolingDown(providerCooldowns.get(provider.id), now)
+      const modelCoolingDown = isCoolingDown(modelCooldowns.get(model.id), now)
+      if (!providerCoolingDown && !modelCoolingDown) availableModels.push(candidate)
+      else unavailableModels.push(candidate)
+    }
+    result.set(input.logicalModelId, [...availableModels, ...unavailableModels])
+  }
+  return result
+}
+
+function isCoolingDown(cooldownUntilTime: number | null | undefined, now: number): boolean {
+  return cooldownUntilTime !== null && cooldownUntilTime !== undefined && now < cooldownUntilTime
 }
 
 /**

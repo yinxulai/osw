@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PlanExhaustedReason, PlannerInput, PlanResult, UpstreamTarget } from '@server/proxy/contracts'
+import { proxyTargetPlanner } from '@server/proxy/planners/target-planner'
 import { NO_LANDING_DETAIL, planLandingTargets, type LandingPlan, type LandingPlanMiss } from '@server/proxy/routing/landing-planner'
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ afterEach(() => {
   mocks.plans.clear()
   mocks.manualModels.clear()
   mocks.planned = []
+  proxyTargetPlanner.planMany = undefined
 })
 
 function target(providerModelId: string): UpstreamTarget {
@@ -77,6 +79,26 @@ describe('planLandingTargets', () => {
     const plan = await planLandingTargets({ logicalModelIds: ['second'], clientProtocol: 'openai-completions' })
 
     expect(plan).toMatchObject({ logicalModelId: 'second', manualModelId: 'model_manual' })
+  })
+
+  it('plans every landing in one batch when the planner supports it', async () => {
+    const planMany = vi.fn(async (inputs: readonly PlannerInput[]) => inputs.map(input => (
+      input.logicalModelId === 'second'
+        ? { targets: [target('model_b')], reason: 'none' as const }
+        : { targets: [], reason: 'no-available-provider' as const, detail: 'first is unavailable' }
+    )))
+    proxyTargetPlanner.planMany = planMany
+
+    const plan = await planLandingTargets({ logicalModelIds: ['first', 'second', 'third'], clientProtocol: 'openai-completions' })
+
+    expect(plan.logicalModelId).toBe('second')
+    expect(planMany).toHaveBeenCalledOnce()
+    expect(planMany).toHaveBeenCalledWith([
+      { logicalModelId: 'first', clientProtocol: 'openai-completions', manualModelId: null },
+      { logicalModelId: 'second', clientProtocol: 'openai-completions', manualModelId: null },
+      { logicalModelId: 'third', clientProtocol: 'openai-completions', manualModelId: null },
+    ])
+    expect(mocks.planned).toEqual([])
   })
 
   it('lists every landing reason when none of them can be used', async () => {

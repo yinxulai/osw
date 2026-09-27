@@ -1,5 +1,5 @@
 import type { Protocol } from '@common/schemas'
-import type { PlanExhaustedReason, UpstreamTarget } from '../contracts'
+import type { PlanExhaustedReason, PlannerInput, PlanResult, UpstreamTarget } from '../contracts'
 import { proxyTargetPlanner } from '../planners/target-planner'
 import { getManualModel } from './manual-routing'
 
@@ -58,10 +58,18 @@ export async function planLandingTargets(input: LandingPlanInput): Promise<Landi
     return { logicalModelId: null, targets: [], manualModelId: null, reason: 'model-not-configured', detail: NO_LANDING_DETAIL }
   }
 
+  const plannerInputs = input.logicalModelIds.map(logicalModelId => ({
+    logicalModelId,
+    clientProtocol: input.clientProtocol,
+    manualModelId: getManualModel(logicalModelId),
+  }))
+  const plans = proxyTargetPlanner.planMany
+    ? await proxyTargetPlanner.planMany(plannerInputs)
+    : await planUntilFirstHit(plannerInputs)
   const unavailable: UnavailableLanding[] = []
-  for (const logicalModelId of input.logicalModelIds) {
-    const manualModelId = getManualModel(logicalModelId)
-    const plan = await proxyTargetPlanner.plan({ logicalModelId, clientProtocol: input.clientProtocol, manualModelId })
+  for (const [index, logicalModelId] of input.logicalModelIds.entries()) {
+    const manualModelId = plannerInputs[index].manualModelId
+    const plan = plans[index]
     if (plan.targets.length > 0) {
       return { logicalModelId, targets: plan.targets, manualModelId }
     }
@@ -79,6 +87,16 @@ export async function planLandingTargets(input: LandingPlanInput): Promise<Landi
     reason: unavailable.some(item => item.reason === 'manual-model-unavailable') ? 'manual-model-unavailable' : last.reason,
     detail: describeUnavailableLandings(unavailable),
   }
+}
+
+async function planUntilFirstHit(inputs: readonly PlannerInput[]): Promise<readonly PlanResult[]> {
+  const plans: PlanResult[] = []
+  for (const input of inputs) {
+    const plan = await proxyTargetPlanner.plan(input)
+    plans.push(plan)
+    if (plan.targets.length > 0) break
+  }
+  return plans
 }
 
 /**

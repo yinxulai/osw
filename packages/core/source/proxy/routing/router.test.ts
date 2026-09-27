@@ -1,20 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { findConvertibleEndpoint, findEndpoint, getAvailableModels } from '@server/proxy/routing/router'
+import { findConvertibleEndpoint, findEndpoint, getAvailableModels, getAvailableModelsBatch } from '@server/proxy/routing/router'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
 
 const mocks = vi.hoisted(() => ({
   models: [] as ProviderModelRoute[],
+  modelsByLogicalModel: new Map<string, ProviderModelRoute[]>(),
   provider: undefined as Provider | undefined,
+  providers: [] as Provider[],
+  providerCooldowns: [] as Array<{ providerId: string; cooldownUntilTime: number | null }>,
+  modelCooldowns: [] as Array<{ providerModelId: string; cooldownUntilTime: number | null }>,
   unavailableProviders: new Set<string>(),
   unavailableModels: new Set<string>(),
 }))
 
 vi.mock('@server/database/model-store', () => ({
   listProviderModelsForLogicalModel: async () => mocks.models,
+  listProviderModelsForLogicalModels: async () => mocks.modelsByLogicalModel,
 }))
 
 vi.mock('@server/database/provider-store', () => ({
   getProvider: async () => mocks.provider,
+  listProviders: async () => mocks.providers,
+}))
+
+vi.mock('@server/database/health-store', () => ({
+  listProviderHealth: async () => mocks.providerCooldowns,
+  listProviderModelHealth: async () => mocks.modelCooldowns,
 }))
 
 vi.mock('@server/proxy/upstream/health', () => ({
@@ -24,7 +35,11 @@ vi.mock('@server/proxy/upstream/health', () => ({
 
 afterEach(() => {
   mocks.models = []
+  mocks.modelsByLogicalModel.clear()
   mocks.provider = undefined
+  mocks.providers = []
+  mocks.providerCooldowns = []
+  mocks.modelCooldowns = []
   mocks.unavailableProviders.clear()
   mocks.unavailableModels.clear()
 })
@@ -213,6 +228,80 @@ describe('getAvailableModels', () => {
     expect(available.map(entry => entry.model.id)).toEqual(['model_manual'])
   })
 })
+
+describe('getAvailableModelsBatch', () => {
+  it('matches the single-landing filtering and ordering for every logical model', async () => {
+    const time = Date.now()
+    const provider: Provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: true,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    const first = logicalModel('model_first', provider.id, 1, time)
+    const disabled = logicalModel('model_disabled', provider.id, 2, time, false)
+    const cooled = logicalModel('model_cooled', provider.id, 3, time)
+    const ready = logicalModel('model_ready', provider.id, 4, time)
+    mocks.provider = provider
+    mocks.models = [first, disabled, cooled, ready]
+    mocks.unavailableModels.add(cooled.id)
+    mocks.modelsByLogicalModel.set('landing_one', [first, disabled, cooled, ready])
+    mocks.modelsByLogicalModel.set('landing_two', [ready, first])
+    mocks.providers = [provider]
+    mocks.modelCooldowns = [{ providerModelId: cooled.id, cooldownUntilTime: time + 60_000 }]
+
+    const single = await getAvailableModels('landing_one')
+    const batch = await getAvailableModelsBatch([
+      { logicalModelId: 'landing_one', manualModelId: null },
+      { logicalModelId: 'landing_two', manualModelId: null },
+    ])
+
+    expect(batch.get('landing_one')?.map(entry => entry.model.id)).toEqual(single.map(entry => entry.model.id))
+    expect(batch.get('landing_two')?.map(entry => entry.model.id)).toEqual(['model_ready', 'model_first'])
+  })
+
+  it('keeps the manually selected model even when it is disabled and cooling', async () => {
+    const time = Date.now()
+    const provider: Provider = {
+      id: 'prov_shared',
+      name: 'Shared Provider',
+      apiKeyReference: 'shared-key',
+      timeoutMilliseconds: 1_000,
+      enabled: false,
+      createdTime: time,
+      updatedTime: time,
+      deletedTime: null,
+    }
+    const manual = logicalModel('model_manual', provider.id, 1, time, false)
+    const other = logicalModel('model_other', provider.id, 2, time)
+    mocks.modelsByLogicalModel.set('landing', [other, manual])
+    mocks.providers = [provider]
+    mocks.providerCooldowns = [{ providerId: provider.id, cooldownUntilTime: time + 60_000 }]
+    mocks.modelCooldowns = [{ providerModelId: manual.id, cooldownUntilTime: time + 60_000 }]
+
+    const batch = await getAvailableModelsBatch([{ logicalModelId: 'landing', manualModelId: manual.id }])
+
+    expect(batch.get('landing')?.map(entry => entry.model.id)).toEqual([manual.id])
+  })
+})
+
+function logicalModel(id: string, providerId: string, priority: number, time: number, enabled = true): ProviderModelRoute {
+  return {
+    id,
+    providerId,
+    modelName: id,
+    endpoints: [],
+    priority,
+    enabled,
+    createdTime: time,
+    updatedTime: time,
+    deletedTime: null,
+  }
+}
 
 describe('findEndpoint', () => {
   const model: ProviderModelRoute = {

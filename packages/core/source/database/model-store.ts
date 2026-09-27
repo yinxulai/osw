@@ -64,6 +64,46 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
     }))
 }
 
+/**
+ * 批量读取多个逻辑模型的绑定。
+ *
+ * 返回 Map 而不是扁平数组，因为调用方已经拿着「落点顺序」；把排序重新塞回数组里只会
+ * 多一层按 id 分组的逻辑。查询仍按调度策略的优先级、权重和创建时间稳定排序。
+ */
+export async function listProviderModelsForLogicalModels(logicalModelIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
+  const result = new Map<string, LogicalModelProviderModel[]>()
+  if (logicalModelIds.length === 0) return result
+
+  const rows = getConfigDb().select({
+    logicalModelId: schedulingPolicies.logicalModelId,
+    model: providerModels,
+    policyEnabled: schedulingPolicies.enabled,
+    policyPriority: schedulingPolicies.priority,
+  })
+    .from(schedulingPolicies)
+    .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
+    .where(and(
+      inArray(schedulingPolicies.logicalModelId, [...logicalModelIds]),
+      isNull(schedulingPolicies.deletedTime),
+    ))
+    .orderBy(asc(schedulingPolicies.logicalModelId), asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
+    .all()
+
+  for (const { logicalModelId, model, policyEnabled, policyPriority } of rows) {
+    if (!includeDeleted && model.deletedTime !== null) continue
+    if (!includeDisabled && (!model.enabled || !policyEnabled)) continue
+    const candidates = result.get(logicalModelId) ?? []
+    candidates.push({
+      ...mapProviderModelRoute(model),
+      priority: policyPriority,
+      enabled: policyEnabled,
+      modelEnabled: model.enabled,
+    })
+    result.set(logicalModelId, candidates)
+  }
+  return result
+}
+
 export async function getProviderModel(id: string): Promise<ProviderModelView | undefined> {
   const row = getConfigDb().select().from(providerModels).where(eq(providerModels.id, id)).get()
   return row ? mapProviderModelView(row) : undefined

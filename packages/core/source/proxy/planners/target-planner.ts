@@ -4,6 +4,7 @@ import {
   findConvertibleEndpoint,
   findEndpoint,
   getAvailableModels,
+  getAvailableModelsBatch,
   type ModelWithProvider,
 } from '@server/proxy/routing/router'
 import { isWebSocketEndpoint, resolveUpstreamUrl } from '@server/proxy/routing/upstream-url'
@@ -28,7 +29,11 @@ import { isWebSocketEndpoint, resolveUpstreamUrl } from '@server/proxy/routing/u
  * `buildUpstreamTarget` 是这个文件对外开的第二个口：一个模型的字段映射只有一份，
  * 批量规划与「测试连接」这种单点探测都走它。
  */
-export const proxyTargetPlanner: AttemptPlanner = { id: 'proxy-target', plan: planProxyTargets }
+export const proxyTargetPlanner: AttemptPlanner = {
+  id: 'proxy-target',
+  plan: planProxyTargets,
+  planMany: planProxyTargetsBatch,
+}
 
 /** 手动锁定的模型用不了时的说明：手动与自动的区别只在这句话里，因此只有一个来源。 */
 const MANUAL_UNAVAILABLE_DETAIL = 'The manually selected ProviderModel is not available for this protocol'
@@ -39,7 +44,23 @@ const NO_MODEL_DETAIL = 'This logical model has no enabled and healthy provider 
 export async function planProxyTargets(input: PlannerInput): Promise<PlanResult> {
   const { logicalModelId, clientProtocol: protocol, manualModelId } = input
   const availableModels = await getAvailableModels(logicalModelId, { manualModelId })
+  return planFromAvailableModels(availableModels, protocol, manualModelId)
+}
 
+/** 批量规划入口：数据查询一次做完，每个落点仍按同一套规则独立判定。 */
+export async function planProxyTargetsBatch(inputs: readonly PlannerInput[]): Promise<readonly PlanResult[]> {
+  const availableByLogicalModel = await getAvailableModelsBatch(inputs.map(input => ({
+    logicalModelId: input.logicalModelId,
+    manualModelId: input.manualModelId,
+  })))
+  return inputs.map(input => planFromAvailableModels(
+    availableByLogicalModel.get(input.logicalModelId) ?? [],
+    input.clientProtocol,
+    input.manualModelId,
+  ))
+}
+
+function planFromAvailableModels(availableModels: readonly ModelWithProvider[], protocol: Protocol, manualModelId: string | null): PlanResult {
   // 手动模式下「候选为空」永远是「手动指定的模型不可用」，哪怕它是被删掉了：
   // 这种情况绝不能退化成「没有可用供应商」，否则用户看到的是一条与他的操作无关的报错。
   if (availableModels.length === 0) {
@@ -143,7 +164,7 @@ function resolveEndpointId(model: ProviderModelRoute, endpointProtocol: Protocol
  * 为什么一个候选都用不上。这段文字同时是日志与用户看到的错误信息（英文原文），
  * 只说事实、不猜原因；界面按 `errorCode` 自己本地化，不把这句英文当模板用。
  */
-function describeCandidates(availableModels: ModelWithProvider[], protocol: Protocol): string {
+function describeCandidates(availableModels: readonly ModelWithProvider[], protocol: Protocol): string {
   const discovered = availableModels.map(candidate => `${candidate.provider.name}/${candidate.model.modelName}`).join(', ')
   const suffix = discovered ? `, discovered: ${discovered}` : ''
 

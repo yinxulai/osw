@@ -6,11 +6,14 @@ import type { ModelWithProvider } from '@server/proxy/routing/router'
 
 const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
+  batchCalls: [] as Array<Array<{ logicalModelId: string; manualModelId: string | null }>>,
 }))
 
 interface ManualModelOptions {
   manualModelId?: string | null
 }
+
+type BatchPlannerInput = { logicalModelId: string; manualModelId: string | null }
 
 // 只替换「谁能用」（需要数据库与健康冷却），端点匹配与协议转换矩阵用真实实现：
 // 规划器要验证的正是「匹配结果如何变成一份目标」这段合成逻辑。
@@ -21,6 +24,15 @@ vi.mock('@server/proxy/routing/router', async importOriginal => {
     getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId
       ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
       : mocks.models,
+    getAvailableModelsBatch: async (inputs: BatchPlannerInput[]) => {
+      mocks.batchCalls.push(inputs)
+      return new Map(inputs.map(input => [
+        input.logicalModelId,
+        input.manualModelId
+          ? mocks.models.filter(candidate => candidate.model.id === input.manualModelId)
+          : mocks.models,
+      ]))
+    },
   }
 })
 
@@ -28,6 +40,7 @@ import { buildUpstreamTarget, proxyTargetPlanner } from './target-planner'
 
 afterEach(() => {
   mocks.models = []
+  mocks.batchCalls = []
 })
 
 interface EndpointFixture {
@@ -174,6 +187,27 @@ describe('候选为空时的原因', () => {
 
     expect(result.targets).toHaveLength(0)
     expect(result.reason).toBe('manual-model-unavailable')
+  })
+})
+
+describe('批量规划', () => {
+  it('queries every landing once and keeps the input order', async () => {
+    mocks.models = [
+      candidate('model_alpha', [{ protocol: 'openai-completions', url: 'https://upstream.example.com/v1/chat/completions' }]),
+    ]
+
+    const results = await proxyTargetPlanner.planMany!([
+      { logicalModelId: 'first', clientProtocol: 'openai-completions', manualModelId: null },
+      { logicalModelId: 'second', clientProtocol: 'anthropic-messages', manualModelId: null },
+    ])
+
+    expect(mocks.batchCalls).toEqual([[
+      { logicalModelId: 'first', manualModelId: null },
+      { logicalModelId: 'second', manualModelId: null },
+    ]])
+    expect(results).toHaveLength(2)
+    expect(results[0].targets).toHaveLength(1)
+    expect(results[1]).toMatchObject({ targets: [], reason: 'no-available-provider' })
   })
 })
 
