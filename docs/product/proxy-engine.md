@@ -146,7 +146,7 @@ flowchart TD
 | `Transport` | 唯一的对外出口（HTTP 单工；双向由 `UpstreamConnection.outbound` 表达） | 取代 `response/transport.ts` |
 | `ProtocolDescriptor` | 协议的声明式元数据（匹配、信封、认证、用量、转换能力） | 取代 6 处协议矩阵 + `createAuthHeaders` switch |
 | `EndpointSpec` | **一个接口**的声明（如 `/v1/embeddings`） | 取代 `routes.ts` + `request-defaults.ts` |
-| `Observer` | 只读观察接口（逐帧、逐尝试、逐交换） | 取代 `observability/hooks.ts` |
+| `Observer` | 只读观察接口（上游头、上游块、已交付块、尝试结果） | `observability/hooks.ts` 已删除；当前由 `contracts/observer.ts` 单一契约承载 |
 | `Modifier` | 读写修改接口（请求方向 / 响应方向，可选逐帧） | 取代重写规则、协议转换、认证注入、默认值注入 |
 | `AttemptPlanner` | 产出候选序列（按上游端点的协议与地址筛选） | 取代 `routing/router.ts` + `routing/routing.ts` |
 | `LocalHandler` | 本地端点，不透传上游 | 取代 `proxy-runtime.ts` 里硬编码的 `/v1/models` |
@@ -326,26 +326,25 @@ export interface ProtocolEnvelope {
 ```ts
 export interface Observer {
   readonly id: string
-  /** 执行顺序，小的先。落库型观察者用小值，依赖落库结果的观察者用大值。 */
-  readonly order?: number
-
-  onExchangeStart?(event: { exchange: ExchangeView }): void | Promise<void>
-  onAttemptStart?(event: { exchange: ExchangeView, attempt: AttemptView }): void | Promise<void>
-  onUpstreamFrame?(event: { exchange: ExchangeView, attempt: AttemptView, frame: Frame }): void | Promise<void>
-  onDownstreamFrame?(event: { exchange: ExchangeView, attempt: AttemptView, frame: Frame }): void | Promise<void>
-  onAttemptEnd?(event: { exchange: ExchangeView, attempt: AttemptView, result: AttemptResult }): void | Promise<void>
-  onExchangeEnd?(event: { exchange: ExchangeView, result: ExchangeResult }): void | Promise<void>
+  onExchangeStart?(exchange: ExchangeView): void
+  onAttemptStart?(exchange: ExchangeView, attempt: AttemptView, target: UpstreamTarget): void
+  onUpstreamHead?(exchange: ExchangeView, attempt: AttemptView, status: number, headers: HeaderMap): void
+  onUpstreamChunk?(exchange: ExchangeView, attempt: AttemptView, chunk: Buffer): void
+  /** 客户端侧**已经写出**的字节；转换器的产出尚未被出口接受时不算。 */
+  onDownstreamChunk?(exchange: ExchangeView, attempt: AttemptView, chunk: Buffer): void
+  onAttemptEnd?(exchange: ExchangeView, attempt: AttemptView, outcome: AttemptOutcomeView): void
+  onExchangeEnd?(exchange: ExchangeView, outcome: ExchangeOutcomeView): void
 }
 ```
 
 契约（必须由内核强制，不能靠约定）：
 
 1. **只读**。载荷里的 `ExchangeView` / `AttemptView` 是冻结视图，不含可变的 headers 与 body 引用。观察者想改内容必须去写 `Modifier`，从类型上就区分开。
-2. **错误隔离**。观察者抛错只记 `console.error`，绝不改变请求结果。观察能力失效不能导致代理不可用。
-3. **不阻塞主链**。`onUpstreamFrame` / `onDownstreamFrame` 的返回值不与数据流背压挂钩；需要保证「已落库」的消费者用 `order` 排在落库观察者之后。
-4. **落库责任自持**。当前「回调必须在落库之后」这一条由 `LoggingObserver.onExchangeStart` 自己保证：它先写请求行，再把 ID 放进 `exchange.state`，后续观察者读 `state` 而不是再回查数据库是否存在。
+2. **统一错误隔离**。`kernel/observer-notifications.ts` 是唯一通知入口：逐个 try/catch，观察者失败只留告警，后面的观察者与转发字节都不受影响。
+3. **同步、不阻塞主链**。观察回调不参与背压、不改写帧；需要记录的事实先由观察者自己快照，离开回调后再落库。
+4. **交付通知遵守真实写出语义**。`onDownstreamChunk` 不跟修改器输出绑定，而由 `HttpResponseSink` 在 `response.write()` 接受字节、必要时等待 `drain` 之后触发。`discard()` 的尝试与尚未被客户端接受的背压数据都不计数。
 
-现有观察能力的落位：`observers/request-log.ts`（请求行）、`observers/attempt-log.ts`（尝试行）、`observers/content-capture.ts`（正文）、`observers/usage.ts`（用量）、`observers/health.ts`（成功/失败计数）、`observers/live-tail.ts`（管理端实时订阅）。
+当前观察者的落位很窄：`observers/attempt-observer.ts` 产出上游视角正文、用量与 TTFT；`observability/live-request-observer.ts` 产出进行中台账的字节进度。请求级与尝试级的事实落库由 session 持有的 `RequestLogger` 与 `AttemptLogger` 完成，不再挂一棵独立的 class 观察者树。
 
 ### 3.5 Modifier：修改接口
 
@@ -496,6 +495,40 @@ flowchart TD
   N --> G
 ```
 
+### 4.1 当前实现的调用关系
+
+入口先建立唯一的 `ProxyRequestSession`：设置快照、`startedAt` 与 `RequestLogger` 在这一刻定下，拒绝、读正文、执行和收尾都复用同一实例。规划器若有 `planMany`，落点按一次批量查询完成；执行器只消费最终的有序 `UpstreamTarget[]`。
+
+```mermaid
+flowchart TD
+  Entry[handleProxyRequest] --> Session[ProxyRequestSession]
+  Entry --> Router[resolveRoute]
+  Router --> Landing[planLandingTargets]
+  Landing --> Planner[proxyTargetPlanner.planMany]
+  Entry --> Executor[executeProxyRequest]
+  Executor --> Runner[runAttempts]
+  Runner --> Attempt[attemptRequest]
+  Attempt --> Prepare[prepareAttempt]
+  Prepare --> Relay[relayAttempt / pipeFrames]
+  Relay --> Modifiers[response modifiers]
+  Modifiers --> Sink[HttpResponseSink]
+  Sink --> Observers[delivered observer notifications]
+  Relay --> Conclusion[concludeAttempt]
+  Conclusion --> Finalizer[RequestFinalizer]
+  Finalizer --> Logger[RequestLogger]
+  Finalizer --> Live[liveRequestStore]
+  Finalizer --> Health[provider health]
+```
+
+一次尝试的内部边界固定为四步：
+
+1. `prepareAttempt`：解析协议适配器、读取密钥和规则、跑请求修改器，产出 `PreparedAttempt`；`attemptStartedAt` 在这里已经确定，供 TTFT、relay 与落库共用。
+2. `relayAttempt`：连接上游，`pipeFrames` 把帧搬到出口，交付判断只发生在头帧；响应修改器产出的 error 帧会终止搬运。
+3. `concludeAttempt`：按 delivered / discarded / interrupted 三类结果生成判别联合，客户端响应字段只存在于已交付类型。
+4. `RequestFinalizer`：六类结局分别写入日志、健康度与实时台账；成功才会把这一次尝试计作请求级用量与任务量。
+
+协议转换失败是数据面失败，不是「转换器内部小错误」：`ProtocolConversionError` 会变成 `kind: 'error'` 帧，禁止把未转换的上游原文当作 200 透传。整包转换、流式分块与流式收尾三个阶段都遵守同一条规则。
+
 与落库那条线**并排**还有一条内存线，专供界面看「此刻」：请求入口登记一份台账记录，执行器每次尝试产出进度（字节、分片、首字、输出 Token），收尾器在落库的同时把它移出台账。两个观察者挂在同一个 `observers` 数组上、互不依赖——其中一个抛错只丢自己那条记录。台账不参与搬运，也不参与交付判定（状态码与上游形态由执行器写，因为「要不要交付」的判断也在那里，事实与判断必须落在同一处）。细节见[可观测性 · 进行中的请求](observability.md#进行中的请求内存态)。
 
 双向传输的能力仍预留在内核里，但**没有实现，也不在当前计划内**：
@@ -528,7 +561,12 @@ flowchart TD
 - [x] 客户端跳的形态是显式事实：`ExchangeView.transport` / `RequestContext.transport` 由入口从封装描述写入，`request-entry` 有断言
 - [x] 双向交换与单工尝试共用同一份搬运与收尾：`relayAttempt` 与 `relayConnected` 共用 `runRelay`，上游只断一次是内核不变式（`kernel/relay.test.ts` 断言 abort 次数为 1）
 - [x] `/v1/models` 由 `LocalHandler` 提供，`proxy-runtime.ts` 不再包含任何业务分支
-- [x] 路由决策只有一处：`planners/target-planner.ts` 是 `AttemptPlanner` 的唯一实现，入口只把规划结果翻成拒绝码；执行器与传输层只见 `UpstreamTarget`（`target-planner.test.ts` 14 例覆盖原生优先、HTTP 转换候选、WS 仅原生、三种空候选原因、字段映射与坏 URL 不下传抛错）
+- [x] 路由决策只有一处：`planners/target-planner.ts` 是 `AttemptPlanner` 的唯一实现，入口只把规划结果翻成拒绝码；执行器与传输层只见 `UpstreamTarget`（`target-planner.test.ts` 覆盖原生优先、HTTP 转换候选、WS 仅原生、三种空候选原因、字段映射与坏 URL 不下传抛错）
+- [x] 多个落点优先批量规划：`planLandingTargets` 优先调用 `planMany`，`getAvailableModelsBatch` 与单点版本在过滤、健康排序和手动锁定上保持一致（`router.test.ts`、`landing-planner.test.ts`、`target-planner.test.ts`）
+- [x] 请求级的设置、开始时间与日志器只有一个来源：`ProxyRequestSession` 从入口贯穿执行与收尾（`request-entry.test.ts`）
+- [x] 观察者通知统一隔离：`notifyObservers` 逐个 try/catch，帧管道、relay 与真实写出回调共用同一实现（`frame-pipe.test.ts`）
+- [x] 交付事实绑定真实写出：`onDownstreamChunk` 只在出口接受字节且背压 `drain` 后触发，`discard()` 不触发（`http-response-sink.test.ts`）
+- [x] 协议转换失败不透传原文：整包转换与流式分块失败都输出 `ProtocolConversionError` error 帧（`response-modifiers.test.ts`）
 - [x] 分层约束可执行：`packages/core/scripts/check-proxy-layers.mjs` 挂在 `pnpm lint` 里
 - [x] 只有一根轴：`TransportKind` = `http` / `http-stream` / `websocket`，是全仓唯一的传输词表（`schemas.test.ts` 钉住词表，`transports/registry.ts` 的加载期断言钉住「每个声明的取值都有实现服务」）
 - [x] 客户端跳的取值不进入上游跳：`PlannerInput` 没有 `transport` 字段，上游形态由 `resolveUpstreamTransport(target.url, exchange.transport)` 从端点地址现算（`upstream-url.test.ts` 断言 `wss://` / `ws://` → `websocket`，其余镜像客户端跳；`attempt-executor.test.ts` 断言 WS 端点不下传给转换候选）

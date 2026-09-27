@@ -31,9 +31,15 @@
 
 **事实永远写入，载荷才受开关控制。** `captureRequestContent` 只决定是否保存正文；是否发生协议转换、上游跳以什么形态作答、命中的改写规则 id、尝试耗时、TTFT 都是事实，无论开关如何都必须落库。因此它们写在 `request_attempts` 上，而不写在与正文同生命周期的表里。而“客户端要的是流式还是非流式”是请求刚一进来就已经定下的**预期**，它与请求日志同生命周期，写在 `request_logs.transport` 上。
 
+**一次请求只有一个 session。** 入口在读取正文前建立 `ProxyRequestSession`，把设置快照、`startedAt` 与 `RequestLogger` 一起固定下来；后续拒绝、读正文、路由、执行与收尾都复用同一实例。设置不会在请求进行到一半时换一套，所有耗时也以收到请求那刻为同一起点。
+
 **协议转换是派生事实，不单独建表。** `request_logs.clientProtocol` 与 `request_attempts.upstreamProtocol` 不相等，就是「发生了转换」的唯一判据；上游跳以什么形态作答读 `request_attempts.upstreamTransport`；耗时直接读 `request_attempts.durationMilliseconds`。三者合并后没有任何独立信息，单独建表只会引入一份会漂移的耗时副本。
 
 指标与用量表不重复保存同一数值：Token、缓存 Token 和其他协议用量进入 `request_usages` / `attempt_usages`；总耗时落在 `request_logs.totalDurationMilliseconds`，缓存命中由 `request_usages.cachedInputTokens > 0` 现算，都不再另存一份。
+
+**内存观察缓存有界，落库正文仍完整。** 开启 `captureRequestContent` 时，观察者为落库保留完整上游正文；关闭时只为健康度与错误归因保留固定窗口的最后 64 KiB 原文，不让长连接在后台无限占用内存。落库正文一旦开启就仍按完整正文压缩保存，不做截断。
+
+**「已交付」以出口真正接受字节为准。** `onDownstreamChunk` 由 `HttpResponseSink` 在 `response.write()` 接受、必要时等待 `drain` 后触发，不由修改器产出帧触发。被 `discard()` 的尝试与卡在背压里的块都不产生下游字节事实，因此实时台账与最终客户端正文不会把「上游发了」误记成「客户端收到了」。
 
 **没有独立的指标 KV 表。** 请求级事实只有两种命运：它要么是**稳定列**（如 `totalDurationMilliseconds`），要么是**某个视角的用量行**（如 `type = 'raw'` 的原始报文行）。一张通用 `(requestId, key, value)` 指标表能表达的每一条数据都属于这两类，却同时失去类型约束与 CHECK 保护，因此不再保留。
 
@@ -44,14 +50,14 @@
 ### 耗时的分解
 
 ```
-尝试耗时 attemptDuration ──┬─ 首字延迟 ttft      （从发出请求到上游第一个真正内容）
+尝试耗时 attemptDuration ──┬─ 首字延迟 ttft      （从开始这次尝试到上游第一个真正内容）
                            └─ 出字时段           （首字之后，直到这次尝试结束）
 ```
 
 | 量 | 定义 | 数据来源 |
 | --- | --- | --- |
-| 尝试耗时 | 一次尝试从发出请求到该次尝试结束的耗时 | `request_attempts.durationMilliseconds` |
-| 首字延迟（TTFT） | 一次尝试从发出请求到**上游首个真正的内容输出**的耗时 | `request_attempts.ttftMilliseconds` |
+| 尝试耗时 | 一次尝试从开始准备到该次尝试结束的耗时（包含取密钥、规则与请求改写） | `request_attempts.durationMilliseconds` |
+| 首字延迟（TTFT） | 一次尝试从开始准备到**上游首个真正的内容输出**的耗时 | `request_attempts.ttftMilliseconds` |
 | 出字时段 | 尝试耗时减去首字延迟 | 现算，不落库 |
 
 三个量同属一条尝试级的轴：前两个是落库的事实，出字时段现算。**出字时段不参与任何指标**，列在这里只是为了说明速度的分母为什么是整段尝试耗时（见下）；**请求总耗时是另一条轴上的第四个量**（`request_logs.totalDurationMilliseconds`），不在上面这张分解表里。
@@ -188,7 +194,8 @@ $$\text{TPS} = \frac{\text{输出 Token}}{\text{尝试耗时}}$$
 
 - **写**只有三处——请求入口（登记、路由结论、终局）、尝试执行器（每次尝试的开始与收尾、上游响应头、第一个正文字节）、收尾器（落库的同时把它移出台账）。它们都在同一次同步执行里写完，Node 单线程下不存在交错，因此不需要锁。
 - **读**分两条路，方向相同（都是「服务端往客户端送」，不是客户端轮询）：
-  - **推送**：`POST /api/request-log/live/stream`，响应是 NDJSON，每 150 毫秒至多一帧，每 10 秒必有一帧（心跳，即使什么都没有变）。掉帧无所谓——每一帧都是**全量快照**而不是增量，所以断线、丢帧、慢客户端都不会留下不一致的状态；客户端只要收到任意一帧就能重画整块实时区。
+  - **推送**：`POST /api/request-log/live/stream`，响应是 NDJSON，每 150 毫秒至多一帧，空闲时每 10 秒有一条心跳。每一行都是版本化的 `LiveRequestStreamMessage`：`snapshot` 携带完整 `requests`，是唯一会替换客户端状态的类型；`heartbeat` 只证明连接还活着，不携带也不暗示业务状态。连接建立后的第一条必定是 `snapshot`。旧协议或无类型的 `{ requests }` 会被明确拒绝，不靠字段缺失猜语义。
+    数据面仍坚持**全量快照**而不是增量：请求台账本来就只有进行中的请求和刚结束的一小段，重发完整状态的代价有界，却天然解决乱序、丢帧、慢客户端与重连对齐。增量协议要同时补齐每订阅者序号、缺口检测、重放窗口和快照回退；这些机制没有真正出现之前，不做半套增量。背压跳过的也只是一次发送，`drain` 之后下一条仍是新快照，所以状态不会因慢连接分叉。
   - **拉取**：`POST /api/request-log/live`，同一份快照的一次性返回，作为推送不可用时的退路。
   两条路都只读内存、不碰数据库。
 - 为什么不是 WebSocket：管理接口是 POST-only 的 loopback 通道，WebSocket 既绕开这套守卫（浏览器不对 WS 施加同源策略），又要为 Origin 校验、握手、分帧与心跳维护一套与 HTTP 平行的逻辑；而这里的数据是**单向、全量、可丢**的，NDJSON over POST 用现成的响应对象与 CORS 规则就能覆盖全部需求。分片上传那套 WS 栈与此无关，它服务的是代理侧的另一类流量。
