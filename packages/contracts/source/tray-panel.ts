@@ -53,6 +53,7 @@ export interface TrayPanelLabels {
   startProxy: string
   stopProxy: string
   quit: string
+  quitShort: string
   opening: string
   actionFailed: string
   logicalModels: string

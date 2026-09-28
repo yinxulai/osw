@@ -1802,6 +1802,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'native.tray.panel.footnote': '状态与逻辑模型会自动保持同步',
   'native.tray.panel.startProxy': '启动代理',
   'native.tray.panel.stopProxy': '停止代理',
+  'native.tray.panel.quit': '退出',
   'native.tray.panel.opening': '正在打开主界面',
   'native.tray.panel.actionFailed': '操作失败，请稍后重试',
   'native.tray.panel.logicalModels': '逻辑模型',

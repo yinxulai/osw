@@ -76,6 +76,7 @@ export function buildTrayPanelState(snapshot: TrayProxySnapshot, theme: TrayPane
       startProxy: t('native.tray.panel.startProxy'),
       stopProxy: t('native.tray.panel.stopProxy'),
       quit: t('native.tray.quit'),
+      quitShort: t('native.tray.panel.quit'),
       opening: t('native.tray.panel.opening'),
       actionFailed: t('native.tray.panel.actionFailed'),
       logicalModels: t('native.tray.panel.logicalModels'),

@@ -1802,6 +1802,7 @@ export const uiEn = {
   'native.tray.panel.footnote': 'Status and logical models stay in sync',
   'native.tray.panel.startProxy': 'Start proxy',
   'native.tray.panel.stopProxy': 'Stop proxy',
+  'native.tray.panel.quit': 'Quit',
   'native.tray.panel.opening': 'Opening the main window',
   'native.tray.panel.actionFailed': 'The action failed. Try again shortly',
   'native.tray.panel.logicalModels': 'Logical models',

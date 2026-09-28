@@ -18,8 +18,9 @@
         --osw-accent: light-dark(#1d1d21, #f4f4f5);
         --osw-accent-text: light-dark(#ffffff, #18181b);
         --osw-success: light-dark(#168653, #48d597);
-        --osw-success-soft: light-dark(rgba(22, 134, 83, 0.1), rgba(72, 213, 151, 0.12));
+        --osw-success-soft: light-dark(#e4f4ec, #15382a);
         --osw-danger: light-dark(#b4232c, #ff6b72);
+        --osw-danger-soft: light-dark(#fbe9eb, #3b2326);
         --osw-shadow: 0 8px 20px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
         color-scheme: light;
       }
@@ -127,14 +128,14 @@
         place-items: center;
         border-radius: 50%;
         color: var(--osw-muted);
-        background: transparent;
-        box-shadow: inset 0 0 0 1px var(--osw-line-soft);
+        background: var(--osw-soft);
+        box-shadow: none;
         transition: color 160ms ease, background 160ms ease, transform 160ms ease;
       }
 
-      .power:hover { color: var(--osw-text); background: var(--osw-soft); }
+      .power:hover { color: var(--osw-text); background: color-mix(in srgb, var(--osw-soft) 86%, var(--osw-text)); }
       .power svg { width: 15px; height: 15px; }
-      [data-running="true"] .power { color: var(--osw-success); background: var(--osw-success-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--osw-success) 26%, transparent); }
+      [data-running="true"] .power { color: var(--osw-success); background: var(--osw-soft); }
       .power[disabled] { cursor: wait; opacity: 0.62; }
 
       .section { min-width: 0; }
@@ -244,7 +245,7 @@
         background: var(--osw-soft);
       }
 
-      .protocol-icon[data-conversion="true"] { color: var(--osw-danger); background: color-mix(in srgb, var(--osw-danger) 10%, transparent); }
+      .protocol-icon[data-conversion="true"] { color: var(--osw-danger); background: var(--osw-danger-soft); }
       .protocol-icon svg { width: 11px; height: 11px; }
       .model-metric { display: inline-flex; min-width: 0; align-items: center; gap: 3px; }
       .model-metric svg { width: 10px; height: 10px; flex: none; }
@@ -266,7 +267,7 @@
       .model-status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--osw-faint); }
       .model-status[data-tone="success"] { color: var(--osw-success); background: var(--osw-success-soft); }
       .model-status[data-tone="success"] .model-status-dot { background: var(--osw-success); }
-      .model-status[data-tone="warning"] { color: var(--osw-danger); background: color-mix(in srgb, var(--osw-danger) 10%, transparent); }
+      .model-status[data-tone="warning"] { color: var(--osw-danger); background: var(--osw-danger-soft); }
       .model-status[data-tone="warning"] .model-status-dot { background: var(--osw-danger); }
 
       .model-empty { display: grid; min-height: 96px; place-content: center; padding: 16px; text-align: center; }
@@ -293,7 +294,8 @@
       .action:hover { color: var(--osw-text); background: var(--osw-soft); }
       .action-primary { color: var(--osw-accent-text); border-color: transparent; background: var(--osw-accent); }
       .action-primary:hover { color: var(--osw-accent-text); background: color-mix(in srgb, var(--osw-accent) 88%, var(--osw-text)); }
-      .action-icon { width: 40px; padding: 0; }
+      .action-quit { color: var(--osw-text); border-color: transparent; background: var(--osw-soft); }
+      .action-quit:hover { color: var(--osw-danger); border-color: transparent; background: var(--osw-danger-soft); }
       .action svg { width: 15px; height: 15px; flex: none; }
 
       .footnote { margin: 8px 0 0; color: var(--osw-faint); font-size: 10px; line-height: 1.45; text-align: center; }
@@ -361,8 +363,9 @@
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /></svg>
             <span id="open-label">...</span>
           </button>
-          <button class="action action-icon" id="quit" type="button">
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
+          <button class="action action-quit" id="quit" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+            <span id="quit-label"></span>
           </button>
         </div>
 
@@ -387,6 +390,7 @@
           open: document.getElementById("open"),
           openLabel: document.getElementById("open-label"),
           quit: document.getElementById("quit"),
+          quitLabel: document.getElementById("quit-label"),
           footnote: document.getElementById("footnote"),
           panel: document.getElementById("panel"),
           toast: document.getElementById("toast"),
@@ -398,6 +402,7 @@
               unavailable: "主进程不可用",
               openApp: "打开主界面",
               quit: "退出 OSW",
+              quitShort: "退出",
               modelsTitle: "逻辑模型",
               modelsEmpty: "还没有逻辑模型",
               failed: "操作失败",
@@ -407,6 +412,7 @@
               unavailable: "Main process unavailable",
               openApp: "Open app",
               quit: "Quit OSW",
+              quitShort: "Quit",
               modelsTitle: "Logical models",
               modelsEmpty: "No logical models yet",
               failed: "The action failed",
@@ -686,6 +692,7 @@
           empty.appendChild(emptyTitle)
           elements.modelPanel.appendChild(empty)
           elements.openLabel.textContent = fallbackCopy.openApp
+          elements.quitLabel.textContent = fallbackCopy.quitShort
           elements.quit.setAttribute("aria-label", fallbackCopy.quit)
           elements.quit.title = fallbackCopy.quit
           elements.footnote.textContent = fallbackCopy.loadFailed
@@ -709,6 +716,7 @@
           elements.power.setAttribute("aria-label", powerLabel)
           elements.power.title = powerLabel
           elements.openLabel.textContent = labels.openApp
+          elements.quitLabel.textContent = labels.quitShort || labels.quit
           elements.quit.setAttribute("aria-label", labels.quit)
           elements.quit.title = labels.quit
           elements.footnote.textContent = labels.footnote
