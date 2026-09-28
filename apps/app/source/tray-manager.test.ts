@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
     nativeTheme: { shouldUseDarkColors: false, on: vi.fn(), off: vi.fn() },
     screen: { getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },
     getProxyServerStatus: vi.fn(),
+    getTrayLogicalModels: vi.fn(),
     startProxyServer: vi.fn(),
     stopProxyServer: vi.fn(),
   }
@@ -69,12 +70,13 @@ vi.mock('./i18n', () => ({
 
 vi.mock('./server-host', () => ({
   getProxyServerStatus: mocks.getProxyServerStatus,
+  getTrayLogicalModels: mocks.getTrayLogicalModels,
   startProxyServer: mocks.startProxyServer,
   stopProxyServer: mocks.stopProxyServer,
 }))
 
 import { TrayManager } from './tray-manager'
-import { TrayPanelManager, buildTrayPanelState } from './tray-panel'
+import { TrayPanelManager, buildTrayPanelState, resolveTrayPanelPosition } from './tray-panel'
 
 type MenuItem = MenuItemConstructorOptions
 
@@ -142,25 +144,55 @@ afterEach(() => {
 })
 
 describe('托盘面板状态', () => {
-  it('把应用图标、主题、语言与可复制的 Base URL 一次装进状态', () => {
-    const state = buildTrayPanelState({ running: true, host: '0.0.0.0', port: 19300 }, 'dark')
+  it('把应用图标、主题、语言与可直接展示的逻辑模型列表一次装进状态', () => {
+    const state = buildTrayPanelState({ running: true, host: '0.0.0.0', port: 19300 }, 'dark', [
+      {
+        id: 'default',
+        name: 'default',
+        models: [
+          {
+            id: 'model_1',
+            providerId: 'prov_1',
+            providerName: 'Primary',
+            modelName: 'gpt-test',
+            protocols: ['openai-completions'],
+            conversionProtocols: ['openai-responses'],
+            enabled: true,
+            modelEnabled: true,
+            cooling: false,
+            avgTps: 50,
+            avgTtftMilliseconds: 250,
+          },
+        ],
+      },
+    ])
 
     expect(state).toEqual(expect.objectContaining({
       running: true,
-      address: '127.0.0.1:19300',
       theme: 'dark',
       locale: 'zh-CN',
     }))
     expect(state.iconUrl).toBeTruthy()
-    expect(state.endpoints).toEqual([
-      { id: 'openai', label: 'OpenAI', url: 'http://127.0.0.1:19300/v1' },
-      { id: 'anthropic', label: 'Anthropic', url: 'http://127.0.0.1:19300' },
+    expect(state.protocolNames['openai-responses']).toBe('OpenAI Responses')
+    expect(state.logicalModels).toEqual([
+      {
+        id: 'default',
+        name: 'default',
+        models: [
+          expect.objectContaining({
+            id: 'model_1',
+            tps: '50',
+            ttft: '250ms',
+          }),
+        ],
+      },
     ])
   })
 
   it('启停 IPC 返回完整面板状态，而不是只回一份裸快照', async () => {
     const actions = {
       getSnapshot: () => ({ running: false, host: '127.0.0.1', port: 19301 }),
+      getLogicalModels: async () => [],
       toggleProxy: async () => undefined,
       openMainWindow: async () => undefined,
       quit: () => undefined,
@@ -172,13 +204,60 @@ describe('托盘面板状态', () => {
     expect(handler).toBeTypeOf('function')
     await expect(handler?.()).resolves.toEqual(expect.objectContaining({
       running: false,
-      endpoints: [
-        { id: 'openai', label: 'OpenAI', url: 'http://127.0.0.1:19301/v1' },
-        { id: 'anthropic', label: 'Anthropic', url: 'http://127.0.0.1:19301' },
-      ],
+      logicalModels: [],
     }))
 
     panelManager.destroy()
+  })
+
+  it('支持托盘页面按内容高度上报窗口尺寸', () => {
+    const actions = {
+      getSnapshot: () => ({ running: false, host: '127.0.0.1', port: 19301 }),
+      getLogicalModels: async () => [],
+      toggleProxy: async () => undefined,
+      openMainWindow: async () => undefined,
+      quit: () => undefined,
+    }
+    const panelManager = new TrayPanelManager(mocks.tray as unknown as import('electron').Tray, actions)
+    panelManager.init()
+
+    const listener = mocks.onIpc.mock.calls.find(([channel]) => channel === 'tray-panel:resize')?.[1] as
+      | ((event: unknown, height: unknown) => void)
+      | undefined
+    expect(listener).toBeTypeOf('function')
+    listener?.({ sender: {} }, 520)
+
+    panelManager.destroy()
+  })
+})
+
+describe('托盘面板定位', () => {
+  it('macOS 扣除透明留白，让可见面板保持 8px 间距', () => {
+    const position = resolveTrayPanelPosition(
+      {
+        trayBounds: { x: 500, y: 0, width: 24, height: 24 },
+        workArea: { x: 0, y: 24, width: 1_440, height: 876 },
+        height: 600,
+        platform: 'darwin',
+      },
+    )
+
+    expect(position).toEqual({ x: 301, y: 4 })
+    expect(position.y + 28).toBe(32)
+  })
+
+  it('Windows 使用窗口底部定位，同样扣除透明留白', () => {
+    const position = resolveTrayPanelPosition(
+      {
+        trayBounds: { x: 500, y: 800, width: 24, height: 24 },
+        workArea: { x: 0, y: 24, width: 1_440, height: 876 },
+        height: 600,
+        platform: 'win32',
+      },
+    )
+
+    expect(position).toEqual({ x: 301, y: 220 })
+    expect(position.y + 600 - 28).toBe(792)
   })
 })
 
@@ -242,6 +321,7 @@ describe('托盘菜单结构', () => {
 
     expect(mocks.tray.popUpContextMenu).toHaveBeenCalledTimes(1)
   })
+
 })
 
 describe('托盘启停与轮询', () => {

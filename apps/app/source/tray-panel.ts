@@ -1,18 +1,56 @@
-import { BrowserWindow, clipboard, ipcMain, nativeTheme, screen, type Tray } from 'electron'
+import { BrowserWindow, ipcMain, nativeTheme, screen, type Tray } from 'electron'
 import path from 'node:path'
-import type { TrayPanelState, TrayPanelTheme } from '@common/tray-panel'
+import type { TrayLogicalModelSummary, TrayPanelState, TrayPanelTheme } from '@common/tray-panel'
+import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
+import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
 import trayPanelHtml from './tray-panel.html?raw'
 import iconPng from '../build/icon.png?url'
 import { nativeLocale, nativeTranslator, onNativeLocaleChanged } from './i18n'
-import { resolveProxyOrigin } from '@common/proxy-origin'
-import { TRAY_ENDPOINTS, type TrayProxySnapshot } from './tray-menu'
+import type { TrayProxySnapshot } from './tray-menu'
 
-const PANEL_WIDTH = 382
-const PANEL_HEIGHT = 444
+// 窗口比内容卡片多一圈透明留白，CSS 阴影不再被窗口边界裁断。宽度按
+// `PANEL_PADDING` 反推，卡片本体宽度仍保持原来的 366px。
+const PANEL_WIDTH = 422
+const PANEL_MIN_HEIGHT = 380
+const PANEL_MAX_HEIGHT = 680
+const PANEL_INITIAL_HEIGHT = 560
 const PANEL_GAP = 8
+const PANEL_PADDING = 28
+
+interface TrayPanelRectangle {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface ResolveTrayPanelPositionInput {
+  trayBounds: TrayPanelRectangle
+  workArea: TrayPanelRectangle
+  height: number
+  platform: NodeJS.Platform
+}
+
+export function resolveTrayPanelPosition(input: ResolveTrayPanelPositionInput): { x: number; y: number } {
+  const targetX = Math.round(input.trayBounds.x + input.trayBounds.width / 2 - PANEL_WIDTH / 2)
+  const targetY = input.platform === 'darwin'
+    ? Math.round(input.trayBounds.y + input.trayBounds.height + PANEL_GAP - PANEL_PADDING)
+    : Math.round(input.trayBounds.y - input.height - PANEL_GAP + PANEL_PADDING)
+
+  const minX = input.workArea.x + PANEL_GAP - PANEL_PADDING
+  const maxX = input.workArea.x + input.workArea.width - PANEL_WIDTH + PANEL_PADDING - PANEL_GAP
+  const minY = input.workArea.y + PANEL_GAP - PANEL_PADDING
+  const maxY = input.workArea.y + input.workArea.height - PANEL_GAP - input.height + PANEL_PADDING
+
+  return {
+    x: Math.min(Math.max(targetX, minX), Math.max(minX, maxX)),
+    y: Math.min(Math.max(targetY, minY), Math.max(minY, maxY)),
+  }
+}
 
 export interface TrayPanelActions {
   getSnapshot: () => TrayProxySnapshot
+  getLogicalModels: () => Promise<TrayLogicalModelSummary[]>
   toggleProxy: () => Promise<void>
   openMainWindow: () => Promise<void>
   quit: () => void
@@ -22,12 +60,10 @@ function currentTheme(): TrayPanelTheme {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
 }
 
-export function buildTrayPanelState(snapshot: TrayProxySnapshot, theme: TrayPanelTheme): TrayPanelState {
+export function buildTrayPanelState(snapshot: TrayProxySnapshot, theme: TrayPanelTheme, logicalModels: TrayLogicalModelSummary[] = []): TrayPanelState {
   const t = nativeTranslator()
-  const origin = resolveProxyOrigin(snapshot.host, snapshot.port)
   return {
     running: snapshot.running,
-    address: origin === null ? '—' : origin.replace(/^https?:\/\//, ''),
     theme,
     locale: nativeLocale(),
     iconUrl: iconPng,
@@ -35,27 +71,37 @@ export function buildTrayPanelState(snapshot: TrayProxySnapshot, theme: TrayPane
       subtitle: t('native.tray.panel.subtitle'),
       running: t('native.tray.panel.running'),
       stopped: t('native.tray.panel.stopped'),
-      listeningAddress: t('native.tray.panel.listeningAddress'),
-      ready: t('native.tray.panel.ready'),
-      unavailable: t('native.tray.panel.unavailable'),
-      quickCopy: t('native.tray.panel.quickCopy'),
-      baseUrl: t('native.tray.panel.baseUrl'),
       openApp: t('native.tray.openWindow'),
       footnote: t('native.tray.panel.footnote'),
-      copied: t('native.tray.copyEndpointDone'),
       startProxy: t('native.tray.panel.startProxy'),
       stopProxy: t('native.tray.panel.stopProxy'),
       quit: t('native.tray.quit'),
       opening: t('native.tray.panel.opening'),
       actionFailed: t('native.tray.panel.actionFailed'),
+      logicalModels: t('native.tray.panel.logicalModels'),
+      logicalModelsCount: t('native.tray.panel.logicalModelsCount', { count: logicalModels.length }),
+      logicalModelsEmpty: t('native.tray.panel.logicalModelsEmpty'),
+      logicalModelsEmptyHint: t('native.tray.panel.logicalModelsEmptyHint'),
+      logicalModelTabs: t('native.tray.panel.logicalModelTabs'),
+      modelConversion: t('native.tray.panel.modelConversion'),
+      providerModelsEmpty: t('logicalModels.card.empty.title'),
+      providerModelsEmptyHint: t('logicalModels.card.empty.description'),
+      modelStandby: t('logicalModels.row.standby'),
+      modelCooling: t('logicalModels.row.cooling'),
+      modelBindingDisabled: t('common.state.disabled'),
+      modelDisabled: t('logicalModels.row.modelDisabled'),
+      unknownProvider: t('logicalModels.row.unknownProvider'),
     },
-    endpoints: origin === null
-      ? []
-      : TRAY_ENDPOINTS.map(endpoint => ({
-          id: endpoint.id,
-          label: endpoint.label,
-          url: `${origin}${endpoint.path}`,
-        })),
+    protocolNames: PROTOCOL_DISPLAY_NAMES,
+    logicalModels: logicalModels.map(model => ({
+      id: model.id,
+      name: model.name,
+      models: model.models.map(({ avgTps, avgTtftMilliseconds, ...item }) => ({
+        ...item,
+        tps: formatOutputSpeed(avgTps),
+        ttft: formatMilliseconds(avgTtftMilliseconds),
+      })),
+    })),
   }
 }
 
@@ -69,9 +115,12 @@ export class TrayPanelManager {
   private unsubscribeLocale: (() => void) | null = null
   private unsubscribeTheme: (() => void) | null = null
   private removeThemeListener: (() => void) | null = null
+  private removeResizeListener: (() => void) | null = null
   private rendererTheme: TrayPanelTheme | null = null
   private rendererThemeReceived = false
   private lastBlurTime = 0
+  private stateRequest = 0
+  private panelHeight = PANEL_INITIAL_HEIGHT
 
   constructor(private readonly tray: Tray, private readonly actions: TrayPanelActions) {}
 
@@ -83,15 +132,20 @@ export class TrayPanelManager {
       await this.actions.toggleProxy()
       return this.state()
     })
-    ipcMain.handle('tray-panel:copy', (_event, endpoint: unknown) => {
-      if (endpoint !== 'openai' && endpoint !== 'anthropic') return
-      const resolved = this.state().endpoints.find(item => item.id === endpoint)
-      if (!resolved) return
-      clipboard.writeText(resolved.url)
-      console.info(`[tray] endpoint copied id=${endpoint}`)
-    })
     ipcMain.handle('tray-panel:open-main-window', () => this.actions.openMainWindow())
     ipcMain.handle('tray-panel:quit', () => this.actions.quit())
+    const onResize = (event: Electron.IpcMainEvent, requestedHeight: unknown) => {
+      if (!this.panel || this.panel.isDestroyed() || event.sender !== this.panel.webContents) return
+      if (typeof requestedHeight !== 'number' || !Number.isFinite(requestedHeight)) return
+      const maxHeight = this.maxPanelHeight()
+      const minHeight = Math.min(PANEL_MIN_HEIGHT, maxHeight)
+      const height = Math.max(minHeight, Math.min(maxHeight, Math.ceil(requestedHeight)))
+      if (height === this.panelHeight && this.panel.getContentSize()[1] === height) return
+      this.panelHeight = height
+      this.setPanelBounds(this.panel, height)
+    }
+    ipcMain.on('tray-panel:resize', onResize)
+    this.removeResizeListener = () => ipcMain.off('tray-panel:resize', onResize)
     const onThemeChanged = (_event: Electron.IpcMainEvent, theme: unknown) => {
       if (theme !== 'light' && theme !== 'dark') return
       this.rendererThemeReceived = true
@@ -117,11 +171,12 @@ export class TrayPanelManager {
     this.unsubscribeLocale = null
     this.unsubscribeTheme?.()
     this.unsubscribeTheme = null
+    this.removeResizeListener?.()
+    this.removeResizeListener = null
     this.removeThemeListener?.()
     this.removeThemeListener = null
     ipcMain.removeHandler('tray-panel:get-state')
     ipcMain.removeHandler('tray-panel:toggle')
-    ipcMain.removeHandler('tray-panel:copy')
     ipcMain.removeHandler('tray-panel:open-main-window')
     ipcMain.removeHandler('tray-panel:quit')
     this.panel?.destroy()
@@ -151,15 +206,23 @@ export class TrayPanelManager {
 
   refresh(): void {
     if (!this.panel || this.panel.isDestroyed()) return
-    this.panel.webContents.send('tray-panel:state-changed', this.state())
+    const request = ++this.stateRequest
+    void this.state().then(next => {
+      if (request !== this.stateRequest || !this.panel || this.panel.isDestroyed()) return
+      this.panel.webContents.send('tray-panel:state-changed', next)
+    }).catch(error => {
+      console.warn('[tray] failed to refresh panel state', error)
+    })
   }
 
   private ensurePanel(): BrowserWindow {
     if (this.panel && !this.panel.isDestroyed()) return this.panel
 
+    const initialHeight = Math.min(PANEL_INITIAL_HEIGHT, this.maxPanelHeight())
+    this.panelHeight = initialHeight
     const panel = new BrowserWindow({
       width: PANEL_WIDTH,
-      height: PANEL_HEIGHT,
+      height: initialHeight,
       show: false,
       frame: false,
       transparent: true,
@@ -169,6 +232,7 @@ export class TrayPanelManager {
       fullscreenable: false,
       skipTaskbar: true,
       hasShadow: false,
+      ...(process.platform === 'win32' ? { roundedCorners: false } : {}),
       backgroundColor: '#00000000',
       webPreferences: {
         // The panel is a main-process-controlled data URL with no Node access and a
@@ -205,22 +269,31 @@ export class TrayPanelManager {
     return panel
   }
 
-  private state(): TrayPanelState {
-    return buildTrayPanelState(this.actions.getSnapshot(), this.rendererTheme ?? currentTheme())
+  private async state(): Promise<TrayPanelState> {
+    let logicalModels: TrayLogicalModelSummary[] = []
+    try {
+      logicalModels = await this.actions.getLogicalModels()
+    } catch (error) {
+      console.warn('[tray] failed to load logical models', error)
+    }
+    return buildTrayPanelState(this.actions.getSnapshot(), this.rendererTheme ?? currentTheme(), logicalModels)
   }
 
   private position(panel: BrowserWindow): void {
-    const bounds = this.tray.getBounds()
-    const targetX = Math.round(bounds.x + bounds.width / 2 - PANEL_WIDTH / 2)
-    const targetY = process.platform === 'darwin'
-      ? Math.round(bounds.y + bounds.height + PANEL_GAP)
-      : Math.round(bounds.y - PANEL_HEIGHT - PANEL_GAP)
+    const height = panel.getContentSize()[1]
+    this.setPanelBounds(panel, height)
+  }
 
-    // Keep the panel on the display that holds the tray icon by clamping the final
-    // position there rather than by centering it on the window's current display.
-    const workArea = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y }).workArea
-    const x = Math.min(Math.max(targetX, workArea.x + PANEL_GAP), workArea.x + workArea.width - PANEL_WIDTH - PANEL_GAP)
-    const y = Math.min(Math.max(targetY, workArea.y + PANEL_GAP), workArea.y + workArea.height - PANEL_HEIGHT - PANEL_GAP)
-    panel.setPosition(x, y, false)
+  private setPanelBounds(panel: BrowserWindow, height: number): void {
+    const trayBounds = this.tray.getBounds()
+    const workArea = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y }).workArea
+    const { x, y } = resolveTrayPanelPosition({ trayBounds, workArea, height, platform: process.platform })
+    panel.setBounds({ x, y, width: PANEL_WIDTH, height }, false)
+  }
+
+  private maxPanelHeight(): number {
+    const trayBounds = this.tray.getBounds()
+    const workArea = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y }).workArea
+    return Math.max(240, Math.min(PANEL_MAX_HEIGHT, workArea.height - PANEL_GAP * 2))
   }
 }

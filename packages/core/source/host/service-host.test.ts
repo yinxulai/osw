@@ -69,6 +69,8 @@ parentPort.on('message', message => {
       // 自杀，模拟运行期崩溃。替身是线程，process.exit 在这里只结束这个线程
       // ——正因为如此它才适合当替身：宿主看到的 exit 与真实进程崩溃同形。
       return process.exit(9)
+    case 'tray.logical-models':
+      return reply([{ id: 'default', name: 'default', models: [] }])
     case 'settings.get':
       return reply(settings)
     case 'runtime.stop':
@@ -213,6 +215,15 @@ describe('service host calls', () => {
     await harness.host.start()
 
     expect(await harness.host.getProxyStatus()).toMatchObject({ running: true, port: 9300 })
+  })
+
+  it('forwards the tray summary call without leaking the full model graph', async () => {
+    const harness = createHost()
+    await harness.host.start()
+
+    await expect(harness.host.getTrayLogicalModels()).resolves.toEqual([
+      { id: 'default', name: 'default', models: [] },
+    ])
   })
 
   it('serves secrets for the service through the injected store', async () => {

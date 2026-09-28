@@ -5,6 +5,7 @@ import { TrayPanelManager } from './tray-panel'
 import { nativeTranslator, onNativeLocaleChanged } from './i18n'
 import {
   getProxyServerStatus,
+  getTrayLogicalModels,
   startProxyServer,
   stopProxyServer,
 } from './server-host'
@@ -45,6 +46,7 @@ export class TrayManager {
     this.tray.setToolTip(nativeTranslator()('app.windowTitle'))
     this.panel = new TrayPanelManager(this.tray, {
       getSnapshot: () => this.snapshot,
+      getLogicalModels: () => getTrayLogicalModels(),
       toggleProxy: async () => {
         const toggled = await this.toggleProxy()
         if (!toggled) throw new Error('tray proxy toggle failed')

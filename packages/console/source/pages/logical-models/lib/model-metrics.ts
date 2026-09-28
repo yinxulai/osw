@@ -1,11 +1,6 @@
 import type { RequestLogEntry } from '@common/schemas'
-import { averageOutputTokensPerSecond, outputSpeedSampleOf, type OutputSpeedSample } from '@common/metrics'
-
-export interface ProviderModelMetrics {
-  sampleCount: number
-  avgTps: number | null
-  avgTtftMilliseconds: number | null
-}
+import { averageOutputTokensPerSecond, outputSpeedSampleOf } from '@common/metrics'
+export { calculateProviderModelMetrics, providerModelMetricKey, type ProviderModelMetrics } from '@common/provider-model-metrics'
 
 export interface LogicalModelSummaryMetrics {
   completedRequestCount: number
@@ -14,17 +9,6 @@ export interface LogicalModelSummaryMetrics {
   avgDurationMilliseconds: number | null
   avgTps: number | null
   failoverCount: number
-}
-
-interface MetricAccumulator {
-  requestIds: Set<string>
-  speedSamples: OutputSpeedSample[]
-  ttftTotal: number
-  ttftCount: number
-}
-
-export function providerModelMetricKey(providerId: string, providerModelId: string): string {
-  return `${providerId}\0${providerModelId}`
 }
 
 export function calculateLogicalModelSummaryMetrics(logs: RequestLogEntry[]): LogicalModelSummaryMetrics {
@@ -45,44 +29,4 @@ export function calculateLogicalModelSummaryMetrics(logs: RequestLogEntry[]): Lo
     avgTps: averageOutputTokensPerSecond(speedSamples),
     failoverCount: successfulLogs.filter(log => log.attempts.some(attempt => attempt.status === 'success' && attempt.attemptIndex > 0)).length,
   }
-}
-
-export function calculateProviderModelMetrics(logs: RequestLogEntry[]): Record<string, ProviderModelMetrics> {
-  const accumulators = new Map<string, MetricAccumulator>()
-
-  for (const log of logs) {
-    if (log.status !== 'success') continue
-    const successfulAttempt = log.attempts.find(attempt => attempt.status === 'success')
-    if (!successfulAttempt) continue
-
-    const key = providerModelMetricKey(successfulAttempt.providerId, successfulAttempt.providerModelId)
-    const accumulator = accumulators.get(key) ?? {
-      requestIds: new Set<string>(),
-      speedSamples: [],
-      ttftTotal: 0,
-      ttftCount: 0,
-    }
-    accumulator.requestIds.add(log.id)
-
-    // TTFT 是尝试级样本：必须取真正成功那次尝试的值，而不是请求级派生值。
-    if (successfulAttempt.ttftMilliseconds != null) {
-      accumulator.ttftTotal += successfulAttempt.ttftMilliseconds
-      accumulator.ttftCount += 1
-    }
-
-    // 速度样本与首字延迟取自同一次尝试，同一个模型行上的两个指标才不会错位。
-    // 分子是请求级输出 Token（它本来就是这次尝试镜像过来的一份），分母是这次尝试的整段耗时。
-    accumulator.speedSamples.push({
-      outputTokens: log.outputTokens,
-      attemptDurationMilliseconds: successfulAttempt.durationMilliseconds,
-    })
-
-    accumulators.set(key, accumulator)
-  }
-
-  return Object.fromEntries(Array.from(accumulators, ([key, accumulator]) => [key, {
-    sampleCount: accumulator.requestIds.size,
-    avgTps: averageOutputTokensPerSecond(accumulator.speedSamples),
-    avgTtftMilliseconds: accumulator.ttftCount > 0 ? accumulator.ttftTotal / accumulator.ttftCount : null,
-  }]))
 }

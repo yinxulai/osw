@@ -9,7 +9,7 @@
       :root {
         --osw-panel: light-dark(#ffffff, #1c1c1f);
         --osw-raised: light-dark(#f7f7f8, #242428);
-        --osw-soft: light-dark(#f1f1f3, #2a2a2f);
+        --osw-soft: light-dark(#f0f0f2, #29292e);
         --osw-text: light-dark(#18181b, #f4f4f5);
         --osw-muted: light-dark(#696974, #a1a1aa);
         --osw-faint: light-dark(#94949e, #777781);
@@ -19,9 +19,9 @@
         --osw-accent-text: light-dark(#ffffff, #18181b);
         --osw-success: light-dark(#168653, #48d597);
         --osw-success-soft: light-dark(rgba(22, 134, 83, 0.1), rgba(72, 213, 151, 0.12));
-        --osw-shadow: 0 18px 48px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.09);
-        color-scheme: light;
         --osw-danger: light-dark(#b4232c, #ff6b72);
+        --osw-shadow: 0 8px 20px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+        color-scheme: light;
       }
 
       :root[data-theme="dark"] { color-scheme: dark; }
@@ -31,12 +31,12 @@
       *::after { box-sizing: border-box; }
 
       html,
-      body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+      body { width: 100%; min-height: 100%; margin: 0; overflow: hidden; background: transparent; }
 
       [hidden] { display: none !important; }
 
       body {
-        padding: 8px;
+        padding: 28px;
         color: var(--osw-text);
         font-family: "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         user-select: none;
@@ -56,7 +56,10 @@
       .panel {
         position: relative;
         width: 100%;
-        height: 100%;
+        min-width: 0;
+        max-height: calc(100vh - 56px);
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
         border: 1px solid var(--osw-line);
         border-radius: 14px;
@@ -69,7 +72,9 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        flex: none;
         padding: 0 16px;
+        border-bottom: 1px solid var(--osw-line-soft);
       }
 
       .app-icon {
@@ -104,70 +109,169 @@
       [data-running="true"] .status { color: var(--osw-success); border-color: color-mix(in srgb, var(--osw-success) 26%, transparent); background: var(--osw-success-soft); }
       [data-running="true"] .status-dot { background: var(--osw-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--osw-success) 12%, transparent); }
 
-      .body { padding: 4px 16px 14px; }
-
-      .state {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 14px;
-        padding: 15px;
-        border: 1px solid var(--osw-line-soft);
-        border-radius: 11px;
-        background: var(--osw-raised);
-        transition: opacity 160ms ease;
+      .body {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        overscroll-behavior: contain;
+        padding: 12px 16px 14px;
       }
 
-      [data-running="false"] .state { opacity: 0.68; }
-      .state-label { color: var(--osw-muted); font-size: 11px; font-weight: 600; }
-      .address { margin-top: 5px; font: 600 13px/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; }
-      .state-note { margin-top: 5px; color: var(--osw-faint); font-size: 11px; }
-
       .power {
-        width: 44px;
-        height: 44px;
+        width: 32px;
+        height: 32px;
         display: grid;
+        flex: none;
         place-items: center;
         border-radius: 50%;
         color: var(--osw-muted);
-        background: var(--osw-soft);
-        box-shadow: inset 0 0 0 1px var(--osw-line);
+        background: transparent;
+        box-shadow: inset 0 0 0 1px var(--osw-line-soft);
         transition: color 160ms ease, background 160ms ease, transform 160ms ease;
       }
 
-      .power:hover { transform: translateY(-1px); }
-      .power svg { width: 19px; height: 19px; }
-      [data-running="true"] .power { color: var(--osw-accent-text); background: var(--osw-accent); box-shadow: inset 0 0 0 1px transparent, 0 0 0 6px color-mix(in srgb, var(--osw-accent) 8%, transparent); }
+      .power:hover { color: var(--osw-text); background: var(--osw-soft); }
+      .power svg { width: 15px; height: 15px; }
+      [data-running="true"] .power { color: var(--osw-success); background: var(--osw-success-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--osw-success) 26%, transparent); }
       .power[disabled] { cursor: wait; opacity: 0.62; }
 
-      .section { margin-top: 16px; }
-      .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+      .section { min-width: 0; }
+      .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
       .section-title { margin: 0; font-size: 12px; font-weight: 650; }
-      .section-note { color: var(--osw-faint); font-size: 11px; }
-      .endpoints { display: grid; gap: 7px; }
+      .section-count { flex: none; color: var(--osw-faint); font-size: 11px; }
 
-      .endpoint {
+      .model-tabs {
         width: 100%;
         min-width: 0;
-        display: grid;
-        grid-template-columns: 72px minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 11px;
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        padding: 3px;
         border: 1px solid var(--osw-line-soft);
-        border-radius: 9px;
-        text-align: left;
-        color: var(--osw-text);
-        background: var(--osw-panel);
+        border-radius: 10px;
+        background: var(--osw-soft);
+        scrollbar-width: none;
       }
 
-      .endpoint:hover { background: var(--osw-raised); }
-      .endpoint-name { color: var(--osw-muted); font-size: 11px; font-weight: 650; }
-      .endpoint-value { min-width: 0; overflow: hidden; font: 500 11px/1.35 ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-      .endpoint svg { width: 14px; height: 14px; color: var(--osw-faint); }
-      .endpoint .check { display: none; color: var(--osw-success); }
-      .endpoint[data-copied="true"] .copy { display: none; }
-      .endpoint[data-copied="true"] .check { display: block; }
+      .model-tabs:empty { display: none; }
+      .model-tabs::-webkit-scrollbar { display: none; }
+      .model-tab {
+        min-width: 0;
+        max-width: 132px;
+        min-height: 30px;
+        flex: 1 0 auto;
+        overflow: hidden;
+        padding: 0 10px;
+        border-radius: 7px;
+        color: var(--osw-muted);
+        background: transparent;
+        font-size: 11px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+      }
+
+      .model-tab:hover { color: var(--osw-text); }
+      .model-tab[aria-selected="true"] {
+        color: var(--osw-text);
+        background: var(--osw-panel);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .model-panel {
+        width: 100%;
+        min-width: 0;
+        max-height: 292px;
+        margin-top: 8px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border: 1px solid var(--osw-line-soft);
+        border-radius: 10px;
+        background: var(--osw-raised);
+        scrollbar-width: thin;
+        scrollbar-color: var(--osw-line) transparent;
+      }
+
+      .model-panel::-webkit-scrollbar { width: 6px; }
+      .model-panel::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--osw-line); }
+
+      .model-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 62px;
+        padding: 9px 11px;
+        transition: background 140ms ease;
+      }
+
+      .model-row + .model-row { border-top: 1px solid var(--osw-line-soft); }
+      .model-row:hover { background: var(--osw-soft); }
+      .model-main { min-width: 0; overflow: hidden; }
+      .model-name-line { display: flex; min-width: 0; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+      .model-provider,
+      .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .model-provider { color: var(--osw-text); }
+      .model-name { color: var(--osw-text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+      .model-separator { flex: none; color: var(--osw-faint); }
+
+      .model-meta {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 7px;
+        overflow: hidden;
+        margin-top: 6px;
+        color: var(--osw-muted);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .protocol-icons { display: flex; flex: none; align-items: center; gap: 3px; }
+      .protocol-icon {
+        width: 18px;
+        height: 18px;
+        display: inline-grid;
+        flex: none;
+        place-items: center;
+        border-radius: 5px;
+        color: var(--osw-faint);
+        background: var(--osw-soft);
+      }
+
+      .protocol-icon[data-conversion="true"] { color: var(--osw-danger); background: color-mix(in srgb, var(--osw-danger) 10%, transparent); }
+      .protocol-icon svg { width: 11px; height: 11px; }
+      .model-metric { display: inline-flex; min-width: 0; align-items: center; gap: 3px; }
+      .model-metric svg { width: 10px; height: 10px; flex: none; }
+
+      .model-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex: none;
+        min-height: 22px;
+        padding: 0 7px;
+        border-radius: 999px;
+        color: var(--osw-muted);
+        background: var(--osw-soft);
+        font-size: 10px;
+        font-weight: 650;
+      }
+
+      .model-status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--osw-faint); }
+      .model-status[data-tone="success"] { color: var(--osw-success); background: var(--osw-success-soft); }
+      .model-status[data-tone="success"] .model-status-dot { background: var(--osw-success); }
+      .model-status[data-tone="warning"] { color: var(--osw-danger); background: color-mix(in srgb, var(--osw-danger) 10%, transparent); }
+      .model-status[data-tone="warning"] .model-status-dot { background: var(--osw-danger); }
+
+      .model-empty { display: grid; min-height: 96px; place-content: center; padding: 16px; text-align: center; }
+      .model-empty-title { font-size: 12px; font-weight: 650; }
+      .model-empty-note { margin-top: 4px; color: var(--osw-faint); font-size: 11px; }
 
       .actions { display: grid; grid-template-columns: 1fr auto; gap: 7px; margin-top: 16px; }
       .action {
@@ -217,9 +321,9 @@
       .panel[data-toast="true"] .toast { opacity: 1; transform: translate(-50%, 0); }
 
       @media (prefers-reduced-motion: reduce) {
-        .state,
         .power,
-        .toast { transition: none !important; }
+        .model-row,
+        .toast { transition: none !important; animation: none !important; }
       }
     </style>
   </head>
@@ -235,26 +339,21 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span id="status-text"></span>
         </span>
+        <button class="power" id="power" type="button" aria-label="OSW">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
+        </button>
       </header>
 
       <div class="body">
-        <section class="state">
-          <div>
-            <div class="state-label" id="state-label">—</div>
-            <div class="address" id="address">—</div>
-            <div class="state-note" id="state-note">—</div>
-          </div>
-          <button class="power" id="power" type="button" aria-label="OSW">
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v10" /><path d="M6.4 6.4a8 8 0 1 0 11.2 0" /></svg>
-          </button>
-        </section>
-
         <section class="section">
           <div class="section-head">
-            <h2 class="section-title" id="section-title">—</h2>
-            <span class="section-note" id="section-note">Base URL</span>
+            <div>
+              <h2 class="section-title" id="models-title">—</h2>
+            </div>
+            <span class="section-count" id="models-count"></span>
           </div>
-          <div class="endpoints" id="endpoints"></div>
+          <div class="model-tabs" id="model-tabs" role="tablist"></div>
+          <div class="model-panel" id="model-panel" role="tabpanel" tabindex="0"></div>
         </section>
 
         <div class="actions">
@@ -280,13 +379,11 @@
           subtitle: document.getElementById("subtitle"),
           statusPill: document.getElementById("status"),
           status: document.getElementById("status-text"),
-          stateLabel: document.getElementById("state-label"),
-          address: document.getElementById("address"),
-          stateNote: document.getElementById("state-note"),
           power: document.getElementById("power"),
-          sectionTitle: document.getElementById("section-title"),
-          sectionNote: document.getElementById("section-note"),
-          endpoints: document.getElementById("endpoints"),
+          modelsTitle: document.getElementById("models-title"),
+          modelsCount: document.getElementById("models-count"),
+          modelTabs: document.getElementById("model-tabs"),
+          modelPanel: document.getElementById("model-panel"),
           open: document.getElementById("open"),
           openLabel: document.getElementById("open-label"),
           quit: document.getElementById("quit"),
@@ -299,25 +396,41 @@
         const fallbackCopy = systemIsChinese
           ? {
               unavailable: "主进程不可用",
-              note: "请打开主界面或重试",
               openApp: "打开主界面",
               quit: "退出 OSW",
-              sectionTitle: "接入地址",
+              modelsTitle: "逻辑模型",
+              modelsEmpty: "还没有逻辑模型",
               failed: "操作失败",
               loadFailed: "OSW 无法加载托盘状态",
             }
           : {
               unavailable: "Main process unavailable",
-              note: "Open the main window or try again",
               openApp: "Open app",
               quit: "Quit OSW",
-              sectionTitle: "Endpoints",
+              modelsTitle: "Logical models",
+              modelsEmpty: "No logical models yet",
               failed: "The action failed",
               loadFailed: "OSW could not load the tray state",
             }
 
         let state = null
+        let selectedModelId = null
         let toastTimer = null
+        let reportedHeight = 0
+        const panelGutter = 56
+
+        function syncHeight() {
+          if (!api || typeof api.resize !== "function") return
+          window.requestAnimationFrame(() => {
+            const previousMaxHeight = elements.panel.style.maxHeight
+            elements.panel.style.maxHeight = "none"
+            const height = Math.ceil(elements.panel.getBoundingClientRect().height + panelGutter)
+            elements.panel.style.maxHeight = previousMaxHeight
+            if (height === reportedHeight) return
+            reportedHeight = height
+            api.resize(height)
+          })
+        }
 
         function showToast(message) {
           elements.toast.textContent = message
@@ -326,6 +439,20 @@
           toastTimer = window.setTimeout(() => {
             elements.panel.dataset.toast = "false"
           }, 1200)
+        }
+
+        const ICON_PATHS = {
+          openaiCompletions: ["M22 17a2 2 0 0 1-2 2H6.8a2 2 0 0 0-1.4.6l-2.2 2.2A.7.7 0 0 1 2 21.3V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z", "m10 8-3 3 3 3", "m14 14 3-3-3-3"],
+          openaiResponses: ["M11 2.8a1 1 0 0 1 2 0l1 5.6a2 2 0 0 0 1.6 1.6l5.6 1.1a1 1 0 0 1 0 2l-5.6 1a2 2 0 0 0-1.6 1.6l-1 5.6a1 1 0 0 1-2 0l-1-5.6a2 2 0 0 0-1.6-1.6l-5.6-1a1 1 0 0 1 0-2l5.6-1.1A2 2 0 0 0 10 8.4z", "M20 2v4", "M22 4h-4", "M4 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"],
+          anthropicMessages: ["M12 6V2H8", "M15 11v2", "M2 12h2", "M20 12h2", "M20 16a2 2 0 0 1-2 2H8.8a2 2 0 0 0-1.4.6l-2.2 2.2A.7.7 0 0 1 4 20.3V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z", "M9 11v2"],
+          timer: ["M10 2h4", "M12 14l3-3", "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"],
+          zap: ["M4 14a1 1 0 0 1-.8-1.6l9-11A1 1 0 0 1 14 2v7h6a1 1 0 0 1 .8 1.6l-9 11A1 1 0 0 1 10 21v-7z"],
+        }
+
+        const PROTOCOL_ICONS = {
+          "openai-completions": ICON_PATHS.openaiCompletions,
+          "openai-responses": ICON_PATHS.openaiResponses,
+          "anthropic-messages": ICON_PATHS.anthropicMessages,
         }
 
         function makeIcon(paths) {
@@ -346,43 +473,194 @@
           return icon
         }
 
-        function renderEndpoints(nextState) {
-          elements.endpoints.replaceChildren()
-          for (const endpoint of nextState.endpoints) {
-            const button = document.createElement("button")
-            button.type = "button"
-            button.className = "endpoint"
-            button.dataset.url = endpoint.url
-            button.setAttribute("aria-label", endpoint.url)
+        function modelBadge(model, labels) {
+          if (!model.modelEnabled) return { tone: "muted", text: labels.modelDisabled }
+          if (!model.enabled) return { tone: "muted", text: labels.modelBindingDisabled }
+          if (model.cooling) return { tone: "warning", text: labels.modelCooling }
+          return { tone: "success", text: labels.modelStandby }
+        }
 
-            const name = document.createElement("span")
-            name.className = "endpoint-name"
-            name.textContent = endpoint.label
+        function protocolIcons(model, nextState) {
+          const container = document.createElement("span")
+          container.className = "protocol-icons"
+          const entries = [
+            ...model.protocols.map(protocol => ({ protocol, conversion: false })),
+            ...model.conversionProtocols.map(protocol => ({ protocol, conversion: true })),
+          ]
+          for (const entry of entries) {
+            const icon = document.createElement("span")
+            icon.className = "protocol-icon"
+            icon.dataset.conversion = String(entry.conversion)
+            icon.title = entry.conversion
+              ? `${nextState.protocolNames[entry.protocol]} · ${nextState.labels.modelConversion}`
+              : nextState.protocolNames[entry.protocol]
+            icon.setAttribute("aria-label", icon.title)
+            icon.appendChild(makeIcon(PROTOCOL_ICONS[entry.protocol]))
+            container.appendChild(icon)
+          }
+          return container
+        }
 
-            const value = document.createElement("span")
-            value.className = "endpoint-value"
-            value.textContent = endpoint.url.replace(/^https?:\/\//, "")
+        function metric(iconPaths, label, value) {
+          const item = document.createElement("span")
+          item.className = "model-metric"
+          item.append(makeIcon(iconPaths), document.createTextNode(`${label} ${value}`))
+          return item
+        }
 
-            const copy = makeIcon(["M8 8h11v11H8z", "M5 16V5h11"])
-            copy.classList.add("copy")
-            copy.setAttribute("aria-hidden", "true")
-            const check = makeIcon(["m5 12 4 4L19 6"])
-            check.classList.add("check")
-            check.setAttribute("aria-hidden", "true")
+        function renderModelPanel(model, nextState) {
+          elements.modelPanel.replaceChildren()
+          if (!model) {
+            elements.modelPanel.removeAttribute("aria-labelledby")
+            return
+          }
+          elements.modelPanel.setAttribute("aria-labelledby", `model-tab-${nextState.logicalModels.indexOf(model)}`)
+          if (model.models.length === 0) {
+            const empty = document.createElement("div")
+            empty.className = "model-empty"
+            const title = document.createElement("div")
+            title.className = "model-empty-title"
+            title.textContent = nextState.labels.providerModelsEmpty
+            const note = document.createElement("div")
+            note.className = "model-empty-note"
+            note.textContent = nextState.labels.providerModelsEmptyHint
+            empty.append(title, note)
+            elements.modelPanel.appendChild(empty)
+            return
+          }
 
-            button.append(name, value, copy, check)
-            button.addEventListener("click", async () => {
-              try {
-                await api.copyEndpoint(endpoint.id)
-                button.dataset.copied = "true"
-                showToast(state.labels.copied)
-                window.setTimeout(() => { button.dataset.copied = "false" }, 1200)
-              } catch {
-                showToast(state.labels.actionFailed)
+          for (const item of model.models) {
+            const row = document.createElement("article")
+            row.className = "model-row"
+            row.setAttribute("role", "listitem")
+
+            const main = document.createElement("div")
+            main.className = "model-main"
+            const nameLine = document.createElement("div")
+            nameLine.className = "model-name-line"
+            const provider = document.createElement("span")
+            provider.className = "model-provider"
+            provider.textContent = item.providerName || nextState.labels.unknownProvider
+            provider.title = provider.textContent
+            const separator = document.createElement("span")
+            separator.className = "model-separator"
+            separator.textContent = "·"
+            separator.setAttribute("aria-hidden", "true")
+            const modelName = document.createElement("span")
+            modelName.className = "model-name"
+            modelName.textContent = item.modelName
+            modelName.title = item.modelName
+            nameLine.append(provider, separator, modelName)
+
+            const meta = document.createElement("div")
+            meta.className = "model-meta"
+            meta.append(protocolIcons(item, nextState))
+            const metaSeparator = document.createElement("span")
+            metaSeparator.className = "model-separator"
+            metaSeparator.textContent = "·"
+            metaSeparator.setAttribute("aria-hidden", "true")
+            meta.append(
+              metaSeparator,
+              metric(ICON_PATHS.zap, "TPS", item.tps),
+              metric(ICON_PATHS.timer, "TTFT", item.ttft),
+            )
+            main.append(nameLine, meta)
+
+            const badge = modelBadge(item, nextState.labels)
+            const status = document.createElement("span")
+            status.className = "model-status"
+            status.dataset.tone = badge.tone
+            const dot = document.createElement("span")
+            dot.className = "model-status-dot"
+            dot.setAttribute("aria-hidden", "true")
+            const statusText = document.createElement("span")
+            statusText.textContent = badge.text
+            status.append(dot, statusText)
+
+            row.append(main, status)
+            elements.modelPanel.appendChild(row)
+          }
+        }
+
+        function selectLogicalModel(id, animate = true) {
+          if (!state || !state.logicalModels.some(model => model.id === id)) return
+          selectedModelId = id
+          const tabs = Array.from(elements.modelTabs.querySelectorAll('[role="tab"]'))
+          for (const tab of tabs) {
+            const selected = tab.dataset.modelId === id
+            tab.setAttribute("aria-selected", String(selected))
+            tab.tabIndex = selected ? 0 : -1
+          }
+          elements.modelPanel.dataset.animate = String(animate)
+          renderModelPanel(state.logicalModels.find(model => model.id === id), state)
+          elements.modelPanel.scrollTop = 0
+          syncHeight()
+        }
+
+        function moveModelFocus(nextIndex) {
+          const tabs = Array.from(elements.modelTabs.querySelectorAll('[role="tab"]'))
+          if (!tabs.length) return
+          const normalized = (nextIndex + tabs.length) % tabs.length
+          selectLogicalModel(tabs[normalized].dataset.modelId, true)
+          tabs[normalized].focus()
+        }
+
+        function renderLogicalModels(nextState) {
+          elements.modelsTitle.textContent = nextState.labels.logicalModels
+          elements.modelsCount.textContent = nextState.labels.logicalModelsCount
+          elements.modelTabs.setAttribute("aria-label", nextState.labels.logicalModelTabs)
+          elements.modelTabs.replaceChildren()
+
+          if (nextState.logicalModels.length === 0) {
+            selectedModelId = null
+            renderModelPanel(null, nextState)
+            const empty = document.createElement("div")
+            empty.className = "model-empty"
+            const title = document.createElement("div")
+            title.className = "model-empty-title"
+            title.textContent = nextState.labels.logicalModelsEmpty
+            const note = document.createElement("div")
+            note.className = "model-empty-note"
+            note.textContent = nextState.labels.logicalModelsEmptyHint
+            empty.append(title, note)
+            elements.modelPanel.appendChild(empty)
+            return
+          }
+
+          selectedModelId = nextState.logicalModels.some(model => model.id === selectedModelId)
+            ? selectedModelId
+            : nextState.logicalModels[0].id
+          nextState.logicalModels.forEach((model, index) => {
+            const tab = document.createElement("button")
+            tab.type = "button"
+            tab.id = `model-tab-${index}`
+            tab.className = "model-tab"
+            tab.dataset.modelId = model.id
+            tab.setAttribute("role", "tab")
+            tab.setAttribute("aria-controls", "model-panel")
+            tab.setAttribute("aria-selected", String(model.id === selectedModelId))
+            tab.tabIndex = model.id === selectedModelId ? 0 : -1
+            tab.textContent = model.name
+            tab.title = model.name
+            tab.addEventListener("click", () => selectLogicalModel(model.id, true))
+            tab.addEventListener("keydown", event => {
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault()
+                moveModelFocus(index + 1)
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault()
+                moveModelFocus(index - 1)
+              } else if (event.key === "Home") {
+                event.preventDefault()
+                moveModelFocus(0)
+              } else if (event.key === "End") {
+                event.preventDefault()
+                moveModelFocus(nextState.logicalModels.length - 1)
               }
             })
-            elements.endpoints.appendChild(button)
-          }
+            elements.modelTabs.appendChild(tab)
+          })
+          renderModelPanel(nextState.logicalModels.find(model => model.id === selectedModelId), nextState)
         }
 
         function renderUnavailable() {
@@ -393,19 +671,25 @@
           elements.panel.dataset.running = "false"
           elements.subtitle.textContent = "OSW"
           elements.statusPill.hidden = false
-          elements.status.textContent = "—"
-          elements.stateLabel.textContent = fallbackCopy.unavailable
-          elements.address.textContent = "—"
-          elements.stateNote.textContent = fallbackCopy.note
+          elements.status.textContent = fallbackCopy.unavailable
           elements.power.disabled = true
           elements.power.setAttribute("aria-label", fallbackCopy.unavailable)
-          elements.sectionTitle.textContent = fallbackCopy.sectionTitle
-          elements.sectionNote.textContent = "Base URL"
+          elements.modelsTitle.textContent = fallbackCopy.modelsTitle
+          elements.modelsCount.textContent = ""
+          elements.modelTabs.replaceChildren()
+          elements.modelPanel.replaceChildren()
+          const empty = document.createElement("div")
+          empty.className = "model-empty"
+          const emptyTitle = document.createElement("div")
+          emptyTitle.className = "model-empty-title"
+          emptyTitle.textContent = fallbackCopy.modelsEmpty
+          empty.appendChild(emptyTitle)
+          elements.modelPanel.appendChild(empty)
           elements.openLabel.textContent = fallbackCopy.openApp
           elements.quit.setAttribute("aria-label", fallbackCopy.quit)
           elements.quit.title = fallbackCopy.quit
           elements.footnote.textContent = fallbackCopy.loadFailed
-          elements.endpoints.replaceChildren()
+          syncHeight()
         }
 
         function render(nextState) {
@@ -421,20 +705,16 @@
           elements.appIcon.hidden = false
           elements.subtitle.textContent = labels.subtitle
           elements.status.textContent = state.running ? labels.running : labels.stopped
-          elements.stateLabel.textContent = labels.listeningAddress
-          elements.address.textContent = state.address
-          elements.stateNote.textContent = state.running ? labels.ready : labels.unavailable
           const powerLabel = state.running ? labels.stopProxy : labels.startProxy
           elements.power.setAttribute("aria-label", powerLabel)
           elements.power.title = powerLabel
-          elements.sectionTitle.textContent = labels.quickCopy
-          elements.sectionNote.textContent = labels.baseUrl
           elements.openLabel.textContent = labels.openApp
           elements.quit.setAttribute("aria-label", labels.quit)
           elements.quit.title = labels.quit
           elements.footnote.textContent = labels.footnote
           elements.panel.dataset.running = String(state.running)
-          renderEndpoints(state)
+          renderLogicalModels(state)
+          syncHeight()
         }
 
         function actionFailed() {
@@ -448,6 +728,10 @@
         if (!api) {
           renderUnavailable()
           return
+        }
+
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(syncHeight).observe(elements.panel)
         }
 
         elements.power.addEventListener("click", async () => {

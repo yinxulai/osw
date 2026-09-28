@@ -19,6 +19,7 @@
  *   - `ServiceEvents`：服务 → 宿主，单向。设置变更与就绪/失败通知。
  */
 import type { Settings } from '@common/schemas'
+import type { TrayLogicalModelSummary } from '@common/tray-panel'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { ServerEndpoints } from '../runtime/server-runtime'
 import type { ProxyServerStatus } from '../proxy/runtime/server'
@@ -38,6 +39,7 @@ export type ServiceCalls = {
   'proxy.status': { params: undefined; result: ProxyServerStatus }
   'proxy.start': { params: undefined; result: void }
   'proxy.stop': { params: undefined; result: void }
+  'tray.logical-models': { params: undefined; result: TrayLogicalModelSummary[] }
   'settings.get': { params: undefined; result: Settings }
   /**
    * 优雅停止：释放实例锁、关数据库、停监听端口。

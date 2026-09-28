@@ -68,9 +68,9 @@ interface ElectronAPI {
 interface TrayPanelAPI {
   getState: () => Promise<import('@common/tray-panel').TrayPanelState>
   toggleProxy: () => Promise<import('@common/tray-panel').TrayPanelState>
-  copyEndpoint: (endpoint: import('@common/tray-panel').TrayPanelEndpointId) => Promise<void>
   openMainWindow: () => Promise<void>
   quit: () => Promise<void>
+  resize: (height: number) => void
   onStateChanged: (callback: (state: import('@common/tray-panel').TrayPanelState) => void) => () => void
 }
 

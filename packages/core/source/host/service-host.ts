@@ -25,6 +25,7 @@
 import { createRpcEndpoint, reviveError, type RpcEndpoint, type RpcPort } from './rpc'
 import type { HostCalls, HostLogLine, RuntimeStartResult, ServiceCalls, ServiceEvents } from './protocol'
 import type { Settings } from '@common/schemas'
+import type { TrayLogicalModelSummary } from '@common/tray-panel'
 import type { SecretStore } from '@common/secret-store'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { ProxyServerStatus } from '../proxy/runtime/server'
@@ -228,6 +229,11 @@ export class ServiceHost {
 
   stopProxy(): Promise<void> {
     return this.call('proxy.stop')
+  }
+
+  /** 托盘打开时读取一次逻辑模型摘要；完整配置仍由控制台接口负责。 */
+  getTrayLogicalModels(): Promise<TrayLogicalModelSummary[]> {
+    return this.call('tray.logical-models')
   }
 
   /**

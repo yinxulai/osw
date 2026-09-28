@@ -7,14 +7,14 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TrayPanelEndpointId, TrayPanelState } from '@common/tray-panel'
+import type { TrayPanelState } from '@common/tray-panel'
 
 const trayPanelApi = {
   getState: (): Promise<TrayPanelState> => ipcRenderer.invoke('tray-panel:get-state'),
   toggleProxy: (): Promise<TrayPanelState> => ipcRenderer.invoke('tray-panel:toggle'),
-  copyEndpoint: (endpoint: TrayPanelEndpointId): Promise<void> => ipcRenderer.invoke('tray-panel:copy', endpoint),
   openMainWindow: (): Promise<void> => ipcRenderer.invoke('tray-panel:open-main-window'),
   quit: (): Promise<void> => ipcRenderer.invoke('tray-panel:quit'),
+  resize: (height: number): void => ipcRenderer.send('tray-panel:resize', height),
   onStateChanged: (callback: (state: TrayPanelState) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: TrayPanelState) => callback(state)
     ipcRenderer.on('tray-panel:state-changed', listener)
