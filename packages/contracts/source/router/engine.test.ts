@@ -952,6 +952,38 @@ describe('router engine', () => {
     ])
   })
 
+  it('变量取值：请求模型是逻辑模型名称时落到它的 id', async () => {
+    // 条件按 `logicalModels[*].name` 命中、落点取同一个字段：客户端的模型名与逻辑模型 id
+    // 不同名时（这里是 `deepseek-v4.1-flash` / `deepseek-v4-1-flash`）不能落到空。
+    const result = await runWorkflow(createVariableModelGraph(), {
+      request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'deepseek-v4.1-flash' } },
+      logicalModels: [{ id: 'deepseek-v4-1-flash', name: 'deepseek-v4.1-flash', enabled: true }],
+      metadata: {},
+    })
+
+    const payload = result.outputPayload as { route: { modelIds: string[]; fallback: boolean } }
+    expect(result.nodeOutputs['model-select']).toEqual([
+      { name: '取值字段', value: 'request.body.model' },
+      { name: '落点逻辑模型', value: ['deepseek-v4-1-flash'] },
+    ])
+    expect(payload.route.modelIds).toEqual(['deepseek-v4-1-flash'])
+    expect(payload.route.fallback).toBe(false)
+    // 取值与落点不同名时，节点说明要如实交代这层翻译，而不是让用户自己猜 id 从哪来。
+    expect(result.trace.find(item => item.nodeId === 'model-select')?.message)
+      .toBe('字段 request.body.model 取值 deepseek-v4.1-flash，按名称指向逻辑模型 deepseek-v4-1-flash')
+  })
+
+  it('变量取值：取值已经是逻辑模型 id 时原样直连', async () => {
+    const result = await runWorkflow(createVariableModelGraph(), {
+      request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'model-hit' } },
+      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      metadata: {},
+    })
+
+    expect(result.trace.find(item => item.nodeId === 'model-select')?.message)
+      .toBe('字段 request.body.model 取值 model-hit，直连该逻辑模型')
+  })
+
   it('变量取值：没有兜底逻辑模型且取不到值时落点为空', async () => {
     const result = await runWorkflow(createVariableModelGraph(), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: '' } },

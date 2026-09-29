@@ -1,6 +1,6 @@
-import { createRouteContextInput, evaluateConditionGroup, normalizeModelIds, readModelIdsFromValue, resolveConditionField, type ConditionRuleEvaluation } from './engine'
+import { createRouteContextInput, evaluateConditionGroup, normalizeModelIds, resolveConditionField, resolveLogicalModelIds, type ConditionRuleEvaluation } from './engine'
 import type { RouteRule, RouteRuleSet } from './route-rules'
-import type { ConditionLogicalOperator, RouteContextInput, RouteDecision, WorkflowProtocol } from './types'
+import type { ConditionLogicalOperator, RouteContextInput, RouteDecision, RuntimeLogicalModel, WorkflowProtocol } from './types'
 
 /**
  * 规则表的执行器：从上往下逐条匹配，第一条命中且给得出落点的规则胜出，都不命中就走兜底。
@@ -52,8 +52,8 @@ export interface RouteRuleRunResult {
   stopReason: 'rule' | 'fallback'
 }
 
-/** 规则命中后给出的落点：`fixed` 取指定列表，`variable` 把字段取值当逻辑模型 id。 */
-function resolveRuleLandingModelIds(rule: RouteRule, payload: Record<string, unknown>): string[] {
+/** 规则命中后给出的落点：`fixed` 取指定列表，`variable` 把字段取值当逻辑模型（先按 id 认、再按名称认）。 */
+function resolveRuleLandingModelIds(rule: RouteRule, payload: Record<string, unknown>, logicalModels: RuntimeLogicalModel[]): string[] {
   if (rule.landing.source !== 'variable') {
     return normalizeModelIds(rule.landing.logicalModelIds)
   }
@@ -62,7 +62,9 @@ function resolveRuleLandingModelIds(rule: RouteRule, payload: Record<string, unk
   if (!path) return []
   // 取值走与条件同一套字段解析：`request.headers.<名字>` 在这里同样大小写不敏感，
   // 否则同一条路径在条件里读得到、在落点上读不到，用户没法自己解释。
-  return readModelIdsFromValue(resolveConditionField(payload, path))
+  // 读到什么当落点则按「先 id、再名称」翻译（见 `resolveLogicalModelIds`）：
+  // 条件用 `logicalModels[*].name` 命中时，落点取的通常就是同一个字段。
+  return resolveLogicalModelIds(resolveConditionField(payload, path), logicalModels)
 }
 
 /**
@@ -95,7 +97,7 @@ export function runRouteRules(ruleSet: RouteRuleSet, inputPayload: RouteContextI
       continue
     }
 
-    const logicalModelIds = resolveRuleLandingModelIds(rule, payload)
+    const logicalModelIds = resolveRuleLandingModelIds(rule, payload, envelope.context.logicalModels)
     steps.push({ ruleId: rule.id, ruleName: rule.name, enabled: true, matched: true, logicalModelIds, conditions: evaluation.conditions })
     // 命中却给不出落点：这条规则的解释是「它不成立」，继续往下匹配，而不是在这里再兜一层。
     // 因此它不算胜出，步骤里保留 `matched: true` + 空落点，测试运行才解释得清「为什么没落到这儿」。
