@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n/provider'
 import { createConditionCase, createConditionRule, getOperatorsByType } from '@common/router/presets'
 import { WorkflowButton } from '../components/workflow-button'
 import type { NodePanelProps } from '../node-data'
+import { localizeNewConditionCase } from '../node-meta'
 import {
   CONDITION_OPERATOR_META,
   FIELD_OPERAND_OPERATORS,
@@ -335,7 +336,7 @@ export function ConditionPanel(props: NodePanelProps) {
 
       <WorkflowButton
         onClick={() => update(current => current.kind === 'condition'
-          ? { ...current, cases: [...current.cases, createConditionCase()] }
+          ? { ...current, cases: [...current.cases, localizeNewConditionCase(t, createConditionCase())] }
           : current)}
       >
         <Plus className="size-3.5" aria-hidden /> {t('router.panel.addBranch')}

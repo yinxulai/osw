@@ -25,6 +25,7 @@ import {
 } from '@common/router/types'
 import type { AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
+import { presetNodeTextSource } from './preset-node-text'
 
 /** React Flow 中注册的节点类型名。 */
 export type CanvasNodeType =
@@ -227,6 +228,150 @@ export function nodePanelHint(t: AppTranslator, model: WorkflowNodeModel): strin
   if (model.kind === 'prompt') return t('router.panelHint.prompt')
   if (model.kind === 'note') return t('router.panelHint.note')
   return t('router.panelHint.fallback')
+}
+
+interface NodeTextKeys {
+  name: UiCatalogKey
+  description: UiCatalogKey
+  text?: UiCatalogKey
+  controlLabel?: UiCatalogKey
+  caseName?: UiCatalogKey
+  caseNames?: Record<string, UiCatalogKey>
+}
+
+/** 固定入口 / 出口的展示文案。它们不可编辑，可以安全地按界面语言渲染。 */
+const FIXED_NODE_TEXT_KEYS: Partial<Record<WorkflowNodeKind, NodeTextKeys>> = {
+  input: {
+    name: 'router.node.input.label',
+    description: 'router.node.input.hint',
+  },
+  output: {
+    name: 'router.node.output.label',
+    description: 'router.node.output.hint',
+  },
+}
+
+/** 从节点选择器新建节点时的展示文案；只覆盖文案，不改节点协议字段。 */
+const NEW_NODE_TEXT_KEYS: Record<AppendableKind, NodeTextKeys> = {
+  'control-input': {
+    name: 'router.factory.controlInput.name',
+    description: 'router.factory.controlInput.description',
+    controlLabel: 'router.factory.controlInput.controlLabel',
+  },
+  'protocol-discovery': {
+    name: 'router.factory.protocolDiscovery.name',
+    description: 'router.factory.protocolDiscovery.description',
+  },
+  condition: {
+    name: 'router.factory.condition.name',
+    description: 'router.factory.condition.description',
+    caseName: 'router.factory.condition.caseName',
+  },
+  'model-select': {
+    name: 'router.factory.modelSelect.name',
+    description: 'router.factory.modelSelect.description',
+  },
+  iteration: {
+    name: 'router.factory.iteration.name',
+    description: 'router.factory.iteration.description',
+  },
+  script: {
+    name: 'router.factory.script.name',
+    description: 'router.factory.script.description',
+  },
+  prompt: {
+    name: 'router.factory.prompt.name',
+    description: 'router.factory.prompt.description',
+  },
+  note: {
+    name: 'router.factory.note.name',
+    description: 'router.factory.note.description',
+    text: 'router.factory.note.text',
+  },
+}
+
+function shouldTranslateText(current: string, origin: string | undefined, allowMissingOrigin = true): boolean {
+  if (origin === undefined) return allowMissingOrigin
+  return current === origin
+}
+
+function withNodeText<T extends WorkflowNodeModel>(t: AppTranslator, node: T, keys: NodeTextKeys, origin?: WorkflowNodeModel): T {
+  const next = {
+    ...node,
+    name: shouldTranslateText(node.name, origin?.name) ? t(keys.name) : node.name,
+    description: shouldTranslateText(node.description, origin?.description) ? t(keys.description) : node.description,
+  }
+  if (node.kind === 'note' && keys.text) {
+    const sourceText = origin?.kind === 'note' ? origin.text : undefined
+    return {
+      ...next,
+      text: shouldTranslateText(node.text, sourceText, origin === undefined) ? t(keys.text) : node.text,
+    } as T
+  }
+  if (node.kind === 'control-input' && keys.controlLabel) {
+    const originControls = origin?.kind === 'control-input' ? origin.controls : []
+    return {
+      ...next,
+      controls: node.controls.map((control) => {
+        const sourceControl = originControls.find(item => item.id === control.id)
+        return shouldTranslateText(control.label, sourceControl?.label, origin === undefined)
+          ? { ...control, label: t(keys.controlLabel!) }
+          : control
+      }),
+    } as T
+  }
+  if (node.kind === 'condition' && (keys.caseName || keys.caseNames)) {
+    const originCases = origin?.kind === 'condition' ? origin.cases : []
+    return {
+      ...next,
+      cases: node.cases.map((conditionCase) => {
+        const key = keys.caseNames?.[conditionCase.id] ?? keys.caseName
+        if (!key) return conditionCase
+        const sourceCase = originCases.find(item => item.id === conditionCase.id)
+        return shouldTranslateText(conditionCase.name, sourceCase?.name, origin === undefined)
+          ? { ...conditionCase, name: t(key) }
+          : conditionCase
+      }),
+    } as T
+  }
+  return next as T
+}
+
+/**
+ * 新建节点的本地化文案。
+ *
+ * 只改 `name` / `description` / 便签正文 / 条件分支名这类展示字段；脚本、落点等
+ * 协议字段仍由 contracts 里的构造器生成，避免 UI 与引擎各长一套默认值。
+ */
+export function localizeNewNode<T extends WorkflowNodeModel>(t: AppTranslator, node: T): T {
+  const keys = NEW_NODE_TEXT_KEYS[node.kind as AppendableKind]
+  return keys ? withNodeText(t, node, keys) : node
+}
+
+/** 条件面板里新增分支时，把分支名按当前界面语言写入。 */
+export function localizeNewConditionCase<T extends { name: string }>(t: AppTranslator, conditionCase: T): T {
+  return { ...conditionCase, name: t('router.factory.condition.caseName') }
+}
+
+/** 控制输入面板里新增控制项时，把控制项名称按当前界面语言写入。 */
+export function localizeNewControlItem<T extends { label: string }>(t: AppTranslator, control: T): T {
+  return { ...control, label: t('router.factory.controlInput.controlLabel') }
+}
+
+/**
+ * 画布与面板展示用的节点内容。
+ *
+ * 内置预设的文本是图数据，保存时必须保持稳定；这里只在渲染层按当前语言覆盖一份副本。
+ * 传 `origin` 时逐字段比对：用户改过的字段原样显示，没改过的字段继续跟随界面语言。
+ */
+export function displayWorkflowNode(t: AppTranslator, node: WorkflowNodeModel): WorkflowNodeModel {
+  const fixedKeys = FIXED_NODE_TEXT_KEYS[node.kind]
+  if (fixedKeys) return withNodeText(t, node, fixedKeys)
+
+  const source = presetNodeTextSource(node)
+  if (source) return withNodeText(t, node, source.keys, source.origin)
+
+  return node
 }
 
 /** 输入 / 输出节点为固定节点：名称与描述不可修改，也不可删除。 */

@@ -87,7 +87,7 @@ export function RuntimeSettingsPage() {
           </div>
         ) : undefined}
       />
-      <PageContent>
+      <PageContent className="pb-5">
         {service.loading || !service.settings ? (
           <div className="space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (

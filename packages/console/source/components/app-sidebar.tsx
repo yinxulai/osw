@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
@@ -11,6 +11,11 @@ import type { UiCatalogKey } from '@common/i18n/catalogs'
 
 export type Theme = 'light' | 'dark'
 export type ThemeMode = 'system' | Theme
+
+interface IndicatorRect {
+  top: number
+  height: number
+}
 
 interface AppSidebarProps {
   showBrand: boolean
@@ -44,7 +49,13 @@ function revealClassName(expanded: boolean) {
 export function AppSidebar(props: AppSidebarProps) {
   const t = useTranslation()
   const expanded = props.expanded
+  const pathname = useRouterState({ select: state => state.location.pathname })
   const [focusedKey, setFocusedKey] = useState<AppNavPath | null>(null)
+  const [hoveredKey, setHoveredKey] = useState<AppNavPath | null>(null)
+  const [hoverRect, setHoverRect] = useState<IndicatorRect | null>(null)
+  const [activeRect, setActiveRect] = useState<IndicatorRect | null>(null)
+  const navRef = useRef<HTMLElement | null>(null)
+  const itemRefs = useRef(new Map<AppNavPath, HTMLAnchorElement>())
   const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
     if (currentSection?.key === item.sectionKey) {
@@ -54,6 +65,42 @@ export function AppSidebar(props: AppSidebarProps) {
     }
     return sections
   }, [])
+  const activeKey = appNavigationItems.find(item => pathname === item.to || pathname.startsWith(`${item.to}/`))?.to ?? null
+
+  useLayoutEffect(() => {
+    const measureItem = (key: AppNavPath): IndicatorRect | null => {
+      const nav = navRef.current
+      const item = itemRefs.current.get(key)
+      if (!nav || !item) return null
+
+      const navRect = nav.getBoundingClientRect()
+      const itemRect = item.getBoundingClientRect()
+      return {
+        top: itemRect.top - navRect.top + nav.scrollTop,
+        height: itemRect.height,
+      }
+    }
+
+    const updateIndicators = () => {
+      if (activeKey) setActiveRect(measureItem(activeKey))
+      if (hoveredKey) setHoverRect(measureItem(hoveredKey))
+    }
+
+    updateIndicators()
+
+    const nav = navRef.current
+    if (!nav || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateIndicators)
+    observer.observe(nav)
+    for (const item of itemRefs.current.values()) observer.observe(item)
+    window.addEventListener('resize', updateIndicators)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateIndicators)
+    }
+  }, [activeKey, expanded, hoveredKey])
 
   return (
     <div
@@ -78,7 +125,48 @@ export function AppSidebar(props: AppSidebarProps) {
         </div>
       )}
 
-      <nav className={cn('min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5', !props.showBrand && 'pt-2.5')}>
+      <nav
+        ref={navRef}
+        className={cn('relative min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5', !props.showBrand && 'pt-2.5')}
+        onPointerLeave={() => setHoveredKey(null)}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute left-1.5 right-1.5 top-0 z-0 rounded-lg bg-sidebar-accent/50',
+            'transition-[transform,height,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+          )}
+          style={{
+            height: hoverRect ? `${hoverRect.height}px` : 0,
+            opacity: hoveredKey && hoveredKey !== activeKey && hoverRect ? 1 : 0,
+            transform: `translateY(${hoverRect?.top ?? 0}px)`,
+          }}
+        />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute left-1.5 right-1.5 top-0 z-0 rounded-lg bg-sidebar-accent',
+            'transition-[transform,height,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+          )}
+          style={{
+            height: activeRect ? `${activeRect.height}px` : 0,
+            opacity: activeRect ? 1 : 0,
+            transform: `translateY(${activeRect?.top ?? 0}px)`,
+          }}
+        />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute left-0 top-0 z-0 h-4 w-0.5 rounded-full bg-sidebar-primary',
+            'transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+          )}
+          style={{
+            opacity: activeRect ? 1 : 0,
+            transform: activeRect
+              ? `translateY(${activeRect.top + (activeRect.height - 16) / 2}px)`
+              : 'translateY(0)',
+          }}
+        />
         {navSections.map(section => (
           <section key={section.key}>
             {/*
@@ -104,35 +192,33 @@ export function AppSidebar(props: AppSidebarProps) {
                        */}
                       <Link
                         to={item.to}
+                        ref={node => {
+                          if (node) itemRefs.current.set(item.to, node)
+                          else itemRefs.current.delete(item.to)
+                        }}
                         activeOptions={{ includeSearch: false }}
                         aria-label={t(item.labelKey)}
+                        onPointerEnter={() => setHoveredKey(item.to)}
                         onFocus={event => {
                           // 只认键盘聚焦：鼠标点出来的聚焦由 hover 展开接管，不需要 tooltip。
-                          if (event.currentTarget.matches(':focus-visible')) setFocusedKey(item.to)
+                          if (event.currentTarget.matches(':focus-visible')) {
+                            setFocusedKey(item.to)
+                            setHoveredKey(item.to)
+                          }
                         }}
-                        onBlur={() => setFocusedKey(current => (current === item.to ? null : current))}
-                        onPointerLeave={() => setFocusedKey(current => (current === item.to ? null : current))}
+                        onBlur={() => {
+                          setFocusedKey(current => (current === item.to ? null : current))
+                          setHoveredKey(current => (current === item.to ? null : current))
+                        }}
                         className={cn(
-                          'relative flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors',
+                          'relative z-10 flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors',
                           'focus-visible:ring-2 focus-visible:ring-state-accent-solid',
                         )}
-                        activeProps={{ className: 'bg-sidebar-accent system-xs-semibold text-sidebar-accent-foreground' }}
-                        inactiveProps={{ className: 'system-xs-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground hover:inset-ring-[0.5px] hover:inset-ring-sidebar-border' }}
+                        activeProps={{ className: 'system-xs-semibold text-sidebar-accent-foreground' }}
+                        inactiveProps={{ className: 'system-xs-medium text-sidebar-foreground/80 hover:text-sidebar-accent-foreground' }}
                       >
-                        {({ isActive }) => (
-                          <>
-                            {/* 激活指示条挂在轨道左缘（`-left-1.5` 抵消 nav 的 padding），不挤图标、也不靠背景色单独表意 */}
-                            <span
-                              aria-hidden="true"
-                              className={cn(
-                                'absolute -left-1.5 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary transition-opacity duration-150 motion-reduce:transition-none',
-                                isActive ? 'opacity-100' : 'opacity-0',
-                              )}
-                            />
-                            <ItemIcon className="size-4 shrink-0" aria-hidden="true" />
-                            <span className={revealClassName(expanded)}>{t(item.labelKey)}</span>
-                          </>
-                        )}
+                        <ItemIcon className="size-4 shrink-0" aria-hidden="true" />
+                        <span className={revealClassName(expanded)}>{t(item.labelKey)}</span>
                       </Link>
                     </TooltipTrigger>
                     <TooltipContent side="right" sideOffset={8}>{t(item.labelKey)}</TooltipContent>

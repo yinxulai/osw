@@ -74,7 +74,9 @@ import {
   resolveInsertAnchor,
 } from './graph-ops'
 import {
+  displayWorkflowNode,
   isProtectedNode,
+  localizeNewNode,
   resolveNoteNodeSize,
   toCanvasNodeType,
 } from './node-meta'
@@ -148,6 +150,23 @@ function WorkflowStudioCanvas() {
   const [graph, setGraph] = useState<WorkflowGraph>(() => createDefaultPolicyGraph(runtimeLogicalModels))
   const graphRef = useRef(graph)
   graphRef.current = graph
+  const displayNodeCacheRef = useRef(new WeakMap<WorkflowNodeModel, { t: typeof t; node: WorkflowNodeModel }>())
+  /** 画布与面板看到的文本副本；图数据本身仍保持内置预设的稳定原文。 */
+  const displayNodes = useMemo(
+    () => graph.nodes.map((node) => {
+      const cached = displayNodeCacheRef.current.get(node)
+      if (cached?.t === t) return cached.node
+
+      const displayNode = displayWorkflowNode(t, node)
+      displayNodeCacheRef.current.set(node, { t, node: displayNode })
+      return displayNode
+    }),
+    [graph.nodes, t],
+  )
+  const displayNodeById = useMemo(
+    () => new Map(displayNodes.map(node => [node.id, node])),
+    [displayNodes],
+  )
 
   const [dockMode, setDockMode] = useState<'select' | 'pan'>('select')
   const [dragEnabled, setDragEnabled] = useState(true)
@@ -292,14 +311,14 @@ function WorkflowStudioCanvas() {
       ? current.nodes.find(node => node.id === anchor.targetNodeId) ?? null
       : null
 
-    const newNode = createNodeByKind(request.kind, resolveInsertPosition(source, target))
+    const newNode = localizeNewNode(t, createNodeByKind(request.kind, resolveInsertPosition(source, target)))
 
     setGraph(latest => {
       const next = insertNode(latest, anchor, newNode)
       return { ...next, nodes: withFixedNodeCopy(next.nodes) }
     })
     setSelectedNodeId(newNode.id)
-  }, [])
+  }, [t])
 
   const handleInsertOnEdge = useCallback((edgeId: string, kind: AppendableKind) => {
     handleRequestInsert({ kind, edgeId })
@@ -311,10 +330,10 @@ function WorkflowStudioCanvas() {
       ? flow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
       : { x: 0, y: 0 }
 
-    const node = createNodeByKind(kind, position)
+    const node = localizeNewNode(t, createNodeByKind(kind, position))
     setGraph(current => ({ ...appendNode(current, node) }))
     setSelectedNodeId(node.id)
-  }, [flow])
+  }, [flow, t])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
     const node = graphRef.current.nodes.find(item => item.id === nodeId)
@@ -371,10 +390,10 @@ function WorkflowStudioCanvas() {
     const node = graphRef.current.nodes.find(item => item.id === nodeId)
     if (!node) return
 
-    const clone = cloneNode(node)
+    const clone = cloneNode(displayNodeById.get(nodeId) ?? node)
     setGraph(current => ({ ...appendNode(current, clone) }))
     setSelectedNodeId(clone.id)
-  }, [])
+  }, [displayNodeById])
 
   const handleConnect = useCallback((connection: Connection) => {
     const { source, target, sourceHandle } = connection
@@ -460,13 +479,13 @@ function WorkflowStudioCanvas() {
    */
   const nodeOutputGroups = useMemo(() => {
     if (!runResult) return []
-    const nameById = new Map(graph.nodes.map(node => [node.id, node.name]))
+    const nameById = new Map(displayNodes.map(node => [node.id, node.name]))
     return Object.entries(runResult.nodeOutputs).map(([nodeId, outputs]) => ({
       nodeId,
       nodeName: nameById.get(nodeId) ?? nodeId,
       outputs,
     }))
-  }, [graph.nodes, runResult])
+  }, [displayNodes, runResult])
 
   const nodeCacheRef = useRef(new Map<string, { model: WorkflowNodeModel; flags: string; node: RouteFlowNode }>())
 
@@ -475,7 +494,7 @@ function WorkflowStudioCanvas() {
     const previous = nodeCacheRef.current
     const next = new Map<string, { model: WorkflowNodeModel; flags: string; node: RouteFlowNode }>()
 
-    const nodes = graph.nodes.map(model => {
+    const nodes = displayNodes.map(model => {
       const sourcePorts = graph.edges
         .filter(edge => edge.sourceNodeId === model.id)
         .map(edge => String(edge.sourcePort))
@@ -536,7 +555,8 @@ function WorkflowStudioCanvas() {
     dragEnabled,
     dockMode,
     flow,
-    graph,
+    displayNodes,
+    graph.edges,
     handleDeleteNode,
     handleDuplicateNode,
     handleOpenNode,
@@ -567,8 +587,8 @@ function WorkflowStudioCanvas() {
   // ---- 选中节点与字段提示 --------------------------------------------------
 
   const selectedNode = useMemo(
-    () => graph.nodes.find(node => node.id === selectedNodeId) ?? null,
-    [graph.nodes, selectedNodeId],
+    () => selectedNodeId ? displayNodeById.get(selectedNodeId) ?? null : null,
+    [displayNodeById, selectedNodeId],
   )
 
   const conditionFieldHints = useMemo(() => {
@@ -846,7 +866,7 @@ function WorkflowStudioCanvas() {
                   canvasWidth={canvasWidth}
                   width={panelWidth}
                   onWidthChange={setPanelWidth}
-                  nodeModels={graph.nodes}
+                  nodeModels={displayNodes}
                   logicalModels={logicalModels}
                   conditionFieldHints={conditionFieldHints}
                   updateNode={updateNode}

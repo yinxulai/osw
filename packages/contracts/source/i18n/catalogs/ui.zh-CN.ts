@@ -1205,6 +1205,139 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'router.policy.script-routing.name': 'JS 脚本处理请求',
   'router.policy.script-routing.description': '用沙箱脚本按请求规模打分分档，再按分档分流到不同逻辑模型。',
 
+  'router.factory.controlInput.name': '控制输入节点',
+  'router.factory.controlInput.description': '注入开关与下拉等系统控制值。',
+  'router.factory.controlInput.controlLabel': '功能开关',
+  'router.factory.protocolDiscovery.name': '协议发现节点',
+  'router.factory.protocolDiscovery.description': '输入 request，输出协议分支。',
+  'router.factory.condition.name': '条件节点',
+  'router.factory.condition.description': '按类型感知条件做 IF / ELSE 多分支。',
+  'router.factory.condition.caseName': '分支 1',
+  'router.factory.modelSelect.name': '逻辑模型选择节点',
+  'router.factory.modelSelect.description': '选择一个或多个逻辑模型，交由出口执行。',
+  'router.factory.iteration.name': '遍历迭代节点',
+  'router.factory.iteration.description': '遍历数组 / 对象，逐项执行循环体并汇总结果。',
+  'router.factory.script.name': 'JS 脚本节点',
+  'router.factory.script.description': '在沙箱里跑一段 JS，把结果写回运行数据。',
+  'router.factory.prompt.name': 'LLM 节点',
+  'router.factory.prompt.description': '用指定逻辑模型执行提示词，回复写回运行数据。',
+  'router.factory.note.name': '备注',
+  'router.factory.note.description': '画布上的说明便签：写给人看，不参与路由执行。',
+  'router.factory.note.text': `## 备注
+
+在这里写这张图的说明，支持 Markdown。
+
+- 备注**不参与执行**：引擎遇到它会直接跳过，不影响路由结果
+- 拖右下角可以改尺寸，标题就是上面这行名字
+- 写清楚：这张图什么时候用、落点为什么这么选`,
+
+  'router.preset.modelDirect.note.name': '默认策略怎么用',
+  'router.preset.modelDirect.note.description': '内置默认策略的用法说明。',
+  'router.preset.modelDirect.note.text': `## 默认策略：请求模型直连
+
+请求里写的模型名**命中逻辑模型**就直连它，否则落到默认逻辑模型。
+
+**链路**
+1. 输入请求
+2. 协议发现：先认出协议，再按协议解析请求体（模型名写在哪，由协议决定）
+3. 条件：请求模型是否在逻辑模型列表里
+4. 命中 → 直连请求模型；未命中 → 默认逻辑模型
+
+**常见改法**
+- 给某个客户端单独分流：在协议发现后面接一个条件节点
+- 想固定落点：把「直连请求模型」的来源改成「固定」`,
+  'router.preset.modelDirect.protocol.name': '协议发现',
+  'router.preset.modelDirect.protocol.description': '先认出协议，再按该协议声明请求体形状；下游读的是协议解析后的字段。',
+  'router.preset.modelDirect.condition.name': '请求模型是否命中逻辑模型',
+  'router.preset.modelDirect.condition.description': 'request.body.model 在 logicalModels[*].id 里时走直连分支，否则落到默认逻辑模型。',
+  'router.preset.modelDirect.case.modelInList': '请求模型在逻辑模型列表里',
+  'router.preset.modelDirect.model.name': '直连请求模型',
+  'router.preset.modelDirect.model.description': '把 request.body.model 的取值直接当作逻辑模型 id。',
+  'router.preset.modelDirect.fallback.name': '默认逻辑模型',
+  'router.preset.modelDirect.fallback.description': '未命中时落到内置的默认逻辑模型。',
+
+  'router.preset.userAgent.note.name': 'UA 分流怎么用',
+  'router.preset.userAgent.note.description': 'UA 分流预设的用法说明。',
+  'router.preset.userAgent.note.text': `## UA 分流：按客户端来源分流
+
+逐个看请求头，头值里出现客户端标识就落到对应逻辑模型；整轮都认不出来就回落默认。
+
+**链路**
+1. 遍历迭代：遍历请求头的每一个头值
+2. 条件：头值包含 Cursor / claude-cli
+3. 命中 → 对应落点；整轮都未命中 → 兜底逻辑模型
+
+**三条咬合的约定**
+- 循环体末尾把落点写进 route.modelIds，迭代节点读同一个字段判定「本轮命中」
+- 迭代节点的「汇总结果写回路径」留空：整轮未命中时不能用空数组盖掉循环体写下的值
+- 兜底放在下游一个「变量取值」的落点节点里，它同时覆盖命中沿用与未命中兜底`,
+  'router.preset.userAgent.iteration.name': '遍历请求头识别来源',
+  'router.preset.userAgent.iteration.description': '逐个遍历 request.headers 的头值，命中客户端标识时把落点逻辑模型收进 route.modelIds。',
+  'router.preset.userAgent.condition.name': '头值里的客户端标识',
+  'router.preset.userAgent.condition.description': '按头值里出现的客户端标识分流：Cursor / Claude CLI，其余头继续下一轮。',
+  'router.preset.userAgent.case.cursor': 'Cursor 客户端',
+  'router.preset.userAgent.case.claudeCli': 'Claude CLI 客户端',
+  'router.preset.userAgent.cursor.name': 'Cursor 落点',
+  'router.preset.userAgent.cursor.description': 'Cursor 客户端落到这个逻辑模型。',
+  'router.preset.userAgent.claudeCli.name': 'Claude CLI 落点',
+  'router.preset.userAgent.claudeCli.description': 'Claude CLI 客户端落到这个逻辑模型。',
+  'router.preset.userAgent.fallback.name': '落点：命中即用，否则兜底',
+  'router.preset.userAgent.fallback.description': '识别出客户端时沿用迭代收到的落点；整轮都没识别出来才回落到兜底逻辑模型。',
+
+  'router.preset.llmComplexity.note.name': 'LLM 复杂度分流怎么用',
+  'router.preset.llmComplexity.note.description': 'LLM 复杂度分流预设的用法说明。',
+  'router.preset.llmComplexity.note.text': `## LLM 复杂度分流
+
+先让逻辑模型读一遍请求，判定 simple / complex，再按结论落到不同逻辑模型。
+
+**链路**
+1. LLM 节点：把请求体整体交给判定模型，回复写进 route.complexity
+2. 条件：route.complexity 匹配正则 [Cc]omplex
+3. 复杂 → 复杂落点；其余 → 简单落点
+
+**注意**
+- 用正则而不是等于：LLM 回复里的多余空白、首字母大小写都能容忍
+- 想更确定：把提示词改成「只回答 JSON」，再用脚本节点解析它
+- 判定默认借用默认逻辑模型，换成专门的小模型更省
+- 这条策略没接协议发现节点：它读的是请求体整体，不需要知道体里的字段名`,
+  'router.preset.llmComplexity.prompt.name': 'LLM 判断请求复杂度',
+  'router.preset.llmComplexity.prompt.description': '把请求交给逻辑模型读一遍，只让它回一个词：simple 或 complex。',
+  'router.preset.llmComplexity.condition.name': '复杂度判定',
+  'router.preset.llmComplexity.condition.description': 'route.complexity 命中 [Cc]omplex 视为复杂请求；LLM 失败或回答认不出来时走「其余」。',
+  'router.preset.llmComplexity.case.complex': '复杂请求',
+  'router.preset.llmComplexity.complex.name': '复杂请求落点',
+  'router.preset.llmComplexity.complex.description': '复杂请求落到这个逻辑模型。',
+  'router.preset.llmComplexity.simple.name': '其余请求落点',
+  'router.preset.llmComplexity.simple.description': '简单请求落到这个逻辑模型。',
+
+  'router.preset.script.note.name': '脚本分流怎么用',
+  'router.preset.script.note.description': 'JS 脚本分流预设的用法说明。',
+  'router.preset.script.note.text': `## JS 脚本分流
+
+用一段沙箱脚本把请求规模算成分档，再按分档落到不同逻辑模型。
+
+**链路**
+1. 协议发现：声明消息列表 / 工具列表在请求体里的位置
+2. JS 脚本：按消息数、上下文字数、工具数打分，返回 simple 或 complex
+3. 条件：route.complexity 等于 complex
+4. 复杂 → 复杂落点；其余 → 简单落点
+
+**注意**
+- 脚本先看 route.protocol，再决定消息列表读 messages 还是 input
+- console.log 会进测试运行的「控制台」，打分过程可以直接核对
+- 阈值（6 条消息 / 8000 字 / 带工具）按自己的业务调`,
+  'router.preset.script.protocol.name': '协议发现',
+  'router.preset.script.protocol.description': '按路径与请求头认出协议，声明脚本要读的请求体字段（消息列表、工具列表）。',
+  'router.preset.script.script.name': 'JS 计算请求复杂度',
+  'router.preset.script.script.description': '按消息数 / 上下文字数 / 工具数打分，返回 simple 或 complex 写进 route.complexity。',
+  'router.preset.script.condition.name': '复杂度判定',
+  'router.preset.script.condition.description': 'route.complexity 等于 complex 视为复杂请求；脚本失败时读不到值，走「其余」。',
+  'router.preset.script.case.complex': '复杂请求',
+  'router.preset.script.complex.name': '复杂请求落点',
+  'router.preset.script.complex.description': '复杂请求落到这个逻辑模型。',
+  'router.preset.script.simple.name': '其余请求落点',
+  'router.preset.script.simple.description': '简单请求落到这个逻辑模型。',
+
   'router.version.aria': '历史版本',
   'router.version.title': '历史版本',
   'router.version.count': '{count} 个',

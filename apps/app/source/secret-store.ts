@@ -18,7 +18,13 @@ export class ElectronSecretStore implements SecretStore {
   async get(reference: string): Promise<string | null> {
     const encrypted = (await this.readSecrets())[reference]
     if (!encrypted) return null
-    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    try {
+      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    } catch {
+      // 密文与当前系统密钥不匹配（重装、迁移等），清除失效条目
+      await this.delete(reference)
+      return null
+    }
   }
 
   async delete(reference: string): Promise<void> {

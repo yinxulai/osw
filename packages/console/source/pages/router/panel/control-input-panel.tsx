@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n/provider'
 import { createControlItem } from '@common/router/presets'
 import { WorkflowButton } from '../components/workflow-button'
 import type { NodePanelProps } from '../node-data'
+import { localizeNewControlItem } from '../node-meta'
 import type { ControlInputNode } from '@common/router/types'
 import {
   NodePanelCard,
@@ -164,7 +165,7 @@ export function ControlInputPanel(props: NodePanelProps) {
 
       <WorkflowButton
         onClick={() => update(current => current.kind === 'control-input'
-          ? { ...current, controls: [...current.controls, createControlItem('switch')] }
+          ? { ...current, controls: [...current.controls, localizeNewControlItem(t, createControlItem('switch'))] }
           : current)}
       >
         <Plus className="size-3.5" aria-hidden /> {t('router.panel.addControl')}

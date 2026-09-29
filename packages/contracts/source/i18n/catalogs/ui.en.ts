@@ -1203,6 +1203,139 @@ export const uiEn = {
   'router.policy.script-routing.name': 'JS script request handling',
   'router.policy.script-routing.description': 'Scores the request in a sandbox script and routes to different logical models by score band.',
 
+  'router.factory.controlInput.name': 'Control input node',
+  'router.factory.controlInput.description': 'Injects switches and select values into the run context.',
+  'router.factory.controlInput.controlLabel': 'Feature switch',
+  'router.factory.protocolDiscovery.name': 'Protocol discovery node',
+  'router.factory.protocolDiscovery.description': 'Reads request and emits protocol branches.',
+  'router.factory.condition.name': 'Condition node',
+  'router.factory.condition.description': 'Runs IF / ELSE branches over typed conditions.',
+  'router.factory.condition.caseName': 'Branch 1',
+  'router.factory.modelSelect.name': 'Logical model select node',
+  'router.factory.modelSelect.description': 'Selects one or more logical models for the output to execute.',
+  'router.factory.iteration.name': 'Iteration node',
+  'router.factory.iteration.description': 'Iterates arrays / objects, runs the loop body per item and collects the result.',
+  'router.factory.script.name': 'JS script node',
+  'router.factory.script.description': 'Runs JS in a sandbox and writes the result back into the run data.',
+  'router.factory.prompt.name': 'LLM node',
+  'router.factory.prompt.description': 'Runs a prompt with the chosen logical model and writes the reply back into the run data.',
+  'router.factory.note.name': 'Note',
+  'router.factory.note.description': 'A sticky note on the canvas: written for humans and skipped by routing.',
+  'router.factory.note.text': `## Note
+
+Write the explanation for this graph here. Markdown is supported.
+
+- Notes do **not** run: the engine skips them and they never affect routing results
+- Drag the bottom-right corner to resize the card; the title is the name above
+- Make it specific: when to use this graph, and why the landing models are chosen this way`,
+
+  'router.preset.modelDirect.note.name': 'How to use the default policy',
+  'router.preset.modelDirect.note.description': 'Usage note for the built-in default policy.',
+  'router.preset.modelDirect.note.text': `## Default policy: route the requested model directly
+
+If the requested model name **matches a logical model**, route straight to it; otherwise use the default logical model.
+
+**Flow**
+1. Input request
+2. Protocol discovery: detect the protocol first, then parse the model name from the request body
+3. Condition: is the requested model in the logical model list?
+4. Match -> route directly to the requested model; no match -> default logical model
+
+**Common edits**
+- Split by client: add a condition after protocol discovery
+- Pin a landing model: change the “direct requested model” source to “fixed”`,
+  'router.preset.modelDirect.protocol.name': 'Protocol discovery',
+  'router.preset.modelDirect.protocol.description': 'Detect the protocol and declare the request-body shape to downstream nodes.',
+  'router.preset.modelDirect.condition.name': 'Is the requested model a logical model?',
+  'router.preset.modelDirect.condition.description': 'When request.body.model is in logicalModels[*].id, use the direct branch; otherwise use the default logical model.',
+  'router.preset.modelDirect.case.modelInList': 'The requested model is in the logical model list',
+  'router.preset.modelDirect.model.name': 'Direct requested model',
+  'router.preset.modelDirect.model.description': 'Use the value of request.body.model directly as the logical model id.',
+  'router.preset.modelDirect.fallback.name': 'Default logical model',
+  'router.preset.modelDirect.fallback.description': 'When nothing matches, fall back to the built-in default logical model.',
+
+  'router.preset.userAgent.note.name': 'How to use user-agent routing',
+  'router.preset.userAgent.note.description': 'Usage note for the user-agent routing preset.',
+  'router.preset.userAgent.note.text': `## User-agent routing: split by client source
+
+Scan request headers one by one; when a header value contains a client marker, route to the matching logical model. If the whole pass fails to identify one, fall back to the default.
+
+**Flow**
+1. Iteration: walk every request-header value
+2. Condition: does the value contain Cursor / claude-cli?
+3. Match -> matching landing; no match in the whole pass -> fallback logical model
+
+**Three interlocking rules**
+- The loop body writes the landing into route.modelIds; the iteration node reads the same field to decide whether the round matched
+- The iteration node’s “aggregate result write-back path” stays empty: an unmatched pass must not overwrite the value written by the loop body with an empty array
+- The fallback lives in a downstream “variable” landing node, covering both pass-through and miss cases`,
+  'router.preset.userAgent.iteration.name': 'Iterate headers to identify the source',
+  'router.preset.userAgent.iteration.description': 'Walk every request.headers value and collect the landing logical model into route.modelIds when a client marker matches.',
+  'router.preset.userAgent.condition.name': 'Client markers in header values',
+  'router.preset.userAgent.condition.description': 'Split by client markers in header values: Cursor / Claude CLI; other headers continue to the next round.',
+  'router.preset.userAgent.case.cursor': 'Cursor client',
+  'router.preset.userAgent.case.claudeCli': 'Claude CLI client',
+  'router.preset.userAgent.cursor.name': 'Cursor landing',
+  'router.preset.userAgent.cursor.description': 'Cursor clients land on this logical model.',
+  'router.preset.userAgent.claudeCli.name': 'Claude CLI landing',
+  'router.preset.userAgent.claudeCli.description': 'Claude CLI clients land on this logical model.',
+  'router.preset.userAgent.fallback.name': 'Landing: use a match, otherwise fall back',
+  'router.preset.userAgent.fallback.description': 'Reuse the landing produced by iteration when a client is identified; only fall back when the whole pass identifies nothing.',
+
+  'router.preset.llmComplexity.note.name': 'How to use LLM complexity routing',
+  'router.preset.llmComplexity.note.description': 'Usage note for the LLM complexity routing preset.',
+  'router.preset.llmComplexity.note.text': `## LLM complexity routing
+
+Let a logical model read the request once, decide simple / complex, and route by that conclusion.
+
+**Flow**
+1. LLM node: hand the whole request body to the judge model and write the reply into route.complexity
+2. Condition: route.complexity matches the regex [Cc]omplex
+3. Complex -> complex landing; everything else -> simple landing
+
+**Notes**
+- Use a regex rather than equality: extra whitespace and title case should be tolerated
+- Want more certainty? Change the prompt to “reply with JSON only”, then parse it with a script node
+- The judge borrows the default logical model by default; a dedicated small model is cheaper
+- This preset does not connect protocol discovery: it reads the whole request body and does not need field names inside it`,
+  'router.preset.llmComplexity.prompt.name': 'LLM judges request complexity',
+  'router.preset.llmComplexity.prompt.description': 'Hand the request to a logical model and ask it for one word only: simple or complex.',
+  'router.preset.llmComplexity.condition.name': 'Complexity verdict',
+  'router.preset.llmComplexity.condition.description': 'route.complexity matching [Cc]omplex counts as complex; LLM failure or an unknown answer takes “everything else”.',
+  'router.preset.llmComplexity.case.complex': 'Complex request',
+  'router.preset.llmComplexity.complex.name': 'Complex request landing',
+  'router.preset.llmComplexity.complex.description': 'Complex requests land on this logical model.',
+  'router.preset.llmComplexity.simple.name': 'Other request landing',
+  'router.preset.llmComplexity.simple.description': 'Simple requests land on this logical model.',
+
+  'router.preset.script.note.name': 'How to use script routing',
+  'router.preset.script.note.description': 'Usage note for the JS script routing preset.',
+  'router.preset.script.note.text': `## JS script routing
+
+Score request size in a sandbox script, then route by score band to different logical models.
+
+**Flow**
+1. Protocol discovery: declare where the message list / tool list lives in the request body
+2. JS script: score by message count, context characters and tool count; return simple or complex
+3. Condition: route.complexity equals complex
+4. Complex -> complex landing; everything else -> simple landing
+
+**Notes**
+- The script reads route.protocol first, then decides whether the message list is messages or input
+- console.log entries show up in the test-run “console”, so the scoring pass can be checked directly
+- Tune the thresholds (6 messages / 8000 characters / tools present) for your own traffic`,
+  'router.preset.script.protocol.name': 'Protocol discovery',
+  'router.preset.script.protocol.description': 'Detect the protocol from path and headers, then declare the request-body fields this script reads.',
+  'router.preset.script.script.name': 'JS scores request complexity',
+  'router.preset.script.script.description': 'Score by message count / context characters / tool count and write simple or complex into route.complexity.',
+  'router.preset.script.condition.name': 'Complexity verdict',
+  'router.preset.script.condition.description': 'route.complexity equal to complex counts as a complex request; if the script fails, the value is missing and it takes “everything else”.',
+  'router.preset.script.case.complex': 'Complex request',
+  'router.preset.script.complex.name': 'Complex request landing',
+  'router.preset.script.complex.description': 'Complex requests land on this logical model.',
+  'router.preset.script.simple.name': 'Other request landing',
+  'router.preset.script.simple.description': 'Simple requests land on this logical model.',
+
   'router.version.aria': 'Version history',
   'router.version.title': 'Version history',
   'router.version.count': '{count}',
