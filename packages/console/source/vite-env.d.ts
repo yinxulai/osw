@@ -62,6 +62,9 @@ interface ElectronAPI {
   openDataDirectory: () => Promise<void>
   /** 把渲染层当前生效的亮暗主题告知主进程；老版本 preload 可能没有。 */
   setTheme?: (theme: 'light' | 'dark') => void
+  /** 主窗口进入或退出原生全屏时通知渲染层。 */
+  onFullScreenChanged?: (callback: (fullScreen: boolean) => void) => () => void
+  getFullScreenState?: () => Promise<boolean>
   updater: UpdaterAPI
 }
 

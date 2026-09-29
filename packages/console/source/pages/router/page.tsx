@@ -867,7 +867,7 @@ function WorkflowStudioCanvas() {
       </PageContent>
 
       <Drawer open={testDrawerOpen} onOpenChange={setTestDrawerOpen} direction="right">
-        <DrawerContent className="workflow-test-drawer workflow-ui-surface h-full w-208! max-w-[90vw]! border-l-[0.5px] border-components-panel-border bg-components-panel-bg">
+        <DrawerContent className="workflow-test-drawer workflow-ui-surface h-full w-208! max-w-[90vw]! border-l-[0.5px] border-components-panel-border bg-background">
           <DrawerHeader>
             <DrawerTitle className="flex items-center gap-2"><ArrowRight className="size-4" /> {t('router.workflow.run')}</DrawerTitle>
             <DrawerDescription>{t('router.runPanel.description')}</DrawerDescription>

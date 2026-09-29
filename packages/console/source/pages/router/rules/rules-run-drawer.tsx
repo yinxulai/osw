@@ -73,7 +73,7 @@ export function RulesRunDrawer(props: RulesRunDrawerProps) {
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent className="workflow-test-drawer workflow-ui-surface h-full w-160! max-w-[90vw]! border-l-[0.5px] border-components-panel-border bg-components-panel-bg">
+    <DrawerContent className="workflow-test-drawer workflow-ui-surface h-full w-160! max-w-[90vw]! border-l-[0.5px] border-components-panel-border bg-background">
         <DrawerHeader>
           <DrawerTitle className="flex items-center gap-2">
             <ArrowRight className="size-4" aria-hidden /> {t('router.rules.run.title')}

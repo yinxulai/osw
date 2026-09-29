@@ -1,17 +1,14 @@
 import type { ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTranslation } from '@/i18n/provider'
+import { BreadcrumbTrail, usePageBreadcrumbs, type PageBreadcrumb } from '@/components/breadcrumbs'
+import { getPlatformCapabilities } from '@/platform/capabilities'
 
 interface PageLayoutProps {
   children: ReactNode
   className?: string
 }
 
-export interface PageBreadcrumb {
-  label: string
-  onClick?: () => void
-}
+export type { PageBreadcrumb } from '@/components/breadcrumbs'
 
 interface PageHeaderProps {
   title: string
@@ -55,12 +52,12 @@ export function AppLayout(props: AppLayoutProps) {
   return (
     <div
       className={cn(
-        'grid h-screen w-full overflow-hidden bg-background text-foreground',
+        'grid h-full w-full overflow-hidden bg-background text-foreground',
         'transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
         sidebarPinned ? 'grid-cols-[14rem_minmax(0,1fr)]' : 'grid-cols-[3rem_minmax(0,1fr)]',
       )}
     >
-      <aside className="relative z-30 min-h-0 overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <aside className="relative z-30 min-h-0 overflow-visible bg-background text-sidebar-foreground">
         {sidebar}
       </aside>
       <main className="relative isolate min-w-0 overflow-auto overscroll-contain">
@@ -77,7 +74,9 @@ export function PageLayout(props: PageLayoutProps) {
 
 export function PageHeader(props: PageHeaderProps) {
   const { title, titleAdornment, description, actions, breadcrumbs, className } = props
-  const t = useTranslation()
+  const isElectron = getPlatformCapabilities().name === 'electron'
+  usePageBreadcrumbs(breadcrumbs)
+
   return (
     <header
       className={cn(
@@ -86,17 +85,8 @@ export function PageHeader(props: PageHeaderProps) {
       )}
     >
       <div className="min-w-0">
-        {breadcrumbs && breadcrumbs.length > 0 && (
-          <nav aria-label={t('nav.breadcrumb')} className="mb-2 flex items-center gap-1 system-xs-regular text-text-tertiary">
-            {breadcrumbs.map((breadcrumb, index) => (
-              <span key={`${breadcrumb.label}-${index}`} className="flex items-center gap-1">
-                {index > 0 && <ChevronRight className="size-3" aria-hidden="true" />}
-                {breadcrumb.onClick ? (
-                  <button type="button" className="rounded-sm hover:text-text-secondary" onClick={breadcrumb.onClick}>{breadcrumb.label}</button>
-                ) : <span>{breadcrumb.label}</span>}
-              </span>
-            ))}
-          </nav>
+        {!isElectron && breadcrumbs && breadcrumbs.length > 0 && (
+          <BreadcrumbTrail items={breadcrumbs} className="mb-2 system-xs-regular" />
         )}
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="system-xl-semibold text-text-primary">{title}</h1>

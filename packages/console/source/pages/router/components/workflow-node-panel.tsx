@@ -36,7 +36,7 @@ export function computeMaxPanelWidth(canvasWidth: number): number {
  */
 const NODE_PANEL_CLASSNAME = cn(
   'workflow-node-panel workflow-ui-surface outline-hidden',
-  'max-w-[calc(100vw-2rem)]! gap-0! border-l-[0.5px] border-components-panel-border bg-components-panel-bg!',
+  'max-w-[calc(100vw-2rem)]! gap-0! border-l-[0.5px] border-components-panel-border bg-background!',
 )
 
 type WorkflowNodePanelProps = {

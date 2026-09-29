@@ -7,6 +7,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+[data-window-drag] {
+  -webkit-app-region: drag;
+}
+
+[data-window-drag] :is(a, button) {
+  -webkit-app-region: no-drag;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;

@@ -1789,7 +1789,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'failureReason.AUTH_FAILED': '认证失败',
   'failureReason.OTHER': '其他',
 
-  // ========== 原生（托盘 / 应用菜单 / 对话框 / 更新） ==========
+  // ========== 原生（托盘 / 对话框 / 更新） ==========
   // 托盘菜单：第一行是状态（不可点），后面才是动作；`{port}` 只在运行时有意义。
   // tooltip 在代码里拼成 `应用名 · 状态`，所以这里的状态文案不带应用名。
   // `section.proxy` 是 macOS 原生分组标题（`type: 'header'`，macOS 14+ 才有），其他平台不渲染。
@@ -1817,10 +1817,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'native.tray.startProxy': '启动代理服务',
   'native.tray.stopProxy': '停止代理服务',
   'native.tray.quit': '退出 OSW',
-
-  'native.menu.edit': '编辑',
-  'native.menu.view': '视图',
-  'native.menu.window': '窗口',
 
   'native.error.fatalTitle': 'OSW 运行失败',
   'native.error.fatalDetail': '应用将退出，请检查日志后重试。',

@@ -20,6 +20,10 @@ export interface PlatformCapabilities {
   updater: UpdaterAPI | null
   /** 把渲染层当前生效的亮暗主题告知宿主；浏览器形态不需要。 */
   setTheme: ((theme: 'light' | 'dark') => void) | null
+  /** 订阅原生窗口全屏状态；系统窗口按钮会随全屏状态改变位置或隐藏。 */
+  onFullScreenChanged: ((callback: (fullScreen: boolean) => void) => () => void) | null
+  /** 读取当前是否处于原生全屏，保证订阅建立前已经进入全屏时也能得到正确状态。 */
+  getFullScreenState: (() => Promise<boolean>) | null
   /** 用系统默认方式打开外部链接。 */
   openExternal: (url: string) => void
   /**
@@ -45,6 +49,12 @@ function detectCapabilities(): PlatformCapabilities {
       // `?? null`：老版本的 preload 可能没暴露 updater，缺能力不代表崩。
       updater: electronApi.updater ?? null,
       setTheme: electronApi.setTheme ? theme => electronApi.setTheme?.(theme) : null,
+      onFullScreenChanged: electronApi.onFullScreenChanged
+        ? callback => electronApi.onFullScreenChanged?.(callback) ?? (() => {})
+        : null,
+      getFullScreenState: electronApi.getFullScreenState
+        ? () => electronApi.getFullScreenState!()
+        : null,
       openExternal: url => electronApi.openExternal(url),
       // 同理：preload 与渲染层是两份产物，版本能对不上。
       openDataDirectory: electronApi.openDataDirectory
@@ -57,6 +67,8 @@ function detectCapabilities(): PlatformCapabilities {
     os: detectBrowserOs(),
     updater: null,
     setTheme: null,
+    onFullScreenChanged: null,
+    getFullScreenState: null,
     openExternal: url => {
       if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer')
     },

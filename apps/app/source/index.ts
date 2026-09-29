@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog, session, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, ipcMain, dialog, session, shell } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +11,8 @@ import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
 import { AutoLaunchManager } from './auto-launch'
 import { UpdaterManager, type UpdateState } from './updater'
-import { nativeTranslator, onNativeLocaleChanged, startNativeLanguageSync } from './i18n'
+import { nativeTranslator, startNativeLanguageSync } from './i18n'
+import { installWindowShortcuts } from './window-actions'
 // Vite 将 build/icon.png 打包为 data URL，避免运行时路径解析问题。
 // Windows 任务栏/窗口图标需要位图，PNG 可被 nativeImage 直接识别。
 import windowIconPng from '../build/icon.png?url'
@@ -147,6 +148,8 @@ if (isPrimaryInstance) {
   registerExternalLinkIpc()
   registerRuntimeConfigIpc()
   registerOpenDataDirectoryIpc()
+  registerWindowThemeIpc()
+  registerWindowFullScreenIpc()
 } else {
   console.info('[osw] another instance already owns this profile; exiting')
 }
@@ -267,67 +270,56 @@ function resolveWindowIcon() {
   return nativeImage.createFromDataURL(windowIconPng)
 }
 
+const WINDOW_BACKGROUND = {
+  light: '#fafafa',
+  dark: '#121212',
+} as const
+
+function applyWindowTheme(target: BrowserWindow, theme: 'light' | 'dark'): void {
+  nativeTheme.themeSource = theme
+  target.setBackgroundColor(WINDOW_BACKGROUND[theme])
+  if (process.platform !== 'darwin') {
+    target.setTitleBarOverlay({
+      color: WINDOW_BACKGROUND[theme],
+      symbolColor: theme === 'dark' ? '#f5f5f5' : '#171717',
+      height: 44,
+    })
+  }
+}
+
 /**
- * 安装 macOS 应用菜单。
- *
- * 保留系统应用菜单，否则 Cmd+V / Cmd+Q 等原生快捷键会失效。
- * - Cmd+Q 退出应用（走 before-quit 清理流程）
- * - Cmd+W 关闭窗口（被 tray-manager 拦截为隐藏到菜单栏）
- * - Cmd+M 最小化、Cmd+H 隐藏、Cmd+R 刷新界面
- *
- * 子项都用 `role`，标签由 Electron 按系统语言给出；这里只翻顶层 label。
- * 语言变化时需要重新调用一次，菜单文案是构建期快照。
+ * macOS 不允许应用完全移除菜单栏，系统至少会保留应用菜单。
+ * 窗口动作不再通过系统菜单提供，这里只注册快捷键，不再安装
+ * File/Edit/View/Window 这组默认菜单，只保留系统要求存在的应用菜单。
  */
 function installApplicationMenu(): void {
-  const t = nativeTranslator()
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    {
-      label: app.getName(),
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    },
-    {
-      label: t('native.menu.edit'),
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ],
-    },
-    {
-      label: t('native.menu.view'),
-      submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-        { role: 'toggleDevTools', visible: isDevelopment },
-      ],
-    },
-    {
-      label: t('native.menu.window'),
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { role: 'close' },
-      ],
-    },
-  ]))
+  Menu.setApplicationMenu(
+    process.platform === 'darwin'
+      ? Menu.buildFromTemplate([{ role: 'appMenu' }])
+      : null,
+  )
+}
+
+function registerWindowThemeIpc(): void {
+  ipcMain.on('appearance:set-theme', (_event, theme: unknown) => {
+    if (theme !== 'light' && theme !== 'dark') return
+    if (win) applyWindowTheme(win, theme)
+  })
+}
+
+function registerWindowFullScreenEvents(target: BrowserWindow): void {
+  const notify = () => {
+    if (!target.isDestroyed()) {
+      target.webContents.send('window:full-screen-changed', target.isFullScreen())
+    }
+  }
+  target.on('enter-full-screen', notify)
+  target.on('leave-full-screen', notify)
+  target.webContents.once('did-finish-load', notify)
+}
+
+function registerWindowFullScreenIpc(): void {
+  ipcMain.handle('window:get-full-screen-state', () => win?.isFullScreen() ?? false)
 }
 
 function createWindow() {
@@ -339,6 +331,24 @@ function createWindow() {
     minHeight: 600,
     autoHideMenuBar: true,
     icon: resolveWindowIcon(),
+    backgroundColor: nativeTheme.shouldUseDarkColors
+      ? WINDOW_BACKGROUND.dark
+      : WINDOW_BACKGROUND.light,
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 14 },
+        }
+      : {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: nativeTheme.shouldUseDarkColors
+              ? WINDOW_BACKGROUND.dark
+              : WINDOW_BACKGROUND.light,
+            symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
+            height: 44,
+          },
+        }),
     // 开机自启时不闪窗口；窗口仍然创建（托盘要挂着它接 close 事件），等托盘点开再 show。
     show: !startHidden,
     webPreferences: {
@@ -348,11 +358,11 @@ function createWindow() {
     },
   })
 
-  // 移除默认菜单栏
+  installWindowShortcuts(win, { enableDevTools: isDevelopment })
+  applyWindowTheme(win, nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+  registerWindowFullScreenEvents(win)
+
   win.setMenuBarVisibility(false)
-  if (process.platform === 'darwin') {
-    installApplicationMenu()
-  }
 
   win.webContents.once('did-fail-load', (_event, errorCode, errorDescription) => {
     const failed = nativeTranslator()('native.error.rendererLoadFailed', {
@@ -397,7 +407,12 @@ function focusExistingInstance(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  // 开发态直接跑 Electron 时，菜单栏会显示宿主程序名；显式覆盖它，
+  // 让开发窗口与打包后的 OSW 表现一致（打包态的 productName 也已经是 OSW）。
+  app.setName('OSW')
   await app.whenReady()
+  // 渲染层不再绘制窗口菜单；系统菜单栏只保留 macOS 必须存在的应用菜单。
+  installApplicationMenu()
 
   // 先接管 console 再输出任何东西：横幅是启动期唯一一组「服务之外」的信息
   // （Electron 版本、数据目录、进程号），漏掉它就等于这次转发没做。
@@ -437,11 +452,7 @@ async function bootstrap(): Promise<void> {
   // （横幅及启动期的报错）在这里一次性补送，之后逐行实时过去。
   setLogSink(forwardRuntimeLog)
 
-  // 托盘 / 应用菜单 / 原生对话框都在主进程，语言真相源仍是 settings.language；
-  // 数据库还读不出来时退回 app.getLocale()。必须在服务端启动后同步。
-  onNativeLocaleChanged(() => {
-    if (process.platform === 'darwin') installApplicationMenu()
-  })
+  // 托盘与原生对话框的语言真相源仍是 settings.language；数据库还读不出来时退回系统语言。
   await startNativeLanguageSync()
 
   try {

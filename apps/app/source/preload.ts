@@ -80,6 +80,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 主题保存在渲染层的本地偏好里，主进程不能直接读；渲染层在主题变化时把生效值
   // 推过来，只用于托盘面板与主窗口保持一致。
   setTheme: (theme: 'light' | 'dark'): void => ipcRenderer.send('appearance:set-theme', theme),
+  onFullScreenChanged: (callback: (fullScreen: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen)
+    ipcRenderer.on('window:full-screen-changed', listener)
+    return () => ipcRenderer.removeListener('window:full-screen-changed', listener)
+  },
+  getFullScreenState: (): Promise<boolean> => ipcRenderer.invoke('window:get-full-screen-state'),
   updater: updaterApi,
 })
 

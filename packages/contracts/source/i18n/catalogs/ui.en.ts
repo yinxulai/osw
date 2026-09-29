@@ -1787,7 +1787,7 @@ export const uiEn = {
   'failureReason.AUTH_FAILED': 'Authentication failed',
   'failureReason.OTHER': 'Other',
 
-  // ========== 原生（托盘 / 应用菜单 / 对话框 / 更新） ==========
+  // ========== 原生（托盘 / 对话框 / 更新） ==========
   // 主进程拿不到渲染层的 context，但两者必须用同一种语言：
   // 语言真相源统一是 `settings.language`，数据库读不出来时才退回 `app.getLocale()`。
   // 托盘菜单：第一行是状态（不可点），后面才是动作；`{port}` 只在运行时有意义。
@@ -1817,11 +1817,6 @@ export const uiEn = {
   'native.tray.startProxy': 'Start the proxy server',
   'native.tray.stopProxy': 'Stop the proxy server',
   'native.tray.quit': 'Quit OSW',
-
-  // role 菜单的标签由系统提供，这里只翻顶层 label。
-  'native.menu.edit': 'Edit',
-  'native.menu.view': 'View',
-  'native.menu.window': 'Window',
 
   'native.error.fatalTitle': 'OSW failed to run',
   'native.error.fatalDetail': 'The app will exit. Check the logs and try again.',

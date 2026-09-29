@@ -355,7 +355,7 @@ function RequestStage(props: RequestStageProps) {
   const renderedSections = props.loading ? props.sections : sections
 
   // 阶段是这条链路上唯一的一层「外壳」：只留边框，不再铺灰底。
-  // 铺灰底会和 Sheet 的 bg-card 形成「白 → 灰 → 白 → 灰」的交替填充，
+  // 铺灰底会和 Sheet 的 bg-background 形成交替填充，
   // 而白 100% 与灰 92% 只差 8 点明度，边界几乎看不见，整屏就糊成一片。
   return (
     <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
@@ -703,7 +703,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   if (selectedAttempt || clientContent || props.loading) {
     state = (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="sticky top-0 z-10 bg-card/95 px-4 py-3 backdrop-blur">
+        <div className="sticky top-0 z-10 bg-background/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden />
@@ -857,7 +857,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
 
   return (
     <Sheet open={Boolean(props.selectedAttemptId)} onOpenChange={open => !open && props.onClose()}>
-      <SheetContent side="right" className="flex h-full w-full max-w-3xl! flex-col gap-0 border-0 bg-card p-0 shadow-none" onOpenAutoFocus={event => event.preventDefault()}>
+      <SheetContent side="right" className="flex h-full w-full max-w-3xl! flex-col gap-0 border-0 bg-background p-0 shadow-none" onOpenAutoFocus={event => event.preventDefault()}>
         <SheetHeader className="shrink-0 border-b border-border/50 px-4 py-3.5 pr-12">
           <SheetTitle className="flex flex-wrap items-center gap-2">
             <span>{selectedAttempt ? t('requestLogs.contents.title', { index: selectedAttempt.attemptIndex + 1, total: props.attempts.length }) : t('requestLogs.contents.titleFallback')}</span>

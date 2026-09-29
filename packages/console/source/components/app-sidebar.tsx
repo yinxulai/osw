@@ -1,38 +1,19 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import {
-  ChartColumnIncreasing,
-  ClipboardList,
-  Cog,
-  Database,
-  GitBranch,
-  ListOrdered,
-  Pin,
-  PinOff,
-  ScrollText,
-  SlidersHorizontal,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react'
+import { Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths, type AppNavPath } from '@/routing/routes'
+import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
+import { type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 
 export type Theme = 'light' | 'dark'
 export type ThemeMode = 'system' | Theme
 
-interface NavItem {
-  /** 目标路由路径；同时作为 React key 与键盘聚焦态的身份。 */
-  to: AppNavPath
-  labelKey: UiCatalogKey
-  icon: LucideIcon
-  sectionKey: UiCatalogKey
-}
-
 interface AppSidebarProps {
+  showBrand: boolean
   theme: Theme
   proxyRunning: boolean
   proxyPort?: number
@@ -41,18 +22,6 @@ interface AppSidebarProps {
   pinned: boolean
   onTogglePinned: () => void
 }
-
-const baseNavItems: NavItem[] = [
-  { to: routePaths.router, labelKey: 'nav.page.router', icon: GitBranch, sectionKey: 'nav.section.primary' },
-  { to: routePaths.logicalModels, labelKey: 'nav.page.logicalModels', icon: ListOrdered, sectionKey: 'nav.section.primary' },
-  { to: routePaths.modelManagement, labelKey: 'nav.page.providers', icon: Database, sectionKey: 'nav.section.primary' },
-  { to: routePaths.overview, labelKey: 'nav.page.overview', icon: ChartColumnIncreasing, sectionKey: 'nav.section.data' },
-  { to: routePaths.requestLogs, labelKey: 'nav.page.requests', icon: ClipboardList, sectionKey: 'nav.section.data' },
-  { to: routePaths.requestRewriteRules, labelKey: 'nav.page.rules', icon: SlidersHorizontal, sectionKey: 'nav.section.advanced' },
-  { to: routePaths.clientConfig, labelKey: 'nav.page.clientConfig', icon: Wrench, sectionKey: 'nav.section.system' },
-  { to: routePaths.logs, labelKey: 'nav.page.logs', icon: ScrollText, sectionKey: 'nav.section.system' },
-  { to: routePaths.runtimeSettings, labelKey: 'nav.page.settings', icon: Cog, sectionKey: 'nav.section.system' },
-]
 
 /**
  * 折叠轨道上的文字开关。
@@ -80,7 +49,7 @@ export function AppSidebar(props: AppSidebarProps) {
   const [hovered, setHovered] = useState(false)
   const expanded = props.pinned || hovered
   const [focusedKey, setFocusedKey] = useState<AppNavPath | null>(null)
-  const navSections = baseNavItems.reduce<Array<{ key: UiCatalogKey; items: NavItem[] }>>((sections, item) => {
+  const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
     if (currentSection?.key === item.sectionKey) {
       currentSection.items.push(item)
@@ -98,20 +67,28 @@ export function AppSidebar(props: AppSidebarProps) {
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       className={cn(
-        'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
-        'transition-[width] duration-200 ease-out motion-reduce:transition-none',
+        'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
+        'transition-[width,background-color,box-shadow,border-radius] duration-200 ease-out motion-reduce:transition-none',
+        props.pinned ? 'bg-background' : 'bg-transparent',
+        !props.pinned && expanded && [
+          'rounded-r-xl border-r-[0.5px] border-components-panel-border',
+          'bg-background/95 backdrop-blur-[12px]',
+          'shadow-[16px_0_36px_-34px_rgba(0,0,0,0.6)]',
+        ],
         expanded && 'w-56',
       )}
     >
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
-        <img src="icon.svg" alt="" className="size-6 shrink-0" />
-        <div className="min-w-0">
-          <h1 className={cn('system-sm-semibold text-sidebar-foreground', revealClassName(expanded))}>{t('app.windowTitle')}</h1>
-          <p className={cn('font-mono system-2xs-medium-uppercase tracking-[1.2px] text-sidebar-foreground/60', revealClassName(expanded))}>{t('app.tagline')}</p>
+      {props.showBrand && (
+        <div className="flex h-16 shrink-0 items-center gap-2.5 px-3">
+          <img src="icon.svg" alt="" className="size-6 shrink-0" />
+          <div className="min-w-0">
+            <h1 className={cn('system-sm-semibold text-sidebar-foreground', revealClassName(expanded))}>{t('app.windowTitle')}</h1>
+            <p className={cn('font-mono system-2xs-medium-uppercase tracking-[1.2px] text-sidebar-foreground/60', revealClassName(expanded))}>{t('app.tagline')}</p>
+          </div>
         </div>
-      </div>
+      )}
 
-      <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5">
+      <nav className={cn('min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5', !props.showBrand && 'pt-2.5')}>
         {navSections.map(section => (
           <section key={section.key}>
             {/*

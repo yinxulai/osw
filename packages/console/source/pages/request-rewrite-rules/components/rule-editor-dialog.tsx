@@ -104,7 +104,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     <Sheet open={props.open} onOpenChange={open => open ? props.onOpenChange(true) : cancel()}>
       <SheetContent
         side="right"
-        className="flex h-full w-full! max-w-3xl! flex-col gap-0 border-0 bg-card p-0 text-card-foreground shadow-none"
+        className="flex h-full w-full! max-w-3xl! flex-col gap-0 border-0 bg-background p-0 text-foreground shadow-none"
         onPointerDownOutside={event => event.preventDefault()}
       >
         <SheetHeader className="shrink-0 px-4 py-3.5 pr-12">
@@ -188,7 +188,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
           onOpenChange={open => !open && setDeleteTestCaseId(undefined)}
         />
 
-        <SheetFooter className="mt-auto flex shrink-0 flex-row items-center justify-end gap-2 border-t border-border/50 bg-card px-4 py-3">
+        <SheetFooter className="mt-auto flex shrink-0 flex-row items-center justify-end gap-2 border-t border-border/50 bg-background px-4 py-3">
           {props.dirty
             ? <span className="mr-auto hidden system-xs-medium text-text-warning sm:inline">{t('rules.editor.dirty')}</span>
             : <span className="mr-auto hidden system-xs-regular text-text-tertiary sm:inline">{t('rules.editor.clean')}</span>}
