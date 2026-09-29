@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useTranslation } from '@/i18n/provider'
+import { cn } from '@/lib/utils'
 import { PROTOCOL_LABELS, type RequestRewriteRule, type RuleStatusFilter } from '../types'
 
 interface RulesTableProps {
@@ -57,7 +58,7 @@ export function RulesTable(props: RulesTableProps) {
       </div>
 
       <div className="overflow-x-auto">
-        <Table className="w-full min-w-205 text-left text-xs">
+        <Table className={cn('w-full text-left text-xs', props.rules.length > 0 && 'min-w-205')}>
           <TableHeader className={tableHeaderClass}>
             <TableRow>
               <TableHead className="px-4 py-2">{t('rules.table.column.rule')}</TableHead>

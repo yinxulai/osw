@@ -371,12 +371,7 @@ export function OverviewPage() {
       <PageHeader
         title={providerId ? t('overview.provider.title', { provider: selectedProviderName ?? t('overview.provider.unknown') }) : t('overview.title')}
         description={providerId ? t('overview.provider.description') : t('overview.description')}
-        breadcrumbs={providerId
-          ? [
-            { label: t('overview.provider.breadcrumb'), onClick: () => void navigate({ to: routePaths.overview, search: { range } }) },
-            { label: selectedProviderName ?? t('overview.provider.unknown') },
-          ]
-          : undefined}
+        breadcrumb={providerId ? selectedProviderName ?? t('overview.provider.unknown') : undefined}
         actions={(
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setBillOpen(true)}>

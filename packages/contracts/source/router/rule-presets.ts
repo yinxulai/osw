@@ -1,7 +1,9 @@
 import {
+  BUILTIN_ROUTE_RULE_NAMES,
   createDefaultRouteRuleSet,
   ROUTE_RULE_DEFAULT_VARIABLE_PATH,
   ROUTE_RULE_SET_VERSION,
+  type BuiltinRouteRuleId,
   type RouteRule,
   type RouteRuleCondition,
   type RouteRuleSet,
@@ -28,9 +30,9 @@ import type { ConditionOperator, RuntimeLogicalModel } from './types'
  * 2. **规则 id 固定**：菜单高亮哪一项靠 `isSameRouteRuleSet` 逐字节比 JSON（不含随机 id），
  *    用 `createRouteRule()` 那套随机 id 生成的话，每次生成都不一样，「当前套的是哪个预设」永远匹配不上。
  *
- * 预设生成的**内容**（规则名、条件取值）会随保存落进数据库、被代理直接执行，属于用户数据而非界面文案，
- * 因此一律不参与界面本地化；只有预设本身的名称与说明（纯展示）放在渲染层目录里
- * （`pages/router/rules/rules-preset-text.ts`）。
+ * 预设生成的**内容**（条件取值、落点）会随保存落进数据库、被代理直接执行，属于用户数据；
+ * 规则名是预设内容的稳定原文，也不能随语言变化，否则完整比对与保存去重会把同一预设认成两份。
+ * 控制台按固定 `id + name` 识别这些规则，并在渲染层完成名称本地化。
  */
 
 /** 内置规则预设的标识符集合。展示文案不在这里，而在渲染层的 `pages/router/rules/rules-preset-text.ts`。 */
@@ -56,11 +58,11 @@ function literalCondition(fieldPath: string, operator: ConditionOperator, value:
   }
 }
 
-/** 固定落点的规则：`fixed` 是规则表里最常见也最好读的一种落点。 */
-function fixedRule(id: string, name: string, conditions: RouteRuleCondition[], logicalModelIds: string[]): RouteRule {
+/** 固定落点的内置规则：名称从稳定原文表派生，展示层再按界面语言翻译。 */
+function fixedRule(id: BuiltinRouteRuleId, conditions: RouteRuleCondition[], logicalModelIds: string[]): RouteRule {
   return {
     id,
-    name,
+    name: BUILTIN_ROUTE_RULE_NAMES[id],
     enabled: true,
     logicalOperator: 'and',
     conditions,
@@ -79,8 +81,8 @@ export function createClientSourceRuleSet(models: RuntimeLogicalModel[]): RouteR
   return {
     version: ROUTE_RULE_SET_VERSION,
     rules: [
-      fixedRule('rule-client-cursor', 'Cursor 客户端', [literalCondition('request.headers.user-agent', 'contains', 'Cursor')], resolveLandingModelIds(pool, 0)),
-      fixedRule('rule-client-claude-cli', 'Claude CLI 客户端', [literalCondition('request.headers.user-agent', 'contains', 'claude-cli')], resolveLandingModelIds(pool, 1)),
+      fixedRule('rule-client-cursor', [literalCondition('request.headers.user-agent', 'contains', 'Cursor')], resolveLandingModelIds(pool, 0)),
+      fixedRule('rule-client-claude-cli', [literalCondition('request.headers.user-agent', 'contains', 'claude-cli')], resolveLandingModelIds(pool, 1)),
     ],
     fallbackModelIds: resolveLandingModelIds(pool, null),
   }
@@ -101,8 +103,8 @@ export function createModelPrefixRuleSet(models: RuntimeLogicalModel[]): RouteRu
   return {
     version: ROUTE_RULE_SET_VERSION,
     rules: [
-      fixedRule('rule-model-claude', 'Claude 模型', [literalCondition('request.body.model', 'regex', '^claude')], resolveLandingModelIds(pool, 0)),
-      fixedRule('rule-model-openai', 'GPT / o 系列模型', [literalCondition('request.body.model', 'regex', '^(gpt|o[1-9])')], resolveLandingModelIds(pool, 1)),
+      fixedRule('rule-model-claude', [literalCondition('request.body.model', 'regex', '^claude')], resolveLandingModelIds(pool, 0)),
+      fixedRule('rule-model-openai', [literalCondition('request.body.model', 'regex', '^(gpt|o[1-9])')], resolveLandingModelIds(pool, 1)),
     ],
     fallbackModelIds: resolveLandingModelIds(pool, null),
   }
@@ -120,8 +122,8 @@ export function createProtocolRoutingRuleSet(models: RuntimeLogicalModel[]): Rou
   return {
     version: ROUTE_RULE_SET_VERSION,
     rules: [
-      fixedRule('rule-protocol-anthropic', 'Anthropic Messages 请求', [literalCondition('route.protocol', 'equals', 'anthropic-messages')], resolveLandingModelIds(pool, 0)),
-      fixedRule('rule-protocol-responses', 'OpenAI Responses 请求', [literalCondition('route.protocol', 'equals', 'openai-responses')], resolveLandingModelIds(pool, 1)),
+      fixedRule('rule-protocol-anthropic', [literalCondition('route.protocol', 'equals', 'anthropic-messages')], resolveLandingModelIds(pool, 0)),
+      fixedRule('rule-protocol-responses', [literalCondition('route.protocol', 'equals', 'openai-responses')], resolveLandingModelIds(pool, 1)),
     ],
     fallbackModelIds: resolveLandingModelIds(pool, null),
   }

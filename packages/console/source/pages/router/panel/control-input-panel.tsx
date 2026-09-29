@@ -90,15 +90,15 @@ export function ControlInputPanel(props: NodePanelProps) {
                         options: item.options?.length
                           ? item.options
                           : [
-                            { label: 'Balanced', value: 'balanced' },
-                            { label: 'Fast', value: 'fast' },
+                            { label: t('router.panel.defaultOptionBalanced'), value: 'balanced' },
+                            { label: t('router.panel.defaultOptionFast'), value: 'fast' },
                           ],
                       }
                     }),
                   }
                   : current)}
               >
-                <SelectTrigger className="w-full"><SelectValue placeholder="type" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.controlKind')} /></SelectTrigger>
                 <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                   <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="switch">{t('router.panel.controlKindSwitch')}</SelectItem>
                   <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="select">{t('router.panel.controlKindSelect')}</SelectItem>
@@ -134,7 +134,7 @@ export function ControlInputPanel(props: NodePanelProps) {
                     : (control.options?.[0]?.value ?? '')}
                   onValueChange={value => patchControl(control.id, { defaultValue: value })}
                 >
-                  <SelectTrigger className="w-full"><SelectValue placeholder="default" /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.defaultValue')} /></SelectTrigger>
                   <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                     {(control.options ?? []).map(option => (
                       <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={option.value} value={option.value}>{option.label}</SelectItem>

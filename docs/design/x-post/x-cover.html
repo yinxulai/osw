@@ -14,7 +14,7 @@
      所以是 ../../../node_modules/... —— 移动文件后必须同步改，写错的后果是
      静默回退到 Segoe UI（渲染出来「很粗糙」，但控制台不报错到脸上）。
      仓库只装了 @fontsource-variable/geist，没有 geist-mono，别给 mono 另写 @font-face。
-  2. 右侧是产品真实截图 snapshot/en/dark/01-logical-models.png，按 1.4 倍放大后出血裁切，
+  2. 右侧是产品真实完整窗口截图 snapshot/en/dark/01-logical-models.png，等比铺满后向右裁切，
      只留 border-top + border-left。截图本身要在仓库里，换机器/换目录会裂。
 -->
 <style>
@@ -144,11 +144,10 @@
 
   /* ---------- 右栏：应用截图，左+上出血 ---------- */
 
-  /* 可见源区：snapshot/en/dark/01-logical-models.png 的 x ∈ [0, 570]、y ∈ [12, 592]。
-     1139 × 696 的源图 × 1.4 = 1595 × 974。
-     横向切开的位置（源图 x=570）落在「Standby 徽章右缘 558」和「卡片右框 586」之间；
-     纵向（源图 y=592）落在第 5 行与第 6 行的行间发丝线下方 —— 两刀都不切字。
-     容器 802..1614 × 88..940，右边和底下都落在画布外，天然裁掉。 */
+  /* 可见源区：snapshot/en/dark/01-logical-models.png 的 x ∈ [0, 1525]、y ∈ [0, 1600]。
+     2400 × 1600 的完整窗口图按高度铺满 852px，横向只露出左边约 2/3。
+     这样保留 macOS 标题栏、侧栏和第一张逻辑模型卡，右边与底下都自然落在画布外。
+     容器 802..1614 × 88..940。 */
   .shot {
     position: absolute;
     left: 802px;
@@ -165,9 +164,9 @@
   .shot img {
     position: absolute;
     left: 0;
-    top: -17px;
-    width: 1595px;
-    height: auto;
+    top: 0;
+    width: auto;
+    height: 852px;
     display: block;
   }
 </style>

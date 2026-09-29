@@ -271,9 +271,13 @@ function resolveWindowIcon() {
 }
 
 const WINDOW_BACKGROUND = {
-  light: '#fafafa',
-  dark: '#121212',
+  light: '#f5f5f5',
+  dark: '#0d0d0d',
 } as const
+
+// 与 renderer 里的 `WindowTitlebar` (`h-9`) 保持一致。
+const WINDOW_TITLEBAR_HEIGHT = 36
+const MAC_TRAFFIC_LIGHT_Y = 12
 
 function applyWindowTheme(target: BrowserWindow, theme: 'light' | 'dark'): void {
   nativeTheme.themeSource = theme
@@ -282,7 +286,7 @@ function applyWindowTheme(target: BrowserWindow, theme: 'light' | 'dark'): void 
     target.setTitleBarOverlay({
       color: WINDOW_BACKGROUND[theme],
       symbolColor: theme === 'dark' ? '#f5f5f5' : '#171717',
-      height: 44,
+      height: WINDOW_TITLEBAR_HEIGHT,
     })
   }
 }
@@ -315,7 +319,6 @@ function registerWindowFullScreenEvents(target: BrowserWindow): void {
   }
   target.on('enter-full-screen', notify)
   target.on('leave-full-screen', notify)
-  target.webContents.once('did-finish-load', notify)
 }
 
 function registerWindowFullScreenIpc(): void {
@@ -335,9 +338,9 @@ function createWindow() {
       ? WINDOW_BACKGROUND.dark
       : WINDOW_BACKGROUND.light,
     ...(process.platform === 'darwin'
-      ? {
+        ? {
           titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 14 },
+          trafficLightPosition: { x: 14, y: MAC_TRAFFIC_LIGHT_Y },
         }
       : {
           titleBarStyle: 'hidden' as const,
@@ -346,7 +349,7 @@ function createWindow() {
               ? WINDOW_BACKGROUND.dark
               : WINDOW_BACKGROUND.light,
             symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
-            height: 44,
+            height: WINDOW_TITLEBAR_HEIGHT,
           },
         }),
     // 开机自启时不闪窗口；窗口仍然创建（托盘要挂着它接 close 事件），等托盘点开再 show。

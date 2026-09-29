@@ -39,7 +39,7 @@ export function BillContent(props: BillContentProps) {
     <>
       <header className="text-center">
         <h1 className="font-semibold text-sm uppercase tracking-[0.2em]">{t('overview.bill.header')}</h1>
-        <p className="mt-1 text-[0.625rem] uppercase tracking-widest opacity-60">OSW Local AI Gateway</p>
+        <p className="mt-1 text-[0.625rem] uppercase tracking-widest opacity-60">{t('overview.bill.brand')}</p>
       </header>
 
       <div className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[0.7rem] leading-5 opacity-75">
@@ -99,14 +99,14 @@ export function BillContent(props: BillContentProps) {
               <span className="flex items-center justify-center scale-x-125">S</span>
               <span className="flex items-center justify-center scale-x-125">W</span>
             </span>
-            <span className="mt-1 inline-flex w-32 justify-center text-[0.5rem] font-semibold tracking-[0.08em] leading-none">Local AI Gateway</span>
+            <span className="mt-1 inline-flex w-32 justify-center text-[0.5rem] font-semibold tracking-[0.08em] leading-none">{t('overview.bill.gateway')}</span>
           </span>
         </div>
       </dl>
 
       <div className="mt-8 flex flex-col items-center gap-2">
         {qrDataUrl
-          ? <img src={qrDataUrl} alt="OSW QR" className="h-24 w-24 rounded-sm border border-black/20 bg-white p-1" draggable={false} />
+          ? <img src={qrDataUrl} alt={t('overview.bill.qrAlt')} className="h-24 w-24 rounded-sm border border-black/20 bg-white p-1" draggable={false} />
           : <div className="h-24 w-24 rounded-sm border border-black/20 bg-white" />}
         <p className="text-[0.625rem] tracking-wide opacity-70">https://osw.yinxulai.com/</p>
       </div>

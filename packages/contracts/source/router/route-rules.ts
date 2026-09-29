@@ -55,6 +55,25 @@ export const MAX_ROUTE_RULE_VERSIONS = 30
 export const ROUTE_RULE_DEFAULT_VARIABLE_PATH = 'request.body.model'
 
 /**
+ * 内置规则落库时使用的稳定名称。
+ *
+ * 名称本身不参与路由判定，但它是预设内容的一部分，所以不能随界面语言变化：
+ * 否则同一份预设会在不同语言下生成两个不同的规则表，`isSameRouteRuleSet` 与保存去重都会失效。
+ * 控制台按 `id + name` 识别这些原文并在渲染层本地化。
+ */
+export const BUILTIN_ROUTE_RULE_NAMES = {
+  'rule-model-direct': '请求模型是逻辑模型就直连',
+  'rule-client-cursor': 'Cursor 客户端',
+  'rule-client-claude-cli': 'Claude CLI 客户端',
+  'rule-model-claude': 'Claude 模型',
+  'rule-model-openai': 'GPT / o 系列模型',
+  'rule-protocol-anthropic': 'Anthropic Messages 请求',
+  'rule-protocol-responses': 'OpenAI Responses 请求',
+} as const
+
+export type BuiltinRouteRuleId = keyof typeof BUILTIN_ROUTE_RULE_NAMES
+
+/**
  * 规则的落点：命中后把哪些逻辑模型交给调度器。
  *
  * 与图里的逻辑模型选择节点同义（`fixed` 取指定列表，`variable` 把字段取值当逻辑模型 id），
@@ -287,7 +306,7 @@ export function createDefaultRouteRuleSet(models: RuntimeLogicalModel[]): RouteR
     rules: [
       {
         id: 'rule-model-direct',
-        name: '请求模型是逻辑模型就直连',
+        name: BUILTIN_ROUTE_RULE_NAMES['rule-model-direct'],
         enabled: true,
         logicalOperator: 'and',
         conditions: [

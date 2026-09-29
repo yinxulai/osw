@@ -43,18 +43,16 @@ export function getPlatformCapabilities(): PlatformCapabilities {
 function detectCapabilities(): PlatformCapabilities {
   const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI
   if (electronApi) {
+    const { getFullScreenState, onFullScreenChanged, setTheme } = electronApi
+
     return {
       name: 'electron',
       os: normalizeOs(electronApi.platform),
       // `?? null`：老版本的 preload 可能没暴露 updater，缺能力不代表崩。
       updater: electronApi.updater ?? null,
-      setTheme: electronApi.setTheme ? theme => electronApi.setTheme?.(theme) : null,
-      onFullScreenChanged: electronApi.onFullScreenChanged
-        ? callback => electronApi.onFullScreenChanged?.(callback) ?? (() => {})
-        : null,
-      getFullScreenState: electronApi.getFullScreenState
-        ? () => electronApi.getFullScreenState!()
-        : null,
+      setTheme: setTheme ? theme => setTheme(theme) : null,
+      onFullScreenChanged: onFullScreenChanged ? callback => onFullScreenChanged(callback) : null,
+      getFullScreenState: getFullScreenState ? () => getFullScreenState() : null,
       openExternal: url => electronApi.openExternal(url),
       // 同理：preload 与渲染层是两份产物，版本能对不上。
       openDataDirectory: electronApi.openDataDirectory

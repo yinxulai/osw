@@ -30,7 +30,7 @@ export function OutputPanel(props: NodePanelProps) {
             ? { ...current, summaryLevel: value as OutputNode['summaryLevel'] }
             : current)}
         >
-          <SelectTrigger className="w-full"><SelectValue placeholder="summary" /></SelectTrigger>
+          <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.summaryLevel')} /></SelectTrigger>
           <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
             <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="brief">{t('router.panel.summaryBrief')}</SelectItem>
             <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="detailed">{t('router.panel.summaryDetailed')}</SelectItem>

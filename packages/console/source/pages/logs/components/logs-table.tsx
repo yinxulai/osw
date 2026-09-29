@@ -102,8 +102,8 @@ export function LogsTable(props: LogsTableProps) {
   }
 
   return (
-    <TableFrame>
-      <div className="max-h-[calc(100vh-190px)] overflow-auto">
+    <TableFrame className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <Table className="w-full table-fixed text-xs">
           <TableHeader className={cn('sticky top-0 z-10 bg-card/95 backdrop-blur-sm', tableHeaderClass)}>
             <TableRow className="h-8">

@@ -200,7 +200,7 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
       onDragEnd={event => void onDragEnd(event)}
     >
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-        <div className="max-h-96 overflow-x-auto overflow-y-auto">
+        <div className="overflow-x-auto">
           {rows.map(row => (
             <SortableProviderModel key={row.model.id} id={row.model.id}>
               {(handleProps, dragging) => (

@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { getPlatformCapabilities, type PlatformOs } from '@/platform/capabilities'
-import { BreadcrumbTrail, usePageBreadcrumbsValue } from '@/components/breadcrumbs'
+import { BreadcrumbTrail, usePageBreadcrumbs } from '@/components/breadcrumbs'
 import { useWindowFullScreen } from '@/hooks/use-window-full-screen'
 
 interface WindowTitlebarProps {
@@ -20,7 +20,7 @@ export function WindowTitlebar(props: WindowTitlebarProps) {
   const t = useTranslation()
   const platform = getPlatformCapabilities().os
   const fullScreen = useWindowFullScreen()
-  const breadcrumbs = usePageBreadcrumbsValue()
+  const breadcrumbs = usePageBreadcrumbs()
   const trail = breadcrumbs.length > 0 ? breadcrumbs : [{ label: props.title }]
 
   return (
@@ -28,7 +28,7 @@ export function WindowTitlebar(props: WindowTitlebarProps) {
       data-window-drag
       aria-label={props.title}
       className={cn(
-        'flex h-11 shrink-0 select-none items-center gap-2.5 bg-background transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+        'flex h-9 shrink-0 select-none items-center gap-2.5 bg-sidebar text-sidebar-foreground transition-[padding] duration-200 ease-out motion-reduce:transition-none',
         resolveWindowTitlebarInsets(platform, fullScreen),
       )}
     >

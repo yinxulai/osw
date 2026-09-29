@@ -40,6 +40,7 @@ export default defineConfig({
       'apps/app/source/**/*.test.{ts,tsx}',
       'apps/apis/source/**/*.test.{ts,tsx}',
       'apps/cli/source/**/*.test.{ts,tsx}',
+      'apps/www/source/**/*.test.{ts,tsx}',
       'packages/core/source/**/*.test.{ts,tsx}',
       'packages/contracts/source/**/*.test.{ts,tsx}',
       'packages/console/source/**/*.test.{ts,tsx}',

@@ -13,9 +13,9 @@ import { SectionHeading } from './section-heading'
  * 全站唯一一处「证明它长什么样」的地方：前面几节都在讲产品做什么，
  * 这一节直接给图 —— 用户在下载之前就该知道界面是什么密度、什么色调。
  *
- * 版式是「一张大图 + 一份目录」，不是五张平铺。理由是高度：五张 1139×696
+ * 版式是「一张大图 + 一份目录」，不是五张平铺。理由是高度：五张 2400×1600
  * 的图铺进两列，一屏能滚出三屏，而读者滚完之后其实哪一张都没看清。这里一次
- * 只放大一张（宽度让给目录之后约 500px 高，整节从 1500px 降到 700px 上下），
+ * 只放大一张（宽度让给目录之后约 550px 高，整节从 1500px 降到 800px 上下），
  * 右边用五个页面名把全部内容列出来 —— 「产品一共有几个页面」一眼仍然看得见。
  *
  * 图会跟随页面主题在暗亮两套里切，套一层 `ring-gradient` 就够和页面底色分开；
@@ -79,7 +79,7 @@ export function ScreenshotsSection(props: ScreenshotsSectionProps) {
               src={active.src}
               alt={labelOf(active)}
               decoding="async"
-              className="block aspect-[1139/696] w-full object-cover object-top"
+              className="block aspect-[3/2] w-full object-cover object-top"
             />
           </div>
 

@@ -18,6 +18,7 @@ import { useTranslation } from '@/i18n/provider'
 import type { RouteRule } from '@common/router/route-rules'
 import type { LogicalModel } from '@common/schemas'
 import { PANEL_POPUP_ITEM_CLASSNAME, PANEL_POPUP_SURFACE_CLASSNAME } from '../panel/panel-fields'
+import { builtinRouteRuleName } from './builtin-rule-name'
 import { RuleEditorPanel } from './rule-editor-panel'
 import { describeConditions, describeLanding } from './rule-summary'
 
@@ -109,7 +110,9 @@ function RuleRowBody(props: RuleRowBodyProps) {
           />
           <span className="grid min-w-0 flex-1 gap-0.5">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate system-xs-medium text-text-primary">{rule.name || t('router.rules.unnamed')}</span>
+              <span className="truncate system-xs-medium text-text-primary">
+                {builtinRouteRuleName(rule, t) || t('router.rules.unnamed')}
+              </span>
               {/* 条数挨着规则名，而不是跟在条件句子后面。跟在后面时那条句子先被截断，
                   角标就成了「省略号 + 一个没有主语的数字」，而它想说的正是「后面还有两条」。 */}
               {rule.conditions.length > 1 && (

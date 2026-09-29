@@ -13,6 +13,7 @@ import { createRouteRuleCondition, type RouteRule } from '@common/router/route-r
 import type { ConditionLogicalOperator } from '@common/router/types'
 import type { LogicalModel } from '@common/schemas'
 import { PANEL_POPUP_ITEM_CLASSNAME, PANEL_POPUP_SURFACE_CLASSNAME } from '../panel/panel-fields'
+import { builtinRouteRuleName } from './builtin-rule-name'
 import { ConditionRow } from './condition-row'
 import { LandingEditor, RuleFieldLabel } from './landing-editor'
 
@@ -54,7 +55,7 @@ export function RuleEditorPanel(props: RuleEditorPanelProps) {
           <Input
             className="h-8"
             autoFocus={autoFocusName}
-            value={rule.name}
+            value={builtinRouteRuleName(rule, t)}
             maxLength={NAME_MAX_LENGTH}
             placeholder={t('router.rules.editor.namePlaceholder')}
             onChange={event => onChange({ name: event.target.value })}

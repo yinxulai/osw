@@ -4,6 +4,7 @@ import App from '@/App'
 import { ErrorFallback } from '@/components/error-boundary'
 import { routePaths } from './routes'
 import { getHistory } from './history'
+import { navigationBreadcrumb } from './route-breadcrumbs'
 import { isThemeParam, LANG_PARAM, THEME_PARAM, type ThemeParam } from './url-overrides'
 import { normalizeLocale, type Locale } from '@common/i18n'
 import { useTranslation } from '@/i18n/provider'
@@ -82,12 +83,42 @@ const indexRoute = createRoute({
 // 引导页由 `App.tsx` 渲染成整屏覆盖层（无侧边栏），但结构上仍与其他页面同级。
 const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.onboarding, component: OnboardingPage })
 
-const logicalModelsRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.logicalModels, component: LogicalModelsPage })
-const modelManagementRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.modelManagement, component: ModelManagementPage })
-const requestRewriteRulesRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.requestRewriteRules, component: RequestRewriteRulesPage })
-const routerRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.router, component: RouterPage })
-const requestLogsRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.requestLogs, component: RequestLogsPage })
-const runtimeSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.runtimeSettings, component: RuntimeSettingsPage })
+const logicalModelsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.logicalModels,
+  component: LogicalModelsPage,
+  staticData: navigationBreadcrumb(routePaths.logicalModels),
+})
+const modelManagementRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.modelManagement,
+  component: ModelManagementPage,
+  staticData: navigationBreadcrumb(routePaths.modelManagement),
+})
+const requestRewriteRulesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.requestRewriteRules,
+  component: RequestRewriteRulesPage,
+  staticData: navigationBreadcrumb(routePaths.requestRewriteRules),
+})
+const routerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.router,
+  component: RouterPage,
+  staticData: navigationBreadcrumb(routePaths.router),
+})
+const requestLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.requestLogs,
+  component: RequestLogsPage,
+  staticData: navigationBreadcrumb(routePaths.requestLogs),
+})
+const runtimeSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.runtimeSettings,
+  component: RuntimeSettingsPage,
+  staticData: navigationBreadcrumb(routePaths.runtimeSettings),
+})
 
 interface OverviewSearch {
   range: AnalyticsRange
@@ -101,12 +132,18 @@ const overviewRoute = createRoute({
     range: search.range === 'today' || search.range === '30d' ? search.range : '7d',
   }),
   component: Outlet,
+  staticData: navigationBreadcrumb(routePaths.overview),
 })
 
 const overviewIndexRoute = createRoute({ getParentRoute: () => overviewRoute, path: '/', component: OverviewPage })
 const overviewProviderRoute = createRoute({ getParentRoute: () => overviewRoute, path: '$providerId', component: OverviewPage })
 
-const clientConfigRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.clientConfig, component: Outlet })
+const clientConfigRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.clientConfig,
+  component: Outlet,
+  staticData: navigationBreadcrumb(routePaths.clientConfig),
+})
 
 const clientConfigIndexRoute = createRoute({ getParentRoute: () => clientConfigRoute, path: '/', component: ClientConfigPage })
 const clientConfigDetailRoute = createRoute({ getParentRoute: () => clientConfigRoute, path: '$clientKey', component: ClientConfigDetailPage })
@@ -122,6 +159,7 @@ const logsRoute = createRoute({
     q: typeof search.q === 'string' && search.q.trim() ? search.q.trim() : undefined,
   }),
   component: LogsPage,
+  staticData: navigationBreadcrumb(routePaths.logs),
 })
 
 const routeTree = rootRoute.addChildren([

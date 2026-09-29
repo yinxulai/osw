@@ -94,7 +94,7 @@ export function ActionEditor(props: ActionEditorProps) {
                 </Select>
                 <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })}>
                   <SelectTrigger aria-label={t('rules.actions.targetAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="header">Header</SelectItem><SelectItem value="body">Body</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem></SelectContent>
                 </Select>
                 <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
                   <SelectTrigger aria-label={t('rules.actions.operationAria', { index: index + 1 })}><SelectValue /></SelectTrigger>

@@ -243,22 +243,16 @@ function WorkflowStudioCanvas() {
   )
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 620 })
+  const [canvasWidth, setCanvasWidth] = useState(0)
 
   useEffect(() => {
     const element = canvasRef.current
     if (!element) return
 
     const update = () => {
-      const rect = element.getBoundingClientRect()
-      const next = {
-        width: rect.width,
-        height: Math.max(420, window.innerHeight - rect.top - 28),
-      }
-      // 量出来的高度会作为 inline style 写回这个元素自己，而它同时又是被观察的对象：
-      // 「量一次 → 重渲染 → 改高度 → ResizeObserver 再触发 → 再量一次」。
-      // 值没变时必须跳过写 state，否则窗口拖拽期间每帧都多一次全画布重渲染。
-      setCanvasSize(current => (current.width === next.width && current.height === next.height ? current : next))
+      const nextWidth = element.clientWidth
+      // 高度由 flex 容器决定，这里只记录宽度供节点面板限制拖动范围。
+      setCanvasWidth(current => current === nextWidth ? current : nextWidth)
     }
 
     update()
@@ -706,7 +700,7 @@ function WorkflowStudioCanvas() {
   const draggable = dragEnabled && dockMode === 'select'
 
   return (
-    <PageLayout>
+    <PageLayout className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={t('router.workflow.title')}
         // 模式切换紧跟在标题后面：它在回答「这个标题指的是哪一种定义」，而不是一个页面动作。
@@ -729,15 +723,14 @@ function WorkflowStudioCanvas() {
         )}
       />
 
-      <PageContent>
+      <PageContent className="flex min-h-0 flex-1 flex-col">
         {/* 画布上不放图例行：节点名与配色在节点本身与节点选择器里已经出现一次，
             再列一行只是把同样的话说第二遍，白占画布上方的纵向空间。 */}
-        <Card className="w-full ring-0">
-          <CardContent>
+        <Card className="flex min-h-0 w-full flex-1 flex-col ring-0">
+          <CardContent className="flex min-h-0 flex-1">
             <div
               ref={canvasRef}
-              className="relative w-full overflow-hidden rounded-xl bg-workflow-canvas-workflow-bg"
-              style={{ height: canvasSize.height }}
+              className="relative min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-workflow-canvas-workflow-bg"
             >
               <ReactFlow
                 nodes={flowNodes}
@@ -850,7 +843,7 @@ function WorkflowStudioCanvas() {
               {selectedNode && (
                 <WorkflowNodePanel
                   model={selectedNode}
-                  canvasWidth={canvasSize.width}
+                  canvasWidth={canvasWidth}
                   width={panelWidth}
                   onWidthChange={setPanelWidth}
                   nodeModels={graph.nodes}
@@ -929,11 +922,11 @@ function WorkflowStudioCanvas() {
                       )}
                   </div>
                   <div className="rounded-lg border border-module-border bg-workflow-block-parma-bg p-2 font-mono system-2xs-regular">
-                    <div className="mb-1 system-2xs-medium-uppercase text-text-tertiary">Output</div>
+                    <div className="mb-1 system-2xs-medium-uppercase text-text-tertiary">{t('router.runPanel.output')}</div>
                     <pre className="whitespace-pre-wrap break-all">{JSON.stringify(runResult.outputPayload, null, 2)}</pre>
                   </div>
                   <div className="space-y-1.5 rounded-lg border border-module-border bg-workflow-block-parma-bg p-2">
-                    <div className="system-2xs-medium-uppercase text-text-tertiary">Trace</div>
+                    <div className="system-2xs-medium-uppercase text-text-tertiary">{t('router.runPanel.trace')}</div>
                     <div className="space-y-1.5">
                       {runResult.trace.map(item => (
                         <div key={`${item.nodeId}-${item.message}`} className="rounded-md border border-module-border bg-workflow-block-bg p-2 system-xs-regular">

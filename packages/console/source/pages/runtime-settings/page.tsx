@@ -58,8 +58,35 @@ export function RuntimeSettingsPage() {
   }
 
   return (
-    <PageLayout className="flex min-h-full flex-col">
-      <PageHeader title={t('settings.title')} description={t('settings.description')} />
+    <PageLayout>
+      <PageHeader
+        title={t('settings.title')}
+        description={t('settings.description')}
+        actions={!service.loading && service.settings ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="system-xs-regular text-text-tertiary">
+              {service.saved
+                ? t('settings.footer.allSaved')
+                : service.isDirty ? t('settings.footer.dirty') : t('settings.footer.synced')}
+            </span>
+            <Button
+              variant="ghost"
+              disabled={service.saving || !service.isDirty}
+              onClick={service.resetSettings}
+            >
+              <RotateCcw />
+              {t('settings.action.reset')}
+            </Button>
+            <Button
+              disabled={service.saving || !service.isDirty}
+              onClick={() => void service.saveSettings()}
+            >
+              {service.saving ? <LoaderCircle className="animate-spin" /> : service.saved ? <Check /> : <Save />}
+              {service.saving ? t('settings.action.saving') : service.saved ? t('settings.action.saved') : t('settings.action.save')}
+            </Button>
+          </div>
+        ) : undefined}
+      />
       <PageContent>
         {service.loading || !service.settings ? (
           <div className="space-y-3">
@@ -135,35 +162,6 @@ export function RuntimeSettingsPage() {
           </>
         )}
       </PageContent>
-
-      {!service.loading && service.settings && (
-        <div className="sticky bottom-0 z-20 -mx-6 -mb-5 mt-auto border-t border-border/50 bg-card/90 px-6 py-3 backdrop-blur-md">
-          <div className="flex items-center justify-between gap-4">
-            <p className="system-xs-regular text-text-tertiary">
-              {service.saved
-                ? t('settings.footer.allSaved')
-                : service.isDirty ? t('settings.footer.dirty') : t('settings.footer.synced')}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                disabled={service.saving || !service.isDirty}
-                onClick={service.resetSettings}
-              >
-                <RotateCcw />
-                {t('settings.action.reset')}
-              </Button>
-              <Button
-                disabled={service.saving || !service.isDirty}
-                onClick={() => void service.saveSettings()}
-              >
-                {service.saving ? <LoaderCircle className="animate-spin" /> : service.saved ? <Check /> : <Save />}
-                {service.saving ? t('settings.action.saving') : service.saved ? t('settings.action.saved') : t('settings.action.save')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </PageLayout>
   )
 }

@@ -18,12 +18,12 @@ export function LogsPage() {
   const showPager = !model.loading && model.total > model.pageSize
 
   return (
-    <PageLayout>
+    <PageLayout className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={t('logs.title')}
         description={t('logs.description')}
       />
-      <PageContent>
+      <PageContent className="flex min-h-0 flex-1 flex-col">
         <LogsToolbar total={model.total} live={model.live} refreshing={model.refreshing} levelFilter={model.levelFilter} searchText={model.searchText} clearDialogOpen={model.clearDialogOpen} onLiveChange={() => model.setLive(value => !value)} onRefresh={() => void model.refresh()} onExport={() => void model.exportLogs()} onClear={() => void model.clearLogs()} onDialogChange={model.setClearDialogOpen} onLevelChange={model.setLevelFilter} onSearchChange={model.setSearchText} />
         <LogsTable logs={model.logs} loading={model.loading} error={model.error} filtered={model.filtered} onRetry={() => void model.refresh()} />
         {showPager && <TablePager page={model.page} totalPages={totalPages} onPageChange={model.goToPage} />}

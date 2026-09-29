@@ -4,15 +4,16 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
+import { useRouteBreadcrumbs } from '@/routing/route-breadcrumbs'
 
 export interface PageBreadcrumb {
   label: string
@@ -21,19 +22,37 @@ export interface PageBreadcrumb {
 
 interface BreadcrumbsContextValue {
   breadcrumbs: PageBreadcrumb[]
-  setBreadcrumbs: Dispatch<SetStateAction<PageBreadcrumb[]>>
+  setPageBreadcrumb: Dispatch<SetStateAction<string | undefined>>
 }
 
 interface PageBreadcrumbsProviderProps {
   children: ReactNode
 }
 
-const EMPTY_BREADCRUMBS: PageBreadcrumb[] = []
 const BreadcrumbsContext = createContext<BreadcrumbsContextValue | null>(null)
 
 export function PageBreadcrumbsProvider(props: PageBreadcrumbsProviderProps) {
-  const [breadcrumbs, setBreadcrumbs] = useState<PageBreadcrumb[]>(EMPTY_BREADCRUMBS)
-  const value = useMemo(() => ({ breadcrumbs, setBreadcrumbs }), [breadcrumbs])
+  const routeBreadcrumbs = useRouteBreadcrumbs()
+  const navigate = useNavigate()
+  const [pageBreadcrumb, setPageBreadcrumb] = useState<string>()
+
+  const breadcrumbs = useMemo(() => {
+    const items = pageBreadcrumb
+      ? [...routeBreadcrumbs, { label: pageBreadcrumb }]
+      : routeBreadcrumbs
+
+    return items.map((item, index) => {
+      const to = item.to
+      return {
+        label: item.label,
+        onClick: index < items.length - 1 && to
+          ? () => void navigate({ to, search: true })
+          : undefined,
+      }
+    })
+  }, [navigate, pageBreadcrumb, routeBreadcrumbs])
+
+  const value = useMemo(() => ({ breadcrumbs, setPageBreadcrumb }), [breadcrumbs, setPageBreadcrumb])
 
   return <BreadcrumbsContext.Provider value={value}>{props.children}</BreadcrumbsContext.Provider>
 }
@@ -44,24 +63,18 @@ function useBreadcrumbsContext(): BreadcrumbsContextValue {
   return context
 }
 
-export function usePageBreadcrumbs(items?: PageBreadcrumb[]): void {
-  const { setBreadcrumbs } = useBreadcrumbsContext()
-  const currentItems = items ?? EMPTY_BREADCRUMBS
-  const itemsRef = useRef(currentItems)
-  itemsRef.current = currentItems
-  // 页面每次渲染都会新建数组，但真正影响顶栏结构的是标签顺序；
-  // 点击回调通过 ref 读取最新值，不需要参与 effect 依赖。
-  const signature = currentItems.map((item, index) => `${index}:${item.label}`).join('\u001f')
+export function usePageBreadcrumb(label?: string): void {
+  const { setPageBreadcrumb } = useBreadcrumbsContext()
 
   useEffect(() => {
-    setBreadcrumbs(itemsRef.current)
+    setPageBreadcrumb(label)
     return () => {
-      setBreadcrumbs(current => current === itemsRef.current ? EMPTY_BREADCRUMBS : current)
+      setPageBreadcrumb(current => current === label ? undefined : current)
     }
-  }, [setBreadcrumbs, signature])
+  }, [label, setPageBreadcrumb])
 }
 
-export function usePageBreadcrumbsValue(): PageBreadcrumb[] {
+export function usePageBreadcrumbs(): PageBreadcrumb[] {
   return useBreadcrumbsContext().breadcrumbs
 }
 

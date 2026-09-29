@@ -95,7 +95,7 @@ export function ModelSelectPanel(props: NodePanelProps) {
             ? { ...current, source: value as ModelSelectSource }
             : current)}
         >
-          <SelectTrigger className="w-full"><SelectValue placeholder="source" /></SelectTrigger>
+          <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.source')} /></SelectTrigger>
           <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
             {SOURCE_OPTIONS.map(option => (
               <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={option.value} value={option.value}>
@@ -116,7 +116,7 @@ export function ModelSelectPanel(props: NodePanelProps) {
               ? { ...current, variablePath: value }
               : current)}
           >
-            <SelectTrigger className="w-full"><SelectValue placeholder="field path" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.fieldPath')} /></SelectTrigger>
             <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
               {variableFields.map(field => (
                 <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={field.path} value={field.path}>

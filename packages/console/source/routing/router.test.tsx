@@ -2,6 +2,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { router } from '@/routing/router'
+import { appNavigationItems } from '@/routing/navigation'
+import { routeBreadcrumbMetadata } from '@/routing/route-breadcrumbs'
 import { routePaths } from '@/routing/routes'
 import { isThemeParam, parseOverrides } from '@/routing/url-overrides'
 
@@ -19,6 +21,11 @@ const leafMatch = (path: string, search: Record<string, unknown> = {}): LeafMatc
   const matches = router.matchRoutes(path, search)
   return matches[matches.length - 1] as unknown as LeafMatch
 }
+
+const breadcrumbMatches = (path: string) => router.matchRoutes(path).flatMap(match => {
+  const metadata = routeBreadcrumbMetadata(match.staticData)
+  return metadata ? [metadata] : []
+})
 
 describe('路由路径契约', () => {
   it('每个声明过的路径都解析到自己', () => {
@@ -102,6 +109,21 @@ describe('路由路径契约', () => {
       search: { lang: 'zh-CN', theme: 'dark' },
     }).href
     expect(href).toBe('/logs?lang=zh-CN&theme=dark')
+  })
+
+  it('侧栏页面通过自己的路由自动注册面包屑', () => {
+    for (const item of appNavigationItems) {
+      expect(breadcrumbMatches(item.to), item.to).toEqual([{ labelKey: item.labelKey, to: item.to }])
+    }
+  })
+
+  it('详情页只注册父级，动态叶子由页面补充', () => {
+    expect(breadcrumbMatches('/overview/demo')).toEqual([
+      { labelKey: 'nav.page.overview', to: routePaths.overview },
+    ])
+    expect(breadcrumbMatches('/client-config/claude-code')).toEqual([
+      { labelKey: 'nav.page.clientConfig', to: routePaths.clientConfig },
+    ])
   })
 })
 

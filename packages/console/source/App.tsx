@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useMatchRoute, useRouterState } from '@tanstack/react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
@@ -20,11 +20,37 @@ import { routePaths } from '@/routing/routes'
 import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
 import { getPlatformCapabilities } from '@/platform/capabilities'
 
+interface RouteOutletProps {
+  pathname: string
+}
+
+function RouteOutlet(props: RouteOutletProps) {
+  const t = useTranslation()
+
+  return (
+    <ErrorBoundary
+      resetKeys={[props.pathname]}
+      fallback={fallbackProps => (
+        <ErrorFallback
+          {...fallbackProps}
+          embedded
+          title={t('common.error.pageTitle')}
+          description={t('common.error.pageDescription')}
+        />
+      )}
+    >
+      <Outlet />
+    </ErrorBoundary>
+  )
+}
+
 function App() {
   const pathname = useRouterState({ select: state => state.location.pathname })
   const matchRoute = useMatchRoute()
   const sidebarPinned = useAppUiStore(state => state.sidebarPinned)
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
+  const sidebarExpanded = sidebarPinned || sidebarHovered
   const { theme, toggleTheme } = useAppearance()
   const proxyStatus = useProxyStatus()
   const t = useTranslation()
@@ -54,7 +80,7 @@ function App() {
       <ConfirmProvider>
         <TooltipProvider>
           <PageBreadcrumbsProvider>
-            <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground">
+            <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-sidebar text-foreground">
               {isElectron && (
                 <WindowTitlebar
                   title={windowTitle}
@@ -65,27 +91,15 @@ function App() {
               <div className="relative min-h-0 flex-1">
                 {isOnboarding ? (
                   <div className="h-full overflow-auto bg-background text-foreground">
-                    <div className={isElectron ? 'fixed right-4 top-15 z-50' : 'fixed right-4 top-4 z-50'}>
+                    <div className={isElectron ? 'fixed right-4 top-13 z-50' : 'fixed right-4 top-4 z-50'}>
                       <OnboardingTopbar theme={theme} onToggleTheme={toggleTheme} />
                     </div>
-                    <ErrorBoundary
-                      resetKeys={[pathname]}
-                      fallback={fallbackProps => (
-                        <ErrorFallback
-                          {...fallbackProps}
-                          embedded
-                          title={t('common.error.pageTitle')}
-                          description={t('common.error.pageDescription')}
-                        />
-                      )}
-                    >
-                      <Outlet />
-                    </ErrorBoundary>
+                    <RouteOutlet pathname={pathname} />
                   </div>
                 ) : (
                   <LiveRequestsProvider enabled={needsLiveRequests}>
                     <AppLayout
-                      sidebarPinned={sidebarPinned}
+                      sidebarExpanded={sidebarExpanded}
                       sidebar={(
                         <AppSidebar
                           showBrand={!isElectron}
@@ -93,6 +107,8 @@ function App() {
                           onToggleTheme={toggleTheme}
                           proxyPort={proxyStatus?.port}
                           proxyRunning={proxyStatus?.running ?? false}
+                          expanded={sidebarExpanded}
+                          onHoverChange={setSidebarHovered}
                           pinned={sidebarPinned}
                           onTogglePinned={() => setSidebarPinned(!sidebarPinned)}
                         />
@@ -104,19 +120,7 @@ function App() {
                        * `routing.tsx` 里的根路由 `errorComponent` 是外层保险，
                        * 作用于 App 自身（包括侧栏、各种 Provider）抛错的情况。
                        */}
-                      <ErrorBoundary
-                        resetKeys={[pathname]}
-                        fallback={fallbackProps => (
-                          <ErrorFallback
-                            {...fallbackProps}
-                            embedded
-                            title={t('common.error.pageTitle')}
-                            description={t('common.error.pageDescription')}
-                          />
-                        )}
-                      >
-                        <Outlet />
-                      </ErrorBoundary>
+                      <RouteOutlet pathname={pathname} />
                     </AppLayout>
                   </LiveRequestsProvider>
                 )}

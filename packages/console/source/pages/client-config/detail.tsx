@@ -201,11 +201,7 @@ export function ClientConfigDetailPage() {
   return (
     <PageLayout>
       <PageHeader
-        breadcrumbs={[
-          { label: t('clientConfig.title'), onClick: backToList },
-          // 末级不是按钮：它说的是「你正在看的就是这一个」，不需要再点一次。
-          { label: client?.name ?? clientKey },
-        ]}
+        breadcrumb={client?.name ?? clientKey}
         title={client?.name ?? clientKey}
         // 标题后面只挂状态徽标：名字本身已经把身份说清楚了，再塞一枚品牌图标，读起来是「名字 + 两个徽标」
         // ——需要图标帮忙分辨的是列表页的每一行，那里才有它的位置。

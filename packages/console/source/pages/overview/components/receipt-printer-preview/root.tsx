@@ -1,4 +1,5 @@
 import { useReducedMotion } from 'motion/react'
+import { useTranslation } from '@/i18n/provider'
 import { ReceiptPrinterMachine } from './machine'
 import { ReceiptOutput } from './output'
 import { ReceiptPaper } from './paper'
@@ -17,6 +18,7 @@ export function ReceiptPrinterPreview(params: ReceiptPrinterPreviewProps) {
     onWheel,
     dragging,
   } = params
+  const t = useTranslation()
 
   const shouldReduceMotion = useReducedMotion()
   const shouldMove = !shouldReduceMotion
@@ -28,7 +30,7 @@ export function ReceiptPrinterPreview(params: ReceiptPrinterPreviewProps) {
   const receiptTranslateY = clampReceiptTranslate(offset)
 
   return (
-    <section className="receipt-printer-theme relative isolate flex h-full w-full max-w-120 select-none flex-col items-center" aria-label="Receipt printer" data-stage={stage}>
+    <section className="receipt-printer-theme relative isolate flex h-full w-full max-w-120 select-none flex-col items-center" aria-label={t('overview.bill.title')} data-stage={stage}>
       <div className="relative z-30 w-full">
         <ReceiptPrinterMachine isComplete={isComplete} shouldMove={shouldMove} stage={stage} statusLabel={statusLabel} />
       </div>

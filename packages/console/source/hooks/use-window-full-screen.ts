@@ -5,12 +5,20 @@ export function useWindowFullScreen(): boolean {
   const [fullScreen, setFullScreen] = useState(false)
 
   useEffect(() => {
-    const capabilities = getPlatformCapabilities()
+    const { getFullScreenState, onFullScreenChanged } = getPlatformCapabilities()
     let active = true
-    void capabilities.getFullScreenState?.().then(value => {
+    const unsubscribe = onFullScreenChanged?.(value => {
       if (active) setFullScreen(value)
-    }).catch(() => {})
-    const unsubscribe = capabilities.onFullScreenChanged?.(setFullScreen)
+    })
+    if (getFullScreenState) {
+      void getFullScreenState()
+        .then(value => {
+          if (active) setFullScreen(value)
+        })
+        .catch(error => {
+          console.error('[window-full-screen] failed to read initial state', error)
+        })
+    }
     return () => {
       active = false
       unsubscribe?.()

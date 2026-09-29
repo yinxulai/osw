@@ -18,6 +18,9 @@ interface AppSidebarProps {
   proxyRunning: boolean
   proxyPort?: number
   onToggleTheme: () => void
+  /** 展开态由上层维护，让侧栏宽度和主内容网格列同步变化。 */
+  expanded: boolean
+  onHoverChange: (hovered: boolean) => void
   /** 钉住时侧栏不再跟鼠标进出，一直保持推开。见 `AppUiState.sidebarPinned`。 */
   pinned: boolean
   onTogglePinned: () => void
@@ -40,14 +43,7 @@ function revealClassName(expanded: boolean) {
 
 export function AppSidebar(props: AppSidebarProps) {
   const t = useTranslation()
-  // 展开态用 JS 而不是 CSS `:hover`：标记淡入要延时（需要知道状态），
-  // 而且键盘 Tab 到图标时要给 tooltip —— tooltip 只在鼠标不在轨道里时才该出现。
-  //
-  // 名字叫 `hovered` 而不是 `expanded`：它只是「鼠标在不在这里」这一个事实，
-  // 真正决定推开与否的是「钉住」和它两者之一 —— 钉住跟鼠标进出无关，
-  // 所以两个状态分开存，展开态是它们的**合成结果**，而不是谁去覆盖谁。
-  const [hovered, setHovered] = useState(false)
-  const expanded = props.pinned || hovered
+  const expanded = props.expanded
   const [focusedKey, setFocusedKey] = useState<AppNavPath | null>(null)
   const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
@@ -64,17 +60,11 @@ export function AppSidebar(props: AppSidebarProps) {
       data-slot="app-sidebar"
       data-expanded={expanded ? 'true' : undefined}
       data-pinned={props.pinned ? 'true' : undefined}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={() => props.onHoverChange(true)}
+      onPointerLeave={() => props.onHoverChange(false)}
       className={cn(
         'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
-        'transition-[width,background-color,box-shadow,border-radius] duration-200 ease-out motion-reduce:transition-none',
-        props.pinned ? 'bg-background' : 'bg-transparent',
-        !props.pinned && expanded && [
-          'rounded-r-xl border-r-[0.5px] border-components-panel-border',
-          'bg-background/95 backdrop-blur-[12px]',
-          'shadow-[16px_0_36px_-34px_rgba(0,0,0,0.6)]',
-        ],
+        'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         expanded && 'w-56',
       )}
     >

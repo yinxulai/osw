@@ -103,7 +103,7 @@ export function IterationPanel(props: NodePanelProps) {
           value={collectMode}
           onValueChange={value => patch({ collectMode: value as IterationCollectMode })}
         >
-          <SelectTrigger className="w-full"><SelectValue placeholder="mode" /></SelectTrigger>
+          <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.collectMode')} /></SelectTrigger>
           <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
             {COLLECT_MODES.map(mode => (
               <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={mode} value={mode}>

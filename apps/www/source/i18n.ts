@@ -4,6 +4,8 @@ import { initReactI18next } from 'react-i18next'
 /** 站点支持的语言。 */
 export type Lang = 'en' | 'zh'
 
+export const LANG_STORAGE_KEY = 'osw-language'
+
 export const LANGS: { id: Lang; label: string }[] = [
   { id: 'en', label: 'English' },
   { id: 'zh', label: '中文' },
@@ -20,7 +22,7 @@ export const FALLBACK_LANG: Lang = 'zh'
  * 英文译文表，key 与各组件的 `t()` 第一个参数一一对应。
  * 新增文案时：先在组件里写中文兜底，再决定要不要在这里补英文。
  */
-const en = {
+export const en = {
   nav: {
     failover: 'Failover',
     capabilities: 'Capabilities',
@@ -184,11 +186,28 @@ const en = {
   footerRepo: 'View the source on GitHub',
 }
 
-/** 首次进入按浏览器语言选一个；识别不到就用兜底语言（中文）。 */
+/** 首次进入优先沿用上次选择，其次按浏览器语言；识别不到就用兜底语言（中文）。 */
 function detectLang(): Lang {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(LANG_STORAGE_KEY)
+      if (stored === 'en' || stored === 'zh') return stored
+    } catch {
+      // 隐私模式等场景可能禁止访问；继续按浏览器语言判断。
+    }
+  }
   const preferred = typeof navigator === 'undefined' ? '' : navigator.language
   return preferred.toLowerCase().startsWith('zh') ? 'zh' : 'en'
 }
+
+i18n.on('languageChanged', (language) => {
+  if (language !== 'en' && language !== 'zh') return
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, language)
+  } catch {
+    // 无法持久化不影响当前页面的语言切换。
+  }
+})
 
 void i18n.use(initReactI18next).init({
   resources: { en: { translation: en } },

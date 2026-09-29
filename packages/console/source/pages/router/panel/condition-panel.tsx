@@ -97,7 +97,7 @@ export function ConditionPanel(props: NodePanelProps) {
                 }
                 : current)}
             >
-              <SelectTrigger className="w-full"><SelectValue placeholder="logical operator" /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.logicalOperator')} /></SelectTrigger>
               <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                 <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="and">{t('router.panel.logicalOperatorAnd')}</SelectItem>
                 <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="or">{t('router.panel.logicalOperatorOr')}</SelectItem>
@@ -189,7 +189,7 @@ export function ConditionPanel(props: NodePanelProps) {
                         }
                       })}
                     >
-                      <SelectTrigger className="w-full"><SelectValue placeholder="field path" /></SelectTrigger>
+                      <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.fieldPath')} /></SelectTrigger>
                       <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                         {conditionFieldHints.map(field => (
                           <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={field.path} value={field.path}>
@@ -255,7 +255,7 @@ export function ConditionPanel(props: NodePanelProps) {
                         value={rule.valueSource ?? 'literal'}
                         onValueChange={value => patchRule({ valueSource: value as ConditionValueSource })}
                       >
-                        <SelectTrigger className="w-full"><SelectValue placeholder="value source" /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.valueSource')} /></SelectTrigger>
                         <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                           <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="literal">{t('router.panel.valueSourceLiteral')}</SelectItem>
                           <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} value="field">{t('router.panel.valueSourceField')}</SelectItem>
@@ -270,7 +270,7 @@ export function ConditionPanel(props: NodePanelProps) {
                         value={rule.valueFieldPath ?? ''}
                         onValueChange={value => patchRule({ valueFieldPath: value })}
                       >
-                        <SelectTrigger className="w-full"><SelectValue placeholder="field path" /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.placeholder.fieldPath')} /></SelectTrigger>
                         <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
                           {conditionFieldHints.map(field => (
                             <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={field.path} value={field.path}>

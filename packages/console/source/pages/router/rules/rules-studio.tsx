@@ -35,6 +35,7 @@ import { SaveVersionDialog, type VersionDraft } from '../components/save-version
 import { VersionMenu } from '../components/version-menu'
 import { WorkflowButton } from '../components/workflow-button'
 import { hasSavedVersion, toRouteRuleSetVersion, toRouteRuleSetVersions, type RouteVersion } from '../route-versions'
+import { builtinRouteRuleName } from './builtin-rule-name'
 import { RulesList } from './rules-list'
 import { RulesPresetMenu } from './rules-preset-menu'
 import { rulePresetTextKeys } from './rules-preset-text'
@@ -441,7 +442,7 @@ export function RouteRulesStudio() {
         open={deleteTarget !== null}
         title={t('router.rules.delete.title')}
         description={deleteTarget
-          ? `${deleteTarget.name || t('router.rules.unnamed')} · ${t('router.rules.delete.description')}`
+          ? `${builtinRouteRuleName(deleteTarget, t) || t('router.rules.unnamed')} · ${t('router.rules.delete.description')}`
           : ''}
         confirmLabel={t('router.rules.delete.confirm')}
         variant="destructive"

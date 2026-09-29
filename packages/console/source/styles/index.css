@@ -612,7 +612,7 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-sidebar text-foreground;
   }
   html {
     @apply font-sans;
@@ -630,7 +630,7 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
     color-scheme: dark;
   }
   body {
-    background-color: hsl(var(--background));
+    background-color: hsl(var(--sidebar-background));
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
     margin: 0;

@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
 import type { RouteRuleRunResult } from '@common/router/route-rule-engine'
 import type { RouteRuleSet } from '@common/router/route-rules'
+import { builtinRouteRuleName } from './builtin-rule-name'
 import { describeConditionField, describeConditions, type Translate } from './rule-summary'
 
 interface RulesRunDrawerProps {
@@ -50,6 +51,9 @@ function formatActual(value: unknown): string {
 export function RulesRunDrawer(props: RulesRunDrawerProps) {
   const { open, onOpenChange, ruleSet, unsaved, payloadText, onPayloadTextChange, payloadRows, payloadError, result, onRun } = props
   const t = useTranslation()
+  const matchedRule = result?.matchedRuleId
+    ? ruleSet.rules.find(rule => rule.id === result.matchedRuleId)
+    : undefined
 
   const stepViews = (result?.steps ?? []).map((step, index) => {
     const rule = ruleSet.rules.find(item => item.id === step.ruleId)
@@ -59,7 +63,7 @@ export function RulesRunDrawer(props: RulesRunDrawerProps) {
       index,
       step,
       winner: result?.matchedRuleId === step.ruleId,
-      ruleName: step.ruleName || t('router.rules.unnamed'),
+      ruleName: (rule ? builtinRouteRuleName(rule, t) : step.ruleName) || t('router.rules.unnamed'),
       sentence: rule ? describeConditions(rule, t) : '',
       // 顺序是引擎给的，条件数组的顺序也是引擎给的，按下标配回规则原文才能说出「哪个字段」。
       unmatched: (rule?.conditions ?? []).length === step.conditions.length
@@ -115,7 +119,7 @@ export function RulesRunDrawer(props: RulesRunDrawerProps) {
                     </Badge>
                     {result.matchedRuleId && (
                       <span className="min-w-0 truncate system-xs-medium text-text-primary">
-                        {ruleSet.rules.find(rule => rule.id === result.matchedRuleId)?.name || t('router.rules.unnamed')}
+                        {(matchedRule ? builtinRouteRuleName(matchedRule, t) : '') || t('router.rules.unnamed')}
                       </span>
                     )}
                   </div>

@@ -15,6 +15,16 @@
       const theme = queryTheme === 'light' || queryTheme === 'dark'
         ? queryTheme
         : window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+      let storedLanguage = null
+      try {
+        storedLanguage = window.localStorage.getItem('osw-language')
+      } catch {
+        // Storage can be unavailable in private browsing; browser language is still a safe fallback.
+      }
+      const language = storedLanguage === 'en' || storedLanguage === 'zh'
+        ? storedLanguage
+        : navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+      document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
       document.documentElement.dataset.theme = theme
       document.documentElement.style.colorScheme = theme
       document.querySelector('meta[name="theme-color"]')
