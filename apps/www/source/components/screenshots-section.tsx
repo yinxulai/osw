@@ -79,7 +79,7 @@ export function ScreenshotsSection(props: ScreenshotsSectionProps) {
               src={active.src}
               alt={labelOf(active)}
               decoding="async"
-              className="block aspect-[3/2] w-full object-cover object-top"
+              className="block h-auto w-full"
             />
           </div>
 
