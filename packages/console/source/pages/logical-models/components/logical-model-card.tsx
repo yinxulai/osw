@@ -18,10 +18,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import type { LiveActivity } from '@/data/live-activity'
 import { SortableProviderModel } from './sortable-provider-model'
 import { ProviderModelRow } from './provider-model-row'
-import { LogicalModelActivityOverlay } from './logical-model-activity-overlay'
 import { providerModelMetricKey, type ProviderModelMetrics } from '../lib/model-metrics'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION } from '@common/schemas'
 import type { LogicalModelProviderModel, Provider, ProviderHealth, ProviderModelHealth } from '@common/schemas'
@@ -57,8 +55,8 @@ interface LogicalModelCardProps {
   onDelete?: () => void
   dragHandleProps?: Record<string, unknown>
   dragging?: boolean
-  /** 当前活动；同时表达“是否忙碌”和最新事件语义，为空时卡片完全静止。 */
-  activity: LiveActivity | null
+  /** 每个供应商模型此刻在途的请求数；键是供应商模型 id，缺省即 0。 */
+  processingCounts: Map<string, number>
 }
 
 export function LogicalModelCard(props: LogicalModelCardProps) {
@@ -85,10 +83,9 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
     onDelete,
     dragHandleProps,
     dragging,
-    activity,
+    processingCounts,
   } = props
   const t = useTranslation()
-  const busy = activity !== null
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -213,6 +210,7 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
                   mode={mode}
                   selected={row.selected}
                   cooling={row.cooling}
+                  processingCount={processingCounts.get(row.model.id) ?? 0}
                   dragging={dragging}
                   dragHandleProps={handleProps}
                   onSelect={() => void onSelectManualModel(row.model)}
@@ -250,10 +248,8 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
     // 「下面都没挨着边，还留着一块空白」）。去掉后最后一行直接与卡片下边缘齐平，
     // 浮入底色也能一路铺到圆角处（Card 自带 overflow-hidden，会被圆角裁掉）。
     <Card
-      className={cn('group relative overflow-hidden pb-0', busy && 'logical-model-card-busy', dragging && 'bg-accent')}
-      aria-busy={busy || undefined}
+      className={cn('group relative overflow-hidden pb-0', dragging && 'bg-accent')}
     >
-      <LogicalModelActivityOverlay activity={activity} />
       {renderHeader()}
       <CardContent className="p-0">
         {renderContent()}

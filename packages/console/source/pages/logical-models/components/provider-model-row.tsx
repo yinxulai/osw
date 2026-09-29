@@ -32,6 +32,8 @@ interface ProviderModelRowProps {
   mode: 'auto' | 'manual'
   selected: boolean
   cooling: boolean
+  /** 该模型此刻在途的请求数；大于 0 时状态位改说「处理中（n）」。 */
+  processingCount: number
   dragging: boolean
   dragHandleProps: Record<string, unknown>
   onSelect: () => void
@@ -203,7 +205,18 @@ export function ProviderModelRow(props: ProviderModelRowProps) {
         </div>
       </div>
       <div className="flex min-w-20 shrink-0 items-center justify-end">
-        <Badge variant={!model.modelEnabled ? 'muted' : props.cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>{!model.modelEnabled ? t('logicalModels.row.modelDisabled') : props.cooling ? t('logicalModels.row.cooling') : model.enabled ? (props.selected ? t('logicalModels.row.selected') : t('logicalModels.row.standby')) : t('common.state.disabled')}</Badge>
+        {/* 「处理中」压过启用状态：一张徽标只回答一句话，此刻最要紧的是它正在干活。
+            停用与冷却都不会真的在处理请求，因此不会与这里的判断冲突。 */}
+        {props.processingCount > 0
+          ? (
+            <Badge variant="info">
+              <span className="size-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden />
+              {t('logicalModels.row.processing', { count: props.processingCount })}
+            </Badge>
+          )
+          : (
+            <Badge variant={!model.modelEnabled ? 'muted' : props.cooling ? 'destructive' : model.enabled ? 'success' : 'muted'}>{!model.modelEnabled ? t('logicalModels.row.modelDisabled') : props.cooling ? t('logicalModels.row.cooling') : model.enabled ? (props.selected ? t('logicalModels.row.selected') : t('logicalModels.row.standby')) : t('common.state.disabled')}</Badge>
+          )}
       </div>
       {/* 操作直接落在一条模糊的遮罩上，而不是滑进来一张带边框的小白卡片：
           遮罩铺满整行高度、左缘渐变淡出，被盖住的指标与徽标只是在模糊里淡出，没有新的卡片边界。 */}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { LiveRequest } from '@common/schemas'
-import { liveRequestActivity, logicalModelActivities } from './live-request-selectors'
+import type { LiveRequest, LiveRequestAttempt, LiveRequestAttemptState } from '@common/schemas'
+import { liveRequestActivity, providerModelProcessingCounts } from './live-request-selectors'
 
 function request(overrides: Partial<LiveRequest> = {}): LiveRequest {
   return {
@@ -51,55 +51,65 @@ describe('liveRequestActivity', () => {
   })
 })
 
-describe('logicalModelActivities', () => {
-  it('deduplicates models with multiple in-flight requests', () => {
-    const activity = logicalModelActivities([
-      request({ id: 'req_one', logicalModelId: 'logical_primary' }),
-      request({ id: 'req_two', logicalModelId: 'logical_primary' }),
-      request({ id: 'req_three', logicalModelId: 'logical_secondary' }),
+describe('providerModelProcessingCounts', () => {
+  function attempt(providerModelId: string, state: LiveRequestAttemptState): LiveRequestAttempt {
+    return {
+      index: 0,
+      providerId: 'prov_1',
+      providerName: 'Provider',
+      providerModelId,
+      providerModelName: providerModelId,
+      endpointProtocol: 'openai-responses',
+      url: 'https://example.com/v1',
+      state,
+      httpStatus: null,
+      upstreamTransport: null,
+      requestBytes: 0,
+      requestRewriteRuleNames: [],
+      upstreamBytes: 0,
+      downstreamBytes: 0,
+      chunkCount: 0,
+      chunkPreview: null,
+      ttftMilliseconds: null,
+      inputTokens: null,
+      outputTokens: null,
+      errorMessage: null,
+      startedAt: 1,
+      endedAt: null,
+    }
+  }
+
+  it('counts in-flight requests per provider model', () => {
+    const counts = providerModelProcessingCounts([
+      request({ id: 'req_one', attempts: [attempt('pm_a', 'streaming')] }),
+      request({ id: 'req_two', attempts: [attempt('pm_a', 'awaiting-upstream')] }),
+      request({ id: 'req_three', attempts: [attempt('pm_b', 'connecting')] }),
     ])
 
-    expect([...activity.keys()]).toEqual(['logical_primary', 'logical_secondary'])
+    expect(counts.get('pm_a')).toBe(2)
+    expect(counts.get('pm_b')).toBe(1)
   })
 
-  it('uses the newest semantic event as the animation key', () => {
-    const activity = logicalModelActivities([
-      request({
-        id: 'req_old',
-        logicalModelId: 'logical_primary',
-        events: [{ at: 10, offsetMilliseconds: 10, kind: 'route.resolved', level: 'info', detail: null }],
-      }),
-      request({
-        id: 'req_new',
-        logicalModelId: 'logical_primary',
-        events: [{ at: 20, offsetMilliseconds: 20, kind: 'upstream.head', level: 'success', detail: null }],
-      }),
+  it('counts a request against its latest attempt after a failover', () => {
+    const counts = providerModelProcessingCounts([
+      request({ attempts: [attempt('pm_old', 'failed'), attempt('pm_new', 'streaming')] }),
     ])
 
-    expect(activity.get('logical_primary')).toEqual({
-      key: 'req_new:1:20:upstream.head',
-      tone: 'success',
-    })
+    expect(counts.get('pm_old')).toBeUndefined()
+    expect(counts.get('pm_new')).toBe(1)
   })
 
-  it('does not replay the animation for byte-only snapshot updates', () => {
-    const event = { at: 20, offsetMilliseconds: 20, kind: 'upstream.head', level: 'success' as const, detail: null }
-    const first = logicalModelActivities([request({ events: [event], updatedAt: 20 })])
-    const second = logicalModelActivities([request({ events: [event], updatedAt: 1_000, attempts: [] })])
-
-    expect(first.get('logical_primary')).toEqual(second.get('logical_primary'))
-  })
-
-  it('ignores settled requests and requests without a logical model', () => {
-    const activity = logicalModelActivities([
-      request({ id: 'req_success', status: 'success', phase: 'settled' }),
-      request({ id: 'req_unmatched', logicalModelId: null }),
+  it('ignores settled requests, ended attempts, and requests still routing', () => {
+    const counts = providerModelProcessingCounts([
+      request({ id: 'req_success', status: 'success', phase: 'settled', attempts: [attempt('pm_a', 'success')] }),
+      request({ id: 'req_ended', attempts: [attempt('pm_a', 'success')] }),
+      request({ id: 'req_routing', logicalModelId: null, attempts: [] }),
     ])
 
-    expect(activity.size).toBe(0)
+    expect(counts.size).toBe(0)
   })
 
   it('returns an empty map before the first snapshot arrives', () => {
-    expect(logicalModelActivities(undefined).size).toBe(0)
+    expect(providerModelProcessingCounts(undefined).size).toBe(0)
   })
 })

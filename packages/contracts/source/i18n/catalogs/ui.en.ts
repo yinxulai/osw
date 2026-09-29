@@ -541,6 +541,7 @@ export const uiEn = {
   'logicalModels.row.viewAnalytics': 'View analytics for {provider}',
   'logicalModels.row.unknownProvider': 'Unknown provider',
   'logicalModels.row.cooling': 'Cooling down',
+  'logicalModels.row.processing': 'Processing ({count})',
   'logicalModels.row.selected': 'Selected',
   'logicalModels.row.standby': 'Standby',
   'logicalModels.row.enabledState': '{model} enabled',

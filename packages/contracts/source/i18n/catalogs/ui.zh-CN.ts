@@ -545,6 +545,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'logicalModels.row.viewAnalytics': '查看 {provider} 数据分析',
   'logicalModels.row.unknownProvider': '未知供应商',
   'logicalModels.row.cooling': '冷却中',
+  'logicalModels.row.processing': '处理中（{count}）',
   'logicalModels.row.selected': '当前指定',
   'logicalModels.row.standby': '待命',
   'logicalModels.row.enabledState': '{model} 启用状态',
