@@ -92,6 +92,7 @@ const EMPTY_VERSION_DRAFT: VersionDraft = { name: '', description: '' }
 
 /** 内建默认策略的 id：一版都没保存过时，代理跑的就是它，画布铺的也是这张图。 */
 const DEFAULT_POLICY_PRESET_ID = ROUTER_POLICY_PRESETS.find(preset => preset.isDefault)?.id
+const WORKFLOW_FIT_VIEW_OPTIONS = { padding: 0.04, minZoom: 0.66, maxZoom: 1 }
 
 /** 单条节点输出的值转成一行文本：字符串直出，数组用逗号连接，其余走 JSON。 */
 function formatNodeOutputValue(value: unknown): string {
@@ -495,59 +496,59 @@ function WorkflowStudioCanvas() {
     const next = new Map<string, { model: WorkflowNodeModel; flags: string; node: RouteFlowNode }>()
 
     const nodes = displayNodes.map(model => {
-      const sourcePorts = graph.edges
-        .filter(edge => edge.sourceNodeId === model.id)
-        .map(edge => String(edge.sourcePort))
-      const targetConnected = graph.edges.some(edge => edge.targetNodeId === model.id)
-      const runStatus = runStatusByNode.get(model.id) ?? 'idle'
-      // 尺寸必须参与缓存键：React Flow 是异步量节点的，首帧量到的是 undefined，
-      // 之后才拿到真实尺寸。不把它算进来的话，缓存会一直拿首次那个 `measured: undefined` 的对象，
-      // 后续 `adoptUserNodes` 重建内部节点时尺寸就被抹平（拖动时报 error015、fitView 拿到 0 尺寸）。
-      const measured = flow.getInternalNode(model.id)?.measured
-      // 便签是唯一一个尺寸不等于内容的节点：它的大小由 `model.size` 说了算，
-      // 所以要把尺寸同时写成 `measured` 与节点样式（`getNodeInlineStyleDimensions` 只认 style / width，不认 measured）。
-      // 其余节点不写 style，宽度交给卡片自己（`w-60`）。
-      const noteSize = model.kind === 'note' ? resolveNoteNodeSize(model) : null
-      const noteDimensions = noteSize ? { width: noteSize.width, height: noteSize.height } : undefined
-      const flags = `${model.id === selectedNodeId}|${draggable}|${runStatus}|${sourcePorts.join(',')}|${targetConnected}|${measured?.width ?? 0}x${measured?.height ?? 0}`
+        const sourcePorts = graph.edges
+          .filter(edge => edge.sourceNodeId === model.id)
+          .map(edge => String(edge.sourcePort))
+        const targetConnected = graph.edges.some(edge => edge.targetNodeId === model.id)
+        const runStatus = runStatusByNode.get(model.id) ?? 'idle'
+        // 尺寸必须参与缓存键：React Flow 是异步量节点的，首帧量到的是 undefined，
+        // 之后才拿到真实尺寸。不把它算进来的话，缓存会一直拿首次那个 `measured: undefined` 的对象，
+        // 后续 `adoptUserNodes` 重建内部节点时尺寸就被抹平（拖动时报 error015、fitView 拿到 0 尺寸）。
+        const measured = flow.getInternalNode(model.id)?.measured
+        // 便签是唯一一个尺寸不等于内容的节点：它的大小由 `model.size` 说了算，
+        // 所以要把尺寸同时写成 `measured` 与节点样式（`getNodeInlineStyleDimensions` 只认 style / width，不认 measured）。
+        // 其余节点不写 style，宽度交给卡片自己（`w-60`）。
+        const noteSize = model.kind === 'note' ? resolveNoteNodeSize(model) : null
+        const noteDimensions = noteSize ? { width: noteSize.width, height: noteSize.height } : undefined
+        const flags = `${model.id === selectedNodeId}|${draggable}|${runStatus}|${sourcePorts.join(',')}|${targetConnected}|${measured?.width ?? 0}x${measured?.height ?? 0}`
 
-      const cached = previous.get(model.id)
-      if (cached && cached.model === model && cached.flags === flags) {
-        next.set(model.id, cached)
-        return cached.node
-      }
+        const cached = previous.get(model.id)
+        if (cached && cached.model === model && cached.flags === flags) {
+          next.set(model.id, cached)
+          return cached.node
+        }
 
-      const node: RouteFlowNode = {
-        id: model.id,
-        type: toCanvasNodeType(model.kind),
-        position: model.position,
-        // React Flow 把量到的尺寸记在 internal node 上，而 `adoptUserNodes` 重建内部节点时
-        // 会直接取用户节点对象的 `measured`。这里重建对象（例如拖动时每帧写回位置）如果不把
-        // 尺寸带回来，尺寸会被重置成 undefined：`calculateNodePosition` 会打印 error015
-        // （“trying to drag a node that is not initialized”），框选 / fitView 等几何计算
-        // 也会拿到 0 尺寸。
-        measured: noteDimensions ?? measured,
-        style: noteDimensions,
-        draggable,
-        data: {
-          model,
-          isSelected: model.id === selectedNodeId,
-          runStatus,
-          connectedSourcePorts: [...new Set(sourcePorts)],
-          targetConnected,
-          canInsert: true,
-          onOpen: handleOpenNode,
-          onUpdateNode: updateNode,
-          onResizeNode: handleResizeNode,
-          onRequestInsert: handleRequestInsert,
-          onDeleteNode: handleDeleteNode,
-          onDuplicateNode: handleDuplicateNode,
-        },
-      }
+        const node: RouteFlowNode = {
+          id: model.id,
+          type: toCanvasNodeType(model.kind),
+          position: model.position,
+          // React Flow 把量到的尺寸记在 internal node 上，而 `adoptUserNodes` 重建内部节点时
+          // 会直接取用户节点对象的 `measured`。这里重建对象（例如拖动时每帧写回位置）如果不把
+          // 尺寸带回来，尺寸会被重置成 undefined：`calculateNodePosition` 会打印 error015
+          // （“trying to drag a node that is not initialized”），框选 / fitView 等几何计算
+          // 也会拿到 0 尺寸。
+          measured: noteDimensions ?? measured,
+          style: noteDimensions,
+          draggable,
+          data: {
+            model,
+            isSelected: model.id === selectedNodeId,
+            runStatus,
+            connectedSourcePorts: [...new Set(sourcePorts)],
+            targetConnected,
+            canInsert: true,
+            onOpen: handleOpenNode,
+            onUpdateNode: updateNode,
+            onResizeNode: handleResizeNode,
+            onRequestInsert: handleRequestInsert,
+            onDeleteNode: handleDeleteNode,
+            onDuplicateNode: handleDuplicateNode,
+          },
+        }
 
-      next.set(model.id, { model, flags, node })
-      return node
-    })
+        next.set(model.id, { model, flags, node })
+        return node
+      })
 
     nodeCacheRef.current = next
     return nodes
@@ -577,9 +578,7 @@ function WorkflowStudioCanvas() {
     if (hasFitViewRef.current) return
     const frame = requestAnimationFrame(() => {
       hasFitViewRef.current = true
-      // maxZoom 限制在 1：图较小时 fitView 会放大到 1.5 倍并溢出可视区，
-      // 首屏应该能一眼看完整个图。
-      void flow.fitView({ padding: 0.25, maxZoom: 1 })
+      void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS)
     })
     return () => cancelAnimationFrame(frame)
   }, [flow])
@@ -853,7 +852,7 @@ function WorkflowStudioCanvas() {
                     type="button"
                     aria-label={t('router.canvas.fitViewAria')}
                     className="flex size-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-secondary"
-                    onClick={() => void flow.fitView({ padding: 0.25, maxZoom: 1 })}
+                    onClick={() => void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS)}
                   >
                     <LocateFixed className="size-3.5" aria-hidden />
                   </button>
