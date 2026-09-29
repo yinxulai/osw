@@ -180,60 +180,7 @@ describe('route rule engine', () => {
     expect(fallthrough.matchedRuleId).toBe('next')
   })
 
-  it('条件按名称命中时，变量落点把同一个字段的取值翻译成逻辑模型 id', () => {
-    // 「请求模型命中逻辑模型就直连」这条规则的常见写法是条件用 `logicalModels[*].name`
-    // （客户端送来的就是模型名），落点再取 `request.body.model`。名称与 id 不同名时
-    // （这里是 `deepseek-v4.1-flash` / `deepseek-v4-1-flash`）不能因为两个名字对不上就落到空。
-    const logicalModels: RuntimeLogicalModel[] = [
-      { id: 'default', name: 'default', enabled: true },
-      { id: 'deepseek-v4-1-flash', name: 'deepseek-v4.1-flash', enabled: true },
-    ]
-    const ruleSet = makeRuleSet([
-      makeRule('by-name', {
-        conditions: [{
-          fieldPath: ROUTE_RULE_DEFAULT_VARIABLE_PATH,
-          valueType: 'string',
-          operator: 'in',
-          valueSource: 'field',
-          valueFieldPath: 'logicalModels[*].name',
-        }],
-        landing: { source: 'variable', logicalModelIds: [], variablePath: ROUTE_RULE_DEFAULT_VARIABLE_PATH },
-      }),
-      makeRule('next', { landing: fixedLanding(['default']) }),
-    ])
-
-    const result = runRouteRules(ruleSet, {
-      ...inputOf(),
-      request: { ...inputOf().request, body: { model: 'deepseek-v4.1-flash' } },
-      logicalModels,
-    })
-
-    expect(result.matchedRuleId).toBe('by-name')
-    expect(result.logicalModelIds).toEqual(['deepseek-v4-1-flash'])
-    expect(result.steps[0]).toMatchObject({ matched: true, logicalModelIds: ['deepseek-v4-1-flash'] })
-  })
-
-  it('取值既是某个逻辑模型的名称、又是另一个的 id 时，id 优先', () => {
-    const logicalModels: RuntimeLogicalModel[] = [
-      { id: 'model-fast', name: 'Model Fast', enabled: true },
-      { id: 'model-smart', name: 'model-fast', enabled: true },
-    ]
-    const ruleSet = makeRuleSet([
-      makeRule('direct', {
-        landing: { source: 'variable', logicalModelIds: [], variablePath: ROUTE_RULE_DEFAULT_VARIABLE_PATH },
-      }),
-    ])
-
-    const result = runRouteRules(ruleSet, {
-      ...inputOf(),
-      request: { ...inputOf().request, body: { model: 'model-fast' } },
-      logicalModels,
-    })
-
-    expect(result.logicalModelIds).toEqual(['model-fast'])
-  })
-
-  it('取值既不是逻辑模型 id 也不是名称时原样透传，这条规则仍然胜出', () => {
+  it('取值不是任何逻辑模型 id 时原样透传，这条规则仍然胜出', () => {
     // 引擎不替下游筛「认不出的模型」：原样透传、规则照常胜出，由供应商规划回答它存不存在。
     // 只有字段压根取不到值时才给不出落点、让给下一条。
     const ruleSet = makeRuleSet([

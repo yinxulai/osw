@@ -706,58 +706,26 @@ export function readModelIdsFromValue(value: unknown): string[] {
 }
 
 /**
- * 落点取值 → 逻辑模型 id。
- *
- * 落点写的是逻辑模型 id，但请求里出现的通常是逻辑模型的**名称**：`logicalModels[*].name`
- * 是条件面板里可选的一栏，而客户端送来的模型名未必等于 id（例如 `deepseek-v4.1-flash`
- * 与 `deepseek-v4-1-flash`）。条件按名称命中、落点又取同一个字段时，两边对不上就会
- * 静默落到空。因此这里取值先按 id 认，认不出来再按名称认，同名时 id 优先。
- *
- * 都认不出来时**原样保留**：它存不存在该由下游的供应商规划回答，
- * 引擎在这里筛掉只会把「写错了」变成「静默换了个模型」。
- */
-export function resolveLogicalModelIds(value: unknown, logicalModels: RuntimeLogicalModel[]): string[] {
-  const candidates = readModelIdsFromValue(value)
-  if (candidates.length === 0 || logicalModels.length === 0) return candidates
-
-  const ids = new Set(logicalModels.map(model => model.id))
-  const idsByName = new Map<string, string>()
-  for (const model of logicalModels) {
-    // 名称归用户自己填，重名时先出现的那条说了算（列表顺序稳定，不在这里再定一套优先级）。
-    if (!idsByName.has(model.name)) idsByName.set(model.name, model.id)
-  }
-
-  return normalizeModelIds(candidates.map(candidate => (ids.has(candidate) ? candidate : idsByName.get(candidate) ?? candidate)))
-}
-
-/** 变量落点命中时的解释：取值本身就是 id 是直连，按名称指到了别的 id 就如实说出来。 */
-function describeVariableLanding(variablePath: string, rawModelIds: string[], modelIds: string[]): string {
-  const direct = rawModelIds.length === modelIds.length && rawModelIds.every((id, index) => id === modelIds[index])
-  return direct
-    ? `字段 ${variablePath} 取值 ${modelIds.join('、')}，直连该逻辑模型`
-    : `字段 ${variablePath} 取值 ${rawModelIds.join('、')}，按名称指向逻辑模型 ${modelIds.join('、')}`
-}
-
-/**
  * 解析逻辑模型选择节点的落点。
  * - `fixed`：直接使用节点上配置的固定逻辑模型列表；
- * - `variable`：把 `variablePath` 指向的字段取值当逻辑模型（先按 id 认、再按名称认，
- *   见 `resolveLogicalModelIds`），取不到值时使用兜底列表
+ * - `variable`：把 `variablePath` 指向的字段取值当逻辑模型 **id**（字符串 → 单个 id，
+ *   字符串数组 → id 列表），取不到值时使用兜底列表
  *   （兜底列表为空表示不兜底，此时落点为空，由输出节点报「没有可用逻辑模型」）。
+ *
+ * 落点只认 id：逻辑模型的 `name` 是给人看的展示名，不参与路由。要让「请求哪个模型就直连哪个」
+ * 成立，客户端发来的模型名就得是逻辑模型 id —— 全链路只有 id 一个标识。
  */
-function resolveModelSelection(node: ModelSelectNode, payload: Record<string, unknown>, logicalModels: RuntimeLogicalModel[]): ModelSelection {
+function resolveModelSelection(node: ModelSelectNode, payload: Record<string, unknown>): ModelSelection {
   if (node.source === 'variable') {
     const variablePath = node.variablePath.trim()
     // 取值走与条件同一套字段解析：`request.headers.<名字>` 在这里同样大小写不敏感，
     // 否则同一条路径在条件里读得到、在落点上读不到，用户没法自己解释。
-    const rawValue = variablePath ? resolveConditionField(payload, variablePath) : undefined
-    const rawModelIds = readModelIdsFromValue(rawValue)
-    const modelIds = resolveLogicalModelIds(rawValue, logicalModels)
+    const modelIds = readModelIdsFromValue(variablePath ? resolveConditionField(payload, variablePath) : undefined)
     if (modelIds.length > 0) {
       return {
         modelIds,
         matched: true,
-        reason: describeVariableLanding(variablePath, rawModelIds, modelIds),
+        reason: `字段 ${variablePath} 取值 ${modelIds.join('、')}，直连该逻辑模型`,
       }
     }
 
@@ -961,7 +929,7 @@ export async function runWorkflow(graph: WorkflowGraph, inputPayload: unknown, o
 
       if (current.kind === 'model-select') {
         const route = routeOf(outputPayload)
-        const selection = resolveModelSelection(current, outputPayload, envelope.context.logicalModels)
+        const selection = resolveModelSelection(current, outputPayload)
         route.modelIds = selection.modelIds
         route.fallback = !selection.matched && selection.modelIds.length > 0
         if (current.source === 'variable') {

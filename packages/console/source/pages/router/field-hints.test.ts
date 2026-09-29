@@ -104,7 +104,6 @@ describe('resolveInputHints', () => {
       'metadata',
       'logicalModels',
       'logicalModels[*].id',
-      'logicalModels[*].name',
       'logicalModels[*].enabled',
     ])
     expect(field('request.headers')).toMatchObject({ valueType: 'object', sourceNodeId: 'input' })
@@ -115,7 +114,6 @@ describe('resolveInputHints', () => {
     expect(field('logicalModels')).toMatchObject({ valueType: 'array', sourceNodeId: 'input' })
     expect(field('logicalModels')?.note).toBeTruthy()
     expect(field('logicalModels[*].id')).toMatchObject({ valueType: 'string', sourceNodeId: 'input' })
-    expect(field('logicalModels[*].name')).toMatchObject({ valueType: 'string' })
     expect(field('logicalModels[*].enabled')).toMatchObject({ valueType: 'boolean' })
   })
 

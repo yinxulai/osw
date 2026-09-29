@@ -126,7 +126,7 @@ interface PromptNode extends WorkflowNodeBase {
 `model-select` 节点的取值来源决定落点：
 
 - `fixed`：使用节点上配置的逻辑模型列表；
-- `variable`：读取 `variablePath` 指向字段的取值作为落点（字符串 → 单个逻辑模型，字符串数组 → 逻辑模型列表；先按 id 认、再按名称认），取不到时使用节点上的兜底逻辑模型；兜底列表为空则不产出落点。
+- `variable`：读取 `variablePath` 指向字段的取值作为落点（字符串 → 单个逻辑模型 **id**，字符串数组 → 逻辑模型 id 列表），取不到时使用节点上的兜底逻辑模型；兜底列表为空则不产出落点。
 
 条件规则的比较值也支持来自字段（`valueSource: 'field'` + `valueFieldPath`），因此「请求模型是否在逻辑模型列表里」这类判断完全由条件节点完成，引擎不预计算业务结论。
 

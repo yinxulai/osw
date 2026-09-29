@@ -31,6 +31,5 @@ export const INPUT_NODE_FIELDS: readonly InputNodeField[] = [
   { path: 'metadata', valueType: 'object', noteKey: 'router.fieldNote.metadata' },
   { path: 'logicalModels', valueType: 'array', noteKey: 'router.fieldNote.logicalModels' },
   { path: `logicalModels${PATH_WILDCARD_SUFFIX}.id`, valueType: 'string' },
-  { path: `logicalModels${PATH_WILDCARD_SUFFIX}.name`, valueType: 'string' },
   { path: `logicalModels${PATH_WILDCARD_SUFFIX}.enabled`, valueType: 'boolean' },
 ]
