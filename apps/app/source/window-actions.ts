@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { resolveWindowShortcut, type WindowAction } from './window-shortcuts'
+import { noteQuitReason } from './main-log'
 
 interface WindowShortcutOptions {
   enableDevTools: boolean
@@ -14,6 +15,7 @@ function executeWindowAction(action: WindowAction, target: BrowserWindow): void 
       target.close()
       return
     case 'quit':
+      noteQuitReason('window-shortcut-quit')
       app.quit()
       return
     case 'undo':

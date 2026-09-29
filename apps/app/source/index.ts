@@ -4,6 +4,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer, onServerStateChanged, stopServer, forwardRuntimeLog } from './server-host'
 import { installLogForwarding, setLogSink } from './log-forwarder'
+import {
+  appendMainLog,
+  getQuitReason,
+  installMainLogCapture,
+  mainLogFilePath,
+  noteQuitReason,
+  startMainHeartbeat,
+  stopMainHeartbeat,
+} from './main-log'
 import { listCurrentDatabaseFileNames } from '@common/database-file'
 import { createRuntimeConfig } from '@common/runtime-config'
 import { getRuntimeProfile } from '@common/runtime-profile'
@@ -47,6 +56,11 @@ process.env.OUTPUT = path.join(__dirname, '..')
 // 共用同一份配置与同一对数据库文件，所以「先用命令行跑起来、再开桌面端」不会看到两套空数据。
 // Electron 自己的缓存与凭据也跟着搬过去——`app.getPath('userData')` 是它们的唯一落点。
 app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))
+
+// 主进程自己的落盘日志：必须比**任何一行输出**都早装上（早于 `installLogForwarding()`），
+// 否则启动横幅——启动期唯一一组「服务之外」的信息——就只能走数据库那条通道，而服务
+// 进程不在时那条通道没有落点。理由与取舍见 `main-log.ts`。
+installMainLogCapture(app.getPath('userData'))
 
 let win: BrowserWindow | null = null
 let trayManager: TrayManager | null = null
@@ -195,6 +209,9 @@ if (isPrimaryInstance) {
 function reportFatalError(error: unknown, title = nativeTranslator()('native.error.fatalTitle')): void {
   if (fatalErrorShown) return
   fatalErrorShown = true
+  // 先记原因再做事：哪怕弹框或 `app.quit()` 卡住，落盘日志里也已经留下「为什么退」。
+  // 原因通常由调用方用 `noteQuitReason()` 先写好，没写就退回这个默认值。
+  if (getQuitReason() === null) noteQuitReason('fatal-error')
 
   const detail = formatError(error)
   console.error(`[osw] ${title}`, detail)
@@ -215,8 +232,31 @@ function reportFatalError(error: unknown, title = nativeTranslator()('native.err
 }
 
 process.on('uncaughtException', error => {
+  noteQuitReason('uncaught-exception')
   reportFatalError(error)
 })
+
+/**
+ * 被信号终止也记一笔。
+ *
+ * 装了监听器就会吞掉 Node 默认的「收到即退出」，所以这里显式还原：先走一次正常退出（让
+ * `before-quit` 去释放实例锁与数据库），再用一个兜底定时器保证清理卡住时进程仍然会结束。
+ * 闪退若是外部所杀（注销、`kill`），这几行常常是事后唯一的线索。
+ */
+const SIGNAL_NUMBERS: ReadonlyArray<readonly [string, number]> = [
+  ['SIGHUP', 1],
+  ['SIGINT', 2],
+  ['SIGTERM', 15],
+]
+
+for (const [signal, signalNumber] of SIGNAL_NUMBERS) {
+  process.on(signal, () => {
+    noteQuitReason(`signal-${signal}`)
+    app.quit()
+    const fallback = setTimeout(() => app.exit(128 + signalNumber), 5_000)
+    fallback.unref()
+  })
+}
 
 /**
  * 未处理的 Promise 拒绝不当作致命错误。
@@ -290,6 +330,7 @@ function logStartupBanner() {
     `  CPU Cores   :  ${os.cpus().length} (${os.cpus()[0]?.model ?? 'unknown'})`,
     `  Memory      :  ${Math.round(os.totalmem() / 1024 / 1024)} MB total`,
     `  User Data   :  ${app.getPath('userData')}`,
+    `  Main Log    :  ${mainLogFilePath() ?? '(unavailable)'}`,
     `  Databases   :  ${listCurrentDatabaseFileNames().join(', ')}`,
     `  Proxy Port  :  ${runtimeProfile.proxyPort}`,
     `  Admin Port  :  ${runtimeProfile.managementPort}`,
@@ -430,18 +471,29 @@ function createWindow() {
     void stopServer().catch(stopError => {
       console.error('[osw] failed to stop server after renderer load failure', formatError(stopError))
     })
+    noteQuitReason('renderer-load-failed')
     app.quit()
+  })
+
+  // 窗口无响应/恢复。长时间无响应往往是被某个同步操作卡死的前兆。
+  win.on('unresponsive', () => {
+    appendMainLog('warn', '[lifecycle] window became unresponsive')
+  })
+  win.on('responsive', () => {
+    appendMainLog('info', '[lifecycle] window became responsive again')
   })
 
   if (isDevelopment) {
     void win.loadURL(process.env.VITE_DEV_SERVER_URL!).catch(error => {
       showStartupError(error)
+      noteQuitReason('dev-server-load-failed')
       app.quit()
     })
     win.webContents.openDevTools()
   } else {
     void win.loadFile(path.join(process.env.OUTPUT!, 'render', 'index.html')).catch(error => {
       showStartupError(error)
+      noteQuitReason('renderer-file-load-failed')
       app.quit()
     })
   }
@@ -481,7 +533,10 @@ async function bootstrap(): Promise<void> {
   // 服务进程崩溃重启的预算也会用尽。到那一步应用已经没什么可做的了：
   // 有窗口的显示错误，没窗口的弹原生对话框，然后退出。
   onServerStateChanged(state => {
-    if (state.kind === 'failed') reportFatalError(state.error)
+    if (state.kind === 'failed') {
+      noteQuitReason('service-restart-exhausted')
+      reportFatalError(state.error)
+    }
   })
 
   const userDataDir = app.getPath('userData')
@@ -502,6 +557,7 @@ async function bootstrap(): Promise<void> {
     })
   } catch (error) {
     showStartupError(error)
+    noteQuitReason('server-start-failed')
     app.quit()
     return
   }
@@ -520,6 +576,7 @@ async function bootstrap(): Promise<void> {
     await stopServer().catch(stopError => {
       console.error('[osw] failed to stop server after startup failure', formatError(stopError))
     })
+    noteQuitReason('window-create-failed')
     app.quit()
     return
   }
@@ -551,6 +608,9 @@ async function bootstrap(): Promise<void> {
 
   console.info(`[osw] ready startupDuration=${formatUptime()}`)
 
+  // 心跳：闪退最缺的就是时间线，有了它才能从日志最后一行判断进程死在哪一刻。
+  startMainHeartbeat()
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else if (trayManager) void trayManager.showWindow()
@@ -565,12 +625,44 @@ if (isPrimaryInstance) {
   app.on('second-instance', focusExistingInstance)
   void bootstrap()
 } else {
+  noteQuitReason('secondary-instance')
   app.quit()
 }
 
 app.on('window-all-closed', () => {
   // 不退出应用，保持在托盘运行
   // if (process.platform !== 'darwin') app.quit()
+  appendMainLog('info', '[lifecycle] all windows closed; staying resident in tray')
+})
+
+/**
+ * 进程级崩溃兜底。这几类事件此前完全没有监听：渲染进程崩了、GPU/工具进程崩了，主进程在用户
+ * 眼里只是「窗口突然白了」，日志里一个字也没有。`reason` 是 Electron 给出的原始分类，
+ * 没有它就只能对着现象猜。
+ */
+app.on('render-process-gone', (_event, contents, details) => {
+  appendMainLog(
+    'error',
+    `[lifecycle] render process gone type=${contents.getType()} reason=${details.reason} exitCode=${details.exitCode}`,
+  )
+})
+
+app.on('child-process-gone', (_event, details) => {
+  appendMainLog(
+    'error',
+    `[lifecycle] child process gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode} serviceName=${details.serviceName ?? '-'}`,
+  )
+})
+
+app.on('will-quit', () => {
+  appendMainLog('info', `[lifecycle] will-quit reason=${getQuitReason() ?? 'unknown'}`)
+})
+
+app.on('quit', (_event, exitCode) => {
+  appendMainLog(
+    'info',
+    `[lifecycle] quit exitCode=${exitCode} reason=${getQuitReason() ?? 'unknown'}`,
+  )
 })
 
 let quitting = false
@@ -587,6 +679,9 @@ function delay(milliseconds: number): Promise<void> {
  * 关掉数据库连接；原来这里只是 `void stopServer()`，没人等它，进程经常在释放锁之前就没了。
  */
 async function shutdown(): Promise<void> {
+  stopMainHeartbeat()
+  appendMainLog('info', `[lifecycle] shutdown started reason=${getQuitReason() ?? 'unknown'}`)
+
   // 托盘先拆：它的状态轮询每 2 秒打一次管理 API，服务关掉之后它就只是一台报错机器。
   trayManager?.destroy()
   trayManager = null
@@ -597,9 +692,11 @@ async function shutdown(): Promise<void> {
   } catch (error) {
     console.error('[osw] failed to stop the server during quit', formatError(error))
   }
+  appendMainLog('info', '[lifecycle] shutdown completed')
 }
 
 app.on('before-quit', event => {
+  appendMainLog('info', `[lifecycle] before-quit reason=${getQuitReason() ?? 'unknown'}`)
   // 无论是谁触发的退出，都要先让托盘别再拦窗口关闭。
   trayManager?.prepareForQuit()
   if (quitting || !isPrimaryInstance) return

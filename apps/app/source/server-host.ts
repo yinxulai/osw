@@ -54,7 +54,12 @@ function spawnServiceProcess(entry: string): ServiceProcess {
       child.on('message', listener)
     },
     onExit: listener => {
-      child.on('exit', listener)
+      child.on('exit', code => {
+        // 服务进程消失是「整个应用还在、但功能全没了」的根因，退出码是这里唯一能带上的事实。
+        // 正常停止也会走到这里，所以用 info 而非 error：是不是崩溃由后面的重启日志回答。
+        console.log(`[service-host] service process exited code=${code}`)
+        listener(code)
+      })
     },
     kill: () => {
       child.kill()
@@ -105,6 +110,9 @@ export async function startServer(options: StartServerOptions): Promise<void> {
   next.onStateChanged(state => {
     if (state.kind === 'restarting') {
       console.warn(`[service-host] restarting after a crash attempt=${state.attempt}`, state.error)
+    }
+    if (state.kind === 'failed') {
+      console.error('[service-host] restart budget exhausted; giving up', state.error)
     }
     // 这里不再包一层 try/catch：`ServiceHost` 的 `setState` 已经逐个兜住了监听器的
     // 异常（并打出同一条日志），再兜一次只会让同一个错误被记两遍。

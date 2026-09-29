@@ -3,6 +3,7 @@ import { generateTrayIcon } from './tray-icon'
 import { buildTrayMenuTemplate, type TrayProxySnapshot } from './tray-menu'
 import { TrayPanelManager } from './tray-panel'
 import { nativeTranslator, onNativeLocaleChanged } from './i18n'
+import { noteQuitReason } from './main-log'
 import {
   getProxyServerStatus,
   getTrayLogicalModels,
@@ -229,6 +230,7 @@ export class TrayManager {
   private quitApp(): void {
     // 设置标志让窗口关闭事件知道是真的要退出
     this.isQuitting = true
+    noteQuitReason('tray-quit')
     app.quit()
   }
 
