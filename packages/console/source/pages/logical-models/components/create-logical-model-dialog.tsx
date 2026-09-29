@@ -35,7 +35,9 @@ export function CreateLogicalModelDialog(props: CreateLogicalModelDialogProps) {
     const validation = LogicalModelIdSchema.safeParse(trimmedId)
     if (!validation.success) {
       // 就地提示错误，避免只弹 toast 让用户找不到出错的字段。
-      const message = validation.error.issues[0]?.message ?? t('logicalModels.create.idInvalid')
+      // 报错用本地化文案而不是 zod 的原始 message：规则本身写在旁边那行 hint 里，
+      // 而 zod 的 message 只有英文一种写法，直接显示会在中文界面上割裂。
+      const message = t('logicalModels.create.idInvalid')
       setIdError(message)
       toast.error(message)
       return

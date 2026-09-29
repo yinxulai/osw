@@ -505,9 +505,9 @@ CREATE INDEX idx_provider_endpoints_deleted_time
 
 ### 3.5 `logical_models`
 
-`default` 是代理内部的兜底逻辑模型：客户端请求中的任意非空模型名在没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，名称固定（请求按名称命中它），只有说明可编辑。
+`default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**id 固定**（请求按 id 命中它），只有说明可编辑。
 
-除 `default` 之外，逻辑模型可以在控制台自由创建、改名、改说明与软删除：名称是展示名，同时可以作为请求命中的依据；说明是自由文本。删除只打 `deletedTime` 时间戳（§8），行留在表里——历史请求日志、调度绑定与路由落点都按 ID 引用逻辑模型，硬删会把它们变成悬空引用。
+除 `default` 之外，逻辑模型可以在控制台自由创建、改名、改说明与软删除：**id 是路由唯一使用的标识**，也是客户端请求里那个 `model` 必须写的值，约束为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（容得下 `deepseek-v4.1-flash`、`GPT-4o` 这类真实模型名）；名称是纯展示名，不参与路由，说明是自由文本。删除只打 `deletedTime` 时间戳（§8），行留在表里——历史请求日志、调度绑定与路由落点都按 ID 引用逻辑模型，硬删会把它们变成悬空引用。
 
 ```sql
 CREATE TABLE logical_models (
@@ -530,7 +530,7 @@ CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 
 `scheduling_policies` 是 **LogicalModel 与 ProviderModel 之间的调度绑定表**，不是逻辑模型的单独全局策略配置。每一行表示一个 ProviderModel 是否加入某个逻辑模型的候选池，以及它在该候选池中的顺序和权重。因此，不同逻辑模型可以绑定相同的 ProviderModel，但为其配置不同的 `priority`、`weight` 和启用状态；ProviderModel 本身不再拥有跨逻辑模型共享的全局排序。
 
-v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 ID 或名称时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改名与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
+v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 ID 时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改名与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
 
 ```sql
 CREATE TABLE scheduling_policies (
@@ -1256,7 +1256,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 ## 8. 删除与历史数据规则
 
-初始化时必须幂等创建 `logical_models.default` 及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、名称也不可改（请求按名称命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
+初始化时必须幂等创建 `logical_models.default` 及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、id 也不可改（请求按 id 命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
 
 ### 配置实体
 

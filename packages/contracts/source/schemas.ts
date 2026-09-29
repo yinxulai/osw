@@ -205,8 +205,14 @@ export type SchedulingPolicy = z.infer<typeof SchedulingPolicySchema>
 
 // ========== Logical Model ==========
 
-/** Logical model IDs are stable public model identifiers. */
-export const LogicalModelIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/, 'logical model id must start with a lowercase letter and may only contain lowercase letters, digits, underscores and hyphens (max 64 characters)')
+/**
+ * 逻辑模型 id：稳定、公开、**路由唯一的标识**。
+ *
+ * 落点只认 id，所以客户端请求里的模型名要能直接写成这个 id —— 于是约束必须容得下真实模型名：
+ * 版本号里的点（`deepseek-v4.1-flash`）、大小写（`GPT-4o`、`Qwen3-Max`）都是模型名的常态。
+ * 仍然拒绝空格、斜杠、冒号等：id 会进日志与快照，标点保持在可枚举的安全子集里。
+ */
+export const LogicalModelIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, 'logical model id must start with a letter or digit and may only contain letters, digits, dots, underscores and hyphens (max 64 characters)')
 
 /**
  * 内建默认逻辑模型的名字：启动时由 `ensureDefaultLogicalModel` 建出来（id 与 name 都取这个值）。
@@ -235,7 +241,8 @@ export interface LogicalModelIdentity {
  * 是否是内建默认逻辑模型。
  *
  * 种子写入时 id 与 name 都是 `default`，但历史数据或手改过的记录可能只对上其中一个，
- * 所以两个都比对一次——请求模型命中的判断也是 id 与 name 都看的，两边保持一致。
+ * 所以两个都比对一次 —— 这里比的是「是不是那条内建记录」，与路由命中不是同一件事：
+ * 路由只看 id。
  */
 export function isBuiltInDefaultLogicalModel(model: LogicalModelIdentity): boolean {
   return model.id === BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME || model.name === BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME
