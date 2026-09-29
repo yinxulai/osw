@@ -233,6 +233,25 @@ describe('route rule engine', () => {
     expect(result.logicalModelIds).toEqual(['model-fast'])
   })
 
+  it('取值既不是逻辑模型 id 也不是名称时原样透传，这条规则仍然胜出', () => {
+    // 引擎不替下游筛「认不出的模型」：原样透传、规则照常胜出，由供应商规划回答它存不存在。
+    // 只有字段压根取不到值时才给不出落点、让给下一条。
+    const ruleSet = makeRuleSet([
+      makeRule('passthrough', {
+        landing: { source: 'variable', logicalModelIds: [], variablePath: ROUTE_RULE_DEFAULT_VARIABLE_PATH },
+      }),
+      makeRule('next', { landing: fixedLanding(['model-fast']) }),
+    ])
+
+    const result = runRouteRules(ruleSet, {
+      ...inputOf(),
+      request: { ...inputOf().request, body: { model: 'ghost-model' } },
+    })
+
+    expect(result.matchedRuleId).toBe('passthrough')
+    expect(result.logicalModelIds).toEqual(['ghost-model'])
+  })
+
   it('条件里的头名大小写不敏感，判定依据如实回传', () => {
     // HTTP 头名本来就大小写不敏感，条件照文档写 `User-Agent` 也必须读得到。
     const ruleSet = makeRuleSet([

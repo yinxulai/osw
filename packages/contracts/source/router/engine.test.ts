@@ -984,6 +984,24 @@ describe('router engine', () => {
       .toBe('字段 request.body.model 取值 model-hit，直连该逻辑模型')
   })
 
+  it('变量取值：头名大小写不敏感，与条件读同一套字段解析', async () => {
+    // 条件里 `request.headers.<名字>` 按头名大小写不敏感；落点取同一个路径时不能因为
+    // 写法大小写不同就读成「字段不存在」，否则同一条路径两边对不上。
+    const graph = createVariableModelGraph()
+    graph.nodes = graph.nodes.map(node => node.kind === 'model-select'
+      ? { ...node, variablePath: 'request.headers.X-Model-Id' }
+      : node)
+
+    const result = await runWorkflow(graph, {
+      request: { path: '/v1/chat/completions', headers: { 'x-model-id': 'model-hit' }, body: { model: 'gpt-4o-mini' } },
+      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      metadata: {},
+    })
+
+    const payload = result.outputPayload as { route: { modelIds: string[] } }
+    expect(payload.route.modelIds).toEqual(['model-hit'])
+  })
+
   it('变量取值：没有兜底逻辑模型且取不到值时落点为空', async () => {
     const result = await runWorkflow(createVariableModelGraph(), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: '' } },

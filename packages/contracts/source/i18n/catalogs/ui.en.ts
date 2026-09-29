@@ -1019,7 +1019,7 @@ export const uiEn = {
   'router.rules.variablePath': 'Value field',
   'router.rules.variablePathEmpty': 'Enter a field path',
   'router.rules.variablePathHint': 'e.g. request.body.model',
-  'router.rules.variableHint': 'The value is resolved as a logical model id first, then by logical model name. When nothing resolves the rule counts as unmet and matching continues.',
+  'router.rules.variableHint': 'The value is resolved as a logical model id first, then by logical model name. When nothing resolves it is passed through verbatim for the downstream to validate (the rule still wins); only when the field has no value does the rule yield no landing and matching continue.',
   'router.rules.pickModelSearch': 'Search and add logical models',
   'router.rules.pickModelEmpty': 'No matching logical model',
   'router.rules.removeModel': 'Remove {name}',

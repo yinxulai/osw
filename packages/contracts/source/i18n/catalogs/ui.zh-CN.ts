@@ -1023,7 +1023,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'router.rules.variablePath': '取值字段',
   'router.rules.variablePathEmpty': '填写字段路径',
   'router.rules.variablePathHint': '例如：request.body.model',
-  'router.rules.variableHint': '取到的值先当逻辑模型 id 认，认不出再按逻辑模型名称认；都认不出时这条规则视为不成立，继续往下匹配。',
+  'router.rules.variableHint': '取到的值先当逻辑模型 id 认，认不出再按逻辑模型名称认；都认不出时原样透传，交给下游校验（这条规则仍然命中）；只有字段取不到值时才给不出落点，继续往下匹配。',
   'router.rules.pickModelSearch': '搜索并添加逻辑模型',
   'router.rules.pickModelEmpty': '没有匹配的逻辑模型',
   'router.rules.removeModel': '移除 {name}',

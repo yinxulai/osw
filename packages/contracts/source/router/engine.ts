@@ -748,7 +748,9 @@ function describeVariableLanding(variablePath: string, rawModelIds: string[], mo
 function resolveModelSelection(node: ModelSelectNode, payload: Record<string, unknown>, logicalModels: RuntimeLogicalModel[]): ModelSelection {
   if (node.source === 'variable') {
     const variablePath = node.variablePath.trim()
-    const rawValue = variablePath ? getByPath(payload, variablePath) : undefined
+    // 取值走与条件同一套字段解析：`request.headers.<名字>` 在这里同样大小写不敏感，
+    // 否则同一条路径在条件里读得到、在落点上读不到，用户没法自己解释。
+    const rawValue = variablePath ? resolveConditionField(payload, variablePath) : undefined
     const rawModelIds = readModelIdsFromValue(rawValue)
     const modelIds = resolveLogicalModelIds(rawValue, logicalModels)
     if (modelIds.length > 0) {
