@@ -155,7 +155,6 @@ describe('service runtime over rpc', () => {
       await harness.calls('proxy.start', undefined)
       expect(await harness.calls('proxy.status', undefined)).toMatchObject({ running: true })
       expect(await harness.calls('settings.get', undefined)).toHaveProperty('language')
-      expect(await harness.calls('tray.logical-models', undefined)).toEqual(expect.any(Array))
     } finally {
       await harness.stop()
     }

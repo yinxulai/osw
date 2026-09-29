@@ -18,6 +18,7 @@ import { useProxyStatus } from '@/data/proxy'
 import { findCurrentNavigationItem } from '@/routing/navigation'
 import { routePaths } from '@/routing/routes'
 import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
+import { useDocumentTheme } from '@/shell/document-theme'
 import { getPlatformCapabilities } from '@/platform/capabilities'
 
 interface RouteOutletProps {
@@ -51,7 +52,9 @@ function App() {
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const sidebarExpanded = sidebarPinned || sidebarHovered
-  const { theme, toggleTheme } = useAppearance()
+  const { toggleTheme } = useAppearance()
+  // 主题落到 `<html>` 上这件事与托盘面板共用同一份（见 hook 内部注释）。
+  const theme = useDocumentTheme()
   const proxyStatus = useProxyStatus()
   const t = useTranslation()
   const isElectron = getPlatformCapabilities().name === 'electron'
@@ -62,8 +65,9 @@ function App() {
   // 的组件各自发一次跳转。
   useAppearanceUrlSync()
 
+  // 主题还要告知主进程：原生标题栏与窗口底色跟着亮暗走（托盘面板不做这件事——它没有
+  // 原生标题栏）。
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
     getPlatformCapabilities().setTheme?.(theme)
   }, [theme])
 

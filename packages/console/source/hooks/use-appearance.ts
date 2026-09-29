@@ -23,7 +23,7 @@ import { useAppUiStore } from '@/store/app-ui-store'
 import { appearanceSearch, useUrlOverrides } from '@/routing/url-overrides'
 import type { Theme, ThemeMode } from '@/components/app-sidebar'
 
-export interface Appearance {
+export interface ResolvedAppearance {
   /** 唯一状态源：持久化的语言偏好。 */
   language: LanguagePreference
   /** 唯一状态源：持久化的主题选择，含「跟随系统」。 */
@@ -32,12 +32,41 @@ export interface Appearance {
   locale: Locale
   /** 屏幕上是亮是暗；「跟随系统」时由系统实时决定。 */
   theme: Theme
+}
+
+export interface Appearance extends ResolvedAppearance {
   /** 改语言偏好，并让地址栏跟上。 */
   setLanguage: (language: LanguagePreference) => void
   /** 改主题偏好，并让地址栏跟上。 */
   setThemeMode: (mode: ThemeMode) => void
   /** 主题开关：亮暗翻转，并把它落成偏好（不经过「跟随系统」）。 */
   toggleTheme: () => void
+}
+
+/**
+ * 只读的那一半：偏好 + 地址栏覆盖 → 生效的语言与主题。
+ *
+ * 不需要改偏好、因而不需要路由的调用方走这里。托盘面板就是这样一个调用方：它用**内存
+ * 路由**，没有可以跳转的地址栏（语言与主题的地址栏覆盖在窗口创建前就由启动脚本读进
+ * `<html>` 了），但它要画的和主界面一模一样的亮暗与语言。
+ *
+ * 依赖 `useUrlOverrides`，那是 `history` 上的一个外部订阅，不在路由上下文里也能跑。
+ */
+export function useResolvedAppearance(): ResolvedAppearance {
+  const { lang: urlLang, theme: urlTheme } = useUrlOverrides()
+
+  const language = useLanguageStore(state => state.preference)
+  const themeMode = useAppUiStore(state => state.themeMode)
+
+  // 地址栏里的值就是生效值；它没有时落回偏好，偏好是「跟随系统」时再落到系统语言。
+  const locale = urlLang ?? resolveLocale(language, getSystemLocale())
+  const systemTheme = useSystemTheme()
+
+  // 界面上要用**生效值**：跟随系统时要随系统实时变，不能把 `system` 原样当成亮暗。
+  const effectiveThemeMode: ThemeMode = urlTheme ?? themeMode
+  const theme: Theme = effectiveThemeMode === 'system' ? systemTheme : effectiveThemeMode
+
+  return { language, themeMode, locale, theme }
 }
 
 /**
@@ -48,20 +77,9 @@ export interface Appearance {
  */
 export function useAppearance(): Appearance {
   const navigate = useNavigate()
-  const { lang: urlLang, theme: urlTheme } = useUrlOverrides()
-
-  const language = useLanguageStore(state => state.preference)
+  const { language, themeMode, locale, theme } = useResolvedAppearance()
   const setLanguagePreference = useLanguageStore(state => state.setPreference)
-  const themeMode = useAppUiStore(state => state.themeMode)
   const setThemeModePreference = useAppUiStore(state => state.setThemeMode)
-
-  // 地址栏里的值就是生效值；它没有时落回偏好，偏好是「跟随系统」时再落到系统语言。
-  const locale = urlLang ?? resolveLocale(language, getSystemLocale())
-  const systemTheme = useSystemTheme()
-
-  // 界面上要用**生效值**：跟随系统时要随系统实时变，不能把 `system` 原样当成亮暗。
-  const effectiveThemeMode: ThemeMode = urlTheme ?? themeMode
-  const theme: Theme = effectiveThemeMode === 'system' ? systemTheme : effectiveThemeMode
 
   /**
    * 改偏好的同时**改写**地址栏（而不是只补缺的）。
@@ -139,7 +157,7 @@ export function useAppearanceUrlSync(): void {
  * 「订阅系统主题」与「语言/主题的读写」是两件事。
  * `matchMedia` 在部分测试环境里不存在，所以订阅前先探一下。
  */
-function useSystemTheme(): Theme {
+export function useSystemTheme(): Theme {
   const [systemTheme, setSystemTheme] = useState<Theme>('light')
 
   useEffect(() => {

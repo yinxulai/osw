@@ -13,7 +13,6 @@ import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type 
 import { restrictToWindowEdges } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useLogicalModelControlService } from './service'
-import { providerModelProcessingCounts } from '@/data/live-request-selectors'
 import { useLiveRequests } from '@/data/live-requests'
 import { useLogicalModels, useLogicalModelsActions } from '@/data/logical-models'
 import { LogicalModelCard } from './components/logical-model-card'
@@ -24,6 +23,7 @@ import { CreateLogicalModelDialog } from './components/create-logical-model-dial
 import { EditLogicalModelDialog } from './components/edit-logical-model-dialog'
 import { logicalModelApi, schedulingPolicyApi } from '@/api/models'
 import { unwrap } from '@/api/unwrap'
+import { providerModelProcessingCounts } from '@common/provider-model-status'
 import { isBuiltInDefaultLogicalModel, type LogicalModel, type LogicalModelProviderModel } from '@common/schemas'
 
 interface LogicalModelColumnProps {

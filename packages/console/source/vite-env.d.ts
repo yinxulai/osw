@@ -85,15 +85,6 @@ interface ElectronAPI {
   updater: UpdaterAPI
 }
 
-interface TrayPanelAPI {
-  getState: () => Promise<import('@common/tray-panel').TrayPanelState>
-  toggleProxy: () => Promise<import('@common/tray-panel').TrayPanelState>
-  openMainWindow: () => Promise<void>
-  quit: () => Promise<void>
-  resize: (height: number) => void
-  onStateChanged: (callback: (state: import('@common/tray-panel').TrayPanelState) => void) => () => void
-}
-
 /**
  * 宿主注入的运行时信息（`window.__OSW__`）。
  *
@@ -103,6 +94,25 @@ interface TrayPanelAPI {
  */
 interface OswRuntime {
   apiBase?: string
+}
+
+/**
+ * 托盘面板窗口的宿主桥（`apps/app/source/tray-panel-preload.ts`）。
+ *
+ * 刻意只剩「窗口自己才能做的事」：面板里显示的每一个数据都不在这里——那些走管理 API 与
+ * 实时流，与控制台同一条通路。这里一旦多出 `getState` 之类的方法，就等于又开了一条
+ * 「面板另拉一份数据」的路，那正是这次重构要拆掉的东西。
+ *
+ * 因此也没有代理开关：`useProxyToggle` 直接调管理 API，主进程每 2 秒读同一个服务来刷托盘
+ * 菜单，两边看到的是同一份状态。
+ */
+interface TrayPanelAPI {
+  /** 打开主界面，并收起面板。 */
+  openMainWindow: () => Promise<void>
+  /** 退出应用。 */
+  quit: () => void
+  /** 把面板内容高度报给宿主窗口：面板的高度由内容决定，窗口跟着走。 */
+  resize: (height: number) => void
 }
 
 interface Window {

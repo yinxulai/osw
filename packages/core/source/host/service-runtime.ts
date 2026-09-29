@@ -10,7 +10,6 @@ import { writeRuntimeLog } from '../management/infrastructure/log-buffer'
 import { startServer, stopServer } from '../index'
 import { getProxyServerStatus, startProxyServer, stopProxyServer } from '../proxy/runtime/server'
 import { createCaller, createRpcEndpoint, describeError, type RpcPort } from './rpc'
-import { listTrayLogicalModels } from './tray-summary'
 import type { HostCalls, HostLogLine, ServiceEvents } from './protocol'
 import type { SecretStore } from '@common/secret-store'
 import type { SystemProxyResolver } from '../infrastructure/network/outbound-connector'
@@ -56,7 +55,6 @@ export async function startServiceRuntime(options: ServiceRuntimeOptions): Promi
     endpoint.handle('proxy.stop', async () => {
       await stopProxyServer()
     })
-    endpoint.handle('tray.logical-models', () => listTrayLogicalModels())
     endpoint.handle('settings.get', () => getSettings())
 
     // 宿主 console 的落点（见协议里的 `logs.write`）。它和 `installLogCapture()` 用同一条

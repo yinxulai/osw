@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import { utilityProcess } from 'electron'
 import { ServiceHost, type ServiceHostState, type ServiceHostOptions, type ServiceProcess } from '@server/host/service-host'
 import type { Settings } from '@common/schemas'
-import type { TrayLogicalModelSummary } from '@common/tray-panel'
 import type { ProxyServerStatus } from '@server/proxy/runtime/server'
 import type { ForwardedLogLine } from './log-forwarder'
 
@@ -161,11 +160,6 @@ export function startProxyServer(): Promise<void> {
 export function stopProxyServer(): Promise<void> {
   if (host === null) return Promise.reject(new Error('Service host is not running'))
   return host.stopProxy()
-}
-
-export function getTrayLogicalModels(): Promise<TrayLogicalModelSummary[]> {
-  if (host === null) return Promise.reject(new Error('Service host is not running'))
-  return host.getTrayLogicalModels()
 }
 
 /**

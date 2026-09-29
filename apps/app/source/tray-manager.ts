@@ -6,7 +6,6 @@ import { nativeTranslator, onNativeLocaleChanged } from './i18n'
 import { noteQuitReason } from './main-log'
 import {
   getProxyServerStatus,
-  getTrayLogicalModels,
   startProxyServer,
   stopProxyServer,
 } from './server-host'
@@ -46,12 +45,6 @@ export class TrayManager {
     this.tray = new Tray(icon)
     this.tray.setToolTip(nativeTranslator()('app.windowTitle'))
     this.panel = new TrayPanelManager(this.tray, {
-      getSnapshot: () => this.snapshot,
-      getLogicalModels: () => getTrayLogicalModels(),
-      toggleProxy: async () => {
-        const toggled = await this.toggleProxy()
-        if (!toggled) throw new Error('tray proxy toggle failed')
-      },
       openMainWindow: async () => {
         this.panel?.hide()
         await this.showWindow()
@@ -65,11 +58,11 @@ export class TrayManager {
     // 这个窗口只有一次数据库读取的时间。
     void this.startStatusPolling()
 
-    // 语言变了要重建菜单：菜单文案是构建期快照，不会自己跟着走。
+    // 语言变了要重建菜单：菜单文案是构建期快照，不会自己跟着走。面板不用管——它的文案
+    // 由渲染层的语言偏好决定，跟着界面一起切。
     this.unsubscribeLocale = onNativeLocaleChanged(() => {
       this.refreshTooltip()
       this.renderMenu()
-      this.panel?.refresh()
     })
 
     // macOS 与 Windows 上左键开面板，右键仍开原生菜单：主路径更顺手，但键盘与
@@ -265,7 +258,6 @@ export class TrayManager {
       this.renderedSignature = signature
       this.refreshTooltip()
       this.renderMenu()
-      this.panel?.refresh()
     } catch (error) {
       if (!this.statusReadFailed) {
         this.statusReadFailed = true
@@ -275,7 +267,6 @@ export class TrayManager {
       // 但若一次都没读到过，就连状态行也没有，只挂兜底菜单。
       if (this.renderedSignature === null) {
         this.renderFallbackMenu()
-        this.panel?.refresh()
       }
     }
   }

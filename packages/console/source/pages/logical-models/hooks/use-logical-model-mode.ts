@@ -1,3 +1,4 @@
+import { isProviderModelCooling } from '@common/provider-model-status'
 import { useCallback } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
@@ -16,14 +17,10 @@ export function useLogicalModelMode(logicalModelId: string, models: LogicalModel
   const mode: 'auto' | 'manual' = manualModelId ? 'manual' : 'auto'
   const refresh = query.refetch
 
-  const isCooling = useCallback((providerId: string, providerModelId: string) => {
-    const providerCooldownUntil = health[providerId]?.cooldownUntilTime
-    const modelCooldownUntil = providerModelHealth[providerModelId]?.cooldownUntilTime
-    return Boolean(
-      (providerCooldownUntil && providerCooldownUntil > Date.now()) ||
-      (modelCooldownUntil && modelCooldownUntil > Date.now()),
-    )
-  }, [health, providerModelHealth])
+  // 冷却判定与徽标口径共用 `@common` 那一份：托盘面板也要画同一个「冷却」。
+  const isCooling = useCallback((providerId: string, providerModelId: string) => (
+    isProviderModelCooling(health[providerId], providerModelHealth[providerModelId])
+  ), [health, providerModelHealth])
 
   const changeMode = useCallback(async (nextMode: 'auto' | 'manual') => {
     if (mutation.isPending || nextMode === mode) return

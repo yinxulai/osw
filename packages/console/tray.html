@@ -1,0 +1,40 @@
+<!doctype html>
+<!--
+  托盘面板：与控制台主界面是**同一份产物**的第二个 HTML 入口（见 `vite.config.ts`）。
+
+  这么做是因为面板要显示的东西（每个供应商模型此刻是不是在处理请求、TPS/TTFT、
+  冷却与停用状态）与控制台逻辑模型页是同一批数据、同一套口径。让面板自己去
+  DB / RPC 拉一份快照，就是维护第二份实现——它一定会和第一份对不上，而且永远
+  是「托盘上少显示了什么」这种最难察觉的那种对不上。
+
+  于是面板直接复用控制台的组件、查询与实时流，只换一个更紧凑的排版与更小的窗口。
+
+  `data-surface` 让 `tray.css` 能把窗口刷成透明（面板是一张带圆角与阴影的浮层，
+  不是一整块底色），并禁掉正文选中。
+-->
+<html lang="en" data-surface="tray">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      CSP 与控制台主界面不同的两处：
+
+      - `connect-src` 必须放行管理服务。面板走的是与控制台同一条数据通路
+        （回环地址上的管理 API + SSE 实时流），而原先那份 `connect-src 'none'`
+        的静态面板没有任何网络能力。只放行回环，不放行任意来源。
+      - 资源要显式带上 `file:`：生产环境由 Electron 以 `file://` 加载，此时文档
+        的 origin 是不透明的，`'self'` 不一定能匹配上同目录的脚本与样式。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline' file:; style-src 'self' 'unsafe-inline' file:; img-src 'self' data: file:; font-src 'self' file:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
+    />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OSW</title>
+    <script src="boot.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/source/tray.tsx"></script>
+  </body>
+</html>

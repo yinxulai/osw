@@ -37,5 +37,21 @@ export default defineConfig({
   build: {
     outDir: 'output',
     emptyOutDir: true,
+    // 两个 HTML 入口，同一份产物：
+    // - `index.html` 控制台主界面（Electron 主窗口 / 浏览器 / 命令行托管都用它）；
+    // - `tray.html` 托盘面板（Electron 托盘窗口用，见 `source/tray.tsx`）。
+    //
+    // 合成一个入口是刻意为之：面板要显示的东西与控制台逻辑模型页是同一批数据、同一套
+    // 口径。分成两份产物就等于维护两套推导与两条数据通路，它们一定会对不上——而且永远
+    // 是「面板上少显示了什么」这种最难察觉的那种对不上。
+    //
+    // 两个文件同级，`base: './'` 的相对资源引用对两者同时成立；共用的模块被提到共享
+    // chunk 里，面板不会重复下载一份 react-query 或 i18n。
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL('./index.html', import.meta.url)),
+        tray: fileURLToPath(new URL('./tray.html', import.meta.url)),
+      },
+    },
   },
 })

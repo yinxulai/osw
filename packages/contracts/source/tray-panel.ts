@@ -1,82 +1,19 @@
-import type { Protocol } from './schemas'
-
 /**
- * 托盘面板的主进程与渲染层契约。
+ * 托盘面板窗口与它内部那个页面之间的契约。
  *
- * 这里只描述「主进程已经决定好、渲染层原样展示」的数据：文案在进入面板前已按当前
- * 语言解析，渲染层不重复业务判断，主进程也不需要知道 DOM 里的元素结构。
+ * 只剩「几何」一件事：窗口是无边框 + 透明的，CSS 阴影画在页面里的卡片上，所以窗口必须
+ * 比卡片大出一圈透明留白——少了这道留白，阴影会被窗口边界裁掉一条边，看起来就是卡片
+ * 缺了一块。
+ *
+ * 这个数必须两边一致，而它横跨两个进程、两种语言（主进程用像素摆窗口，页面用 CSS 画
+ * 卡片），没法靠类型系统约束。所以把它放进共用契约：改一处，两边一起变。
  */
 
-export type TrayPanelTheme = 'light' | 'dark'
-
-export interface TrayProviderModelSummary {
-  id: string
-  providerId: string
-  providerName: string
-  modelName: string
-  protocols: Protocol[]
-  conversionProtocols: Protocol[]
-  enabled: boolean
-  modelEnabled: boolean
-  cooling: boolean
-  avgTps: number | null
-  avgTtftMilliseconds: number | null
-}
-
 /**
- * 托盘面板只需要展示逻辑模型的摘要，不携带完整调度配置。
+ * 面板内容卡片外圈的透明留白（单边，像素）。
  *
- * 面板宽度有限，只保留逻辑模型切换与模型行展示所需字段；完整端点、权重和调度
- * 配置仍归控制台，避免把业务详情复制进托盘。
+ * - 主进程：`apps/app/source/tray-panel.ts` 摆放窗口时按它把位置往外让，否则卡片看起来
+ *   会贴不到托盘图标；
+ * - 渲染层：`pages/tray/page.tsx` 用它做 `padding`，并在上报内容高度时把它算进去。
  */
-export interface TrayLogicalModelSummary {
-  id: string
-  name: string
-  models: TrayProviderModelSummary[]
-}
-
-export interface TrayProviderModelView extends Omit<TrayProviderModelSummary, 'avgTps' | 'avgTtftMilliseconds'> {
-  tps: string
-  ttft: string
-}
-
-export interface TrayLogicalModelView extends Omit<TrayLogicalModelSummary, 'models'> {
-  models: TrayProviderModelView[]
-}
-
-export interface TrayPanelLabels {
-  subtitle: string
-  running: string
-  stopped: string
-  openApp: string
-  footnote: string
-  startProxy: string
-  stopProxy: string
-  quit: string
-  quitShort: string
-  opening: string
-  actionFailed: string
-  logicalModels: string
-  logicalModelsCount: string
-  logicalModelsEmpty: string
-  logicalModelsEmptyHint: string
-  logicalModelTabs: string
-  modelConversion: string
-  providerModelsEmpty: string
-  providerModelsEmptyHint: string
-  modelStandby: string
-  modelCooling: string
-  modelBindingDisabled: string
-  modelDisabled: string
-  unknownProvider: string
-}
-
-export interface TrayPanelState {
-  running: boolean
-  theme: TrayPanelTheme
-  locale: 'zh-CN' | 'en'
-  iconUrl: string
-  labels: TrayPanelLabels
-  protocolNames: Record<Protocol, string>
-  logicalModels: TrayLogicalModelView[]
-}
+export const TRAY_PANEL_GUTTER = 28

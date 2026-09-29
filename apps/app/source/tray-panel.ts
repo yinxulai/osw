@@ -1,21 +1,28 @@
-import { BrowserWindow, ipcMain, nativeTheme, screen, type Tray } from 'electron'
+/**
+ * 托盘面板窗口。
+ *
+ * 面板本身**不是这里画的**：它是控制台那份产物里的第二个 HTML 入口
+ * （`packages/console/tray.html`），与主界面共用同一份组件、查询、实时流与推导。这个文件
+ * 只负责「窗口」这件事——摆在哪、多高、怎么关，以及把三个只有宿主才做得到的动作
+ * （打开主界面、退出、按内容高度改窗口尺寸）递给页面。
+ *
+ * 于是这里**没有**任何数据读取：没有数据库快照，也没有「面板状态」这类需要跟着业务字段
+ * 一起演进的 IPC 载荷。面板要显示什么，是渲染层自己的事。
+ */
+
+import { BrowserWindow, ipcMain, screen, type Tray } from 'electron'
 import path from 'node:path'
-import type { TrayLogicalModelSummary, TrayPanelState, TrayPanelTheme } from '@common/tray-panel'
-import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
-import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
-import trayPanelHtml from './tray-panel.html?raw'
-import iconPng from '../build/icon.png?url'
-import { nativeLocale, nativeTranslator, onNativeLocaleChanged } from './i18n'
-import type { TrayProxySnapshot } from './tray-menu'
+import { TRAY_PANEL_GUTTER } from '@common/tray-panel'
 
 // 窗口比内容卡片多一圈透明留白，CSS 阴影不再被窗口边界裁断。宽度按
-// `PANEL_PADDING` 反推，卡片本体宽度仍保持原来的 366px。
+// `TRAY_PANEL_GUTTER` 反推，卡片本体宽度仍保持原来的 366px。
 const PANEL_WIDTH = 422
 const PANEL_MIN_HEIGHT = 380
 const PANEL_MAX_HEIGHT = 680
 const PANEL_INITIAL_HEIGHT = 560
 const PANEL_GAP = 8
-const PANEL_PADDING = 28
+// 与渲染层共用的那个常量：留白两边都有份，谁都不能只改自己这一侧。
+const PANEL_PADDING = TRAY_PANEL_GUTTER
 
 interface TrayPanelRectangle {
   x: number
@@ -49,78 +56,15 @@ export function resolveTrayPanelPosition(input: ResolveTrayPanelPositionInput): 
 }
 
 export interface TrayPanelActions {
-  getSnapshot: () => TrayProxySnapshot
-  getLogicalModels: () => Promise<TrayLogicalModelSummary[]>
-  toggleProxy: () => Promise<void>
   openMainWindow: () => Promise<void>
   quit: () => void
-}
-
-function currentTheme(): TrayPanelTheme {
-  return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-}
-
-export function buildTrayPanelState(snapshot: TrayProxySnapshot, theme: TrayPanelTheme, logicalModels: TrayLogicalModelSummary[] = []): TrayPanelState {
-  const t = nativeTranslator()
-  return {
-    running: snapshot.running,
-    theme,
-    locale: nativeLocale(),
-    iconUrl: iconPng,
-    labels: {
-      subtitle: t('native.tray.panel.subtitle'),
-      running: t('native.tray.panel.running'),
-      stopped: t('native.tray.panel.stopped'),
-      openApp: t('native.tray.openWindow'),
-      footnote: t('native.tray.panel.footnote'),
-      startProxy: t('native.tray.panel.startProxy'),
-      stopProxy: t('native.tray.panel.stopProxy'),
-      quit: t('native.tray.quit'),
-      quitShort: t('native.tray.panel.quit'),
-      opening: t('native.tray.panel.opening'),
-      actionFailed: t('native.tray.panel.actionFailed'),
-      logicalModels: t('native.tray.panel.logicalModels'),
-      logicalModelsCount: t('native.tray.panel.logicalModelsCount', { count: logicalModels.length }),
-      logicalModelsEmpty: t('native.tray.panel.logicalModelsEmpty'),
-      logicalModelsEmptyHint: t('native.tray.panel.logicalModelsEmptyHint'),
-      logicalModelTabs: t('native.tray.panel.logicalModelTabs'),
-      modelConversion: t('native.tray.panel.modelConversion'),
-      providerModelsEmpty: t('logicalModels.card.empty.title'),
-      providerModelsEmptyHint: t('logicalModels.card.empty.description'),
-      modelStandby: t('logicalModels.row.standby'),
-      modelCooling: t('logicalModels.row.cooling'),
-      modelBindingDisabled: t('common.state.disabled'),
-      modelDisabled: t('logicalModels.row.modelDisabled'),
-      unknownProvider: t('logicalModels.row.unknownProvider'),
-    },
-    protocolNames: PROTOCOL_DISPLAY_NAMES,
-    logicalModels: logicalModels.map(model => ({
-      id: model.id,
-      name: model.name,
-      models: model.models.map(({ avgTps, avgTtftMilliseconds, ...item }) => ({
-        ...item,
-        tps: formatOutputSpeed(avgTps),
-        ttft: formatMilliseconds(avgTtftMilliseconds),
-      })),
-    })),
-  }
-}
-
-export function createTrayPanelPath(): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(trayPanelHtml)}`
 }
 
 export class TrayPanelManager {
   private panel: BrowserWindow | null = null
   private initialized = false
-  private unsubscribeLocale: (() => void) | null = null
-  private unsubscribeTheme: (() => void) | null = null
-  private removeThemeListener: (() => void) | null = null
   private removeResizeListener: (() => void) | null = null
-  private rendererTheme: TrayPanelTheme | null = null
-  private rendererThemeReceived = false
   private lastBlurTime = 0
-  private stateRequest = 0
   private panelHeight = PANEL_INITIAL_HEIGHT
 
   constructor(private readonly tray: Tray, private readonly actions: TrayPanelActions) {}
@@ -128,13 +72,8 @@ export class TrayPanelManager {
   init(): void {
     if (this.initialized) return
     this.initialized = true
-    ipcMain.handle('tray-panel:get-state', () => this.state())
-    ipcMain.handle('tray-panel:toggle', async () => {
-      await this.actions.toggleProxy()
-      return this.state()
-    })
     ipcMain.handle('tray-panel:open-main-window', () => this.actions.openMainWindow())
-    ipcMain.handle('tray-panel:quit', () => this.actions.quit())
+    ipcMain.on('tray-panel:quit', () => this.actions.quit())
     const onResize = (event: Electron.IpcMainEvent, requestedHeight: unknown) => {
       if (!this.panel || this.panel.isDestroyed() || event.sender !== this.panel.webContents) return
       if (typeof requestedHeight !== 'number' || !Number.isFinite(requestedHeight)) return
@@ -147,39 +86,15 @@ export class TrayPanelManager {
     }
     ipcMain.on('tray-panel:resize', onResize)
     this.removeResizeListener = () => ipcMain.off('tray-panel:resize', onResize)
-    const onThemeChanged = (_event: Electron.IpcMainEvent, theme: unknown) => {
-      if (theme !== 'light' && theme !== 'dark') return
-      this.rendererThemeReceived = true
-      this.rendererTheme = theme
-      this.refresh()
-    }
-    ipcMain.on('appearance:set-theme', onThemeChanged)
-    this.removeThemeListener = () => ipcMain.off('appearance:set-theme', onThemeChanged)
-
-    this.unsubscribeLocale = onNativeLocaleChanged(() => this.refresh())
-    this.unsubscribeTheme = (() => {
-      const listener = () => {
-        if (!this.rendererThemeReceived) this.refresh()
-      }
-      nativeTheme.on('updated', listener)
-      return () => nativeTheme.off('updated', listener)
-    })()
   }
 
   destroy(): void {
     this.initialized = false
-    this.unsubscribeLocale?.()
-    this.unsubscribeLocale = null
-    this.unsubscribeTheme?.()
-    this.unsubscribeTheme = null
     this.removeResizeListener?.()
     this.removeResizeListener = null
-    this.removeThemeListener?.()
-    this.removeThemeListener = null
-    ipcMain.removeHandler('tray-panel:get-state')
-    ipcMain.removeHandler('tray-panel:toggle')
     ipcMain.removeHandler('tray-panel:open-main-window')
-    ipcMain.removeHandler('tray-panel:quit')
+    ipcMain.removeAllListeners('tray-panel:quit')
+    ipcMain.removeAllListeners('tray-panel:resize')
     this.panel?.destroy()
     this.panel = null
   }
@@ -198,22 +113,10 @@ export class TrayPanelManager {
     this.position(panel)
     panel.show()
     panel.focus()
-    this.refresh()
   }
 
   hide(): void {
     this.panel?.hide()
-  }
-
-  refresh(): void {
-    if (!this.panel || this.panel.isDestroyed()) return
-    const request = ++this.stateRequest
-    void this.state().then(next => {
-      if (request !== this.stateRequest || !this.panel || this.panel.isDestroyed()) return
-      this.panel.webContents.send('tray-panel:state-changed', next)
-    }).catch(error => {
-      console.warn('[tray] failed to refresh panel state', error)
-    })
   }
 
   private ensurePanel(): BrowserWindow {
@@ -236,9 +139,9 @@ export class TrayPanelManager {
       ...(process.platform === 'win32' ? { roundedCorners: false } : {}),
       backgroundColor: '#00000000',
       webPreferences: {
-        // The panel is a main-process-controlled data URL with no Node access and a
-        // deliberately tiny IPC surface (see `tray-panel-preload.ts`). Loading the
-        // main preload here would hand the page the whole updater/runtime bridge.
+        // The panel shares the console bundle but not the console's bridge: the main
+        // preload would hand a floating popover the whole updater/screenshots surface.
+        // See `tray-panel-preload.ts` for what is exposed instead.
         preload: path.join(import.meta.dirname, 'tray-panel-preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
@@ -262,27 +165,24 @@ export class TrayPanelManager {
     panel.on('closed', () => {
       if (this.panel === panel) this.panel = null
     })
-    panel.webContents.on('did-finish-load', () => this.refresh())
-    void panel.loadURL(createTrayPanelPath()).catch(error => {
+
+    // 与控制台主窗口同一套地址规则（见 `index.ts`）：开发期从 Vite dev server 取
+    // `tray.html`，打包后从产物目录里读同级的那个文件。两个 HTML 入口都在 Vite 根目录下，
+    // 所以这里只差一个文件名。
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL
+    const load = devServerUrl
+      ? panel.loadURL(`${devServerUrl.replace(/\/+$/, '')}/tray.html`)
+      : panel.loadFile(path.join(process.env.OUTPUT!, 'render', 'tray.html'))
+    void load.catch(error => {
       console.error('[tray] failed to load panel', error)
     })
+
     this.panel = panel
     return panel
   }
 
-  private async state(): Promise<TrayPanelState> {
-    let logicalModels: TrayLogicalModelSummary[] = []
-    try {
-      logicalModels = await this.actions.getLogicalModels()
-    } catch (error) {
-      console.warn('[tray] failed to load logical models', error)
-    }
-    return buildTrayPanelState(this.actions.getSnapshot(), this.rendererTheme ?? currentTheme(), logicalModels)
-  }
-
   private position(panel: BrowserWindow): void {
-    const height = panel.getContentSize()[1]
-    this.setPanelBounds(panel, height)
+    this.setPanelBounds(panel, panel.getContentSize()[1])
   }
 
   private setPanelBounds(panel: BrowserWindow, height: number): void {

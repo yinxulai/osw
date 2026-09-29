@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow, MenuItemConstructorOptions } from 'electron'
 import { createAppTranslator } from '@common/i18n/catalogs'
 
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     setToolTip: vi.fn(),
     setContextMenu: vi.fn(),
     popUpContextMenu: vi.fn(),
+    getBounds: vi.fn(() => ({ x: 500, y: 0, width: 24, height: 24 })),
     destroy: vi.fn(),
     on: vi.fn(),
   }
@@ -29,10 +30,53 @@ const mocks = vi.hoisted(() => {
     return tray
   })
 
+  /**
+   * 托盘面板窗口的替身。
+   *
+   * 面板是「窗口」那一层的行为：尺寸由页面报上来，位置由托盘图标与工作区算出来。
+   * 真正值得断言的就是这条链路，所以这个替身老老实实记录 `setBounds`。
+   */
+  const panelWindows: PanelWindowStub[] = []
+  class PanelWindowStub {
+    contentSize: [number, number]
+    bounds: PanelBounds | null = null
+    visible = false
+    destroyed = false
+    webContents = { on: vi.fn(), send: vi.fn() }
+    loadFile = vi.fn(() => Promise.resolve())
+    loadURL = vi.fn(() => Promise.resolve())
+    setAlwaysOnTop = vi.fn()
+    on = vi.fn()
+    show = vi.fn(() => {
+      this.visible = true
+    })
+    hide = vi.fn(() => {
+      this.visible = false
+    })
+    focus = vi.fn()
+    isVisible = vi.fn(() => this.visible)
+    isDestroyed = vi.fn(() => this.destroyed)
+    destroy = vi.fn(() => {
+      this.destroyed = true
+    })
+    getContentSize = vi.fn((): [number, number] => this.contentSize)
+    setBounds = vi.fn((next: PanelBounds) => {
+      this.bounds = next
+      this.contentSize = [next.width, next.height]
+    })
+
+    constructor(_options: unknown) {
+      this.contentSize = [422, 560]
+      panelWindows.push(this)
+    }
+  }
+
   return {
     tray,
     mainWindow,
     Tray,
+    panelWindows,
+    PanelWindowStub,
     app: { quit: vi.fn(), dock: { show: vi.fn(), hide: vi.fn() } },
     clipboard: { writeText: vi.fn() },
     buildFromTemplate: vi.fn((template: MenuItemConstructorOptions[]) => ({ template })),
@@ -40,10 +84,8 @@ const mocks = vi.hoisted(() => {
     removeHandler: vi.fn(),
     onIpc: vi.fn(),
     offIpc: vi.fn(),
-    nativeTheme: { shouldUseDarkColors: false, on: vi.fn(), off: vi.fn() },
     screen: { getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },
     getProxyServerStatus: vi.fn(),
-    getTrayLogicalModels: vi.fn(),
     startProxyServer: vi.fn(),
     stopProxyServer: vi.fn(),
   }
@@ -52,11 +94,16 @@ const mocks = vi.hoisted(() => {
 vi.mock('electron', () => ({
   app: mocks.app,
   Tray: mocks.Tray,
-  BrowserWindow: class {},
+  BrowserWindow: mocks.PanelWindowStub,
   Menu: { buildFromTemplate: mocks.buildFromTemplate },
   clipboard: mocks.clipboard,
-  ipcMain: { handle: mocks.handle, removeHandler: mocks.removeHandler, on: mocks.onIpc, off: mocks.offIpc },
-  nativeTheme: mocks.nativeTheme,
+  ipcMain: {
+    handle: mocks.handle,
+    removeHandler: mocks.removeHandler,
+    on: mocks.onIpc,
+    off: mocks.offIpc,
+    removeAllListeners: vi.fn(),
+  },
   screen: mocks.screen,
 }))
 
@@ -70,13 +117,19 @@ vi.mock('./i18n', () => ({
 
 vi.mock('./server-host', () => ({
   getProxyServerStatus: mocks.getProxyServerStatus,
-  getTrayLogicalModels: mocks.getTrayLogicalModels,
   startProxyServer: mocks.startProxyServer,
   stopProxyServer: mocks.stopProxyServer,
 }))
 
 import { TrayManager } from './tray-manager'
-import { TrayPanelManager, buildTrayPanelState, resolveTrayPanelPosition } from './tray-panel'
+import { TrayPanelManager, resolveTrayPanelPosition } from './tray-panel'
+
+interface PanelBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 type MenuItem = MenuItemConstructorOptions
 
@@ -143,90 +196,115 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('托盘面板状态', () => {
-  it('把应用图标、主题、语言与可直接展示的逻辑模型列表一次装进状态', () => {
-    const state = buildTrayPanelState({ running: true, host: '0.0.0.0', port: 19300 }, 'dark', [
-      {
-        id: 'default',
-        name: 'default',
-        models: [
-          {
-            id: 'model_1',
-            providerId: 'prov_1',
-            providerName: 'Primary',
-            modelName: 'gpt-test',
-            protocols: ['openai-completions'],
-            conversionProtocols: ['openai-responses'],
-            enabled: true,
-            modelEnabled: true,
-            cooling: false,
-            avgTps: 50,
-            avgTtftMilliseconds: 250,
-          },
-        ],
-      },
-    ])
+describe('托盘面板窗口', () => {
+  const OUTPUT_DIRECTORY = '/tmp/osw-panel-output'
 
-    expect(state).toEqual(expect.objectContaining({
-      running: true,
-      theme: 'dark',
-      locale: 'zh-CN',
-    }))
-    expect(state.iconUrl).toBeTruthy()
-    expect(state.protocolNames['openai-responses']).toBe('OpenAI Responses')
-    expect(state.logicalModels).toEqual([
-      {
-        id: 'default',
-        name: 'default',
-        models: [
-          expect.objectContaining({
-            id: 'model_1',
-            tps: '50',
-            ttft: '250ms',
-          }),
-        ],
-      },
-    ])
+  beforeAll(() => {
+    // 面板页与控制台主窗口一样，打包后从产物目录里读（见 `index.ts`）。
+    process.env.OUTPUT = OUTPUT_DIRECTORY
   })
 
-  it('启停 IPC 返回完整面板状态，而不是只回一份裸快照', async () => {
-    const actions = {
-      getSnapshot: () => ({ running: false, host: '127.0.0.1', port: 19301 }),
-      getLogicalModels: async () => [],
-      toggleProxy: async () => undefined,
-      openMainWindow: async () => undefined,
-      quit: () => undefined,
-    }
-    const panelManager = new TrayPanelManager(mocks.tray as unknown as import('electron').Tray, actions)
-    panelManager.init()
-
-    const handler = mocks.handle.mock.calls.find(([channel]) => channel === 'tray-panel:toggle')?.[1] as (() => Promise<unknown>) | undefined
-    expect(handler).toBeTypeOf('function')
-    await expect(handler?.()).resolves.toEqual(expect.objectContaining({
-      running: false,
-      logicalModels: [],
-    }))
-
-    panelManager.destroy()
+  afterAll(() => {
+    delete process.env.OUTPUT
   })
 
-  it('支持托盘页面按内容高度上报窗口尺寸', () => {
-    const actions = {
-      getSnapshot: () => ({ running: false, host: '127.0.0.1', port: 19301 }),
-      getLogicalModels: async () => [],
-      toggleProxy: async () => undefined,
-      openMainWindow: async () => undefined,
-      quit: () => undefined,
-    }
+  afterEach(() => {
+    delete process.env.VITE_DEV_SERVER_URL
+  })
+
+  const actions = {
+    openMainWindow: async () => undefined,
+    quit: () => undefined,
+  }
+
+  function createPanel(): TrayPanelManager {
     const panelManager = new TrayPanelManager(mocks.tray as unknown as import('electron').Tray, actions)
     panelManager.init()
+    return panelManager
+  }
 
+  function resizeListener(): (event: unknown, height: unknown) => void {
     const listener = mocks.onIpc.mock.calls.find(([channel]) => channel === 'tray-panel:resize')?.[1] as
       | ((event: unknown, height: unknown) => void)
       | undefined
-    expect(listener).toBeTypeOf('function')
-    listener?.({ sender: {} }, 520)
+    if (!listener) throw new Error('tray-panel:resize listener was never registered')
+    return listener
+  }
 
+  it('把「打开主界面 / 退出」这两个只有宿主做得到的动作递出去', async () => {
+    let opened = 0
+    let quit = 0
+    const panelManager = new TrayPanelManager(mocks.tray as unknown as import('electron').Tray, {
+      openMainWindow: async () => {
+        opened += 1
+      },
+      quit: () => {
+        quit += 1
+      },
+    })
+    panelManager.init()
+
+    const openHandler = mocks.handle.mock.calls.find(([channel]) => channel === 'tray-panel:open-main-window')?.[1] as (() => Promise<void>) | undefined
+    const quitHandler = mocks.onIpc.mock.calls.find(([channel]) => channel === 'tray-panel:quit')?.[1] as (() => void) | undefined
+
+    await openHandler?.()
+    quitHandler?.()
+
+    expect({ opened, quit }).toEqual({ opened: 1, quit: 1 })
+    panelManager.destroy()
+  })
+
+  it('开发期从 Vite dev server 取面板页，打包后读产物目录里的同名文件', () => {
+    process.env.VITE_DEV_SERVER_URL = 'http://localhost:5173/'
+    const developing = createPanel()
+    developing.show()
+    // 尾斜杠不能拼成 `//tray.html`。
+    expect(mocks.panelWindows.at(-1)?.loadURL).toHaveBeenCalledWith('http://localhost:5173/tray.html')
+    developing.destroy()
+
+    delete process.env.VITE_DEV_SERVER_URL
+    const packaged = createPanel()
+    packaged.show()
+    // 两个 HTML 入口同在 Vite 根下，所以产物里也只差一个文件名。
+    expect(mocks.panelWindows.at(-1)?.loadFile).toHaveBeenCalledWith(`${OUTPUT_DIRECTORY}/render/tray.html`)
+    packaged.destroy()
+  })
+
+  it('按页面上报的内容高度改窗口尺寸，并带上透明留白重新落位', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = mocks.panelWindows.at(-1)
+    if (!panel) throw new Error('panel window was never created')
+
+    resizeListener()({ sender: panel.webContents }, 520)
+
+    // 422 宽的窗口居中到 x=512 的托盘图标下，macOS 顶部再扣掉那圈透明留白。
+    expect(panel.setBounds).toHaveBeenLastCalledWith({ x: 301, y: 4, width: 422, height: 520 }, false)
+    panelManager.destroy()
+  })
+
+  it('挡掉不属于面板窗口的尺寸上报', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = mocks.panelWindows.at(-1)
+    if (!panel) throw new Error('panel window was never created')
+    panel.setBounds.mockClear()
+
+    resizeListener()({ sender: { on: vi.fn() } }, 520)
+
+    expect(panel.setBounds).not.toHaveBeenCalled()
+    panelManager.destroy()
+  })
+
+  it('尺寸上报会被夹在最小与最大高度之间', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = mocks.panelWindows.at(-1)
+    if (!panel) throw new Error('panel window was never created')
+
+    resizeListener()({ sender: panel.webContents }, 10)
+
+    expect(panel.setBounds).toHaveBeenLastCalledWith({ x: 301, y: 4, width: 422, height: 380 }, false)
     panelManager.destroy()
   })
 })

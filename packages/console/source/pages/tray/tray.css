@@ -1,0 +1,31 @@
+/**
+ * 托盘面板专属样式。
+ *
+ * 只有两组规则，其余全部沿用控制台的设计令牌与 `@utility`：面板不是另一套皮肤，
+ * 就是控制台的那套令牌换一种排布。
+ *
+ * 选择器统一挂在 `html[data-surface='tray']` 上（属性在 `tray.html`）。这份样式目前
+ * 只被面板入口 import，所以不带着它也照样只有面板会中；但一旦哪天被合进主产物，
+ * 这两组会静默地作用到主窗口上——而「主窗口背景变透明」这种事故只在打包后才看得出来。
+ * 挂上属性，出事故的第一现场就是它自己。
+ */
+
+/* 窗口是无边框 + 透明的（`tray-panel.ts` 里 `transparent: true`），底色只能由面板自己
+   那张卡片画：`html`/`body` 上留任何底色，都会在卡片圆角外面露出四个直角。 */
+html[data-surface='tray'],
+html[data-surface='tray'] body {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* `min-height` 也要归零：`body` 的基础样式里有 `min-height: 100vh`，而面板的高度由内容
+   决定、再报给窗口。两处都声明高度，窗口就会比内容高一截——底下多出一块谁也看不见的
+   区域，正是最难查的那种问题。 */
+html[data-surface='tray'] body {
+  min-height: 0;
+  /* 浮层不是可编辑文档：拖选只会留下一片高亮，看起来像窗口坏了。 */
+  user-select: none;
+  -webkit-user-select: none;
+  /* 这是固定宽度的小窗口，任何方向的橡皮筋滚动都没有意义。 */
+  overscroll-behavior: none;
+}

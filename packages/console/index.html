@@ -5,51 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OSW</title>
-    <script>
-      /*
-       * 绘制前把主题与语言定下来，避免「先闪一下白底再变深色」「先闪英文再变中文」。
-       *
-       * 优先级必须和 `App.tsx` / `I18nProvider` 完全一致：
-       *   主题：URL 里的 `?theme=` > 持久化偏好（`osw-ui`）> 系统
-       *   语言：URL 里的 `?lang=` > 持久化偏好（`osw-language`）> 浏览器语言
-       *
-       * 两项都在查询串里，所以只解析一次 hash，不再区分路径段与查询参数。
-       * 反正接口都只要求「第一帧不闪」，挂载后 `I18nProvider` 会以服务端设置为准重算一遍。
-       *
-       * 这里只能手写：内联脚本在模块加载前执行，拿不到任何 `import`。
-       */
-      ;(function () {
-        var readPersisted = function (key) {
-          try {
-            var raw = localStorage.getItem(key)
-            return raw ? JSON.parse(raw).state : null
-          } catch (error) {
-            return null
-          }
-        }
-
-        var hash = location.hash.replace(/^#/, '')
-        var queryIndex = hash.indexOf('?')
-        var query = queryIndex === -1 ? '' : hash.slice(queryIndex + 1)
-        var params = new URLSearchParams(query)
-
-        var ui = readPersisted('osw-ui') || {}
-        var urlTheme = params.get('theme')
-        // `system` 也是合法值（它表达「跟随系统」这个选择），所以这里当「已显式指定」处理，不再看偏好。
-        var mode = urlTheme === 'light' || urlTheme === 'dark' || urlTheme === 'system' ? urlTheme : (ui.themeMode || 'system')
-        var isDark = mode === 'dark'
-          || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.classList.toggle('dark', isDark)
-
-        // 认不出的语种当「没写」，退回偏好，而不是拦住整条地址。
-        var urlLang = params.get('lang')
-        var normalizedLang = urlLang && /^zh/i.test(urlLang) ? 'zh-CN' : urlLang && /^en/i.test(urlLang) ? 'en' : null
-        var preference = (readPersisted('osw-language') || {}).preference
-        var persistedLang = preference === 'zh-CN' || preference === 'en' ? preference : null
-        var locale = normalizedLang || persistedLang || navigator.language || 'en'
-        document.documentElement.lang = /^zh/i.test(locale) ? 'zh-CN' : 'en'
-      })()
-    </script>
+    <script src="boot.js"></script>
   </head>
   <body>
     <div id="root"></div>
