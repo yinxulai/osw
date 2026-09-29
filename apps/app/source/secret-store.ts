@@ -20,9 +20,9 @@ export class ElectronSecretStore implements SecretStore {
     if (!encrypted) return null
     try {
       return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
-    } catch {
-      // 密文与当前系统密钥不匹配（重装、迁移等），清除失效条目
-      await this.delete(reference)
+    } catch (error) {
+      // 保留原密文：应用名、系统钥匙串或迁移状态恢复后，它仍可能被解开。
+      console.warn(`[secrets] failed to decrypt ${reference}`, error)
       return null
     }
   }

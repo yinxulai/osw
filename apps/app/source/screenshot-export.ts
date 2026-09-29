@@ -112,6 +112,26 @@ async function normalizeCapture(filePath: string): Promise<void> {
   await fs.writeFile(filePath, resized.toPNG())
 }
 
+async function captureWindow(target: BrowserWindow, windowId: number, filePath: string): Promise<void> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    target.showInactive()
+    target.moveTop()
+    await delay(200)
+
+    try {
+      await runScreencapture(windowId, filePath)
+      return
+    } catch (error) {
+      lastError = error
+      await delay(attempt * 500)
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('screencapture failed')
+}
+
 async function initializeExportWindow(target: BrowserWindow, baseUrl: string): Promise<void> {
   await target.loadURL(screenshotUrl(baseUrl, SCREENSHOT_EXPORT_CASES[0]))
   await target.webContents.executeJavaScript(`
@@ -197,6 +217,7 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
   target.setMenuBarVisibility(false)
   target.setIgnoreMouseEvents(true)
   target.setFocusable(false)
+  target.setAlwaysOnTop(true, 'floating')
 
   try {
     await initializeExportWindow(target, options.baseUrl)
@@ -223,7 +244,7 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
 
       const outputPath = path.join(options.outputDirectory, captureCase.locale, captureCase.theme, `${captureCase.fileName}.png`)
       await fs.mkdir(path.dirname(outputPath), { recursive: true })
-      await runScreencapture(windowId, outputPath)
+      await captureWindow(target, windowId, outputPath)
       await normalizeCapture(outputPath)
 
       completed += 1

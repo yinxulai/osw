@@ -37,6 +37,9 @@ const __dirname = path.dirname(__filename)
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL)
 const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'production')
+const applicationDisplayName = 'OSW'
+// safeStorage on macOS derives its Keychain service from app.name. That value has
+// been `@osw/app` since the desktop host first stored secrets; keep it stable.
 
 process.env.OUTPUT = path.join(__dirname, '..')
 
@@ -334,7 +337,22 @@ function applyWindowTheme(target: BrowserWindow, theme: 'light' | 'dark'): void 
 function installApplicationMenu(): void {
   Menu.setApplicationMenu(
     process.platform === 'darwin'
-      ? Menu.buildFromTemplate([{ role: 'appMenu' }])
+      ? Menu.buildFromTemplate([
+          {
+            label: applicationDisplayName,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          },
+        ])
       : null,
   )
 }
@@ -446,10 +464,11 @@ function focusExistingInstance(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  // 开发态直接跑 Electron 时，菜单栏会显示宿主程序名；显式覆盖它，
-  // 让开发窗口与打包后的 OSW 表现一致（打包态的 productName 也已经是 OSW）。
-  app.setName('OSW')
   await app.whenReady()
+  app.setAboutPanelOptions({
+    applicationName: applicationDisplayName,
+    applicationVersion: app.getVersion(),
+  })
   // 渲染层不再绘制窗口菜单；系统菜单栏只保留 macOS 必须存在的应用菜单。
   installApplicationMenu()
 

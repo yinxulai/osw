@@ -180,6 +180,12 @@ osw/
 | App | `ElectronSecretStore` | 沿用 `safeStorage.encryptString` / `decryptString`，密文写在数据目录下的 `secrets.json` |
 | CLI | `EncryptedFileSecretStore` | 随机 32 字节主密钥存 `secrets.cli.key`（`0600`），逐条 AES-256-GCM 加密写入 `secrets.cli.json` |
 
+safeStorage 在 macOS 上按 Electron 的 `app.name` 选择 Keychain 条目；`apps/app`
+的包名 `@osw/app` 从桌面端启用 `safeStorage` 起就是密钥命名空间的一部分。改用
+`app.setName('OSW')` 会让旧密文换到 `OSW Safe Storage` 下解密，表现为
+`safeStorage.decryptString` 失败。界面显示名和可执行文件 productName 可以叫
+OSW，但 `app.name` 不能随显示名一起改。
+
 CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、误传、被其它用户读到；它不防「同用户同机器上的恶意进程」——那需要系统钥匙串，会引入原生依赖，与「零原生依赖」的约束冲突。接口化之后，未来接入钥匙串只是一个新实现，不改 core。CLI 的实现放在 `apps/cli/source/secret-store.ts`。
 
 **两个形态的文件名故意不同**（`secrets.cli.json` / `secrets.cli.key` vs `secrets.json`），虽然它们落在同一个数据目录里。密文算法不同，同名同址的结果不是「共用密钥」，而是**后写的那个把前一个的条目全部作废**：`safeStorage` 的 base64 密文在命令行侧解不开，命令行的 `v1:iv:tag:ciphertext` 在 `safeStorage` 侧会被当成非法 base64 直接抛错。供应商 key 在服务端只存哈希、作废了不可再生，所以这里必须靠文件名隔开。
