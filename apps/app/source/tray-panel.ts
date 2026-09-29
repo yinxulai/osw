@@ -12,7 +12,15 @@
 
 import { BrowserWindow, ipcMain, screen, type Tray } from 'electron'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { TRAY_PANEL_GUTTER } from '@common/tray-panel'
+
+// 面板的 preload 产物就在主进程旁边（`apps/app/output/command/`），名字由
+// `vite.tray-panel.config.ts` 钉死。定位方式沿用 `packages/core/source/database/index.ts`
+// 与 `apps/cli/source/host.ts` 的那一套：按 `import.meta.url` 反推目录，不用
+// `import.meta.dirname`——两者都是「产物平铺在同一层」这条假设的写法，但这套在别处
+// 已经有注释解释过原因，不在这里换一种。
+const preloadBundlePath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tray-panel-preload.js')
 
 // 窗口比内容卡片多一圈透明留白，CSS 阴影不再被窗口边界裁断。宽度按
 // `TRAY_PANEL_GUTTER` 反推，卡片本体宽度仍保持原来的 366px。
@@ -142,7 +150,7 @@ export class TrayPanelManager {
         // The panel shares the console bundle but not the console's bridge: the main
         // preload would hand a floating popover the whole updater/screenshots surface.
         // See `tray-panel-preload.ts` for what is exposed instead.
-        preload: path.join(import.meta.dirname, 'tray-panel-preload.js'),
+        preload: preloadBundlePath,
         nodeIntegration: false,
         contextIsolation: true,
         // Keep the preload sandboxed. With `sandbox: false`, Electron resolves the
