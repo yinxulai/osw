@@ -312,11 +312,21 @@ describe('托盘菜单结构', () => {
     expect(mocks.tray.setToolTip).toHaveBeenLastCalledWith('接入地址已复制')
   })
 
-  it('右键仍打开同一份原生菜单', async () => {
+  it('右键仍打开同一份原生菜单（Linux 按平台约定挂 setContextMenu）', async () => {
     mocks.getProxyServerStatus.mockResolvedValue({ running: true, host: '127.0.0.1', port: 19300 })
     manager = await initRunning()
 
     const listener = mocks.tray.on.mock.calls.find(([event]) => event === 'right-click')?.[1] as (() => void) | undefined
+
+    // Linux 的 StatusNotifierItem 对自绘弹层支持不稳定，托盘保留 `setContextMenu` 这条平台约定，
+    // 不注册 left / right-click（见 `tray-manager.ts`）。两个平台分支各自断言，
+    // 而不是在 Linux 上静默跳过 —— 否则这条用例在 Linux CI 上永远红。
+    if (process.platform === 'linux') {
+      expect(listener).toBeUndefined()
+      expect(mocks.tray.setContextMenu).toHaveBeenCalled()
+      return
+    }
+
     listener?.()
 
     expect(mocks.tray.popUpContextMenu).toHaveBeenCalledTimes(1)
