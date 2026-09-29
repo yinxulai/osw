@@ -54,6 +54,22 @@ interface UpdaterAPI {
   onStateChanged: (callback: (state: UpdateState) => void) => () => void
 }
 
+interface ScreenshotExportProgress {
+  completed: number
+  total: number
+  current: string
+}
+
+interface ScreenshotExportResult {
+  count: number
+  outputDirectory: string
+}
+
+interface ScreenshotExportAPI {
+  exportAll: () => Promise<ScreenshotExportResult>
+  onProgress: (callback: (progress: ScreenshotExportProgress) => void) => () => void
+}
+
 interface ElectronAPI {
   platform: string
   /** 用系统默认方式打开外部链接。主进程只放行 `https:`。 */
@@ -65,6 +81,7 @@ interface ElectronAPI {
   /** 主窗口进入或退出原生全屏时通知渲染层。 */
   onFullScreenChanged?: (callback: (fullScreen: boolean) => void) => () => void
   getFullScreenState?: () => Promise<boolean>
+  screenshots?: ScreenshotExportAPI
   updater: UpdaterAPI
 }
 

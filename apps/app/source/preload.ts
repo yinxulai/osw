@@ -45,6 +45,26 @@ export interface UpdateState {
   downloadedFile: string | null
 }
 
+export interface ScreenshotExportProgress {
+  completed: number
+  total: number
+  current: string
+}
+
+export interface ScreenshotExportResult {
+  count: number
+  outputDirectory: string
+}
+
+const screenshotExportApi = {
+  exportAll: (): Promise<ScreenshotExportResult> => ipcRenderer.invoke('screenshots:export'),
+  onProgress: (callback: (progress: ScreenshotExportProgress) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: ScreenshotExportProgress) => callback(progress)
+    ipcRenderer.on('screenshots:export-progress', listener)
+    return () => ipcRenderer.removeListener('screenshots:export-progress', listener)
+  },
+}
+
 /**
  * `download()` 的结果，与主进程 `updater.ts` 的 `UpdateDownloadResult` 一致。
  *
@@ -86,6 +106,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('window:full-screen-changed', listener)
   },
   getFullScreenState: (): Promise<boolean> => ipcRenderer.invoke('window:get-full-screen-state'),
+  screenshots: screenshotExportApi,
   updater: updaterApi,
 })
 

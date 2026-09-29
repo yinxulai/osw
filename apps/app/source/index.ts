@@ -13,6 +13,7 @@ import { AutoLaunchManager } from './auto-launch'
 import { UpdaterManager, type UpdateState } from './updater'
 import { nativeTranslator, startNativeLanguageSync } from './i18n'
 import { installWindowShortcuts } from './window-actions'
+import { exportWebsiteScreenshots, type ScreenshotExportProgress } from './screenshot-export'
 // Vite 将 build/icon.png 打包为 data URL，避免运行时路径解析问题。
 // Windows 任务栏/窗口图标需要位图，PNG 可被 nativeImage 直接识别。
 import windowIconPng from '../build/icon.png?url'
@@ -137,6 +138,39 @@ function registerOpenDataDirectoryIpc(): void {
   })
 }
 
+let screenshotExportPromise: Promise<{ count: number; outputDirectory: string }> | null = null
+
+/**
+ * 开发版截图导出。
+ *
+ * 单独开一个受控窗口逐页导航，主窗口和当前工作状态不参与，因此导出过程中
+ * 用户仍可以继续操作主窗口。截图由 macOS 的 `screencapture -l` 抓完整原生窗口，
+ * 而不是 `webContents.capturePage()`；后者拿不到标题栏、交通灯和窗口圆角。
+ */
+function registerScreenshotExportIpc(): void {
+  if (!isDevelopment) return
+
+  ipcMain.handle('screenshots:export', async event => {
+    if (screenshotExportPromise) return screenshotExportPromise
+
+    const outputDirectory = path.resolve(app.getAppPath(), '..', '..', 'snapshot')
+    const sendProgress = (progress: ScreenshotExportProgress) => {
+      if (!event.sender.isDestroyed()) event.sender.send('screenshots:export-progress', progress)
+    }
+
+    screenshotExportPromise = exportWebsiteScreenshots({
+      baseUrl: process.env.VITE_DEV_SERVER_URL!,
+      outputDirectory,
+      preloadPath: path.join(__dirname, 'preload.js'),
+      onProgress: sendProgress,
+    }).finally(() => {
+      screenshotExportPromise = null
+    })
+
+    return screenshotExportPromise
+  })
+}
+
 // 这一层**不是**数据目录那把锁，而是操作系统级的「应用实例」：它把第二次启动变成一个
 // 「聚焦已有窗口」的事件（见 `second-instance` / `focusExistingInstance`），并且必须在
 // 任何窗口存在之前就判定。数据目录的互斥是 core 的事（`runtime/instance-lock.ts`），
@@ -148,6 +182,7 @@ if (isPrimaryInstance) {
   registerExternalLinkIpc()
   registerRuntimeConfigIpc()
   registerOpenDataDirectoryIpc()
+  registerScreenshotExportIpc()
   registerWindowThemeIpc()
   registerWindowFullScreenIpc()
 } else {
@@ -305,9 +340,10 @@ function installApplicationMenu(): void {
 }
 
 function registerWindowThemeIpc(): void {
-  ipcMain.on('appearance:set-theme', (_event, theme: unknown) => {
+  ipcMain.on('appearance:set-theme', (event, theme: unknown) => {
     if (theme !== 'light' && theme !== 'dark') return
-    if (win) applyWindowTheme(win, theme)
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target) applyWindowTheme(target, theme)
   })
 }
 

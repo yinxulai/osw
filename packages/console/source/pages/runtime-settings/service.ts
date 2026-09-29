@@ -3,12 +3,14 @@ import { useRequestLogRetention } from './hooks/use-request-log-retention'
 import { useRuntimeDataReload } from './hooks/use-runtime-data-reload'
 import { useSettingsForm } from './hooks/use-settings-form'
 import { useStorageUsage } from './hooks/use-storage-usage'
+import { useScreenshotExport } from './hooks/use-screenshot-export'
 
 export function useRuntimeSettingsService() {
   const form = useSettingsForm()
   const retention = useRequestLogRetention()
   const reload = useRuntimeDataReload()
   const development = useDevelopmentSeed(reload)
+  const screenshots = useScreenshotExport()
   const storageBytes = useStorageUsage()
 
   return {
@@ -25,5 +27,8 @@ export function useRuntimeSettingsService() {
     storageBytes,
     reload,
     seedDevelopmentData: development.seedDevelopmentData,
+    exportScreenshots: screenshots.exportScreenshots,
+    exportingScreenshots: screenshots.exporting,
+    screenshotExportProgress: screenshots.progress,
   }
 }

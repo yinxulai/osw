@@ -152,7 +152,12 @@ export function RuntimeSettingsPage() {
               />
               <DataDirectoryCard storageBytes={service.storageBytes} />
               {import.meta.env.DEV && (
-                <DevelopmentCard onSeedDevelopment={() => void service.seedDevelopmentData()} />
+                <DevelopmentCard
+                  exportingScreenshots={service.exportingScreenshots}
+                  screenshotProgress={service.screenshotExportProgress}
+                  onExportScreenshots={() => void service.exportScreenshots()}
+                  onSeedDevelopment={() => void service.seedDevelopmentData()}
+                />
               )}
             </SettingsSection>
 

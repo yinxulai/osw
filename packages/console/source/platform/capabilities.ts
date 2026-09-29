@@ -18,6 +18,8 @@ export interface PlatformCapabilities {
   os: PlatformOs
   /** 应用内更新。浏览器形态没有这个概念（产物是托管在本地服务上的静态文件）。 */
   updater: UpdaterAPI | null
+  /** 开发版自动导出官网截图。仅 macOS Electron 开发态提供。 */
+  screenshotExport: ScreenshotExportAPI | null
   /** 把渲染层当前生效的亮暗主题告知宿主；浏览器形态不需要。 */
   setTheme: ((theme: 'light' | 'dark') => void) | null
   /** 订阅原生窗口全屏状态；系统窗口按钮会随全屏状态改变位置或隐藏。 */
@@ -50,6 +52,7 @@ function detectCapabilities(): PlatformCapabilities {
       os: normalizeOs(electronApi.platform),
       // `?? null`：老版本的 preload 可能没暴露 updater，缺能力不代表崩。
       updater: electronApi.updater ?? null,
+      screenshotExport: electronApi.screenshots ?? null,
       setTheme: setTheme ? theme => setTheme(theme) : null,
       onFullScreenChanged: onFullScreenChanged ? callback => onFullScreenChanged(callback) : null,
       getFullScreenState: getFullScreenState ? () => getFullScreenState() : null,
@@ -64,6 +67,7 @@ function detectCapabilities(): PlatformCapabilities {
     name: 'web',
     os: detectBrowserOs(),
     updater: null,
+    screenshotExport: null,
     setTheme: null,
     onFullScreenChanged: null,
     getFullScreenState: null,

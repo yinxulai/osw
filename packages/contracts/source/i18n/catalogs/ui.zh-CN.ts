@@ -1939,6 +1939,13 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.development.seedInserted': '测试数据已插入',
   'settings.development.seedExisting': '测试数据已存在',
   'settings.development.seedFailed': '插入失败：{message}',
+  'settings.development.screenshots': '官网截图',
+  'settings.development.screenshotsDescription': '把五个主要页面按中英、明暗自动导出为 20 张完整原生窗口 PNG',
+  'settings.development.screenshotsAction': '导出截图',
+  'settings.development.screenshotsRunning': '正在导出',
+  'settings.development.screenshotsProgress': '正在导出 {completed}/{total}',
+  'settings.development.screenshotsDone': '已导出 {count} 张截图到 {path}',
+  'settings.development.screenshotsFailed': '截图导出失败：{message}',
   // 服务端只发机器码的枚举值（见 `FAILURE_REASON_CATEGORIES`）
   'failureReason.TIMEOUT': '超时',
   'failureReason.RATE_LIMITED': '限流 (429)',

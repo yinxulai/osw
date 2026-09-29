@@ -1936,6 +1936,13 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.development.seedInserted': 'Sample data inserted',
   'settings.development.seedExisting': 'Sample data already exists',
   'settings.development.seedFailed': 'Insert failed: {message}',
+  'settings.development.screenshots': 'Website screenshots',
+  'settings.development.screenshotsDescription': 'Captures the five main pages in English and Chinese, light and dark, as 20 full native-window PNGs',
+  'settings.development.screenshotsAction': 'Export screenshots',
+  'settings.development.screenshotsRunning': 'Exporting',
+  'settings.development.screenshotsProgress': 'Exporting {completed}/{total}',
+  'settings.development.screenshotsDone': 'Exported {count} screenshots to {path}',
+  'settings.development.screenshotsFailed': 'Screenshot export failed: {message}',
 
   // 服务端只发机器码的枚举值（见 `FAILURE_REASON_CATEGORIES`）
   'failureReason.TIMEOUT': 'Timeout',
