@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { generateId, now } from '@common/utils'
+import { resourceNotFoundError, translateSqliteUniqueViolation } from '../errors'
 import { getConfigDb } from './index'
 import { workflows } from './config-schema'
 
@@ -37,8 +38,18 @@ export async function listWorkflows(includeDeleted = false): Promise<WorkflowRec
   return rows.map(parseWorkflow)
 }
 
+/**
+ * 按型号与版本号取一行。
+ *
+ * 优先返回**活跃行**：版本号只在活跃行之间唯一（见 `config-schema.ts` 的
+ * `idx_workflows_type_version`），被裁掉的旧版本日后可能把同一个号让给新版本，
+ * 那时同一号上会同时存在一活一删两行，取到哪一行不能靠运气。
+ */
 export async function getWorkflow(type: string, version: number): Promise<WorkflowRecord | undefined> {
-  const row = getConfigDb().select().from(workflows).where(and(eq(workflows.type, type), eq(workflows.version, version))).get()
+  const row = getConfigDb().select().from(workflows)
+    .where(and(eq(workflows.type, type), eq(workflows.version, version)))
+    .orderBy(asc(sql`${workflows.deletedTime} IS NOT NULL`), desc(workflows.updatedTime))
+    .get()
   return row ? parseWorkflow(row) : undefined
 }
 
@@ -60,23 +71,28 @@ export async function createWorkflow(input: Omit<WorkflowRecord, 'id' | 'created
     updatedTime: time,
     deletedTime: null,
   }
-  getConfigDb().insert(workflows).values({
-    id: workflow.id,
-    type: workflow.type,
-    version: workflow.version,
-    name: workflow.name,
-    description: workflow.description,
-    definition: JSON.stringify(workflow.definition),
-    createdTime: workflow.createdTime,
-    updatedTime: workflow.updatedTime,
-    deletedTime: workflow.deletedTime,
-  }).run()
+  try {
+    getConfigDb().insert(workflows).values({
+      id: workflow.id,
+      type: workflow.type,
+      version: workflow.version,
+      name: workflow.name,
+      description: workflow.description,
+      definition: JSON.stringify(workflow.definition),
+      createdTime: workflow.createdTime,
+      updatedTime: workflow.updatedTime,
+      deletedTime: workflow.deletedTime,
+    }).run()
+  } catch (error) {
+    // 同一毫秒里两次保存会算出同一个版本号，撞上活跃行的唯一索引；翻译成 409，别当 500 报。
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return workflow
 }
 
 export async function updateWorkflow(id: string, updates: Partial<Omit<WorkflowRecord, 'id' | 'type' | 'version' | 'createdTime'>>): Promise<WorkflowRecord> {
   const existing = getConfigDb().select().from(workflows).where(eq(workflows.id, id)).get()
-  if (!existing) throw new Error(`workflow not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('workflow', id)
   const next: WorkflowRecord = {
     ...parseWorkflow(existing),
     ...updates,

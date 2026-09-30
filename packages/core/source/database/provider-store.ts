@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray } from 'drizzl
 import { ProviderEndpointSchema, ProviderSchema, ProviderSettingSchema } from '@common/schemas'
 import type { Provider, ProviderEndpoint, ProviderSetting } from '@common/schemas'
 import { generateId, now } from '@common/utils'
-import { endpointUrlInUseError } from '../errors'
+import { endpointUrlInUseError, resourceNotFoundError, translateSqliteUniqueViolation } from '../errors'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -35,13 +35,16 @@ export async function createProvider(input: CreateProviderInput): Promise<Provid
   const time = now()
   const db = getConfigDb()
   const provider = ProviderSchema.parse({ ...input, description: input.description ?? '', id, createdTime: time, updatedTime: time, deletedTime: null })
-  // 新建的供应商追加到侧栏末尾：用户拖动排序后的相对顺序不会被后续创建打乱。
-  const maxSortOrder = db.select({ value: max(providers.sortOrder) }).from(providers).get()?.value ?? -1
-  db.insert(providers).values({ id, name: provider.name, description: provider.description ?? '', enabled: provider.enabled, sortOrder: Number(maxSortOrder) + 1, createdTime: time, updatedTime: time }).run()
-  db.insert(providerSettings).values([
-    { providerId: id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: time },
-    { providerId: id, key: 'connection.timeoutMilliseconds', value: String(provider.timeoutMilliseconds), valueType: 'number', updatedTime: time },
-  ]).run()
+  // 供应商与它的设置行必须一起落库：只写进去一半，用户看到的供应商就少了密钥引用或超时配置。
+  db.transaction(transaction => {
+    // 新建的供应商追加到侧栏末尾：用户拖动排序后的相对顺序不会被后续创建打乱。
+    const maxSortOrder = transaction.select({ value: max(providers.sortOrder) }).from(providers).get()?.value ?? -1
+    transaction.insert(providers).values({ id, name: provider.name, description: provider.description ?? '', enabled: provider.enabled, sortOrder: Number(maxSortOrder) + 1, createdTime: time, updatedTime: time }).run()
+    transaction.insert(providerSettings).values([
+      { providerId: id, key: 'security.secretReference', value: provider.apiKeyReference, valueType: 'string', updatedTime: time },
+      { providerId: id, key: 'connection.timeoutMilliseconds', value: String(provider.timeoutMilliseconds), valueType: 'number', updatedTime: time },
+    ]).run()
+  })
   return provider
 }
 
@@ -49,17 +52,20 @@ export async function updateProvider(id: string, updates: Partial<Omit<Provider,
   const db = getConfigDb()
   const time = now()
   const existing = db.select().from(providers).where(eq(providers.id, id)).get()
-  if (!existing) throw new Error(`provider not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('provider', id)
   const next = ProviderSchema.parse({ ...mapProvider(existing), ...updates, id, createdTime: Number(existing.createdTime), updatedTime: time })
-  db.update(providers).set({ name: next.name, description: next.description ?? '', enabled: next.enabled, updatedTime: time, deletedTime: next.deletedTime }).where(and(eq(providers.id, id), isNull(providers.deletedTime))).run()
-  for (const [key, value, valueType] of [
-    ['security.secretReference', next.apiKeyReference, 'string'],
-    ['connection.timeoutMilliseconds', String(next.timeoutMilliseconds), 'number'],
-  ] as const) {
-    db.insert(providerSettings).values({ providerId: id, key, value, valueType, updatedTime: time }).onConflictDoUpdate({
-      target: [providerSettings.providerId, providerSettings.key], set: { value, valueType, updatedTime: time },
-    }).run()
-  }
+  // 供应商行与两条设置行是一次修改：中间失败会让保存的结果只生效一半。
+  db.transaction(transaction => {
+    transaction.update(providers).set({ name: next.name, description: next.description ?? '', enabled: next.enabled, updatedTime: time, deletedTime: next.deletedTime }).where(and(eq(providers.id, id), isNull(providers.deletedTime))).run()
+    for (const [key, value, valueType] of [
+      ['security.secretReference', next.apiKeyReference, 'string'],
+      ['connection.timeoutMilliseconds', String(next.timeoutMilliseconds), 'number'],
+    ] as const) {
+      transaction.insert(providerSettings).values({ providerId: id, key, value, valueType, updatedTime: time }).onConflictDoUpdate({
+        target: [providerSettings.providerId, providerSettings.key], set: { value, valueType, updatedTime: time },
+      }).run()
+    }
+  })
   return next
 }
 
@@ -119,16 +125,24 @@ type CreateProviderEndpointInput = Omit<ProviderEndpoint, 'id' | 'createdTime' |
 export async function createProviderEndpoint(input: CreateProviderEndpointInput): Promise<ProviderEndpoint> {
   const time = now()
   const endpoint = ProviderEndpointSchema.parse({ ...input, id: generateId('end_'), enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  getConfigDb().insert(providerEndpoints).values({ ...endpoint, deletedTime: null }).run()
+  try {
+    getConfigDb().insert(providerEndpoints).values({ ...endpoint, deletedTime: null }).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return endpoint
 }
 
 export async function updateProviderEndpoint(id: string, updates: Partial<Pick<ProviderEndpoint, 'protocol' | 'url' | 'enabled'>>): Promise<ProviderEndpoint> {
   const existing = await getProviderEndpoint(id)
-  if (!existing) throw new Error(`provider endpoint not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('provider endpoint', id)
   const endpoint = ProviderEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
-  getConfigDb().update(providerEndpoints).set({ protocol: endpoint.protocol, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
-    .where(and(eq(providerEndpoints.id, id), isNull(providerEndpoints.deletedTime))).run()
+  try {
+    getConfigDb().update(providerEndpoints).set({ protocol: endpoint.protocol, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
+      .where(and(eq(providerEndpoints.id, id), isNull(providerEndpoints.deletedTime))).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return endpoint
 }
 

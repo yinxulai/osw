@@ -10,7 +10,7 @@ import type {
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
-import { endpointUrlMissingError } from '../errors'
+import { duplicateProviderModelError, endpointUrlMissingError, resourceNotFoundError, translateSqliteUniqueViolation } from '../errors'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -136,14 +136,29 @@ export async function getProviderModelRoute(id: string): Promise<ProviderModelRo
 
 type CreateProviderModelRouteInput = Pick<ProviderModelRoute, 'providerId' | 'modelName' | 'priority'> & Partial<Pick<ProviderModelRoute, 'endpoints' | 'enabled'>>
 
+/** 活跃行里有没有同供应商下的同名模型。`excludeId` 用于改名时跳过自己。 */
+function activeProviderModelNameTaken(providerId: string, modelName: string, excludeId?: string): boolean {
+  const row = getConfigDb().select({ id: providerModels.id }).from(providerModels)
+    .where(and(eq(providerModels.providerId, providerId), eq(providerModels.modelName, modelName), isNull(providerModels.deletedTime)))
+    .all()
+  return row.some(candidate => candidate.id !== excludeId)
+}
+
 export async function createProviderModelRoute(input: CreateProviderModelRouteInput): Promise<ProviderModelRoute> {
   const id = generateId('model_')
   const time = now()
   const db = getConfigDb()
-  db.transaction(transaction => {
-    transaction.insert(providerModels).values({ id, providerId: input.providerId, modelName: input.modelName, enabled: input.enabled ?? true, createdTime: time, updatedTime: time }).run()
-    replaceRouteEndpoints(transaction, id, input.providerId, input.endpoints ?? [], time)
-  })
+  // 预检只是为了把话说清楚（409 + 撞的是哪个名字）；真正的保证是那条部分唯一索引，
+  // 竞态窗口由 `translateSqliteUniqueViolation` 在下层兜住。
+  if (activeProviderModelNameTaken(input.providerId, input.modelName)) throw duplicateProviderModelError(input.modelName)
+  try {
+    db.transaction(transaction => {
+      transaction.insert(providerModels).values({ id, providerId: input.providerId, modelName: input.modelName, enabled: input.enabled ?? true, createdTime: time, updatedTime: time }).run()
+      replaceRouteEndpoints(transaction, id, input.providerId, input.endpoints ?? [], time)
+    })
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return { id, providerId: input.providerId, modelName: input.modelName, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
 }
 
@@ -151,27 +166,38 @@ export async function updateProviderModelRoute(id: string, updates: Partial<Omit
   const time = now()
   const db = getConfigDb()
   const existing = await getProviderModelRoute(id)
-  if (!existing) throw new Error(`provider model not found: ${id}`)
-  db.transaction(transaction => {
-    transaction.update(providerModels).set({
-      ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
-      ...(updates.modelName !== undefined ? { modelName: updates.modelName } : {}),
-      ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
-      ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
-      updatedTime: time,
-    }).where(eq(providerModels.id, id)).run()
-    if (updates.enabled === false) {
-      // 关闭模型时，把它在所有逻辑模型里的调度绑定一并禁用：
-      // 模型已经不可用了，绑定仍「开启」会让人误以为它还会参与调度。
-      transaction.update(schedulingPolicies).set({ enabled: false, updatedTime: time })
-        .where(and(eq(schedulingPolicies.providerModelId, id), isNull(schedulingPolicies.deletedTime))).run()
-    }
-    if (updates.endpoints !== undefined) {
-      // 端点集合变化交给 `replaceRouteEndpoints` 做差异更新：没变的绑定原地保留
-      // （连同它的 id），只对增减做软删除/新增。
-      replaceRouteEndpoints(transaction, id, updates.providerId ?? existing.providerId, updates.endpoints, time)
-    }
-  })
+  if (!existing) throw resourceNotFoundError('provider model', id)
+  // 改名是**换一个身份**：新名字若在同一个供应商下已被活跃行占用，这次改名就得拒绝，
+  // 而不是让两条活跃行重名（那正是 #37 的形态）。预检 + 约束翻译两条路都留着。
+  const nextModelName = updates.modelName ?? existing.modelName
+  const nextProviderId = updates.providerId ?? existing.providerId
+  if ((updates.modelName !== undefined || updates.providerId !== undefined) && activeProviderModelNameTaken(nextProviderId, nextModelName, id)) {
+    throw duplicateProviderModelError(nextModelName)
+  }
+  try {
+    db.transaction(transaction => {
+      transaction.update(providerModels).set({
+        ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
+        ...(updates.modelName !== undefined ? { modelName: updates.modelName } : {}),
+        ...(updates.enabled !== undefined ? { enabled: updates.enabled } : {}),
+        ...(updates.deletedTime !== undefined ? { deletedTime: updates.deletedTime } : {}),
+        updatedTime: time,
+      }).where(eq(providerModels.id, id)).run()
+      if (updates.enabled === false) {
+        // 关闭模型时，把它在所有逻辑模型里的调度绑定一并禁用：
+        // 模型已经不可用了，绑定仍「开启」会让人误以为它还会参与调度。
+        transaction.update(schedulingPolicies).set({ enabled: false, updatedTime: time })
+          .where(and(eq(schedulingPolicies.providerModelId, id), isNull(schedulingPolicies.deletedTime))).run()
+      }
+      if (updates.endpoints !== undefined) {
+        // 端点集合变化交给 `replaceRouteEndpoints` 做差异更新：没变的绑定原地保留
+        // （连同它的 id），只对增减做软删除/新增。
+        replaceRouteEndpoints(transaction, id, updates.providerId ?? existing.providerId, updates.endpoints, time)
+      }
+    })
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return { ...existing, ...updates, id, updatedTime: time }
 }
 
@@ -216,16 +242,24 @@ type CreateProviderModelEndpointInput = Omit<ProviderModelEndpoint, 'id' | 'crea
 export async function createProviderModelEndpoint(input: CreateProviderModelEndpointInput): Promise<ProviderModelEndpoint> {
   const time = now()
   const endpoint = ProviderModelEndpointSchema.parse({ ...input, id: generateId('pme_'), url: input.url ?? null, enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  getConfigDb().insert(providerModelEndpoints).values({ ...endpoint, deletedTime: null }).run()
+  try {
+    getConfigDb().insert(providerModelEndpoints).values({ ...endpoint, deletedTime: null }).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return endpoint
 }
 
 export async function updateProviderModelEndpoint(id: string, updates: Partial<Pick<ProviderModelEndpoint, 'providerEndpointId' | 'url' | 'enabled'>>): Promise<ProviderModelEndpoint> {
   const existing = await getProviderModelEndpoint(id)
-  if (!existing) throw new Error(`provider model endpoint not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('provider model endpoint', id)
   const endpoint = ProviderModelEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
-  getConfigDb().update(providerModelEndpoints).set({ providerEndpointId: endpoint.providerEndpointId, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
-    .where(and(eq(providerModelEndpoints.id, id), isNull(providerModelEndpoints.deletedTime))).run()
+  try {
+    getConfigDb().update(providerModelEndpoints).set({ providerEndpointId: endpoint.providerEndpointId, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
+      .where(and(eq(providerModelEndpoints.id, id), isNull(providerModelEndpoints.deletedTime))).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return endpoint
 }
 
@@ -256,16 +290,24 @@ type CreateProtocolConverterInput = Omit<ProtocolConverter, 'id' | 'createdTime'
 export async function createProtocolConverter(input: CreateProtocolConverterInput): Promise<ProtocolConverter> {
   const time = now()
   const converter = ProtocolConverterSchema.parse({ ...input, id: generateId('conv_'), enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  getConfigDb().insert(protocolConverters).values({ ...converter, deletedTime: null }).run()
+  try {
+    getConfigDb().insert(protocolConverters).values({ ...converter, deletedTime: null }).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return converter
 }
 
 export async function updateProtocolConverter(id: string, updates: Partial<Pick<ProtocolConverter, 'clientProtocol' | 'enabled'>>): Promise<ProtocolConverter> {
   const existing = await getProtocolConverter(id)
-  if (!existing) throw new Error(`protocol converter not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('protocol converter', id)
   const converter = ProtocolConverterSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
-  getConfigDb().update(protocolConverters).set({ clientProtocol: converter.clientProtocol, enabled: converter.enabled, updatedTime: converter.updatedTime })
-    .where(and(eq(protocolConverters.id, id), isNull(protocolConverters.deletedTime))).run()
+  try {
+    getConfigDb().update(protocolConverters).set({ clientProtocol: converter.clientProtocol, enabled: converter.enabled, updatedTime: converter.updatedTime })
+      .where(and(eq(protocolConverters.id, id), isNull(protocolConverters.deletedTime))).run()
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return converter
 }
 

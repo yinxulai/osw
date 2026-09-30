@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
 import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema, type RequestRewriteRule, type ProviderModelRequestRewriteRule } from '@common/schemas'
 import { generateId, now } from '@common/utils'
+import { duplicateRequestRewriteRuleBindingError, resourceNotFoundError, translateSqliteUniqueViolation } from '../errors'
 import { getConfigDb } from './index'
 import { providerModelRequestRewriteRules, providerModels, requestRewriteRules } from './config-schema'
 
@@ -24,7 +25,7 @@ export async function createRequestRewriteRule(input: Omit<RequestRewriteRule, '
   getConfigDb().insert(requestRewriteRules).values({ ...rule, match: JSON.stringify(rule.match), actions: JSON.stringify(rule.actions), testCases: JSON.stringify(rule.testCases) }).run(); return rule
 }
 export async function updateRequestRewriteRule(id: string, updates: Partial<Omit<RequestRewriteRule, 'id' | 'createdTime'>>): Promise<RequestRewriteRule> {
-  const existing = await getRequestRewriteRule(id); if (!existing) throw new Error(`request rewrite rule not found: ${id}`)
+  const existing = await getRequestRewriteRule(id); if (!existing) throw resourceNotFoundError('request rewrite rule', id)
   const rule = RequestRewriteRuleSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
   getConfigDb().update(requestRewriteRules).set({ name: rule.name, description: rule.description, enabled: rule.enabled, scope: rule.scope, schemaVersion: rule.schemaVersion, source: rule.source, match: JSON.stringify(rule.match), actions: JSON.stringify(rule.actions), testCases: JSON.stringify(rule.testCases), updatedTime: rule.updatedTime, deletedTime: rule.deletedTime }).where(eq(requestRewriteRules.id, id)).run(); return rule
 }
@@ -44,25 +45,33 @@ export async function listProviderModelRequestRewriteRules(providerModelId: stri
   return getConfigDb().select().from(providerModelRequestRewriteRules).where(and(eq(providerModelRequestRewriteRules.providerModelId, providerModelId), isNull(providerModelRequestRewriteRules.deletedTime))).orderBy(asc(providerModelRequestRewriteRules.priority)).all().map(parseBinding)
 }
 export async function replaceProviderModelRequestRewriteRuleBindings(providerModelId: string, bindings: Array<Pick<ProviderModelRequestRewriteRule, 'ruleId' | 'priority' | 'enabled'>>): Promise<ProviderModelRequestRewriteRule[]> {
-  if (new Set(bindings.map(item => item.ruleId)).size !== bindings.length || new Set(bindings.map(item => item.priority)).size !== bindings.length) throw new Error('A request rewrite rule with the same binding and priority already exists')
+  // 重复的 ruleId 是请求体自己前后矛盾，重复的 priority 会撞上
+  // `idx_provider_model_request_rewrite_rule_priority_active`。两条都是用户可修正的输入，
+  // 不是服务端故障：用 409 + `DUPLICATE_RESOURCE` 说清楚，别让它变成一句「内部错误」。
+  if (new Set(bindings.map(item => item.ruleId)).size !== bindings.length) throw duplicateRequestRewriteRuleBindingError('rule')
+  if (new Set(bindings.map(item => item.priority)).size !== bindings.length) throw duplicateRequestRewriteRuleBindingError('priority')
   const time = now(); const db = getConfigDb()
-  db.transaction(tx => {
-    const model = tx.select({ id: providerModels.id }).from(providerModels).where(and(eq(providerModels.id, providerModelId), isNull(providerModels.deletedTime))).get()
-    if (!model) throw new Error(`provider model not found: ${providerModelId}`)
-    for (const item of bindings) {
-      const rule = tx.select().from(requestRewriteRules).where(and(eq(requestRewriteRules.id, item.ruleId), isNull(requestRewriteRules.deletedTime))).get()
-      if (!rule) throw new Error(`request rewrite rule not found: ${item.ruleId}`)
-    }
-    const activeScope = and(eq(providerModelRequestRewriteRules.providerModelId, providerModelId), isNull(providerModelRequestRewriteRules.deletedTime))
-    const retainedRuleIds = bindings.map(item => item.ruleId)
-    tx.update(providerModelRequestRewriteRules).set({ enabled: false, deletedTime: time, updatedTime: time }).where(retainedRuleIds.length === 0 ? activeScope : and(activeScope, notInArray(providerModelRequestRewriteRules.requestRewriteRuleId, retainedRuleIds))).run()
-    for (const item of bindings) {
-      tx.insert(providerModelRequestRewriteRules).values({ providerModelId, requestRewriteRuleId: item.ruleId, priority: item.priority, enabled: item.enabled, createdTime: time, updatedTime: time, deletedTime: null }).onConflictDoUpdate({
-        target: [providerModelRequestRewriteRules.providerModelId, providerModelRequestRewriteRules.requestRewriteRuleId],
-        set: { priority: item.priority, enabled: item.enabled, updatedTime: time, deletedTime: null },
-      }).run()
-    }
-  })
+  try {
+    db.transaction(tx => {
+      const model = tx.select({ id: providerModels.id }).from(providerModels).where(and(eq(providerModels.id, providerModelId), isNull(providerModels.deletedTime))).get()
+      if (!model) throw resourceNotFoundError('provider model', providerModelId)
+      for (const item of bindings) {
+        const rule = tx.select().from(requestRewriteRules).where(and(eq(requestRewriteRules.id, item.ruleId), isNull(requestRewriteRules.deletedTime))).get()
+        if (!rule) throw resourceNotFoundError('request rewrite rule', item.ruleId)
+      }
+      const activeScope = and(eq(providerModelRequestRewriteRules.providerModelId, providerModelId), isNull(providerModelRequestRewriteRules.deletedTime))
+      const retainedRuleIds = bindings.map(item => item.ruleId)
+      tx.update(providerModelRequestRewriteRules).set({ enabled: false, deletedTime: time, updatedTime: time }).where(retainedRuleIds.length === 0 ? activeScope : and(activeScope, notInArray(providerModelRequestRewriteRules.requestRewriteRuleId, retainedRuleIds))).run()
+      for (const item of bindings) {
+        tx.insert(providerModelRequestRewriteRules).values({ providerModelId, requestRewriteRuleId: item.ruleId, priority: item.priority, enabled: item.enabled, createdTime: time, updatedTime: time, deletedTime: null }).onConflictDoUpdate({
+          target: [providerModelRequestRewriteRules.providerModelId, providerModelRequestRewriteRules.requestRewriteRuleId],
+          set: { priority: item.priority, enabled: item.enabled, updatedTime: time, deletedTime: null },
+        }).run()
+      }
+    })
+  } catch (error) {
+    throw translateSqliteUniqueViolation(error) ?? error
+  }
   return listProviderModelRequestRewriteRules(providerModelId)
 }
 export async function listRulesForProviderModel(providerModelId: string): Promise<RequestRewriteRule[]> {

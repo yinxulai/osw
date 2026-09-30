@@ -140,6 +140,11 @@ describe('router graph store', () => {
     expect(versions[0].version).toBe(MAX_ROUTER_GRAPH_VERSIONS + 3)
     expect(await readRouterGraphVersion(1)).toBeNull()
     expect(await readRouterGraphVersion(4)).not.toBeNull()
+    // 被裁掉的旧版本不能把版本号一起带走：它们的行还在库里，若唯一索引是全表的那一条，
+    // 下一个版本号就会撞上这些历史行。活跃行之间唯一才是对的（partial index）。
+    const saved = await saveRouterGraphVersion(graphWithMarker('after-prune-'), undefined, undefined)
+    expect(saved).toMatchObject({ version: MAX_ROUTER_GRAPH_VERSIONS + 4, created: true })
+    expect((await listRouterGraphVersions())[0].version).toBe(MAX_ROUTER_GRAPH_VERSIONS + 4)
   })
 
   it('skips stored rows whose definition is not a valid graph', async () => {

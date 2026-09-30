@@ -41,6 +41,12 @@ export function normalizeError(error: unknown): AppError {
     return new AppError(CLIENT_REQUEST_ABORTED, 499, 'Client aborted the request', { cause: error })
   }
 
+  // 唯一约束冲突是**可修正的输入问题**，不是服务端故障。放在这里统一翻译，是因为
+  // 「先查后写」的预检在任何一条写路径上都隔着一段窗口，兜底必须在最后一道口收口
+  // （见 `translateSqliteUniqueViolation` 的说明）。
+  const constraint = translateSqliteUniqueViolation(error)
+  if (constraint) return constraint
+
   return new AppError('INTERNAL_ERROR', 500, 'Internal server error', {
     expose: false,
     cause: error,
@@ -180,4 +186,86 @@ export function protectedLogicalModelError(modelId: string): AppError {
     `Logical model ${modelId} is built in and cannot be deleted or renamed`,
     { details: { modelId } },
   )
+}
+
+/**
+ * 「这个模型名在这个供应商下已经有一个活跃行了」。
+ *
+ * 与 `duplicateLogicalModelError` 是同一件事的另一张表：`provider_models` 也靠
+ * `(providerId, modelName)` 的部分唯一索引保证「活跃行之间不重名」，软删除会把这些名字让出来。
+ * 用户能在模型管理页把名字改成同供应商下已有的那个，那是一次**输入错误**（换个名字，或者先
+ * 把原来那个删掉/改名），不是服务端故障——所以用 400 系的 `DUPLICATE_RESOURCE` 暴露出去，
+ * 界面按 `errors.DUPLICATE_RESOURCE` 说「同名资源已存在」，而不是一句「内部错误」。
+ */
+export function duplicateProviderModelError(modelName: string): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `Provider model ${modelName} already exists for this provider`,
+    { details: { modelName } },
+  )
+}
+
+/** 「没有这个资源」。参数是给日志与外部工具看的那句英文诊断里的标识（id 或名字）。 */
+export function resourceNotFoundError(resource: string, identifier: string): AppError {
+  return new AppError(
+    'RESOURCE_NOT_FOUND',
+    404,
+    `${resource} ${identifier} not found`,
+    { details: { resource, identifier } },
+  )
+}
+
+/**
+ * 「这一条改写规则已经绑过了」。`replaceProviderModelRequestRewriteRuleBindings` 收的是整份
+ * 绑定表，重复的 `ruleId` 说明请求体自己前后矛盾；`priority` 重复则撞上
+ * `(providerModelId, priority)` 的部分唯一索引，两条都是用户可修正的输入，不是 500。
+ */
+export function duplicateRequestRewriteRuleBindingError(kind: 'rule' | 'priority'): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `A request rewrite rule with the same binding and priority already exists (duplicate ${kind})`,
+    { details: { kind } },
+  )
+}
+
+/** `node:sqlite` 的约束冲突错误码：`errstr` 是 `SQLITE_CONSTRAINT_UNIQUE` / `SQLITE_CONSTRAINT`。 */
+const SQLITE_UNIQUE_VIOLATION = 2067
+
+function readSqliteError(error: unknown): { errcode: number; message: string } | null {
+  if (typeof error !== 'object' || error === null) return null
+  const candidate = error as { code?: unknown; errcode?: unknown; message?: unknown }
+  if (candidate.code !== 'ERR_SQLITE_ERROR' || typeof candidate.errcode !== 'number') return null
+  return { errcode: candidate.errcode, message: typeof candidate.message === 'string' ? candidate.message : '' }
+}
+
+/**
+ * 把裸的 SQLite 唯一约束冲突翻译成用户看得懂的错误。
+ *
+ * 为什么不指望调用方「每次都先查一遍」：先查后写之间永远有一段窗口（同一个进程里两个
+ * 异步写、两个管理页签、导入文件与手改同时发生），窗口里插进去的那一行只有数据库自己知道。
+ * 于是 `INSERT` 直接抛 `SQLITE_CONSTRAINT_UNIQUE`，`normalizeError` 判不出来源，回给界面的
+ * 就是一句「Internal server error」（HTTP 500）——用户明明只是填重了一个名字。
+ *
+ * 这里兜住的是那条兜底路径：抛出的仍然是 500 一条路以外的正确语义（409 + 可本地化的错误码），
+ * 只是**冲突究竟撞在哪一列上，从 SQLite 的消息里读**，不猜。读不出来就原样放行，
+ * 让 `normalizeError` 按未知错误处理——宁可 500，也不要给一个编造的「哪里重了」。
+ */
+export function translateSqliteUniqueViolation(error: unknown): AppError | null {
+  const sqlite = readSqliteError(error)
+  if (!sqlite || sqlite.errcode !== SQLITE_UNIQUE_VIOLATION) return null
+  // 消息形如 `UNIQUE constraint failed: provider_models.providerId, provider_models.modelName`
+  const columns = sqlite.message.split(':').slice(1).join(':').trim()
+  if (columns.includes('provider_models.')) {
+    return new AppError('DUPLICATE_RESOURCE', 409, `A provider model with the same name already exists (${columns})`, { cause: error, details: { constraint: columns } })
+  }
+  if (columns.includes('logical_models.')) return duplicateLogicalModelError(columns)
+  if (columns.includes('provider_endpoints.') || columns.includes('provider_model_endpoints.') || columns.includes('protocol_converters.') || columns.includes('provider_model_request_rewrite_rules.')) {
+    return new AppError('DUPLICATE_RESOURCE', 409, `A resource with the same identity already exists (${columns})`, { cause: error, details: { constraint: columns } })
+  }
+  if (columns.includes('workflows.')) {
+    return new AppError('RESOURCE_CONFLICT', 409, `A workflow with the same type and version already exists (${columns})`, { cause: error, details: { constraint: columns } })
+  }
+  return new AppError('DUPLICATE_RESOURCE', 409, `A resource with the same identity already exists (${columns})`, { cause: error, details: { constraint: columns } })
 }

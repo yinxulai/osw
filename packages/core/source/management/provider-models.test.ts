@@ -160,7 +160,7 @@ describe('provider model CRUD routes', () => {
     expect(responseData(found).data).toMatchObject({ id: model.id })
 
     await expect(providerModelRoutes.invoke('/api/provider-model/get', mockResponse(), { id: 'model_missing' }))
-      .rejects.toThrow(/provider model not found/)
+      .rejects.toThrow(/provider model model_missing not found/)
   })
 
   it('merges partial updates and rewrites the scheduling policy when both fields are given', async () => {

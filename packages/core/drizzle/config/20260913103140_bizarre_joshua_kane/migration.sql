@@ -179,6 +179,6 @@ CREATE INDEX `idx_request_rewrite_rules_deleted_time` ON `request_rewrite_rules`
 CREATE INDEX `idx_scheduling_policies_route` ON `scheduling_policies` (`logicalModelId`,`enabled`,`priority`,`weight`);--> statement-breakpoint
 CREATE INDEX `idx_scheduling_policies_deleted_time` ON `scheduling_policies` (`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_settings_updated_time` ON `settings` (`updatedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_workflows_type_version` ON `workflows` (`type`,`version`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_workflows_type_version` ON `workflows` (`type`,`version`) WHERE deletedTime IS NULL;--> statement-breakpoint
 CREATE INDEX `idx_workflows_type` ON `workflows` (`type`,`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_workflows_deleted_time` ON `workflows` (`deletedTime`);

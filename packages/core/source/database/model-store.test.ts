@@ -312,4 +312,36 @@ describe('model store', () => {
       expect.objectContaining({ providerModelId: other.id, enabled: true, deletedTime: null }),
     ]))
   })
+
+  it('rejects a duplicate model name inside one provider with a typed 409', async () => {
+    const provider = await createProvider({ name: 'Dup Provider', apiKeyReference: 'key_dup', timeoutMilliseconds: 20_000, enabled: true })
+    await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
+
+    // 活跃行重名是用户可修正的输入错误：预检就要给出 409 + `DUPLICATE_RESOURCE`，
+    // 不能让 `provider_models (providerId, modelName)` 的唯一索引抛成一句 500。
+    await expect(createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 }))
+      .rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
+
+    // 改名撞上已有的活跃行同样要被拦下。
+    const renamed = await createProviderModelRoute({ providerId: provider.id, modelName: 'other-name', priority: 0 })
+    await expect(updateProviderModelRoute(renamed.id, { modelName: 'same-name' }))
+      .rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
+
+    // 另一个供应商用同一个名字不受影响：唯一性只在供应商内部成立。
+    const another = await createProvider({ name: 'Another Provider', apiKeyReference: 'key_another', timeoutMilliseconds: 20_000, enabled: true })
+    await expect(createProviderModelRoute({ providerId: another.id, modelName: 'same-name', priority: 0 }))
+      .resolves.toMatchObject({ providerId: another.id, modelName: 'same-name' })
+  })
+
+  it('frees a model name again after the previous holder is deleted', async () => {
+    const provider = await createProvider({ name: 'Reuse Provider', apiKeyReference: 'key_reuse', timeoutMilliseconds: 20_000, enabled: true })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
+    const { deleteProviderModelRoute } = await import('./model-store')
+    await deleteProviderModelRoute(first.id)
+
+    // 唯一索引是部分索引（`WHERE deletedTime IS NULL`），软删掉的旧行不该占住名字。
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
+    expect(second.id).not.toBe(first.id)
+    await expect(getProviderModel(second.id)).resolves.toMatchObject({ modelName: 'reusable', deletedTime: null })
+  })
 })

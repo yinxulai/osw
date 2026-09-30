@@ -16,6 +16,7 @@ import {
   upsertSchedulingPolicy,
 } from '@server/database/logical-model-store'
 import { HttpRouter } from '@server/http-router'
+import { resourceNotFoundError } from '@server/errors'
 import { reportTelemetryEvent } from '@server/telemetry'
 import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
@@ -63,7 +64,9 @@ const GetProviderModelSchema = z.object({ id: z.string().min(1) })
 async function handleGetProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = GetProviderModelSchema.parse(body)
   const model = await getProviderModel(id)
-  if (!model) throw new Error(`provider model not found: ${id}`)
+  // 读一个不存在的模型是 404，不是 500：它是「你要的东西不在了」（可能刚在另一个页签删掉），
+  // 界面按 `errors.RESOURCE_NOT_FOUND` 说清楚，比一句「内部错误」有用得多。
+  if (!model) throw resourceNotFoundError('provider model', id)
   sendSuccess(res, model)
 }
 

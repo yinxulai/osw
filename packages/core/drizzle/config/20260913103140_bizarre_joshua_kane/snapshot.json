@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "26ec2757-8264-4233-bc25-cdf718b808c5",
+  "id": "4a2201fb-1985-41b5-81cf-5c511c03d27e",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -1806,7 +1806,7 @@
         }
       ],
       "isUnique": true,
-      "where": null,
+      "where": "deletedTime IS NULL",
       "origin": "manual",
       "name": "idx_workflows_type_version",
       "entityType": "indexes",

@@ -228,7 +228,11 @@ export const workflows = sqliteTable(
     deletedTime: integer('deletedTime'),
   },
   table => [
-    uniqueIndex('idx_workflows_type_version').on(table.type, table.version),
+    // 版本号只在**活跃行**之间唯一。全表唯一会让被裁掉的旧版本永久占住它的号：
+    // `pruneRouterGraphVersions` 软删的是最旧的若干版，它们的行还在、版本号还在，
+    // 新版本的 `latest + 1` 一旦撞上那些号，写入就会抛唯一约束冲突。
+    // 版本号是「用户看得见的编号」，不该因为一段历史被裁掉就跳号或换号。
+    uniqueIndex('idx_workflows_type_version').on(table.type, table.version).where(sql`deletedTime IS NULL`),
     index('idx_workflows_type').on(table.type, table.deletedTime),
     index('idx_workflows_deleted_time').on(table.deletedTime),
   ],

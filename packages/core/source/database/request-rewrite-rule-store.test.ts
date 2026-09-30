@@ -136,7 +136,14 @@ describe('request rewrite rule store', () => {
     await expect(replaceProviderModelRequestRewriteRuleBindings(providerModel.id, [
       { ruleId: globalRule.id, priority: 5, enabled: true },
       { ruleId: globalRule.id, priority: 10, enabled: true },
-    ])).rejects.toThrow('A request rewrite rule with the same binding and priority already exists')
+    ])).rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
+
+    // 优先级重复会撞上 `(providerModelId, priority)` 的部分唯一索引；预检先把它拦成 409，
+    // 而不是让 SQLite 的裸约束冲突冒成 500。
+    await expect(replaceProviderModelRequestRewriteRuleBindings(providerModel.id, [
+      { ruleId: globalRule.id, priority: 7, enabled: true },
+      { ruleId: boundRule.id, priority: 7, enabled: true },
+    ])).rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
 
     const deleted = await deleteRequestRewriteRule(boundRule.id)
     expect(deleted).toMatchObject({ id: boundRule.id, affectedProviderModelCount: 1 })
