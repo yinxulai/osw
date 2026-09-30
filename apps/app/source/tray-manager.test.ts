@@ -84,7 +84,13 @@ const mocks = vi.hoisted(() => {
     removeHandler: vi.fn(),
     onIpc: vi.fn(),
     offIpc: vi.fn(),
-    screen: { getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },
+    screen: {
+      getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })),
+      getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })),
+      getCursorScreenPoint: vi.fn(() => ({ x: 700, y: 12 })),
+      on: vi.fn(),
+      off: vi.fn(),
+    },
     getProxyServerStatus: vi.fn(),
     startProxyServer: vi.fn(),
     stopProxyServer: vi.fn(),
@@ -122,7 +128,7 @@ vi.mock('./server-host', () => ({
 }))
 
 import { TrayManager } from './tray-manager'
-import { TrayPanelManager, resolveTrayPanelPosition } from './tray-panel'
+import { TrayPanelManager, resolveTrayPanelAnchor, resolveTrayPanelPosition } from './tray-panel'
 
 interface PanelBounds {
   x: number
@@ -231,6 +237,21 @@ describe('托盘面板窗口', () => {
     return listener
   }
 
+  type PanelStub = (typeof mocks.panelWindows)[number]
+
+  function lastPanel(): PanelStub {
+    const panel = mocks.panelWindows.at(-1)
+    if (!panel) throw new Error('panel window was never created')
+    return panel
+  }
+
+  /** 面板失焦时宿主会收起它：macOS 上这一下往往和「点托盘」是同一个物理点击。 */
+  function blurListener(panel: PanelStub): () => void {
+    const listener = panel.on.mock.calls.find(([event]) => event === 'blur')?.[1] as (() => void) | undefined
+    if (!listener) throw new Error('panel blur handler was never registered')
+    return listener
+  }
+
   it('把「打开主界面 / 退出」这两个只有宿主做得到的动作递出去', async () => {
     let opened = 0
     let quit = 0
@@ -306,6 +327,199 @@ describe('托盘面板窗口', () => {
 
     expect(panel.setBounds).toHaveBeenLastCalledWith({ x: 301, y: 4, width: 422, height: 380 }, false)
     panelManager.destroy()
+  })
+
+  it('点托盘时面板还开着，就收起它', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = lastPanel()
+    expect(panel.visible).toBe(true)
+
+    panelManager.show()
+
+    expect(panel.visible).toBe(false)
+    panelManager.destroy()
+  })
+
+  it('macOS 上「失焦收起」与紧随其后的那一次点击是同一个动作，只收不弹', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = lastPanel()
+
+    // 点托盘：先 blur（面板收起），click 随后才到。
+    blurListener(panel)()
+    panelManager.show()
+
+    expect(panel.visible).toBe(false)
+    panelManager.destroy()
+  })
+
+  it('真的下一次点击要能打开面板，不能被上一次收起的余波吃掉', () => {
+    vi.useFakeTimers()
+    try {
+      const panelManager = createPanel()
+      panelManager.show()
+      const panel = lastPanel()
+
+      blurListener(panel)()
+      panelManager.show()
+      expect(panel.visible).toBe(false)
+
+      // 用户松开手，再点一次。这一击必须是「打开」，而不是又被当成上一次点击的尾巴。
+      vi.advanceTimersByTime(600)
+      panelManager.show()
+
+      expect(panel.visible).toBe(true)
+      panelManager.destroy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('连着两轮「收起再点击」都能开上，不会退化成一击要按好几下', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = lastPanel()
+
+    // 第一轮：点托盘 → blur 收起 → click 落后到达（同一个物理点击）。
+    blurListener(panel)()
+    panelManager.show()
+    expect(panel.visible).toBe(false)
+
+    // 第二轮：用户立刻再点。间隔是 0ms，但这一击不属于上一次点击——之前那一下
+    // 已经在上面被消费掉了，时间戳必须清零。
+    panelManager.show()
+    expect(panel.visible).toBe(true)
+
+    blurListener(panel)()
+    panelManager.show()
+    expect(panel.visible).toBe(false)
+
+    panelManager.show()
+    expect(panel.visible).toBe(true)
+    panelManager.destroy()
+  })
+
+  it('面板已经收起时的失焦只是余波，不会让紧跟其后的点击白白失效', () => {
+    const panelManager = createPanel()
+    panelManager.show()
+    const panel = lastPanel()
+
+    // 打开主界面之类的动作收起了面板，之后窗口层面的 blur 才姗姗来迟。
+    panelManager.show()
+    expect(panel.visible).toBe(false)
+    blurListener(panel)()
+
+    // 这一击是用户真的要打开面板。
+    panelManager.show()
+    expect(panel.visible).toBe(true)
+    panelManager.destroy()
+  })
+
+  it('每次打开都重新落位：托盘图标被系统搬走后面板跟着走', () => {
+    let now = 1_000_000
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    try {
+      const panelManager = createPanel()
+      panelManager.show()
+      const panel = lastPanel()
+      expect(panel.setBounds).toHaveBeenLastCalledWith({ x: 301, y: 4, width: 422, height: 560 }, false)
+
+      // 收起面板，然后过一会儿再点开——两次点击之间的间隔要大于同一次点击的窗口。
+      panelManager.show()
+      now += 600
+      mocks.tray.getBounds.mockReturnValueOnce({ x: 900, y: 0, width: 24, height: 24 })
+      panelManager.show()
+
+      expect(panel.setBounds).toHaveBeenLastCalledWith({ x: 701, y: 4, width: 422, height: 560 }, false)
+      panelManager.destroy()
+    } finally {
+      clock.mockRestore()
+    }
+  })
+})
+
+describe('托盘面板落位兜底', () => {
+  const primaryWorkArea = { x: 0, y: 0, width: 1_440, height: 900 }
+  type WorkArea = typeof primaryWorkArea
+
+  interface AnchorFixture {
+    trayBounds: WorkArea
+    /** 只在图标矩形不可用时才会被问到。 */
+    displayAt: (point: { x: number; y: number }) => { workArea: WorkArea }
+    platform?: NodeJS.Platform
+  }
+
+  function anchorWith(fixture: AnchorFixture) {
+    return resolveTrayPanelAnchor({
+      trayBounds: fixture.trayBounds,
+      // 光标故意放在第二块屏上：只有图标矩形不可用时它才该起作用。
+      cursor: { x: 3_000, y: 700 },
+      platform: fixture.platform ?? 'darwin',
+      displayAt: fixture.displayAt,
+      primaryDisplay: () => ({ workArea: primaryWorkArea }),
+    })
+  }
+
+  it('图标矩形可用时按图标水平居中，并用它所在的那块屏', () => {
+    const anchor = anchorWith({
+      trayBounds: { x: 500, y: 0, width: 24, height: 24 },
+      displayAt: () => ({ workArea: { x: 0, y: 24, width: 1_440, height: 876 } }),
+    })
+
+    expect(anchor.trayBounds).toEqual({ x: 500, y: 0, width: 24, height: 24 })
+    expect(anchor.workArea).toEqual({ x: 0, y: 24, width: 1_440, height: 876 })
+  })
+
+  it('图标矩形退化成 0×0 时改用光标所在屏，并把面板水平居中，而不是贴到工作区最左边', () => {
+    // 状态项刚创建 / 被菜单栏溢出收起时，`getBounds()` 会给一个看起来合法的 {0,0,0,0}。
+    // 拿它去问 `getDisplayNearestPoint` 会返回主屏——用户可能正看着另一块屏。
+    const secondary = { x: 1_920, y: 0, width: 1_920, height: 1_080 }
+    const anchor = anchorWith({
+      trayBounds: { x: 0, y: 0, width: 0, height: 0 },
+      displayAt: point => ({ workArea: point.x > 2_000 ? secondary : primaryWorkArea }),
+    })
+
+    expect(anchor.workArea).toEqual(secondary)
+    // 1_920 + (1_920 - 422) / 2 = 2_669
+    expect(anchor.trayBounds).toEqual({ x: 2_669, y: -8, width: 422, height: 0 })
+    // 兜底落位与图标可用时朝向一致：面板顶边在菜单栏下方 8px 处。
+    expect(resolveTrayPanelPosition({ ...anchor, height: 560, platform: 'darwin' })).toEqual({ x: 2_669, y: -20 })
+  })
+
+  it('Windows 的兜底落位在任务栏上方', () => {
+    const anchor = anchorWith({
+      trayBounds: { x: 0, y: 0, width: 0, height: 0 },
+      displayAt: () => ({ workArea: { x: 0, y: 0, width: 1_440, height: 876 } }),
+      platform: 'win32',
+    })
+
+    expect(anchor.trayBounds).toEqual({ x: 509, y: 884, width: 422, height: 0 })
+    // 0 + 876 - 8 - 560 + 28 = 336：面板底边贴着任务栏上方 8px。
+    expect(resolveTrayPanelPosition({ ...anchor, height: 560, platform: 'win32' })).toEqual({ x: 509, y: 336 })
+  })
+
+  it('连工作区也拿不到时退回主屏', () => {
+    const anchor = anchorWith({
+      trayBounds: { x: 0, y: 0, width: 0, height: 0 },
+      displayAt: () => ({ workArea: { x: 0, y: 0, width: 0, height: 0 } }),
+    })
+
+    expect(anchor.workArea).toEqual(primaryWorkArea)
+    // 0 + (1_440 - 422) / 2 = 509
+    expect(resolveTrayPanelPosition({ ...anchor, height: 560, platform: 'darwin' })).toEqual({ x: 509, y: -20 })
+  })
+
+  it('比面板还窄的工作区也能给出一个完整可见的落位', () => {
+    const narrow = { x: 0, y: 24, width: 300, height: 400 }
+    const anchor = anchorWith({
+      trayBounds: { x: 10, y: 0, width: 24, height: 24 },
+      displayAt: () => ({ workArea: narrow }),
+    })
+    const position = resolveTrayPanelPosition({ ...anchor, height: 390, platform: 'darwin' })
+
+    expect(position.x).toBeLessThanOrEqual(narrow.x)
+    expect(position.y + 390 - 28).toBeLessThanOrEqual(narrow.y + narrow.height)
   })
 })
 
