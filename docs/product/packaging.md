@@ -186,6 +186,28 @@ safeStorage 在 macOS 上按 Electron 的 `app.name` 选择 Keychain 条目；`a
 `safeStorage.decryptString` 失败。界面显示名和可执行文件 productName 可以叫
 OSW，但 `app.name` 不能随显示名一起改。
 
+**历史遗留条目**：改名的代价是钥匙串里会残留旧命名空间的 `genp` 条目——`app.name`
+一变，密文写进新条目，旧条目既不会被读也不会被删。本机实测登录钥匙串里同时躺着
+`one-switch Safe Storage`（仓库目录还叫 `one-switch` 时的 Electron 默认名）、
+`@osw/app Safe Storage`（当前活跃）与 `OSW Safe Storage`（`app.setName('OSW')`
+短暂生效期间留下，见 729b689）。这些残留**不影响功能**：应用只查自己那一个
+service 名，多余的条目只是噪音。要清掉可执行
+`security delete-generic-password -s '<旧名>'`（会弹一次授权）。
+
+**为什么「每次都要求确认密码」与条目数量无关**：打包产物走的是 adhoc 签名
+（`identity: null` + `scripts/macos-adhoc-sign.cjs`），没有 Team ID，指定要求退化成一条裸
+`cdhash`。钥匙串项的 ACL 记的正是创建它的签名身份，所以每次重新打包 `cdhash` 一变，
+ACL 就失配、重新询问；开发态跑的是 `node_modules/electron`（`Identifier=Electron`，
+同样 adhoc），与打包产物各算一个身份，来回切也各问一次。三个名字里两个是死条目、
+活跃的只有一个，弹窗频率取决于**重打包次数**而非条目数。要根治只能换成 Developer ID
+正式签名（ACL 按签名身份匹配、跨版本不失效）；只给当前条目设 partition list 或点
+「始终允许」都只在同一个 `cdhash` 下有效。
+
+排查时**不要**用 `sqlite3` 读 `~/Library/Keychains/login.keychain-db`——它不是 SQLite
+（提示 `file is not a database`）。用 `security find-generic-password -s '<service>'`
+确认存在、`-g` 看 `acct` 与 ACL、`security dump-keychain` 按 `svce` 找记录（`cdat`
+就是创建时间，直接指向是哪一版应用写的）。
+
 CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、误传、被其它用户读到；它不防「同用户同机器上的恶意进程」——那需要系统钥匙串，会引入原生依赖，与「零原生依赖」的约束冲突。接口化之后，未来接入钥匙串只是一个新实现，不改 core。CLI 的实现放在 `apps/cli/source/secret-store.ts`。
 
 **两个形态的文件名故意不同**（`secrets.cli.json` / `secrets.cli.key` vs `secrets.json`），虽然它们落在同一个数据目录里。密文算法不同，同名同址的结果不是「共用密钥」，而是**后写的那个把前一个的条目全部作废**：`safeStorage` 的 base64 密文在命令行侧解不开，命令行的 `v1:iv:tag:ciphertext` 在 `safeStorage` 侧会被当成非法 base64 直接抛错。供应商 key 在服务端只存哈希、作废了不可再生，所以这里必须靠文件名隔开。
