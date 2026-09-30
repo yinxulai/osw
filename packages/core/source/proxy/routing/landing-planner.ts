@@ -24,6 +24,8 @@ export interface LandingPlanInput {
   /** 图算出的落点逻辑模型，按优先级排列 */
   readonly logicalModelIds: readonly string[]
   readonly clientProtocol: Protocol
+  /** 会话亲和键；见 `PlannerInput.sessionKey`。多个落点共用同一个会话键。 */
+  readonly sessionKey?: string | null
 }
 
 /** 有落点可用：候选列表与它所属的逻辑模型一起给出，调用方不必再判断两者是否一致。 */
@@ -62,6 +64,7 @@ export async function planLandingTargets(input: LandingPlanInput): Promise<Landi
     logicalModelId,
     clientProtocol: input.clientProtocol,
     manualModelId: getManualModel(logicalModelId),
+    sessionKey: input.sessionKey,
   }))
   const plans = proxyTargetPlanner.planMany
     ? await proxyTargetPlanner.planMany(plannerInputs)

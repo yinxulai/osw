@@ -8,6 +8,8 @@ import {
   type ModelWithProvider,
 } from '@server/proxy/routing/router'
 import { isWebSocketEndpoint, resolveUpstreamUrl } from '@server/proxy/routing/upstream-url'
+import { readAffinityBinding, resolveAffinityProviderModelId } from '@server/proxy/upstream/affinity'
+import { getSettings } from '@server/database/settings-store'
 
 /**
  * 默认尝试规划器。
@@ -42,22 +44,45 @@ const MANUAL_UNAVAILABLE_DETAIL = 'The manually selected ProviderModel is not av
 export const NO_MODEL_DETAIL = 'This logical model has no enabled and healthy provider model'
 
 export async function planProxyTargets(input: PlannerInput): Promise<PlanResult> {
-  const { logicalModelId, clientProtocol: protocol, manualModelId } = input
-  const availableModels = await getAvailableModels(logicalModelId, { manualModelId })
+  const { logicalModelId, clientProtocol: protocol, manualModelId, sessionKey } = input
+  // 手动锁定优先于亲和：用户显式指定的模型不接受任何策略的改排，绑定也不必解析。
+  const affinityProviderModelId = manualModelId === null ? await resolveAffinityProviderModelId(logicalModelId, sessionKey) : null
+  if (affinityProviderModelId) {
+    console.debug(`[proxy] cache affinity resolved logicalModelId=${logicalModelId} providerModelId=${affinityProviderModelId} sessionKey=${sessionKey}`)
+  }
+  const availableModels = await getAvailableModels(logicalModelId, { manualModelId, affinityProviderModelId })
   return planFromAvailableModels(availableModels, protocol, manualModelId)
 }
 
 /** 批量规划入口：数据查询一次做完，每个落点仍按同一套规则独立判定。 */
 export async function planProxyTargetsBatch(inputs: readonly PlannerInput[]): Promise<readonly PlanResult[]> {
-  const availableByLogicalModel = await getAvailableModelsBatch(inputs.map(input => ({
-    logicalModelId: input.logicalModelId,
-    manualModelId: input.manualModelId,
-  })))
+  const availableByLogicalModel = await getAvailableModelsBatch(await withAffinityTargets(inputs))
   return inputs.map(input => planFromAvailableModels(
     availableByLogicalModel.get(input.logicalModelId) ?? [],
     input.clientProtocol,
     input.manualModelId,
   ))
+}
+
+/**
+ * 给每个落点补上它的亲和绑定（设置只读一次，落点可能不止一个）。
+ *
+ * 设置在落点规划这里只需要「开没开 + TTL 由谁维护」：TTL 在写入时生效，读取时只看开关。
+ * 落点按图给定的顺序独立解析，绑定的命名空间是「逻辑模型 + 会话键」，落点之间互不串扰。
+ */
+async function withAffinityTargets(inputs: readonly PlannerInput[]): Promise<Array<{
+  logicalModelId: string
+  manualModelId: string | null
+  affinityProviderModelId: string | null
+}>> {
+  const settings = await getSettings()
+  return inputs.map(input => ({
+    logicalModelId: input.logicalModelId,
+    manualModelId: input.manualModelId,
+    affinityProviderModelId: input.manualModelId === null
+      ? readAffinityBinding(input.logicalModelId, input.sessionKey, settings.cacheAffinityEnabled)
+      : null,
+  }))
 }
 
 function planFromAvailableModels(availableModels: readonly ModelWithProvider[], protocol: Protocol, manualModelId: string | null): PlanResult {

@@ -583,6 +583,19 @@ flowchart TD
 
 保留这五处的代价只有注释与一个永不触发的分支；收益是将来真要加一条双向传输时，`proxy/kernel/**` 不需要改写搬运与收尾规则。
 
+### 4.2 缓存亲和
+
+大上下文请求的成本由 provider 侧 prompt cache 的命中决定，命中又取决于「同一会话的请求是否连续落在同一家供应商上」。故障转移天然打破这一点；冷却到期后的自动切回还会再打破一次——切回去的那一个请求几乎必然是全价 prefill。
+
+缓存亲和是插在规划与收尾之间的第三块事实：**会话最近一次成功的供应商模型是谁**（`upstream/affinity.ts`，进程内 Map，TTL 取自设置）。
+
+- **会话键**是客户端自带的稳定请求 ID（六个标准头之一，见 `request-attribute-collector`），入口解析一次、规划与收尾共用（`RequestContext.sessionKey`）。代理不推导会话身份——客户端按请求换 ID 时，亲和自然退化为现状。
+- **写入**只发生在成功收尾：成功即建立或改绑（failover 之后的那次成功自动完成改绑），因此一次故障事故只付一次 miss。
+- **读取**只发生在规划：绑定候选在健康组里时被挪到最前（`applyAffinityOrdering`），在不可用组里时保持队尾原位——把冷候选提到队首等于主动迎着冷却与全价 prefill 撞上去。绑定永远不创造候选，只调整既有候选的顺序。
+- **永不自动切回**：恢复的供应商靠新会话拿回流量（新会话没有绑定，仍按调度顺序尝试），老会话按绑定 TTL 过期后自然回流。这也是它与新会话探测的分工：恢复资格是时间判定，真实流量的第一次成功才是恢复结论。
+
+绑定是进程内状态，重启即消失——代价最多是每个活跃会话多付一次 prefill，不值得为此引入一张数据库表。
+
 ## 五、已钉在测试上的不变式
 
 > 标记含义：[x] 表示已由自动化测试或 `pnpm lint` / `pnpm typecheck` 门控覆盖。
@@ -619,6 +632,9 @@ flowchart TD
 - [x] 协议固定头**只补缺、不覆盖**：凭据落点与协议固定头分成 `replace` / `fill` 两半（`resolveProtocolAuthHeaders`）。客户端自己带了 `anthropic-version` 就用客户端的值，代理只在缺了这个头时补 `2023-06-01`——把两半合成一份就表达不出「该覆盖」与「该让位」的区别（`protocols.test.ts`、`response/headers.test.ts`）
 - [x] 上游中途断连会变成一帧终止错误：`transports/http.ts` 监听响应的 `close`，在 `readableEnded` 为假时发一帧 `error`，而不是让下游等一个永远不会来的结尾（`transports/http.test.ts`）
 - [x] 自定义鉴权头不吞掉协议固定头：`createProtocolAuthHeaders` 的自定义头分支保留 `preset.fixedHeaders`（例如 Anthropic 的 `anthropic-version`）（`protocols.test.ts`）
+- [x] 缓存亲和只调整顺序、不创造候选：绑定候选不在健康组时原样返回，冷却中的绑定候选保持队尾兜底（`router.test.ts`）
+- [x] 亲和按「逻辑模型 + 会话键」命名空间隔离，TTL 只由最近一次成功刷新，过期在读取时判定（`affinity.test.ts`）
+- [x] 手动锁定优先于亲和：手动模式下不解析绑定、不下传亲和候选（`target-planner.test.ts`）
 
 ### 尚未实现的部分
 
