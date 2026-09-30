@@ -110,7 +110,10 @@ export function TrayPanelPage() {
         <div className="flex flex-col px-3.5 py-3">
           <section className="min-w-0">
             <div className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="system-2xs-semibold">{t('logicalModels.title')}</h2>
+              {/* 排版阶梯里 `2xs` 一族只有 `regular` / `medium` / `semibold-uppercase`；
+                  写一个不存在的 `system-2xs-semibold` 不会报错，元素会静静退回 `<h2>` 的
+                  浏览器默认字号，标题于是比正文大一整圈。 */}
+              <h2 className="system-2xs-medium">{t('logicalModels.title')}</h2>
               <span className="shrink-0 system-2xs-regular text-text-quaternary">
                 {t('tray.panel.logicalModelsCount', { count: logicalModels.length })}
               </span>
@@ -127,13 +130,20 @@ export function TrayPanelPage() {
                   )
             ) : (
               <Tabs value={activeLogicalModelId} onValueChange={setSelectedLogicalModelId}>
-                <TabsList className="w-full overflow-x-auto" aria-label={t('tray.panel.logicalModelTabs')}>
+                {/* 标准标签行为：列表铺满整行当作分割线，标签按内容宽度**从左往右**排。
+                    两处默认值要收回来——列表自带 `justify-center`、标签自带 `flex-1`，
+                    单个逻辑模型时那个标签会被居中并抻满整行，像没画完的占位。
+                    收回后单个贴左缘、多个依次排开，名字再长也只截断自己，溢出交给横向滚动。 */}
+                <TabsList className="w-full justify-start overflow-x-auto" aria-label={t('tray.panel.logicalModelTabs')}>
                   {logicalModels.map(model => (
                     <TabsTrigger
                       key={model.id}
                       value={model.id}
                       title={model.name}
-                      className={cn('min-w-0 overflow-hidden text-ellipsis', !model.enabled && 'text-text-quaternary')}
+                      className={cn(
+                        'min-w-0 max-w-full flex-none overflow-hidden text-ellipsis',
+                        !model.enabled && 'text-text-quaternary',
+                      )}
                     >
                       {model.name}
                     </TabsTrigger>
