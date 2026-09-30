@@ -1851,6 +1851,15 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.failover.unitMilliseconds': '毫秒',
   'settings.failover.rangeError': '请输入 {min} 到 {max} 之间的整数',
 
+  // 缓存亲和
+  'settings.cacheAffinity.title': '缓存亲和',
+  'settings.cacheAffinity.description': '让同一会话的请求粘在最近一次成功的供应商模型上，保护供应商侧的提示词缓存',
+  'settings.cacheAffinity.enabled': '启用缓存亲和',
+  'settings.cacheAffinity.enabledDescription': '首位供应商进入冷却时，会话留在继任供应商上；恢复的供应商靠新会话拿回流量，不再自动切回。',
+  'settings.cacheAffinity.ttl': '绑定保持',
+  'settings.cacheAffinity.ttlDescription': '会话空闲超过该时长后绑定作废，按新会话调度。',
+  'settings.cacheAffinity.rangeError': '请输入 {min} 到 {max} 之间的整数',
+
   // 数据目录
   'settings.dataDirectory.title': '数据目录',
   'settings.dataDirectory.description': '配置、数据库与凭据都保存在这个目录里，桌面端与命令行共用同一份。',

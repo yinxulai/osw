@@ -384,3 +384,78 @@ describe('findConvertibleEndpoint', () => {
     expect(findConvertibleEndpoint(model, 'openai-completions')).toBeUndefined()
   })
 })
+
+describe('缓存亲和', () => {
+  const time = Date.now()
+  const sharedProvider: Provider = {
+    id: 'prov_shared',
+    name: 'Shared Provider',
+    apiKeyReference: 'shared-key',
+    timeoutMilliseconds: 1_000,
+    enabled: true,
+    createdTime: time,
+    updatedTime: time,
+    deletedTime: null,
+  }
+  const model = (id: string, priority: number): ProviderModelRoute => ({
+    id,
+    providerId: 'prov_shared',
+    modelName: id,
+    endpoints: [],
+    priority,
+    enabled: true,
+    createdTime: time,
+    updatedTime: time,
+    deletedTime: null,
+  })
+
+  function seedFourModels(): void {
+    mocks.provider = sharedProvider
+    mocks.models = [model('model_a', 1), model('model_b', 2), model('model_c', 3), model('model_d', 4)]
+  }
+
+  it('moves a healthy bound model to the front of the available group', async () => {
+    seedFourModels()
+    mocks.unavailableModels.add('model_d')
+
+    const available = await getAvailableModels('default', { affinityProviderModelId: 'model_c' })
+
+    // 绑定的是健康组里的第二位：前置后其余候选的相对顺序不动，冷却中的 model_d 仍垫底。
+    expect(available.map(entry => entry.model.id)).toEqual(['model_c', 'model_a', 'model_b', 'model_d'])
+  })
+
+  it('keeps a cooling bound model in the unavailable tail', async () => {
+    seedFourModels()
+    mocks.unavailableModels.add('model_a')
+
+    const available = await getAvailableModels('default', { affinityProviderModelId: 'model_a' })
+
+    // 绑定候选正在冷却：把它提到队首等于主动迎着冷却与全价 prefill 撞上去，因此保持队尾原位。
+    expect(available.map(entry => entry.model.id)).toEqual(['model_b', 'model_c', 'model_d', 'model_a'])
+  })
+
+  it('keeps the scheduling order when no affinity is given', async () => {
+    seedFourModels()
+    mocks.unavailableModels.add('model_b')
+
+    const available = await getAvailableModels('default', { affinityProviderModelId: null })
+
+    expect(available.map(entry => entry.model.id)).toEqual(['model_a', 'model_c', 'model_d', 'model_b'])
+  })
+
+  it('resolves the binding per landing in batch planning', async () => {
+    seedFourModels()
+    mocks.providers = [sharedProvider]
+    mocks.modelsByLogicalModel.set('default', mocks.models)
+    mocks.modelsByLogicalModel.set('landing', mocks.models)
+
+    const batch = await getAvailableModelsBatch([
+      { logicalModelId: 'default', manualModelId: null, affinityProviderModelId: 'model_c' },
+      { logicalModelId: 'landing', manualModelId: null, affinityProviderModelId: null },
+    ])
+
+    // 亲和是「逻辑模型 + 会话键」命名空间下的：每个落点只吃自己的绑定。
+    expect(batch.get('default')!.map(entry => entry.model.id)).toEqual(['model_c', 'model_a', 'model_b', 'model_d'])
+    expect(batch.get('landing')!.map(entry => entry.model.id)).toEqual(['model_a', 'model_b', 'model_c', 'model_d'])
+  })
+})

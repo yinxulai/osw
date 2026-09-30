@@ -10,6 +10,7 @@ import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewri
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { isClientAttributableStatus, type HealthFailureScope } from '@server/proxy/response/response'
 import { markProviderModelSuccess, markProviderSuccess } from '@server/proxy/upstream/health'
+import { recordAffinityProviderModelId } from '@server/proxy/upstream/affinity'
 // 统计埋点直连遥测入口，**不经过请求日志器**：记录日志是用户可关的调试功能（观测口径），
 // 而「处理了多少任务」是产品口径，两者开关不同、保留期不同、字段要求相反（telemetry.md §5.4）。
 import { reportTelemetryEvent } from '@server/telemetry'
@@ -123,6 +124,9 @@ function createSuccessHandler(runtime: FinalizerRuntime): RequestFinalizer['onSu
     )
     await markProviderSuccess(target.providerId)
     await markProviderModelSuccess(target.providerModelId)
+    // 缓存亲和：成功即刷新（或建立）会话绑定，failover 之后的成功在这里自然完成改绑。
+    // 没有会话键（内部执行、探测）或功能关闭时，写入自身不生效。
+    if (context.sessionKey) await recordAffinityProviderModelId(context.logicalModelId, context.sessionKey, target.providerModelId)
     await requestLogger.finalizeRequestContent(toRequestContentOutcome(outcome))
     // 用量不在请求级收尾里写：它随着「服务该请求的那次尝试」一起落库。
     await requestLogger.finalizeRequestLog('success', startedAt)

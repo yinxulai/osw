@@ -1848,6 +1848,15 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.failover.unitMilliseconds': 'ms',
   'settings.failover.rangeError': 'Enter an integer between {min} and {max}',
 
+  // Cache affinity
+  'settings.cacheAffinity.title': 'Cache affinity',
+  'settings.cacheAffinity.description': 'Keep a session on the provider model it last succeeded with, preserving upstream prompt caches',
+  'settings.cacheAffinity.enabled': 'Enable cache affinity',
+  'settings.cacheAffinity.enabledDescription': 'While the top provider is cooling down, sessions stay on the failover target; a recovered provider regains traffic through new sessions instead of an automatic switch-back.',
+  'settings.cacheAffinity.ttl': 'Binding retention',
+  'settings.cacheAffinity.ttlDescription': 'A binding expires after the session has been idle for this long; the session is then scheduled as new.',
+  'settings.cacheAffinity.rangeError': 'Enter an integer between {min} and {max}',
+
   // 数据目录
   'settings.dataDirectory.title': 'Data directory',
   'settings.dataDirectory.description': 'Configuration, databases and credentials all live here, shared by the desktop app and the CLI.',
