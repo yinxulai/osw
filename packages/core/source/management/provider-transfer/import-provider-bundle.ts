@@ -1,9 +1,8 @@
 import { generateKeyReference } from '@common/secret-store'
 import { ProviderBundleImportRequestSchema } from '@common/provider-bundle'
 import type { ProviderBundleImportRequest, ProviderBundleModel, ProviderBundleProvider, ProviderBundleSetting } from '@common/provider-bundle'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
 import { AppError } from '@server/errors'
-import { upsertSchedulingPolicy } from '@server/database/logical-model-store'
+import { getDefaultLogicalModelRecordId, upsertSchedulingPolicy } from '@server/database/logical-model-store'
 import { createProviderModelRoute, deleteProviderModelRoute, listProviderModels, updateProviderModelRoute } from '@server/database/model-store'
 import {
   createProvider,
@@ -148,7 +147,8 @@ async function applyModels(providerId: string, models: ProviderBundleModel[]): P
       // priority 属于调度策略（`scheduling_policies.priority`），不属于供应商包，这里只占位。
       // 绑定开关跟随模型本体的开关：包里带着停用模型时，不能顺手建一条打开的绑定。
       const created = await createProviderModelRoute({ providerId, modelName: model.modelName, enabled: model.enabled, endpoints, priority: 0 })
-      await upsertSchedulingPolicy({ logicalModelId: BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, providerModelId: created.id, priority: 0, enabled: created.enabled })
+      // 包里的模型没有落点信息，一律接到内建默认逻辑模型上；外键要的是**记录 id**，不是模型名。
+      await upsertSchedulingPolicy({ logicalModelId: await getDefaultLogicalModelRecordId(), providerModelId: created.id, priority: 0, enabled: created.enabled })
       // 与手工新建同一个口径：一条端点绑定算一次「这类能力被接进来」（见 `model_created` 的契约注释）。
       // 同一个包的模型名与本地对得上时走的是上面的复用分支，那条不发。
       for (const endpoint of endpoints) reportTelemetryEvent({ name: 'model_created', protocol: endpoint.protocol })

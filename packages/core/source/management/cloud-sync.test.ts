@@ -7,7 +7,7 @@ import { CONFIG_SNAPSHOT_FILE_NAME, CONFIG_SNAPSHOT_FORMAT, CONFIG_SNAPSHOT_VERS
 import type { ConfigSnapshot } from '@common/cloud-sync'
 import { closeDatabases, initDatabases } from '../database'
 import { normalizeError } from '../errors'
-import { createLogicalModel, listLogicalModels, listSchedulingPolicies, reorderLogicalModels, upsertSchedulingPolicy } from '@server/database/logical-model-store'
+import { createLogicalModel, getLogicalModelByModelId, listLogicalModels, listSchedulingPolicies, reorderLogicalModels, upsertSchedulingPolicy } from '@server/database/logical-model-store'
 import { createProviderModelRoute, listProviderModels } from '@server/database/model-store'
 import { createProvider, listProviders } from '@server/database/provider-store'
 import { getSettings } from '@server/database/settings-store'
@@ -115,15 +115,29 @@ async function expectAppError(run: () => Promise<unknown>, code: string): Promis
   expect(normalizeError(error).code).toBe(code)
 }
 
+/** 取内建默认逻辑模型的**记录 id**：调度策略的外键永远是它，不是可路由的 `modelId`。 */
+async function defaultLogicalModelRecordId(): Promise<string> {
+  const record = await getLogicalModelByModelId('default')
+  if (!record) throw new Error('内建默认逻辑模型缺失')
+  return record.id
+}
+
+/** 取快照种子造出的 `lm_heavy` 的**记录 id**，导入之后它必然是本机新生成的一个。 */
+async function heavyLogicalModelRecordId(): Promise<string> {
+  const record = await getLogicalModelByModelId('lm_heavy')
+  if (!record) throw new Error('lm_heavy 逻辑模型缺失')
+  return record.id
+}
+
 /** 造一台「有东西可搬」的机器：一个供应商、两个模型、两个逻辑模型、两条绑定。 */
 async function seedLocalConfiguration(): Promise<void> {
   const provider = await createProvider({ name: 'OpenAI', apiKeyReference: 'key_ref', timeoutMilliseconds: 30_000 })
   const model = await createProviderModelRoute({ providerId: provider.id, modelName: 'gpt-4o', priority: 0 })
   const other = await createProviderModelRoute({ providerId: provider.id, modelName: 'gpt-4o-mini', priority: 1 })
-  await createLogicalModel({ id: 'lm_heavy', name: 'Heavy', description: 'expensive things' })
-  await reorderLogicalModels(['lm_heavy', 'default'])
-  await upsertSchedulingPolicy({ logicalModelId: 'lm_heavy', providerModelId: other.id, priority: 3 })
-  await upsertSchedulingPolicy({ logicalModelId: 'default', providerModelId: model.id, priority: 0 })
+  const heavy = await createLogicalModel({ modelId: 'lm_heavy', description: 'expensive things' })
+  await reorderLogicalModels([heavy.id, await defaultLogicalModelRecordId()])
+  await upsertSchedulingPolicy({ logicalModelId: heavy.id, providerModelId: other.id, priority: 3 })
+  await upsertSchedulingPolicy({ logicalModelId: await defaultLogicalModelRecordId(), providerModelId: model.id, priority: 0 })
 }
 
 describe('config snapshot', () => {
@@ -195,7 +209,7 @@ describe('config snapshot', () => {
     expect(result.imported).toMatchObject({ providers: 1, models: 2, logicalModels: 2, bindings: 2 })
     expect((await listProviders()).map(provider => provider.name)).toEqual(['OpenAI'])
     expect((await listProviderModels()).map(model => model.modelName).sort()).toEqual(['gpt-4o', 'gpt-4o-mini'])
-    expect((await listLogicalModels()).map(model => model.id)).toEqual(['lm_heavy', 'default'])
+    expect((await listLogicalModels()).map(model => model.modelId)).toEqual(['lm_heavy', 'default'])
   })
 
   it('replaces the bindings of every logical model the snapshot mentions', async () => {
@@ -205,7 +219,7 @@ describe('config snapshot', () => {
 
     await importConfigSnapshot(snapshot)
 
-    const heavy = await listSchedulingPolicies('lm_heavy')
+    const heavy = await listSchedulingPolicies(await heavyLogicalModelRecordId())
     expect(heavy).toHaveLength(1)
     expect(heavy[0]).toMatchObject({ priority: 3 })
   })
@@ -215,24 +229,24 @@ describe('config snapshot', () => {
     const { snapshot } = await exportConfigSnapshot()
     const stripped: ConfigSnapshot = {
       ...snapshot,
-      bindings: snapshot.bindings.filter(binding => binding.logicalModelId !== 'lm_heavy'),
+      bindings: snapshot.bindings.filter(binding => binding.modelId !== 'lm_heavy'),
     }
     await restartWithEmptyDatabase()
 
     await importConfigSnapshot(stripped)
 
-    expect(await listSchedulingPolicies('lm_heavy')).toEqual([])
+    expect(await listSchedulingPolicies(await heavyLogicalModelRecordId())).toEqual([])
   })
 
   it('leaves logical models the snapshot never mentions alone', async () => {
     await seedLocalConfiguration()
     const { snapshot } = await exportConfigSnapshot()
     await restartWithEmptyDatabase()
-    await createLogicalModel({ id: 'lm_local_only', name: 'Local only' })
+    await createLogicalModel({ modelId: 'lm_local_only' })
 
     await importConfigSnapshot(snapshot)
 
-    expect((await listLogicalModels()).map(model => model.id)).toContain('lm_local_only')
+    expect((await listLogicalModels()).map(model => model.modelId)).toContain('lm_local_only')
   })
 
   it('rejects a file that is not a snapshot with a validation error', async () => {

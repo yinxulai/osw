@@ -172,8 +172,28 @@ export const protocolConverters = sqliteTable(
 export const logicalModels = sqliteTable(
   'logical_models',
   {
+    /**
+     * **数据记录 id**：本机生成的内部主键，不是对外的模型名。
+     *
+     * 它只承担两件事：标识这一行、给外键当锚点。所以它必须稳定——改名不动它、软删除也不动它。
+     * 调度绑定（`scheduling_policies.logicalModelId`）指着它，那些引用就永远不可能因为一次改名
+     * 而变成悬空行，也不需要 `ON UPDATE CASCADE` 这类「改一处搬一片」的补救。
+     *
+     * 用 `generateId('lm_')` 生成，与 `prov_` / `end_` / `pm_` 同一套做法。
+     */
     id: text('id').primaryKey(),
-    name: text('name').notNull().unique(),
+    /**
+     * **模型 id**：对外的路由目标，客户端请求里的模型名就是它。
+     *
+     * 与 `provider_models.modelName` 处在同一个位置：它是用户起的、可以被改的，
+     * 所以绝不能拿来当外键的锚点。它与数据记录 id 是**两个字段**，
+     * 合成一个的代价是「改名」等于「换身份」，每加一处引用就要多一处搬运。
+     *
+     * 活跃行之间唯一（部分唯一索引，见下方索引）；软删除时被改写成
+     * `~deleted.<时刻>.<原 modelId>`（见 `@common/schemas` 的 `logicalModelTombstoneModelId`），
+     * 让位给将来的同名模型。
+     */
+    modelId: text('modelId').notNull(),
     description: text('description').notNull().default(''),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     /**
@@ -185,7 +205,13 @@ export const logicalModels = sqliteTable(
     updatedTime: integer('updatedTime').notNull(),
     deletedTime: integer('deletedTime'),
   },
-  table => [index('idx_logical_models_enabled').on(table.enabled), index('idx_logical_models_deleted_time').on(table.deletedTime)],
+  table => [
+    // 活跃行之间的 modelId 唯一：软删除的墓碑行已被改写名字，但部分索引才是硬保证
+    // （索引列不能条件化地放进主键，主键上是数据记录 id）。
+    uniqueIndex('idx_logical_models_model_id_active').on(table.modelId).where(sql`deletedTime IS NULL`),
+    index('idx_logical_models_enabled').on(table.enabled),
+    index('idx_logical_models_deleted_time').on(table.deletedTime),
+  ],
 )
 
 export const workflows = sqliteTable(
@@ -252,6 +278,9 @@ export const clientConfigVersions = sqliteTable(
 export const schedulingPolicies = sqliteTable(
   'scheduling_policies',
   {
+    // 指向逻辑模型的**数据记录 id**，不是模型 id：模型 id 可以被改（改名、软删除改写），
+    // 外键锚在它上面就等于「改一次要搬一片」；锚在记录 id 上，改名只是一次 UPDATE，
+    // 这里一行都不用动，也不需要 `ON UPDATE CASCADE`。
     logicalModelId: text('logicalModelId').notNull().references(() => logicalModels.id),
     providerModelId: text('providerModelId').notNull().references(() => providerModels.id),
     strategy: text('strategy').notNull().default('priority'),

@@ -133,11 +133,13 @@ function WorkflowStudioCanvas() {
   /**
    * 预设生成与测试运行共用的逻辑模型列表。
    *
-   * 预设的落点在生成时就要定成真实 id，所以它必须拿到当前这份列表；
+   * 预设的落点在生成时就要定成真实的模型 id，所以它必须拿到当前这份列表；
    * 测试运行的负载也注入同一份，两侧看到的模型完全一致。
+   * 注意交出去的是 `modelId` 而不是数据记录 id —— 图会被同步到云端，
+   * 里面写死的引用只能是可移植的模型名。
    */
   const runtimeLogicalModels = useMemo(
-    () => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })),
+    () => logicalModels.map(model => ({ modelId: model.modelId, description: model.description, enabled: model.enabled })),
     [logicalModels],
   )
 

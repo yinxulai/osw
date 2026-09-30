@@ -1,7 +1,8 @@
 import type { LogicalModel, LogicalModelProviderModel, Protocol, ProviderModel, ProviderModelRequestRewriteRule, ProviderModelRouteEndpoint, RequestRewriteRuleTestCase, RequestRewriteRule, SchedulingPolicy } from '@common/schemas'
 import { request } from './client'
 
-type CreateLogicalModelInput = { id: string; description?: string; name?: string; enabled?: boolean }
+type CreateLogicalModelInput = { modelId: string; description?: string; enabled?: boolean }
+type UpdateLogicalModelInput = { modelId?: string; description?: string; enabled?: boolean }
 type ProviderModelEndpointView = { id: string; url: string | null; enabled: boolean; protocol: Protocol; providerModelId: string; providerEndpointId: string; conversions: Array<{ id: string; clientProtocol: Protocol; enabled: boolean }> }
 type ProviderModelView = ProviderModel & { endpoints: ProviderModelEndpointView[] }
 type ProviderModelUpdateInput = { logicalModelId?: string; modelName?: string; enabled?: boolean; priority?: number; endpoints?: ProviderModelRouteEndpoint[] }
@@ -20,9 +21,10 @@ export const requestRewriteRuleApi = {
 
 export const logicalModelApi = {
   list: () => request<LogicalModel[]>('/logical-model/list'),
+  /** `id` 是**数据记录 id**；改模型名（`modelId`）与改说明共用 `update`。 */
   get: (id: string) => request<LogicalModel>('/logical-model/get', { id }),
   create: (data: CreateLogicalModelInput) => request<LogicalModel>('/logical-model/create', data),
-  update: (id: string, updates: Partial<LogicalModel>) => request<LogicalModel>('/logical-model/update', { id, ...updates }),
+  update: (id: string, updates: UpdateLogicalModelInput) => request<LogicalModel>('/logical-model/update', { id, ...updates }),
   reorder: (ids: string[]) => request<LogicalModel[]>('/logical-model/reorder', { ids }),
   remove: (id: string) => request<{ id: string }>('/logical-model/delete', { id }),
 }
@@ -32,12 +34,15 @@ export const providerModelApi = {
   get: (id: string) => request<ProviderModelView>('/provider-model/get', { id }),
   create: (data: ProviderModelCreateInput) => request<ProviderModelView>('/provider-model/create', data),
   update: (id: string, updates: ProviderModelUpdateInput) => request<ProviderModelView>('/provider-model/update', { id, ...updates }),
-  listByLogicalModel: (logicalModelId = 'default') => request<LogicalModelProviderModel[]>('/provider-model/list-by-logical-model', { logicalModelId }),
+  // `logicalModelId` 在这些接口里是**数据记录 id**（`lm_*`），不是模型名 ——
+  // 它们读写的是调度绑定，外键指着那把钥匙。
+  listByLogicalModel: (logicalModelId: string) => request<LogicalModelProviderModel[]>('/provider-model/list-by-logical-model', { logicalModelId }),
   remove: (id: string) => request<{ id: string }>('/provider-model/delete', { id }),
   requestRewriteRules: (providerModelId: string) => request<ProviderModelRequestRewriteRule[]>('/request-rewrite-rule/bindings', { providerModelId }),
   replaceRequestRewriteRules: (providerModelId: string, bindings: RequestRewriteRuleBindingInput[]) => request<ProviderModelRequestRewriteRule[]>('/request-rewrite-rule/replace-bindings', { providerModelId, bindings }),
 }
 
+/** 调度绑定同样按**数据记录 id** 寻址；模型名只在请求时用得到。 */
 export const schedulingPolicyApi = {
   list: (logicalModelId?: string) => request<SchedulingPolicy[]>('/scheduling-policy/list', logicalModelId ? { logicalModelId } : {}),
   update: (data: SchedulingPolicyInput) => request<SchedulingPolicy>('/scheduling-policy/update', data),

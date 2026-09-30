@@ -49,7 +49,7 @@ type WorkflowSourcePort = 'out' | 'body' | 'else' | WorkflowProtocol | (string &
 ```ts
 interface IterationNode extends WorkflowNodeBase {
   kind: 'iteration'
-  sourcePath: string                  // 遍历来源，支持通配投影（如 logicalModels[*].id）
+  sourcePath: string                  // 遍历来源，支持通配投影（如 logicalModels[*].modelId）
   collectPath: string                 // 每轮结束后读取的结果路径（判定本轮是否命中）
   collectMode: 'first' | 'last' | 'list' | 'count'
   resultPath: string                  // 汇总结果写回路径，留空表示不写回
@@ -126,11 +126,11 @@ interface PromptNode extends WorkflowNodeBase {
 `model-select` 节点的取值来源决定落点：
 
 - `fixed`：使用节点上配置的逻辑模型列表；
-- `variable`：读取 `variablePath` 指向字段的取值作为落点（字符串 → 单个逻辑模型 **id**，字符串数组 → 逻辑模型 id 列表），取不到时使用节点上的兜底逻辑模型；兜底列表为空则不产出落点。
+- `variable`：读取 `variablePath` 指向字段的取值作为落点（字符串 → 单个逻辑模型 `modelId`，字符串数组 → `modelId` 列表），取不到时使用节点上的兜底逻辑模型；兜底列表为空则不产出落点。
 
 条件规则的比较值也支持来自字段（`valueSource: 'field'` + `valueFieldPath`），因此「请求模型是否在逻辑模型列表里」这类判断完全由条件节点完成，引擎不预计算业务结论。
 
-引擎不内置「跟随请求模型」这类专用语义，默认策略由 `Input → 协议发现 → Condition(request.body.model in logicalModels[*].id) → ModelSelect(变量) / ModelSelect(固定 default) → Output` 组合而成，见 [route-design.md](./route-design.md) §2.7。协议发现这一步不可省：入口节点不解析请求体，`request.body.model` 这个路径由它按命中的协议声明给下游。
+引擎不内置「跟随请求模型」这类专用语义，默认策略由 `Input → 协议发现 → Condition(request.body.model in logicalModels[*].modelId) → ModelSelect(变量) / ModelSelect(固定 default) → Output` 组合而成，见 [route-design.md](./route-design.md) §2.7。协议发现这一步不可省：入口节点不解析请求体，`request.body.model` 这个路径由它按命中的协议声明给下游。
 
 抓不到任何逻辑模型时该节点仍产出 trace，`success` 为 `false`，但不阻断执行。
 
@@ -141,7 +141,7 @@ interface PromptNode extends WorkflowNodeBase {
 - `a.b.c`：逐层取字段；
 - `a[*].b`：先把 `a` 展开成元素集合，对每个元素取 `b`，最后拍平一层。
 
-因此「取数组里每个元素的某个属性再整体判定」不需要新节点：`logicalModels[*].id`、`request.body.items[*].type` 都是合法路径。写回也走同一套语法（汇总结果用 `setByPath` 写入 `resultPath`，路径不存在时会创建中间对象）。
+因此「取数组里每个元素的某个属性再整体判定」不需要新节点：`logicalModels[*].modelId`、`request.body.items[*].type` 都是合法路径。写回也走同一套语法（汇总结果用 `setByPath` 写入 `resultPath`，路径不存在时会创建中间对象）。
 
 ### 类型与操作符
 

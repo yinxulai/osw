@@ -22,6 +22,20 @@ function createTemporaryDirectory(): string {
   return directory
 }
 
+/**
+ * 内建默认逻辑模型的**数据记录 id**。
+ *
+ * 调度绑定的外键指向的是记录 id，不是模型名；测试里要往 `scheduling_policies` 写原始行
+ * 或调 `listProviderModelsForLogicalModel` 时都得先换一次。
+ */
+function defaultLogicalModelRecordId(): string {
+  const row = getConfigDb().$client
+    .prepare('SELECT id FROM logical_models WHERE modelId = ? AND deletedTime IS NULL')
+    .get('default')
+  if (!row) throw new Error('missing built-in default logical model')
+  return (row as { id: string }).id
+}
+
 function tableNames(client: DatabaseSync): string[] {
   return client
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
@@ -106,9 +120,11 @@ describe('database lifecycle', () => {
   it('seeds the default logical model on a fresh configuration file', async () => {
     await initDatabases(createTemporaryDirectory())
 
-    expect(getConfigDb().$client.prepare('SELECT id, name, enabled FROM logical_models').all()).toEqual([
-      { id: 'default', name: 'default', enabled: 1 },
-    ])
+    // `id` 是本机生成的数据记录 id（外键锚点），`modelId` 才是对外的模型名。
+    const rows = getConfigDb().$client.prepare('SELECT id, modelId, enabled FROM logical_models').all() as Array<Record<string, unknown>>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ modelId: 'default', enabled: 1 })
+    expect(rows[0].id).toMatch(/^lm_/)
   })
 
   it('restores default when a configuration file has no logical model', async () => {
@@ -119,15 +135,15 @@ describe('database lifecycle', () => {
 
     client.prepare('DELETE FROM logical_models').run()
     client
-      .prepare('INSERT INTO logical_models (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
-      .run('custom', 'Custom', time, time)
+      .prepare('INSERT INTO logical_models (id, modelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)')
+      .run('lm_custom', 'custom', time, time)
 
     await closeDatabases()
     await initDatabases(directory)
 
-    expect(getConfigDb().$client.prepare('SELECT id FROM logical_models ORDER BY id').all()).toEqual([
-      { id: 'custom' },
-      { id: 'default' },
+    expect(getConfigDb().$client.prepare('SELECT modelId FROM logical_models ORDER BY modelId').all()).toEqual([
+      { modelId: 'custom' },
+      { modelId: 'default' },
     ])
   })
 })
@@ -198,22 +214,23 @@ describe('schema split', () => {
     const time = Date.now()
     client.prepare('INSERT INTO providers (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('prov_test', 'Test', time, time)
     client.prepare('INSERT INTO provider_models (id, providerId, modelName, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?)').run('pm_test', 'prov_test', 'model-a', time, time)
-    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('default', 'pm_test', 0, 100, time, time)
+    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run(defaultLogicalModelRecordId(), 'pm_test', 0, 100, time, time)
 
-    expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('default', 'pm_test', time, time)).toThrow()
+    expect(() => client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run(defaultLogicalModelRecordId(), 'pm_test', time, time)).toThrow()
   })
 
   it('keeps disabled models in the management list while excluding them from scheduling', async () => {
     await initDatabases(createTemporaryDirectory())
     const client = getConfigDb().$client
     const time = Date.now()
+    const defaultRecordId = defaultLogicalModelRecordId()
     client.prepare('INSERT INTO providers (id, name, createdTime, updatedTime) VALUES (?, ?, ?, ?)').run('prov_test', 'Test', time, time)
     client.prepare('INSERT INTO provider_models (id, providerId, modelName, enabled, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('pm_disabled', 'prov_test', 'model-disabled', 0, time, time)
-    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run('default', 'pm_disabled', 0, 100, time, time)
+    client.prepare('INSERT INTO scheduling_policies (logicalModelId, providerModelId, priority, weight, createdTime, updatedTime) VALUES (?, ?, ?, ?, ?, ?)').run(defaultRecordId, 'pm_disabled', 0, 100, time, time)
 
-    await expect(listProviderModelsForLogicalModel('default')).resolves.toEqual([])
+    await expect(listProviderModelsForLogicalModel(defaultRecordId)).resolves.toEqual([])
     // 管理列表仍要露出全局停用的模型；`enabled` 是绑定开关（默认开），不是模型本体。
-    await expect(listProviderModelsForLogicalModel('default', false, true)).resolves.toMatchObject([
+    await expect(listProviderModelsForLogicalModel(defaultRecordId, false, true)).resolves.toMatchObject([
       { id: 'pm_disabled', enabled: true, priority: 0 },
     ])
   })

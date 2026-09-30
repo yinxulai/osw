@@ -49,7 +49,7 @@ export function PromptPanel(props: NodePanelProps) {
   )
 
   const selectedModel = useMemo(
-    () => logicalModels.find(item => item.id === logicalModelId),
+    () => logicalModels.find(item => item.modelId === logicalModelId),
     [logicalModels, logicalModelId],
   )
 
@@ -77,8 +77,8 @@ export function PromptPanel(props: NodePanelProps) {
           <SelectTrigger className="w-full"><SelectValue placeholder={t('router.panel.selectLogicalModel')} /></SelectTrigger>
           <SelectContent className={PANEL_POPUP_SURFACE_CLASSNAME}>
             {logicalModels.map(item => (
-              <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={item.id} value={item.id}>
-                {item.name} · {item.id}{item.enabled ? '' : t('router.panel.disabledSuffix')}
+              <SelectItem className={PANEL_POPUP_ITEM_CLASSNAME} key={item.modelId} value={item.modelId}>
+                {item.modelId}{item.enabled ? '' : t('router.panel.disabledSuffix')}
               </SelectItem>
             ))}
           </SelectContent>
@@ -90,7 +90,7 @@ export function PromptPanel(props: NodePanelProps) {
         <NodePanelHint tone="warning">{t('router.panel.warnModelMissing', { id: logicalModelId })}</NodePanelHint>
       )}
       {selectedModel && !selectedModel.enabled && (
-        <NodePanelHint tone="warning">{t('router.panel.warnModelDisabled', { name: selectedModel.name })}</NodePanelHint>
+        <NodePanelHint tone="warning">{t('router.panel.warnModelDisabled', { name: selectedModel.modelId })}</NodePanelHint>
       )}
 
       {/* 纯选型建议，不是本节点的必要配置，放在告警之后、具体配置项之前。 */}

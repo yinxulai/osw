@@ -211,7 +211,7 @@ export const ROUTE_RULE_FIELD_KINDS: readonly RouteRuleFieldKindMeta[] = [
   { kind: 'transport', prefix: 'route.transport', valueType: 'string', labelKey: 'router.rules.field.transport', needsName: false },
   { kind: 'body', prefix: 'request.body.', valueType: 'unknown', labelKey: 'router.rules.field.body', needsName: true, namePlaceholderKey: 'router.rules.field.bodyPlaceholder' },
   { kind: 'metadata', prefix: 'metadata.', valueType: 'unknown', labelKey: 'router.rules.field.metadata', needsName: true, namePlaceholderKey: 'router.rules.field.metadataPlaceholder' },
-  { kind: 'logicalModelIds', prefix: 'logicalModels[*].id', valueType: 'string', labelKey: 'router.rules.field.logicalModelIds', needsName: false },
+  { kind: 'logicalModelIds', prefix: 'logicalModels[*].modelId', valueType: 'string', labelKey: 'router.rules.field.logicalModelIds', needsName: false },
   { kind: 'custom', prefix: '', valueType: 'unknown', labelKey: 'router.rules.field.custom', needsName: true, namePlaceholderKey: 'router.rules.field.customPlaceholder' },
 ]
 
@@ -315,7 +315,7 @@ export function createDefaultRouteRuleSet(models: RuntimeLogicalModel[]): RouteR
             valueType: 'string',
             operator: 'in',
             valueSource: 'field',
-            valueFieldPath: 'logicalModels[*].id',
+            valueFieldPath: 'logicalModels[*].modelId',
           },
         ],
         landing: {

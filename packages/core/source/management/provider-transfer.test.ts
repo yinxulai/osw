@@ -9,7 +9,7 @@ import { PROVIDER_BUNDLE_FORMAT, PROVIDER_BUNDLE_VERSION } from '@common/provide
 import type { ProviderBundle, ProviderBundleProvider } from '@common/provider-bundle'
 import { closeDatabases, initDatabases } from '../database'
 import { normalizeError } from '../errors'
-import { listSchedulingPolicies } from '@server/database/logical-model-store'
+import { listSchedulingPolicies, getLogicalModelByModelId } from '@server/database/logical-model-store'
 import { createProviderModelRoute, listProviderModels } from '@server/database/model-store'
 import {
   createProvider,
@@ -100,6 +100,13 @@ function bundleWith(providers: ProviderBundleProvider[]): ProviderBundle {
 
 function minimalProvider(name: string): ProviderBundleProvider {
   return { name, description: '', enabled: true, timeoutMilliseconds: 30_000, endpoints: [], settings: [], models: [] }
+}
+
+/** 调度绑定的外键指向的是**数据记录 id**，不是模型名 `default`。 */
+async function defaultLogicalModelRecordId(): Promise<string> {
+  const record = await getLogicalModelByModelId('default')
+  if (!record) throw new Error('missing built-in default logical model')
+  return record.id
 }
 
 /** 一个「打开转换的协议」必须真的可转换，否则 store 不会写入转换器，导出时又被读回 false。 */
@@ -223,7 +230,7 @@ describe('provider bundle import', () => {
     // 本机密钥库的引用属于源环境，导入必须重新生成，否则两台机器会指向同一个不存在的引用。
     expect(restored?.apiKeyReference).not.toBe(API_KEY_REFERENCE)
     expect(secretStore.set).toHaveBeenCalledWith(expect.stringMatching(/^key_/), 'sk-secret')
-    expect(await listSchedulingPolicies('default')).toHaveLength(2)
+    expect(await listSchedulingPolicies(await defaultLogicalModelRecordId())).toHaveLength(2)
 
     const reExported = await exportProviderBundle({ includeApiKeys: true })
     expect(reExported.bundle.providers.map(sortProvider)).toEqual(exported.bundle.providers.map(sortProvider))
@@ -301,15 +308,16 @@ describe('provider bundle import', () => {
     ])
 
     const [model] = await listProviderModels(false)
-    expect(await listSchedulingPolicies('default')).toEqual([
-      expect.objectContaining({ logicalModelId: 'default', providerModelId: model?.id }),
+    const defaultRecordId = await defaultLogicalModelRecordId()
+    expect(await listSchedulingPolicies(defaultRecordId)).toEqual([
+      expect.objectContaining({ logicalModelId: defaultRecordId, providerModelId: model?.id }),
     ])
 
     // 再导入一次是覆盖而不是追加：同名供应商复用，同名模型复用，调度位置也不被重排。
     expect((await importProviderBundle({ bundle })).imported).toEqual({ providers: 1, models: 1 })
     expect(await listProviders(false)).toHaveLength(1)
     expect((await listProviderModels(false)).map(item => item.modelName)).toEqual(['claude-sonnet-4'])
-    expect(await listSchedulingPolicies('default')).toHaveLength(1)
+    expect(await listSchedulingPolicies(defaultRecordId)).toHaveLength(1)
     expect(secretStore.set).toHaveBeenCalledTimes(2)
     // 这一遍什么也没新建，所以埋点不该再长：按名覆盖不是创建。
     expect(reported).toHaveLength(2)

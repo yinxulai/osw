@@ -141,8 +141,8 @@ describe('内置节点 · 输入节点', () => {
     const result = await runWorkflow(graph, {
       request: { path: '/v1/chat/completions' },
       logicalModels: [
-        { id: 'model-z', name: 'Z', enabled: true },
-        { id: 'model-a', name: 'A', enabled: false },
+        { modelId: 'model-z', enabled: true },
+        { modelId: 'model-a', enabled: false },
       ],
     })
 
@@ -162,7 +162,7 @@ describe('内置节点 · 输入节点', () => {
   it('画布上禁用输入节点也照常进入路由流程', async () => {
     const graph: WorkflowGraph = { version: 1, nodes: [inputNode({ enabled: false }), outputNode()], edges: [edge('input', 'out', 'output')] }
 
-    const result = await runWorkflow(graph, { logicalModels: [{ id: 'default', name: 'Default', enabled: true }] })
+    const result = await runWorkflow(graph, { logicalModels: [{ modelId: 'default', enabled: true }] })
 
     expect(traceOf(result, 'input')?.message).toBe('输入进入路由流程')
     expect(outputValue(result, 'input', '逻辑模型')).toEqual(['default'])
@@ -384,8 +384,8 @@ describe('内置节点 · 条件节点（操作符矩阵）', () => {
     { name: 'in：字面量按逗号拆分成集合', rule: conditionRule({ operator: 'in', value: ' fast , safe ' }), input: inputRequest({ value: 'safe' }), expected: true },
     { name: 'in：不在集合里则不成立', rule: conditionRule({ operator: 'in', value: 'fast,safe' }), input: inputRequest({ value: 'slow' }), expected: false },
     { name: 'in：枚举候选集优先于字面量', rule: conditionRule({ operator: 'in', valueType: 'enum', value: 'ignored', enumOptions: ['fast', 'safe'] }), input: inputRequest({ value: 'fast' }), expected: true },
-    { name: 'in：比较值来自另一个字段（通配投影）', rule: conditionRule({ operator: 'in', valueSource: 'field', valueFieldPath: 'logicalModels[*].id', value: 'ignored' }), input: inputRequest({ value: 'model-b' }, { logicalModels: [{ id: 'model-a', name: 'A', enabled: true }, { id: 'model-b', name: 'B', enabled: true }] }), expected: true },
-    { name: 'in：比较值为空数组时无人命中', rule: conditionRule({ operator: 'in', valueSource: 'field', valueFieldPath: 'logicalModels[*].id', value: 'ignored' }), input: inputRequest({ value: 'model-b' }, { logicalModels: [] }), expected: false },
+    { name: 'in：比较值来自另一个字段（通配投影）', rule: conditionRule({ operator: 'in', valueSource: 'field', valueFieldPath: 'logicalModels[*].modelId', value: 'ignored' }), input: inputRequest({ value: 'model-b' }, { logicalModels: [{ modelId: 'model-a', enabled: true }, { modelId: 'model-b', enabled: true }] }), expected: true },
+    { name: 'in：比较值为空数组时无人命中', rule: conditionRule({ operator: 'in', valueSource: 'field', valueFieldPath: 'logicalModels[*].modelId', value: 'ignored' }), input: inputRequest({ value: 'model-b' }, { logicalModels: [] }), expected: false },
     { name: 'notIn：不在集合里成立', rule: conditionRule({ operator: 'notIn', value: 'fast, safe' }), input: inputRequest({ value: 'slow' }), expected: true },
     { name: 'notIn：在集合里不成立', rule: conditionRule({ operator: 'notIn', value: 'fast, safe' }), input: inputRequest({ value: 'fast' }), expected: false },
     { name: 'regex：匹配请求路径', rule: conditionRule({ operator: 'regex', fieldPath: 'request.path', value: '^/v1/(chat/)?completions$' }), input: inputRequest(), expected: true },
@@ -907,7 +907,7 @@ describe('内置节点 · 输出节点', () => {
 
 describe('内置节点 · 引擎导出的路径与决策工具', () => {
   it('getByPath 支持通配投影并拍平一层', () => {
-    expect(getByPath({ logicalModels: [{ id: 'a' }, { id: 'b' }] }, 'logicalModels[*].id')).toEqual(['a', 'b'])
+    expect(getByPath({ logicalModels: [{ modelId: 'a' }, { modelId: 'b' }] }, 'logicalModels[*].modelId')).toEqual(['a', 'b'])
     expect(getByPath({ a: { b: [{ c: 1 }, { c: 2 }, {}] } }, 'a.b[*].c')).toEqual([1, 2])
     expect(getByPath({ a: [{ b: [1, 2] }, { b: [3] }] }, 'a[*].b')).toEqual([1, 2, 3])
     expect(getByPath({ items: [{ tags: ['x', 'y'] }] }, 'items[*].tags[*]')).toEqual(['x', 'y'])
@@ -955,33 +955,39 @@ describe('内置节点 · 引擎导出的路径与决策工具', () => {
       transport: 'http-stream',
       metadata: { traceId: 'trace-from-caller' },
       logicalModels: [
-        { id: 'model-a', name: 'A', enabled: true },
-        { id: 'model-b', name: 'B', enabled: false },
+        { modelId: 'model-a', enabled: true },
+        { modelId: 'model-b', enabled: false },
       ],
     })
 
     expect(envelope.context.traceId).toBe('trace-from-caller')
     expect(envelope.context.logicalModels).toEqual([
-      { id: 'model-a', name: 'A', enabled: true },
-      { id: 'model-b', name: 'B', enabled: false },
+      { modelId: 'model-a', enabled: true },
+      { modelId: 'model-b', enabled: false },
     ])
     expect(envelope.payload.route).toMatchObject({ traceId: 'trace-from-caller', protocol: 'anthropic-messages', transport: 'http-stream' })
   })
 
-  it('createRouteContextInput 丢弃缺少 id 或名称的逻辑模型，并补全缺省字段', () => {
+  it('createRouteContextInput 丢弃缺少模型 id 的逻辑模型，并补全缺省字段', () => {
     const envelope = createRouteContextInput({
       request: {},
       logicalModels: [
-        { id: '', name: 'NoId', enabled: true },
-        { id: 'model-b', name: '   ', enabled: true },
-        { id: ' model-c ', name: ' C ', enabled: true },
+        { modelId: '', enabled: true },
+        { modelId: 'model-b', enabled: true },
+        { modelId: ' model-c ', enabled: true },
         'not-an-object',
       ] as unknown as RuntimeLogicalModel[],
     })
 
-    expect(envelope.context.logicalModels).toEqual([{ id: 'model-c', name: 'C', enabled: true }])
+    expect(envelope.context.logicalModels).toEqual([
+      { modelId: 'model-b', enabled: true },
+      { modelId: 'model-c', enabled: true },
+    ])
     expect(envelope.context.traceId).toMatch(/^trace-/)
-    expect(envelope.payload.logicalModels).toEqual([{ id: 'model-c', name: 'C', enabled: true }])
+    expect(envelope.payload.logicalModels).toEqual([
+      { modelId: 'model-b', enabled: true },
+      { modelId: 'model-c', enabled: true },
+    ])
   })
 
   it('一次运行结束后调用方能从 payload 直接读出决策与落点', async () => {

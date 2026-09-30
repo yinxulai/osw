@@ -20,7 +20,7 @@ export interface InputNodeField {
  * （`panel/input-panel.tsx`）都读它，所以面板上列的就是下游真正能选的。
  *
  * 逻辑模型列表是**运行时注入**的：任何静态示例里都不可能有它，
- * 所以这组通配投影只能显式给出，否则默认策略里的 `logicalModels[*].id`
+ * 所以这组通配投影只能显式给出，否则默认策略里的 `logicalModels[*].modelId`
  * 在「比较字段」下拉里根本选不到。
  */
 export const INPUT_NODE_FIELDS: readonly InputNodeField[] = [
@@ -30,6 +30,6 @@ export const INPUT_NODE_FIELDS: readonly InputNodeField[] = [
   { path: 'request.body', valueType: 'object', noteKey: 'router.fieldNote.requestBody' },
   { path: 'metadata', valueType: 'object', noteKey: 'router.fieldNote.metadata' },
   { path: 'logicalModels', valueType: 'array', noteKey: 'router.fieldNote.logicalModels' },
-  { path: `logicalModels${PATH_WILDCARD_SUFFIX}.id`, valueType: 'string' },
+  { path: `logicalModels${PATH_WILDCARD_SUFFIX}.modelId`, valueType: 'string' },
   { path: `logicalModels${PATH_WILDCARD_SUFFIX}.enabled`, valueType: 'boolean' },
 ]

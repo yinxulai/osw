@@ -35,10 +35,9 @@ interface ValuesCardProps {
   onChange: (values: ClientConfigValues) => void
 }
 
-/** 下拉里一条可选的逻辑模型。只取用得到的三个字段，不把整个 `LogicalModel` 拖进这张卡。 */
+/** 下拉里一条可选的逻辑模型。只取用得到的两个字段，不把整个 `LogicalModel` 拖进这张卡。 */
 interface ModelOption {
   id: string
-  name: string
   enabled: boolean
 }
 
@@ -76,7 +75,8 @@ export function ValuesCard(props: ValuesCardProps) {
   const disabled = !ready
 
   const slots = useMemo(() => (applyConfig ? agentClientModelSlots(applyConfig) : []), [applyConfig])
-  const options = useMemo(() => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })), [logicalModels])
+  /** 写进配置文件的就是模型 id（`modelId`），不是数据记录 id。 */
+  const options = useMemo(() => logicalModels.map(model => ({ id: model.modelId, enabled: model.enabled })), [logicalModels])
 
   /** 某个槽位在文件里当前的值；没配方就是空串。 */
   const detectedOf = (role: AgentClientModelSlot) => (applyConfig ? resolveAgentClientSlotValue(applyConfig, detected, role) : '')
@@ -191,8 +191,7 @@ function ModelField(props: ModelFieldProps) {
           <SelectContent>
             {items.map(option => (
               <SelectItem key={option.id} value={option.id}>
-                {option.name}
-                {option.name === option.id ? '' : ` · ${option.id}`}
+                {option.id}
                 {option.enabled ? '' : t('clientConfig.model.disabled')}
               </SelectItem>
             ))}

@@ -158,7 +158,7 @@ describe('配置契约 · 可省字段的缺省值', () => {
 
     const script = createNodeByKind('script', { x: 0, y: 0 })
     if (script.kind !== 'script') throw new Error('expected script node')
-    expect(script.code).toContain("get('logicalModels[*].id')")
+    expect(script.code).toContain("get('logicalModels[*].modelId')")
     expect(script.resultPath).toBe('route.scriptResult')
 
     const condition = createNodeByKind('condition', { x: 0, y: 0 })
@@ -173,7 +173,7 @@ describe('配置契约 · 可省字段的缺省值', () => {
 
     const prompt = createNodeByKind('prompt', { x: 0, y: 0 })
     if (prompt.kind !== 'prompt') throw new Error('expected prompt node')
-    expect(prompt.promptTemplate).toContain('${logicalModels[*].id}')
+    expect(prompt.promptTemplate).toContain('${logicalModels[*].modelId}')
     // 逻辑模型必须由用户显式选一个：引擎不接受「猜一个上游来执行」。
     expect(prompt.logicalModelId).toBe('')
   })
@@ -239,7 +239,7 @@ describe('配置契约 · 请求上下文与图', () => {
 
   it('四个预设生成的图都满足同一份 schema（界面看到的与运行时生效的是同一张）', () => {
     for (const preset of ROUTER_POLICY_PRESETS) {
-      const graph = preset.createGraph([{ id: 'default', name: 'Default', enabled: true }])
+      const graph = preset.createGraph([{ modelId: 'default', enabled: true }])
 
       expect({ id: preset.id, issues: WorkflowGraphSchema.safeParse(graph).error?.issues }).toEqual({ id: preset.id, issues: undefined })
     }

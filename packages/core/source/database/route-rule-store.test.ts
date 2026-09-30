@@ -37,9 +37,9 @@ async function initTemporaryDatabase(): Promise<void> {
 }
 
 async function createModels(): Promise<RuntimeLogicalModel[]> {
-  // 内建默认逻辑模型由 `initDatabases` 落库，这里不重复创建它（`logical_models.name` 上是唯一索引）。
+  // 内建默认逻辑模型由 `initDatabases` 落库，这里不重复创建它（活跃行的 `modelId` 上是唯一索引）。
   const seeded = await listLogicalModels()
-  return seeded.map(model => ({ id: model.id, name: model.name, enabled: model.enabled }))
+  return seeded.map(model => ({ modelId: model.modelId, enabled: model.enabled }))
 }
 
 /** 造一份与基准规则表不同的表：只改规则名，结构仍然合法。 */

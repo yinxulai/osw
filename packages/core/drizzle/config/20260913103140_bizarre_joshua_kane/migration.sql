@@ -1,6 +1,18 @@
+CREATE TABLE `client_config_versions` (
+	`id` text PRIMARY KEY,
+	`clientKey` text NOT NULL,
+	`filePath` text NOT NULL,
+	`contentHash` text NOT NULL,
+	`content` text NOT NULL,
+	`sizeBytes` integer DEFAULT 0 NOT NULL,
+	`origin` text DEFAULT 'apply' NOT NULL,
+	`note` text DEFAULT '' NOT NULL,
+	`createdTime` integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `logical_models` (
 	`id` text PRIMARY KEY,
-	`name` text NOT NULL UNIQUE,
+	`modelId` text NOT NULL,
 	`description` text DEFAULT '' NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
 	`sortOrder` integer DEFAULT 0 NOT NULL,
@@ -140,6 +152,9 @@ CREATE TABLE `workflows` (
 	`deletedTime` integer
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `idx_client_config_versions_hash` ON `client_config_versions` (`clientKey`,`filePath`,`contentHash`);--> statement-breakpoint
+CREATE INDEX `idx_client_config_versions_file` ON `client_config_versions` (`clientKey`,`filePath`,`createdTime`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_logical_models_model_id_active` ON `logical_models` (`modelId`) WHERE deletedTime IS NULL;--> statement-breakpoint
 CREATE INDEX `idx_logical_models_enabled` ON `logical_models` (`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_deleted_time` ON `logical_models` (`deletedTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_protocol_converters_unique_active` ON `protocol_converters` (`providerModelEndpointId`,`clientProtocol`) WHERE deletedTime IS NULL;--> statement-breakpoint

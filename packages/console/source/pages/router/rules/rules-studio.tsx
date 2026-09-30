@@ -72,7 +72,7 @@ export function RouteRulesStudio() {
   const logicalModels = useLogicalModels()
 
   const runtimeLogicalModels = useMemo(
-    () => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })),
+    () => logicalModels.map(model => ({ modelId: model.modelId, description: model.description, enabled: model.enabled })),
     [logicalModels],
   )
 

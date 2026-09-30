@@ -60,7 +60,7 @@ export function IterationPanel(props: NodePanelProps) {
     <div className="grid gap-2.5">
       <NodePanelHint>
         {t('router.panel.iterationHintPrefix')}
-        <span className="font-mono">logicalModels[*].id</span>
+        <span className="font-mono">logicalModels[*].modelId</span>
         {t('router.panel.iterationHintSuffix')}
       </NodePanelHint>
 

@@ -64,7 +64,8 @@ export function useRequestLogsService() {
       .map(model => ({ id: model.id, name: `${providerNameById.get(model.providerId) ?? model.providerId} / ${model.modelName}` }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [providerModelsQuery.data, providerNameById])
-  const getModelName = useCallback((id: string | null) => id === null ? '—' : logicalModels.find(model => model.id === id)?.name ?? id, [logicalModels])
+  // 日志里记的是请求当时的模型名，所以拿**模型 id** 反查展示名；找不到就原样显示那个名字。
+  const getModelName = useCallback((modelId: string | null) => modelId === null ? '—' : logicalModels.find(model => model.modelId === modelId)?.modelId ?? modelId, [logicalModels])
   const refresh = useCallback((targetPage = page) => queryClient.invalidateQueries({ queryKey: ['request-logs', filter, targetPage] }), [filter, page, queryClient])
   const setFilter = useCallback((next: Partial<RequestLogFilter>) => { setFilterState(next) }, [setFilterState])
   const goToPage = useCallback((targetPage: number) => setPage(targetPage), [setPage])

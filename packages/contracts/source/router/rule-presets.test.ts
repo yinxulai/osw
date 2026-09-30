@@ -18,9 +18,9 @@ import type { RuntimeLogicalModel, WorkflowProtocol } from './types'
  */
 
 const models: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 const presetRuleSets = ROUTER_RULE_PRESETS.map(preset => ({ id: preset.id, ruleSet: preset.createRuleSet(models) }))
@@ -93,7 +93,7 @@ describe('内置规则预设清单', () => {
 
 describe('内置规则预设的落点', () => {
   it('每个预设的落点都是这次可见的逻辑模型', () => {
-    const visibleIds = new Set(models.map(model => model.id))
+    const visibleIds = new Set(models.map(model => model.modelId))
 
     for (const { id, ruleSet } of presetRuleSets) {
       for (const landingId of landingIdsOf(ruleSet)) {
@@ -103,7 +103,7 @@ describe('内置规则预设的落点', () => {
   })
 
   it('只剩一个已启用模型时每条分支都落到它，不留空落点', () => {
-    const single: RuntimeLogicalModel[] = [{ id: 'default', name: 'Default', enabled: true }]
+    const single: RuntimeLogicalModel[] = [{ modelId: 'default', enabled: true }]
 
     for (const preset of ROUTER_RULE_PRESETS) {
       const ruleSet = preset.createRuleSet(single)

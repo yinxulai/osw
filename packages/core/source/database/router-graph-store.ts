@@ -4,6 +4,9 @@ import { UNSAVED_ROUTER_GRAPH_VERSION } from '@common/router/types'
 import type { RouterGraphSaveResult, RouterGraphSnapshot, RouterGraphVersionSummary, WorkflowGraph } from '@common/router/types'
 import { listLogicalModels } from './logical-model-store'
 import { createWorkflow, deleteWorkflow, getLatestWorkflow, getWorkflow, listWorkflows, type WorkflowRecord } from './workflow-store'
+import { ROUTER_GRAPH_TYPE } from './workflow-kind'
+
+export { ROUTER_GRAPH_TYPE }
 
 /**
  * 路由图只有一份真相，放在 `workflows` 表里（`type = 'router'`），一行一版、版本号单调递增。
@@ -12,7 +15,6 @@ import { createWorkflow, deleteWorkflow, getLatestWorkflow, getWorkflow, listWor
  * 生效的路由图就不再是同一张图，而这类不一致没有任何办法在界面上解释清楚。
  * 这里只保留服务端这一份，画布读它、代理运行时执行它。
  */
-export const ROUTER_GRAPH_TYPE = 'router'
 
 /** 保留的版本上限：超出后把最旧的版本软删除，它只是不再出现在版本列表里。 */
 export const MAX_ROUTER_GRAPH_VERSIONS = 30

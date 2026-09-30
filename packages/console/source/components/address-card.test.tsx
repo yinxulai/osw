@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { I18nProvider } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -42,7 +42,7 @@ describe('AddressCard', () => {
     // 地址是全页唯一的主角，另一种写法是一句说明，不是第二条值。
     expect(screen.getAllByText(ORIGIN)).toHaveLength(1)
     expect(screen.getByText(CLIENT_CONFIG_SAMPLE_API_KEY)).not.toBeNull()
-    expect(screen.getByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)).not.toBeNull()
+    expect(screen.getByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)).not.toBeNull()
   })
 
   it('地址读不出来时摆占位符并把复制按钮禁用，而不是收掉这一行', () => {
@@ -63,7 +63,7 @@ describe('AddressCard', () => {
     expect(onCopy.mock.calls).toEqual([
       ['origin', ORIGIN],
       ['apiKey', CLIENT_CONFIG_SAMPLE_API_KEY],
-      ['modelName', BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME],
+      ['modelName', BUILT_IN_DEFAULT_LOGICAL_MODEL_ID],
     ])
   })
 
@@ -82,7 +82,7 @@ describe('AddressCard', () => {
     // 值是这段视图的全部内容：三个入口一个不少，地址那一句常驻的说明也还在。
     expect(screen.getAllByText(ORIGIN)).toHaveLength(1)
     expect(screen.getByText(CLIENT_CONFIG_SAMPLE_API_KEY)).not.toBeNull()
-    expect(screen.getByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)).not.toBeNull()
+    expect(screen.getByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Copy model name' })).not.toBeNull()
   })
 
@@ -92,7 +92,7 @@ describe('AddressCard', () => {
       { wrapper: Wrapper },
     )
 
-    expect(screen.queryByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)).toBeNull()
+    expect(screen.queryByText(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy model name' })).toBeNull()
     // 地址与密钥不受影响：少了模型名不等于这张卡变空。
     expect(screen.getAllByText(ORIGIN)).toHaveLength(1)
@@ -121,6 +121,6 @@ describe('AddressCard', () => {
 
     const card = screen.getByText(ORIGIN).closest('[data-slot="card"]')
     expect(card?.lastElementChild?.getAttribute('data-slot')).toBe('card-content')
-    expect(card?.textContent).toContain(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME)
+    expect(card?.textContent).toContain(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
   })
 })

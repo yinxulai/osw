@@ -63,7 +63,7 @@ function clonePayload<T>(payload: T): T {
 /**
  * 路径段：`a[*].b` 拆成 `[{ key: 'a', wildcard: true }, { key: 'b' }]`。
  * 通配段表示「读 key 之后，对数组每一项继续解析剩下的路径，最后拍平一层」，
- * 例如 `logicalModels[*].id` 取到的是全部逻辑模型 id 组成的字符串数组。
+ * 例如 `logicalModels[*].modelId` 取到的是全部逻辑模型 id 组成的字符串数组。
  */
 interface PathSegment {
   key: string
@@ -169,7 +169,12 @@ function routeOf(payload: Record<string, unknown>): RouteDecision {
   return objectField(payload, 'route') as unknown as RouteDecision
 }
 
-/** 归一化逻辑模型列表：运行时会传入主进程的逻辑模型（id / 名称 / 开关）。 */
+/**
+ * 归一化逻辑模型列表：运行时传入的是主进程的逻辑模型（模型 id / 开关）。
+ *
+ * 只取 `modelId`：主进程的记录上还有一个本机生成的**数据记录 id**（`id`），
+ * 那是数据库内部的主键，进了图就等于把「这台机器上的这一行」写进了路由定义。
+ */
 function readLogicalModels(source: unknown): RuntimeLogicalModel[] {
   if (!Array.isArray(source)) return []
   return source
@@ -177,12 +182,11 @@ function readLogicalModels(source: unknown): RuntimeLogicalModel[] {
     .map(item => {
       const model = item as Record<string, unknown>
       return {
-        id: String(model.id ?? '').trim(),
-        name: String(model.name ?? '').trim(),
+        modelId: String(model.modelId ?? '').trim(),
         enabled: Boolean(model.enabled),
       }
     })
-    .filter(model => model.id && model.name)
+    .filter(model => model.modelId)
 }
 
 function normalizeInputPayload(inputPayload: unknown): RouteContextEnvelope {
@@ -208,7 +212,7 @@ function normalizeInputPayload(inputPayload: unknown): RouteContextEnvelope {
    * 不写派生冗余字段：
    * - 「请求模型」就是请求自己的字段（`request.body.model`，写在哪由协议决定），
    *   再存一份副本只会多出第二个事实源；入口节点也不报它 —— 要它就问协议发现节点；
-   * - 「可用逻辑模型 id」是 `logicalModels` 的投影，需要时用通配投影（`logicalModels[*].id`）现算。
+   * - 「可用逻辑模型 id」是 `logicalModels` 的投影，需要时用通配投影（`logicalModels[*].modelId`）现算。
    */
   normalized.route = {
     ...createEmptyRoute(),
@@ -867,7 +871,7 @@ export async function runWorkflow(graph: WorkflowGraph, inputPayload: unknown, o
         // 请求体里的任何东西都不在它这儿 —— 包括模型名。那是协议层的事实，
         // 路径由协议发现节点按命中的协议声明（§2.3 / §4.1）；在这里读 `request.body.model`
         // 就等于要求输入节点兼容所有协议，而它连「体是什么格式」都不声称。
-        addNodeOutput(nodeOutputs, current.id, '逻辑模型', envelope.context.logicalModels.map(model => model.id))
+        addNodeOutput(nodeOutputs, current.id, '逻辑模型', envelope.context.logicalModels.map(model => model.modelId))
         trace.push({ nodeId: current.id, nodeName: current.name, kind: current.kind, success: true, message: '输入进入路由流程' })
         currentId = edgeTarget(edges, current.id)
         continue

@@ -19,7 +19,7 @@ export function CreateLogicalModelDialog(props: CreateLogicalModelDialogProps) {
   const { open, onOpenChange, onCreated } = props
   const toast = useToast()
   const t = useTranslation()
-  const [id, setId] = useState('')
+  const [modelId, setModelId] = useState('')
   const [idError, setIdError] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -31,7 +31,7 @@ export function CreateLogicalModelDialog(props: CreateLogicalModelDialogProps) {
   }
 
   const createLogicalModel = async () => {
-    const trimmedId = id.trim()
+    const trimmedId = modelId.trim()
     const validation = LogicalModelIdSchema.safeParse(trimmedId)
     if (!validation.success) {
       // 就地提示错误，避免只弹 toast 让用户找不到出错的字段。
@@ -45,9 +45,10 @@ export function CreateLogicalModelDialog(props: CreateLogicalModelDialogProps) {
     setIdError('')
     setSaving(true)
     try {
-      await unwrap(logicalModelApi.create({ id: trimmedId, description: description.trim() }))
+      // 只管闭包：数据记录 id 由服务端生成，用户在这里给出的就是模型名（`modelId`）。
+      await unwrap(logicalModelApi.create({ modelId: trimmedId, description: description.trim() }))
       toast.success(t('logicalModels.create.created'))
-      setId('')
+      setModelId('')
       setDescription('')
       onOpenChange(false)
       onCreated()
@@ -75,9 +76,9 @@ export function CreateLogicalModelDialog(props: CreateLogicalModelDialogProps) {
           >
             <Input
               id="logical-model-id"
-              value={id}
+              value={modelId}
               aria-invalid={Boolean(idError)}
-              onChange={event => { setId(event.target.value); if (idError) setIdError('') }}
+              onChange={event => { setModelId(event.target.value); if (idError) setIdError('') }}
               placeholder={t('logicalModels.create.idPlaceholder')}
               autoFocus
             />

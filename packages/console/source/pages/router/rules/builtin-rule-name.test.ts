@@ -6,8 +6,8 @@ import type { RouteRule } from '@common/router/route-rules'
 import { builtinRouteRuleName } from './builtin-rule-name'
 
 const models = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'fast', name: 'Fast', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'fast', enabled: true },
 ]
 
 const builtinRules = ROUTER_RULE_PRESETS.flatMap(preset => preset.createRuleSet(models).rules)

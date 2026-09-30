@@ -85,7 +85,7 @@ function RuleRowBody(props: RuleRowBodyProps) {
   } = props
   const t = useTranslation()
 
-  const landing = describeLanding(rule.landing, t, modelId => logicalModels.find(model => model.id === modelId)?.name ?? modelId)
+  const landing = describeLanding(rule.landing, t)
   const landingEmpty = rule.landing.source === 'variable'
     ? rule.landing.variablePath.trim().length === 0
     : rule.landing.logicalModelIds.length === 0

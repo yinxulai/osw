@@ -37,7 +37,13 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
   return rows.map(mapProviderModelView)
 }
 
-export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false, includeDisabled = false): Promise<LogicalModelProviderModel[]> {
+/**
+ * 列出一个逻辑模型（**按数据记录 id**，不是模型名）的绑定。
+ *
+ * 运行时拿到的是请求里的模型名，翻译成记录 id 由 `@server/proxy/routing/router` 负责；
+ * 这里只认外键那一把钥匙，两把混用不会报错，只会静静查到另一个模型的绑定。
+ */
+export async function listProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted = false, includeDisabled = false): Promise<LogicalModelProviderModel[]> {
   // 这里必须分开取「绑定开关」与「模型本体开关」：两列同名（`scheduling_policies.enabled`
   // 与 `provider_models.enabled`），把策略行整行嵌进 select 时后者会被前者盖住——不是
   // node:sqlite 折叠了列名，而是早先的实现直接写了 `enabled: model.enabled`。
@@ -51,7 +57,7 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
   })
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
-    .where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), isNull(schedulingPolicies.deletedTime)))
+    .where(and(eq(schedulingPolicies.logicalModelId, logicalModelRecordId), isNull(schedulingPolicies.deletedTime)))
     .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
     .all()
   return rows
@@ -65,14 +71,14 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
 }
 
 /**
- * 批量读取多个逻辑模型的绑定。
+ * 批量读取多个逻辑模型的绑定（同样按**数据记录 id**）。
  *
  * 返回 Map 而不是扁平数组，因为调用方已经拿着「落点顺序」；把排序重新塞回数组里只会
- * 多一层按 id 分组的逻辑。查询仍按调度策略的优先级、权重和创建时间稳定排序。
+ * 多一层按 id 分组的逻辑。键就是传进来的记录 id，查询仍按调度策略的优先级、权重和创建时间稳定排序。
  */
-export async function listProviderModelsForLogicalModels(logicalModelIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
+export async function listProviderModelsForLogicalModels(logicalModelRecordIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
   const result = new Map<string, LogicalModelProviderModel[]>()
-  if (logicalModelIds.length === 0) return result
+  if (logicalModelRecordIds.length === 0) return result
 
   const rows = getConfigDb().select({
     logicalModelId: schedulingPolicies.logicalModelId,
@@ -83,7 +89,7 @@ export async function listProviderModelsForLogicalModels(logicalModelIds: readon
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
     .where(and(
-      inArray(schedulingPolicies.logicalModelId, [...logicalModelIds]),
+      inArray(schedulingPolicies.logicalModelId, [...logicalModelRecordIds]),
       isNull(schedulingPolicies.deletedTime),
     ))
     .orderBy(asc(schedulingPolicies.logicalModelId), asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))

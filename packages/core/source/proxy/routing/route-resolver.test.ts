@@ -58,8 +58,8 @@ afterEach(() => {
   reported.length = 0
 })
 
-function model(id: string, enabled = true): RuntimeLogicalModel {
-  return { id, name: id, enabled }
+function model(modelId: string, enabled = true): RuntimeLogicalModel {
+  return { modelId, enabled }
 }
 
 function useDefaultPolicy(models: RuntimeLogicalModel[]): void {

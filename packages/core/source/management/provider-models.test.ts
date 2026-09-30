@@ -43,7 +43,7 @@ afterEach(async () => {
 describe('provider model routes', () => {
   it('creates a model and updates its scheduling policy', async () => {
     const provider = await createProvider({ name: 'Provider Model Provider', apiKeyReference: 'key_provider_model', timeoutMilliseconds: 15_000, enabled: true })
-    const logicalModel = await createLogicalModel({ id: 'routing-model', name: 'routing-model', description: 'route tests' })
+    const logicalModel = await createLogicalModel({ modelId: 'routing-model', description: 'route tests' })
 
     const createRes = mockResponse()
     await providerModelRoutes.invoke('/api/provider-model/create', createRes, {
@@ -78,7 +78,7 @@ describe('provider model routes', () => {
 
   it('reports one model_created per endpoint protocol', async () => {
     const provider = await createProvider({ name: 'Multi Protocol Provider', apiKeyReference: 'key_multi_protocol', timeoutMilliseconds: 15_000, enabled: true })
-    const logicalModel = await createLogicalModel({ id: 'multi-protocol-model', name: 'multi-protocol-model', description: '' })
+    const logicalModel = await createLogicalModel({ modelId: 'multi-protocol-model', description: '' })
 
     await providerModelRoutes.invoke('/api/provider-model/create', mockResponse(), {
       providerId: provider.id,
@@ -108,7 +108,8 @@ describe('provider model routes', () => {
   })
 })
 
-async function createModelWithEndpoint(providerId: string, modelName: string, logicalModelId = 'default'): Promise<{ id: string }> {
+/** 不传 `logicalModelId` 时就落到内建默认逻辑模型：记录 id 由路由层自己解析。 */
+async function createModelWithEndpoint(providerId: string, modelName: string, logicalModelId?: string): Promise<{ id: string }> {
   const response = mockResponse()
   await providerModelRoutes.invoke('/api/provider-model/create', response, {
     providerId,
@@ -142,7 +143,7 @@ describe('provider model CRUD routes', () => {
 
   it('lists the models bound to a logical model', async () => {
     const provider = await createProvider({ name: 'Logical Provider', apiKeyReference: 'key_logical', enabled: true })
-    const logicalModel = await createLogicalModel({ id: 'logical-list', name: 'logical-list', description: '' })
+    const logicalModel = await createLogicalModel({ modelId: 'logical-list', description: '' })
     const model = await createModelWithEndpoint(provider.id, 'logical-model', logicalModel.id)
 
     const res = mockResponse()
@@ -164,7 +165,7 @@ describe('provider model CRUD routes', () => {
 
   it('merges partial updates and rewrites the scheduling policy when both fields are given', async () => {
     const provider = await createProvider({ name: 'Update Provider', apiKeyReference: 'key_update', enabled: true })
-    const logicalModel = await createLogicalModel({ id: 'logical-update', name: 'logical-update', description: '' })
+    const logicalModel = await createLogicalModel({ modelId: 'logical-update', description: '' })
     const model = await createModelWithEndpoint(provider.id, 'update-model', logicalModel.id)
 
     const res = mockResponse()
@@ -186,7 +187,7 @@ describe('provider model CRUD routes', () => {
 
   it('leaves the scheduling policy untouched when only a logical model id is supplied', async () => {
     const provider = await createProvider({ name: 'Partial Provider', apiKeyReference: 'key_partial', enabled: true })
-    const logicalModel = await createLogicalModel({ id: 'logical-partial', name: 'logical-partial', description: '' })
+    const logicalModel = await createLogicalModel({ modelId: 'logical-partial', description: '' })
     const model = await createModelWithEndpoint(provider.id, 'partial-model', logicalModel.id)
 
     const res = mockResponse()

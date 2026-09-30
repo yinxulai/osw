@@ -1,6 +1,8 @@
 import type { SecretStore } from '@common/secret-store'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { and, eq, inArray } from 'drizzle-orm'
 import { getConfigDb, getDataDb } from './index'
+import { mapLogicalModelIdsToRecordIds } from './logical-model-store'
 import {
   providerEndpoints,
   providerModelEndpoints,
@@ -113,6 +115,11 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
   const timestamp = Date.now()
   const batchId = `${timestamp.toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   const providerModelsToInsert = PROVIDER_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingProviderModelIds.has(`model_dev_provider_${index + 1}`))
+  // fixture 第一列写的是**模型 id**（人看得懂的那种），而 `scheduling_policies` 的外键指向的是
+  // **数据记录 id**：两边不是同一把钥匙，落库前必须先换一次。
+  const logicalModelRecordIdByModelId = await mapLogicalModelIdsToRecordIds(PROVIDER_MODEL_FIXTURES.map(fixture => fixture[0]))
+  const defaultLogicalModelRecordId = logicalModelRecordIdByModelId.get(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
+  if (!defaultLogicalModelRecordId) throw new Error('built-in default logical model is missing; cannot seed scheduling policies')
 
   // 两个库、两个事务：SQLite 的事务不能跨文件，配置先写一次、观测数据再写一次。
   config.transaction(transaction => {
@@ -157,7 +164,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
           if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
           transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: fixture[0], providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
       }
     }
   })

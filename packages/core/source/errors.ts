@@ -135,3 +135,49 @@ export function providerModelDisabledError(modelName: string): AppError {
     { details: { modelName } },
   )
 }
+
+/**
+ * 「这个模型 id 已经被占用了」。
+ *
+ * `modelId` 是逻辑模型对外的唯一身份（请求里的模型名就是它，活跃行之间由部分唯一索引保证），
+ * 所以重名不是「换个名字」而是「要一个已经被人拿走的身份」——只能拒绝。
+ * 400 与 500 的差别在这里很实在：这是用户可修正的输入问题（换个模型 id，或者先把原来那个
+ * 删掉/改名），不是服务端故障，把它的 `errorCode` 暴露出去，界面才能把「哪个模型 id 撞了」
+ * 说清楚，而不是给一句没有上下文的「内部错误」。
+ *
+ * 数据记录 id 不会走到这里：它由服务端生成。
+ */
+export function duplicateLogicalModelError(modelId: string): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `Logical model ${modelId} already exists`,
+    { details: { modelId } },
+  )
+}
+
+/** 「没有这个逻辑模型」。读、改、删共用同一个说法；`id` 是**数据记录 id**。 */
+export function logicalModelNotFoundError(id: string): AppError {
+  return new AppError(
+    'RESOURCE_NOT_FOUND',
+    404,
+    `Logical model ${id} not found`,
+    { details: { id } },
+  )
+}
+
+/**
+ * 「内建默认逻辑模型不能删、也不能改名」。
+ *
+ * 它是所有兜底落点的归宿：请求没命中任何逻辑模型时落到这里，删掉它等于让代理没有可用的上游
+ * 起点。用户能改的是它的说明与开关。参数是它的 **modelId**（内建默认模型认的是模型 id，
+ * 因为数据记录 id 是本机生成的、不能参与这个判断）。
+ */
+export function protectedLogicalModelError(modelId: string): AppError {
+  return new AppError(
+    'RESOURCE_CONFLICT',
+    409,
+    `Logical model ${modelId} is built in and cannot be deleted or renamed`,
+    { details: { modelId } },
+  )
+}

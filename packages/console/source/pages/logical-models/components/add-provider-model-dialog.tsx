@@ -13,13 +13,14 @@ type ProviderModelOption = { id: string; providerId: string; providerName: strin
 
 interface AddProviderModelDialogProps {
   open: boolean
-  logicalModelId: string
+  /** 加到哪个逻辑模型上。这里是**数据记录 id**（`lm_*`）：绑定的外键指着它。 */
+  logicalModelRecordId: string
   onOpenChange: (open: boolean) => void
   onAdded: () => void
 }
 
 export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
-  const { open, logicalModelId, onOpenChange, onAdded } = props
+  const { open, logicalModelRecordId, onOpenChange, onAdded } = props
   const toast = useToast()
   const t = useTranslation()
   const [models, setModels] = useState<ProviderModelOption[]>([])
@@ -51,7 +52,7 @@ export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
     if (!open) return
     let cancelled = false
     setLoading(true)
-    void Promise.all([unwrap(providerApi.list()), unwrap(providerModelApi.list()), unwrap(schedulingPolicyApi.list(logicalModelId))])
+    void Promise.all([unwrap(providerApi.list()), unwrap(providerModelApi.list()), unwrap(schedulingPolicyApi.list(logicalModelRecordId))])
       .then(([providersResult, modelsResult, policiesResult]) => {
         if (cancelled) return
         const providerNameById = new Map(providersResult.map(provider => [provider.id, provider.name]))
@@ -66,13 +67,13 @@ export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
       .catch(error => toast.error(error instanceof Error ? error.message : String(error)))
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [logicalModelId, open, toast])
+  }, [logicalModelRecordId, open, toast])
 
   const addModels = async () => {
     if (selectedIds.length === 0) return
     setSaving(true)
     try {
-      await Promise.all(selectedIds.map((providerModelId, index) => unwrap(schedulingPolicyApi.update({ logicalModelId, providerModelId, priority: models.length + index + 1, enabled: true }))))
+      await Promise.all(selectedIds.map((providerModelId, index) => unwrap(schedulingPolicyApi.update({ logicalModelId: logicalModelRecordId, providerModelId, priority: models.length + index + 1, enabled: true }))))
       toast.success(t('logicalModels.addModels.added', { count: selectedIds.length }))
       onAdded()
       onOpenChange(false)

@@ -7,7 +7,10 @@ import {
 } from '@common/router/route-rules'
 import type { RouteRuleSet, RouteRuleSetSaveResult, RouteRuleSetVersionSummary, RouteRuleSnapshot } from '@common/router/route-rules'
 import { listLogicalModels } from './logical-model-store'
+import { ROUTE_RULE_TYPE } from './workflow-kind'
 import { createWorkflow, deleteWorkflow, getLatestWorkflow, getWorkflow, listWorkflows, type WorkflowRecord } from './workflow-store'
+
+export { ROUTE_RULE_TYPE }
 
 /**
  * 路由规则表只有一份真相，放在 `workflows` 表里（`type = 'route-rules'`），一行一版、版本号单调递增。
@@ -21,7 +24,6 @@ import { createWorkflow, deleteWorkflow, getLatestWorkflow, getWorkflow, listWor
  * 与路由图共用同一张表但**互不相干**：`workflows` 的唯一键是 `(type, version)`，
  * 两种定义各写各的行、各算各的版本号，谁都不会把对方的内容或版本号推走。
  */
-export const ROUTE_RULE_TYPE = 'route-rules'
 
 function parseRuleSet(record: WorkflowRecord): RouteRuleSet | null {
   const parsed = RouteRuleSetSchema.safeParse(record.definition)

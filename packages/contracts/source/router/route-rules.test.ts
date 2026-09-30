@@ -26,8 +26,8 @@ import type { RuntimeLogicalModel } from './types'
  */
 
 const models: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
 ]
 
 describe('route rule field kinds', () => {
@@ -56,7 +56,7 @@ describe('route rule field path', () => {
   it('不需要名称的来源忽略名称输入', () => {
     expect(toRouteRuleFieldPath({ kind: 'model', name: 'ignored' })).toBe(ROUTE_RULE_DEFAULT_VARIABLE_PATH)
     expect(toRouteRuleFieldPath({ kind: 'method', name: '' })).toBe('request.method')
-    expect(toRouteRuleFieldPath({ kind: 'logicalModelIds', name: '' })).toBe('logicalModels[*].id')
+    expect(toRouteRuleFieldPath({ kind: 'logicalModelIds', name: '' })).toBe('logicalModels[*].modelId')
   })
 
   it('整条路径就是字段的来源不带名称', () => {
@@ -90,7 +90,7 @@ describe('route rule field path', () => {
 
   it('值类型按来源给出，认不准的来源是 unknown', () => {
     expect(routeRuleFieldValueType('request.method')).toBe('string')
-    expect(routeRuleFieldValueType('logicalModels[*].id')).toBe('string')
+    expect(routeRuleFieldValueType('logicalModels[*].modelId')).toBe('string')
     expect(routeRuleFieldValueType('request.body.anything')).toBe('unknown')
     expect(routeRuleFieldValueType('not.a.known.path')).toBe('unknown')
   })
@@ -149,7 +149,7 @@ describe('default route rule set', () => {
         valueType: 'string',
         operator: 'in',
         valueSource: 'field',
-        valueFieldPath: 'logicalModels[*].id',
+        valueFieldPath: 'logicalModels[*].modelId',
       },
     ])
     expect(ruleSet.fallbackModelIds.length).toBeGreaterThan(0)

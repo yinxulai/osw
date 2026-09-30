@@ -2,7 +2,7 @@
 
 > 本文是新大版本的目标数据库结构。
 >
-> **发布策略：迁移优先，换代只在大版本发布时发生。** 结构变化默认加一条迁移（`packages/core/drizzle/<role>/` 下每个目录是一条，启动时按目录名顺序执行）；只有应用大版本发布时才把 `DATABASE_SCHEMA_VERSIONS` 里对应角色那个数字加一，以换文件名的方式甩掉累积的迁移历史——那时才会在一个全新的空文件上初始化，旧文件既不读取、不迁移、不检测。
+> **发布策略：不保留增量迁移，结构变化就地重画基线。** 每条链只有**一条**基线（`packages/core/drizzle/<role>/` 下唯一那个目录），它由当前 schema 直接生成。改结构 = 改 `packages/core/source/database/<role>-schema.ts`，再把那条基线重新生成一遍、**沿用原来的目录名**；不追加迁移、不留历史目录。`DATABASE_SCHEMA_VERSIONS` 只在应用大版本发布时加一，用来甩掉磁盘上的旧文件——它与「这次改了多少结构」无关。
 > 数据库由**两个**文件组成：用户写的配置和系统写的观测数据各自独立（理由见 §2.1）。
 
 ## 1. 设计目标
@@ -17,7 +17,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 6. **请求/响应正文与日志索引分离，正文按需记录并完整保留。**
 7. **历史日志不依赖可变配置，不为日志快照增加外键。**
 8. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
-9. **数据库结构以 Drizzle schema 为唯一代码定义，由生成的 migration 在应用启动时执行；不提供兼容迁移。**
+9. **数据库结构以 Drizzle schema 为唯一代码定义；链上只保留一条从当前 schema 生成的基线，不提供兼容迁移。**
 10. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
 11. **表名统一为 `settings`，不再引入 `app_config` 作为数据库表名。**
 12. **领域前缀按对象边界使用：`provider*` 是配置身份，`client*` 是客户端一侧，`upstream*` 是实际远端 hop。**
@@ -48,13 +48,13 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `config-<v>.db` | 配置库 | 12 | 用户 | 供应商、模型、路由、改写规则全没了——**不可再生** |
 | `data-<v>.db` | 数据库 | 10 | 系统 | 历史请求、日志与健康状态归零，代理照常工作——**可丢弃** |
 
-文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**，且这一下必须与「重新生成首发基线、丢掉旧链」一起做：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。**日常改结构不走这条路，加一条迁移就好**——把每次加列都做成换代，等于每加一列就让用户在一张空表上重新开始。两个库的版本各自独立，可以停在不同的数字上。
+文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。它与本次改动动了多少结构无关——**日常改结构不换代**，直接改 schema 再把基线重画一遍即可（见下一段）。两个库的版本各自独立，可以停在不同的数字上。
 
-两条路的代价完全不同，选错了会直接伤到用户：**加迁移**保留用户已有数据，只是启动时多跑几条语句；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布、要甩掉迁移历史。为了给某次加列省一条迁移而换代，是拿用户的配置当耗材。
+**日常改结构：改 schema，重画基线，目录名不动。** 库里没有增量迁移这回事，链上永远只有一条由当前 schema 直接生成的基线；改完 schema 就用 `drizzle-kit generate` 把那条基线重新生成一遍，并把目录名**沿用原来那一个**。为什么必须沿用：运行时迁移器的判定依据是**目录名**，已有库的 `__drizzle_migrations` 里记的就是它——换个新名字，那条基线在已有库眼里就是一条从没跑过的新迁移，会被拿去对已经存在的表再跑一遍 `CREATE TABLE`。而重画**内容**是安全的：目录名没变，迁移器认为它已经应用过，不会重放。
 
-**不换代也能把迁移链压平，前提是基线目录名沿用原来那一条。** 换代之外还有第三种操作：把 `drizzle/<role>/` 下累积的目录合成一条覆盖当前全部结构的基线，文件名不变、`DATABASE_SCHEMA_VERSIONS` 不加一。做法必须是「**沿用第一条基线的目录名、内容换成合并后的全量结构、删掉它后面所有目录**」，而不是「重新生成一个新名字的基线、把旧的删掉」——已有库的 `__drizzle_migrations` 里记的是旧基线目录名，新名字在它眼里是一条从没跑过的新迁移，会被拿去对已经存在的表再跑一遍 `CREATE TABLE`（见本节末关于判定依据的说明）。反过来，被删掉的那些后续目录对已有库只是「库里多了几行没对应本地文件的记录」，migrator 不会因此报错。这条路只在**明确不需要换代**（非主版本发布）而链已经太长时使用；它不换文件名，所以旧用户的库原地不动。
+换代与改结构的代价完全不同，选错了会直接伤到用户：**重画基线**只在文件里重建表结构，用户已有的数据由基线自己那条 `CREATE TABLE` 链在新库上重建、旧数据不受影响；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布。
 
-两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，所以重命名一个已发布的迁移目录会被当成一条新迁移而重放。`logical_models.default` 是应用 seed，不属于 schema migration。
+两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，这正是重画基线必须沿用旧目录名的原因；反过来说，目录名没变时改内容不会被重放，所以链上只留一条基线是安全的。`logical_models.default` 是应用 seed，不属于 schema migration。
 
 两条链互相独立：一个库的演进不会牵扯另一个库，也不存在同时改两个库的事务。
 
@@ -190,7 +190,7 @@ erDiagram
 
   logical_models {
     text id PK
-    text name UK
+    text modelId
     text description
     boolean enabled
     integer sortOrder
@@ -505,32 +505,47 @@ CREATE INDEX idx_provider_endpoints_deleted_time
 
 ### 3.5 `logical_models`
 
-`default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**id 固定**（请求按 id 命中它），只有说明可编辑。
+逻辑模型有**两个键，职责不重叠**：
 
-除 `default` 之外，逻辑模型可以在控制台自由创建、改名、改说明与软删除：**id 是路由唯一使用的标识**，也是客户端请求里那个 `model` 必须写的值，约束为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（容得下 `deepseek-v4.1-flash`、`GPT-4o` 这类真实模型名）；名称是纯展示名，不参与路由，说明是自由文本。删除只打 `deletedTime` 时间戳（§8），行留在表里——历史请求日志、调度绑定与路由落点都按 ID 引用逻辑模型，硬删会把它们变成悬空引用。
+- **`id`：数据记录 id**（`lm_*`，本机生成）。它是这一行的稳定主键，也是所有外键盯着的那一列——`scheduling_policies.logicalModelId` 指的是它。用户看不见、也不需要它，**改名不换它、软删除也不换它**。
+- **`modelId`：模型 id（对外的模型名）**。客户端请求里的 `model` 写的就是它，路由匹配也只用它。它由用户填写，约束为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（容得下 `deepseek-v4.1-flash`、`GPT-4o` 这类真实模型名），**可以随时改**。
+
+把这两个键分开，是为了让「改名」不再等于「换身份」：外键指向 `id`，一次改名就只是改一列文本，不需要 `ON UPDATE CASCADE`，也不会有任何引用变成悬空行。反过来，只用一个键的最省事写法很快会撞上「用户想改名，而历史日志、调度绑定、路由落点都写着旧名字」这件事。
+
+`default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**`modelId` 固定为 `default`**，不可改名、不可删除，只有说明可编辑。
+
+除 `default` 之外，逻辑模型可以在控制台自由创建、改 `modelId`、改说明与软删除。删除只打 `deletedTime` 时间戳（§8），行留在表里——调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行；路由定义按 `modelId` 引用落点，历史请求日志只留当天的模型名快照。
+
+软删除会顺手把 `modelId` 改写成墓碑名 `~deleted.<时间戳>.<原名>`（见 `@common/schemas` 的 `logicalModelTombstoneModelId`）：`~` 不在模型名的字符集里，所以墓碑不可能与任何真实模型名相撞。这样做的收益是「删掉一个模型」立刻放出它的模型名，可以马上再建一个同名的。
+
+「模型名在活跃行里唯一」由**部分唯一索引**保证，而不是列级 `UNIQUE`：墓碑行必须能与活跃行共存于同一个模型名下，列级唯一约束会把软删除过的名字永久占住，让「删掉再建同名」变成一次撞约束的 500。
 
 ```sql
 CREATE TABLE logical_models (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
+  modelId TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  sortOrder INTEGER NOT NULL DEFAULT 0,
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
   deletedTime INTEGER
 );
 
+-- 活跃行的模型名唯一；软删除的名字可以立刻被新模型复用。
+CREATE UNIQUE INDEX idx_logical_models_model_id_active
+  ON logical_models(modelId) WHERE deletedTime IS NULL;
 CREATE INDEX idx_logical_models_enabled ON logical_models(enabled);
 CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 ```
 
-初始化时必须幂等创建 `default`。
+初始化时必须幂等创建 `modelId = 'default'` 的那一行。
 
 ### 3.6 `scheduling_policies`
 
 `scheduling_policies` 是 **LogicalModel 与 ProviderModel 之间的调度绑定表**，不是逻辑模型的单独全局策略配置。每一行表示一个 ProviderModel 是否加入某个逻辑模型的候选池，以及它在该候选池中的顺序和权重。因此，不同逻辑模型可以绑定相同的 ProviderModel，但为其配置不同的 `priority`、`weight` 和启用状态；ProviderModel 本身不再拥有跨逻辑模型共享的全局排序。
 
-v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 ID 时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改名与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
+v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 `modelId` 时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改 `modelId` 与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
 
 ```sql
 CREATE TABLE scheduling_policies (
@@ -552,7 +567,7 @@ CREATE INDEX idx_scheduling_policies_deleted_time
   ON scheduling_policies(deletedTime);
 ```
 
-`request_logs.logicalModelId` 保留实际处理请求的逻辑模型标识，但不建立外键。MVP 中请求体只要求 `model` 为非空字符串；路由先按请求模型匹配逻辑模型，未匹配时才回退到 `default` 的启用绑定。
+`request_logs.logicalModelId` 保留实际处理请求的逻辑模型标识（即当时的 modelId），但不建立外键。MVP 中请求体只要求 `model` 为非空字符串；路由先按请求模型匹配逻辑模型，未匹配时才回退到 `default` 的启用绑定。
 
 ### 3.7 `provider_models`、`provider_model_endpoints` 与 `protocol_converters`
 
@@ -1183,7 +1198,7 @@ settings.value（仅保留真正动态的扩展设置；标准设置必须有独
 
 ```text
 Provider name / enabled / timeout / auth type
-LogicalModel name / description / enabled / routing strategy
+LogicalModel modelId / description / enabled / routing strategy
 ProviderModel modelName / enabled；scheduling_policies priority / weight / enabled
 Provider protocol / URL / ProviderModel endpoint binding / conversion client protocol / enabled
 日志 status / protocol / model IDs / provider ID
@@ -1256,7 +1271,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 ## 8. 删除与历史数据规则
 
-初始化时必须幂等创建 `logical_models.default` 及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、id 也不可改（请求按 id 命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
+初始化时必须幂等创建 `modelId = 'default'` 的逻辑模型及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、`modelId` 也不可改（请求按模型名命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
 
 ### 配置实体
 

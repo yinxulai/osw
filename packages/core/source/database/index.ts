@@ -6,7 +6,8 @@ import {
   createDatabaseFileName,
   type DatabaseRole,
 } from '@common/database-file'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
+import { generateId } from '@common/utils'
 import { drizzle } from 'drizzle-orm/node-sqlite'
 import { migrate } from 'drizzle-orm/node-sqlite/migrator'
 
@@ -340,15 +341,24 @@ function getMigrationsFolder(role: DatabaseRole): string {
  * 保证内建默认逻辑模型存在。
  *
  * 这条记录是内建「模型直达」规则的落点：客户端发来的模型名大概率不是本机配的逻辑模型，
- * 没有它就没有任何可用的上游起点。名字取 `BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME`，
- * 与服务端的回落匹配共用同一个常量。
+ * 没有它就没有任何可用的上游起点。
+ *
+ * 存在与否认的是 **modelId**（与服务端的回落匹配共用同一个常量）；数据记录 id 由这里现生成——
+ * 它是本机的内部主键，别处一律通过 `getLogicalModelByModelId` 查出来，不要写死，也不要拿它
+ * 当这个模型的标识去比较。
+ *
+ * 按 `modelId` 先查一次而不是 `INSERT OR IGNORE`：主键是记录 id（每次生成的都不一样），
+ * 拿它做冲突判定等于永远不冲突，每次启动都会多插一行。
  */
 function ensureDefaultLogicalModel(db: DatabaseSync): void {
+  const existing = db.prepare('SELECT id FROM logical_models WHERE modelId = ? AND deletedTime IS NULL')
+    .get(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
+  if (existing) return
   const time = BigInt(Date.now())
-  db.prepare(`INSERT OR IGNORE INTO logical_models
-    (id, name, description, enabled, createdTime, updatedTime)
+  db.prepare(`INSERT INTO logical_models
+    (id, modelId, description, enabled, createdTime, updatedTime)
     VALUES (?, ?, ?, 1, ?, ?)`)
-    .run(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, time, time)
+    .run(generateId('lm_'), BUILT_IN_DEFAULT_LOGICAL_MODEL_ID, BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, time, time)
 }
 
 /**

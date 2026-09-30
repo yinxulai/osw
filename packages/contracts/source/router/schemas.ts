@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { TransportKindSchema } from '@common/schemas'
+import { LogicalModelIdSchema, TransportKindSchema } from '@common/schemas'
 import {
   NOTE_DEFAULT_HEIGHT,
   NOTE_DEFAULT_WIDTH,
@@ -10,9 +10,14 @@ import {
   SCRIPT_TIMEOUT_LIMIT,
 } from './types'
 
+/**
+ * 运行时注入的逻辑模型快照。
+ *
+ * 只有**模型 id**（请求里的模型名）与开关：数据记录 id 是本机的内部主键，
+ * 不属于可移植的图数据，也不该被入口交进引擎。
+ */
 const LogicalModelContextSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  modelId: LogicalModelIdSchema,
   enabled: z.boolean(),
 })
 
@@ -114,7 +119,7 @@ const ModelSelectNodeSchema = WorkflowNodeBaseSchema.extend({
 const IterationNodeSchema = WorkflowNodeBaseSchema.extend({
   kind: z.literal('iteration'),
   // 省略时用默认值补齐（与 model-select 的处理保持一致）。
-  // 遍历来源：支持通配投影（`logicalModels[*].id`）；数组按元素、对象按键值对遍历。
+  // 遍历来源：支持通配投影（`logicalModels[*].modelId`）；数组按元素、对象按键值对遍历。
   sourcePath: z.string().default(''),
   // 每轮结束后读取这条路径判断本轮是否命中；空值视为未命中。
   collectPath: z.string().default('route.modelIds'),

@@ -96,7 +96,7 @@ export function resolveInputHints(t: AppTranslator, graph: WorkflowGraph, target
     if (!upstreamNodeIds.has(model.id)) continue
 
     if (model.kind === 'input') {
-      // 通配投影无条件暴露：命中判断（`request.body.model in logicalModels[*].id`）依赖它，
+      // 通配投影无条件暴露：命中判断（`request.body.model in logicalModels[*].modelId`）依赖它，
       // 而示例输入里带没带 `logicalModels` 不应该决定这条路径在不在候选表里。
       for (const field of INPUT_NODE_FIELDS) {
         addUniqueField(fields, {

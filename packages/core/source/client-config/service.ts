@@ -16,7 +16,7 @@ import type {
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { resolveProxyOrigin } from '@common/proxy-origin'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { AppError } from '../errors'
 import {
   getClientConfigVersion,
@@ -384,7 +384,7 @@ async function resolveClientConfigDefaults(): Promise<ClientConfigDefaults> {
   if (!origin) {
     throw new AppError('VALIDATION_ERROR', 400, `Local service address is not available: ${settings.listenHost}:${settings.listenPort}`)
   }
-  return { origin, apiKey: CLIENT_CONFIG_SAMPLE_API_KEY, model: BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME }
+  return { origin, apiKey: CLIENT_CONFIG_SAMPLE_API_KEY, model: BUILT_IN_DEFAULT_LOGICAL_MODEL_ID }
 }
 
 /** 这个客户端的哪些文件会被自动填充碰到：有角色声明的字段，才说明这里有可写的键。 */

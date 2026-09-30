@@ -92,7 +92,7 @@ describe('model store', () => {
     })
     expect(converter).toMatchObject({ providerModelEndpointId: extraEndpoint.id, clientProtocol: 'openai-responses', enabled: true })
 
-    const logicalModel = await createLogicalModel({ id: 'model-routing', name: 'model-routing', description: 'route test' })
+    const logicalModel = await createLogicalModel({ modelId: 'model-routing', description: 'route test' })
     await upsertSchedulingPolicy({
       logicalModelId: logicalModel.id,
       providerModelId: route.id,
@@ -251,7 +251,7 @@ describe('model store', () => {
       priority: 2,
       endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
     })
-    const logicalModel = await createLogicalModel({ id: 'binding-enabled', name: 'binding-enabled' })
+    const logicalModel = await createLogicalModel({ modelId: 'binding-enabled' })
     await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: enabledRoute.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: disabledRoute.id, priority: 2, enabled: false })
 
@@ -292,8 +292,8 @@ describe('model store', () => {
       priority: 2,
       endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
     })
-    const first = await createLogicalModel({ id: 'disable-cascade-a', name: 'disable-cascade-a' })
-    const second = await createLogicalModel({ id: 'disable-cascade-b', name: 'disable-cascade-b' })
+    const first = await createLogicalModel({ modelId: 'disable-cascade-a' })
+    const second = await createLogicalModel({ modelId: 'disable-cascade-b' })
     await upsertSchedulingPolicy({ logicalModelId: first.id, providerModelId: route.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: second.id, providerModelId: route.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: first.id, providerModelId: other.id, priority: 2, enabled: true })

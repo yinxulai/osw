@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Server } from 'lucide-react'
 import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { CopyButton } from './copy-button'
 import { FormRow } from './form-kit'
 import { InfoHint } from './info-hint'
@@ -135,7 +135,7 @@ export function AddressCard(props: AddressCardProps) {
             control={(
               <ValueWithCopy
                 itemKey="modelName"
-                value={BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME}
+                value={BUILT_IN_DEFAULT_LOGICAL_MODEL_ID}
                 label={t('access.field.model.copy')}
                 copiedKey={copiedKey}
                 onCopy={onCopy}

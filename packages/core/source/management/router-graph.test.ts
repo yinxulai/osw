@@ -19,7 +19,7 @@ import { mockResponse } from './test-support'
  * 读不到给 `null`）；图本身的构造与执行分别是 `presets.test.ts` / `route-rule-engine.test.ts` 的事。
  */
 
-const models: RuntimeLogicalModel[] = [{ id: 'default', name: 'Default', enabled: true }]
+const models: RuntimeLogicalModel[] = [{ modelId: 'default', enabled: true }]
 
 /** 试跑也会真的跑一遍引擎，所以「跑过哪些节点」同样是产品事实，要按同一口径埋点。 */
 const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
