@@ -208,10 +208,17 @@ describe('托盘面板窗口', () => {
   beforeAll(() => {
     // 面板页与控制台主窗口一样，打包后从产物目录里读（见 `index.ts`）。
     process.env.OUTPUT = OUTPUT_DIRECTORY
+    // 这一组用例断言的是**状态项**的落位几何：面板挂到菜单栏图标下、纵向再扣掉那圈
+    // 透明留白（见 `tray-panel.ts`）。`TrayPanelManager` 用的是 `process.platform`，
+    // Linux 会走「贴在任务栏上方」那条分支，CI 就是在这里红过一次。
+    // 平台是测试的输入，不是环境事实，所以钉住 `darwin`（与 `updater.test.ts` 同一套写法）；
+    // Linux 的分支由下面的 `托盘面板定位` 用例直接覆盖。
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
   })
 
   afterAll(() => {
     delete process.env.OUTPUT
+    vi.restoreAllMocks()
   })
 
   afterEach(() => {
@@ -550,6 +557,22 @@ describe('托盘面板定位', () => {
 
     expect(position).toEqual({ x: 301, y: 220 })
     expect(position.y + 600 - 28).toBe(792)
+  })
+
+  it('Linux 与 Windows 同属「贴着任务栏上方」那条分支，不按 macOS 的菜单栏算', () => {
+    // 这条用例存在的理由就是「平台是分支输入」：`TrayPanelManager` 直接读
+    // `process.platform`，CI 跑在 Linux 上，于是同一个窗口尺寸会算出与 macOS 不同的 y。
+    // 在这里把它钉死，本地（macOS）也能发现分支被写反。
+    const position = resolveTrayPanelPosition(
+      {
+        trayBounds: { x: 500, y: 800, width: 24, height: 24 },
+        workArea: { x: 0, y: 24, width: 1_440, height: 876 },
+        height: 600,
+        platform: 'linux',
+      },
+    )
+
+    expect(position).toEqual({ x: 301, y: 220 })
   })
 })
 
