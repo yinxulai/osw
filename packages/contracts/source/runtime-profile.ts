@@ -3,6 +3,17 @@ export type RuntimeEnvironment = 'development' | 'production'
 export interface RuntimeProfile {
   environment: RuntimeEnvironment
   /**
+   * 应用名：Electron 的 `app.name`，同时也是 macOS 钥匙串里 `safeStorage` 条目的
+   * service 名（`<applicationName> Safe Storage`）。
+   *
+   * 它是**两种环境的密钥命名空间**：生产用 `OSW`、开发用 `OSW Development`，
+   * 于是两条环境各存各的密文，互不干扰（开发环境反复重置数据目录、反复重打包，
+   * 不该污染用户真正在用的那一份）。规则只有一条：`applicationName` 必须由本字段
+   * 提供，宿主**不得**再调用 `app.setName()` 另取一个值——否则命名空间与文档
+   * 对不上，表现为旧的 `safeStorage` 密文解不开。
+   */
+  applicationName: string
+  /**
    * 数据目录名：整份数据的落点，两种宿主形态靠它落到同一个目录里。
    *
    * 规则是 **`<用户主目录>/<这个名字>`**（见 `docs/product/packaging.md` §5.5）：数据放在
@@ -26,6 +37,7 @@ export interface RuntimeProfile {
 const PROFILES: Record<RuntimeEnvironment, RuntimeProfile> = {
   development: {
     environment: 'development',
+    applicationName: 'OSW Development',
     dataDirectoryName: '.osw-development',
     proxyPort: 19300,
     managementPort: 19301,
@@ -33,6 +45,7 @@ const PROFILES: Record<RuntimeEnvironment, RuntimeProfile> = {
   },
   production: {
     environment: 'production',
+    applicationName: 'OSW',
     dataDirectoryName: '.osw',
     proxyPort: 9300,
     managementPort: 9301,

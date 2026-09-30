@@ -180,28 +180,39 @@ osw/
 | App | `ElectronSecretStore` | 沿用 `safeStorage.encryptString` / `decryptString`，密文写在数据目录下的 `secrets.json` |
 | CLI | `EncryptedFileSecretStore` | 随机 32 字节主密钥存 `secrets.cli.key`（`0600`），逐条 AES-256-GCM 加密写入 `secrets.cli.json` |
 
-safeStorage 在 macOS 上按 Electron 的 `app.name` 选择 Keychain 条目；`apps/app`
-的包名 `@osw/app` 从桌面端启用 `safeStorage` 起就是密钥命名空间的一部分。改用
-`app.setName('OSW')` 会让旧密文换到 `OSW Safe Storage` 下解密，表现为
-`safeStorage.decryptString` 失败。界面显示名和可执行文件 productName 可以叫
-OSW，但 `app.name` 不能随显示名一起改。
+桌面形态的 `ElectronSecretStore` 是 `safeStorage` 在本地文件（`secrets.json`）之外的一层：
+`safeStorage` 自身需要一个密钥加解密这些密文，那个密钥放在系统钥匙串里，条目名是
+**`<app.name> Safe Storage`**。所以 `app.name` 就是**密钥命名空间**，用错了条目的
+后果不是「读不到」，而是 `safeStorage.decryptString` 直接失败、已有密钥全部作废。
 
-**历史遗留条目**：改名的代价是钥匙串里会残留旧命名空间的 `genp` 条目——`app.name`
-一变，密文写进新条目，旧条目既不会被读也不会被删。本机实测登录钥匙串里同时躺着
+统一规则（本版起）：**`app.name` 由运行档的 `applicationName` 决定，宿主不再另调
+`app.setName()`**，且必须在任何一次 `safeStorage` 调用之前设好。两条环境各占一个
+命名空间，互不干扰：
+
+| 环境 | `app.name` | 钥匙串条目 |
+| --- | --- | --- |
+| 生产 | `OSW` | `OSW Safe Storage` |
+| 开发 | `OSW Development` | `OSW Development Safe Storage` |
+
+显示的界面名、可执行文件 `productName`、关于面板都可以叫 OSW；但**命名空间只认
+`app.name` 这一处**，别为了「显示成 OSW」去动它。开发态之所以要单独一个命名空间：
+它的数据目录（`.osw-development`）会被反复重置、产物会被反复重打包，不该让这些
+实验污染用户真正在用的那一份密文。
+
+**历史遗留条目**：改名会留下不再被读、也不会被删的旧条目。本机登录钥匙串里曾有
 `one-switch Safe Storage`（仓库目录还叫 `one-switch` 时的 Electron 默认名）、
-`@osw/app Safe Storage`（当前活跃）与 `OSW Safe Storage`（`app.setName('OSW')`
-短暂生效期间留下，见 729b689）。这些残留**不影响功能**：应用只查自己那一个
-service 名，多余的条目只是噪音。要清掉可执行
-`security delete-generic-password -s '<旧名>'`（会弹一次授权）。
+`@osw/app Safe Storage`（包名曾是命名空间的旧约定）与 `OSW Safe Storage`。这些残留
+**不影响功能**——应用只查自己那一个 service 名，多余的条目只是噪音。清理按旧名执行
+`security delete-generic-password -s '<旧名>'`（会弹一次授权）；既然命名空间从
+`@osw/app` 改到了 `OSW`，旧密文本就解不开，留着作废的钥匙串项没有意义，清掉即可。
 
 **为什么「每次都要求确认密码」与条目数量无关**：打包产物走的是 adhoc 签名
 （`identity: null` + `scripts/macos-adhoc-sign.cjs`），没有 Team ID，指定要求退化成一条裸
 `cdhash`。钥匙串项的 ACL 记的正是创建它的签名身份，所以每次重新打包 `cdhash` 一变，
 ACL 就失配、重新询问；开发态跑的是 `node_modules/electron`（`Identifier=Electron`，
-同样 adhoc），与打包产物各算一个身份，来回切也各问一次。三个名字里两个是死条目、
-活跃的只有一个，弹窗频率取决于**重打包次数**而非条目数。要根治只能换成 Developer ID
-正式签名（ACL 按签名身份匹配、跨版本不失效）；只给当前条目设 partition list 或点
-「始终允许」都只在同一个 `cdhash` 下有效。
+同样 adhoc），与打包产物各算一个身份，来回切也各问一次。弹窗频率取决于**重打包次数**
+而非条目数。要根治只能换成 Developer ID 正式签名（ACL 按签名身份匹配、跨版本不失效）；
+只给当前条目设 partition list 或点「始终允许」都只在同一个 `cdhash` 下有效。
 
 排查时**不要**用 `sqlite3` 读 `~/Library/Keychains/login.keychain-db`——它不是 SQLite
 （提示 `file is not a database`）。用 `security find-generic-password -s '<service>'`

@@ -46,9 +46,14 @@ const __dirname = path.dirname(__filename)
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL)
 const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'production')
-const applicationDisplayName = 'OSW'
-// safeStorage on macOS derives its Keychain service from app.name. That value has
-// been `@osw/app` since the desktop host first stored secrets; keep it stable.
+
+// `app.name` 是 macOS `safeStorage` 的钥匙串命名空间（`<name> Safe Storage`）。
+// 它由运行档决定：生产 `OSW`，开发 `OSW Development`——两条环境各占一个命名空间，
+// 互不干扰。必须在任何一次 `safeStorage` 调用之前设好；`setName` 之后已有密钥
+// 仍按各自的名字存取，所以开发态反复重置数据目录不会碰到生产态的密文。
+// 历史上 `app.name` 曾随包名（`@osw/app`）漂移，旧命名空间的残留在钥匙串里，
+// 见 `docs/product/packaging.md` §5.1。
+app.setName(runtimeProfile.applicationName)
 
 process.env.OUTPUT = path.join(__dirname, '..')
 
@@ -380,7 +385,7 @@ function installApplicationMenu(): void {
     process.platform === 'darwin'
       ? Menu.buildFromTemplate([
           {
-            label: applicationDisplayName,
+            label: runtimeProfile.applicationName,
             submenu: [
               { role: 'about' },
               { type: 'separator' },
@@ -518,7 +523,7 @@ function focusExistingInstance(): void {
 async function bootstrap(): Promise<void> {
   await app.whenReady()
   app.setAboutPanelOptions({
-    applicationName: applicationDisplayName,
+    applicationName: runtimeProfile.applicationName,
     applicationVersion: app.getVersion(),
   })
   // 渲染层不再绘制窗口菜单；系统菜单栏只保留 macOS 必须存在的应用菜单。

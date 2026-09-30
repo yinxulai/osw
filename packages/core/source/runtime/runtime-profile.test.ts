@@ -6,9 +6,15 @@ describe('runtime profile', () => {
     const development = getRuntimeProfile('development')
     const production = getRuntimeProfile('production')
 
+    expect(development.applicationName).not.toBe(production.applicationName)
     expect(development.dataDirectoryName).not.toBe(production.dataDirectoryName)
     expect(development.proxyPort).not.toBe(production.proxyPort)
     expect(development.managementPort).not.toBe(production.managementPort)
+  })
+
+  it('names each environment with the OSW keychain namespace', () => {
+    expect(getRuntimeProfile('production').applicationName).toBe('OSW')
+    expect(getRuntimeProfile('development').applicationName).toBe('OSW Development')
   })
 
   it.each(['development', 'production'] as const)(
