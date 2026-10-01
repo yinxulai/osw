@@ -125,12 +125,14 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   const requestEvaluation: RewriteEvaluation = {
     appliedRuleIds: [],
     skippedRuleIds: [],
+    skippedRules: [],
     bodyBytesBefore: requestBody.length,
     bodyBytesAfter: requestBody.length,
   }
   const responseEvaluation: RewriteEvaluation = {
     appliedRuleIds: [],
     skippedRuleIds: [],
+    skippedRules: [],
     bodyBytesBefore: 0,
     bodyBytesAfter: 0,
   }

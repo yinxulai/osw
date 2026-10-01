@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FlaskConical, ListFilter, LoaderCircle, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
-import { requestRewriteRuleApi } from '@/api/models'
+import { requestRewriteRuleApi, type RequestRewriteTestResult } from '@/api/models'
 import { FormField } from '@/components/form-kit'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -20,14 +20,33 @@ import {
 } from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
 import { toApiRuleAction, type RequestRewriteRule, type RuleTestCase } from '../types'
-import type { RequestRewriteRule as ApiRequestRewriteRule } from '@common/schemas'
+import { bodyDeliveryShape, isStageRunnable } from '@common/delivery-shape'
+import { ENABLED_RULE_STAGES } from '@common/features'
+import type { UiCatalogKey } from '@common/i18n/catalogs'
+import type { RequestRewriteRule as ApiRequestRewriteRule, RuleStage, TransportKind } from '@common/schemas'
 
-interface RuleTestResult {
-  body: string
-  headers: Record<string, string | string[] | undefined>
-  appliedRuleIds: string[]
-  skippedRuleIds: string[]
-  scriptLogs: string[]
+/** 试跑结果直接沿用 API 的返回结构：字段只在一处声明，日后加 `skippedRules` 这类字段不会漏同步。 */
+type RuleTestResult = RequestRewriteTestResult
+
+/** 投递形态下拉的取值与展示 key。标签复用请求日志那套，避免同一根轴在两处各起一个名字。 */
+const TRANSPORT_OPTIONS: ReadonlyArray<{ value: TransportKind; labelKey: 'requestLogs.transport.http' | 'requestLogs.transport.httpStream' | 'requestLogs.transport.websocket' }> = [
+  { value: 'http', labelKey: 'requestLogs.transport.http' },
+  { value: 'http-stream', labelKey: 'requestLogs.transport.httpStream' },
+  { value: 'websocket', labelKey: 'requestLogs.transport.websocket' },
+]
+
+const SKIP_REASON_KEY = {
+  disabled: 'rules.tests.skipReason.disabled',
+  deleted: 'rules.tests.skipReason.deleted',
+  'no-stage-actions': 'rules.tests.skipReason.noStageActions',
+  'unmatched-protocol': 'rules.tests.skipReason.unmatchedProtocol',
+  'unsupported-shape': 'rules.tests.skipReason.unsupportedShape',
+} as const
+
+/** 阶段下拉的显示名。可选集合来自 `@common/features`，本组件不再自己决定开放哪些阶段。 */
+const STAGE_LABEL_KEY: Record<RuleStage, UiCatalogKey> = {
+  request: 'rules.stage.request',
+  response: 'rules.stage.response',
 }
 
 interface RuleEditorDialogProps {
@@ -145,9 +164,20 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                           <FormField label={t('rules.tests.stage')} htmlFor={`${testCase.id}-stage`}>
                             <Select value={testCase.stage} onValueChange={value => { const stage = value as RuleTestCase['stage']; const input = defaultTestInput(stage); updateTestCase(testCase.id, { stage, ...input }) }}>
                               <SelectTrigger id={`${testCase.id}-stage`} className="w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
+                              <SelectContent>{ENABLED_RULE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{t(STAGE_LABEL_KEY[stage])}</SelectItem>)}</SelectContent>
                             </Select>
                           </FormField>
+                          <FormField label={t('rules.tests.transport')} htmlFor={`${testCase.id}-transport`} hint={t('rules.tests.transport.hint')}>
+                            <Select value={testCase.transport} onValueChange={value => updateTestCase(testCase.id, { transport: value as TransportKind })}>
+                              <SelectTrigger id={`${testCase.id}-transport`} className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>{TRANSPORT_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{t(option.labelKey)}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </FormField>
+                          {(testCase.transport === 'websocket' || !isStageRunnable(testCase.stage, bodyDeliveryShape(testCase.transport))) && (
+                            <p className="rounded-md border border-module-border bg-inset px-2.5 py-2 system-2xs-regular text-text-warning" data-testid="rule-test-shape-warning">
+                              {testCase.transport === 'websocket' ? t('rules.tests.shapeNotRunnable.websocket') : t('rules.tests.shapeNotRunnable.response')}
+                            </p>
+                          )}
                           <div className="grid gap-3 sm:grid-cols-2">
                             <FormField label={t(testCase.stage === 'response' ? 'rules.tests.bodyLabel.response' : 'rules.tests.bodyLabel.request')} htmlFor={`${testCase.id}-body`}>
                               <Textarea id={`${testCase.id}-body`} value={testCase.body} onChange={event => updateTestCase(testCase.id, { body: event.target.value })} className="min-h-32 font-mono" />
@@ -162,6 +192,11 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                                 <span>{t('rules.tests.applied', { value: result.appliedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
                                 <span>{t('rules.tests.skipped', { value: result.skippedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
                               </div>
+                              {result.skippedRules.length > 0 && (
+                                <ul className="grid gap-0.5 text-text-tertiary" data-testid="rule-test-skip-reasons">
+                                  {result.skippedRules.map(item => <li key={item.ruleId}>· {t(SKIP_REASON_KEY[item.reason as keyof typeof SKIP_REASON_KEY] ?? 'rules.tests.skipReason.unsupportedShape')}</li>)}
+                                </ul>
+                              )}
                               <div className="grid gap-2 sm:grid-cols-2"><pre className="max-h-36 overflow-auto rounded-md bg-card p-2 font-mono">{JSON.stringify(result.headers, null, 2)}</pre><pre className="max-h-36 overflow-auto rounded-md bg-card p-2 font-mono">{result.body}</pre></div>
                               {result.scriptLogs.length > 0 && (
                                 <div className="grid gap-1">

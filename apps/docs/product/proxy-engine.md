@@ -105,21 +105,30 @@
 
 「两者是否一致」是**一次比较**，用完即弃：不需要任何常驻的合成量。
 ### 1.3 交付形态是一根派生的轴，不是一个散落的判断
-`TransportKind` 说的是**线上那一跳的字节长什么样**（§1.1，`websocket` 也在词表里）；出口、`downstream-head`、改写引擎真正关心的却是另一件事：**手里有没有一整份正文**。`websocket` 与 `http-stream` 在这件事上是同一档，`http` 是另一档。
-把这件事写成 `transport === 'http-stream'` 之类的判断，会让同一件事实在多个调用点各写一遍、写法巧合地等价；正确做法是**给它一个名字**：
+`TransportKind` 说的是**线上那一跳的字节长什么样**（§1.1，`websocket` 也在词表里）；出口、`downstream-head`、改写引擎真正关心的却是另一件事：**手里有没有一整份正文**。`websocket` 与 `http-stream` 在这件事上不是同一档，`http` 又是另一档：
+- `http`：一整份正文，能读能改（`whole`）；
+- `http-stream`：正文向下分帧、边收边发（`incremental`）；
+- `websocket`：双向多轮，压根没有「一份响应正文」（`duplex`）。
+把这件事写成 `transport === 'http-stream' ? 'incremental' : 'whole'` 会让同一件事实在多个调用点各写一遍，而且那个兜底分支会把 `websocket` 悄悄归成「整包」——真实入口对 WS 回 501，试跑却报「改造成功」。正确做法是**给它一个名字，并且穷尽**：
 ```ts
-/** 这次交付的正文是一整块发出去，还是逐块发出去。 */
-export type BodyDeliveryShape = 'whole' | 'incremental'
+/** 这次交付的正文是一整块发出去、逐块发出去，还是双向多轮。 */
+export type BodyDeliveryShape = 'whole' | 'incremental' | 'duplex'
+const SHAPE_BY_TRANSPORT: Record<TransportKind, BodyDeliveryShape> = {
+  'http': 'whole',
+  'http-stream': 'incremental',
+  'websocket': 'duplex',
+}
 export function bodyDeliveryShape(transport: TransportKind): BodyDeliveryShape {
-  return transport === 'http-stream' ? 'incremental' : 'whole'
+  return SHAPE_BY_TRANSPORT[transport]
 }
 ```
-它是**派生量**，不是新的独立事实：源头仍然只有客户端跳的 `transport`（§1.1），因此不引入第二根会漂移的轴。它出现在三个地方，各管一件具体的事：
+用 `Record<TransportKind, ...>` 而非兜底分支，是为了让**新增一档传输时必须显式表态**：漏了编译不过，而不是悄悄落到某个默认档。它是**派生量**，不是新的独立事实：源头仍然只有客户端跳的 `transport`（§1.1），因此不引入第二根会漂移的轴。它出现在三个地方，各管一件具体的事：
 | 位置 | 表达式 | 说明 |
 | --- | --- | --- |
 | 出口构造 | `createHttpResponseSink({ mode: BodyDeliveryShape })` | 边收边发还是攒齐再发；出口不再自己解释 `transport` |
 | 修改器静态能力 | `ModifierScope.shapes?: readonly BodyDeliveryShape[]` | `response-rewrite` 声明 `scope: { shapes: ['whole'] }`，内核在选候选时直接排除 |
-| 改写引擎 | `RequestRewriteContext.shape?: BodyDeliveryShape` | 响应阶段的字段改写只在 `whole` 下成立 |
+| 改写引擎 | `RequestRewriteContext.shape?: BodyDeliveryShape` | 响应阶段的字段改写只在 `whole` 下成立；`duplex` 直接报错 |
+「阶段 × 形态能不能跑」也收敛到同一处（`stageShapeSupport` / `isStageRunnable`，与形态定义同住 `@common/delivery-shape`），让内核与渲染层对同一份输入永远给同一个答案。响应阶段在 `incremental` 下是 `skipped`（今天不处理、逐条报 `unsupported-shape`），在 `duplex` 下是 `not-applicable`（用错了，立刻报错）——两个值刻意不合并，合并正是上面那个 bug 的来源。
 它与 `scope.transports` 的分工是**语义层级**：`transports` 说「这种传输形态」，`shapes` 说「这种交付形态」。需要按交付形态分流时用后者——写成前者要求每个读的人自己知道 `['http']` 就是「非流式」，而且新增一档传输（比如未来的 WS 同步回包）时要逐个回来改。
 #### 交付快照：`ClientDelivery`
 「客户端到底收到了什么」必须是**一份**自动成立的事实。此前它被拆成两个各自可取的东西——状态码与响应头分别读、正文另外算、完整与否由调用方自己传——三者之间没有任何机制保证一致，而响应头那一半是从宿主（`ServerResponse`）回读的：`writeHead(status, headers)` 把头交出去之后 `getHeaders()` 只剩空对象，头确实发出去了却读不回来，于是日志里「返回客户端的响应」只剩正文（这正是本节的起因）。现在：

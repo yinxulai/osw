@@ -7,7 +7,7 @@ import { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-regis
 import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import { pipeFrames } from '@server/proxy/kernel/frame-pipe'
 import { selectCandidates } from '@server/proxy/kernel/modifier-selection'
-import { createResponseModifiers } from './response-modifiers'
+import { createResponseModifiers, createResponseRewriteModifier } from './response-modifiers'
 
 const JSON_HEAD: HeadFrame = { kind: 'head', status: 200, headers: { 'content-type': 'application/json', 'content-length': '18' } }
 const SSE_HEAD: HeadFrame = { kind: 'head', status: 200, headers: { 'content-type': 'text/event-stream' } }
@@ -130,13 +130,16 @@ type RunInput = {
 async function run(input: RunInput) {
   const sink = createSink()
   const onRewriteEvaluated = vi.fn()
-  const modifiers = createResponseModifiers({
+  // 响应改写已从默认注册里摘下（受 `RESPONSE_REWRITE_ENABLED` 闸门控制），因此这里单独把它
+  // 装回管线——这组用例要证明的正是「实现仍然完好」，关闭的只是默认入口。
+  const options = {
     adapter: input.adapter,
     delivery: input.delivery,
     rules: input.rules ?? [],
     toolNames: new ToolNameRegistry(),
     onRewriteEvaluated,
-  })
+  }
+  const modifiers = [...createResponseModifiers(options), createResponseRewriteModifier(options)]
   const result = await pipeFrames({ frames: frameSource(input.frames), sink, context: input.context, modifiers })
   return { frames: sink.frames, result, onRewriteEvaluated }
 }
@@ -254,7 +257,7 @@ describe('downstream head modifier', () => {
 })
 
 describe('response rewrite modifier', () => {
-  it('按声明的交付形态被内核排除，不需要自己去判断', () => {
+  it('不随响应侧修改器默认注册：响应阶段被功能闸门关闭时，它一次都不会进候选列表', () => {
     const modifiers = createResponseModifiers({
       adapter: nativeAdapter(),
       delivery: DELIVERED,
@@ -263,13 +266,28 @@ describe('response rewrite modifier', () => {
       onRewriteEvaluated: vi.fn(),
     })
 
+    // 闸门关着（`RESPONSE_REWRITE_ENABLED === false`），响应改写不注册；形态判定
+    // （`scope.shapes: ['whole']`）也因此在真实链路里根本轮不到被问。此处断言的是**注册**
+    // 这一步就被拦住，而不是「注册了但运行时跳过」——后者会留下一条能被绕过的缝。
+    expect(modifiers.map(modifier => modifier.id)).toEqual(['downstream-head', 'protocol-conversion'])
+    // 修改器实现本身仍在（单独导出），下面的用例直接把它装回管线，证明关闭的是入口不是能力。
+    expect(typeof createResponseRewriteModifier).toBe('function')
+  })
+
+  it('按声明的交付形态被内核排除，不需要自己去判断', () => {
+    const modifiers = [createResponseRewriteModifier({
+      adapter: nativeAdapter(),
+      delivery: DELIVERED,
+      rules: [],
+      toolNames: new ToolNameRegistry(),
+      onRewriteEvaluated: vi.fn(),
+    })]
+
     const entire = selectCandidates(modifiers, createContext({ transport: 'http' }), 'frame').map(modifier => modifier.id)
     const incremental = selectCandidates(modifiers, createContext({ transport: 'http-stream' }), 'frame').map(modifier => modifier.id)
 
     expect(entire).toContain('response-rewrite')
     expect(incremental).not.toContain('response-rewrite')
-    // 被排除的只有「在增量传输下没有能做的事」的那一个，其余修改器照常参与。
-    expect(incremental).toEqual(expect.arrayContaining(['downstream-head', 'protocol-conversion']))
   })
 
   it('整包传输下改写整份 JSON 正文并更新 content-length', async () => {

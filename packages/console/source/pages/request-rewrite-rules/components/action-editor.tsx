@@ -1,16 +1,21 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FormField } from '@/components/form-kit'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import { PanelCodeEditor } from '@/pages/router/panel/panel-code-editor'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT } from '@common/schemas'
+import { ENABLED_RULE_STAGES } from '@common/features'
+import type { RuleStage } from '@common/schemas'
 import type { SchemaFieldDescriptor } from '@common/router/types'
+import { defaultRewriteScript, rewriteScriptSamplesForStage, shouldReseedScript } from '../rewrite-script-samples'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
 
 const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
@@ -18,6 +23,15 @@ const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
   append: 'rules.actions.operation.append',
   remove: 'rules.actions.operation.remove',
   replace: 'rules.actions.operation.replace',
+}
+
+/**
+ * 各阶段的显示名。下拉不再硬编码选项，而是遍历 `ENABLED_RULE_STAGES`——响应阶段是否可选
+ * 由 `@common/features` 那一个开关决定，两个下拉不必各写一遍判断、也不会各写漏一处。
+ */
+const STAGE_LABEL_KEY: Record<RuleStage, UiCatalogKey> = {
+  request: 'rules.stage.request',
+  response: 'rules.stage.response',
 }
 
 /** 值字段的标签与占位符按「是否替换」和「目标是 Header 还是 Body」分档。 */
@@ -156,15 +170,52 @@ export function ActionEditor(props: ActionEditorProps) {
             <div key={action.id} className="rounded-lg border border-module-border p-3">
               <div className="flex flex-wrap items-center gap-1.5 pb-3">
                 <span className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-inset font-mono system-2xs-medium text-text-tertiary">{index + 1}</span>
-                <Select value={action.stage} onValueChange={value => updateAction(action.id, { stage: value as 'request' | 'response' })}>
+                <Select value={action.stage} onValueChange={value => {
+                  const stage = value as 'request' | 'response'
+                  // 阶段改了，起始脚本也该跟着换：请求基线和响应基线读的是两个不一样的报文，
+                  // 把请求脚本留在响应阶段等于给用户一个跑不通的起点。是否替换由 `shouldReseedScript`
+                  // 判定——只有编辑器里还是「原阶段的默认基线」（用户没动过）时才换。
+                  updateAction(action.id, shouldReseedScript(action.code, action.stage, stage)
+                    ? { stage, code: defaultRewriteScript(stage) }
+                    : { stage })
+                }}>
                   <SelectTrigger aria-label={t('rules.actions.stageAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
+                  <SelectContent>{ENABLED_RULE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{t(STAGE_LABEL_KEY[stage])}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })}>
+                <Select value={action.target} onValueChange={value => {
+                  const target = value as RuleActionTarget
+                  // 切到脚本时填入起始脚本：空白编辑器对第一次用的人无从下手，示例就是那份「能直接跑通」的起点。
+                  if (target === 'script') updateAction(action.id, { target, operation: 'set', value: '', code: action.code || defaultRewriteScript(action.stage), timeoutMilliseconds: action.timeoutMilliseconds ?? REWRITE_SCRIPT_TIMEOUT_DEFAULT })
+                  else updateAction(action.id, { target, operation: 'set', value: '' })
+                }}>
                   <SelectTrigger aria-label={t('rules.actions.targetAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem><SelectItem value="script">{t('rules.actions.target.script')}</SelectItem></SelectContent>
                 </Select>
-                {!isScript && (
+                {/*
+                 * 脚本动作没有「操作」（设置/追加/删除/替换），那一格正好是放「插入示例」的地方：
+                 * 对脚本来说，「从哪段代码起手」就是它与其它动作对应的那个第一层选择。把它并进这一行，
+                 * 与删除、替换、设置这些并列，而不是单独占一行压住代码编辑器。
+                 */}
+                {isScript ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-2.5 system-xs-medium')}>
+                      <Sparkles aria-hidden />
+                      {t('rules.actions.scriptSampleLabel')}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" sideOffset={6} className="w-80 min-w-80">
+                      {rewriteScriptSamplesForStage(action.stage).map(sample => (
+                        <DropdownMenuItem
+                          key={sample.id}
+                          onSelect={() => updateAction(action.id, { code: sample.code })}
+                          className="flex h-auto flex-col items-stretch gap-0.5 rounded-lg px-2 py-1.5 focus:bg-state-base-hover"
+                        >
+                          <span className="system-xs-medium text-text-primary">{t(sample.nameKey)}</span>
+                          <span className="system-2xs-regular text-text-tertiary">{t(sample.descriptionKey)}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
                   <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
                     <SelectTrigger aria-label={t('rules.actions.operationAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                     <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{t(OPERATION_LABEL_KEY[operation])}</SelectItem>)}</SelectContent>

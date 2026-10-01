@@ -1,5 +1,4 @@
 import type { OutgoingHttpHeaders } from 'node:http'
-import type { TransportKind } from '@common/schemas'
 
 /**
  * 一次尝试的交付决策。
@@ -22,22 +21,19 @@ export function createDeliveryDecisionRef(): DeliveryDecisionRef {
 }
 
 /**
- * 这次交付的正文是一整块发出去，还是逐块发出去。
+ * 正文交付形态、形态判定与「阶段×形态」可行性，全部住在 `@common/delivery-shape`。
  *
- * 它是 `TransportKind` 的函数，也是**唯一**同时被响应出口与响应修改器读到的一根轴：
- * 出口按它选「边收边发」还是「攒完再发」；响应修改器按它回答「手里有没有一整份正文可改」。
+ * 这里只做转出。它必须与 `@common` 是**同一份定义**，而不是「这边再判一次」：
+ * 出口（`http-response-sink.ts`）、执行器、修改器筛选、改写引擎与试跑路由读的都是这一根轴，
+ * 只要有一处自己写 `transport === 'http-stream'`，`websocket` 落地那天它们就会各说各的，
+ * 而分叉的后果是 `content-length` 与实际字节数不符，客户端以连接层错误直接断开。
  *
- * 之所以要给它一个名字，是因为下游有两处**必须**得到同一个答案，而它们此前各说各的：
- * 出口判 `transport === 'http-stream'`，改写规则声明 `scope.transports: ['http']`。
- * 两式在今天的取值域里恰好等价，那是巧合——一旦多一种形态（或 `websocket` 落地），
- * 两处就会分叉；而分叉的后果是 `content-length` 与实际写出的字节数不符，
- * 客户端以连接层错误直接断开（见 `response-modifiers.ts` 的 `downstream-head`）。
+ * 放在 `@common` 而非这里的理由很实在：试跑路由与渲染层要拿同一个答案来回答「这份正文
+ * 能不能按路径改」，两层都得够得着。
  */
-export type BodyDeliveryShape = 'whole' | 'incremental'
+export type { BodyDeliveryShape, StageShapeSupport } from '@common/delivery-shape'
+export { bodyDeliveryShape, isStageRunnable, stageShapeSupport } from '@common/delivery-shape'
 
-export function bodyDeliveryShape(transport: TransportKind): BodyDeliveryShape {
-  return transport === 'http-stream' ? 'incremental' : 'whole'
-}
 
 /**
  * 客户端视角的响应头事实：状态码 + **真正交出去**的那一份响应头。

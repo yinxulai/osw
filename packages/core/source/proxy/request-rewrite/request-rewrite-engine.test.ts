@@ -78,7 +78,7 @@ describe('applyRequestRewriteRules', () => {
       jsonAction({ type: 'body-set', path: '$.response', value: 'yes' }, 'response'),
     ])
     const requestResult = applyRequestRewriteRules(body({}), {}, [mixed], context('request'))
-    const responseResult = applyRequestRewriteRules(body({}), {}, [mixed], context('response'))
+    const responseResult = applyRequestRewriteRules(body({}), {}, [mixed], context('response', { shape: 'whole' }))
     expect(requestResult.headers['X-Request']).toBe('yes')
     expect(parsed(requestResult)).toEqual({})
     expect(parsed(responseResult)).toEqual({ response: 'yes' })
@@ -153,7 +153,7 @@ const scriptAction = (code: string, overrides: ScriptActionOverrides = {}): Requ
   ({ type: 'script', stage: 'request', code, timeoutMilliseconds: 1000, ...overrides })
 
 describe('applyRequestRewriteRules - script action', () => {
-  it('把脚本交回的 body 与 headers 合并回报文', () => {
+  it('把脚本交回的完整 body 与 headers 整体替换回报文', () => {
     const result = applyRequestRewriteRules(
       body({ temperature: 1, marker: 'apply-strict' }),
       { 'X-Old': 'kept' },
@@ -166,7 +166,7 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(result.scriptLogs).toEqual([])
   })
 
-  it('只交回 body 时 headers 保持原样，交回空值则整条不改动', () => {
+  it('只交回 body 时 headers 保持原样，什么都不交回则整条不改动', () => {
     const onlyBody = applyRequestRewriteRules(body({ a: 1 }), { 'X-Keep': 'yes' }, [rule([scriptAction('return { body: { a: 2 } }')])], context())
     expect(parsed(onlyBody)).toEqual({ a: 2 })
     expect(onlyBody.headers['X-Keep']).toBe('yes')
@@ -175,6 +175,14 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(parsed(untouched)).toEqual({ a: 1 })
     expect(untouched.headers['X-Keep']).toBe('yes')
     expect(untouched.scriptLogs).toEqual(['[log] no change'])
+  })
+
+  it('交回的 body 是完整内容：没写进去的字段即删除', () => {
+    const result = applyRequestRewriteRules(body({ keep: 1, drop: 2, nested: { a: 1, b: 2 } }), {}, [rule([
+      scriptAction('return { body: { keep: body.keep } }'),
+    ])], context())
+    // 顶层与嵌套里没交回的键一并消失——这正是逐键合并做不到的「删字段」。
+    expect(parsed(result)).toEqual({ keep: 1 })
   })
 
   it('正文不是 JSON 时把 null 交给脚本，而不是直接报错', () => {
@@ -213,11 +221,116 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(result.scriptLogs).toEqual([])
   })
 
+  it('跳过原因带上「为什么没生效」：每条被跳过的规则都有具名原因', () => {
+    const disabled = rule([requestHeader('header-set')], { id: 'disabled', enabled: false })
+    const deleted = rule([requestHeader('header-set')], { id: 'deleted', deletedTime: 10 })
+    const unmatched = rule([requestHeader('header-set')], { id: 'unmatched', match: { clientProtocols: ['anthropic-messages'], upstreamProtocols: [] } })
+    const responseOnly = rule([jsonAction({ type: 'body-set', path: '$.x', value: 1 }, 'response')], { id: 'response-only' })
+    const result = applyRequestRewriteRules(body({}), {}, [disabled, deleted, unmatched, responseOnly], context('request'))
+    expect(result.skippedRules).toEqual([
+      { ruleId: 'disabled', reason: 'disabled' },
+      { ruleId: 'deleted', reason: 'deleted' },
+      { ruleId: 'unmatched', reason: 'unmatched-protocol' },
+      { ruleId: 'response-only', reason: 'no-stage-actions' },
+    ])
+    // 扁平视图与结构化视图永远同源，不能一处有一套。
+    expect(result.skippedRuleIds).toEqual(result.skippedRules.map(item => item.ruleId))
+  })
+
+  it('流式响应的跳过原因为 unsupported-shape，而不是笼统的「跳过」', () => {
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response', { shape: 'incremental' }))
+    expect(result.skippedRules).toEqual([{ ruleId: 'rule-test', reason: 'unsupported-shape' }])
+  })
+
+  it('WebSocket（duplex）在响应阶段不适用：直接报错而不是静默跳过', () => {
+    // 双向多轮没有「一份响应正文」。能走到这里说明调用方把形态传错了——静默跳过会让试跑
+    // 报「改造成功了 0 条」而真实入口回 501，两处对同一份输入给出两个答案。
+    expect(() => applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response', { shape: 'duplex' })))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('响应阶段必须显式给出形态：缺省即抛，不允许悄悄按整包处理', () => {
+    expect(() => applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response')))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('请求阶段无需形态：形态是响应交付才有的概念', () => {
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'new' })])], context('request'))
+    expect(result.appliedRuleIds).toEqual(['rule-test'])
+  })
+
   it('脚本能通过 get() 读取字段并按内容决定是否改动', () => {
     const code = 'if (get("marker") === "apply-strict") return { body: { ...body, temperature: 0 } }'
     const matched = applyRequestRewriteRules(body({ marker: 'apply-strict', temperature: 1 }), {}, [rule([scriptAction(code)])], context())
     expect(parsed(matched)).toEqual({ marker: 'apply-strict', temperature: 0 })
     const missed = applyRequestRewriteRules(body({ temperature: 1 }), {}, [rule([scriptAction(code)])], context())
     expect(parsed(missed)).toEqual({ temperature: 1 })
+  })
+
+  it('脚本与结构化动作按列表顺序混合执行，后者看到前者的结果', () => {
+    const result = applyRequestRewriteRules(body({ count: 1 }), {}, [rule([
+      scriptAction('return { body: { ...body, count: body.count + 10 } }'),
+      jsonAction({ type: 'body-set', path: '$.count', value: 100 }),
+      scriptAction('return { body: { ...body, count: body.count + 1 } }'),
+    ])], context())
+    expect(parsed(result)).toEqual({ count: 101 })
+    expect(result.scriptLogs).toEqual([])
+  })
+
+  it('多条规则的脚本日志按执行顺序累加', () => {
+    const first = rule([scriptAction('console.log("first")')], { id: 'first' })
+    const second = rule([scriptAction('console.warn("second")', { stage: 'request' })], { id: 'second' })
+    const result = applyRequestRewriteRules(body({}), {}, [first, second], context())
+    expect(result.scriptLogs).toEqual(['[log] first', '[warn] second'])
+    expect(result.appliedRuleIds).toEqual(['first', 'second'])
+  })
+
+  it('脚本把 Header 置为 undefined 相当于删除该头，null 归一成空串', () => {
+    const result = applyRequestRewriteRules(body({}), { 'X-Drop': 'value', 'X-Blank': 'value', 'X-Keep': 'yes' }, [rule([
+      scriptAction('return { headers: { "X-Blank": null, "X-Keep": headers["X-Keep"] } }'),
+    ])], context())
+    // 删头不必再写 `undefined`：没交回的键直接消失。
+    expect(result.headers['X-Drop']).toBeUndefined()
+    expect(result.headers['X-Blank']).toBe('')
+    expect(result.headers['X-Keep']).toBe('yes')
+  })
+
+  it('脚本交回的 Header 是完整集合：整体替换、不区分大小写对齐', () => {
+    const result = applyRequestRewriteRules(body({}), { 'X-Test': 'old', 'X-Drop': 'gone' }, [rule([
+      scriptAction('return { headers: { "x-test": "new" } }'),
+    ])], context())
+    expect(result.headers['x-test']).toBe('new')
+    expect(result.headers['X-Test']).toBeUndefined()
+    expect(result.headers['X-Drop']).toBeUndefined()
+    expect(Object.keys(result.headers).filter(key => key.toLowerCase() === 'x-test')).toHaveLength(1)
+  })
+
+  it('响应阶段脚本在完整正文上执行，并更新 content-length', () => {
+    const result = applyRequestRewriteRules(body({ output: 'old' }), {}, [rule([
+      scriptAction('return { body: { output: body.output.toUpperCase() } }', { stage: 'response' }),
+    ])], context('response', { shape: 'whole' }))
+    expect(parsed(result)).toEqual({ output: 'OLD' })
+    expect(result.headers['content-length']).toBe(String(result.body.length))
+  })
+
+  it('脚本不得改动投递形态字段，但可以只改 headers 时原样保留 stream', () => {
+    const headersOnly = applyRequestRewriteRules(body({ stream: false }), {}, [rule([
+      scriptAction('return { headers: { "x-added": "1" } }'),
+    ])], context())
+    expect(parsed(headersOnly)).toEqual({ stream: false })
+    expect(headersOnly.headers['x-added']).toBe('1')
+  })
+
+  it('脚本与结构化动作共用受保护 Header 校验：脚本改动即失败', () => {
+    expect(() => applyRequestRewriteRules(body({}), {}, [rule([
+      scriptAction('return { headers: { "content-length": "0" } }'),
+    ])], context())).toThrow(/protected header/i)
+  })
+
+  it('脚本返回非法结构（数组 / 数字）时失败', () => {
+    expect(() => applyRequestRewriteRules(body({}), {}, [rule([scriptAction('return [1, 2]')])], context()))
+      .toThrow(RequestRewriteError)
+    expect(() => applyRequestRewriteRules(body({}), {}, [rule([scriptAction('return 7')])], context()))
+      .toThrow(RequestRewriteError)
   })
 })

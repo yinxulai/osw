@@ -10,13 +10,23 @@ type ProviderModelCreateInput = { providerId: string; modelName: string; logical
 type RequestRewriteRuleBindingInput = { ruleId: string; priority: number; enabled: boolean }
 type SchedulingPolicyInput = { logicalModelId: string; providerModelId: string; strategy?: string; priority?: number; weight?: number; enabled?: boolean }
 
+/** 规则试跑的结果。`skippedRules` 带上每条被跳过规则的原因（见 `@osw/core` 的 `RewriteSkipReason`）。 */
+export type RequestRewriteTestResult = {
+  body: string
+  headers: Record<string, string | string[] | undefined>
+  appliedRuleIds: string[]
+  skippedRuleIds: string[]
+  skippedRules: Array<{ ruleId: string; reason: string }>
+  scriptLogs: string[]
+}
+
 export const requestRewriteRuleApi = {
   list: () => request<RequestRewriteRule[]>('/request-rewrite-rule/list'),
   get: (id: string) => request<RequestRewriteRule>('/request-rewrite-rule/get', { id }),
   create: (data: Omit<RequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'>) => request<RequestRewriteRule>('/request-rewrite-rule/create', data),
   update: (id: string, updates: Partial<RequestRewriteRule>) => request<RequestRewriteRule>('/request-rewrite-rule/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/request-rewrite-rule/delete', { id }),
-  test: (rule: RequestRewriteRule, testCase: RequestRewriteRuleTestCase) => request<{ body: string; headers: Record<string, string | string[] | undefined>; appliedRuleIds: string[]; skippedRuleIds: string[]; scriptLogs: string[] }>('/request-rewrite-rule/test', { rule, testCase }),
+  test: (rule: RequestRewriteRule, testCase: RequestRewriteRuleTestCase) => request<RequestRewriteTestResult>('/request-rewrite-rule/test', { rule, testCase }),
 }
 
 export const logicalModelApi = {

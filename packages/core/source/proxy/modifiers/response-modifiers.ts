@@ -1,6 +1,7 @@
 import type { DeliveryDecisionRef, Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
 import { bodyDeliveryShape } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
+import { RESPONSE_REWRITE_ENABLED } from '@common/features'
 import type { ProtocolAdapter, ProtocolConversionAdapter, StreamConverter } from '@server/proxy/protocols/shared/types'
 import type { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
 import { isEventStreamResponse } from '@server/proxy/adapters/http-response-sink'
@@ -32,13 +33,18 @@ export interface ResponseModifierOptions {
  *
  * 改写会改响应头，因此它必须把头部帧一起扣住，直到正文就绪再一并交出——否则出口
  * 已经按旧头开始写了。
+ *
+ * **响应改写整段受 `RESPONSE_REWRITE_ENABLED` 闸门控制**：关闭时它根本不进候选列表，
+ * 于是响应阶段的规则一条都不会跑。这不是「运行时忘判」，而是「压根没注册」——
+ * 前者会留下一条能被别的路径绕过的缝，后者没有缝。修改器实现原样保留，翻回开关即恢复。
  */
 export function createResponseModifiers(options: ResponseModifierOptions): Modifier[] {
-  return [
+  const modifiers: Modifier[] = [
     createDownstreamHeadModifier(options),
     createConversionModifier(options),
-    createResponseRewriteModifier(options),
   ]
+  if (RESPONSE_REWRITE_ENABLED) modifiers.push(createResponseRewriteModifier(options))
+  return modifiers
 }
 
 function createDownstreamHeadModifier(options: ResponseModifierOptions): Modifier {
@@ -132,7 +138,13 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
   }
 }
 
-function createResponseRewriteModifier(options: ResponseModifierOptions): Modifier {
+/**
+ * 响应改写修改器本体。它**不**由 {@link createResponseModifiers} 无条件注册——注册与否
+ * 取决于 `RESPONSE_REWRITE_ENABLED`（见 `@common/features`），响应阶段关闭时它根本不进
+ * 候选列表。因此这个工厂是单独导出的：实现与闸门分开，关闭时实现仍在、可被单测直接覆盖，
+ * 重新开放只是让 `createResponseModifiers` 把它加回去。
+ */
+export function createResponseRewriteModifier(options: ResponseModifierOptions): Modifier {
   let head: HeadFrame | null = null
   let body = ''
   return {
@@ -141,10 +153,15 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
     direction: 'response',
     frameMode: 'frame',
     /**
-     * 增量交付的响应里规则**没有能做的事**：出口拿到的是一段段 SSE 文本，而规则动作是在
-     * 一整份 JSON 上按路径取值（见 `request-rewrite-engine.ts` 的 `applyBody`）。
+     * 只声明 `whole`：增量交付的响应里规则**没有能做的事**——出口拿到的是一段段 SSE 文本，
+     * 而规则动作是在一整份 JSON 上按路径取值（见 `request-rewrite-engine.ts` 的 `applyBody`）。
      * 这是「这种形态下它没有职责」的静态陈述，在头帧之前就能算出来，因此写在 `scope` 上
      * 交给内核代筛，而不是让它在 `match` 里自己读一根轴。
+     *
+     * 它同时也把 `duplex`（WebSocket）排除在外——但那是另一回事：WS 双向多轮根本没有
+     * 「一份响应正文」，这里筛掉它不代表改写引擎会接受它（引擎对 `duplex` 直接抛错，
+     * 见 `resolveStageShape`）。列表**只含 `whole`** 是刻意的：将来流式事件级改写真上了，
+     * 要在这里显式加上 `incremental`，而不是靠一个「非 whole 都排除」的兜底。
      *
      * 它限制的是**交付形态**而不是「客户端跳的 transport」：同一个事实，取后者只是
      * 在当前取值域下恰好同义（见 `BodyDeliveryShape`）。
@@ -176,6 +193,7 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,
         skippedRuleIds: modified.skippedRuleIds,
+        skippedRules: modified.skippedRules,
         bodyBytesBefore: body.length,
         bodyBytesAfter: modified.body.length,
       })

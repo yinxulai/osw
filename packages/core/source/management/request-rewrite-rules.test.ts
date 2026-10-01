@@ -7,7 +7,8 @@ import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createProviderModelRoute } from '@server/database/model-store'
-import { createRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
+import { createRequestRewriteRule, getRequestRewriteRule, listRequestRewriteRules } from '@server/database/request-rewrite-rule-store'
+import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
 import { requestRewriteRuleRoutes } from './routes/relations/request-rewrite-rules'
 import { mockResponse } from './test-support'
 
@@ -116,6 +117,77 @@ describe('request rewrite rule routes', () => {
   })
 
   /**
+   * 试跑要能把脚本的日志带回界面。`/test` 把引擎结果摊平后回给前端（body 转成字符串），
+   * `scriptLogs` 是新增字段，最怕在摊平时被顺手丢掉——那样脚本编辑器里永远看不到日志。
+   */
+  it('surfaces script logs and applied body from the test endpoint', async () => {
+    const testRes = mockResponse()
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', testRes, {
+      rule: {
+        id: 'rule_script',
+        name: 'scripted body',
+        description: '',
+        enabled: true,
+        global: true,
+        source: 'user',
+        match: { clientProtocols: ['openai-completions'], upstreamProtocols: [] },
+        schemaVersion: 1,
+        actions: [
+          { type: 'script', stage: 'request', code: 'console.log("seen", body.count); return { body: { ...body, count: body.count + 1 } }', timeoutMilliseconds: 200 },
+        ],
+        testCases: [],
+        createdTime: 0,
+        updatedTime: 0,
+        deletedTime: null,
+      },
+      testCase: {
+        stage: 'request',
+        body: '{"count":1}',
+        headers: '{"authorization":"Bearer token"}',
+        clientProtocol: 'openai-completions',
+        upstreamProtocol: 'openai-completions',
+        transport: 'http',
+      },
+    })
+    const data = responseData(testRes).data as { body: string, scriptLogs: string[], appliedRuleIds: string[] }
+    expect(JSON.parse(data.body)).toEqual({ count: 2 })
+    expect(data.scriptLogs).toEqual(['[log] seen 1'])
+    expect(data.appliedRuleIds).toEqual(['rule_script'])
+  })
+
+  it('reports a failing script as an error instead of a partial result', async () => {
+    const testRes = mockResponse()
+    // 脚本抛错时引擎抛 `RequestRewriteError`，路由不吞掉它：试跑请求以失败收场，
+    // 而不是 200 带一份脏数据回界面。
+    await expect(requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', testRes, {
+      rule: {
+        id: 'rule_boom',
+        name: 'throwing script',
+        description: '',
+        enabled: true,
+        global: true,
+        source: 'user',
+        match: { clientProtocols: ['openai-completions'], upstreamProtocols: [] },
+        schemaVersion: 1,
+        actions: [{ type: 'script', stage: 'request', code: 'throw new Error("boom")' }],
+        testCases: [],
+        createdTime: 0,
+        updatedTime: 0,
+        deletedTime: null,
+      },
+      testCase: {
+        stage: 'request',
+        body: '{"count":1}',
+        headers: '{}',
+        clientProtocol: 'openai-completions',
+        upstreamProtocol: 'openai-completions',
+        transport: 'http',
+      },
+    })).rejects.toThrow(RequestRewriteError)
+    expect(vi.mocked(testRes.end)).not.toHaveBeenCalled()
+  })
+
+  /**
    * 来源的映射只有一处，但它决定了整个属性有没有信息量：库里三档、上报两档，只有内建算
    * `builtin`。界面从模板起手时写的就是 `builtin`（`rule-presets.ts`），这里盯住这条通路。
    */
@@ -163,5 +235,65 @@ describe('request rewrite rule routes', () => {
     const listRes = mockResponse()
     await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/bindings', listRes, { providerModelId: providerModel.id })
     expect(responseData(listRes).data).toEqual([expect.objectContaining({ ruleId: rule.id })])
+  })
+
+  /**
+   * 响应阶段整段被功能闸门关闭（`RESPONSE_REWRITE_ENABLED`，见 `@common/features`）。
+   *
+   * 界面藏起「响应」选项只是第一道；真正要防的是脚本、旧数据或第三方客户端直接把带响应
+   * 阶段的请求打进来——只靠界面藏，等于把闸门交给调用方自觉。这三条用例盯住写入（create /
+   * update）与试跑（test）三个入口都拒绝了，并且回的是**具名**错误码而不是笼统的 400：
+   * 界面要能据此本地化出一句可照做的理由。
+   */
+  describe('response stage is closed behind the feature flag', () => {
+    it('rejects a create that carries a response-stage action', async () => {
+      const res = mockResponse()
+      await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/create', res, {
+        name: 'response rule',
+        description: '',
+        enabled: true,
+        scope: 'model',
+        schemaVersion: 1,
+        source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] },
+        actions: [{ type: 'body-set', stage: 'response', path: '$.text', value: 'x' }],
+        testCases: [],
+      })
+      expect(responseData(res)).toMatchObject({ success: false, errorCode: 'RESPONSE_REWRITE_DISABLED' })
+      // 被拒绝的写入一个字节都不该落库。
+      expect(await listRequestRewriteRules()).toHaveLength(0)
+    })
+
+    it('rejects an update that switches an action to the response stage', async () => {
+      const rule = await createRequestRewriteRule({
+        name: 'request rule', description: '', enabled: true, scope: 'model', schemaVersion: 1, source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] },
+        actions: [{ type: 'header-set', stage: 'request', name: 'x-a', value: 'a' }],
+        testCases: [],
+      })
+      const res = mockResponse()
+      await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/update', res, {
+        id: rule.id,
+        actions: [{ type: 'body-set', stage: 'response', path: '$.text', value: 'x' }],
+      })
+      expect(responseData(res)).toMatchObject({ success: false, errorCode: 'RESPONSE_REWRITE_DISABLED' })
+      // 原规则的动作没有被改写——拒绝必须发生在落库之前。
+      const stored = await getRequestRewriteRule(rule.id)
+      expect(stored?.actions).toEqual([{ type: 'header-set', stage: 'request', name: 'x-a', value: 'a' }])
+    })
+
+    it('rejects a response-stage test case', async () => {
+      const res = mockResponse()
+      await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', res, {
+        rule: {
+          id: 'rule_response_test', name: 'x', description: '', enabled: true, global: true, source: 'user',
+          match: { clientProtocols: [], upstreamProtocols: [] }, schemaVersion: 1,
+          actions: [{ type: 'body-set', stage: 'response', path: '$.text', value: 'x' }],
+          testCases: [], createdTime: 0, updatedTime: 0, deletedTime: null,
+        },
+        testCase: { stage: 'response', body: '{"text":"original"}', headers: '{}', clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', transport: 'http' },
+      })
+      expect(responseData(res)).toMatchObject({ success: false, errorCode: 'RESPONSE_REWRITE_DISABLED' })
+    })
   })
 })

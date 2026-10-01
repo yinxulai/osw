@@ -1,5 +1,6 @@
 import type { Protocol, RequestRewriteRule, RequestRewriteRuleAction } from '@common/schemas'
 import type { BodyDeliveryShape } from '@server/proxy/contracts'
+import { stageShapeSupport } from '@server/proxy/contracts'
 import { executeRewriteScript } from './rewrite-script-sandbox'
 
 const PROTECTED_HEADERS = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding'])
@@ -19,20 +20,47 @@ export interface RequestRewriteContext {
   clientProtocol: Protocol
   upstreamProtocol: Protocol
   /**
-   * 响应阶段这一次交付的正文形态（{@link BodyDeliveryShape}）。只有响应阶段会用到。
+   * 这一次交付的正文形态（{@link BodyDeliveryShape}）。请求阶段已是整份，无需传；响应阶段必须传。
    *
-   * 取的是**交付形态**而不是「客户端跳的 transport」：规则能不能动手，取决于手里这堆字节
-   * 是不是一整份（见 `bodyDeliveryShape`）。两者今天恰好同义，但这里问的是前者，
-   * 因此不能写成一个只在这套取值域下成立的等价式。
+   * 拿不到形态就不能回答「这份正文能不能改」——而那个问题的答案有两种失败，后果完全不同：
+   * 流式是「今天没有能做的事」（逐条跳过并报原因），WebSocket 是「这个阶段压根没有一份
+   * 正文可改」（调用方用错了，必须立刻报错，见 {@link RequestRewriteResult.skippedRules}）。
+   * 因此这里不做默认值：**响应阶段必须由调用方明确给出形态**，缺省即抛。
    */
   shape?: BodyDeliveryShape
+}
+
+/** 一条规则被跳过的**原因**。它要能被展示、被断言，因此是枚举而不是一句自由文本。 */
+export type RewriteSkipReason =
+  /** 规则被停用。 */
+  | 'disabled'
+  /** 规则已被删除。 */
+  | 'deleted'
+  /** 规则在**这个阶段**没有任何动作（动作分阶段，请求规则不该在响应阶段生效）。 */
+  | 'no-stage-actions'
+  /** 规则声明的协议匹配不中（`match.clientProtocols` / `match.upstreamProtocols`）。 */
+  | 'unmatched-protocol'
+  /** 这种交付形态下，该阶段没有它能做的事（目前只有响应阶段的流式）。 */
+  | 'unsupported-shape'
+
+export interface RewriteSkippedRule {
+  ruleId: string
+  reason: RewriteSkipReason
 }
 
 export interface RequestRewriteResult {
   body: Buffer
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
+  /**
+   * 被跳过的规则 id。
+   *
+   * 保留这个扁平数组是为了兼容既有调用方与断言；它是 {@link skippedRules} 的派生视图，
+   * 两者永远同源。
+   */
   skippedRuleIds: string[]
+  /** 与 `skippedRuleIds` 一一对应，但带上原因。诊断与试跑解释都读它。 */
+  skippedRules: RewriteSkippedRule[]
   /** 本次执行里所有脚本动作回传的日志（`console.log / warn / error`），供规则试跑展示。 */
   scriptLogs: string[]
 }
@@ -50,13 +78,18 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
   let currentBody = Buffer.from(body)
   const currentHeaders = { ...headers }
   const appliedRuleIds: string[] = []
-  const skippedRuleIds: string[] = []
+  const skippedRules: RewriteSkippedRule[] = []
   const scriptLogs: string[] = []
+  // 先判定「阶段×形态」，再逐条跑规则。这个判断与结果无关（只取决于阶段与形态），
+  // 因此放在循环外算一次：形态如果根本不适用，那是调用方用错了，一条都不该跑。
+  const support = resolveStageShape(context)
   for (const rule of rules) {
-    if (!rule.enabled || rule.deletedTime !== null) { skippedRuleIds.push(rule.id); continue }
+    if (!rule.enabled) { skippedRules.push({ ruleId: rule.id, reason: 'disabled' }); continue }
+    if (rule.deletedTime !== null) { skippedRules.push({ ruleId: rule.id, reason: 'deleted' }); continue }
     const actions = rule.actions.filter(action => action.stage === context.stage)
-    if (actions.length === 0 || !matches(rule, context)) { skippedRuleIds.push(rule.id); continue }
-    if (context.stage === 'response' && context.shape === 'incremental') { skippedRuleIds.push(rule.id); continue }
+    if (actions.length === 0) { skippedRules.push({ ruleId: rule.id, reason: 'no-stage-actions' }); continue }
+    if (!matches(rule, context)) { skippedRules.push({ ruleId: rule.id, reason: 'unmatched-protocol' }); continue }
+    if (support === 'skipped') { skippedRules.push({ ruleId: rule.id, reason: 'unsupported-shape' }); continue }
     if (actions.length > MAX_ACTIONS) throw new RequestRewriteError('Too many rule actions', rule.id)
     for (const action of actions) {
       if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as HeaderAction, rule.id)
@@ -66,7 +99,25 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
     appliedRuleIds.push(rule.id)
   }
   if (currentBody.length > 0) currentHeaders['content-length'] = String(currentBody.length)
-  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds, scriptLogs }
+  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds: skippedRules.map(item => item.ruleId), skippedRules, scriptLogs }
+}
+
+/**
+ * 判定这次调用的「阶段×形态」支持度，并在**不适用**时立刻报错。
+ *
+ * 三态里的两种失败走两条路，是因为它们对用户的意义不同（见 `StageShapeSupport`）：
+ * - `skipped`：正常返回，逐条规则标 `unsupported-shape`，试跑界面据此提示「这种形态下这条
+ *   规则没有能做的事」，真实链路也正是这么做的（响应改写修改器的 `scope` 已经把增量交付筛掉）。
+ * - `not-applicable`：抛错。WebSocket 是双向多轮，没有「一份响应正文」这个概念，能走到这里
+ *   说明调用方把形态传错了——静默跳过只会让试跑说「改造成功了多少条」，而真实入口对同一个
+ *   请求回的是 501，两处对同一份输入给出两个答案。
+ */
+function resolveStageShape(context: RequestRewriteContext): 'supported' | 'skipped' {
+  if (context.stage === 'request') return 'supported'
+  if (context.shape === undefined) throw new RequestRewriteError('Response-stage rewriting requires an explicit delivery shape')
+  const support = stageShapeSupport('response', context.shape)
+  if (support === 'not-applicable') throw new RequestRewriteError(`Response-stage rewriting does not apply to delivery shape: ${context.shape}`)
+  return support
 }
 
 function matches(rule: RequestRewriteRule, context: RequestRewriteContext): boolean {
@@ -89,14 +140,15 @@ function applyHeader(headers: Record<string, string | string[] | undefined>, act
 }
 
 /**
- * 脚本动作：在沙箱里跑用户代码，把交回的 `{ body, headers }` 合并回当前报文。
+ * 脚本动作：在沙箱里跑用户代码，把交回的 `{ body, headers }` **整体替换**回报文。
  *
  * 与结构化 body 动作有一处刻意的差异：body 解析失败时**不报错**，而是把 `null` 交给脚本
  * （`ctx.body === null` 由脚本自行决定是否 `throw`）。因为脚本要表达的正是「先看内容再决定
  * 怎么改」，把「是不是 JSON」这个判断也交给它，比引擎替它先拒绝更贴合它的用途。
  *
- * 交回对象的合并语义见 {@link mergeScriptHeaders} 与 `rewrite-script-sandbox.ts` 的
- * `normalizeOutcome`：`undefined` 表示该项不改动，脚本整体失败则阻断当前 attempt。
+ * 交回对象的替换语义见 {@link replaceScriptHeaders} 与 `rewrite-script-sandbox.ts` 的
+ * `normalizeOutcome`：**交回谁就整体替换谁**（省略的字段 / 键即删除），两个键都没交回才表示
+ * 整条不改动；脚本整体失败则阻断当前 attempt。
  */
 function applyScript(body: Buffer, headers: Record<string, string | string[] | undefined>, action: ScriptAction, rule: RequestRewriteRule, context: RequestRewriteContext, scriptLogs: string[]): Buffer {
   const parsedBody = parseBodyLenient(body)
@@ -110,7 +162,10 @@ function applyScript(body: Buffer, headers: Record<string, string | string[] | u
   })
   scriptLogs.push(...result.logs)
   if (!result.success) throw new RequestRewriteError(result.error ?? 'Script execution failed', rule.id)
-  if (result.headers !== undefined) mergeScriptHeaders(headers, result.headers, rule.id)
+  // 只有「两个键都没返回」才是「整条不动」。返回了任意一个，就按**完整替换**处理：
+  // 省略的字段即删除。以前的逐键合并做不到删除（见 replaceScriptHeaders）。
+  if (result.body === undefined && result.headers === undefined) return body
+  if (result.headers !== undefined) replaceScriptHeaders(headers, result.headers, rule.id)
   if (result.body === undefined) return body
   assertDeliveryModeUnchanged(parsedBody, result.body, rule.id)
   return Buffer.from(JSON.stringify(result.body))
@@ -143,19 +198,35 @@ function readOwnField(value: unknown, field: string): unknown {
 }
 
 /**
- * 把脚本交回的 headers 覆盖回当前头。
+ * 把脚本交回的 Header 整体替换掉当前头。
  *
- * 脚本改的是**报文本身**，因此这里必须做和结构化 Header 动作同一级别的保护校验：
- * 脚本一旦动了受保护 Header，整条规则失败（而不是静默忽略），与结构化动作的失败语义一致。
+ * 用的是**完整替换**而不是逐键合并：交回的这份就是脚本眼前的全部 Header，脚本没写的
+ * 键即视为删除。逐键合并做不到删除（写 `undefined` 只是把值置空、`null` 归一成空串），
+ * 这正是「省略字段删不掉」的根因。
+ *
+ * 校验分两步：
+ * - 先比对**改动前后取值**，受保护 Header 只要真的变了就失败；原样带回去（值相同）
+ *   不算违规 —— 否则任何 `{ ...headers }` 的写法都会因为夹带了 `content-length` / `host`
+ *   而误伤；
+ * - 再按大小写不敏感对齐大小写，避免同一头出现 `X-Test` 与 `x-test` 两个键。
  */
-function mergeScriptHeaders(headers: Record<string, string | string[] | undefined>, next: Record<string, string | string[] | undefined>, ruleId: string): void {
-  for (const [name, value] of Object.entries(next)) {
-    if (PROTECTED_HEADERS.has(name.toLowerCase())) throw new RequestRewriteError(`Modifying a protected header is not allowed: ${name}`, ruleId)
-    const existingKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase())
-    if (value === undefined) { delete headers[existingKey ?? name]; continue }
-    if (existingKey && existingKey !== name) delete headers[existingKey]
-    headers[name] = value
+function replaceScriptHeaders(headers: Record<string, string | string[] | undefined>, next: Record<string, string | string[] | undefined>, ruleId: string): void {
+  for (const name of PROTECTED_HEADERS) {
+    if (readHeader(headers, name) !== readHeader(next, name)) throw new RequestRewriteError(`Modifying a protected header is not allowed: ${name}`, ruleId)
   }
+  const replaced: Record<string, string | string[] | undefined> = {}
+  for (const [name, value] of Object.entries(next)) {
+    const existingKey = Object.keys(replaced).find(key => key.toLowerCase() === name.toLowerCase())
+    replaced[existingKey ?? name] = value
+  }
+  for (const key of Object.keys(headers)) delete headers[key]
+  Object.assign(headers, replaced)
+}
+
+/** 大小写不敏感地读一个头，用于「取值是否变过」的比对。 */
+function readHeader(headers: Record<string, string | string[] | undefined>, name: string): string | string[] | undefined {
+  const key = Object.keys(headers).find(item => item.toLowerCase() === name)
+  return key === undefined ? undefined : headers[key]
 }
 
 function applyBody(body: Buffer, action: BodyAction, ruleId: string): Buffer {

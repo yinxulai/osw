@@ -95,8 +95,9 @@ export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
   /**
    * 用户自定义脚本动作：在沙箱里跑一段 JS，实现结构化动作表达不了的条件判断与数据修改。
    *
-   * `code` 是**函数体**形式，用 `return` 交回 `{ body, headers }`（见
-   * `request-rewrite-engine.ts` 的 `applyScript`）。它和其它动作一样带 `stage`，
+   * `code` 是**函数体**形式，用 `return { body, headers }` 交回**完整报文**（见
+   * `request-rewrite-engine.ts` 的 `applyScript`）：交回谁就整体替换谁，脚本没写的
+   * 字段 / 键即视为删除。它和其它动作一样带 `stage`，
    * 因此可以只作用于请求或响应其中之一。
    */
   RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('script'), code: z.string().min(1).max(REWRITE_SCRIPT_CODE_LIMIT), timeoutMilliseconds: z.number().int().positive().max(REWRITE_SCRIPT_TIMEOUT_LIMIT).default(REWRITE_SCRIPT_TIMEOUT_DEFAULT) }),
@@ -910,6 +911,7 @@ export const ApiErrorCodeSchema = z.enum([
   'INVALID_MODEL',
   'MANUAL_MODEL_UNAVAILABLE',
   'REQUEST_REWRITE_RULE_FAILED',
+  'RESPONSE_REWRITE_DISABLED',
   'PROXY_INTERNAL_ERROR',
   'SYSTEM_PROXY_RESOLUTION_FAILED',
   'OUTBOUND_PROXY_UNREACHABLE',
