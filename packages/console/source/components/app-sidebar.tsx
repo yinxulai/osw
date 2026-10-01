@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ThemeModeMenu, themeModeLabelKey } from '@/components/theme-mode-menu'
+import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
 import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
@@ -20,11 +20,10 @@ interface IndicatorRect {
 interface AppSidebarProps {
   showBrand: boolean
   theme: Theme
-  /** 主题偏好（含「跟随系统」）：菜单里勾着哪一项由它决定，与设置页同源。 */
-  themeMode: ThemeMode
   proxyRunning: boolean
   proxyPort?: number
-  onThemeModeChange: (mode: ThemeMode) => void
+  /** 亮暗翻转。偏好是三态，装不进一个按钮——「跟随系统」只在设置页里选。 */
+  onToggleTheme: () => void
   /** 展开态由上层维护，让侧栏宽度和主内容网格列同步变化。 */
   expanded: boolean
   onHoverChange: (hovered: boolean) => void
@@ -257,10 +256,9 @@ export function AppSidebar(props: AppSidebarProps) {
           {props.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
           <span className={revealClassName(expanded)}>{t(props.pinned ? 'nav.sidebar.unpin' : 'nav.sidebar.pin')}</span>
         </button>
-        <ThemeModeMenu
+        <AnimatedThemeToggler
           theme={props.theme}
-          themeMode={props.themeMode}
-          onThemeModeChange={props.onThemeModeChange}
+          onThemeChange={() => props.onToggleTheme()}
           className={cn(
             // `[&_svg]:shrink-0` 是必需的：折叠态轨道只剩 48px，flex 会把没有 min-width 的 svg 压成一条 1px 竖线。
             'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
@@ -268,8 +266,8 @@ export function AppSidebar(props: AppSidebarProps) {
             'focus-visible:ring-2 focus-visible:ring-state-accent-solid',
           )}
         >
-          <span className={revealClassName(expanded)}>{t(themeModeLabelKey(props.themeMode))}</span>
-        </ThemeModeMenu>
+          <span className={revealClassName(expanded)}>{props.theme === 'dark' ? t('nav.theme.toLight') : t('nav.theme.toDark')}</span>
+        </AnimatedThemeToggler>
         {/*
          * 运行状态不单独圈框：它和上面的主题切换是同一族的脚注行，用一模一样的
          * `h-9 / px-2.5 / gap-2.5` 外壳 + `size-4` 前导图标盒。折叠态下小圆点就落在这条轨道的

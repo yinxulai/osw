@@ -52,7 +52,7 @@ function App() {
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const sidebarExpanded = sidebarPinned || sidebarHovered
-  const { themeMode, effectiveThemeMode, setThemeMode, toggleTheme } = useAppearance()
+  const { effectiveThemeMode, toggleTheme } = useAppearance()
   // 主题落到 `<html>` 上这件事与托盘面板共用同一份（见 hook 内部注释）。
   const theme = useDocumentTheme()
   const proxyStatus = useProxyStatus()
@@ -109,8 +109,7 @@ function App() {
                         <AppSidebar
                           showBrand={!isElectron}
                           theme={theme}
-                          themeMode={themeMode}
-                          onThemeModeChange={setThemeMode}
+                          onToggleTheme={toggleTheme}
                           proxyPort={proxyStatus?.port}
                           proxyRunning={proxyStatus?.running ?? false}
                           expanded={sidebarExpanded}

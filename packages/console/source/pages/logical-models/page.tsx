@@ -14,7 +14,7 @@ import { restrictToWindowEdges } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useLogicalModelControlService } from './service'
 import { useLiveRequests } from '@/data/live-requests'
-import { useLogicalModels, useLogicalModelsActions } from '@/data/logical-models'
+import { useLogicalModels, useLogicalModelsActions, useLogicalModelsLoading } from '@/data/logical-models'
 import { LogicalModelCard } from './components/logical-model-card'
 import { LogicalModelSummary } from './components/logical-model-summary'
 import { SortableLogicalModel } from './components/sortable-logical-model'
@@ -123,7 +123,12 @@ export function LogicalModelsPage() {
   const logicalModels = useLogicalModels()
   const liveRequests = useLiveRequests()
   const { refresh: refreshLogicalModels, reorder: reorderLogicalModels } = useLogicalModelsActions()
-  const service = useLogicalModelControlService(null)
+  // 页头代理开关与顶部指标卡都挂在**内建默认逻辑模型**上：它是请求未命中任何逻辑模型时的
+  // 落点，也是这一页唯一一个跨全部逻辑模型的全局口径。列表没回来时传 `null`，控制服务里
+  // 的查询一个都不开火，所以骨架屏只能由列表自身的就绪状态决定——挂在控制服务上会永远等下去。
+  const defaultLogicalModel = useMemo(() => logicalModels.find(isBuiltInDefaultLogicalModel) ?? null, [logicalModels])
+  const logicalModelsLoading = useLogicalModelsLoading()
+  const service = useLogicalModelControlService(defaultLogicalModel)
   const t = useTranslation()
   const [createLogicalModelOpen, setCreateLogicalModelOpen] = useState(false)
   const proxyRunning = service.proxyStatus?.running ?? false
@@ -164,7 +169,7 @@ export function LogicalModelsPage() {
         )}
       />
       <PageContent>
-        {service.loading ? (
+        {logicalModelsLoading ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
