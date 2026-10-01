@@ -16,7 +16,7 @@ interface ProviderWebsiteLinkProps {
  * 对不上就没有这一块，因为自建供应商本来也没有官网可说，不编一个假的出来。
  *
  * 打开方式走 `getPlatformCapabilities().openExternal`：Electron 形态交给系统浏览器，
- * 浏览器形态开新标签页。组件里不出现 `window.electronAPI` 字面量（`apps/docs/product/packaging.md` §5.4）。
+ * 浏览器形态开新标签页。组件里不出现 `window.electronAPI` 字面量（`apps/docs/specs/packaging.md` §5.4）。
  */
 export function ProviderWebsiteLink(props: ProviderWebsiteLinkProps) {
   const { url, className } = props

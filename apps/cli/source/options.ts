@@ -3,7 +3,7 @@
  *
  * 纯函数：不读环境变量、不碰文件系统、不写终端。错误也是**数据**——目录 key 加插值参数，
  * 而不是拼好的句子。解析器不该知道当前说的是哪种语言，句子由入口用取词函数渲染
- * （见 apps/docs/product/packaging.md §5.6：终端文案与界面文案共用同一份目录）。
+ * （见 apps/docs/specs/packaging.md §5.6：终端文案与界面文案共用同一份目录）。
  */
 
 import type { TranslateParams } from '@common/i18n'

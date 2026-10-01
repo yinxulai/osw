@@ -4,7 +4,7 @@
  * `RuntimeProfile` 是**预设**（development / production 两档默认值），`RuntimeConfig`
  * 是宿主算完之后交给 core 的**完整配置**。core 只接受后者：它不需要知道默认端口是
  * 怎么来的，也不需要知道数据目录在哪个平台该长什么样——那些都是宿主适配的事
- * （见 `apps/docs/product/packaging.md` §5.5）。
+ * （见 `apps/docs/specs/packaging.md` §5.5）。
  *
  * 这个文件刻意不 import 任何 Node 内置模块：默认数据目录要用 `node:os` / `node:path`，
  * 那是宿主侧的活（App 用 `app.setPath('userData', ...)`，CLI 用

@@ -134,14 +134,14 @@ apps/www/
     main.tsx / vite-env.d.ts
   public/
     icon.svg           # 官方 logo（自 packages/console/public/icon.svg 复制的副本；改 logo 以真源为准同步覆盖）
-    social-preview.png # 分享卡片图（自 apps/docs/design/brand/png/ 复制）
+    social-preview.png # 分享卡片图（自 apps/docs/assets/brand/png/ 复制）
   wrangler.toml      # Workers Static Assets（纯静态，无 main、无绑定）
   vite.config.ts / tsconfig.json / index.html
 ```
 
 ## 视觉约定
 
-沿用 `apps/docs/product/route-workbench.md` 的视觉下限：**不用阴影**，层级靠「底色明度阶梯 + 1px 发丝边框」表达，
+沿用 `apps/docs/specs/route-workbench.md` 的视觉下限：**不用阴影**，层级靠「底色明度阶梯 + 1px 发丝边框」表达，
 字号下限 11px。具体到官网，多放开两件事：
 
 - **品牌渐变**：标志是一道彩虹斜切的闪电，`index.css` 把它的四个色相（金 → 橙 → 玫红 → 紫）取出来做点缀，

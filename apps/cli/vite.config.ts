@@ -4,14 +4,14 @@ import { defineConfig } from 'vite'
 import packageJson from '../../package.json' with { type: 'json' }
 
 // 命令行宿主。单入口 ESM，产物 `output/index.js` 就是 `bin` 指向的文件
-// （见 apps/docs/product/packaging.md §5.8、§6）。
+// （见 apps/docs/specs/packaging.md §5.8、§6）。
 //
 // 与 `apps/app/vite.config.ts` 同源但**不能共用**它的 `vite.shared.ts`：那份配置里的
 // 外部化列表包含 `electron`，而 CLI 的外部化列表只要 Node 内置模块，多写一条就是多留
 // 一个「CLI 悄悄依赖桌面壳」的口子（静态检查能抓 import，抓不到构建配置）。
 //
 // 这里的几个配置项都只在运行期暴露，且构建过程没有警告——代价与理由见
-// `apps/app/vite.shared.ts` 的注释与 apps/docs/product/packaging.md §5.8：
+// `apps/app/vite.shared.ts` 的注释与 apps/docs/specs/packaging.md §5.8：
 //   `rolldownOptions.external`：内置模块不能被换成浏览器空模块（`platform: 'node'` 不管这件事）
 //   顶层 `define: { 'process.env': ... }`：不能被静态替换成 `{}`（放进 `build` 里会被忽略）
 //
@@ -23,7 +23,7 @@ export default defineConfig({
     // 版本号在构建期取一次。取的是**仓库根**的 `package.json`：那是唯一的发布版本权威
     // （`packages/toolkit/scripts/version.mjs` 把它写进全部 workspace manifest）。
     // 运行期读 `package.json` 会引入一条「按固定层数向上找文件」的路径假设，
-    // 那正是 apps/docs/product/packaging.md §5.8 复盘出的脆点。声明见 `source/vite-env.d.ts`，
+    // 那正是 apps/docs/specs/packaging.md §5.8 复盘出的脆点。声明见 `source/vite-env.d.ts`，
     // 测试侧的同一份注入见 `packages/toolkit/vitest.config.ts`。
     __CLI_VERSION__: JSON.stringify(packageJson.version),
   },

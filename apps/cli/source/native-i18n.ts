@@ -2,7 +2,7 @@
  * 命令行的终端语言。
  *
  * 规则与 `apps/app/source/i18n.ts` 完全一致（真相源是 `settings.language`，读不出来时退回
- * 宿主语言，见 `apps/docs/product/i18n.md` §7 与 `apps/docs/product/packaging.md` §5.6）。差别只有一处：
+ * 宿主语言，见 `apps/docs/specs/i18n.md` §7 与 `apps/docs/specs/packaging.md` §5.6）。差别只有一处：
  * 「宿主语言」怎么取——Electron 有 `app.getLocale()`，命令行只有环境变量与 `Intl`。
  *
  * 这个文件**刻意不静态 import core**（settings 模块链会静态加载 `node:sqlite`）：入口静态

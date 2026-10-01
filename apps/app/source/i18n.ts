@@ -3,7 +3,7 @@
  *
  * 托盘与原生对话框都跑在主进程，拿不到渲染进程的 React context，
  * 但它们和界面必须显示同一种语言，所以真相源和渲染进程一致——
- * `settings` 表的 `language`（见 `apps/docs/product/i18n.md` §7）。
+ * `settings` 表的 `language`（见 `apps/docs/specs/i18n.md` §7）。
  *
  * 数据库还读不出来的时候（启动早期、初始化失败、uncaughtException）退回
  * `app.getLocale()`，保证「启动失败」这类对话框不会因为取不到配置而完全没有文案。

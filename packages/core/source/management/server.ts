@@ -13,7 +13,7 @@ export interface ManagementServerOptions {
   environment?: RuntimeEnvironment
   /**
    * 控制台静态产物根目录。给了才托管；桌面形态自己 `loadFile`，不走这里。
-   * 路径由宿主决定，core 不猜（见 `apps/docs/product/packaging.md` §5.2）。
+   * 路径由宿主决定，core 不猜（见 `apps/docs/specs/packaging.md` §5.2）。
    */
   webRoot?: string | null
 }

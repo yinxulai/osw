@@ -4,7 +4,7 @@ import type { ToolNameRegistry } from './tool-name-registry'
 /**
  * OpenAI Chat Completions 响应 → OpenAI Responses 响应。
  *
- * 字段依据见 apps/docs/references/openai-responses.md 与 apps/docs/references/openai-completions.md。
+ * 字段依据见 apps/docs/upstream/openai-responses.md 与 apps/docs/upstream/openai-completions.md。
  *
  * Responses 的响应体不是 Chat Completions 的字段改名，而是「事件/输出项」模型：
  * 非流式返回 `output[]` 项列表，流式则要补齐 output_item / content_part /
@@ -123,7 +123,7 @@ function openAiToolCallToResponses(call: Json): { kind: ToolItemKind, callId: st
  *
  * 两类项字段集不同，不能套同一个骨架：`FunctionCall` 有 `status`、载荷叫 `arguments`；
  * `CustomToolCall` 没有 `status`、载荷叫 `input`
- * （见 apps/docs/references/openai-responses.md 的 `FunctionCall` 与 `CustomToolCall`）。
+ * （见 apps/docs/upstream/openai-responses.md 的 `FunctionCall` 与 `CustomToolCall`）。
  */
 function toolCallItem(kind: ToolItemKind, itemId: string, callId: string, name: string, payload: string, status: ResponsesStatus, toolNames?: ToolNameRegistry): Json {
   const address = restoreToolName(name, toolNames)
@@ -275,7 +275,7 @@ function closeTextItem(state: OpenAiToResponsesState, events: Json[], status: Ex
  *
  * 载荷事件按类别分流：`function_call` 是 `response.function_call_arguments.delta/done`（载荷字段
  * `arguments`），`custom_tool_call` 是 `response.custom_tool_call_input.delta/done`（载荷字段 `input`）。
- * 后者是前者的对位事件，但本地参考文档（apps/docs/references/openai-responses.md）的事件清单并不完整
+ * 后者是前者的对位事件，但本地参考文档（apps/docs/upstream/openai-responses.md）的事件清单并不完整
  * （连 `response.function_call_arguments.*` 都没收录），因此此处按 `output_item.done` 里
  * 已经确定的 item 结构对齐字段，不额外臆造别的键。
  */

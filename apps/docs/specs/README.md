@@ -24,7 +24,7 @@
 
 **一个主题只在一处展开。** 下表右列是每个主题的权威文档；其它文档提到同一主题时只写一句结论加一个链接，不再复述细节。发现两处描述不一致时，以权威文档和代码为准。
 
-本目录是**内部文档**，只服务实现与评审，**不进静态站**——使用者的「怎么用」写在 [`../source/`](../source/)（分类与布局见 [`../README.md`](../README.md)）。下表按主题聚成几簇，方便定位：**总览 → 代理与请求 → 路由 → 配置与数据 → 观测与安全 → 形态与工程**。
+本目录（`specs/`）是**内部产品规格**，只服务实现与评审，**不进静态站**——使用者的「怎么用」写在 [`../source/`](../source/)（分类与布局见 [`../README.md`](../README.md)）。下表按主题聚成几簇，方便定位：**总览 → 代理与请求 → 路由 → 配置与数据 → 观测与安全 → 形态与工程**。
 
 ### 总览与架构
 
@@ -76,6 +76,6 @@
 | 主题 | 权威文档 | 覆盖范围 |
 |------|---------|---------|
 | 版本规划 | [roadmap.md](./roadmap.md) | 唯一的进度与验收状态来源 |
-| 上游协议参考 | [../references/](../references/)（索引见 [../references/README.md](../references/README.md)） | 三家上游 API 的逐字快照；协议转换器字段映射的唯一外部依据 |
+| 上游协议参考 | [../upstream/](../upstream/)（索引见 [../upstream/README.md](../upstream/README.md)） | 三家上游 API 的逐字快照；协议转换器字段映射的唯一外部依据 |
 
 管理 API 清单以代码为准（`packages/core/source/management/router.ts` 与 `packages/core/source/management/routes/`）；控制台页面清单以 `packages/console/source/pages/` 为准；数据库表与字段以 `packages/core/source/database/config-schema.ts`（用户配置）与 `data-schema.ts`（观测数据）为准——两个库各自是一份独立 schema。

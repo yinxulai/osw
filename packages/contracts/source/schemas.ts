@@ -409,7 +409,7 @@ export const SettingsSchema = z.object({
    * 它最近一次成功的供应商模型上：首位供应商短暂故障进入冷却时，老会话留在已经
    * 热了缓存的继任供应商上，而不是在冷却到期后切回去再付一次全价 prefill。
    * 新会话不受影响，仍按调度顺序尝试——恢复的供应商靠新会话拿回流量，
-   * 不需要主动探测（见 `apps/docs/product/proxy-engine.md` §缓存亲和）。
+   * 不需要主动探测（见 `apps/docs/specs/proxy-engine.md` §缓存亲和）。
    */
   cacheAffinityEnabled: z.boolean().default(false),
   /**
@@ -428,7 +428,7 @@ export const SettingsSchema = z.object({
    * 界面语言偏好。
    *
    * 放在服务端设置里而不是渲染进程的 `localStorage`：托盘菜单与原生对话框由主进程渲染，
-   * 主进程读不到渲染进程的存储（见 `apps/docs/product/i18n.md` §3）。
+   * 主进程读不到渲染进程的存储（见 `apps/docs/specs/i18n.md` §3）。
    */
   language: LanguagePreferenceSchema.default('system'),
   /**
@@ -440,7 +440,7 @@ export const SettingsSchema = z.object({
   routeMode: RouteModeSchema.default('workflow'),
   /**
    * 匿名使用统计的开关。**默认开启**——它用来判断功能是否真的被用起来，是产品的既定行为；
-   * 界面上不提供任何入口，设置页也不做任何展示（见 `apps/docs/product/telemetry.md` §13）。
+   * 界面上不提供任何入口，设置页也不做任何展示（见 `apps/docs/specs/telemetry.md` §13）。
    *
    * 字段本身仍然保留：它是「采集是否被允许」的唯一判据（开发档另有一条独立短路）。
    * 关掉后不再采集任何事件，队列里压着的那一批会尽力发完，但**没有**一条「开关被改了」的事件——
@@ -851,7 +851,7 @@ export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
 export const ApiErrorSchema = z.object({
   success: z.literal(false),
   errorCode: z.string(),
-  /** 诊断消息，固定英文。界面**不要**直接展示它，按 `errorCode` 本地化（见 `apps/docs/product/i18n.md` §5）。 */
+  /** 诊断消息，固定英文。界面**不要**直接展示它，按 `errorCode` 本地化（见 `apps/docs/specs/i18n.md` §5）。 */
   errorMessage: z.string(),
   /**
    * 消息里 `{name}` 占位符的取值。

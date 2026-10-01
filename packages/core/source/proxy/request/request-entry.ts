@@ -81,7 +81,7 @@ function describeTargetOrder(targets: readonly UpstreamTarget[]): string {
  * 正文**不设大小上限**：代理必须整份读完才谈得上转发（协议转换、正文改写、模型名校验
  * 都要看完整正文），拿字节数拒掉「太大」的请求，等于替用户决定他的多模态请求能有多大。
  * 这是本地工具，不做资源消耗攻击假设——同一条判断在规则引擎里也是这么下的
- * （见 `apps/docs/product/request-rewrite-rules.md`）。
+ * （见 `apps/docs/specs/request-rewrite-rules.md`）。
  */
 interface RequestBodyReadResult {
   /** 已读到的正文；`aborted` 时只保留到那一刻为止收到的部分。 */

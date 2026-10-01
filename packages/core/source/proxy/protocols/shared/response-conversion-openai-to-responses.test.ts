@@ -133,7 +133,7 @@ describe('openAiResponseToResponses', () => {
       }],
     }, toolNames)
 
-    // `CustomToolCall` 没有 `status` 字段（见 apps/docs/references/openai-responses.md），
+    // `CustomToolCall` 没有 `status` 字段（见 apps/docs/upstream/openai-responses.md），
     // 而且载荷叫 `input` 不是 `arguments`，不能照抄 function_call 的骨架
     expect(result.output).toEqual([
       { id: 'chat_3_fc_0', type: 'custom_tool_call', call_id: 'call_1', name: 'raw', namespace: 'crm', input: 'free text' },

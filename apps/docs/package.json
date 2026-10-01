@@ -4,7 +4,7 @@
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
-  "description": "文档站点：把 apps/docs 下的开放文档发布成静态站。Clarify 站点。",
+  "description": "文档站点：把 apps/docs/source 下的开放文档发布成静态站。Clarify 站点。",
   "author": "yinxulai <yinxulai@hotmail.com>",
   "scripts": {
     "dev": "clarify dev",

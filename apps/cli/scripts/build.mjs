@@ -10,7 +10,7 @@ import { run } from '../../../packages/toolkit/scripts/lib/run.mjs'
 //   2. `packages/console/output` → `output/web`（`--web` 时由管理服务托管的控制台产物）
 //
 // 第 2 步是「拷别人的产物」而不是「构建前端」：控制台只编一份，两种宿主共用
-// （见 apps/docs/product/packaging.md §2）。所以构建顺序有依赖——`package.json` 把
+// （见 apps/docs/specs/packaging.md §2）。所以构建顺序有依赖——`package.json` 把
 // `@osw/console` 放在 devDependencies 里，让 Turbo 的 `^build` 先把它构建出来；
 // 这个依赖**只是产物依赖，不是 import**，包边界检查管的是后者。
 

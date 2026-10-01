@@ -13,8 +13,8 @@ pnpm icons
 | 文件 | 角色 |
 | --- | --- |
 | `packages/console/public/icon.svg` | **官方标志（唯一真源）**。一道连续斜切的闪电，彩虹渐变。同时是控制台 favicon 与侧栏标记。 |
-| `apps/docs/design/brand/icon.svg` | 上者的副本，仅供本目录自解释 / 外部取用；脚本每次运行都会重写。 |
-| `apps/docs/design/brand/icon-alt-blades.svg` | **保留的延续版本**（双刃 · 冷色霓虹）。不是标志，只作视觉延续与备选用途。 |
+| `apps/docs/assets/brand/icon.svg` | 上者的副本，仅供本目录自解释 / 外部取用；脚本每次运行都会重写。 |
+| `apps/docs/assets/brand/icon-alt-blades.svg` | **保留的延续版本**（双刃 · 冷色霓虹）。不是标志，只作视觉延续与备选用途。 |
 
 ## 导出方式
 
@@ -62,7 +62,7 @@ pnpm icons
 构图区约在 0.86 处）。此前用的是「切掉一角」的缺口方案，但 16px 下缺口会和闪电缺口糊在一起、
 像一坨没画完的图形；改为保标志完整、另加圆点后，两个尺寸下都能一眼分清。
 
-### `apps/docs/design/brand/png/`（文档 / 物料导出，不参与打包）
+### `apps/docs/assets/brand/png/`（文档 / 物料导出，不参与打包）
 
 | 文件 | 尺寸 | 用途 |
 | --- | --- | --- |
