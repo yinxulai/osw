@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DAY_MILLISECONDS, TREND_MAX_BUCKETS, resolveAnalyticsBuckets } from '@common/analytics-buckets'
 import { closeDatabases, initDatabases } from '../database'
 import { createRequestLog, createRequestAttempt, recordAttemptUsage } from '@server/database/request-log-store'
-import { createProvider } from '@server/database/provider-store'
+import { createProvider, deleteProvider } from '@server/database/provider-store'
+import { createProviderModelRoute, deleteProviderModelRoute } from '@server/database/model-store'
 import { analyticsRoutes } from './routes/observability/analytics'
 import { mockResponse } from './test-support'
 
@@ -398,5 +399,70 @@ describe('analytics route', () => {
       '70ms-80ms', '80ms-90ms', '90ms-100ms', '100ms-110ms', '110ms-120ms', '120ms-130ms',
     ])
     expect(payload.data.latencyDistribution.at(-1)).toEqual(expect.objectContaining({ range: '120ms-130ms', count: 1 }))
+  })
+
+  it('keeps reporting deleted providers and models through the summary and detail endpoints', async () => {
+    // 统计读的是尝试行上的快照列：删掉一条配置只该让它退出「可被调度」的名单，
+    // 不该让观测页面上已经发生过的历史跟着消失。这里走完整的 HTTP 路由，验一遍端到端契约。
+    const provider = await createProvider({ name: '要删掉的供应商', apiKeyReference: 'key_deleted_route', timeoutMilliseconds: 30_000, enabled: true })
+    const model = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'deleted-route-model',
+      priority: 1,
+      endpoints: [{ protocol: 'openai-responses', endpointUrl: 'https://example.com/v1/responses', customAuthHeader: null, protocolConversionEnabled: false }],
+    })
+    const log = await createRequestLog({ logicalModelId: 'default', clientProtocol: 'openai-responses', transport: 'http', status: 'success', totalDurationMilliseconds: 1500 })
+    const attempt = await createAttemptOrThrow({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: model.id,
+      providerName: provider.name,
+      providerModelName: model.modelName,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 1500,
+      ttftMilliseconds: 120,
+    })
+    await recordAttemptUsage({ attemptId: attempt.id, servesRequest: true, ...EMPTY_USAGE, inputTokens: 100, outputTokens: 20, cachedInputTokens: 25, cacheCreationInputTokens: 0 })
+
+    await deleteProviderModelRoute(model.id)
+    await deleteProvider(provider.id)
+
+    const summaryRes = mockResponse()
+    await analyticsRoutes.invoke('/api/analytics/summary', summaryRes, { range: '7d' })
+    const summary = responseData(summaryRes) as {
+      success: boolean
+      data: {
+        providerStats: Array<{ providerId: string; providerName: string; attempts: number; percent: number }>
+        modelStats: Array<{ providerModelId: string; providerModelName: string; providerId: string; providerName: string }>
+      }
+    }
+    expect(summary.success).toBe(true)
+    expect(summary.data.providerStats).toEqual([
+      expect.objectContaining({ providerId: provider.id, providerName: provider.name, attempts: 1, percent: 100 }),
+    ])
+    expect(summary.data.modelStats).toEqual([
+      expect.objectContaining({ providerModelId: model.id, providerModelName: model.modelName, providerId: provider.id, providerName: provider.name }),
+    ])
+
+    // 详情页按 providerId 取数，配置已删也照样能打开，名字来自快照而不是配置表。
+    const detailRes = mockResponse()
+    await analyticsRoutes.invoke('/api/analytics/provider-detail', detailRes, { providerId: provider.id, range: '7d' })
+    const detail = responseData(detailRes) as {
+      success: boolean
+      data: {
+        summary: { providerName: string; attempts: number; success: number; failed: number; cacheHitRate: number | null; totalTokens: number }
+        models: Array<{ providerModelId: string; providerModelName: string }>
+      }
+    }
+    expect(detail.success).toBe(true)
+    expect(detail.data.summary).toEqual(expect.objectContaining({ providerName: provider.name, attempts: 1, success: 1, failed: 0, cacheHitRate: 0.25, totalTokens: 120 }))
+    expect(detail.data.models).toEqual([expect.objectContaining({ providerModelId: model.id, providerModelName: model.modelName })])
   })
 })

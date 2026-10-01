@@ -6,7 +6,9 @@ import { eq } from 'drizzle-orm'
 import { closeDatabases, getDataDb, initDatabases } from './index'
 import { createRequestAttempt, createRequestLog, recordAttemptUsage } from './request-log-store'
 import { requestAttempts, requestLogs } from './data-schema'
-import { getLatencyDistribution, getModelStats } from './analytics-store'
+import { createProvider, deleteProvider, listProviders } from './provider-store'
+import { createProviderModelRoute, deleteProviderModelRoute, listProviderModelRoutes } from './model-store'
+import { getLatencyDistribution, getModelStats, getProviderStat, getProviderStats } from './analytics-store'
 
 const EMPTY_USAGE = { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, reasoningTokens: null, rawUsage: null }
 
@@ -255,5 +257,157 @@ describe('getModelStats', () => {
     // 分母是 2000 + 800，不是扣首字之后的 1500 + 0，也不是四次尝试相加。
     expect(stats.speedOutputTokens).toBe(44)
     expect(stats.speedDurationMs).toBe(2800)
+  })
+})
+
+/**
+ * 统计查询读的是**尝试行上的快照**（`providerId` / `providerName` / `providerModelId` /
+ * `providerModelName`），它们是在请求发生时写下的，不是对配置表的一次实时 join。
+ *
+ * 这一组用例把这句话变成可执行的事实：配置行软删除之后，同样的查询必须给出同样的数字。
+ * 删配置只该让一个供应商 / 模型退出「可被调度」的名单，不该让观测页面上已经发生过的历史
+ * 跟着蒸发——用户删掉一个不用的供应商，恰恰还要回头核对它以前花了多少。
+ */
+describe('analytics is unaffected by deleted configuration', () => {
+  interface DeletedFixture {
+    requestId: string
+    attemptId: string
+    providerId: string
+    providerName: string
+    providerModelId: string
+    providerModelName: string
+  }
+
+  /** 造一条「配置 + 一次成功尝试 + 用量」的完整事实，返回值用于删除后比对。 */
+  async function createAttributedTraffic(): Promise<DeletedFixture> {
+    const provider = await createProvider({ name: '要删掉的供应商', apiKeyReference: 'key_deleted_analytics', timeoutMilliseconds: 30_000, enabled: true })
+    const model = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'deleted-model',
+      priority: 1,
+      endpoints: [{ protocol: 'openai-responses', endpointUrl: 'https://example.com/v1/responses', customAuthHeader: null, protocolConversionEnabled: false }],
+    })
+    const requestId = await createLog()
+    const attempt = await createAttemptOrThrow({
+      requestId,
+      providerId: provider.id,
+      providerModelId: model.id,
+      providerName: provider.name,
+      providerModelName: model.modelName,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      status: 'success',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      durationMilliseconds: 1,
+      ttftMilliseconds: 120,
+    })
+    await recordAttemptUsage({ attemptId: attempt.id, servesRequest: true, ...EMPTY_USAGE, inputTokens: 100, outputTokens: 20, cachedInputTokens: 25 })
+    return { requestId, attemptId: attempt.id, providerId: provider.id, providerName: provider.name, providerModelId: model.id, providerModelName: model.modelName }
+  }
+
+  /** 同一请求的同一次序号只能落一行，冲突时 store 返回 `null`。 */
+  async function createAttemptOrThrow(input: Parameters<typeof createRequestAttempt>[0]) {
+    const attempt = await createRequestAttempt(input)
+    if (!attempt) throw new Error('expected attempt to be created')
+    return attempt
+  }
+
+  it('keeps provider and model statistics intact after the provider row is soft-deleted', async () => {
+    const fixture = await createAttributedTraffic()
+    const before = {
+      providerStats: await getProviderStats(0),
+      providerStat: await getProviderStat(fixture.providerId, 0),
+      modelStats: await getModelStats(0),
+    }
+
+    await deleteProvider(fixture.providerId)
+
+    // 配置侧：确实删掉了（活跃列表里没有，行还在表里）。
+    expect((await listProviders()).map(provider => provider.id)).not.toContain(fixture.providerId)
+    expect(await listProviderModelRoutes(false)).toEqual([])
+    // 观测侧：三项统计一字不差。
+    expect(await getProviderStats(0)).toEqual(before.providerStats)
+    expect(await getProviderStat(fixture.providerId, 0)).toEqual(before.providerStat)
+    expect(await getModelStats(0)).toEqual(before.modelStats)
+    // 连名字都还在：它们来自尝试行的快照，不来自那张被删掉的配置行。
+    expect(await getProviderStat(fixture.providerId, 0)).toEqual(expect.objectContaining({ providerName: fixture.providerName, attempts: 1, success: 1 }))
+    expect(await getModelStats(0)).toEqual([expect.objectContaining({ providerModelId: fixture.providerModelId, providerModelName: fixture.providerModelName, providerId: fixture.providerId, providerName: fixture.providerName })])
+  })
+
+  it('keeps provider and model statistics intact after only the provider model row is soft-deleted', async () => {
+    const fixture = await createAttributedTraffic()
+    const before = { providerStats: await getProviderStats(0), modelStats: await getModelStats(0) }
+
+    // 只删模型、保留供应商：两条统计路径的独立性分别被钉住。
+    await deleteProviderModelRoute(fixture.providerModelId)
+
+    expect(await listProviderModelRoutes(false)).toEqual([])
+    expect(await listProviders()).toEqual([expect.objectContaining({ id: fixture.providerId })])
+    expect(await getProviderStats(0)).toEqual(before.providerStats)
+    expect(await getModelStats(0)).toEqual(before.modelStats)
+  })
+
+  it('still reports deleted providers in the per-provider latency distribution', async () => {
+    const fixture = await createAttributedTraffic()
+    const before = await getLatencyDistribution(0, 6, fixture.providerId)
+
+    await deleteProvider(fixture.providerId)
+
+    expect(await getLatencyDistribution(0, 6, fixture.providerId)).toEqual(before)
+    // 120ms 的样本仍然落在 `100ms-150ms` 那一档：分布本身没变，只是别的档为 0。
+    expect((await getLatencyDistribution(0, 6, fixture.providerId)).filter(bucket => bucket.count > 0)).toEqual([
+      expect.objectContaining({ range: '100ms-150ms', count: 1 }),
+    ])
+  })
+
+  it('groups deleted and surviving configuration together in the same ranking', async () => {
+    // 同一批尝试里既有活跃供应商、也有已删除供应商：分组键是快照列，两者都该在榜上。
+    const deleted = await createAttributedTraffic()
+    const survivingProvider = await createProvider({ name: '还在的供应商', apiKeyReference: 'key_surviving_analytics', timeoutMilliseconds: 30_000, enabled: true })
+    const survivingModel = await createProviderModelRoute({ providerId: survivingProvider.id, modelName: 'surviving-model', priority: 1, endpoints: [] })
+    const requestId = await createLog()
+    const attempt = await createAttemptOrThrow({
+      requestId,
+      providerId: survivingProvider.id,
+      providerModelId: survivingModel.id,
+      providerName: survivingProvider.name,
+      providerModelName: survivingModel.modelName,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      status: 'success',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      durationMilliseconds: 1,
+    })
+    await recordAttemptUsage({ attemptId: attempt.id, servesRequest: true, ...EMPTY_USAGE, inputTokens: 10, outputTokens: 10 })
+
+    await deleteProvider(deleted.providerId)
+
+    const stats = await getProviderStats(0)
+    expect(stats.map(stat => stat.providerId)).toEqual(expect.arrayContaining([deleted.providerId, survivingProvider.id]))
+    expect(stats).toHaveLength(2)
+    // `providerModelId` 由 `createProviderModelRoute` 生成，这里只需要它出现在榜上。
+    expect((await getModelStats(0)).map(stat => stat.providerModelId)).toEqual(expect.arrayContaining([deleted.providerModelId, survivingModel.id]))
+  })
+
+  it('keeps the deleted record visible to the raw attempt snapshot it wrote', async () => {
+    // 反证：观测库里那条尝试行仍在，且它的快照列就是统计读的东西——删配置不会回头改历史行。
+    const fixture = await createAttributedTraffic()
+
+    await deleteProvider(fixture.providerId)
+
+    expect(getDataDb().select().from(requestAttempts).where(eq(requestAttempts.id, fixture.attemptId)).get()).toEqual(expect.objectContaining({
+      providerId: fixture.providerId,
+      providerName: fixture.providerName,
+      providerModelId: fixture.providerModelId,
+      providerModelName: fixture.providerModelName,
+    }))
   })
 })

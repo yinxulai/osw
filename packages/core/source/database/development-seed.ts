@@ -69,6 +69,34 @@ const PROVIDER_FIXTURES = [
   },
 ] as const
 
+/**
+ * 已软删除的供应商 fixture。
+ *
+ * 单独列一份，是因为它描述的是**历史**，而不是「本机的第五家供应商」：这些行插进去就带着
+ * `deletedTime`，`listProviders()` 默认看不见它们；但它们名下的请求记录、尝试快照与用量是真实
+ * 发生过的事。删配置只该让它从「可调度」的列表里消失，不该让观测页面上这段历史一起蒸发
+ * ——观测库里的每一行都是请求当时落下的事实，与配置库此刻还留着什么无关。
+ *
+ * （`legacyName` 与活跃 fixture 同义：就地改名的匹配条件是「同一 id + 仍是旧名字」。）
+ */
+const RETIRED_PROVIDER_FIXTURES = [
+  {
+    id: 'prov_dev_retired',
+    name: 'Retired Demo Provider',
+    legacyName: 'Retired Demo Provider（开发示例）',
+    apiKeyReference: 'key_dev_retired',
+    apiKey: 'sk-development-retired',
+    endpoints: {
+      'openai-responses': 'https://api.retired-demo.example.com/v1/responses',
+    },
+  },
+] as const
+
+/** 参与请求归因、健康状态与就地改名的全部供应商 fixture：活跃的在前，已删除的在后。 */
+const ALL_PROVIDER_FIXTURES = [...PROVIDER_FIXTURES, ...RETIRED_PROVIDER_FIXTURES] as const
+
+const RETIRED_PROVIDER_IDS = new Set<string>(RETIRED_PROVIDER_FIXTURES.map(provider => provider.id))
+
 const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_ark', 'doubao-seed-1-6', 'openai-completions', 1],
   ['default', 'prov_dev_openai', 'gpt-4.1-mini', 'openai-responses', 2],
@@ -77,7 +105,13 @@ const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_openai', 'o3', 'openai-responses', 5],
   ['default', 'prov_dev_ark', 'doubao-seed-1-6-flash', 'openai-completions', 6],
   ['default', 'prov_dev_deepseek', 'deepseek-chat', 'openai-completions', 7],
+  // 挂在已删除供应商名下、自己也已删除的模型：它的历史请求必须照样能被检索与统计到，
+  // 否则「这个模型以前用过多少」在配置删掉之后就再也答不上来。
+  ['default', 'prov_dev_retired', 'retired-demo-model', 'openai-responses', 8],
 ] as const
+
+/** 已删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。 */
+const RETIRED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.length - 1
 
 const DEVELOPMENT_REQUEST_COUNT = 120
 
@@ -96,7 +130,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
   )
   if (hasConfiguration && !options.allowExisting) return false
 
-  const fixtureProviderIds = PROVIDER_FIXTURES.map(provider => provider.id)
+  const fixtureProviderIds = ALL_PROVIDER_FIXTURES.map(provider => provider.id)
   const fixtureProviderModelIds = PROVIDER_MODEL_FIXTURES.map((_, index) => `model_dev_provider_${index + 1}`)
   const existingProviderIds = new Set(
     config.select({ id: providers.id }).from(providers).where(inArray(providers.id, fixtureProviderIds)).all().map(row => row.id),
@@ -108,7 +142,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
     config.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, fixtureProviderModelIds)).all().map(row => row.id),
   )
 
-  for (const provider of PROVIDER_FIXTURES) {
+  for (const provider of ALL_PROVIDER_FIXTURES) {
     if (!existingProviderIds.has(provider.id)) await secretStore.set(provider.apiKeyReference, provider.apiKey)
   }
 
@@ -123,18 +157,20 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
 
   // 两个库、两个事务：SQLite 的事务不能跨文件，配置先写一次、观测数据再写一次。
   config.transaction(transaction => {
-    const providersToInsert = PROVIDER_FIXTURES.filter(provider => !existingProviderIds.has(provider.id))
+    const providersToInsert = ALL_PROVIDER_FIXTURES.filter(provider => !existingProviderIds.has(provider.id))
     if (providersToInsert.length > 0) transaction.insert(providers).values(providersToInsert.map(provider => ({
       id: provider.id,
       name: provider.name,
       description: 'Development sample provider',
-      enabled: true,
+      // 已删除的 fixture 一进来就带删除标：它在可调度列表里从未出现过，但它的历史数据在。
+      enabled: !RETIRED_PROVIDER_IDS.has(provider.id),
       // 种子行的侧栏顺序照 fixture 数组来：`createdTime` 全都一样，没有序号就没有确定顺序。
-      sortOrder: PROVIDER_FIXTURES.indexOf(provider),
+      sortOrder: ALL_PROVIDER_FIXTURES.indexOf(provider),
       createdTime: timestamp,
       updatedTime: timestamp,
+      deletedTime: RETIRED_PROVIDER_IDS.has(provider.id) ? timestamp : null,
     }))).run()
-    for (const provider of PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
+    for (const provider of ALL_PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
       transaction.update(providers)
         .set({ name: provider.name, updatedTime: timestamp })
         .where(and(eq(providers.id, provider.id), eq(providers.name, provider.legacyName)))
@@ -150,37 +186,42 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         id: `model_dev_provider_${index + 1}`,
         providerId: fixture[1],
         modelName: fixture[2],
-        enabled: true,
+        // 已删除的模型与它的父供应商保持一致：停用 + 打标。
+        enabled: index !== RETIRED_PROVIDER_MODEL_INDEX,
         createdTime: timestamp,
         updatedTime: timestamp,
+        deletedTime: index === RETIRED_PROVIDER_MODEL_INDEX ? timestamp : null,
       }))).run()
 
       for (const { fixture, index } of providerModelsToInsert) {
+        // 已删除 fixture 的子结构一并打标：与 `deleteProvider` / `deleteProviderModelRoute`
+        // 落库后的形状保持一致，读它的人不必区分「种子造出来的删除」与「用户点出来的删除」。
+        const retired = index === RETIRED_PROVIDER_MODEL_INDEX
         const protocols = [fixture[3]]
         for (const protocol of protocols) {
           const endpointId = `endpoint_dev_${fixture[1]}_${protocol}`
-          const url = PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.endpoints[protocol as keyof typeof PROVIDER_FIXTURES[number]['endpoints']] ?? 'https://api.example.com'
+          const url = ALL_PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.endpoints[protocol as keyof typeof ALL_PROVIDER_FIXTURES[number]['endpoints']] ?? 'https://api.example.com'
           const existingEndpoint = transaction.select().from(providerEndpoints).where(inArray(providerEndpoints.id, [endpointId])).get()
-          if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
-          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+          if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
+          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: true, createdTime: timestamp, updatedTime: timestamp }).run()
+        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
       }
     }
   })
 
   data.transaction(transaction => {
     // 供应商改名时，历史尝试里冗余存着的名字要跟着走：那是同一件事的两份落库位置。
-    for (const provider of PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
+    for (const provider of ALL_PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
       transaction.update(requestAttempts)
         .set({ providerName: provider.name })
         .where(and(eq(requestAttempts.providerId, provider.id), eq(requestAttempts.providerName, provider.legacyName)))
         .run()
     }
 
-    const healthToInsert = PROVIDER_FIXTURES.filter(provider => !existingHealthProviderIds.has(provider.id))
+    const healthToInsert = ALL_PROVIDER_FIXTURES.filter(provider => !existingHealthProviderIds.has(provider.id))
     if (healthToInsert.length > 0) transaction.insert(providerHealth).values(healthToInsert.map(provider => {
-      const index = PROVIDER_FIXTURES.findIndex(item => item.id === provider.id)
+      const index = ALL_PROVIDER_FIXTURES.findIndex(item => item.id === provider.id)
       return {
         providerId: provider.id,
         consecutiveFailures: index === 3 ? 1 : 0,
@@ -195,7 +236,10 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
 
     const sampleRequests = Array.from({ length: DEVELOPMENT_REQUEST_COUNT }, (_, index) => {
       const failed = index % 11 === 4
-      const provider = PROVIDER_FIXTURES[index % PROVIDER_FIXTURES.length]
+      // 归因**按模型认供应商**：两边各取各的模数会造出「OpenAI 的供应商配火山方舟的模型」
+      // 这种库里根本不可能出现的尝试——而尝试快照恰恰是统计查询唯一的事实来源。
+      const modelIndex = index % PROVIDER_MODEL_FIXTURES.length
+      const provider = ALL_PROVIDER_FIXTURES.find(item => item.id === PROVIDER_MODEL_FIXTURES[modelIndex][1])!
       const duration = 480 + (index * 173) % 2_400
       const inputTokens = 320 + index * 47
       const outputTokens = 80 + (index * 29) % 360
@@ -216,6 +260,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         createdTime: timestamp - index * 6 * 3_600_000,
         provider,
         index,
+        modelIndex,
         failed,
       }
     })
@@ -245,8 +290,8 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
     ])
     if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
     transaction.insert(requestAttempts).values(sampleRequests.flatMap(request => {
-      const fixture = PROVIDER_MODEL_FIXTURES[request.index % PROVIDER_MODEL_FIXTURES.length]
-      const providerModelId = `model_dev_provider_${request.index % PROVIDER_MODEL_FIXTURES.length + 1}`
+      const fixture = PROVIDER_MODEL_FIXTURES[request.modelIndex]
+      const providerModelId = `model_dev_provider_${request.modelIndex + 1}`
       // 开发示例：客户端跳要增量时，上游跳也以 SSE 返回（忠诚转发的典型情形）。
       const upstreamTransport = request.transport === 'http-stream' ? 'http-stream' as const : 'http' as const
       const attempt = {
