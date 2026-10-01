@@ -94,10 +94,14 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
           {formatTime(locale, live.startedAt)}
         </td>
         {/* 这一格与已结束的行逐字对齐：同样只写「最终落在谁身上」，多试几次时同样补一个 `+n`。 */}
+        {/* 第一次尝试开始之前没有「落点」可写，但队列里已经有下一个候选了——那时写它，
+            而不是留一个 `—`：屏幕前的人此刻最想知道的就是「它要往谁发」。 */}
         <td className={cn(tableCellClass, 'max-w-40')}>
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate system-xs-medium text-text-primary">
-              {attempt === null ? '—' : `${attempt.providerName}/${attempt.providerModelName}`}
+              {attempt === null
+                ? (snapshot.nextTarget === null ? '—' : `${snapshot.nextTarget.providerName}/${snapshot.nextTarget.providerModelName}`)
+                : `${attempt.providerName}/${attempt.providerModelName}`}
             </span>
             {snapshot.attemptCount > 1 && (
               <span

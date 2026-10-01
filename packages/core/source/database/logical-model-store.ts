@@ -6,6 +6,7 @@ import { RouteRuleSetSchema } from '@common/router/route-rules'
 import { WorkflowGraphSchema } from '@common/router/schemas'
 import { generateId, now } from '@common/utils'
 import { duplicateLogicalModelError, logicalModelNotFoundError, protectedLogicalModelError, providerModelDisabledError } from '../errors'
+import { cachedConfigRead } from './config-read-cache'
 import { getConfigDb } from './index'
 import { logicalModels, providerModels, routeRuleSets, schedulingPolicies, workflows } from './config-schema'
 
@@ -19,8 +20,15 @@ import { logicalModels, providerModels, routeRuleSets, schedulingPolicies, workf
  *
  * 这个文件里凡是「按 id 找」的函数收的都是记录 id；只有 `getLogicalModelByModelId`
  * 与运行时查表（`getAvailableModels` 等）才按 modelId 找。
+ *
+ * `listLogicalModels` 与 `getLogicalModelByModelId` 走常驻读缓存（见 `./config-read-cache.ts`）：
+ * 代理每处理一个请求都要用它把模型名翻成落点，而这份名单只在用户改模型时才变。
  */
 export async function listLogicalModels(includeDeleted = false): Promise<LogicalModel[]> {
+  return cachedConfigRead(`logical-models:${includeDeleted}`, () => readLogicalModels(includeDeleted))
+}
+
+async function readLogicalModels(includeDeleted: boolean): Promise<LogicalModel[]> {
   const db = getConfigDb()
   const query = db.select().from(logicalModels)
   const rows = includeDeleted
@@ -49,6 +57,10 @@ export async function getLogicalModel(id: string): Promise<LogicalModel | undefi
  * 由 `assertLogicalModelIdAvailable` 把守，因此这里查到的永远是那一行。
  */
 export async function getLogicalModelByModelId(modelId: string): Promise<LogicalModel | undefined> {
+  return cachedConfigRead(`logical-model-by-model-id:${modelId}`, () => readLogicalModelByModelId(modelId))
+}
+
+async function readLogicalModelByModelId(modelId: string): Promise<LogicalModel | undefined> {
   const row = getConfigDb().select().from(logicalModels)
     .where(and(eq(logicalModels.modelId, modelId), isNull(logicalModels.deletedTime)))
     .get()

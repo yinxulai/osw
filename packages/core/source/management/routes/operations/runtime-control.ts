@@ -1,5 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { getLogicalModel } from '@server/database/logical-model-store'
+import { getProviderModel } from '@server/database/model-store'
+import { getProvider } from '@server/database/provider-store'
 import { getSettings } from '@server/database/settings-store'
 import { listProviderHealth, listProviderModelHealth } from '@server/database/health-store'
 import { getManualModel, setManualModel } from '../../../proxy/routing/manual-routing'
@@ -31,10 +34,17 @@ function handleLogicalModelStatus(_req: IncomingMessage, res: ServerResponse, bo
 }
 
 const SwitchLogicalModelSchema = z.object({ logicalModelId: z.string().min(1), modelId: z.string().nullable() })
-function handleLogicalModelSwitch(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
+async function handleLogicalModelSwitch(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { logicalModelId, modelId } = SwitchLogicalModelSchema.parse(body)
   setManualModel(logicalModelId, modelId)
-  console.info(`[management] manual route updated logicalModelId=${logicalModelId} providerModelId=${modelId ?? 'automatic'}`)
+  // 这行日志是给人排查「我刚才在界面上把 A 切到 B 了」的，因此写名字而不是记录 id：
+  // id 只有对着数据库才认得出来，而这里已经能读到名字。查不到时回落成 id，别把事实吞掉。
+  const [logicalModel, providerModel] = await Promise.all([
+    getLogicalModel(logicalModelId),
+    modelId === null ? Promise.resolve(undefined) : getProviderModel(modelId),
+  ])
+  const provider = providerModel === undefined ? undefined : await getProvider(providerModel.providerId)
+  console.info(`[management] manual route updated logicalModelId=${logicalModelId} model=${logicalModel?.modelId ?? logicalModelId} target=${providerModel === undefined ? 'automatic' : `${provider?.name ?? providerModel.providerId}/${providerModel.modelName}`}`)
   sendSuccess(res, { logicalModelId, modelId })
 }
 

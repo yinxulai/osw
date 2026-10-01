@@ -12,6 +12,7 @@ import { classifyUpstreamStatus, type UpstreamStatusDisposition } from '@server/
 import { ClientRequestCancelledError, isClientRequestCancelled, LocalAttemptError } from './attempt-errors'
 import { concludeDeliveredAttempt, concludeInterruptedAttempt, concludeUndeliverableAttempt, type AttemptConclusionInput } from './attempt-conclusion'
 import type { AttemptOutcome } from './attempt-outcome'
+import { formatTarget } from './attempt-outcome'
 import { prepareAttempt, type PreparedAttempt } from './attempt-preparation'
 import { createRequestFinalizer } from './request-finalizer-handlers'
 import { extractUpstreamRequestId } from './request-id'
@@ -164,7 +165,7 @@ async function executeRelay(prepared: PreparedAttempt): Promise<AttemptExecution
           && (context.transport === 'http-stream') !== (upstreamTransport === 'http-stream')
         if (transportMismatch) {
           disposition = 'failover'
-          console.warn(`[proxy] transport mismatch requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} transport=${context.transport} upstreamTransport=${upstreamTransport} upstreamContentType=${String(head.headers['content-type'] ?? '')}`)
+          console.warn(`[proxy] transport mismatch requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} transport=${context.transport} upstreamTransport=${upstreamTransport} upstreamContentType=${String(head.headers['content-type'] ?? '')}`)
         }
         delivery.decision = disposition === 'failover'
           ? { kind: 'discard', reason: transportMismatch ? 'transport-mismatch' : 'status' }
@@ -182,7 +183,7 @@ async function executeRelay(prepared: PreparedAttempt): Promise<AttemptExecution
           transportMismatch,
           upstreamRequestIdPresent: upstreamRequestId !== null,
         })
-        console.debug(`[proxy] upstream response received requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} status=${statusCode} disposition=${disposition} transport=${context.transport} transportMismatch=${transportMismatch} upstreamTransport=${upstreamTransport} upstreamRequestIdPresent=${upstreamRequestId !== null} responseLatency=${Date.now() - prepared.attemptStartedAt}ms`)
+        console.debug(`[proxy] upstream response received requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} status=${statusCode} disposition=${disposition} transport=${context.transport} transportMismatch=${transportMismatch} upstreamTransport=${upstreamTransport} upstreamRequestIdPresent=${upstreamRequestId !== null} responseLatency=${Date.now() - prepared.attemptStartedAt}ms`)
       },
     })
   } catch (error) {
@@ -227,7 +228,7 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
 
   if (isClientRequestCancelled(failure) || (failure === null && !execution.relay.ended && context.signal.aborted)) {
     if (execution.relay.head !== null && deliveredSuccessfully) {
-      console.debug(`[proxy] client finished early requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} duration=${execution.durationMilliseconds}ms`)
+      console.debug(`[proxy] client finished early requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} duration=${execution.durationMilliseconds}ms`)
       return await concludeDeliveredAttempt({ ...conclusion, mode, streamInterrupted: false })
     }
     throw new ClientRequestCancelledError()
@@ -245,9 +246,9 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
   // 规则是否生效是**交付形态**的函数，不是「客户端跳的形态是不是 http」的函数：
   // 两者在今天的取值域里同义，但那条同义是巧合，而这里说的是规则引擎真正的前提。
   if (mode === 'incremental') {
-    console.debug(`[proxy] response rewrite skipped requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} mode=${mode} rules=${prepared.rules.length} reason=modifier-not-applicable`)
+    console.debug(`[proxy] response rewrite skipped requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} reason=modifier-not-applicable`)
   } else {
-    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'}`)
+    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'}`)
   }
   return await concludeDeliveredAttempt({ ...conclusion, mode })
 }

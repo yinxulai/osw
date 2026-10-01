@@ -158,8 +158,9 @@ describe('RequestExecutionRow', () => {
     // 起点是合成出来的「收到请求」：台账的 begin 不产生事件，但故事得有个头。
     expect(screen.getByText('Received POST /v1/responses')).toBeTruthy()
     expect(screen.getByText('Route chosen')).toBeTruthy()
-    // 候选链按优先级排，所以「试到第二家」在出事之前就已经写在轴上了。
-    expect(screen.getByText('1 candidates · model-one')).toBeTruthy()
+    // 候选链按优先级排，所以「试到第二家」在出事之前就已经写在轴上了；
+    // 每一格带供应商名，避免同名模型分不清要发往哪家。
+    expect(screen.getByText('1 candidates · Provider One/model-one')).toBeTruthy()
     expect(screen.getByText('Sent to model-one · attempt 1')).toBeTruthy()
     expect(screen.getByText('model-one responded 200')).toBeTruthy()
     // 偏移量比绝对时间有用：两次事件之间隔了多久才是这条线上的刻度。

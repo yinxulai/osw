@@ -180,6 +180,7 @@ describe('timelineOf', () => {
 
   it('reads the candidate chain in priority order', () => {
     // 候选名单比一个数字有用：它把「为何会试到第二家」提前写在了轴上。
+    // 每一格带上供应商名：同名模型可以挂在多家供应商下，只写模型名无法判断要发往哪家。
     const nodes = timelineOf(liveOf(
       [eventOf('route.resolved', 'info', { candidates: 2 }, 5)],
       {
@@ -190,7 +191,7 @@ describe('timelineOf', () => {
       },
     ))
 
-    expect(nodes[1]?.message).toEqual({ kind: 'routeResolved', candidates: ['model-one', 'model-two'] })
+    expect(nodes[1]?.message).toEqual({ kind: 'routeResolved', candidates: ['Provider One/model-one', 'Provider Two/model-two'] })
   })
 
   it('describes what was rewritten for the attempt that was actually sent', () => {

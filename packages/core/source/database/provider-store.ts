@@ -3,6 +3,7 @@ import { ProviderEndpointSchema, ProviderSchema, ProviderSettingSchema } from '@
 import type { Provider, ProviderEndpoint, ProviderSetting } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { duplicateProviderEndpointError, endpointUrlInUseError, resourceNotFoundError } from '../errors'
+import { cachedConfigRead } from './config-read-cache'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -14,7 +15,15 @@ import {
   type ProviderEndpointRow,
 } from './config-schema'
 
+/**
+ * 列供应商。走常驻读缓存：规划器给每个候选补供应商信息时会用到它，
+ * 而这份名单只在用户改供应商配置时才变（见 `./config-read-cache.ts`）。
+ */
 export async function listProviders(includeDeleted = false): Promise<Provider[]> {
+  return cachedConfigRead(`providers:${includeDeleted}`, () => readProviders(includeDeleted))
+}
+
+async function readProviders(includeDeleted: boolean): Promise<Provider[]> {
   const db = getConfigDb()
   // 侧栏顺序由用户在界面上拖出来（`sortOrder`）；序号相同的历史行再按创建时间倒序，
   // 因此「全为 0」的老数据仍然稳定地保持原来的相对位置。
@@ -24,7 +33,12 @@ export async function listProviders(includeDeleted = false): Promise<Provider[]>
   return rows.map(mapProvider)
 }
 
+/** 按记录 id 取一个供应商；走常驻读缓存（单点查是规划器的 N+1 热点）。 */
 export async function getProvider(id: string): Promise<Provider | undefined> {
+  return cachedConfigRead(`provider:${id}`, () => readProvider(id))
+}
+
+async function readProvider(id: string): Promise<Provider | undefined> {
   const row = getConfigDb().select().from(providers).where(eq(providers.id, id)).get()
   return row ? mapProvider(row) : undefined
 }

@@ -11,6 +11,7 @@ import type {
 import { generateId, now } from '@common/utils'
 import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
 import { endpointUrlMissingError, resourceNotFoundError } from '../errors'
+import { cachedConfigRead } from './config-read-cache'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -42,8 +43,17 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
  *
  * 运行时拿到的是请求里的模型名，翻译成记录 id 由 `@server/proxy/routing/router` 负责；
  * 这里只认外键那一把钥匙，两把混用不会报错，只会静静查到另一个模型的绑定。
+ *
+ * 走常驻读缓存：这是代理每请求的读路径（见 `./config-read-cache.ts`）。
  */
 export async function listProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted = false, includeDisabled = false): Promise<LogicalModelProviderModel[]> {
+  return cachedConfigRead(
+    `provider-models-for-logical-model:${logicalModelRecordId}:${includeDeleted}:${includeDisabled}`,
+    () => readProviderModelsForLogicalModel(logicalModelRecordId, includeDeleted, includeDisabled),
+  )
+}
+
+async function readProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted: boolean, includeDisabled: boolean): Promise<LogicalModelProviderModel[]> {
   // 这里必须分开取「绑定开关」与「模型本体开关」：两列同名（`scheduling_policies.enabled`
   // 与 `provider_models.enabled`），把策略行整行嵌进 select 时后者会被前者盖住——不是
   // node:sqlite 折叠了列名，而是早先的实现直接写了 `enabled: model.enabled`。
@@ -75,8 +85,18 @@ export async function listProviderModelsForLogicalModel(logicalModelRecordId: st
  *
  * 返回 Map 而不是扁平数组，因为调用方已经拿着「落点顺序」；把排序重新塞回数组里只会
  * 多一层按 id 分组的逻辑。键就是传进来的记录 id，查询仍按调度策略的优先级、权重和创建时间稳定排序。
+ *
+ * 走常驻读缓存；键把「哪些落点」编码进去，所以不同的落点组合各存一份，
+ * 而一次批量规划里的同一组合也会命中（见 `./config-read-cache.ts`）。
  */
 export async function listProviderModelsForLogicalModels(logicalModelRecordIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
+  return cachedConfigRead(
+    `provider-models-for-logical-models:${[...logicalModelRecordIds].join(',')}:${includeDeleted}:${includeDisabled}`,
+    () => readProviderModelsForLogicalModels(logicalModelRecordIds, includeDeleted, includeDisabled),
+  )
+}
+
+async function readProviderModelsForLogicalModels(logicalModelRecordIds: readonly string[], includeDeleted: boolean, includeDisabled: boolean): Promise<Map<string, LogicalModelProviderModel[]>> {
   const result = new Map<string, LogicalModelProviderModel[]>()
   if (logicalModelRecordIds.length === 0) return result
 
