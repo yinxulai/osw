@@ -68,7 +68,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 
 装好后 OSW 常驻系统托盘，并会自己检查更新。Windows / Linux 上是下载后就地安装；macOS 因为签名状态，只能检查更新并跳到 DMG 下载页。
 
-装完接着看下面的[三步上手](#三步上手)。
+装完接着看下面的[三步上手](#三步上手)。想按功能逐项了解，见 [`apps/user-guide`](./apps/user-guide) 使用手册（基于 [Clarify](https://github.com/taicode-labs/clarify) 构建）。
 
 ## 为什么值得装
 
@@ -272,7 +272,7 @@ pnpm release:win     # 构建 Windows arm64 / x64 安装包
 pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 ```
 
-仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
+仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/user-guide` 是面向使用者的手册（Clarify 站点，`pnpm --filter @osw/user-guide dev`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
 
 设计目标、行为契约和验收标准的唯一权威在 [`docs/product/`](./docs/product/README.md)，构建与打包细节见 [packaging.md](./docs/product/packaging.md)；上游 API 的逐字快照见 [`docs/references/`](./docs/references/)。
 

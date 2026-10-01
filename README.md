@@ -68,7 +68,7 @@ Download the installer for your platform from the [latest release](https://githu
 
 Once installed, OSW lives in the system tray and checks for updates itself. Windows and Linux download and install updates in place; on macOS the ad-hoc signature means it can only check for updates and open the DMG download page.
 
-Next: [Up and running in three steps](#up-and-running-in-three-steps).
+Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/user-guide`](./apps/user-guide) handbook (Chinese, built with [Clarify](https://github.com/taicode-labs/clarify)).
 
 ## Why it's worth installing
 
@@ -270,7 +270,7 @@ pnpm release:win     # build Windows arm64 / x64 installers
 pnpm release:linux   # build Linux arm64 / x64 installers
 ```
 
-The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
+The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/user-guide` is the end-user handbook (a Clarify site, `pnpm --filter @osw/user-guide dev`), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
 Design goals, behaviour contracts and acceptance criteria have a single authority in [`docs/product/`](./docs/product/README.md); build and packaging details live in [packaging.md](./docs/product/packaging.md). Verbatim upstream API references are kept in [`docs/references/`](./docs/references/).
 

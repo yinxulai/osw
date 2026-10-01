@@ -1,0 +1,15 @@
+
+<svg width="256px" height="256px" viewBox="0 0 256 256" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <!-- OSW 标志：一道连续斜切的闪电。所有位图图标都由这个文件派生（pnpm icons）。 -->
+  <defs>
+    <linearGradient id="icon-gradient" gradientUnits="userSpaceOnUse" x1="41" y1="16" x2="215" y2="241">
+      <stop offset="0" stop-color="#FFE066"></stop>
+      <stop offset="0.38" stop-color="#FF9500"></stop>
+      <stop offset="0.72" stop-color="#F0297C"></stop>
+      <stop offset="1" stop-color="#7C3AED"></stop>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <path id="shap-1" d="M186 33L58 148H114L84 224L198 108H142Z" fill="url(#icon-gradient)" stroke="url(#icon-gradient)" stroke-width="34" stroke-linejoin="round"></path>
+  </g>
+</svg>
