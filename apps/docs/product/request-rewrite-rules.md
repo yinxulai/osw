@@ -309,6 +309,31 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 5. 试跑入参形态如何表达「一段事件序列」？
 6. 事件级改写的失败语义是否与整包一致（当前尝试失败）？
 
+### 6.2 响应阶段已被功能闸门关闭（当前状态）
+
+鉴于 §6.1 的能力缺口，**响应阶段改写当前整段关闭**——入口关掉，代码与类型保留。
+
+理由与 §6.1 的开头呼应：非流式响应能改，但占绝大多数的 SSE 流式请求改不了，而用户在「响应」阶段配好一串动作、到真实请求才发现流式下**什么都不发生**。静默地不做，比不提供这个阶段更糟：前者让用户以为规则生效了。因此在这个缺口补齐（§6.1 评审通过并落地）之前，产品层面不开放响应阶段。这与 §6 的「能力判定」是两根正交的轴：§6 回答「这份正文在这种形态下能不能按路径改」，闸门回答「这个入口今天开不开放」。
+
+关闭的是**入口**，不是**能力**：
+
+| 关闭的入口 | 位置 |
+| --- | --- |
+| 动作编辑器的阶段下拉不再列出「响应」 | `action-editor.tsx`（遍历 `@common/features` 的 `ENABLED_RULE_STAGES`） |
+| 测试用例的阶段下拉不再列出「响应」 | `rule-editor-dialog.tsx` |
+| 内核不再注册 `response-rewrite` 修改器，响应规则一次都不执行 | `createResponseModifiers`（`RESPONSE_REWRITE_ENABLED` 为假时跳过注册） |
+| 写入（`create` / `update`）与试跑（`test`）拒绝带响应阶段的请求 | 管理 API 回具名错误码 `RESPONSE_REWRITE_DISABLED`（HTTP 400） |
+
+界面藏起选项只是第一道：脚本、旧数据或第三方客户端仍可能把带响应阶段的请求打进来，只靠界面藏等于把闸门交给调用方自觉，因此管理 API 也挡一道。
+
+**没有关闭的**（避免把「关闭」做成「删除」）：
+
+- `RuleStage` 类型、`RequestRewriteRuleActionSchema.stage`、`delivery-shape.ts` 的 `stageShapeSupport` / `isStageRunnable` 及其单测——它们是**能力**的表述，原样保留，`delivery-shape.test.ts` 继续断言 `stageShapeSupport('response', 'incremental') === 'skipped'`、`('response', 'duplex') === 'not-applicable'`；
+- 响应改写修改器与引擎实现（`createResponseRewriteModifier` 单独导出、`applyRequestRewriteRules` 的响应阶段语义完整），并有直接覆盖它们的单测；
+- 库里既有的响应阶段数据（如果存在）仍能读出。
+
+重新开放只改一处：把 `packages/contracts/source/features.ts` 的 `RESPONSE_REWRITE_ENABLED` 翻回 `true`。它是被标注成 `boolean` 的常量（而不是字面量 `false`），因此 `if (RESPONSE_REWRITE_ENABLED)` 的两条分支都会留在打包产物里，不会被死代码消除裁掉——那才是真正意义上的删除。
+
 ## 7. 数据模型
 
 两张表的字段、主键与索引定义在 [data-model.md](./data-model.md) §3.13，这里只写字段之外必须知道的约定。
@@ -462,7 +487,7 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 | A：请求侧基础规则 | 已实现 | 实体、Schema、Store、管理 API、规则管理页、ProviderModel 绑定与排序、Header 动作、非流式 JSON path 动作、attempt 隔离与失败阻断 |
 | A2：脚本动作 | 已实现 | `script` 动作类型（沙箱执行、超时、受保护 Header / 投递形态字段校验、交回即整体替换）、控制台代码编辑器与类型提示、示例代码下拉与自动填入起始脚本、测试结果脚本日志；见 §5.5 |
 | B：协议字段预设 | 部分实现 | `thinking/reasoning` 预设见 §5.4；三种协议的字段矩阵与 Responses/Anthropic 人工验收仍未完成 |
-| C：非流式响应规则 | 部分实现 | 非流式响应 JSON 修改与响应阶段动作已生效，流式响应按 §6 跳过（跳过带具名理由）；请求日志中的规则执行摘要已落库并在请求详情展示规则名（粒度只到规则 ID 列表），响应字段修改安全审计未做。**注意：跳过意味着响应改写对占多数的 SSE 请求无效，这是当前最大缺口**，补齐方案见 §6.1 |
+| C：非流式响应规则 | 已关闭（闸门） | 能力已实现（非流式响应 JSON 修改、响应阶段动作、跳过带具名理由、请求日志规则执行摘要），但因流式缺口当前整段关闭，见 §6.2。**注意：跳过意味着响应改写对占多数的 SSE 请求无效，这是当前最大缺口**，补齐方案见 §6.1 |
 | C2：交付形态边界 | 已实现 | 交付形态抽成独立轴 `BodyDeliveryShape`，传输到形态换算穷尽无兜底；请求/响应两阶段 × 三种形态的可执行性有单一事实来源（`stageShapeSupport`），跳过逐条报理由，`websocket`（`duplex`）在响应阶段显式报错、试跑入口回 `TRANSPORT_NOT_IMPLEMENTED`；见 §6 |
 | D：流式事件级规则 | 设计待评审 | 仅允许有明确协议语义的 SSE 事件级动作，不支持任意文本替换；设计草案见 §6.1，独立设计评审拍板后再实施 |
 
@@ -472,6 +497,7 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 
 | 问题 | 当前行为 |
 | --- | --- |
+| 响应阶段是否开放 | 关闭（§6.2）：能力已实现但整段受 `RESPONSE_REWRITE_ENABLED` 闸门控制，界面不列出、内核不注册、管理 API 回 `RESPONSE_REWRITE_DISABLED`；翻回开关即恢复 |
 | 响应规则遇到流式请求时是跳过还是阻断 | 跳过响应阶段动作并继续请求、逐条报 `unsupported-shape`（§6），不阻断 |
 | WebSocket（`duplex`）响应阶段如何处置 | 不适用：引擎在响应阶段收到 `duplex` 直接报错，试跑入口回 `TRANSPORT_NOT_IMPLEMENTED`（§6）；请求阶段随 WebSocket 入口本身未实现 |
 | `thinking/reasoning` 首期覆盖哪些供应商和字段 | 见 §5.4 的当前实现 |

@@ -1,6 +1,7 @@
 import type { DeliveryDecisionRef, Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
 import { bodyDeliveryShape } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
+import { RESPONSE_REWRITE_ENABLED } from '@common/features'
 import type { ProtocolAdapter, ProtocolConversionAdapter, StreamConverter } from '@server/proxy/protocols/shared/types'
 import type { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
 import { isEventStreamResponse } from '@server/proxy/adapters/http-response-sink'
@@ -32,13 +33,18 @@ export interface ResponseModifierOptions {
  *
  * 改写会改响应头，因此它必须把头部帧一起扣住，直到正文就绪再一并交出——否则出口
  * 已经按旧头开始写了。
+ *
+ * **响应改写整段受 `RESPONSE_REWRITE_ENABLED` 闸门控制**：关闭时它根本不进候选列表，
+ * 于是响应阶段的规则一条都不会跑。这不是「运行时忘判」，而是「压根没注册」——
+ * 前者会留下一条能被别的路径绕过的缝，后者没有缝。修改器实现原样保留，翻回开关即恢复。
  */
 export function createResponseModifiers(options: ResponseModifierOptions): Modifier[] {
-  return [
+  const modifiers: Modifier[] = [
     createDownstreamHeadModifier(options),
     createConversionModifier(options),
-    createResponseRewriteModifier(options),
   ]
+  if (RESPONSE_REWRITE_ENABLED) modifiers.push(createResponseRewriteModifier(options))
+  return modifiers
 }
 
 function createDownstreamHeadModifier(options: ResponseModifierOptions): Modifier {
@@ -132,7 +138,13 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
   }
 }
 
-function createResponseRewriteModifier(options: ResponseModifierOptions): Modifier {
+/**
+ * 响应改写修改器本体。它**不**由 {@link createResponseModifiers} 无条件注册——注册与否
+ * 取决于 `RESPONSE_REWRITE_ENABLED`（见 `@common/features`），响应阶段关闭时它根本不进
+ * 候选列表。因此这个工厂是单独导出的：实现与闸门分开，关闭时实现仍在、可被单测直接覆盖，
+ * 重新开放只是让 `createResponseModifiers` 把它加回去。
+ */
+export function createResponseRewriteModifier(options: ResponseModifierOptions): Modifier {
   let head: HeadFrame | null = null
   let body = ''
   return {

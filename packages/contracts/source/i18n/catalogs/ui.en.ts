@@ -1691,6 +1691,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'errors.INVALID_MODEL': 'The request does not carry a usable model name',
   'errors.MANUAL_MODEL_UNAVAILABLE': 'The manually selected provider model is not available for this protocol',
   'errors.REQUEST_REWRITE_RULE_FAILED': 'A request rewrite rule rejected this request',
+  'errors.RESPONSE_REWRITE_DISABLED': 'Response-stage rewriting is turned off: streaming responses cannot be rewritten yet, so this cannot be saved or tested',
   'errors.PROXY_INTERNAL_ERROR': 'Internal proxy error',
   'errors.SYSTEM_PROXY_RESOLUTION_FAILED': 'Could not resolve the system proxy settings',
   'errors.OUTBOUND_PROXY_UNREACHABLE': 'Could not reach the target through the outbound proxy',

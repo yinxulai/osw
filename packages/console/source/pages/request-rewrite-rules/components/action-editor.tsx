@@ -12,6 +12,8 @@ import { PanelCodeEditor } from '@/pages/router/panel/panel-code-editor'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT } from '@common/schemas'
+import { ENABLED_RULE_STAGES } from '@common/features'
+import type { RuleStage } from '@common/schemas'
 import type { SchemaFieldDescriptor } from '@common/router/types'
 import { defaultRewriteScript, rewriteScriptSamplesForStage, shouldReseedScript } from '../rewrite-script-samples'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
@@ -21,6 +23,15 @@ const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
   append: 'rules.actions.operation.append',
   remove: 'rules.actions.operation.remove',
   replace: 'rules.actions.operation.replace',
+}
+
+/**
+ * 各阶段的显示名。下拉不再硬编码选项，而是遍历 `ENABLED_RULE_STAGES`——响应阶段是否可选
+ * 由 `@common/features` 那一个开关决定，两个下拉不必各写一遍判断、也不会各写漏一处。
+ */
+const STAGE_LABEL_KEY: Record<RuleStage, UiCatalogKey> = {
+  request: 'rules.stage.request',
+  response: 'rules.stage.response',
 }
 
 /** 值字段的标签与占位符按「是否替换」和「目标是 Header 还是 Body」分档。 */
@@ -169,7 +180,7 @@ export function ActionEditor(props: ActionEditorProps) {
                     : { stage })
                 }}>
                   <SelectTrigger aria-label={t('rules.actions.stageAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
+                  <SelectContent>{ENABLED_RULE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{t(STAGE_LABEL_KEY[stage])}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={action.target} onValueChange={value => {
                   const target = value as RuleActionTarget

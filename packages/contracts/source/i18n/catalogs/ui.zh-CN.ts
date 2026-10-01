@@ -1691,6 +1691,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'errors.INVALID_MODEL': '请求没有携带可用的模型名称',
   'errors.MANUAL_MODEL_UNAVAILABLE': '手动指定的供应商模型当前不可用于该协议',
   'errors.REQUEST_REWRITE_RULE_FAILED': '请求重写规则拒绝了这次请求',
+  'errors.RESPONSE_REWRITE_DISABLED': '响应阶段改写已关闭：流式响应暂无法改写，因此不能保存或试跑',
   'errors.PROXY_INTERNAL_ERROR': '代理内部错误',
   'errors.SYSTEM_PROXY_RESOLUTION_FAILED': '无法解析系统代理设置',
   'errors.OUTBOUND_PROXY_UNREACHABLE': '无法通过出站代理连接到目标地址',

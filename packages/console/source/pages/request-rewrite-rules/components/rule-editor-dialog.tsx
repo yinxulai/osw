@@ -21,7 +21,9 @@ import {
 import { RuleEditor } from './rule-editor'
 import { toApiRuleAction, type RequestRewriteRule, type RuleTestCase } from '../types'
 import { bodyDeliveryShape, isStageRunnable } from '@common/delivery-shape'
-import type { RequestRewriteRule as ApiRequestRewriteRule, TransportKind } from '@common/schemas'
+import { ENABLED_RULE_STAGES } from '@common/features'
+import type { UiCatalogKey } from '@common/i18n/catalogs'
+import type { RequestRewriteRule as ApiRequestRewriteRule, RuleStage, TransportKind } from '@common/schemas'
 
 /** 试跑结果直接沿用 API 的返回结构：字段只在一处声明，日后加 `skippedRules` 这类字段不会漏同步。 */
 type RuleTestResult = RequestRewriteTestResult
@@ -40,6 +42,12 @@ const SKIP_REASON_KEY = {
   'unmatched-protocol': 'rules.tests.skipReason.unmatchedProtocol',
   'unsupported-shape': 'rules.tests.skipReason.unsupportedShape',
 } as const
+
+/** 阶段下拉的显示名。可选集合来自 `@common/features`，本组件不再自己决定开放哪些阶段。 */
+const STAGE_LABEL_KEY: Record<RuleStage, UiCatalogKey> = {
+  request: 'rules.stage.request',
+  response: 'rules.stage.response',
+}
 
 interface RuleEditorDialogProps {
   open: boolean
@@ -156,7 +164,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                           <FormField label={t('rules.tests.stage')} htmlFor={`${testCase.id}-stage`}>
                             <Select value={testCase.stage} onValueChange={value => { const stage = value as RuleTestCase['stage']; const input = defaultTestInput(stage); updateTestCase(testCase.id, { stage, ...input }) }}>
                               <SelectTrigger id={`${testCase.id}-stage`} className="w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
+                              <SelectContent>{ENABLED_RULE_STAGES.map(stage => <SelectItem key={stage} value={stage}>{t(STAGE_LABEL_KEY[stage])}</SelectItem>)}</SelectContent>
                             </Select>
                           </FormField>
                           <FormField label={t('rules.tests.transport')} htmlFor={`${testCase.id}-transport`} hint={t('rules.tests.transport.hint')}>
