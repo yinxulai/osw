@@ -18,15 +18,25 @@ export interface RequestContext {
   readonly method: string
   readonly path: string
   readonly headers: IncomingHttpHeaders
+  /**
+   * 会话亲和键：客户端自带的按会话稳定的请求 ID（六个标准头之一，见
+   * `request-attribute-collector`），拿不到时为 `null`。
+   *
+   * 它是**客户端声明的事实**，代理不推导、不改写：调度用它把同一会话粘在
+   * 最近一次成功的供应商模型上（缓存亲和，见 `upstream/affinity`），
+   * 观测侧则原样落库为 `request.client_request_id` 属性。
+   */
+  readonly sessionKey: string | null
   readonly attributes: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
   readonly requestBody: Buffer
   readonly signal: AbortSignal
 }
 
-export type RequestContextInput = Omit<RequestContext, 'signal' | 'headers' | 'attributes' | 'transport'> & {
+export type RequestContextInput = Omit<RequestContext, 'signal' | 'headers' | 'attributes' | 'transport' | 'sessionKey'> & {
   headers?: IncomingHttpHeaders
   attributes?: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
   signal?: AbortSignal
+  sessionKey?: string | null
   /** 省略即 `http`：不以形态为卖点的调用方（模型连通性探测、能力自检）都是一问一答形状的。 */
   transport?: TransportKind
 }
@@ -37,6 +47,7 @@ export function createRequestContext(input: RequestContextInput): RequestContext
     headers: input.headers ?? {},
     attributes: input.attributes ?? [],
     transport: input.transport ?? 'http',
+    sessionKey: input.sessionKey ?? null,
     signal: input.signal ?? new AbortController().signal,
   }
 }

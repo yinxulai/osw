@@ -10,6 +10,14 @@ export interface PlannerInput {
   readonly clientProtocol: Protocol
   /** 管理端手工锁定的模型。非空时规划器只返回它，并忽略健康状态与启用开关。 */
   readonly manualModelId: string | null
+  /**
+   * 会话亲和键：客户端自带的按会话稳定的请求 ID（拿不到时缺省）。
+   *
+   * 开启缓存亲和后，规划器把这个会话粘在它最近一次成功的供应商模型上（健康优先级不变，
+   * 只是排序提前）；没有键、功能关闭或绑定不存在时，调度退化为纯优先级排序。
+   * 手动锁定优先于亲和——用户显式指定的东西不录取任何策略。
+   */
+  readonly sessionKey?: string | null
 }
 
 export interface PlanResult {

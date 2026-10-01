@@ -15,6 +15,12 @@ export interface ModelWithProvider {
 export interface AvailableModelsOptions {
   /** 手动模式精确指定的模型；忽略模型、供应商及健康状态。 */
   manualModelId?: string | null
+  /**
+   * 缓存亲和指定的模型（会话最近一次成功的那个）。**只对健康候选生效**：
+   * 它在健康组里时被挪到最前面，在不可用组里时保持原位——冷却中的候选本来就是
+   * 队尾兜底，把冷候选提到队首等于主动迎着冷却与全价 prefill 撞上去。
+   */
+  affinityProviderModelId?: string | null
 }
 
 /**
@@ -52,13 +58,15 @@ export async function getAvailableModels(modelId = BUILT_IN_DEFAULT_LOGICAL_MODE
     else unavailableModels.push(candidate)
   }
 
-  return [...availableModels, ...unavailableModels]
+  return [...applyAffinityOrdering(availableModels, options.affinityProviderModelId), ...unavailableModels]
 }
 
 export interface BatchAvailableModelsInput {
   /** 落点的**模型 id**（路由定义里写的那个名字）。 */
   readonly logicalModelId: string
   readonly manualModelId: string | null
+  /** 见 {@link AvailableModelsOptions.affinityProviderModelId}。 */
+  readonly affinityProviderModelId?: string | null
 }
 
 /**
@@ -109,9 +117,25 @@ export async function getAvailableModelsBatch(inputs: readonly BatchAvailableMod
       if (!providerCoolingDown && !modelCoolingDown) availableModels.push(candidate)
       else unavailableModels.push(candidate)
     }
-    result.set(input.logicalModelId, [...availableModels, ...unavailableModels])
+    result.set(input.logicalModelId, [...applyAffinityOrdering(availableModels, input.affinityProviderModelId), ...unavailableModels])
   }
   return result
+}
+
+/**
+ * 缓存亲和的排序落地：把会话绑定的候选挪到健康组的最前面，其余相对顺序不动。
+ *
+ * 输入**只允许是健康组**——调用方（单点与批量规划）都先做完健康分组再交进来，
+ * 这里不重复判断、也不判断不了健康：绑定候选若已进冷却，保持队尾兜底的原位，
+ * 否则「粘住它」会变成「撞上它的冷却」。候选不在列表里（被删、被停用）或本来
+ * 就在首位时原样返回；绑定永远不创造候选，只调整既有候选的顺序。
+ */
+export function applyAffinityOrdering(availableModels: readonly ModelWithProvider[], affinityProviderModelId: string | null | undefined): readonly ModelWithProvider[] {
+  if (!affinityProviderModelId || availableModels.length <= 1) return availableModels
+  const index = availableModels.findIndex(candidate => candidate.model.id === affinityProviderModelId)
+  if (index <= 0) return availableModels
+  const bound = availableModels[index]
+  return [bound, ...availableModels.slice(0, index), ...availableModels.slice(index + 1)]
 }
 
 function isCoolingDown(cooldownUntilTime: number | null | undefined, now: number): boolean {

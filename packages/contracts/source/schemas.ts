@@ -387,6 +387,24 @@ export const SettingsSchema = z.object({
   cooldownMaxSeconds: z.number().int().positive().default(300),
   consecutiveFailureThreshold: z.number().int().positive().default(3),
   idleTimeoutMilliseconds: z.number().int().positive().default(30000),
+  /**
+   * 会话级缓存亲和开关。
+   *
+   * 开启后，同一个会话键（客户端自带的稳定请求 ID，六个标准头之一）的请求会粘在
+   * 它最近一次成功的供应商模型上：首位供应商短暂故障进入冷却时，老会话留在已经
+   * 热了缓存的继任供应商上，而不是在冷却到期后切回去再付一次全价 prefill。
+   * 新会话不受影响，仍按调度顺序尝试——恢复的供应商靠新会话拿回流量，
+   * 不需要主动探测（见 `docs/product/proxy-engine.md` §缓存亲和）。
+   */
+  cacheAffinityEnabled: z.boolean().default(false),
+  /**
+   * 缓存亲和绑定的保持时长。
+   *
+   * 会话空闲超过这个时长后绑定作废、按新会话处理：provider 侧 prompt cache 的
+   * TTL 通常只有几分钟，绑定活得比缓存久没有收益，只会拖慢流量按优先级回流。
+   * 只在「最近一次成功」时刷新。
+   */
+  cacheAffinityTtlSeconds: z.number().int().positive().default(900),
   outboundProxyMode: OutboundProxyModeSchema.default('system'),
   outboundProxyUrl: z.string().default(''),
   outboundProxyBypass: z.string().default('localhost,127.0.0.1,::1'),

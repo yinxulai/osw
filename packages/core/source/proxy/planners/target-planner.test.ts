@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Protocol } from '@common/schemas'
 import type { PlanResult } from '@server/proxy/contracts'
 import type * as RouterModule from '@server/proxy/routing/router'
@@ -7,13 +7,22 @@ import type { ModelWithProvider } from '@server/proxy/routing/router'
 const mocks = vi.hoisted(() => ({
   models: [] as ModelWithProvider[],
   batchCalls: [] as Array<Array<{ logicalModelId: string; manualModelId: string | null }>>,
+  affinityCalls: [] as Array<string | null | undefined>,
+  settings: { cacheAffinityEnabled: false, cacheAffinityTtlSeconds: 900 },
+}))
+
+const settingsStore = vi.hoisted(() => ({
+  getSettings: vi.fn(),
 }))
 
 interface ManualModelOptions {
   manualModelId?: string | null
+  affinityProviderModelId?: string | null
 }
 
 type BatchPlannerInput = { logicalModelId: string; manualModelId: string | null }
+
+vi.mock('@server/database/settings-store', () => settingsStore)
 
 // 只替换「谁能用」（需要数据库与健康冷却），端点匹配与协议转换矩阵用真实实现：
 // 规划器要验证的正是「匹配结果如何变成一份目标」这段合成逻辑。
@@ -21,9 +30,12 @@ vi.mock('@server/proxy/routing/router', async importOriginal => {
   const original = await importOriginal<typeof RouterModule>()
   return {
     ...original,
-    getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => options.manualModelId
-      ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
-      : mocks.models,
+    getAvailableModels: async (_logicalModelId: string, options: ManualModelOptions = {}) => {
+      mocks.affinityCalls.push(options.affinityProviderModelId)
+      return options.manualModelId
+        ? mocks.models.filter(candidate => candidate.model.id === options.manualModelId)
+        : mocks.models
+    },
     getAvailableModelsBatch: async (inputs: BatchPlannerInput[]) => {
       mocks.batchCalls.push(inputs)
       return new Map(inputs.map(input => [
@@ -37,10 +49,17 @@ vi.mock('@server/proxy/routing/router', async importOriginal => {
 })
 
 import { buildUpstreamTarget, proxyTargetPlanner } from './target-planner'
+import { clearAffinityStoreForTests, writeAffinityBinding } from '@server/proxy/upstream/affinity'
+
+beforeEach(() => {
+  settingsStore.getSettings.mockResolvedValue(mocks.settings)
+})
 
 afterEach(() => {
   mocks.models = []
   mocks.batchCalls = []
+  mocks.affinityCalls = []
+  clearAffinityStoreForTests()
 })
 
 interface EndpointFixture {
@@ -82,10 +101,10 @@ function candidate(id: string, endpoints: EndpointFixture[], providerId = 'prov_
   }
 }
 
-function plan(clientProtocol: Protocol, manualModelId: string | null = null): Promise<PlanResult> {
+function plan(clientProtocol: Protocol, manualModelId: string | null = null, sessionKey?: string): Promise<PlanResult> {
   // 上游形态不在这里传：它由端点自己的地址决定（`wss://` 就是 websocket）。
   // 客户端跳的取值从不改变哪个端点合法。
-  return Promise.resolve(proxyTargetPlanner.plan({ logicalModelId: 'default', clientProtocol, manualModelId }))
+  return Promise.resolve(proxyTargetPlanner.plan({ logicalModelId: 'default', clientProtocol, manualModelId, sessionKey }))
 }
 
 describe('端点匹配', () => {
@@ -202,8 +221,8 @@ describe('批量规划', () => {
     ])
 
     expect(mocks.batchCalls).toEqual([[
-      { logicalModelId: 'first', manualModelId: null },
-      { logicalModelId: 'second', manualModelId: null },
+      { logicalModelId: 'first', manualModelId: null, affinityProviderModelId: null },
+      { logicalModelId: 'second', manualModelId: null, affinityProviderModelId: null },
     ]])
     expect(results).toHaveLength(2)
     expect(results[0].targets).toHaveLength(1)
@@ -281,5 +300,49 @@ describe('buildUpstreamTarget', () => {
       providerModelId: 'model_alpha',
       endpointId: 'model_alpha:openai-completions',
     })
+  })
+})
+
+describe('缓存亲和', () => {
+  it('hands the session binding to the router when enabled', async () => {
+    mocks.settings = { cacheAffinityEnabled: true, cacheAffinityTtlSeconds: 900 }
+    settingsStore.getSettings.mockResolvedValue(mocks.settings)
+    writeAffinityBinding('default', 'sess_alpha', 'model_alpha', true, 900)
+    mocks.models = [
+      candidate('model_alpha', [{ protocol: 'openai-completions', url: 'https://upstream.example.com/v1/chat/completions' }]),
+      candidate('model_beta', [{ protocol: 'openai-completions', url: 'https://upstream.example.com/v2/chat/completions' }]),
+    ]
+
+    await plan('openai-completions', null, 'sess_alpha')
+
+    // 规划器只负责解析绑定，排序在路由的健康分组处完成：这里验证的是「绑定被交下去」。
+    expect(mocks.affinityCalls).toEqual(['model_alpha'])
+  })
+
+  it('resolves nothing when affinity is disabled', async () => {
+    mocks.settings = { cacheAffinityEnabled: false, cacheAffinityTtlSeconds: 900 }
+    settingsStore.getSettings.mockResolvedValue(mocks.settings)
+    writeAffinityBinding('default', 'sess_alpha', 'model_alpha', true, 900)
+    mocks.models = [
+      candidate('model_alpha', [{ protocol: 'openai-completions', url: 'https://upstream.example.com/v1/chat/completions' }]),
+    ]
+
+    await plan('openai-completions', null, 'sess_alpha')
+
+    expect(mocks.affinityCalls).toEqual([null])
+  })
+
+  it('does not resolve a binding under manual lock', async () => {
+    mocks.settings = { cacheAffinityEnabled: true, cacheAffinityTtlSeconds: 900 }
+    settingsStore.getSettings.mockResolvedValue(mocks.settings)
+    writeAffinityBinding('default', 'sess_alpha', 'model_alpha', true, 900)
+    mocks.models = [
+      candidate('model_beta', [{ protocol: 'openai-completions', url: 'https://upstream.example.com/v1/chat/completions' }]),
+    ]
+
+    // 手动锁定优先于亲和：用户显式指定的模型不接受任何策略的改排。
+    await plan('openai-completions', 'model_beta', 'sess_alpha')
+
+    expect(mocks.affinityCalls).toEqual([null])
   })
 })

@@ -201,7 +201,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   // 落点 → 候选：落点列表按优先级排，第一个有可用候选的落点胜出。
   // 协议取自图的决策而不是入口自己再记一份：两者同源才能保证「图说是什么就是什么」。
   // 形态**不传**：上游跳用什么形态是规划器对那个候选的决定（端点地址的 scheme），客户端偏好从不改变哪个端点合法。
-  const plan = await planLandingTargets({ logicalModelIds: route.logicalModelIds, clientProtocol: route.protocol })
+  // 会话键在入口已经解出来（`clientRequestId`），多个落点共用同一个：亲和是会话级的事实，不是落点级的。
+  const plan = await planLandingTargets({ logicalModelIds: route.logicalModelIds, clientProtocol: route.protocol, sessionKey: clientRequestId })
   console.debug(`[proxy] routing planned requestId=${requestId} landingModels=${route.logicalModelIds.join(',')} logicalModelId=${plan.logicalModelId ?? 'none'} protocol=${route.protocol} transport=${route.transport} planner=${proxyTargetPlanner.id} manualModelId=${plan.manualModelId ?? 'none'} reason=${plan.logicalModelId === null ? plan.reason : 'none'} targets=${plan.targets.length} targetOrder=${describeTargetOrder(plan.targets)} upstreamTransports=${plan.targets.map(target => resolveUpstreamTransport(target.url, route.transport)).join(',') || 'none'}`)
   if (plan.logicalModelId === null) {
     // 落点一个都没成，但图确实选过落点：日志照记首选落点，否则「路由到了谁」会被记成空白。
@@ -233,6 +234,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     method,
     path,
     headers: req.headers,
+    // 成功收尾要用它刷新缓存亲和的绑定：与规划用的是同一个键，两处不能各解一份。
+    sessionKey: clientRequestId,
     attributes,
     requestBody,
     signal: controller.signal,
