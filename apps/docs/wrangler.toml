@@ -4,6 +4,13 @@
 #   Root directory     `apps/docs`
 #   Build command      `pnpm install && pnpm build`
 #   Build output dir   `output`
+#   Deploy command     **留空**（不要填 `wrangler deploy`）
+#
+# ⚠️ Deploy command 必须留空。新建的 Pages 项目，Build settings 里可能带一条默认的
+# `npx wrangler deploy`——那是 **Workers** 的部署命令。对纯静态 Pages 站点跑它，会在
+# 部署阶段报 `Missing entry-point to Worker script or to assets directory`（构建成功、
+# 只有部署这一步失败）。Pages 自己会把 `pages_build_output_dir` 指到的目录当产物上传，
+# **不需要**任何 deploy 命令；必须显式删掉那条默认值，否则构建永远不会发布。
 #
 # 本文件把「输出目录」这件事从后台搬进了仓库：`pages_build_output_dir` 就是 Pages 用的
 # 构建产物目录，与 `apps/www` 的 `[assets] directory` 回答同一个问题。一旦本文件存在，

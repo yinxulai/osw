@@ -52,9 +52,11 @@ pnpm --filter @osw/docs preview  # 预览构建产物
 | Root directory | `apps/docs` |
 | Build command | `pnpm install && pnpm build` |
 | Build output directory | `output` |
+| Deploy command | **留空** |
 
 要点与坑：
 
+- **Deploy command 必须留空。** 新建的 Pages 项目，Build settings 里可能带一条默认的 `npx wrangler deploy`——那是 **Workers** 的部署命令。对纯静态 Pages 站点跑它会在**部署阶段**报 `Missing entry-point to Worker script or to assets directory`（构建其实成功了，只有最后一步失败）。Pages 会自己上传 `pages_build_output_dir` 指到的目录，不需要任何 deploy 命令，删掉那条默认值即可。
 - **`wrangler.toml` 就在仓库里**（[`apps/docs/wrangler.toml`](./wrangler.toml)），Git 集成会直接用它：只有 `name`、`pages_build_output_dir`、`compatibility_date` 三个键，因为站点没有 Worker、没有绑定、没有密钥。它同时是 Pages 项目配置的**唯一事实来源**——同名项在后台会变成只读。
 - **包管理器**：`pnpm-lock.yaml` 在仓库根，Root directory 指向子目录时 Cloudflare 未必能自动识别。在 Build 的 **Variables and secrets** 里加一条 `PNPM_VERSION`（与仓库根 `package.json` 的 `packageManager` 同版）最稳。
 - **自定义域名**：Pages 的 Wrangler 配置**不认** `routes`（那是 Workers 的键），所以域名只能在后台 Custom domains 里手动绑定，例如 `docs.osw.yinxulai.com`。前提是该 zone 在同一个 Cloudflare 账号下。
