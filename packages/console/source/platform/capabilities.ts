@@ -20,8 +20,8 @@ export interface PlatformCapabilities {
   updater: UpdaterAPI | null
   /** 开发版自动导出官网截图。仅 macOS Electron 开发态提供。 */
   screenshotExport: ScreenshotExportAPI | null
-  /** 把渲染层当前生效的亮暗主题告知宿主；浏览器形态不需要。 */
-  setTheme: ((theme: 'light' | 'dark') => void) | null
+  /** 把渲染层当前生效的主题模式告知宿主：`'system'` 时宿主保持跟随操作系统。浏览器形态不需要。 */
+  setTheme: ((theme: 'light' | 'dark' | 'system') => void) | null
   /** 订阅原生窗口全屏状态；系统窗口按钮会随全屏状态改变位置或隐藏。 */
   onFullScreenChanged: ((callback: (fullScreen: boolean) => void) => () => void) | null
   /** 读取当前是否处于原生全屏，保证订阅建立前已经进入全屏时也能得到正确状态。 */

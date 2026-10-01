@@ -52,7 +52,7 @@ function App() {
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const sidebarExpanded = sidebarPinned || sidebarHovered
-  const { toggleTheme } = useAppearance()
+  const { themeMode, effectiveThemeMode, setThemeMode, toggleTheme } = useAppearance()
   // 主题落到 `<html>` 上这件事与托盘面板共用同一份（见 hook 内部注释）。
   const theme = useDocumentTheme()
   const proxyStatus = useProxyStatus()
@@ -66,10 +66,11 @@ function App() {
   useAppearanceUrlSync()
 
   // 主题还要告知主进程：原生标题栏与窗口底色跟着亮暗走（托盘面板不做这件事——它没有
-  // 原生标题栏）。
+  // 原生标题栏）。推的是**生效模式**而不是解析后的亮暗：跟随系统必须原样传达，主进程才能
+  // 把 nativeTheme 留在 system 档，让原生外观跟着操作系统实时切换；解析值会把钉死旧值。
   useEffect(() => {
-    getPlatformCapabilities().setTheme?.(theme)
-  }, [theme])
+    getPlatformCapabilities().setTheme?.(effectiveThemeMode)
+  }, [effectiveThemeMode])
 
   // 引导页是覆盖整个应用的「特殊层」：不带侧边栏、右上角固定主题与语言切换。
   // 不经过 AppLayout，因此它压在任何普通页面之上。
@@ -108,7 +109,8 @@ function App() {
                         <AppSidebar
                           showBrand={!isElectron}
                           theme={theme}
-                          onToggleTheme={toggleTheme}
+                          themeMode={themeMode}
+                          onThemeModeChange={setThemeMode}
                           proxyPort={proxyStatus?.port}
                           proxyRunning={proxyStatus?.running ?? false}
                           expanded={sidebarExpanded}
