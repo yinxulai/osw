@@ -3,8 +3,18 @@ import { defineConfig } from '@clarify-labs/cli'
 // OSW 使用手册的站点结构。
 //
 // 这里只声明「有哪些页、怎么分组」；每页的正文在 `source/` 下的 MDX 里。
-// 分组顺序就是使用者的阅读顺序：先把网关搭起来 → 配上游 → 接客户端 → 处理请求 →
-// 看运行结果 → 管数据 → 查参考。
+//
+// 分组顺序就是使用者的心智路径，也是本手册的布局原则（见 README.md）：
+//   认识它（index/concepts）
+//   → 跑起来（installation/quick-start）
+//   → 接上游（providers/logical-models/routing/failover/cache-affinity）
+//   → 接客户端（protocols/client-config）
+//   → 处理请求（rewrite/outbound-proxy）
+//   → 看运行结果（request-logs/analytics/runtime-logs）
+//   → 管数据与安全（data/cloud-sync/privacy）
+//   → 查参考与排查（settings/cli/troubleshooting/limitations）
+//
+// 分组只服务于导航：同一件事只在一页里展开，跨页只写一句结论加链接。
 export default defineConfig({
   title: 'OSW 使用手册',
   description: '本地 AI 网关：一个地址接住所有客户端，自动故障转移。',
@@ -31,17 +41,23 @@ export default defineConfig({
         icon: 'BookOpen',
         pages: [
           {
-            group: '开始使用',
-            icon: 'Rocket',
+            group: '认识 OSW',
+            icon: 'Sparkles',
             pages: [
               { page: 'index', title: 'OSW 是什么', icon: 'Sparkles' },
-              { page: 'installation', title: '安装与启动', icon: 'Download' },
-              { page: 'quick-start', title: '三步搭好网关', icon: 'Flag' },
               { page: 'concepts', title: '核心概念', icon: 'Shapes' },
             ],
           },
           {
-            group: '配置路由',
+            group: '跑起来',
+            icon: 'Rocket',
+            pages: [
+              { page: 'installation', title: '安装与启动', icon: 'Download' },
+              { page: 'quick-start', title: '三步搭好网关', icon: 'Flag' },
+            ],
+          },
+          {
+            group: '接入上游',
             icon: 'Network',
             pages: [
               { page: 'providers', title: '供应商与模型', icon: 'Server' },

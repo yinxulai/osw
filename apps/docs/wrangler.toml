@@ -1,0 +1,40 @@
+# OSW 使用手册站点。部署由 **Cloudflare Pages 的 Git 集成**完成
+# （Dashboard → Workers & Pages → 本项目 → Settings → Build）：
+#
+#   Root directory     `apps/docs`
+#   Build command      `pnpm install && pnpm build`
+#   Build output dir   `output`
+#
+# 本文件把「输出目录」这件事从后台搬进了仓库：`pages_build_output_dir` 就是 Pages 用的
+# 构建产物目录，与 `apps/www` 的 `[assets] directory` 回答同一个问题。一旦本文件存在，
+# 它就是 Pages 项目配置的**唯一事实来源**——同名项在后台变成只读。
+#
+# **纯静态**：Clarify 的产物是逐页静态 HTML（`output/<slug>/index.html`）加 Pagefind 索引、
+# 每页 `.md` 孪生文件与 `llms.txt`；没有 Worker 脚本、没有函数，所以既不需要 `main`，
+# 也不需要任何绑定或密钥。目录名与 `source/` 对仗：`source` 进、`output` 出。
+
+name = "osw-docs"
+
+# 构建产物目录。Clarify 默认就写 `output/`（见 `apps/docs/package.json` 的 `build`），
+# 这里显式声明，让「Pages 去哪拿产物」在仓库里可复核，而不是只活在后台表单里。
+pages_build_output_dir = "./output"
+
+# 固定兼容日期，不跟最新。站点是纯静态资源，没有运行时逻辑，但显式写死可以避免
+# 「后台某天改成了 Latest」这种仓库外漂移。
+compatibility_date = "2026-10-01"
+
+# ---------------------------------------------------------------- 自定义域名
+#
+# ⚠️ 上线前必须在后台做这一步：Pages → 本项目 → Custom domains → Set up a domain，
+# 绑定 `osw-docs.pages.dev` 之外的永久地址（例如 `docs.osw.yinxulai.com`）。
+#
+# 与 `apps/www` / `apps/apis` 不同，Pages 的 Wrangler 配置**不认** `routes` / `[[routes]]`
+# （那是 Workers 的键），所以域名绑定只能在 Dashboard 手动完成，不能像那两个 Worker 一样
+# 写成仓库里的一行。前提不变：`yinxulai.com` 这个 zone 在同一个 Cloudflare 账号下。
+
+# ---------------------------------------------------------------- 构建期环境
+#
+# `pnpm-lock.yaml` 在仓库根，而 Root directory 指向子目录时 Cloudflare 未必能自动识别包
+# 管理器。在后台 Build 的 **Variables and secrets** 里加一条 `PNPM_VERSION`
+# （与仓库根 `package.json` 的 `packageManager` 同版）最稳。这一条同样只存在于后台，
+# 因为它是 Pages 构建环境的事，不是仓库配置。

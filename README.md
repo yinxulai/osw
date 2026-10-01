@@ -68,7 +68,7 @@ Download the installer for your platform from the [latest release](https://githu
 
 Once installed, OSW lives in the system tray and checks for updates itself. Windows and Linux download and install updates in place; on macOS the ad-hoc signature means it can only check for updates and open the DMG download page.
 
-Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/docs`](./apps/docs) handbook (Chinese, built with [Clarify](https://github.com/taicode-labs/clarify)).
+Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/docs`](./apps/docs) handbook (Chinese, a [Clarify](https://github.com/taicode-labs/clarify) site published to Cloudflare Pages).
 
 ## Why it's worth installing
 
@@ -265,14 +265,16 @@ pnpm typecheck       # TypeScript
 pnpm lint            # ESLint plus the layering and package-boundary guards
 pnpm test            # the whole test suite
 pnpm build           # compile every package (no installers)
+pnpm build:docs      # build the docs site (Clarify → static output)
+pnpm deploy:docs     # publish apps/docs/output to Cloudflare Pages
 pnpm release:mac     # build macOS arm64 / x64 installers
 pnpm release:win     # build Windows arm64 / x64 installers
 pnpm release:linux   # build Linux arm64 / x64 installers
 ```
 
-The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a Clarify site, `pnpm --filter @osw/docs dev`), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
+The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a Clarify site published to Cloudflare Pages; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
-Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/product/`](./apps/docs/product/README.md); build and packaging details live in [packaging.md](./apps/docs/product/packaging.md). Verbatim upstream API references are kept in [`apps/docs/references/`](./apps/docs/references/).
+Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/product/`](./apps/docs/product/README.md); build and packaging details live in [packaging.md](./apps/docs/product/packaging.md). Verbatim upstream API references are kept in [`apps/docs/references/`](./apps/docs/references/). The layout of `apps/docs` itself (what each of `source/`, `product/`, `references/` and `design/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
 
 ## Feedback
 
