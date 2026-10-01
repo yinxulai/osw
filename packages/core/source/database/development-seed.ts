@@ -77,25 +77,28 @@ const PROVIDER_FIXTURES = [
  * 发生过的事。删配置只该让它从「可调度」的列表里消失，不该让观测页面上这段历史一起蒸发
  * ——观测库里的每一行都是请求当时落下的事实，与配置库此刻还留着什么无关。
  *
+ * 注意命名：这里说的是**本机配置被软删除**（用户点删、行留着 `deletedTime`），不是「模型版本
+ * 退役」那种上游厂商停服。两者是完全不同的生命周期，不要用 `retired` 之类的词去称呼它。
+ *
  * （`legacyName` 与活跃 fixture 同义：就地改名的匹配条件是「同一 id + 仍是旧名字」。）
  */
-const RETIRED_PROVIDER_FIXTURES = [
+const SOFT_DELETED_PROVIDER_FIXTURES = [
   {
-    id: 'prov_dev_retired',
-    name: 'Retired Demo Provider',
-    legacyName: 'Retired Demo Provider（开发示例）',
-    apiKeyReference: 'key_dev_retired',
-    apiKey: 'sk-development-retired',
+    id: 'prov_dev_deleted',
+    name: 'Deleted Demo Provider',
+    legacyName: 'Deleted Demo Provider（开发示例）',
+    apiKeyReference: 'key_dev_deleted',
+    apiKey: 'sk-development-deleted',
     endpoints: {
-      'openai-responses': 'https://api.retired-demo.example.com/v1/responses',
+      'openai-responses': 'https://api.deleted-demo.example.com/v1/responses',
     },
   },
 ] as const
 
-/** 参与请求归因、健康状态与就地改名的全部供应商 fixture：活跃的在前，已删除的在后。 */
-const ALL_PROVIDER_FIXTURES = [...PROVIDER_FIXTURES, ...RETIRED_PROVIDER_FIXTURES] as const
+/** 参与请求归因、健康状态与就地改名的全部供应商 fixture：活跃的在前，已软删除的在后。 */
+const ALL_PROVIDER_FIXTURES = [...PROVIDER_FIXTURES, ...SOFT_DELETED_PROVIDER_FIXTURES] as const
 
-const RETIRED_PROVIDER_IDS = new Set<string>(RETIRED_PROVIDER_FIXTURES.map(provider => provider.id))
+const SOFT_DELETED_PROVIDER_IDS = new Set<string>(SOFT_DELETED_PROVIDER_FIXTURES.map(provider => provider.id))
 
 const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_ark', 'doubao-seed-1-6', 'openai-completions', 1],
@@ -105,13 +108,13 @@ const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_openai', 'o3', 'openai-responses', 5],
   ['default', 'prov_dev_ark', 'doubao-seed-1-6-flash', 'openai-completions', 6],
   ['default', 'prov_dev_deepseek', 'deepseek-chat', 'openai-completions', 7],
-  // 挂在已删除供应商名下、自己也已删除的模型：它的历史请求必须照样能被检索与统计到，
+  // 挂在已软删除供应商名下、自己也已软删除的模型：它的历史请求必须照样能被检索与统计到，
   // 否则「这个模型以前用过多少」在配置删掉之后就再也答不上来。
-  ['default', 'prov_dev_retired', 'retired-demo-model', 'openai-responses', 8],
+  ['default', 'prov_dev_deleted', 'deleted-demo-model', 'openai-responses', 8],
 ] as const
 
-/** 已删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。 */
-const RETIRED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.length - 1
+/** 已软删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。 */
+const SOFT_DELETED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.length - 1
 
 const DEVELOPMENT_REQUEST_COUNT = 120
 
@@ -162,13 +165,13 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       id: provider.id,
       name: provider.name,
       description: 'Development sample provider',
-      // 已删除的 fixture 一进来就带删除标：它在可调度列表里从未出现过，但它的历史数据在。
-      enabled: !RETIRED_PROVIDER_IDS.has(provider.id),
+      // 已软删除的 fixture 一进来就带删除标：它在可调度列表里从未出现过，但它的历史数据在。
+      enabled: !SOFT_DELETED_PROVIDER_IDS.has(provider.id),
       // 种子行的侧栏顺序照 fixture 数组来：`createdTime` 全都一样，没有序号就没有确定顺序。
       sortOrder: ALL_PROVIDER_FIXTURES.indexOf(provider),
       createdTime: timestamp,
       updatedTime: timestamp,
-      deletedTime: RETIRED_PROVIDER_IDS.has(provider.id) ? timestamp : null,
+      deletedTime: SOFT_DELETED_PROVIDER_IDS.has(provider.id) ? timestamp : null,
     }))).run()
     for (const provider of ALL_PROVIDER_FIXTURES.filter(provider => existingProviderIds.has(provider.id))) {
       transaction.update(providers)
@@ -186,26 +189,26 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         id: `model_dev_provider_${index + 1}`,
         providerId: fixture[1],
         modelName: fixture[2],
-        // 已删除的模型与它的父供应商保持一致：停用 + 打标。
-        enabled: index !== RETIRED_PROVIDER_MODEL_INDEX,
+        // 已软删除的模型与它的父供应商保持一致：停用 + 打标。
+        enabled: index !== SOFT_DELETED_PROVIDER_MODEL_INDEX,
         createdTime: timestamp,
         updatedTime: timestamp,
-        deletedTime: index === RETIRED_PROVIDER_MODEL_INDEX ? timestamp : null,
+        deletedTime: index === SOFT_DELETED_PROVIDER_MODEL_INDEX ? timestamp : null,
       }))).run()
 
       for (const { fixture, index } of providerModelsToInsert) {
-        // 已删除 fixture 的子结构一并打标：与 `deleteProvider` / `deleteProviderModelRoute`
+        // 已软删除 fixture 的子结构一并打标：与 `deleteProvider` / `deleteProviderModelRoute`
         // 落库后的形状保持一致，读它的人不必区分「种子造出来的删除」与「用户点出来的删除」。
-        const retired = index === RETIRED_PROVIDER_MODEL_INDEX
+        const softDeleted = index === SOFT_DELETED_PROVIDER_MODEL_INDEX
         const protocols = [fixture[3]]
         for (const protocol of protocols) {
           const endpointId = `endpoint_dev_${fixture[1]}_${protocol}`
           const url = ALL_PROVIDER_FIXTURES.find(provider => provider.id === fixture[1])?.endpoints[protocol as keyof typeof ALL_PROVIDER_FIXTURES[number]['endpoints']] ?? 'https://api.example.com'
           const existingEndpoint = transaction.select().from(providerEndpoints).where(inArray(providerEndpoints.id, [endpointId])).get()
-          if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
-          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
+          if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
+          transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: !retired, createdTime: timestamp, updatedTime: timestamp, deletedTime: retired ? timestamp : null }).run()
+        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
       }
     }
   })

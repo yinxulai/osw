@@ -40,12 +40,12 @@ describe('development seed', () => {
     expect(await listLogicalModels()).toHaveLength(1)
     // 已删除的供应商 / 模型不进活跃列表，但行确实在表里（`deletedTime` 非空即为证据）。
     expect(await listProviders(true)).toHaveLength(5)
-    const retiredProviderRows = getConfigDb().select().from(providers).where(eq(providers.id, 'prov_dev_retired')).all()
-    expect(retiredProviderRows).toEqual([expect.objectContaining({ name: 'Retired Demo Provider', enabled: false, deletedTime: expect.any(Number) })])
+    const deletedProviderRows = getConfigDb().select().from(providers).where(eq(providers.id, 'prov_dev_deleted')).all()
+    expect(deletedProviderRows).toEqual([expect.objectContaining({ name: 'Deleted Demo Provider', enabled: false, deletedTime: expect.any(Number) })])
     const providerModelRows = getConfigDb().select().from(providerModels).all()
     expect(providerModelRows).toHaveLength(8)
     expect(providerModelRows.filter(row => row.deletedTime !== null)).toEqual([
-      expect.objectContaining({ id: 'model_dev_provider_8', providerId: 'prov_dev_retired', modelName: 'retired-demo-model', enabled: false }),
+      expect.objectContaining({ id: 'model_dev_provider_8', providerId: 'prov_dev_deleted', modelName: 'deleted-demo-model', enabled: false }),
     ])
     expect(await listRequestLogs(200)).toHaveLength(120)
     const firstBatchRequests = await listRequestLogs(120, 0)
