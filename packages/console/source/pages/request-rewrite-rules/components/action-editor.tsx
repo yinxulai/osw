@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FormField } from '@/components/form-kit'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import { PanelCodeEditor } from '@/pages/router/panel/panel-code-editor'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT } from '@common/schemas'
 import type { SchemaFieldDescriptor } from '@common/router/types'
+import { defaultRewriteScript, REWRITE_SCRIPT_SAMPLES } from '../rewrite-script-samples'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
 
 const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
@@ -113,6 +116,42 @@ function ScriptTimeoutInput(props: ScriptTimeoutInputProps) {
   )
 }
 
+interface ScriptSampleMenuProps {
+  onSelect: (code: string) => void
+  t: AppTranslator
+}
+
+/**
+ * 示例代码下拉：把一整段起始脚本塞进编辑器。
+ *
+ * 这里**刻意不**用 `asChild` 去包 `Button`（同 `rule-preset-menu.tsx` 的说明）：
+ * 项目跑在 React 18 上，`components/ui/*` 是不 forwardRef 的普通函数组件，
+ * Radix 拿不到触发器 ref，浮层会被挪到视口外（表现为「点了没反应」）。
+ */
+function ScriptSampleMenu(props: ScriptSampleMenuProps) {
+  const { onSelect, t } = props
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-2.5 system-xs-medium')}>
+        <Sparkles aria-hidden />
+        {t('rules.actions.scriptSampleLabel')}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} className="w-80 min-w-80">
+        {REWRITE_SCRIPT_SAMPLES.map(sample => (
+          <DropdownMenuItem
+            key={sample.id}
+            onSelect={() => onSelect(sample.code)}
+            className="flex h-auto flex-col items-stretch gap-0.5 rounded-lg px-2 py-1.5 focus:bg-state-base-hover"
+          >
+            <span className="system-xs-medium text-text-primary">{t(sample.nameKey)}</span>
+            <span className="system-2xs-regular text-text-tertiary">{t(sample.descriptionKey)}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function ActionEditor(props: ActionEditorProps) {
   const t = useTranslation()
   const [deleteActionId, setDeleteActionId] = useState<string>()
@@ -160,7 +199,12 @@ export function ActionEditor(props: ActionEditorProps) {
                   <SelectTrigger aria-label={t('rules.actions.stageAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
                 </Select>
-                <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })}>
+                <Select value={action.target} onValueChange={value => {
+                  const target = value as RuleActionTarget
+                  // 切到脚本时填入起始脚本：空白编辑器对第一次用的人无从下手，示例就是那份「能直接跑通」的起点。
+                  if (target === 'script') updateAction(action.id, { target, operation: 'set', value: '', code: action.code || defaultRewriteScript(action.stage), timeoutMilliseconds: action.timeoutMilliseconds ?? REWRITE_SCRIPT_TIMEOUT_DEFAULT })
+                  else updateAction(action.id, { target, operation: 'set', value: '' })
+                }}>
                   <SelectTrigger aria-label={t('rules.actions.targetAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem><SelectItem value="script">{t('rules.actions.target.script')}</SelectItem></SelectContent>
                 </Select>
@@ -188,6 +232,9 @@ export function ActionEditor(props: ActionEditorProps) {
                       onChange={code => updateAction(action.id, { code })}
                     />
                   </FormField>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ScriptSampleMenu t={t} onSelect={code => updateAction(action.id, { code })} />
+                  </div>
                   <ScriptTimeoutInput action={action} t={t} onChange={patch => updateAction(action.id, patch)} />
                 </div>
               ) : (

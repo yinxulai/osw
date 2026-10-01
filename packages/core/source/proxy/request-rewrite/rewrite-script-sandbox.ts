@@ -127,8 +127,9 @@ export function executeRewriteScript(invocation: RewriteScriptInvocation): Rewri
 /**
  * 脚本交回的报文。
  *
- * 约定与 §脚本动作一致：`return` 一个对象时按 `{ body, headers }` 取值；返回 `undefined`
- * （或返回不含这两个键的对象）表示这一项不改动 —— 引擎会保留原值。
+ * 约定与 §脚本动作一致：`return` 一个对象时按 `{ body, headers }` 取值，**交回谁就整体替换谁**，
+ * 脚本没写的字段 / 键即视为删除 —— 这是「删掉一个字段」唯一可行的表达方式。
+ * 返回 `undefined` / `null`（或返回不含这两个键的对象）表示这一项不改动，引擎保留原值。
  */
 function normalizeOutcome(value: unknown): { body: unknown; headers: Record<string, string | string[] | undefined> | undefined } {
   if (value === undefined || value === null) return { body: undefined, headers: undefined }

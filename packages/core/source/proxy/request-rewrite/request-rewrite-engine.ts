@@ -89,14 +89,15 @@ function applyHeader(headers: Record<string, string | string[] | undefined>, act
 }
 
 /**
- * 脚本动作：在沙箱里跑用户代码，把交回的 `{ body, headers }` 合并回当前报文。
+ * 脚本动作：在沙箱里跑用户代码，把交回的 `{ body, headers }` **整体替换**回报文。
  *
  * 与结构化 body 动作有一处刻意的差异：body 解析失败时**不报错**，而是把 `null` 交给脚本
  * （`ctx.body === null` 由脚本自行决定是否 `throw`）。因为脚本要表达的正是「先看内容再决定
  * 怎么改」，把「是不是 JSON」这个判断也交给它，比引擎替它先拒绝更贴合它的用途。
  *
- * 交回对象的合并语义见 {@link mergeScriptHeaders} 与 `rewrite-script-sandbox.ts` 的
- * `normalizeOutcome`：`undefined` 表示该项不改动，脚本整体失败则阻断当前 attempt。
+ * 交回对象的替换语义见 {@link replaceScriptHeaders} 与 `rewrite-script-sandbox.ts` 的
+ * `normalizeOutcome`：**交回谁就整体替换谁**（省略的字段 / 键即删除），两个键都没交回才表示
+ * 整条不改动；脚本整体失败则阻断当前 attempt。
  */
 function applyScript(body: Buffer, headers: Record<string, string | string[] | undefined>, action: ScriptAction, rule: RequestRewriteRule, context: RequestRewriteContext, scriptLogs: string[]): Buffer {
   const parsedBody = parseBodyLenient(body)
@@ -110,7 +111,10 @@ function applyScript(body: Buffer, headers: Record<string, string | string[] | u
   })
   scriptLogs.push(...result.logs)
   if (!result.success) throw new RequestRewriteError(result.error ?? 'Script execution failed', rule.id)
-  if (result.headers !== undefined) mergeScriptHeaders(headers, result.headers, rule.id)
+  // 只有「两个键都没返回」才是「整条不动」。返回了任意一个，就按**完整替换**处理：
+  // 省略的字段即删除。以前的逐键合并做不到删除（见 replaceScriptHeaders）。
+  if (result.body === undefined && result.headers === undefined) return body
+  if (result.headers !== undefined) replaceScriptHeaders(headers, result.headers, rule.id)
   if (result.body === undefined) return body
   assertDeliveryModeUnchanged(parsedBody, result.body, rule.id)
   return Buffer.from(JSON.stringify(result.body))
@@ -143,19 +147,35 @@ function readOwnField(value: unknown, field: string): unknown {
 }
 
 /**
- * 把脚本交回的 headers 覆盖回当前头。
+ * 把脚本交回的 Header 整体替换掉当前头。
  *
- * 脚本改的是**报文本身**，因此这里必须做和结构化 Header 动作同一级别的保护校验：
- * 脚本一旦动了受保护 Header，整条规则失败（而不是静默忽略），与结构化动作的失败语义一致。
+ * 用的是**完整替换**而不是逐键合并：交回的这份就是脚本眼前的全部 Header，脚本没写的
+ * 键即视为删除。逐键合并做不到删除（写 `undefined` 只是把值置空、`null` 归一成空串），
+ * 这正是「省略字段删不掉」的根因。
+ *
+ * 校验分两步：
+ * - 先比对**改动前后取值**，受保护 Header 只要真的变了就失败；原样带回去（值相同）
+ *   不算违规 —— 否则任何 `{ ...headers }` 的写法都会因为夹带了 `content-length` / `host`
+ *   而误伤；
+ * - 再按大小写不敏感对齐大小写，避免同一头出现 `X-Test` 与 `x-test` 两个键。
  */
-function mergeScriptHeaders(headers: Record<string, string | string[] | undefined>, next: Record<string, string | string[] | undefined>, ruleId: string): void {
-  for (const [name, value] of Object.entries(next)) {
-    if (PROTECTED_HEADERS.has(name.toLowerCase())) throw new RequestRewriteError(`Modifying a protected header is not allowed: ${name}`, ruleId)
-    const existingKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase())
-    if (value === undefined) { delete headers[existingKey ?? name]; continue }
-    if (existingKey && existingKey !== name) delete headers[existingKey]
-    headers[name] = value
+function replaceScriptHeaders(headers: Record<string, string | string[] | undefined>, next: Record<string, string | string[] | undefined>, ruleId: string): void {
+  for (const name of PROTECTED_HEADERS) {
+    if (readHeader(headers, name) !== readHeader(next, name)) throw new RequestRewriteError(`Modifying a protected header is not allowed: ${name}`, ruleId)
   }
+  const replaced: Record<string, string | string[] | undefined> = {}
+  for (const [name, value] of Object.entries(next)) {
+    const existingKey = Object.keys(replaced).find(key => key.toLowerCase() === name.toLowerCase())
+    replaced[existingKey ?? name] = value
+  }
+  for (const key of Object.keys(headers)) delete headers[key]
+  Object.assign(headers, replaced)
+}
+
+/** 大小写不敏感地读一个头，用于「取值是否变过」的比对。 */
+function readHeader(headers: Record<string, string | string[] | undefined>, name: string): string | string[] | undefined {
+  const key = Object.keys(headers).find(item => item.toLowerCase() === name)
+  return key === undefined ? undefined : headers[key]
 }
 
 function applyBody(body: Buffer, action: BodyAction, ruleId: string): Buffer {

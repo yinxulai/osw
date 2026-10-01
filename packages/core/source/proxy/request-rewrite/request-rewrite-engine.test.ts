@@ -153,7 +153,7 @@ const scriptAction = (code: string, overrides: ScriptActionOverrides = {}): Requ
   ({ type: 'script', stage: 'request', code, timeoutMilliseconds: 1000, ...overrides })
 
 describe('applyRequestRewriteRules - script action', () => {
-  it('把脚本交回的 body 与 headers 合并回报文', () => {
+  it('把脚本交回的完整 body 与 headers 整体替换回报文', () => {
     const result = applyRequestRewriteRules(
       body({ temperature: 1, marker: 'apply-strict' }),
       { 'X-Old': 'kept' },
@@ -166,7 +166,7 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(result.scriptLogs).toEqual([])
   })
 
-  it('只交回 body 时 headers 保持原样，交回空值则整条不改动', () => {
+  it('只交回 body 时 headers 保持原样，什么都不交回则整条不改动', () => {
     const onlyBody = applyRequestRewriteRules(body({ a: 1 }), { 'X-Keep': 'yes' }, [rule([scriptAction('return { body: { a: 2 } }')])], context())
     expect(parsed(onlyBody)).toEqual({ a: 2 })
     expect(onlyBody.headers['X-Keep']).toBe('yes')
@@ -175,6 +175,14 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(parsed(untouched)).toEqual({ a: 1 })
     expect(untouched.headers['X-Keep']).toBe('yes')
     expect(untouched.scriptLogs).toEqual(['[log] no change'])
+  })
+
+  it('交回的 body 是完整内容：没写进去的字段即删除', () => {
+    const result = applyRequestRewriteRules(body({ keep: 1, drop: 2, nested: { a: 1, b: 2 } }), {}, [rule([
+      scriptAction('return { body: { keep: body.keep } }'),
+    ])], context())
+    // 顶层与嵌套里没交回的键一并消失——这正是逐键合并做不到的「删字段」。
+    expect(parsed(result)).toEqual({ keep: 1 })
   })
 
   it('正文不是 JSON 时把 null 交给脚本，而不是直接报错', () => {
@@ -241,19 +249,21 @@ describe('applyRequestRewriteRules - script action', () => {
 
   it('脚本把 Header 置为 undefined 相当于删除该头，null 归一成空串', () => {
     const result = applyRequestRewriteRules(body({}), { 'X-Drop': 'value', 'X-Blank': 'value', 'X-Keep': 'yes' }, [rule([
-      scriptAction('return { headers: { "X-Drop": undefined, "X-Blank": null } }'),
+      scriptAction('return { headers: { "X-Blank": null, "X-Keep": headers["X-Keep"] } }'),
     ])], context())
+    // 删头不必再写 `undefined`：没交回的键直接消失。
     expect(result.headers['X-Drop']).toBeUndefined()
     expect(result.headers['X-Blank']).toBe('')
     expect(result.headers['X-Keep']).toBe('yes')
   })
 
-  it('脚本按不区分大小写的键覆盖已有 Header，不留下重复键', () => {
-    const result = applyRequestRewriteRules(body({}), { 'X-Test': 'old' }, [rule([
+  it('脚本交回的 Header 是完整集合：整体替换、不区分大小写对齐', () => {
+    const result = applyRequestRewriteRules(body({}), { 'X-Test': 'old', 'X-Drop': 'gone' }, [rule([
       scriptAction('return { headers: { "x-test": "new" } }'),
     ])], context())
     expect(result.headers['x-test']).toBe('new')
     expect(result.headers['X-Test']).toBeUndefined()
+    expect(result.headers['X-Drop']).toBeUndefined()
     expect(Object.keys(result.headers).filter(key => key.toLowerCase() === 'x-test')).toHaveLength(1)
   })
 

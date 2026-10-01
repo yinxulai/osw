@@ -13,7 +13,7 @@ import type { RequestRewriteRule, RuleAction, RuleTestCase } from './types'
  * 2. **名称与说明取自当前界面语言**。规则名保存后就是用户数据（路由预设的节点名同理），
  *    用户在哪门语言下创建，草稿就是哪门语言的写法，之后可以自己改。
  *
- * 模板清单刻意保持**短**：只留「改一个头、删一个头、改一个字段」这三种最常被问到的形态。
+ * 模板清单刻意保持**短**：只留「改一个头、删一个头、改一个字段、写一段脚本」这四种最常被问到的形态。
  * 删除字段、文本替换、响应阶段这些动作编辑器本来就支持，用户照着搭即可 ——
  * 模板一多，下拉就成了要先通读一遍才能选的目录，反而拖慢「新建一条规则」这个动作。
  *
@@ -21,7 +21,7 @@ import type { RequestRewriteRule, RuleAction, RuleTestCase } from './types'
  * 而不是让用户先自己编一份请求体才知道规则有没有生效。
  */
 
-export type RulePresetId = 'set-user-agent' | 'remove-request-header' | 'set-request-field'
+export type RulePresetId = 'set-user-agent' | 'remove-request-header' | 'set-request-field' | 'script-conditional'
 
 type RuleActionDraft = Omit<RuleAction, 'id'>
 /** 试跑用例的名称由模板统一定，不单独占 key。 */
@@ -89,6 +89,37 @@ export const RULE_PRESETS: readonly RulePreset[] = [
       stage: 'request',
       headers: '{\n  "content-type": "application/json"\n}',
       body: '{\n  "model": "gpt-4o-mini",\n  "messages": [{ "role": "user", "content": "hello" }]\n}',
+      clientProtocol: 'openai-completions',
+      upstreamProtocol: 'openai-completions',
+      transport: 'http',
+    },
+  },
+  {
+    id: 'script-conditional',
+    nameKey: 'rules.presets.scriptConditional.name',
+    descriptionKey: 'rules.presets.scriptConditional.description',
+    actions: [{
+      stage: 'request',
+      target: 'script',
+      operation: 'set',
+      path: '',
+      // 脚本里的注释与标识符保持英文：这段代码会直接进代码编辑器。
+      // 它演示的是结构化动作表达不了的那件事 —— 先看内容，再决定这条规则要不要动手。
+      code: `// Rewrite only when this request asks for strict mode; otherwise do nothing.
+// Returning nothing leaves the payload untouched, so this rule stays out of the way.
+const marker = JSON.stringify(body || {})
+if (marker.indexOf('apply-strict') === -1) {
+  console.log('not a strict request, skipping')
+} else {
+  console.log('forcing temperature to 0')
+  return { body: { ...body, temperature: 0 }, headers: { ...headers } }
+}
+`,
+    }],
+    testCase: {
+      stage: 'request',
+      headers: '{\n  "content-type": "application/json"\n}',
+      body: '{\n  "model": "gpt-4o-mini",\n  "temperature": 0.9,\n  "messages": [{ "role": "user", "content": "apply-strict please" }]\n}',
       clientProtocol: 'openai-completions',
       upstreamProtocol: 'openai-completions',
       transport: 'http',

@@ -25,7 +25,7 @@ describe('内置规则模板', () => {
   })
 
   it('清单保持精简，每个模板只演示一种基础动作并自带可运行用例', () => {
-    expect(RULE_PRESETS.map(preset => preset.id)).toEqual(['set-user-agent', 'remove-request-header', 'set-request-field'])
+    expect(RULE_PRESETS.map(preset => preset.id)).toEqual(['set-user-agent', 'remove-request-header', 'set-request-field', 'script-conditional'])
     for (const preset of RULE_PRESETS) {
       expect(preset.actions, `${preset.id} 应只有一个动作`).toHaveLength(1)
       expect(preset.testCase.headers.length, `${preset.id} 缺少试跑请求头`).toBeGreaterThan(0)
