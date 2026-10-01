@@ -32,6 +32,8 @@
 
 `source/` 下的 MDX 由 [Clarify](https://github.com/taicode-labs/clarify) 构建为静态站。站点结构（有哪些页、怎么分组）声明在 [`clarify.ts`](./clarify.ts)，正文在各 `.mdx` 里。
 
+站点按读者的阶段分**四个 tab**——开始使用、上游与路由、观测与数据、参考——每个 tab 回答一个问题，而不是把全部页面塞进一个「使用指南」。为什么这么分、每个 tab 下有哪些组，都写在 `clarify.ts` 的注释里（它是导航结构的唯一事实来源，本文件不重复）。
+
 ```bash
 pnpm --filter @osw/docs dev      # 本地开发服务器
 pnpm --filter @osw/docs build    # 构建静态产物到 output/
