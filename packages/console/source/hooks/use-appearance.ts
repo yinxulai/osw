@@ -28,6 +28,9 @@ export interface ResolvedAppearance {
   language: LanguagePreference
   /** 唯一状态源：持久化的主题选择，含「跟随系统」。 */
   themeMode: ThemeMode
+  /** 生效的主题模式（地址栏覆盖 > 偏好）。告知宿主「跟不跟系统」时必须用它：解析后的
+   * `theme` 表达不了这件事——`dark` 可能是手选的，也可能是跟着系统来的。 */
+  effectiveThemeMode: ThemeMode
   /** 推导出的生效值：地址栏 > 偏好 > 系统，只读。 */
   locale: Locale
   /** 屏幕上是亮是暗；「跟随系统」时由系统实时决定。 */
@@ -66,7 +69,7 @@ export function useResolvedAppearance(): ResolvedAppearance {
   const effectiveThemeMode: ThemeMode = urlTheme ?? themeMode
   const theme: Theme = effectiveThemeMode === 'system' ? systemTheme : effectiveThemeMode
 
-  return { language, themeMode, locale, theme }
+  return { language, themeMode, effectiveThemeMode, locale, theme }
 }
 
 /**
@@ -77,7 +80,7 @@ export function useResolvedAppearance(): ResolvedAppearance {
  */
 export function useAppearance(): Appearance {
   const navigate = useNavigate()
-  const { language, themeMode, locale, theme } = useResolvedAppearance()
+  const { language, themeMode, effectiveThemeMode, locale, theme } = useResolvedAppearance()
   const setLanguagePreference = useLanguageStore(state => state.setPreference)
   const setThemeModePreference = useAppUiStore(state => state.setThemeMode)
 
@@ -116,7 +119,7 @@ export function useAppearance(): Appearance {
     [theme, setThemeMode],
   )
 
-  return { language, themeMode, locale, theme, setLanguage, setThemeMode, toggleTheme }
+  return { language, themeMode, effectiveThemeMode, locale, theme, setLanguage, setThemeMode, toggleTheme }
 }
 
 /**

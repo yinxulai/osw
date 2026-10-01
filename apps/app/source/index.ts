@@ -206,6 +206,7 @@ if (isPrimaryInstance) {
   registerOpenDataDirectoryIpc()
   registerScreenshotExportIpc()
   registerWindowThemeIpc()
+  registerNativeThemeSync()
   registerWindowFullScreenIpc()
 } else {
   console.info('[osw] another instance already owns this profile; exiting')
@@ -363,16 +364,32 @@ const WINDOW_BACKGROUND = {
 const WINDOW_TITLEBAR_HEIGHT = 36
 const MAC_TRAFFIC_LIGHT_Y = 12
 
-function applyWindowTheme(target: BrowserWindow, theme: 'light' | 'dark'): void {
-  nativeTheme.themeSource = theme
-  target.setBackgroundColor(WINDOW_BACKGROUND[theme])
+function applyWindowChrome(target: BrowserWindow): void {
+  // 具体亮暗一律从 `shouldUseDarkColors` 解析：`themeSource` 写入的瞬间它就已同步成目标值
+  // （跟随系统时即操作系统当前值），不需要按模式分支。
+  const background = nativeTheme.shouldUseDarkColors
+    ? WINDOW_BACKGROUND.dark
+    : WINDOW_BACKGROUND.light
+  target.setBackgroundColor(background)
   if (process.platform !== 'darwin') {
     target.setTitleBarOverlay({
-      color: WINDOW_BACKGROUND[theme],
-      symbolColor: theme === 'dark' ? '#f5f5f5' : '#171717',
+      color: background,
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
       height: WINDOW_TITLEBAR_HEIGHT,
     })
   }
+}
+
+/**
+ * `'system'` 必须原样进 `themeSource`，不能在这里解析成具体亮暗：`themeSource` 是整个应用
+ * 的开关，一旦写成 `'light'` / `'dark'`，`shouldUseDarkColors` 和渲染层的
+ * `prefers-color-scheme` 都被钉死在设置那一刻，操作系统后续怎么切换都不再更新——
+ * 「跟随系统」就只剩启动那一瞬。留在 system 档，Electron 会自己跟随，渲染层的
+ * `matchMedia` 订阅也因此保持有效。
+ */
+function applyWindowTheme(target: BrowserWindow, mode: 'light' | 'dark' | 'system'): void {
+  nativeTheme.themeSource = mode
+  applyWindowChrome(target)
 }
 
 /**
@@ -404,10 +421,22 @@ function installApplicationMenu(): void {
 }
 
 function registerWindowThemeIpc(): void {
-  ipcMain.on('appearance:set-theme', (event, theme: unknown) => {
-    if (theme !== 'light' && theme !== 'dark') return
+  ipcMain.on('appearance:set-theme', (event, mode: unknown) => {
+    if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return
     const target = BrowserWindow.fromWebContents(event.sender)
-    if (target) applyWindowTheme(target, theme)
+    if (target) applyWindowTheme(target, mode)
+  })
+}
+
+function registerNativeThemeSync(): void {
+  // 「跟随系统」时操作系统切换亮暗，主进程只能从这里得知；手选亮暗走 `appearance:set-theme`
+  // （applyWindowTheme 自带同步），themeSource 不是 system 档，这里直接跳过。
+  nativeTheme.on('updated', () => {
+    if (nativeTheme.themeSource !== 'system') return
+    // 只补主窗口的原生外观：托盘面板是透明窗口（backgroundColor '#00000000'），
+    // setBackgroundColor 会把透明底换成实色，砸掉面板的浮层观感。面板的亮暗由渲染层的
+    // `prefers-color-scheme` 跟着变，不依赖这里的底色。
+    if (win && !win.isDestroyed()) applyWindowChrome(win)
   })
 }
 
@@ -462,7 +491,9 @@ function createWindow() {
   })
 
   installWindowShortcuts(win, { enableDevTools: isDevelopment })
-  applyWindowTheme(win, nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+  // 渲染层加载后会把真实偏好的生效模式推上来（`appearance:set-theme`）；在那之前先停在
+  // system 档按操作系统解析，别把启动那一刻的值钉死（见 `applyWindowTheme` 注释）。
+  applyWindowTheme(win, 'system')
   registerWindowFullScreenEvents(win)
 
   win.setMenuBarVisibility(false)
