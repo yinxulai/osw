@@ -32,8 +32,17 @@ export const providerRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/provider/export', handleExportProviderBundle)
   .post('/api/provider/import', handleImportProviderBundle)
 
-async function handleListProviders(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  sendSuccess(res, await listProviders())
+/**
+ * 列表默认只回活跃行；`includeDeleted` 连软删除的行一起回。
+ *
+ * 观测侧（请求日志、统计分析）的供应商名是**写入当时的快照**，删掉配置行不会让历史记录消失，
+ * 但界面要能标出「这一家已经删了」。只比活跃名单做不到：被删的行仍在表里，正是靠这份全量
+ * 名单才能把它认出来（见 `provider-store.deleteProvider`）。
+ */
+const ListProvidersSchema = z.object({ includeDeleted: z.boolean().optional() }).default({})
+async function handleListProviders(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = ListProvidersSchema.parse(body)
+  sendSuccess(res, await listProviders(input.includeDeleted ?? false))
 }
 
 const ReorderProvidersSchema = z.object({ ids: z.array(z.string().min(1)).min(1) })

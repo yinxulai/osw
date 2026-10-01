@@ -78,6 +78,7 @@ function liveRequestOf(overrides: Partial<LiveRequest> = {}): LiveRequest {
 
 interface RenderRowOptions {
   expanded?: boolean
+  modelDeleted?: boolean
   toggleExpand?: (id: string) => void
 }
 
@@ -90,6 +91,7 @@ function renderRow(live: LiveRequest, options: RenderRowOptions = {}) {
           live={live}
           expanded={options.expanded ?? false}
           modelName="Default model"
+          modelDeleted={options.modelDeleted ?? false}
           toggleExpand={options.toggleExpand ?? (() => {})}
         />
       </tbody>
@@ -132,6 +134,21 @@ describe('RequestExecutionRow', () => {
     fireEvent.click(screen.getByText('Delivering'))
 
     expect(toggleExpand).toHaveBeenCalledWith('req_live')
+  })
+
+  // 逻辑模型被删掉之后，那条请求照旧在列表里、名字照旧显示——那是发生过的事实。
+  // 只有名字旁边多出一枚「已删除」，读者才知道这个名字今天已经不再对应一条配置。
+  it('marks the logical model as deleted once its config row is gone', () => {
+    renderRow(liveRequestOf(), { expanded: true, modelDeleted: true })
+
+    expect(screen.getByText('Default model')).toBeTruthy()
+    expect(screen.getByText('Deleted')).toBeTruthy()
+  })
+
+  it('does not mark a logical model that still exists', () => {
+    renderRow(liveRequestOf(), { expanded: true })
+
+    expect(screen.queryByText('Deleted')).toBeNull()
   })
 
   it('states what is happening now and how long it has been happening', () => {

@@ -56,6 +56,31 @@ describe('logical model routes', () => {
     expect(responseData(res)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
   })
 
+  // 删除只是软删除：默认列表把它藏起来，但 `includeDeleted` 必须能把它拿回来。
+  // 观测侧靠这份全量名单分辨「这个名字还在用」与「这个名字的主人已经删了」——
+  // 历史请求日志里的名字快照要能对得上一条真实存在过的行。
+  it('hides deleted logical models by default but returns them with includeDeleted', async () => {
+    const createRes = mockResponse()
+    await modelRoutes.invoke('/api/logical-model/create', createRes, { modelId: 'deleted-model' })
+    const created = responseData(createRes).data as { id: string; modelId: string }
+
+    const deleteRes = mockResponse()
+    await modelRoutes.invoke('/api/logical-model/delete', deleteRes, { id: created.id })
+
+    const activeRes = mockResponse()
+    await modelRoutes.invoke('/api/logical-model/list', activeRes)
+    const active = responseData(activeRes).data as Array<{ id: string }>
+    expect(active.some(model => model.id === created.id)).toBe(false)
+
+    const allRes = mockResponse()
+    await modelRoutes.invoke('/api/logical-model/list', allRes, { includeDeleted: true })
+    const all = responseData(allRes).data as Array<{ id: string; modelId: string; deletedTime: number | null }>
+    expect(all).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.id, modelId: 'deleted-model' }),
+    ]))
+    expect(all.find(model => model.id === created.id)?.deletedTime).not.toBeNull()
+  })
+
   it('reorders logical models through the management route', async () => {
     await createLogicalModel({ modelId: 'route-order-a' })
     await createLogicalModel({ modelId: 'route-order-b' })

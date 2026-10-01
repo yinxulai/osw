@@ -28,8 +28,17 @@ export const modelRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/logical-model/reorder', handleReorderLogicalModels)
   .post('/api/logical-model/delete', handleDeleteLogicalModel)
 
-async function handleListLogicalModels(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  sendSuccess(res, await listLogicalModels())
+/**
+ * 列表默认只回活跃行，`includeDeleted` 拿到的则连软删除的行一起回。
+ *
+ * 观测侧要的就是这份「全量」：请求日志里存的是**模型名**，删除或改名之后活跃名单里就查不到它，
+ * 界面得能区分「被删了」和「只是改过名」。只比活跃名单做不到这件事——删除的行仍然保留着原来的
+ * `modelId`，正是靠它才能把历史日志对回一条真实存在过的行（见 `logical-model-store.deleteLogicalModel`）。
+ */
+const ListLogicalModelsSchema = z.object({ includeDeleted: z.boolean().optional() }).default({})
+async function handleListLogicalModels(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = ListLogicalModelsSchema.parse(body)
+  sendSuccess(res, await listLogicalModels(input.includeDeleted ?? false))
 }
 
 const GetLogicalModelSchema = z.object({ id: z.string() })

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { unwrap } from '@/api/unwrap'
 import { providerModelApi } from '@/api/models'
 import { useLiveRequests } from '@/data/live-requests'
-import { useLogicalModels } from '@/data/logical-models'
+import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
 import { isRequestExecuting } from './lib/execution'
@@ -66,6 +66,10 @@ export function useRequestLogsService() {
   }, [providerModelsQuery.data, providerNameById])
   // 日志里记的是请求当时的模型名，所以拿**模型 id** 反查展示名；找不到就原样显示那个名字。
   const getModelName = useCallback((modelId: string | null) => modelId === null ? '—' : logicalModels.find(model => model.modelId === modelId)?.modelId ?? modelId, [logicalModels])
+  // 名字对不上一条活跃逻辑模型、却对得上一条已删除的——说明这条历史记录指向的配置被删了。
+  // 名字照旧展示（记录是历史事实），只补一枚「已删除」标签（见 `DeletedTag`）。
+  const deletedLogicalModelIds = useDeletedLogicalModelIds()
+  const isModelDeleted = useCallback((modelId: string | null) => modelId !== null && deletedLogicalModelIds.has(modelId), [deletedLogicalModelIds])
   const refresh = useCallback((targetPage = page) => queryClient.invalidateQueries({ queryKey: ['request-logs', filter, targetPage] }), [filter, page, queryClient])
   const setFilter = useCallback((next: Partial<RequestLogFilter>) => { setFilterState(next) }, [setFilterState])
   const goToPage = useCallback((targetPage: number) => setPage(targetPage), [setPage])
@@ -76,7 +80,7 @@ export function useRequestLogsService() {
     rows, total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
     error, filtered,
-    page, expandedId, filter, providerOptions, providerModelOptions, getModelName,
+    page, expandedId, filter, providerOptions, providerModelOptions, getModelName, isModelDeleted,
     details: detailQuery.data && expandedId ? { [expandedId]: detailQuery.data } : {},
     // 只认「还没有数据」，不认后台重取：请求还挂着时详情每 1.5s 会被重取一次，
     // 那是为了拿到新的状态与用量，画面上的东西不该跟着闪一下。

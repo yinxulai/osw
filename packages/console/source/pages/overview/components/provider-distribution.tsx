@@ -3,6 +3,8 @@ import type { ProviderStat } from '@common/schemas'
 import { cn } from '@/lib/utils'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { Card, CardContent } from '@/components/ui/card'
+import { DeletedTag } from '@/components/deleted-tag'
+import { useDeletedProviderIds } from '@/data/providers'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatCount, getProviderColor } from '../lib/format'
 
@@ -15,6 +17,8 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
   const { stats } = props
   const t = useTranslation()
   const locale = useLocale()
+  // 榜单里的供应商名是写入当时的快照，删掉配置行不会让它从榜上消失——只补「已删除」标签。
+  const deletedProviderIds = useDeletedProviderIds()
 
   return (
     <Card className="min-w-70">
@@ -45,6 +49,7 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
                   <span className="flex min-w-0 items-center gap-2 system-xs-medium text-text-primary">
                     <span className={cn('size-2 shrink-0 rounded-full', getProviderColor(idx))} />
                     <span className="truncate">{p.providerName}</span>
+                    {deletedProviderIds.has(p.providerId) && <DeletedTag />}
                   </span>
                   <span className="flex shrink-0 items-center gap-1 text-text-tertiary tabular-nums">
                     {p.percent}% · {formatCount(locale, p.attempts)}

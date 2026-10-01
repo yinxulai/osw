@@ -1325,6 +1325,8 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`、`provider_model_request_rewrite_rules` 的主键是 `(providerModelId, requestRewriteRuleId)`，因此它们的「复活」天然是主键冲突更新；端点、绑定、协议转换器则由 store 先找历史行、命中就原地复活。
 3. **身份是记录 id，不是名字。** `providerModels` 允许同一供应商下存在多条同名模型，逻辑模型、路由图版本、规则表版本同理——名字是给人看的注记，唯一性不成立，删掉再建一条同名的是常见动作。删除时也**不改写标识**（不造墓碑名），因为身份本来就不是靠名字成立。
 
+软删除的行因此仍会被观测侧读到：请求日志、统计分析里的名字与 id 都能对上一条真实存在过的配置，记录照旧展示、照旧计账。列表接口默认只回活跃行，观测侧要分辨「这个名字还在用」与「它的主人已经删了」时，用 `includeDeleted` 一并取回（`/api/logical-model/list`、`/api/provider/list`、`/api/provider-model/list`），比对后给名字补一枚「已删除」标签——纯展示，见 [observability.md](./observability.md)。
+
 ### 运行状态
 
 删除 Provider 时，在**配置库**的同一事务中级联：

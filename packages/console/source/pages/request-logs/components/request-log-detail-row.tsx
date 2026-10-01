@@ -13,6 +13,7 @@ import type {
 } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DeletedTag } from '@/components/deleted-tag'
 import { useToast } from '@/components/ui/toast'
 import { useProxyStatus } from '@/data/proxy'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
@@ -39,6 +40,8 @@ interface RequestLogDetailRowProps {
   /** 展开后才按需取回的详情；正文摘要与改写规则名字都在这里。 */
   detail: RequestLogDetail | null
   modelName: string
+  /** 记录里那个逻辑模型名此刻已不再对应一条活跃配置（被删了）。 */
+  modelDeleted: boolean
   detailLoading: boolean
   detailError: string | null
 }
@@ -465,12 +468,11 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                 {log.logicalModelId === null
                   ? <MetaFact label={t('requestLogs.detail.logicalModel')} value={t('requestLogs.detail.unresolved')} />
                   : (
-                    <>
-                      <MetaFact label={t('requestLogs.detail.logicalModel')} value={modelName} />
-                      {modelName !== log.logicalModelId && (
-                        <MetaFact label={t('requestLogs.detail.modelId')} value={log.logicalModelId} mono />
-                      )}
-                    </>
+                    <MetaFact
+                      label={t('requestLogs.detail.logicalModel')}
+                      value={modelName}
+                      tag={props.modelDeleted ? <DeletedTag /> : null}
+                    />
                   )}
                 <MetaFact
                   label={t(converted ? 'requestLogs.detail.convertedProtocol' : 'requestLogs.detail.protocol')}

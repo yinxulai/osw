@@ -21,6 +21,8 @@ export const requestRewriteRuleApi = {
 
 export const logicalModelApi = {
   list: () => request<LogicalModel[]>('/logical-model/list'),
+  /** 连软删除的行一起回。删除的逻辑模型只是不再活跃，历史请求日志仍按 `modelId` 引用它。 */
+  listIncludingDeleted: () => request<LogicalModel[]>('/logical-model/list', { includeDeleted: true }),
   /** `id` 是**数据记录 id**；改模型名（`modelId`）与改说明共用 `update`。 */
   get: (id: string) => request<LogicalModel>('/logical-model/get', { id }),
   create: (data: CreateLogicalModelInput) => request<LogicalModel>('/logical-model/create', data),
@@ -31,6 +33,8 @@ export const logicalModelApi = {
 
 export const providerModelApi = {
   list: () => request<ProviderModelView[]>('/provider-model/list'),
+  /** 连软删除的行一起回，用来认出统计里那些已经删掉的供应商模型（历史快照仍按 id 引用它们）。 */
+  listIncludingDeleted: () => request<ProviderModelView[]>('/provider-model/list', { includeDeleted: true }),
   get: (id: string) => request<ProviderModelView>('/provider-model/get', { id }),
   create: (data: ProviderModelCreateInput) => request<ProviderModelView>('/provider-model/create', data),
   update: (id: string, updates: ProviderModelUpdateInput) => request<ProviderModelView>('/provider-model/update', { id, ...updates }),

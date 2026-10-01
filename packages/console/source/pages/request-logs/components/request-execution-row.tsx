@@ -61,6 +61,8 @@ interface RequestExecutionRowProps {
   live: LiveRequest
   expanded: boolean
   modelName: string
+  /** 这条请求指向的逻辑模型已被删除时为 `true`（进行中的请求几乎不会撞上，删掉配置不影响已有请求）。 */
+  modelDeleted: boolean
   toggleExpand: (id: string) => void
 }
 
@@ -151,6 +153,7 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
         <RequestExecutionDetailRow
           live={live}
           modelName={props.modelName}
+          modelDeleted={props.modelDeleted}
           now={now}
           activity={activity}
         />

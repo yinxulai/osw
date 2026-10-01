@@ -4,6 +4,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { MetricGrid } from '@/components/metric-grid'
 import { Badge } from '@/components/ui/badge'
+import { DeletedTag } from '@/components/deleted-tag'
+import { useDeletedProviderModelIds } from '@/data/provider-models'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatCount, formatPercent, formatTokens } from '../lib/format'
@@ -20,6 +22,8 @@ export function ProviderDetail(props: ProviderDetailProps) {
   const { cacheHitRate } = summary
   const t = useTranslation()
   const locale = useLocale()
+  // 统计里的模型名是写入当时的快照，删掉配置行不会让它们从榜上消失——只补一枚「已删除」标签。
+  const deletedProviderModelIds = useDeletedProviderModelIds()
 
   return (
     <div className="grid gap-4">
@@ -43,7 +47,12 @@ export function ProviderDetail(props: ProviderDetailProps) {
               <thead className="bg-inset text-text-tertiary"><tr><th className="px-4 py-2 text-left system-2xs-medium">{t('overview.models.column.model')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.providerDetail.attempts')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgTtft')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgTps')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgOutput')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.cacheHitRate')}</th><th className="px-4 py-2 text-right system-2xs-medium">{t('overview.models.column.successRate')}</th></tr></thead>
               <tbody>{providerModels.length === 0 ? <tr><td colSpan={7} className="py-8 text-center text-text-tertiary">{t('overview.providerDetail.models.empty')}</td></tr> : providerModels.map(model => (
                 <tr key={model.providerModelId} className="border-t border-border/40 transition-colors hover:bg-state-base-hover">
-                  <td className="max-w-52 truncate px-4 py-2.5 system-xs-medium text-text-primary">{model.providerModelName}</td>
+                  <td className="max-w-52 px-4 py-2.5 system-xs-medium text-text-primary">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate">{model.providerModelName}</span>
+                      {deletedProviderModelIds.has(model.providerModelId) && <DeletedTag />}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatCount(locale, model.attempts)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatMilliseconds(model.avgTtftMs)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{formatOutputSpeed(model.avgTps)}</td>
