@@ -15,6 +15,31 @@
   -webkit-app-region: no-drag;
 }
 
+/* 浮层一律排除在窗口拖拽区之外。
+   侧边弹窗 / 对话框 / 下拉菜单 / 气泡都是 portal 到 `<body>` 的 `position: fixed` 元素，
+   常常压在 `[data-window-drag]` 那条顶部拖拽带之上。macOS 里 `-webkit-app-region: drag`
+   的判定优先于普通的点击命中：落在拖拽区上的那一点会被窗口拿走去拖窗口，而不是交给按钮。
+   于是弹窗右上角的关闭按钮、下拉项这些「看得见却按不动」——浮层越高、越贴近顶部越明显。
+   这里把浮层的 portal 根节点显式标成 `no-drag`，让指针事件回到按钮本身。
+
+   用 `data-slot` 选择器而不是去改每个 portal：`position: fixed` 的浮层会被移出原 DOM 树，
+   调用点那一层的 `no-drag` 拦不住它，只有落在浮层自身或它的祖先上才作数。 */
+[data-slot="sheet-content"],
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="drawer-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="context-menu-content"],
+[data-slot="context-menu-sub-content"],
+[data-slot="select-content"],
+[data-slot="combobox-content"],
+[data-slot="popover-content"],
+[data-slot="hover-card-content"],
+[data-slot="tooltip-content"] {
+  -webkit-app-region: no-drag;
+}
+
 /* 揭示期间浏览器会在最上层铺一整棵快照伪元素（`::view-transition`），它默认会吃掉
    指针事件：鼠标底下的侧栏因此收到一次 `pointerleave`（悬停态归零、收起），动画一结束
    指针又落回侧栏、`pointerenter` 再次触发（又展开）——表现成「点主题，侧栏抽一下」。

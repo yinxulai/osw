@@ -116,42 +116,6 @@ function ScriptTimeoutInput(props: ScriptTimeoutInputProps) {
   )
 }
 
-interface ScriptSampleMenuProps {
-  onSelect: (code: string) => void
-  t: AppTranslator
-}
-
-/**
- * 示例代码下拉：把一整段起始脚本塞进编辑器。
- *
- * 这里**刻意不**用 `asChild` 去包 `Button`（同 `rule-preset-menu.tsx` 的说明）：
- * 项目跑在 React 18 上，`components/ui/*` 是不 forwardRef 的普通函数组件，
- * Radix 拿不到触发器 ref，浮层会被挪到视口外（表现为「点了没反应」）。
- */
-function ScriptSampleMenu(props: ScriptSampleMenuProps) {
-  const { onSelect, t } = props
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-2.5 system-xs-medium')}>
-        <Sparkles aria-hidden />
-        {t('rules.actions.scriptSampleLabel')}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={6} className="w-80 min-w-80">
-        {REWRITE_SCRIPT_SAMPLES.map(sample => (
-          <DropdownMenuItem
-            key={sample.id}
-            onSelect={() => onSelect(sample.code)}
-            className="flex h-auto flex-col items-stretch gap-0.5 rounded-lg px-2 py-1.5 focus:bg-state-base-hover"
-          >
-            <span className="system-xs-medium text-text-primary">{t(sample.nameKey)}</span>
-            <span className="system-2xs-regular text-text-tertiary">{t(sample.descriptionKey)}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 export function ActionEditor(props: ActionEditorProps) {
   const t = useTranslation()
   const [deleteActionId, setDeleteActionId] = useState<string>()
@@ -208,7 +172,31 @@ export function ActionEditor(props: ActionEditorProps) {
                   <SelectTrigger aria-label={t('rules.actions.targetAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem><SelectItem value="script">{t('rules.actions.target.script')}</SelectItem></SelectContent>
                 </Select>
-                {!isScript && (
+                {/*
+                 * 脚本动作没有「操作」（设置/追加/删除/替换），那一格正好是放「插入示例」的地方：
+                 * 对脚本来说，「从哪段代码起手」就是它与其它动作对应的那个第一层选择。把它并进这一行，
+                 * 与删除、替换、设置这些并列，而不是单独占一行压住代码编辑器。
+                 */}
+                {isScript ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8 px-2.5 system-xs-medium')}>
+                      <Sparkles aria-hidden />
+                      {t('rules.actions.scriptSampleLabel')}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" sideOffset={6} className="w-80 min-w-80">
+                      {REWRITE_SCRIPT_SAMPLES.map(sample => (
+                        <DropdownMenuItem
+                          key={sample.id}
+                          onSelect={() => updateAction(action.id, { code: sample.code })}
+                          className="flex h-auto flex-col items-stretch gap-0.5 rounded-lg px-2 py-1.5 focus:bg-state-base-hover"
+                        >
+                          <span className="system-xs-medium text-text-primary">{t(sample.nameKey)}</span>
+                          <span className="system-2xs-regular text-text-tertiary">{t(sample.descriptionKey)}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
                   <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
                     <SelectTrigger aria-label={t('rules.actions.operationAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                     <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{t(OPERATION_LABEL_KEY[operation])}</SelectItem>)}</SelectContent>
@@ -232,9 +220,6 @@ export function ActionEditor(props: ActionEditorProps) {
                       onChange={code => updateAction(action.id, { code })}
                     />
                   </FormField>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ScriptSampleMenu t={t} onSelect={code => updateAction(action.id, { code })} />
-                  </div>
                   <ScriptTimeoutInput action={action} t={t} onChange={patch => updateAction(action.id, patch)} />
                 </div>
               ) : (
