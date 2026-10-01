@@ -1,30 +1,26 @@
-# OSW 使用手册站点。部署由 **Cloudflare Pages 的 Git 集成**完成
+# OSW 使用手册站点。部署由 **Cloudflare 侧的 Workers Git 集成**完成
 # （Dashboard → Workers & Pages → 本项目 → Settings → Build）：
 #
 #   Root directory     `apps/docs`
 #   Build command      `pnpm install && pnpm build`
-#   Build output dir   `output`
-#   Deploy command     **留空**（不要填 `wrangler deploy`）
+#   Deploy command     `npx wrangler deploy`
 #
-# ⚠️ Deploy command 必须留空。新建的 Pages 项目，Build settings 里可能带一条默认的
-# `npx wrangler deploy`——那是 **Workers** 的部署命令。对纯静态 Pages 站点跑它，会在
-# 部署阶段报 `Missing entry-point to Worker script or to assets directory`（构建成功、
-# 只有部署这一步失败）。Pages 自己会把 `pages_build_output_dir` 指到的目录当产物上传，
-# **不需要**任何 deploy 命令；必须显式删掉那条默认值，否则构建永远不会发布。
+# ⚠️ 本项目在 Cloudflare 侧是一个 **Worker**（Workers Builds，dashboard 路径形如
+# `/workers/services/view/osw-docs`，GitHub 上的 check 名是 `Workers Builds: osw-docs`），
+# **不是**经典 Pages 项目。所以这里用 **Workers Static Assets** 的配置形状（与 `apps/www` 一致），
+# 部署命令是 Workers 的 `npx wrangler deploy`。
 #
-# 本文件把「输出目录」这件事从后台搬进了仓库：`pages_build_output_dir` 就是 Pages 用的
-# 构建产物目录，与 `apps/www` 的 `[assets] directory` 回答同一个问题。一旦本文件存在，
-# 它就是 Pages 项目配置的**唯一事实来源**——同名项在后台变成只读。
+# 反过来，若照 Pages 那样写 `pages_build_output_dir`，`npx wrangler deploy` 会因为看不出
+# 「产物目录」而报 `✘ Missing entry-point to Worker script or to assets directory`——
+# **构建是成功的，只有部署这一步失败**，很容易误判成缓存或没保存。
+# **判断形状看部署命令**：用 `npx wrangler deploy` 就是 Workers 形状（配 `[assets]`），
+# 用 `npx wrangler pages deploy` 才是 Pages 形状（配 `pages_build_output_dir`），两者不可混用。
 #
 # **纯静态**：Clarify 的产物是逐页静态 HTML（`output/<slug>/index.html`）加 Pagefind 索引、
-# 每页 `.md` 孪生文件与 `llms.txt`；没有 Worker 脚本、没有函数，所以既不需要 `main`，
+# 每页 `.md` 孪生文件与 `llms.txt`；没有 Worker 脚本，只有 `[assets]`，所以既不需要 `main`，
 # 也不需要任何绑定或密钥。目录名与 `source/` 对仗：`source` 进、`output` 出。
 
 name = "osw-docs"
-
-# 构建产物目录。Clarify 默认就写 `output/`（见 `apps/docs/package.json` 的 `build`），
-# 这里显式声明，让「Pages 去哪拿产物」在仓库里可复核，而不是只活在后台表单里。
-pages_build_output_dir = "./output"
 
 # 固定兼容日期，不跟最新。站点是纯静态资源，没有运行时逻辑，但显式写死可以避免
 # 「后台某天改成了 Latest」这种仓库外漂移。
@@ -32,16 +28,28 @@ compatibility_date = "2026-10-01"
 
 # ---------------------------------------------------------------- 自定义域名
 #
-# ⚠️ 上线前必须在后台做这一步：Pages → 本项目 → Custom domains → Set up a domain，
-# 绑定 `osw-docs.pages.dev` 之外的永久地址（例如 `docs.osw.yinxulai.com`）。
+# 与 `apps/www` / `apps/apis` 同理：站点地址是发布到各处的永久地址，不能依赖 `workers.dev`
+# 子域。这里直接声明绑定，`npx wrangler deploy` 会顺带创建 DNS 记录并申请证书。
 #
-# 与 `apps/www` / `apps/apis` 不同，Pages 的 Wrangler 配置**不认** `routes` / `[[routes]]`
-# （那是 Workers 的键），所以域名绑定只能在 Dashboard 手动完成，不能像那两个 Worker 一样
-# 写成仓库里的一行。前提不变：`yinxulai.com` 这个 zone 在同一个 Cloudflare 账号下。
+# 前提：`yinxulai.com` 这个 zone 在**同一个 Cloudflare 账号**下。不满足时 deploy 会报错
+# （找不到 zone），需把 zone 挪到本账号，或删掉 `routes` 改到后台手动绑定。
+#
+# ⚠️ 这一块必须在**任何 `[表头]` 之前**：TOML 里 `[assets]` 之后的键都会落入那张表，
+# 放错位置只会得到「Unexpected fields found in …」的告警，而部署照常进行。
+routes = [
+  { pattern = "docs.osw.yinxulai.com", custom_domain = true },
+]
+
+# 静态资源：Clarify 构建产物。站点是**多页站**（不是 SPA），未知路径应按 404 处理，
+# 所以用 `not_found_handling = "404-page"`（而非 `single-page-application`）：
+# 找不到资源时返回 404；产物里没有 `404.html` 时 Cloudflare 会给出默认 404 页。
+[assets]
+directory = "./output"
+not_found_handling = "404-page"
 
 # ---------------------------------------------------------------- 构建期环境
 #
 # `pnpm-lock.yaml` 在仓库根，而 Root directory 指向子目录时 Cloudflare 未必能自动识别包
 # 管理器。在后台 Build 的 **Variables and secrets** 里加一条 `PNPM_VERSION`
-# （与仓库根 `package.json` 的 `packageManager` 同版）最稳。这一条同样只存在于后台，
-# 因为它是 Pages 构建环境的事，不是仓库配置。
+# （与仓库根 `package.json` 的 `packageManager` 同版）最稳。这一条只存在于后台，
+# 因为它是构建环境的事，不是仓库配置。
