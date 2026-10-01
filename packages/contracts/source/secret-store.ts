@@ -3,7 +3,7 @@
  *
  * 设计目标：API Key 等敏感信息不落数据库，数据库里只留一个 reference ID。
  * 这里只描述形状，具体实现由宿主提供——core 不知道密钥存在哪儿，也就不会
- * 长出「Electron 专属」的分支（见 `apps/docs/product/packaging.md` §5.1）。
+ * 长出「Electron 专属」的分支（见 `apps/docs/specs/packaging.md` §5.1）。
  *
  * | 宿主 | 实现 | 载体 |
  * | --- | --- | --- |

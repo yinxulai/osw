@@ -3,7 +3,7 @@ import { asArray, asNumber, asObject, asString, type Json } from './conversion-u
 /**
  * Anthropic Messages 响应 → OpenAI Chat Completions 响应。
  *
- * 字段依据见 apps/docs/references/anthropic-messages.md 与 apps/docs/references/openai-completions.md。
+ * 字段依据见 apps/docs/upstream/anthropic-messages.md 与 apps/docs/upstream/openai-completions.md。
  *
  * 流式注意两点：
  * 1. Anthropic 的 content block index 覆盖全部块类型（文本块也占一个），而 OpenAI 的

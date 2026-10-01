@@ -4,7 +4,7 @@
  * 控制台有两种运行形态：Electron 窗口里（`window.electronAPI` 由 preload 注入）和浏览器里
  * （命令行形态托管，或 Vite dev server）。形态差异只在这一层判断一次，别处一律用
  * `getPlatformCapabilities()`——业务组件里不该再出现 `window.electronAPI` 字面量
- * （见 `apps/docs/product/packaging.md` §5.4）。
+ * （见 `apps/docs/specs/packaging.md` §5.4）。
  *
  * 拿不到的能力就是 `null`：界面按「正常但不可用」渲染，不换一套简化排版。
  */

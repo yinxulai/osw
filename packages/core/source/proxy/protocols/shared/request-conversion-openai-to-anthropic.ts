@@ -3,7 +3,7 @@ import { asArray, asNumber, asObject, asString, safeJsonParse, type Json } from 
 /**
  * OpenAI Chat Completions 请求 → Anthropic Messages 请求。
  *
- * 字段依据见 apps/docs/references/openai-completions.md 与 apps/docs/references/anthropic-messages.md。
+ * 字段依据见 apps/docs/upstream/openai-completions.md 与 apps/docs/upstream/anthropic-messages.md。
  *
  * 关键差异：OpenAI 用独立的 `role: tool` 消息承载工具结果，Anthropic 要求
  * `tool_result` block 出现在紧随 assistant `tool_use` 的用户消息中，因此连续的

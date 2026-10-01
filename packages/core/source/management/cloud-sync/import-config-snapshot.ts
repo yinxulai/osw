@@ -34,7 +34,7 @@ export interface ConfigSnapshotImportResult {
  *
  * 后两条的取舍和供应商包是一致的：把一个供应商从队列里移掉要能同步过去，但对快照没提到的
  * 对象动刀就不是同步而是删除了。代价是「删掉一个逻辑模型」这个动作不会传播，见
- * `apps/docs/product/cloud-sync.md`。
+ * `apps/docs/specs/cloud-sync.md`。
  */
 export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapshotImportResult> {
   const snapshot = parseConfigSnapshot(input)

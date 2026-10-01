@@ -52,12 +52,12 @@ const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'produc
 // 互不干扰。必须在任何一次 `safeStorage` 调用之前设好；`setName` 之后已有密钥
 // 仍按各自的名字存取，所以开发态反复重置数据目录不会碰到生产态的密文。
 // 历史上 `app.name` 曾随包名（`@osw/app`）漂移，旧命名空间的残留在钥匙串里，
-// 见 `apps/docs/product/packaging.md` §5.1。
+// 见 `apps/docs/specs/packaging.md` §5.1。
 app.setName(runtimeProfile.applicationName)
 
 process.env.OUTPUT = path.join(__dirname, '..')
 
-// 数据目录固定落在用户主目录，与命令行形态同一处（见 `apps/docs/product/packaging.md` §5.5）：两种形态
+// 数据目录固定落在用户主目录，与命令行形态同一处（见 `apps/docs/specs/packaging.md` §5.5）：两种形态
 // 共用同一份配置与同一对数据库文件，所以「先用命令行跑起来、再开桌面端」不会看到两套空数据。
 // Electron 自己的缓存与凭据也跟着搬过去——`app.getPath('userData')` 是它们的唯一落点。
 app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))

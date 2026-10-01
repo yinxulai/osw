@@ -18,7 +18,7 @@ const DELIVERED: DeliveryDecisionRef = { decision: { kind: 'deliver', successful
  * 执行器已经判定的 failover：这次响应一个字节都不交付。
  *
  * 「客户端要增量、上游回了整包」就落在这一档——它是**上游违约**，不是「改成整包交付」
- * （见 `apps/docs/product/proxy-engine.md` §1.2）。因此这里的修改器必须原样透传，绝不能自己
+ * （见 `apps/docs/specs/proxy-engine.md` §1.2）。因此这里的修改器必须原样透传，绝不能自己
  * 攒一份整包再发出去。
  */
 const ABANDONED: DeliveryDecisionRef = { decision: { kind: 'discard', reason: 'status' } }

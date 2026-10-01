@@ -26,7 +26,7 @@ export function selectCandidates(modifiers: readonly Modifier[], context: Modifi
  * 修改器声明的 `scope` 是否覆盖这次交换。省略的范围即「不限」。
  *
  * 判据只取**客户端跳**：上游跳的形态是规划器的决策，修改器对它没有发言权
- * （见 `apps/docs/product/proxy-engine.md` §2.3.1）。
+ * （见 `apps/docs/specs/proxy-engine.md` §2.3.1）。
  */
 export function matchesModifierScope(scope: ModifierScope | undefined, context: ModifierContext): boolean {
   if (!scope) return true

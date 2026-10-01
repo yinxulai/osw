@@ -39,7 +39,7 @@ import { describeFill, firstFillError } from './lib/fill-summary'
  *
  * 读写全部发生在管理服务（core）：只有它拿得到真实主目录与进程环境变量，也只有它手里有
  * 「注册表声明过的路径」这份白名单。控制台只说「客户端 X 的 Y 文件」，路径从不由界面拼出来——
- * 管理 API 没有身份校验（见 `apps/docs/product/security-privacy.md`），能写哪个文件绝不能由调用方决定。
+ * 管理 API 没有身份校验（见 `apps/docs/specs/security-privacy.md`），能写哪个文件绝不能由调用方决定。
  */
 export function ClientConfigPage() {
   const t = useTranslation()

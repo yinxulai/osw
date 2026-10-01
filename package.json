@@ -16,6 +16,8 @@
     "build:cli": "pnpm --filter @osw/console run build && pnpm --filter @osw/cli run build",
     "build:www": "pnpm --filter @osw/www run build",
     "deploy:www": "pnpm --filter @osw/www run deploy",
+    "build:docs": "pnpm --filter @osw/docs run build",
+    "deploy:docs": "pnpm --filter @osw/docs run deploy",
     "start:cli": "node apps/cli/output/index.js",
     "smoke:cli": "pnpm --filter @osw/cli run smoke",
     "release:mac": "pnpm build && pnpm --filter @osw/app run package:mac",

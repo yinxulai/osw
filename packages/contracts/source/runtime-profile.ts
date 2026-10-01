@@ -16,7 +16,7 @@ export interface RuntimeProfile {
   /**
    * 数据目录名：整份数据的落点，两种宿主形态靠它落到同一个目录里。
    *
-   * 规则是 **`<用户主目录>/<这个名字>`**（见 `apps/docs/product/packaging.md` §5.5）：数据放在
+   * 规则是 **`<用户主目录>/<这个名字>`**（见 `apps/docs/specs/packaging.md` §5.5）：数据放在
    * 用户主目录根下的隐藏目录，不放平台 appData 目录。两个原因：
    *
    *   1. Windows 的 `%APPDATA%` 是**漫游配置目录**。会持续增长的请求日志与正文进去以后，

@@ -19,14 +19,14 @@ import { getRuntimeProfile, type RuntimeEnvironment } from '@common/runtime-prof
  *
  * 这是**唯一**一处选择：数据目录名与默认端口都从这一档预设里取。别处再写一遍
  * `'production'` 或者写死一个目录名，都会把「两种形态共用同一份数据」这件事写坏
- * （`apps/docs/product/packaging.md` §5.5）。
+ * （`apps/docs/specs/packaging.md` §5.5）。
  */
 export const CLI_RUNTIME_ENVIRONMENT: RuntimeEnvironment = 'production'
 
 /**
  * 平台默认数据目录：`<用户主目录>/<预设数据目录名>`。
  *
- * 与桌面形态**同名同址**（`apps/docs/product/packaging.md` §5.5）：两种形态默认共用同一份配置与
+ * 与桌面形态**同名同址**（`apps/docs/specs/packaging.md` §5.5）：两种形态默认共用同一份配置与
  * 同一对数据库文件，这样「先用命令行跑起来、再开桌面端」不会看到两套空数据。
  *
  * 位置选在**用户主目录**而不是各平台的应用数据目录（`%APPDATA%` / `Application Support` /
@@ -67,7 +67,7 @@ export function consoleWebRoot(): string {
  * 把监听地址转成「可以连过去」的地址。
  *
  * 通配地址不是可连接地址：`0.0.0.0` / `::` 要回落成回环地址才连得上（桌面端同一条规则，
- * 见 `apps/docs/product/desktop.md`）。IPv6 字面量在 URL 里要加方括号、在 `net.connect` 里不能加，
+ * 见 `apps/docs/specs/desktop.md`）。IPv6 字面量在 URL 里要加方括号、在 `net.connect` 里不能加，
  * 所以这里是**去方括号**的那个方向，加括号由 `formatHostForDisplay` 负责。
  */
 export function connectHost(host: string): string {

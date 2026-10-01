@@ -1,8 +1,8 @@
 packages:
   - packages/*
   - apps/*
-  # docs 的内容根是开放文档（`apps/docs/source/`），内部文档与设计资产在同级的
-  # `product/` 与 `design/` 下，不参与站点构建。
+  # docs 的内容根是开放文档（`apps/docs/source/`），内部规格、上游快照与设计资产
+  # 在同级的 `specs/`、`upstream/`、`assets/` 下，不参与站点构建。
   - apps/docs
 
 allowBuilds:

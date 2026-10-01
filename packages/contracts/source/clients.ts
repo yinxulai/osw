@@ -6,7 +6,7 @@
  *   1. 控制台（渲染进程）——列出可管理的客户端、渲染图标与字段；
  *   2. 管理服务端（core）——把客户端声明的配置文件路径解析成真实路径并校验写入目标，
  *      是「只允许读写这些文件」这条边界的唯一依据（管理 API 没有身份校验，见
- *      `apps/docs/product/security-privacy.md`，因此路径绝不能由调用方随便给）。
+ *      `apps/docs/specs/security-privacy.md`，因此路径绝不能由调用方随便给）。
  *   3. 备份与版本管理——`files[].path` 就是版本记录要挂靠的对象。
  *
  * 它放在 contracts 而不是 console：core 不允许依赖 console（`check-package-boundaries.mjs`），

@@ -15,7 +15,7 @@ describe('format support', () => {
     expect(supportsAutoFill('jsonc')).toBe(true)
     expect(supportsAutoFill('env')).toBe(true)
     expect(supportsAutoFill('toml')).toBe(true)
-    // YAML 没有写入器（见 `apps/docs/product/` 里的取舍）：只做备份、手动编辑与历史版本。
+    // YAML 没有写入器（见 `apps/docs/specs/` 里的取舍）：只做备份、手动编辑与历史版本。
     expect(supportsAutoFill('yaml')).toBe(false)
   })
 

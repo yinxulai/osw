@@ -4,7 +4,7 @@
  * **它用一个专用的直连连接器，不走 `coreNetworkClient` 单例。**
  * 那个单例承载的是「用户为模型请求配的出站代理」语义，统计流量混进去会有两个坏结果：
  * 用户的代理日志里出现他没预期的目标；以及代理配错时统计会永久失败
- * （见 `apps/docs/product/telemetry.md` §1「与出站代理的关系」、`outbound-proxy.md`「非目标」）。
+ * （见 `apps/docs/specs/telemetry.md` §1「与出站代理的关系」、`outbound-proxy.md`「非目标」）。
  *
  * 这里也**不使用系统的出站代理**：模式固定为 `direct`，`systemProxyResolver` 用默认的
  * 「不解析」，所以「统计流量永不经过代理」是结构上成立的，不是靠某个配置项恰好为空。

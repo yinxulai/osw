@@ -4,7 +4,7 @@
  * 新增文案先加在这里，再补 `ui.zh-CN.ts`：后者声明为 `Record<keyof typeof uiEn, MessageValue>`，
  * 少一个 key 编译就会失败，不需要运行时完整性检查来兜底。
  *
- * key 规范见 `apps/docs/product/i18n.md` §4：层级点分、全英文小写驼峰、整句一条、变量用 `{name}`。
+ * key 规范见 `apps/docs/specs/i18n.md` §4：层级点分、全英文小写驼峰、整句一条、变量用 `{name}`。
  * **诊断文案（日志、错误消息）不进这里**——它们固定英文，写在源码里。
  */
 
@@ -88,7 +88,7 @@ export const uiEn = {
 
   // ========== 模型诊断面板 ==========
   // 面板自身的界面文案进目录；表格里展示的诊断消息（服务端 `errorMessage`）保持英文原文，
-  // 见 `apps/docs/product/i18n.md` §5「诊断 / 详情面板保留英文原文」。
+  // 见 `apps/docs/specs/i18n.md` §5「诊断 / 详情面板保留英文原文」。
   'modelTest.title': 'Channel diagnostics',
   'modelTest.description': 'Verify upstream connectivity and streaming, measure TTFT and TPS, across the protocol conversion chain',
   'modelTest.selection.title': 'Diagnostic scope',
@@ -1665,7 +1665,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'clientConfig.time.daysAgo': '{count} d ago',
 
   // ========== 错误码本地化 ==========
-  // 服务端只输出英文诊断消息；界面按错误码本地化，见 `apps/docs/product/i18n.md` §5。
+  // 服务端只输出英文诊断消息；界面按错误码本地化，见 `apps/docs/specs/i18n.md` §5。
   // key 与 `ApiErrorCodeSchema` 一一对应（`catalogs.test.ts` 会校验）——
   // 刻意不设 `errors.UNKNOWN`：目录里没有的错码直接退回英文诊断原文（`localizeErrorCode`）。
   'errors.NOT_FOUND': 'Resource not found',
@@ -2045,7 +2045,7 @@ Score request size in a sandbox script, then route by score band to different lo
 
   // ========== 命令行（终端输出） ==========
   // 面向用户的可读文案：帮助、启动横幅、状态、停止结果。
-  // 诊断消息（日志、异常堆栈）仍固定英文（见 apps/docs/product/i18n.md §2），不在这里。
+  // 诊断消息（日志、异常堆栈）仍固定英文（见 apps/docs/specs/i18n.md §2），不在这里。
   // 参数名、端口号、路径都是原样打印的字面量，所以占位符名保持与代码一致。
   'native.cli.usage': 'Usage: osw [command] [options]',
   'native.cli.commands': 'Commands:',

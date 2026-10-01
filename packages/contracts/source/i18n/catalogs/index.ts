@@ -19,7 +19,7 @@ export type UiCatalogKey = keyof typeof uiEn
 /** 界面目录的类型：键与英文目录一致，值允许按复数分档。 */
 export type UiCatalog = Record<UiCatalogKey, MessageValue>
 
-/** 基础文案，供 `apps/docs/product/i18n.md` §4 的 key 规范之外的自定义插值使用。 */
+/** 基础文案，供 `apps/docs/specs/i18n.md` §4 的 key 规范之外的自定义插值使用。 */
 export const CATALOGS: Record<Locale, Catalog> = {
   en: uiEn,
   'zh-CN': uiZhCN,
