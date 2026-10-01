@@ -1,0 +1,71 @@
+---
+title: Failover
+description: When OSW switches to the next channel, how cooldown is computed, and where to tune it.
+keywords:
+  - failover
+  - cooldown
+  - retry
+  - failure threshold
+---
+
+# Failover
+
+**Failover** means that when one provider fails, OSW automatically tries the next candidate in the same group. It keeps requests running even when a single provider wobbles, rate-limits, or has its auth expire.
+
+## When it switches to the next
+
+| Situation | Behavior |
+| --- | --- |
+| Network error / connection timeout / streaming idle timeout | Switch to the next candidate. |
+| `401` / `403` | Switch to the next candidate, and **count it as one failure for that provider**. |
+| `408` / `429` | Switch to the next candidate. |
+| `5xx` | Switch to the next candidate. |
+| Other `4xx` | **Return as-is**, no switch. |
+
+<Callout title="Once streaming has started, no stitching" type="warning">
+Once a streaming response has begun to be sent, a mid-stream break **aborts** it; the output of multiple channels is never stitched together.
+</Callout>
+
+## Cooldown
+
+After consecutive failures reach the threshold, that provider (or that provider model) enters **cooldown** and is temporarily removed from the candidates:
+
+- It is no longer tried during cooldown, and requests flow straight to other candidates.
+- The cooldown duration grows with the failure count up to a ceiling, then it is automatically put back.
+- Cooldown state is visible on the model rows of a [logical model](/upstreams/logical-models).
+
+## Tuning
+
+All parameters live in **Settings → Reliability → Failover**:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| Failure threshold | 3 | How many consecutive failures trigger cooldown. |
+| Base cooldown | 30s | The starting cooldown duration. |
+| Max cooldown | 5 min | The cooldown duration ceiling. |
+| Request timeout | 30s | Timeout for a single attempt; on timeout it switches to the next. |
+
+<Callout title="Timeout is also per provider" type="note">
+A provider's own "request timeout" overrides the default here (see [Providers & models](/upstreams/providers)).
+</Callout>
+
+## It only fails over within a group
+
+Failover **only happens within a group**. A group can be:
+
+- the models attached to one [logical model](/upstreams/logical-models); or
+- one channel that has explicitly enabled protocol conversion.
+
+<Callout title="No cross-group fallback" type="info">
+If the channel a request uses does not support the native protocol and has no conversion enabled, it will not switch to another group for that reason — that is routing's job (see [Request routing](/upstreams/routing)).
+</Callout>
+
+## Observing it
+
+- **Logical models page**: a model row's "consecutive failures" and "cooling down" markers.
+- **Analytics**: the frequency of failover and the distribution of failure causes.
+- **Request logs**: the attempt detail of a request, showing which candidate it failed on and who it finally landed on.
+
+---
+
+If the same session repeatedly hits different providers, the upstream's prompt cache gets scattered; the next section, [Cache affinity](/upstreams/cache-affinity), solves this.

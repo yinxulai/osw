@@ -1,0 +1,108 @@
+---
+title: Settings
+description: The six sections of the Settings page and every configuration item.
+keywords:
+  - settings
+  - configuration
+  - parameters
+---
+
+# Settings
+
+The **Settings** page manages app behavior, network connections, failover, and local data, organized into six sections: **App / Network / Routing / Reliability / Data / Cloud sync**. Changes take effect on save, and the bottom shows the sync and save status.
+
+## App
+
+### Appearance & startup
+
+| Setting | Description |
+| --- | --- |
+| Theme | Follow system / light / dark. |
+| Language | UI language; logs and error messages are always English. |
+| Launch at login | Start automatically on login and hide to the tray. |
+
+### Version updates
+
+Check for updates, download, and install. On macOS you can only check and open the DMG download page; major versions with breaking changes do not support auto-update and must be downloaded manually. See [Install & run](/getting-started/installation).
+
+### Onboarding
+
+You can **re-run** the three-step first-launch onboarding.
+
+## Network
+
+### Listening service
+
+| Setting | Description |
+| --- | --- |
+| Listen address | `127.0.0.1` recommended, allowing local access only. |
+| Listen port | Default `9300`; after saving, the proxy uses the new port automatically. |
+
+### Outbound proxy
+
+Decides OSW's network path to model services:
+
+| Mode | Description |
+| --- | --- |
+| No proxy | All upstream requests are forced direct. |
+| Use system proxy | Follow the operating system's proxy settings. |
+| Custom proxy | Use a specified HTTP / HTTPS / SOCKS proxy. |
+
+In custom mode you can fill in a **proxy URL** (credentials are stored locally; use only trusted proxies) and **bypass addresses** (comma-separated, supporting `*.example.com` and `<local>`). You can also **test the connection**: make one lightweight request with the current config to verify the proxy works. See [Outbound proxy](/upstreams/outbound-proxy).
+
+## Routing
+
+### Routing mode
+
+Decides which routing definition the proxy executes (workflow orchestration / routing rules). **The switch takes effect immediately and needs no save.** See [Request routing](/upstreams/routing).
+
+## Reliability
+
+### Failover
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Consecutive failure threshold | 3 | After reaching it, the provider enters cooldown. |
+| Initial cooldown | 30s | The wait time on first entering cooldown. |
+| Max cooldown | 5 min | Cooldown grows with failure count, up to this cap. |
+| Streaming idle timeout | 30s | A streaming response with no new data within this duration is judged failed. |
+
+See [Failover](/upstreams/failover).
+
+### Cache affinity
+
+| Setting | Description |
+| --- | --- |
+| Enable cache affinity | When the primary provider enters cooldown, the session stays on its successor; a recovered provider wins traffic back via **new sessions** rather than switching back automatically. |
+| Binding hold | After a session is idle for longer than this, the binding is void and it is scheduled as a new session. |
+
+See [Cache affinity](/upstreams/cache-affinity).
+
+## Data
+
+### Data directory
+
+Shows the directory holding config, databases, and credentials, and can **open it in the file manager** (desktop only; in the command-line shape, access it by path yourself). It also shows the **disk usage** of the observational database in this directory, which shrinks immediately after clearing historical logs. See [Data directory & retention](/observability/data).
+
+### Request logs
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Record request logs | On | Request identity, and the usage and metrics of each attempt. After turning it off, requests are still forwarded but not persisted. |
+| Request log retention | Forever | Automatically deletes request logs older than the set number of days (along with attempts, usage, and bodies). |
+| Body retention | 7 days | Automatically deletes request and response bodies older than the set number of days; requests, attempts, and metrics are kept. |
+| Record request and response bodies | On | Convenient for troubleshooting, but logs may contain sensitive information. |
+
+You can also **clear historical logs**: immediately delete existing history by number of days, without affecting the automatic retention settings.
+
+### Log retention
+
+The retention duration for runtime logs, a **separate setting** from request logs. See [Runtime logs](/observability/runtime-logs).
+
+## Cloud sync
+
+Choose a sync method, connect credentials, bind a remote location, and manually **back up to cloud** or **restore from cloud**. A restore overwrites this machine's providers, models, and bindings wholesale with the remote snapshot, and cannot be undone; logical models absent from the snapshot are left untouched. See [Config cloud sync](/observability/cloud-sync).
+
+---
+
+For the equivalent capabilities in the command-line shape, see [Command line](/reference/cli).

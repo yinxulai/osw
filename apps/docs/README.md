@@ -24,7 +24,7 @@
 2. **一个主题只有一处权威。** 跨类提到同一主题时只写一句结论加链接，不展开复述。`specs/` 内部同样如此——[`specs/README.md`](./specs/README.md) 的文档地图是各主题权威文档的唯一索引。发现两处描述不一致时，以权威文档和代码为准。
 3. **开放文档只服务使用者。** 内部实现取舍、未定稿的设计、维护者才关心的边界，一律不进 `source/`；使用者不需要的细节留在 `specs/`。
 4. **每个子树自带索引。** 具体约定（`specs/` 的文档地图、`upstream/` 的检索约定、`assets/` 的资产清单）写在各自的 `README.md` 里，本文件只负责「有哪些类、各自去哪」，不重复各子树的内部结构。
-5. **文件与 URL 同名。** 开放文档的文件名就是站点路径（`source/zh/logical-models.mdx` → `/logical-models`），产品文档用相同的英文 slug（`specs/provider-model.md`），这样「文档名 ↔ 站点页 ↔ 代码注释里的引用」三处一致，检索时不必记忆别名。带语言前缀的 URL 与文件名同构（`source/en/logical-models.mdx` → `/en/logical-models`），两种语言的同名页共享段 slug。
+5. **文件与 URL 同名。** 开放文档的文件名就是站点路径（`source/zh/upstreams/routing.mdx` → `/upstreams/routing`），产品文档用相同的英文 slug（`specs/provider-model.md`），这样「文档名 ↔ 站点页 ↔ 代码注释里的引用」三处一致，检索时不必记忆别名。带语言前缀的 URL 与文件名同构（`source/en/upstreams/routing.mdx` → `/en/upstreams/routing`），两种语言的同名页共享段 slug。
 
 > **为什么不把三类内部内容都塞进一个目录？** 它们看起来都是「非站点文档」，但生命周期不同：`specs/` 随产品演进反复改写，`upstream/` 是逐字快照、只增不改，`assets/` 是二进制与画布物料、由脚本重写。混在一个目录里，就得靠文件名前缀来区分这几种完全不同的维护规则；分成三个目录，规则各自成文，也不用为「这份 md 该不该进打包」逐个判断。
 
@@ -42,32 +42,39 @@ pnpm --filter @osw/docs preview  # 预览构建产物
 
 ## 多语言
 
-**中文是主要维护语言**（`locales.default = 'zh'`）：它占据根路径（`/installation`），是内容的权威版本；英文挂在 `/en` 前缀下（`/en/installation`）。两种语言都同时可按语言前缀访问（`/zh/installation` 亦有效），因此带前缀的链接永远稳定。
+**中文是主要维护语言**（`locales.default = 'zh'`）：它占据根路径（`/getting-started/installation`），是内容的权威版本；英文挂在 `/en` 前缀下（`/en/getting-started/installation`）。两种语言都同时可按语言前缀访问（`/zh/getting-started/installation` 亦有效），因此带前缀的链接永远稳定。
 
-配置在 [`clarify.ts`](./clarify.ts) 的 `locales`（`default` / `missing` / `locales`）；正文按语言分目录，两边文件与 slug 一一对应：
+配置在 [`clarify.ts`](./clarify.ts) 的 `locales`（`default` / `missing` / `locales`）；正文按语言分目录，目录内再按 tab 分子目录，两边文件与 slug 一一对应：
 
 ```text
 source/
-├── zh/   # 默认语言（主要维护语言）：安装与启动.mdx → /installation
-└── en/   # /en 前缀：installation.mdx → /en/installation
+├── zh/                          # 默认语言（主要维护语言）
+│   ├── index.mdx                # → /
+│   ├── getting-started/         # → /getting-started/installation
+│   ├── upstreams/               # → /upstreams/routing
+│   ├── observability/           # → /observability/request-logs
+│   └── reference/               # → /reference/settings
+└── en/                          # 同构，挂在 /en 前缀下
 ```
 
-`missing: 'fallback'` 是这里的关键选择：**英文缺哪一页，该页就自动回退到中文，而不是 404**。这让英文可以**增量补译**，站点任何时刻都不会出现断页。构建时 `clarify check` 会对每个待补译的页报一条 `i18n-fallback-route` warning——那是**已知且预期**的，不是错误；译完之后 warning 自然消失。
+`missing: 'fallback'` 是这里的关键选择：**英文缺哪一页，该页就自动回退到中文，而不是 404**。这让英文可以**增量补译**，站点任何时刻都不会出现断页。构建时 `clarify check` 会对每个待补译的页报一条 `i18n-fallback-route` warning——那是**已知且预期**的，不是错误；译完之后 warning 自然消失（当前已全部译完，无 warning）。
 
 导航、页脚、tab / 分组 / 页标题在 `clarify.ts` 里都写成 `{ zh, en }` 双语（页面正文里的**站内链接**用无前缀的裸路径，如 `/protocols`，由当前语言自动解析到正确版本）；站点级 `title` / `description` 仍是单值字符串，即默认语言。SEO 上：`siteUrl` 会生成双语言的 `sitemap.xml` 与 `robots.txt`，默认语言的裸路径页会输出 `canonical` 指向带前缀的规范 URL（`/quick-start` → `/zh/quick-start`）去重。
 
 ### 译制进度
 
-英文目前**只译了「开始使用」整条上手路径**，其余页面全部走回退。要补某一页，就是在 `source/en/<slug>.mdx` 新建同名文件（可直接从 `source/zh/<slug>.mdx` 复制再翻译，保持 `title` / `description` / 段结构与中文一致）。
+四个 tab 的**中英双语已全部译完**，无回退页。要补或改某一页，就是在 `source/en/<tab-dir>/<slug>.mdx` 新建 / 修改同名文件（可直接从 `source/zh/<tab-dir>/<slug>.mdx` 复制再翻译，保持 `title` / `description` / 段结构与中文一致）。
 
-| Tab | 页面 slug | English |
+| Tab | 目录 | English |
 | --- | --- | --- |
-| 开始使用 | `index` `concepts` `installation` `quick-start` `protocols` `client-config` | ✅ 已译 |
-| 上游与路由 | `providers` `logical-models` `routing` `failover` `cache-affinity` `rewrite` `outbound-proxy` | ⏳ 回退中文 |
-| 观测与数据 | `request-logs` `analytics` `runtime-logs` `data` `cloud-sync` `privacy` | ⏳ 回退中文 |
-| 参考 | `settings` `cli` `troubleshooting` `limitations` | ⏳ 回退中文 |
+| 开始使用 | `getting-started/` | ✅ 已译 |
+| 上游与路由 | `upstreams/` | ✅ 已译 |
+| 观测与数据 | `observability/` | ✅ 已译 |
+| 参考 | `reference/` | ✅ 已译 |
 
-> **改中文时同步看英文。** 中文是权威版本，改动了中文页的 slug、段结构或站内链接时，`source/en/` 下同页（若已译）也要跟着改；不确定英文是否跟得上时，宁可先把该英文页删掉，让 fallback 接住，也不要留下与中文不一致的译文。
+> **改中文时同步看英文。** 中文是权威版本，改动了中文页的 slug、段结构或站内链接时，`source/en/` 下同页也要跟着改；不确定英文是否跟得上时，宁可先把该英文页删掉，让 fallback 接住，也不要留下与中文不一致的译文。
+>
+> **`description` 里含 `: `（冒号加空格）时必须整体加引号。** YAML 会把它当成键值分隔符，导致 `clarify check` / `build` 直接抛 `YAMLException` 而中断。`title` 同理。
 
 ## 部署（Cloudflare Workers）
 

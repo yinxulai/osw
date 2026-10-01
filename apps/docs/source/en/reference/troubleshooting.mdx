@@ -1,0 +1,88 @@
+---
+title: Troubleshooting
+description: Causes and fixes for common symptoms such as failed requests, port conflicts, and unavailable proxies.
+keywords:
+  - troubleshooting
+  - error codes
+  - FAQ
+---
+
+# Troubleshooting
+
+First work out "which layer is wrong" — client to local service, local service to upstream, or the local service itself — then treat accordingly.
+
+## Client can't connect
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| `PROXY_NOT_RUNNING` / can't connect to the local service | The proxy isn't started | Click "Start service" in the tray, or check the status line on the main screen. |
+| Anthropic client 404 | Base URL has an extra `/v1` | Change it to `http://127.0.0.1:9300` (see [Protocols](/getting-started/protocols)). |
+| Connection refused | Wrong port, or the port is in use | Confirm the listen port (Settings → Network → Listening service), switch ports if needed. |
+| `REQUEST_REWRITE_RULE_FAILED` | A rewrite rule rejected the request | Turn off [rewrite rules](/upstreams/rewrite) one by one to locate it. |
+
+Run `curl http://127.0.0.1:9300/v1/models` first: if it returns the model list, the local service is running and the problem is in the client config.
+
+## The request reached local but didn't complete
+
+| Error code | Meaning | Fix |
+| --- | --- | --- |
+| `NO_MODEL_CONFIGURED` | No usable upstream provider | Go to [Model management](/upstreams/providers) to add providers and models. |
+| `NO_AVAILABLE_PROVIDER` | This logical model has no enabled, available provider model | Add an available model in [Logical models](/upstreams/logical-models), or wait for cooldown to end. |
+| `INVALID_MODEL` | The request carried no usable model name | Fill in a non-empty model name in the client (use `default` if unsure). |
+| `MANUAL_MODEL_UNAVAILABLE` | The manually pinned model is not currently applicable to this protocol | Switch to a model applicable to the protocol, or use failover mode. |
+| `ALL_PROVIDERS_FAILED` | Every upstream provider failed | Expand the per-attempt detail in [Request logs](/observability/request-logs) to see the specific error of each. |
+| `UPSTREAM_MODELS_UNAVAILABLE` | Can't fetch the model list | Check whether the endpoint and protocol match ([Providers & models](/upstreams/providers)). |
+
+## Upstream-related
+
+| Error code | Meaning | Fix |
+| --- | --- | --- |
+| `UPSTREAM_AUTH_FAILED` | The upstream rejected authentication | Check whether the API key is correct and not expired. |
+| `UPSTREAM_TIMEOUT` | The upstream request timed out | See whether you should raise the timeout, or whether the provider is wobbling. |
+| `UPSTREAM_STREAM_ERROR` | The streaming response broke unexpectedly | A break after streaming starts aborts rather than stitches; retry and see. |
+| `UPSTREAM_UNAVAILABLE` | Upstream unavailable | Go to [Analytics](/observability/analytics) to see whether it is happening in a cluster. |
+
+## Proxy-related
+
+| Error code | Meaning |
+| --- | --- |
+| `SYSTEM_PROXY_RESOLUTION_FAILED` | Could not resolve the system proxy settings. |
+| `OUTBOUND_PROXY_UNREACHABLE` | Could not connect to the target through the outbound proxy. |
+| `OUTBOUND_PROXY_AUTH_REQUIRED` | The outbound proxy requires authentication. |
+| `OUTBOUND_PROXY_TUNNEL_REJECTED` | The outbound proxy refused to establish a tunnel. |
+
+<Callout title="Switch to direct to rule out the proxy" type="note">
+When upstream requests fail across the board, switch [Outbound proxy](/upstreams/outbound-proxy) back to "No proxy" to quickly confirm whether the proxy is the problem.
+</Callout>
+
+## Client config
+
+| Error code | Meaning | Fix |
+| --- | --- | --- |
+| `CLIENT_CONFIG_CLIENT_NOT_SUPPORTED` | This client doesn't support auto-fill yet | Edit the content manually below the config page. |
+| `CLIENT_CONFIG_PARSE_FAILED` | The content can't be parsed in its format | Fix the original file's syntax first, then auto-fill; or edit manually. |
+| `CLIENT_CONFIG_WRITE_FAILED` | Can't write the config file | Check the file path and permissions. |
+| `CLIENT_CONFIG_PATH_NOT_ALLOWED` | The config file is not on the writable list | Only paths on the list can be filled in. |
+
+## Cloud sync
+
+| Error code | Meaning | Fix |
+| --- | --- | --- |
+| `CLOUD_SYNC_NOT_CONFIGURED` | Not configured yet | Save your credentials first. |
+| `CLOUD_SYNC_AUTH_FAILED` | Credentials rejected | Confirm the token is valid and has enough scope (only `gist` is needed). |
+| `CLOUD_SYNC_UNREACHABLE` | Can't reach the cloud | Check the network and [Outbound proxy](/upstreams/outbound-proxy). |
+| `CLOUD_SYNC_REMOTE_FILE_MISSING` | The remote doesn't have this file yet | Back up once on a machine that already has your config. |
+| `CLOUD_SYNC_REMOTE_FILE_INVALID` | The remote file is not valid JSON | It may have been broken by hand-editing; re-back-up to overwrite it. |
+
+## The service itself
+
+| Symptom | Fix |
+| --- | --- |
+| `DATABASE_UNAVAILABLE` | Check whether the [data directory](/observability/data) is writable and the disk isn't full. |
+| `SECRET_STORE_UNAVAILABLE` | The system key store is unavailable; see [Local-first & secrets](/observability/privacy). |
+| Startup failure, config anomalies | See [Runtime logs](/observability/runtime-logs). |
+| Inconsistent version behavior | `osw status` to check for version drift ([Command line](/reference/cli)). |
+
+---
+
+There are things OSW deliberately doesn't do; see [Limitations](/reference/limitations) before digging further.

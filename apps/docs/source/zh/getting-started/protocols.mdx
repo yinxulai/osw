@@ -1,0 +1,68 @@
+---
+title: 本服务支持的协议
+description: OpenAI Chat Completions / Responses、Anthropic Messages 三种协议，以及协议转换。
+keywords:
+  - 协议
+  - Chat Completions
+  - Responses
+  - Anthropic
+  - 协议转换
+---
+
+# 本服务支持的协议
+
+OSW 接受三种上游协议，并在同一个端口上识别它们。
+
+| 协议 | 端点 | 典型客户端 |
+| --- | --- | --- |
+| OpenAI Chat Completions | `/v1/chat/completions` | 绝大多数 OpenAI 兼容工具 |
+| OpenAI Responses | `/v1/responses` | Codex 等 |
+| Anthropic Messages | `/v1/messages` | Claude Code 等 |
+
+## 路径怎么认
+
+同一个端口同时服务这三种协议，路径**带不带 `/v1` 前缀都识别**：
+
+```
+http://127.0.0.1:9300/v1/chat/completions
+http://127.0.0.1:9300/chat/completions
+```
+
+## Base URL 怎么填
+
+| 你的客户端 | Base URL |
+| --- | --- |
+| OpenAI 兼容 | `http://127.0.0.1:9300/v1` |
+| Anthropic | `http://127.0.0.1:9300` |
+
+<Callout title="Anthropic 不加 /v1" type="warning">
+Anthropic 客户端会自己在地址后追加 `/v1/messages`。加 `/v1` 会变成 `/v1/v1/messages`，代理不认识，返回 404。
+</Callout>
+
+## `GET /v1/models`
+
+由本地提供，返回你配置的模型名称（也就是逻辑模型），**绝不转发上游**。所以 `curl http://127.0.0.1:9300/v1/models` 既能验证服务在跑，也能看到当前可写的模型名。
+
+## 传输形态
+
+| 形态 | 行为 |
+| --- | --- |
+| 非流式 | 原样处理，读完整包再回。 |
+| 流式 | SSE 逐帧透传。开始下发后中断即中止，不拼接。 |
+| WebSocket | 按连接处理。 |
+
+## 协议转换
+
+**默认不转换**：请求按它进来的协议原样转发。只有某个渠道**显式开启**转换后，它才可能接住其他协议的请求：
+
+- **原生请求优先**：请求的协议与渠道支持的协议一致时，直接用原生渠道。
+- **转换请求**仅在没有原生候选时使用。
+- 转换是**兼容层**，部分参数可能丢失，不能指望与原生完全等价。
+
+<Callout title="转换开启一次只作用于这个协议端点" type="info">
+转换开关在供应商模型编辑弹窗的协议端点行上（见[供应商与模型](/upstreams/providers)）。
+</Callout>
+
+---
+
+协议没问题了，去[客户端配置](/getting-started/client-config)把工具接上。

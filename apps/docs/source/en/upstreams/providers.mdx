@@ -1,0 +1,78 @@
+---
+title: Providers & models
+description: Configure upstream credentials, protocol endpoints, and model lists in Model management.
+keywords:
+  - providers
+  - model management
+  - API key
+  - protocol conversion
+---
+
+# Providers & models
+
+The **Model management** page in the left sidebar centralizes upstream credentials and model mappings. Credentials are stored per **provider**; you can set a default endpoint for each protocol and override it per model.
+
+## Providers
+
+A provider represents one upstream service. When creating or editing a provider you can configure:
+
+| Field | Description |
+| --- | --- |
+| Provider name | e.g. OpenAI / DeepSeek. |
+| API key (optional) | Stored on this machine only; leave it empty for upstreams that need no auth, such as a local or test cluster. |
+| Request timeout (ms) | On timeout, OSW switches to the next candidate. Default 30000 (30s). |
+| Default endpoint per protocol | Enable a protocol and fill in its default endpoint; a model using that protocol inherits it unless you override it. |
+
+<Callout title="Keys are stored per provider" type="note">
+The upstream endpoint is the model's real endpoint and must include scheme, host, and path. A wrong endpoint is the most common cause of "can't fetch models".
+</Callout>
+
+Several vendor presets are built in; picking one fills in the website and default endpoints. You can also choose **Custom provider** and fill everything in yourself.
+
+## Provider models
+
+Under a provider, **Add model**:
+
+- The **model ID** is the name the upstream recognizes; requests are forwarded verbatim (e.g. `gpt-4o`, `claude-3-5-sonnet-20241022`).
+- **Fetch models** pulls the list straight from the upstream; tick and add them in bulk.
+- A model must enable at least one **protocol endpoint**; it inherits the provider-level endpoint by default and can override it.
+
+**Protocol conversion** is toggled per endpoint:
+
+<Callout title="Protocol conversion is a compatibility layer" type="warning">
+Once enabled, the endpoint can accept requests in other protocols and convert them automatically, but **some parameters may be dropped**. Native requests take priority; converted requests are used only when no native candidate exists.
+</Callout>
+
+See [Supported protocols](/getting-started/protocols) for details.
+
+## Queue order
+
+Both providers and models support **drag-to-reorder**. The order affects the try order during failover (the order inside a logical model is what ultimately decides — see [Logical models](/upstreams/logical-models)).
+
+## Channel diagnostics
+
+To verify that a channel works, use **Connection test** (channel diagnostics): tick several channels and protocols to validate them concurrently, and pick a diagnostic mode:
+
+| Mode | What it does |
+| --- | --- |
+| Connectivity | Sends one minimal request and tells you whether the path works. |
+| Streaming | Requires the upstream to actually stream frame by frame over SSE; a full-buffer reply counts as failure. |
+| Speed | Measures TTFT and TPS; the prompt is longer and it takes longer. |
+
+<Callout title="It costs a little money" type="warning">
+Each target receives one **real** request (speed diagnostics cost more), recorded in request logs. The diagnostic message itself stays in English.
+</Callout>
+
+## Import & export
+
+- **Export** one or all providers; the export includes endpoints, their models, the protocol-conversion toggles, and custom settings. You can optionally **include plaintext API keys**.
+- On **import**, a provider with the same name is **overwritten wholesale**: endpoints and models absent from the package are deleted, so confirm on the target device before importing.
+- Newly created models attach to the `default` logical model; existing models keep their scheduling position.
+
+<Callout title="An export with keys is a usable credential" type="warning">
+An export that includes plaintext keys is equivalent to a usable credential. Don't send it over public channels; only move it between your own devices.
+</Callout>
+
+---
+
+Once your upstreams are configured, go to [Logical models](/upstreams/logical-models) to arrange them into groups that requests can land on.

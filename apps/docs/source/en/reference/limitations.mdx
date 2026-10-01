@@ -1,0 +1,53 @@
+---
+title: Limitations
+description: What OSW explicitly does not do — know the boundaries before judging whether something is a problem.
+keywords:
+  - limitations
+  - unsupported
+  - constraints
+---
+
+# Limitations
+
+OSW is a **local LLM proxy** with clear boundaries. The following are **deliberately not done**, not left unfinished.
+
+## Network & access
+
+- **No system-level proxy**: OSW does not take over global traffic; it serves only clients that explicitly point their Base URL at it.
+- **No remote access**: it is designed to run on this machine, listening on `127.0.0.1` by default. Exposing it to a LAN is a risk you take on yourself (it carries no auth).
+- **The management service listens locally only**: the management API always binds to `127.0.0.1`; to access it from another machine, use an SSH tunnel.
+
+## Protocol
+
+- **Gemini's `/v1beta/models/*` is not supported**: connect via the OpenAI-compatible or Anthropic shape instead.
+- **Protocol conversion is a compatibility layer**: no conversion by default. Only after you enable it explicitly may an endpoint accept requests in other protocols, and some parameters may be dropped.
+
+## Routing & failover
+
+- **Failover happens only within a group**: the models attached to one logical model, or one channel with conversion explicitly enabled. It **does not fall back across groups** — that is routing's job.
+- **No stitching after streaming starts**: a mid-stream break aborts; the output of multiple channels is never stitched together.
+
+## Collaboration & sync
+
+- **No team collaboration / multi-user permissions**: this is a single-machine tool.
+- **No account system**: no login; cloud sync uses your own credentials.
+- **Cloud sync only encodes, never encrypts**: base64 keeps the file from being readable at a glance, but is not a means of secrecy (see [Config cloud sync](/observability/cloud-sync)).
+- **No automatic / scheduled sync**: upload and pull are one-shot actions you trigger manually, and there is no conflict merging.
+
+## Request rewriting
+
+- **Only non-streaming JSON**: streaming (SSE) and non-JSON content do not participate in rewriting (see [Request rewriting](/upstreams/rewrite)).
+- **The response stage is currently disabled**: because a streaming response cannot be rewritten at the event level and it accounts for the vast majority of traffic, the response stage is disabled entirely — the editor doesn't offer it, and saving or dry-running a rule with a response stage is rejected (see [Request rewriting](/upstreams/rewrite)).
+
+## Observability
+
+- **Bodies are recorded verbatim**: capture is **not size-limited**, and the request body is read fully into memory; request bodies are also not masked (see [Request logs](/observability/request-logs)).
+
+## Updates
+
+- **No auto-update for major versions**: versions with breaking changes (data and config no longer carried forward) must be downloaded and installed manually.
+- **No auto-install on macOS**: because of ad-hoc signing, it can only check for updates and open the DMG download page.
+
+---
+
+If your need falls outside these boundaries, feel free to open an issue in the [GitHub repository](https://github.com/yinxulai/osw) to discuss it.

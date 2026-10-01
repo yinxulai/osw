@@ -1,0 +1,66 @@
+---
+title: Local-first & secrets
+description: What stays on this machine, what goes out, how keys are stored, and the actual behavior of anonymous usage telemetry.
+keywords:
+  - privacy
+  - keys
+  - local-first
+  - anonymous telemetry
+  - telemetry
+---
+
+# Local-first & secrets
+
+OSW is a **local-first** tool: it runs on your own machine and proxies your requests to various upstreams. Apart from requests sent to the upstreams you configured and the anonymous telemetry described below, it sends content nowhere else.
+
+## Traffic that leaves this machine
+
+| Traffic | Where it goes | Content |
+| --- | --- | --- |
+| Model requests | The upstreams you configured in [Model management](/upstreams/providers) | Your request content, sent verbatim per the upstream protocol. |
+| Anonymous usage telemetry | An endpoint of ours | Closed-set events and attributes, **containing no user content**. |
+| Config cloud sync | The Gist you chose | Your config snapshot (sent only when you trigger it). |
+
+<Callout title="No other egress path" type="note">
+Model requests go to your configured upstreams and can optionally use an [outbound proxy](/upstreams/outbound-proxy); telemetry connects directly and independently; sync connects directly to your chosen Gist. Beyond that there is no implicit egress.
+</Callout>
+
+## Keys and credentials
+
+- Upstream **API keys are stored only on this machine**, encrypted, in `secrets.json` in the data directory.
+- The local service **does not verify auth**: the API key a client fills in is only a placeholder, replaced at forward time with the real key for that provider.
+- **A provider export with plaintext keys** is equivalent to a usable credential (see [Providers & models](/upstreams/providers)).
+- **A cloud-sync snapshot contains API keys** and is only base64-encoded, **not encrypted** (see [Config cloud sync](/observability/cloud-sync)).
+
+## Anonymous usage telemetry
+
+Telemetry answers "how many people are using it, which version, which features actually get used", and is **on by default**.
+
+- **There is no switch in the UI**, and it is not shown in the console either.
+- Event and attribute names are a **closed set** shared by the client and the Worker; fields outside the closed set are **rejected wholesale** server-side, not warned about or downgraded.
+- **No user content is collected**: no prompts, no responses, no token usage, no error text, no request latency.
+- **The local database is not read**: the request-completed event is emitted right where the proxy finishes, on a different path from [Request logs](/observability/request-logs) (the latter being a debug feature you can turn off).
+- **It never uses your outbound proxy** — it is an independent direct connector, so it never appears in proxy logs.
+- **Installations ≠ users**: multiple users on one machine, or multiple data directories, count as multiple installations. A local tool has no reliable notion of a "person", and does not pretend to.
+
+On identity:
+
+- On first enable, a random UUID v4 is generated in the data directory and written to `telemetry-id` (permissions `0600`); it is **not written into the config database** — it should not be exported, backed up, or included in a provider package along with your config.
+- **No derivation, no rotation**: the identifier itself is tied to no personal information (no account, no email, no device fingerprint); deleting `telemetry-id` gives you a new identity.
+
+<Callout title="Rotating doesn't buy anonymity" type="info">
+Rotating the identifier daily does not make you more anonymous, but it wrecks every retention report. Keeping one long-lived identifier is more honest than manufacturing a batch of fake "new installs".
+</Callout>
+
+## What you control
+
+| What you want to do | Where |
+| --- | --- |
+| Turn off request body recording | Settings → Data → Request logs |
+| Shorten request content retention | Settings → Data → Request logs |
+| Change the data directory | Settings → Data → Data directory |
+| Send model requests through your own egress | Settings → Network → Outbound proxy |
+
+---
+
+For the full settings list, go to [Settings](/reference/settings).

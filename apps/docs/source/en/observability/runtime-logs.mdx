@@ -1,0 +1,38 @@
+---
+title: Runtime logs
+description: "The service's own logs: startup, config changes, route publishing, and internal errors."
+keywords:
+  - runtime logs
+  - troubleshooting
+  - service logs
+---
+
+# Runtime logs
+
+**Runtime logs** record what the **service itself** is doing, not your requests — startup and shutdown, listen-port changes, config saves, route version publishing, and internal errors and warnings.
+
+## Difference from request logs
+
+| | Runtime logs | Request logs |
+| --- | --- | --- |
+| Subject | The service itself | The **user requests** that pass through |
+| Question | Is the service working correctly | Why did this request fail |
+| Typical content | Startup, config, internal errors | Dispatching, attempts, latency, upstream errors |
+
+<Callout title="The two logs are not mixed" type="info">
+Runtime logs serve troubleshooting — fields are request ID, latency, error code. Telemetry events serve product decisions and must be anonymous and low-cardinality. The requirements of the two are exactly opposite, so they are kept separate.
+</Callout>
+
+## Common uses
+
+- Startup failure: port in use, data directory not writable.
+- Config anomalies: cloud-sync conflict, key decryption failure.
+- Routing issues: whether a particular publish succeeded, and whether there was a rollback.
+
+## Retention
+
+Runtime log retention is tuned in **Settings → Data → Log retention**. It is a **separate setting** from the request log retention policy.
+
+---
+
+Next, see where data lands and how it is retained and cleaned — [Data directory & retention](/observability/data).

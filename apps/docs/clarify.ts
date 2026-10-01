@@ -70,7 +70,7 @@ export default defineConfig({
   },
   navigation: {
     menus: [
-      { label: zh('快速开始', 'Quick start'), href: '/quick-start' },
+      { label: zh('快速开始', 'Quick start'), href: '/getting-started/quick-start' },
       { label: 'GitHub', href: 'https://github.com/yinxulai/osw' },
     ],
     tabs: [
@@ -83,23 +83,23 @@ export default defineConfig({
             icon: 'Sparkles',
             pages: [
               { page: 'index', title: zh('OSW 是什么', 'What is OSW'), icon: 'Sparkles' },
-              { page: 'concepts', title: zh('核心概念', 'Core concepts'), icon: 'Shapes' },
+              { page: 'getting-started/concepts', title: zh('核心概念', 'Core concepts'), icon: 'Shapes' },
             ],
           },
           {
             group: zh('跑起来', 'Get it running'),
             icon: 'Rocket',
             pages: [
-              { page: 'installation', title: zh('安装与启动', 'Install & run'), icon: 'Download' },
-              { page: 'quick-start', title: zh('三步搭好网关', 'Three steps to a gateway'), icon: 'Flag' },
+              { page: 'getting-started/installation', title: zh('安装与启动', 'Install & run'), icon: 'Download' },
+              { page: 'getting-started/quick-start', title: zh('三步搭好网关', 'Three steps to a gateway'), icon: 'Flag' },
             ],
           },
           {
             group: zh('接入客户端', 'Connect clients'),
             icon: 'Plug',
             pages: [
-              { page: 'protocols', title: zh('本服务支持的协议', 'Supported protocols'), icon: 'Braces' },
-              { page: 'client-config', title: zh('客户端配置', 'Client configuration'), icon: 'Wrench' },
+              { page: 'getting-started/protocols', title: zh('本服务支持的协议', 'Supported protocols'), icon: 'Braces' },
+              { page: 'getting-started/client-config', title: zh('客户端配置', 'Client configuration'), icon: 'Wrench' },
             ],
           },
         ],
@@ -112,19 +112,19 @@ export default defineConfig({
             group: zh('接入上游', 'Connect upstreams'),
             icon: 'Network',
             pages: [
-              { page: 'providers', title: zh('供应商与模型', 'Providers & models'), icon: 'Server' },
-              { page: 'logical-models', title: zh('逻辑模型', 'Logical models'), icon: 'Layers' },
-              { page: 'routing', title: zh('请求选路', 'Request routing'), icon: 'Waypoints' },
-              { page: 'failover', title: zh('故障转移', 'Failover'), icon: 'HeartPulse' },
-              { page: 'cache-affinity', title: zh('缓存亲和', 'Cache affinity'), icon: 'Link' },
+              { page: 'upstreams/providers', title: zh('供应商与模型', 'Providers & models'), icon: 'Server' },
+              { page: 'upstreams/logical-models', title: zh('逻辑模型', 'Logical models'), icon: 'Layers' },
+              { page: 'upstreams/routing', title: zh('请求选路', 'Request routing'), icon: 'Waypoints' },
+              { page: 'upstreams/failover', title: zh('故障转移', 'Failover'), icon: 'HeartPulse' },
+              { page: 'upstreams/cache-affinity', title: zh('缓存亲和', 'Cache affinity'), icon: 'Link' },
             ],
           },
           {
             group: zh('处理请求', 'Shape requests'),
             icon: 'Filter',
             pages: [
-              { page: 'rewrite', title: zh('请求重写', 'Request rewriting'), icon: 'Replace' },
-              { page: 'outbound-proxy', title: zh('上游代理', 'Outbound proxy'), icon: 'Shield' },
+              { page: 'upstreams/rewrite', title: zh('请求重写', 'Request rewriting'), icon: 'Replace' },
+              { page: 'upstreams/outbound-proxy', title: zh('上游代理', 'Outbound proxy'), icon: 'Shield' },
             ],
           },
         ],
@@ -137,18 +137,18 @@ export default defineConfig({
             group: zh('观测与排查', 'Observe & diagnose'),
             icon: 'Activity',
             pages: [
-              { page: 'request-logs', title: zh('请求记录', 'Request logs'), icon: 'ListFilter' },
-              { page: 'analytics', title: zh('统计分析', 'Analytics'), icon: 'ChartColumn' },
-              { page: 'runtime-logs', title: zh('运行日志', 'Runtime logs'), icon: 'Terminal' },
+              { page: 'observability/request-logs', title: zh('请求记录', 'Request logs'), icon: 'ListFilter' },
+              { page: 'observability/analytics', title: zh('统计分析', 'Analytics'), icon: 'ChartColumn' },
+              { page: 'observability/runtime-logs', title: zh('运行日志', 'Runtime logs'), icon: 'Terminal' },
             ],
           },
           {
             group: zh('数据与安全', 'Data & security'),
             icon: 'Database',
             pages: [
-              { page: 'data', title: zh('数据目录与保留', 'Data directory & retention'), icon: 'HardDrive' },
-              { page: 'cloud-sync', title: zh('配置云同步', 'Config cloud sync'), icon: 'CloudUpload' },
-              { page: 'privacy', title: zh('本地优先与密钥', 'Local-first & secrets'), icon: 'Lock' },
+              { page: 'observability/data', title: zh('数据目录与保留', 'Data directory & retention'), icon: 'HardDrive' },
+              { page: 'observability/cloud-sync', title: zh('配置云同步', 'Config cloud sync'), icon: 'CloudUpload' },
+              { page: 'observability/privacy', title: zh('本地优先与密钥', 'Local-first & secrets'), icon: 'Lock' },
             ],
           },
         ],
@@ -161,16 +161,16 @@ export default defineConfig({
             group: zh('配置与接口', 'Config & CLI'),
             icon: 'SlidersHorizontal',
             pages: [
-              { page: 'settings', title: zh('设置项', 'Settings'), icon: 'SlidersHorizontal' },
-              { page: 'cli', title: zh('命令行', 'Command line'), icon: 'SquareTerminal' },
+              { page: 'reference/settings', title: zh('设置项', 'Settings'), icon: 'SlidersHorizontal' },
+              { page: 'reference/cli', title: zh('命令行', 'Command line'), icon: 'SquareTerminal' },
             ],
           },
           {
             group: zh('排查与边界', 'Troubleshooting & limits'),
             icon: 'LifeBuoy',
             pages: [
-              { page: 'troubleshooting', title: zh('常见问题', 'Troubleshooting'), icon: 'LifeBuoy' },
-              { page: 'limitations', title: zh('不支持的边界', 'Limitations'), icon: 'CircleSlash' },
+              { page: 'reference/troubleshooting', title: zh('常见问题', 'Troubleshooting'), icon: 'LifeBuoy' },
+              { page: 'reference/limitations', title: zh('不支持的边界', 'Limitations'), icon: 'CircleSlash' },
             ],
           },
         ],
@@ -181,8 +181,8 @@ export default defineConfig({
     copyright: zh('© 2026 OSW. 本地 AI 网关使用手册。', '© 2026 OSW. Local AI gateway handbook.'),
     links: [
       { label: zh('OSW 是什么', 'What is OSW'), href: '/' },
-      { label: zh('快速开始', 'Quick start'), href: '/quick-start' },
-      { label: zh('常见问题', 'Troubleshooting'), href: '/troubleshooting' },
+      { label: zh('快速开始', 'Quick start'), href: '/getting-started/quick-start' },
+      { label: zh('常见问题', 'Troubleshooting'), href: '/reference/troubleshooting' },
     ],
     socials: {
       GitHub: 'https://github.com/yinxulai/osw',

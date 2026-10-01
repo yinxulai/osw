@@ -1,0 +1,80 @@
+---
+title: Logical models
+description: Use logical models to arrange a set of upstreams into a landing target, and manage priority and switching mode.
+keywords:
+  - logical model
+  - failover
+  - manual pinning
+  - priority
+---
+
+# Logical models
+
+A **logical model** is the model name a client writes in its request, and it is where routing lands. Underneath it hangs a set of real provider models; once a request lands on it, one of them is chosen to actually run.
+
+The **Logical models** page in the left sidebar manages request priority, switching mode, and model enablement.
+
+## One card, one logical model
+
+Each logical model is a card:
+
+- **Drag to reorder** to set priority between logical models.
+- The **model rows** inside a card can be dragged too, deciding the try order during failover.
+- **Add model** creates a scheduling entry for the current logical model.
+
+<Callout title="No explicit add, no participation" type="info">
+Only models explicitly added to a logical model take part in requests. Adding one creates a scheduling entry.
+</Callout>
+
+## Two modes
+
+Each logical model card has a toggle:
+
+| Mode | Behavior |
+| --- | --- |
+| **Failover** | Tries the attached models in order, automatically switching to the next on failure. |
+| **Manual pinning** | Requests use one fixed upstream model (that row is marked "pinned", the rest stand by). |
+
+<Callout title="Add a model before switching to manual" type="note">
+You cannot switch to manual pinning mode without any models.
+</Callout>
+
+## Metric cards
+
+The top of each card shows four metrics to help you judge who should rank first:
+
+| Metric | Meaning |
+| --- | --- |
+| Success rate | Success rate over the last N completed requests. |
+| Average latency | Full latency of the attempt that served the request, including TTFT. |
+| Average TPS | Output tokens ÷ full latency of that attempt (including TTFT). |
+| Currently available models | Number of models available right now, and whether failover happened recently. |
+
+Each model row also shows: the time of its last success, its consecutive failure count, whether it is cooling down, and whether it is disabled.
+
+## The built-in `default`
+
+`default` is the **fallback logical model**: any request that matches no other logical model lands here.
+
+- Its ID cannot be changed; its description still can.
+- It cannot be deleted.
+- It is the final safety net for every strategy in [Request routing](/upstreams/routing).
+
+## Create & edit
+
+When you **create a logical model**, fill in:
+
+- **Logical model ID**: starts with a letter or digit and may contain letters, digits, dots, underscores, and hyphens, up to 64 characters. The model name in a request must be usable verbatim as this ID, so dots in version numbers are allowed (e.g. `deepseek-v4.1-flash`).
+- **Description** (optional).
+
+<Callout title="The ID is the identity" type="note">
+Requests send it as the model name and the routing graph references it by it. Renaming swaps all of those references in the same save.
+</Callout>
+
+## Delete a logical model
+
+After deletion the UI no longer shows it, and requests that matched it fall to `default`.
+
+---
+
+Once logical models are arranged, go see how requests are actually [routed](/upstreams/routing).

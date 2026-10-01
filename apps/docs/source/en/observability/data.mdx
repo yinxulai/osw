@@ -1,0 +1,55 @@
+---
+title: Data directory & retention
+description: Where config and logs live, what to back up, and what is safe to delete.
+keywords:
+  - data directory
+  - backup
+  - SQLite
+  - retention
+---
+
+# Data directory & retention
+
+All of OSW's local state lives in one **data directory**, `~/.osw` by default. The desktop app and the command line share it.
+
+## Two databases, different jobs
+
+| File | What it holds | What happens if deleted |
+| --- | --- | --- |
+| `config-v1.db` | Providers, models, logical models, routing, settings, client config | **You lose your config — worth backing up** |
+| `data-v1.db` | Request logs, usage, runtime logs | You only lose history — **safe to delete** |
+
+<Callout title="config-v1.db is what you back up" type="note">
+Before moving machines or reinstalling, backing up `config-v1.db` is enough. `data-v1.db` is regenerable observational data.
+</Callout>
+
+## Also in the data directory
+
+| File | Purpose |
+| --- | --- |
+| `secrets.json` | Encrypted upstream credentials, etc.; permission-restricted. |
+| `telemetry-id` | Anonymous installation identifier (UUID v4, permissions `0600`). |
+| `instance.lock` | Single-instance lock. |
+
+## Location
+
+You can change the data directory in **Settings → Data → Data directory**; it takes effect after a restart. The development build always uses `~/.osw-development` and never touches your real data.
+
+## Retention & cleanup
+
+| Data | Default | Where to tune |
+| --- | --- | --- |
+| Request logs (metadata) | Forever | Settings → Data → Request logs |
+| Request content (bodies) | 7 days | Settings → Data → Request logs |
+| Runtime logs | See settings | Settings → Data → Log retention |
+
+Request and response body content is recorded by default, so the request content retention policy is the main knob controlling data growth. See [Request logs](/observability/request-logs) for details.
+
+## Export & migration
+
+- **Provider export**: see [Providers & models](/upstreams/providers); optionally includes plaintext API keys.
+- **Config cloud sync**: sync config across devices via GitHub Gist — see [Config cloud sync](/observability/cloud-sync).
+
+---
+
+To make your config follow you across machines, see [Config cloud sync](/observability/cloud-sync).

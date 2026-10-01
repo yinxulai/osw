@@ -1,0 +1,64 @@
+---
+title: Request logs
+description: Each request's full attempt chain, latency, errors, and optional request/response body content.
+keywords:
+  - request logs
+  - logging
+  - attempts
+  - body capture
+---
+
+# Request logs
+
+The **Request logs** page lists, newest first, every request that passed through this service — the first place to look when investigating "why didn't this one work".
+
+## What the list shows
+
+- **Source** : which client the request's model name came from.
+- **Routing result**: which [logical model](/upstreams/logical-models) it landed on.
+- **Status and latency**: whether it succeeded, and end-to-end latency.
+- **Protocol and streaming**: the protocol used, and whether it streamed.
+- **Token usage**: input / output tokens.
+
+## Attempt detail
+
+A request may have tried several candidates. Each record expands into its **individual attempts**: which provider / model was tried, what the result was, and what the failure reason was.
+
+Failure reasons are grouped:
+
+| Group | Meaning |
+| --- | --- |
+| Timeout | Connection or idle timeout. |
+| Rate limit | Upstream returned `429`. |
+| Server error | Upstream `5xx`. |
+| Auth failure | Upstream `401` / `403`. |
+| Other | Everything else. |
+
+This is also the most direct way to understand what [Failover](/upstreams/failover) actually did.
+
+## Content capture
+
+Request and response body content is **recorded** by default and can be tuned in **Settings → Data → Request logs**:
+
+| Setting | Description |
+| --- | --- |
+| Record request logs | Master switch. |
+| Request metadata retention | How long request **metadata** is kept (default: forever). |
+| Request content retention | How long request / response **bodies** are kept (default: 7 days). |
+| Sensitive header masking | `authorization`, `x-api-key`, `cookie`, etc. are not persisted by default. |
+
+<Callout title="Request bodies are not masked" type="warning">
+Sensitive **headers** are masked, but request **bodies** are not: prompts, code, and tool output are stored verbatim. Think about this before handling sensitive data.
+</Callout>
+
+<Callout title="Capture is not size-limited" type="info">
+The request body is read fully into memory before being persisted, with no size cap. Very large bodies consume corresponding memory.
+</Callout>
+
+## Cleanup
+
+You can clean up request logs manually, or let the retention policy expire them automatically. For the storage location, see [Data directory & retention](/observability/data).
+
+---
+
+To look at trends across many requests, go to [Analytics](/observability/analytics).

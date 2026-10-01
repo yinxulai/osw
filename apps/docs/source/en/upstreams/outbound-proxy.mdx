@@ -1,0 +1,45 @@
+---
+title: Outbound proxy
+description: Let OSW reach upstreams through the system proxy or a custom proxy, and which traffic bypasses it.
+keywords:
+  - outbound proxy
+  - egress proxy
+  - system proxy
+  - custom proxy
+---
+
+# Outbound proxy
+
+The **Outbound proxy** decides what network egress OSW uses to reach upstreams. Configure it in **Settings → Network → Outbound proxy**.
+
+## Three modes
+
+| Mode | Behavior |
+| --- | --- |
+| **Direct** | Reach the upstream directly, through no proxy. |
+| **Follow system** | Use the operating system's current proxy settings. |
+| **Custom** | Fill in a proxy address manually. |
+
+## When you need it
+
+- The upstream is only reachable through a corporate proxy.
+- You need to pin model requests to a particular egress.
+- Direct connections to upstreams on the local network are unstable, and a proxy is steadier.
+
+## Which traffic bypasses the proxy
+
+<Callout title="Telemetry does not use your proxy" type="info">
+Anonymous usage telemetry **never** uses the user-configured outbound proxy; it connects directly and independently. That way your proxy logs never show a target you didn't expect, and a misconfigured proxy doesn't make telemetry fail permanently. See [Local-first & secrets](/observability/privacy).
+</Callout>
+
+## Unrelated to protocol conversion
+
+The outbound proxy only changes the **network egress**, not the protocol. For protocol handling see [Supported protocols](/getting-started/protocols).
+
+<Callout title="How a wrong proxy shows up" type="warning">
+A wrong custom proxy address makes every upstream request fail to connect, showing up as widespread network errors in request logs. Switching back to direct quickly confirms whether the proxy is the problem.
+</Callout>
+
+---
+
+Once configured, watch every request with [Request logs](/observability/request-logs).

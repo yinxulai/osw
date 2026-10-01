@@ -1,0 +1,85 @@
+---
+title: Install & run
+description: Download the installer, first launch, launch at login, and version updates.
+keywords:
+  - install
+  - download
+  - update
+  - tray
+---
+
+# Install & run
+
+OSW comes in two forms: a **desktop app** and a **command line**. Both share the same data directory and configuration. The desktop app is the everyday form; the command line suits headless environments or scripted runs.
+
+## Download
+
+Grab the installer for your platform from the [latest release](https://github.com/yinxulai/osw/releases/latest). File names follow `OSW-<version>-<os>-<arch>.<ext>`, and each installer ships with a `.sha256` for verification.
+
+| Platform | Architecture | File |
+| --- | --- | --- |
+| macOS | Apple silicon | `OSW-<version>-mac-arm64.dmg` |
+| macOS | Intel | `OSW-<version>-mac-x64.dmg` |
+| Windows | x64 | `OSW-<version>-win-x64.exe` |
+| Windows | ARM64 | `OSW-<version>-win-arm64.exe` |
+| Linux | x64 | `OSW-<version>-linux-x86_64.AppImage` |
+| Linux | ARM64 | `OSW-<version>-linux-arm64.AppImage` |
+
+## Install
+
+<CodeGroup title="Per-platform install">
+
+```bash title="macOS"
+# Open the .dmg and drag OSW into Applications.
+# Builds are ad-hoc signed, not notarized:
+#   if first launch is blocked, allow it under
+#   System Settings → Privacy & Security, or right-click the app → Open in Finder.
+```
+
+```powershell title="Windows"
+# Run the .exe.
+# If SmartScreen says "Unknown publisher", choose "More info → Run anyway".
+```
+
+```bash title="Linux"
+chmod +x OSW-*-linux-*.AppImage
+./OSW-*-linux-*.AppImage
+```
+
+</CodeGroup>
+
+## First launch
+
+After launch, OSW lives in the **system tray** and does not hold a main window open. The first run opens a three-step guide (see [Three steps to a gateway](/getting-started/quick-start)), because there are no upstreams or client configs yet.
+
+A few things about the tray:
+
+| Section | Contents |
+| --- | --- |
+| Proxy service | Status line (running · port / stopped), copy the access address (OpenAI `…/v1` and Anthropic as two entries), start / stop |
+| Open main window | Bring up the console window |
+| Quit OSW | Exit the app |
+
+<Callout title="The tray icon does not express state" type="note">
+The icon itself does not distinguish running from stopped. To see state, open the tray or check the status line (running · port) in the main window title bar.
+</Callout>
+
+## Launch at login
+
+Turn on "Launch at login" under **Settings → App → Appearance & startup** and OSW starts automatically when you log in, hidden in the tray. Enabling it for daily use is recommended: that way the local service is already running when a client's first request arrives.
+
+## Version updates
+
+OSW checks for updates itself (**Settings → App → Version updates**).
+
+- **Windows / Linux**: download and install in place.
+- **macOS**: because builds are ad-hoc signed, it can only check for updates and open the DMG download page; installing is manual.
+- **Major updates**: when a new version contains breaking changes (data and config are no longer carried over), automatic updates are not supported, and the UI points you to a manual download.
+
+## Data directory
+
+The desktop app and the command line share one data directory (default `~/.osw`), holding config, secrets, and logs. Dev builds use `~/.osw-development`, so a dev instance never touches your real data. See [Data directory & retention](/observability/data) for details.
+
+---
+
+Next: [Three steps to a gateway](/getting-started/quick-start), or read up on [Core concepts](/getting-started/concepts) first.

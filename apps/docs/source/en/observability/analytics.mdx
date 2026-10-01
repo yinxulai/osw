@@ -1,0 +1,45 @@
+---
+title: Analytics
+description: Request volume, success rate, latency, token usage, and failover trends.
+keywords:
+  - analytics
+  - charts
+  - token
+  - trends
+---
+
+# Analytics
+
+The **Analytics** page aggregates request logs into trends, answering "how has everything been running lately".
+
+## What to look at
+
+| Dimension | Use |
+| --- | --- |
+| Request volume | Which models are being used, and which client is using them. |
+| Success rate | Whether the whole thing is stable. |
+| Latency distribution | Whether responses are slowing down, and where. |
+| Token usage | Which logical model and channel consume the most. |
+| Failover frequency | Which provider keeps dropping the ball. |
+| Failure-cause distribution | The share of timeout / rate limit / 5xx / auth. |
+
+## Division of labor with request logs
+
+- **Request logs** are **per-request**, used to pinpoint what happened to **one** request.
+- **Analytics** is **aggregate**, used to spot patterns **over a period**.
+
+<Callout title="It analyzes your own requests" type="note">
+The statistics here come only from local request logs, and are a different thing from anonymous usage telemetry. The latter is covered in [Local-first & secrets](/observability/privacy).
+</Callout>
+
+## Troubleshooting approach
+
+Read together with failover, typical calls:
+
+- A provider's failure rate spikes → look at its cooldown records and [channel diagnostics](/upstreams/providers).
+- Success rate is fine but latency rises → a slow candidate may be pulling the average up; consider adjusting queue order.
+- Token usage is abnormal → check [Cache affinity](/upstreams/cache-affinity) to confirm whether the prompt cache still hits.
+
+---
+
+Runtime logs record what the **service itself** is doing; see [Runtime logs](/observability/runtime-logs).

@@ -1,0 +1,75 @@
+---
+title: Request routing
+description: "The Smart routing page decides which logical model a request lands on, in one of two modes: workflow orchestration or routing rules."
+keywords:
+  - routing
+  - smart routing
+  - routing rules
+  - workflow
+  - dry run
+---
+
+# Request routing
+
+The **Smart routing** page answers one question: **which requests belong to which group of channels**. It decides which [logical model](/upstreams/logical-models) a request lands on, and therefore which upstream it ultimately connects to.
+
+## Two modes
+
+The page header lets you switch between two modes. Each is a **separate definition**; only one is in effect at a time, and switching does not delete the other.
+
+|  | Workflow orchestration | Routing rules |
+| --- | --- | --- |
+| Shape | A node graph on a canvas | An ordered table of rules |
+| Expressiveness | Branches, loops, scripts, and LLM judgement | Order only — no branches, loops, or scripts |
+| Editing | Place nodes, wire ports, tune each node | Add, remove, edit rows; drag to reorder |
+| Best for | Heavy strategies you set up once and then run | Simple strategies where you add or drop a line anytime |
+
+Both modes share the same versioning: changes take effect on save, and you can roll back to any version.
+
+<Callout title="The header names the active mode" type="note">
+If the mode toggle says "Workflow orchestration", the header says "Workflow orchestration"; likewise for rules mode.
+</Callout>
+
+## Workflow orchestration
+
+Chain nodes into a path on the canvas: **input → protocol discovery → condition → logical model selection → output**. Each node does one thing.
+
+Built-in strategies can be applied directly (selecting one replaces the current canvas):
+
+| Strategy | What it does |
+| --- | --- |
+| Logical model hit | If the request model hits the logical model list, connect straight to it; otherwise fall to the default logical model. |
+| UA-based source split | Detects Cursor / Claude CLI and routes them to different logical models; anything unrecognized falls back to default. |
+| LLM request complexity analysis | Has a logical model read the request to judge complexity; complex ones go to a high-performance target, the rest to a fast, cheap one. |
+| JS script request handling | Scores and buckets the request by size with a sandboxed script, then routes by bucket. |
+
+Available nodes include: input request, control input, protocol discovery, condition, logical model selection, iterate, JS script, LLM node, note, and routing result output.
+
+## Routing rules
+
+The rule table matches top to bottom: **the first rule that matches and yields a target wins**; if none match, the fallback applies.
+
+- Conditions can be based on: request headers, request model name, request path, request method, matched protocol, transport shape, request body fields, caller metadata, the list of available logical model IDs, and a custom path.
+- The target can be a **specific logical model**, or a value **taken from a field in the request** and used as the logical model ID.
+- Drag to reorder; the last row is the **fallback**.
+
+Built-in rule presets: logical model hit, UA-based source split, model-name-prefix split, and split by protocol.
+
+## Dry run
+
+Both modes have a **dry run** that lays the decision process out for a sample request:
+
+- Workflow: shows where it stopped, which protocol it took, then walks each node's output and the full trace in order.
+- Rules: evaluates rows top to bottom, stopping at the first hit, and lists what each row read; unmatched rows also show the values actually read at runtime.
+
+<Callout title="A dry run never forwards upstream" type="info">
+A dry run only exercises the routing decision and sends no request to any upstream. Running one before changing routing is far cheaper than going straight to production.
+</Callout>
+
+## Versions & rollback
+
+Every **save** publishes the current definition as a **new version**, and the proxy starts routing by it immediately. From the version history you can roll back to any version. If the current content already matches the latest version, no new version is created.
+
+---
+
+Once routing has set the target, the try order inside that target is handled by [Failover](/upstreams/failover).

@@ -1,0 +1,63 @@
+---
+title: Config cloud sync
+description: Put your config into your own GitHub Gist and pick up where you left off on a new machine.
+keywords:
+  - cloud sync
+  - Gist
+  - snapshot
+  - backup
+---
+
+# Config cloud sync
+
+**Config cloud sync** puts your config into **your own** third-party cloud storage, so a single pull on a new machine lets you pick up where you left off. The only supported carrier today is **GitHub Gist**.
+
+<Callout title="No account, no server of ours" type="info">
+OSW introduces no account system and does not relay your data. Traffic goes **directly from this machine to the chosen backend** (Gist over `api.github.com`); we are not involved and do not know what you synced.
+</Callout>
+
+## What is synced
+
+| Included | Not included |
+| --- | --- |
+| Providers and upstream models (**including each provider's API key**) | App settings (listen address, outbound proxy, UI preferences) |
+| Logical models (ID, description, enabled state) and order | Request logs, usage statistics, observational data |
+| Logical model → upstream model bindings (priority, enabled state) | — |
+
+<Callout title="Settings are deliberately left out" type="note">
+Settings are a property of this machine's environment; syncing them to another machine would be making decisions on its behalf.
+</Callout>
+
+## It works right after switching machines
+
+Because it includes each provider's API key, you don't have to re-enter keys after pulling — otherwise "pick up where you left off" would only half hold.
+
+## Encoded, not encrypted
+
+<Callout title="base64 is not encryption" type="warning">
+The snapshot is base64-encoded before it is written, **only so the file at the other end is not readable at a glance**. Anyone who gets the file can decode it and restore everything, including API keys. Make the Gist private, and use only a fine-grained PAT with the `gist` scope.
+</Callout>
+
+## How to use it
+
+Operate from **Settings → Sync**:
+
+1. **Issue credentials**: create a fine-grained PAT on GitHub with **only the `gist` scope** and paste it in. Credentials can be saved, cleared, and verified.
+2. **Bind a remote** (optional): paste a Gist URL, or leave it empty and the first upload creates one automatically.
+3. **Upload / pull**: both are **manually triggered, one-shot actions**.
+
+<Callout title="No automatic sync" type="info">
+There is no automatic / scheduled / background sync, and no conflict detection or merging. What you see is what you do: one upload or one pull.
+</Callout>
+
+## The carrier can be swapped
+
+Gist is only the first backend. The interface is pluggable: each backend needs just two slots — **credentials** and a **remote handle** (for Gist it is "token + Gist id"; for a future WebDAV it would be "password + directory"). When swapping backends, the remote binding and timestamps are cleared together, but old credentials are kept per type, so they are still there when you switch back.
+
+<Callout title="Only single-object access by name is supported" type="note">
+The carrier must be able to read / write a single file by name; storage that only supports "whole-database overwrite" doesn't fit this interface.
+</Callout>
+
+---
+
+What is synced is config, not where your data goes. For what leaves this machine, see [Local-first & secrets](/observability/privacy).

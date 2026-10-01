@@ -1,0 +1,118 @@
+---
+title: Request rewriting
+description: Change request headers, request bodies, and responses per stage, before a request is sent or before a response returns.
+keywords:
+  - request rewriting
+  - headers
+  - template
+  - script
+  - response
+---
+
+# Request rewriting
+
+**Request rewriting** adds an orchestratable rewrite layer on the forwarding path: before a request is sent and before a response returns, it changes request headers, request bodies, or response content by rules.
+
+<Callout title="Only non-streaming JSON" type="warning">
+Rewriting applies only to **non-streaming JSON** requests. Streaming (SSE) and non-JSON content do not participate in rewriting.
+</Callout>
+
+## Two stages
+
+| Stage | Timing | Targets | Status |
+| --- | --- | --- | --- |
+| **Request** | Before the request goes upstream | Request headers, request body | Available |
+| **Response** | After the upstream returns, before it goes back to the client | Response headers, response body | **Disabled** |
+
+<Callout title="The response stage is currently disabled" type="warning">
+A streaming (SSE) response cannot be rewritten at the event level, and it accounts for the vast majority of traffic — a rule that only takes effect on non-streaming responses would almost never fire. So the **response stage is disabled entirely**: the editor no longer offers it, and saving or dry-running a rule with a response stage is rejected. The capability is implemented; it will be enabled once streaming rewriting is in place.
+</Callout>
+
+## A rule
+
+A rule is "match conditions + actions":
+
+- **Match**: which requests it applies to (client protocol and upstream protocol).
+- **Actions**:
+  - `set`: set a field.
+  - `append`: append a value (request headers only).
+  - `remove`: remove a field.
+  - `replace`: replace the matching part of a field (regex supported, body only).
+
+Each action specifies a target (request header / request body field / script) and a value.
+
+## Built-in templates
+
+"New rule" is a dropdown that, besides a blank rule, offers several drafts with **actions already filled in**; apply one and hit "Run test" to see the effect:
+
+| Template | What it does |
+| --- | --- |
+| Modify User-Agent | Overrides the `User-Agent` request header, default value `OSW/<app version>`. |
+| Remove header | Deletes a specified request header, such as a local session cookie. |
+| Set request field | Writes a fixed value into the JSON request body, creating the path if it doesn't exist. |
+| Conditional rewrite by script | Reads the request content first, then decides whether to change it — a demo of the script action. |
+
+Templates only fill in a draft; they **are not persisted and take no effect** until saved, at which point they are fully equivalent to a hand-written rule.
+
+## Script actions
+
+Structured actions cannot express logic like "read the content, then decide how to change it" (e.g. "only set `temperature` to 0 if a certain marker appears in the body"). A **script** action fills that gap with a small piece of your own code: it reads the current stage's message and returns the rewrite result.
+
+A script is written as a **function body** — no `function` wrapper, just statements and a direct `return`:
+
+```js
+// Only when the request contains "apply-strict", clamp temperature to 0;
+// if it doesn't match, return nothing and this action changes nothing.
+if (JSON.stringify(body || {}).includes('apply-strict')) {
+  return { body: { ...body, temperature: 0 } }
+}
+```
+
+A script can see these names (no `require` / `process` / timers / network / filesystem):
+
+| Name | Meaning |
+| --- | --- |
+| `body` | The parsed message of the current stage; `null` when it is not valid JSON |
+| `headers` | The message's headers for the current stage (read-only copy) |
+| `protocol` | `{ stage, clientProtocol, upstreamProtocol }`, read-only |
+| `get(path)` | Get a value by dot path; `[*]` means array projection (e.g. `messages[*].role`); returns `undefined` when not found. **Do not write a `$.` prefix** (writing `$.a` will not resolve), unlike the structured body action above |
+| `console.log/warn/error(...)` | Write to the "Run test" log area, up to 50 lines |
+
+### What to return
+
+- `return { body, headers }`: **whatever you return is replaced wholesale** — fields / keys the script does not write are treated as deleted.
+- Not returning, or returning an object in which neither key appears: this action leaves the message unchanged.
+- Returning another type, such as a number, string, or array: the rule fails.
+
+Because returning replaces wholesale, **deleting a field** becomes expressible — return the complete body but omit that key:
+
+```js
+// Return the complete body but drop the metadata key — under wholesale
+// replacement it is thereby deleted.
+const { metadata, ...rest } = body || {}
+return { body: rest, headers: { ...headers } }
+```
+
+When the message is not valid JSON, it does **not** error out; instead `null` is handed to the script, which decides whether to `throw` — "is it JSON" may itself be what the script needs to judge.
+
+### What it can and cannot do
+
+- **Protected headers cannot be changed**: `Authorization`, `Host`, `Content-Length`, `Connection`, `Transfer-Encoding`. This is judged by **whether the value differs before and after the change**; changing it fails the rule, while carrying it back unchanged is not a violation.
+- **Delivery-shape fields cannot be changed**: `stream`, likewise judged by before-and-after value.
+- **Each execution has a timeout**: default 1000 ms, maximum 5000 ms; an infinite loop is interrupted rather than hanging the proxy.
+- **Only applies to complete JSON messages**: consistent with structured actions, streaming responses do not participate.
+- There is no `eval` or `new Function` in the sandbox. It guards against slips and infinite loops, **not** against malicious code.
+
+### Getting started and debugging
+
+When you switch to a script, the editor fills in a **baseline** script that runs as-is; **Insert example** on the action row lists selectable examples for the current stage, and picking one replaces the whole editor content. When you switch message stages, if the editor still holds the baseline of the previous stage (you haven't touched it), it switches to the baseline for the new stage along with it.
+
+In "Run test", add a case (pick a stage, transport shape, paste a message) and run it to see the rewritten headers and body; `console.*` output from the script appears in the result area. Rules that did not take effect give a reason each (disabled / deleted / no actions in this stage / protocol mismatch / shape unsupported), so "why didn't it take effect" is answerable on the spot.
+
+## Debugging
+
+Rules take effect in order. Each one's switch can be turned off individually, to bisect which one broke the request. Changes take effect immediately after saving, and new requests see the effect right away.
+
+---
+
+When you need to send upstream through your own network egress, see [Outbound proxy](/upstreams/outbound-proxy).

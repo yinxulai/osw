@@ -1,0 +1,79 @@
+---
+title: Command line
+description: "Run OSW headless: start, stop, check status, and the various options."
+keywords:
+  - CLI
+  - command line
+  - headless
+  - data directory
+---
+
+# Command line
+
+The command-line shape shares the same data directory and config as the desktop app, and suits headless environments, containers, or scripted runs.
+
+## Usage
+
+```bash
+osw [command] [options]
+```
+
+| Command | Description |
+| --- | --- |
+| `start` | Start the service (**the default when no command is given**). |
+| `stop` | Stop the instance started by this CLI. |
+| `status` | Print running status, listen address, data directory, and version. |
+| `version` | Print the version number. |
+
+## Options
+
+| Option | Description |
+| --- | --- |
+| `--data-dir` | Data directory. |
+| `--host` | Proxy listen address. |
+| `--proxy-port` | Proxy port. |
+| `--management-port` | Management port. |
+| `--web` | Serve the console from the management service (on by default). |
+| `--no-web` | Do not serve the console; provide the HTTP API only. |
+| `--json` | Output as JSON (**`status` only**). |
+| `--help` | Show help. |
+| `--version` | Print the version number. |
+
+<Callout title="The management service listens locally only" type="note">
+The management service always listens on `127.0.0.1` only: it has **no auth** of its own. To reach it from another machine, use an SSH tunnel.
+</Callout>
+
+## Start
+
+After starting it prints the console address, proxy address, management service address, and data directory; press `Ctrl+C` to stop.
+
+<Callout title="--host exposes an unauthenticated proxy" type="warning">
+When the proxy listens on a non-loopback address, other devices on the same network can reach it directly, and it **carries no auth**. If you only want local use, don't pass `--host` (it defaults to listening on `127.0.0.1` only).
+</Callout>
+
+## Status
+
+```bash
+osw status          # human-readable
+osw status --json   # for scripts to consume
+```
+
+Status includes: running / not running / unresponsive, management service, proxy address, console, data directory, version, PID, and start time.
+
+A few notices are worth watching:
+
+- **Port not listening**: the process is still there, but the proxy port is not listening — the service may have failed halfway through startup.
+- **Version drift**: the running instance's version differs from the current CLI version.
+
+## Stop
+
+`osw stop` sends an exit request to the instance and cleans up. If no running instance is found, it cleans up stale runtime files; if the instance has no exit handshake enabled (or something else is actually on that port), it refuses the exit request.
+
+## Handling conflicts
+
+- **Port in use**: stop the process occupying it, or switch ports with `--proxy-port` / `--management-port`.
+- **An instance is already running**: stop it first with `osw stop`; to run two at once, give one of them a different data directory via `--data-dir`.
+
+## Error codes and copy
+
+Command-line error output is localized. Runtime proxy error codes are shown in [Request logs](/observability/request-logs); for meanings see [Troubleshooting](/reference/troubleshooting).

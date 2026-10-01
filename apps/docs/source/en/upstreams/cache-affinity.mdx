@@ -1,0 +1,47 @@
+---
+title: Cache affinity
+description: Keep the same session on the same provider model as much as possible, to protect the upstream's prompt cache.
+keywords:
+  - cache affinity
+  - prompt cache
+  - session stickiness
+  - TTL
+---
+
+# Cache affinity
+
+**Cache affinity** keeps requests from the same session on the **most recently successful** provider model, instead of re-picking from the head of the candidates on every request.
+
+## Why it's needed
+
+A provider's **prompt cache** can only hit when "consecutive requests share an exactly identical prefix". If consecutive requests in the same session are split across different providers, or across different replicas of one provider, the cache is built in vain — you keep paying full price for the same context.
+
+Failover itself is right, but "pick from the head of the queue on every request" scatters the session.
+
+## How it works
+
+- Once enabled, OSW remembers the provider model a session last succeeded on and prefers reusing it for later requests in the same session.
+- The affinity record has a **TTL**: after TTL with no new request it expires naturally, and the next request picks afresh.
+- If the affined candidate is no longer available (cooling down / disabled), the request proceeds through normal [failover](/upstreams/failover) and records the new winner as the affined candidate.
+
+## Tuning
+
+In **Settings → Reliability → Cache affinity**:
+
+| Setting | Description |
+| --- | --- |
+| Enable cache affinity | Master switch. |
+| Affinity TTL | After this idle period with no new request, the affinity expires. Longer is stickier, but takes longer to rebalance. |
+
+<Callout title="TTL is a trade-off" type="note">
+If the TTL is too short, the session re-routes before it has built up a cache, which is as good as off; if it is too long, a slow channel is not swapped out for a while. The default is fine for most scenarios.
+</Callout>
+
+## Related
+
+- It complements [Failover](/upstreams/failover): failover preserves availability, cache affinity preserves cost.
+- The amount of cache hit is visible in [Analytics](/observability/analytics).
+
+---
+
+To see how requests are doing, start with [Request logs](/observability/request-logs).

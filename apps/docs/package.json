@@ -4,7 +4,7 @@
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
-  "description": "文档站点：把 apps/docs/source/<locale> 下的开放文档（中文为主、英文增量补译）发布成静态站。Clarify 站点。",
+  "description": "文档站点：把 apps/docs/source/<locale> 下的开放文档（中英双语，按 tab 分子目录）发布成静态站。Clarify 站点。",
   "author": "yinxulai <yinxulai@hotmail.com>",
   "scripts": {
     "dev": "clarify dev",

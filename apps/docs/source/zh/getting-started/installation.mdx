@@ -1,0 +1,85 @@
+---
+title: 安装与启动
+description: 下载安装包、首次启动、开机自启与版本更新。
+keywords:
+  - 安装
+  - 下载
+  - 更新
+  - 托盘
+---
+
+# 安装与启动
+
+OSW 有**桌面端**与**命令行**两种形态，两个形态共用同一份数据目录与配置。桌面端是日常使用的形态；命令行适合无头环境或脚本化运行。
+
+## 下载
+
+到 [最新发布页](https://github.com/yinxulai/osw/releases/latest)下载对应平台的安装包。文件名遵循 `OSW-<版本>-<系统>-<架构>.<扩展名>`，每个安装包都配一份 `.sha256` 供校验。
+
+| 平台 | 架构 | 下载文件 |
+| --- | --- | --- |
+| macOS | Apple 芯片 | `OSW-<版本>-mac-arm64.dmg` |
+| macOS | Intel | `OSW-<版本>-mac-x64.dmg` |
+| Windows | x64 | `OSW-<版本>-win-x64.exe` |
+| Windows | ARM64 | `OSW-<版本>-win-arm64.exe` |
+| Linux | x64 | `OSW-<版本>-linux-x86_64.AppImage` |
+| Linux | ARM64 | `OSW-<版本>-linux-arm64.AppImage` |
+
+## 安装
+
+<CodeGroup title="各平台安装">
+
+```bash title="macOS"
+# 打开 .dmg，把 OSW 拖进「应用程序」。
+# 构建是 ad-hoc 签名、未经公证：
+#   首次启动若被拦，去「系统设置 → 隐私与安全性」放行，
+#   或在访达里右键应用 →「打开」。
+```
+
+```powershell title="Windows"
+# 运行 .exe。
+# 若 SmartScreen 提示「未知发布者」，选择「更多信息 → 仍要运行」。
+```
+
+```bash title="Linux"
+chmod +x OSW-*-linux-*.AppImage
+./OSW-*-linux-*.AppImage
+```
+
+</CodeGroup>
+
+## 第一次启动
+
+启动后 OSW 常驻**系统托盘**，不会占着主界面。首次运行会打开一个三步引导（见[三步搭好网关](/getting-started/quick-start)），因为此时还没有任何上游和客户端配置。
+
+托盘的几件事：
+
+| 分组 | 内容 |
+| --- | --- |
+| 代理服务 | 状态行（运行中 · 端口 / 已停止）、复制接入地址（分 OpenAI `…/v1` 与 Anthropic 两条）、启动 / 停止 |
+| 打开主界面 | 唤出控制台窗口 |
+| 退出 OSW | 退出应用 |
+
+<Callout title="托盘图标不表达状态" type="note">
+图标本身不区分运行 / 停止。要看状态，点开托盘或看主界面标题栏上的状态行（运行中 · 端口）。
+</Callout>
+
+## 开机自启
+
+**设置 → 应用 → 外观与启动**里的「开机自启」打开后，登录系统时自动启动并隐藏到托盘。日常使用建议开启：这样客户端第一次请求到达时本地服务已经在跑了。
+
+## 版本更新
+
+OSW 自己检查更新（**设置 → 应用 → 版本更新**）。
+
+- **Windows / Linux**：下载并就地安装。
+- **macOS**：因为是 ad-hoc 签名，只能检查更新并打开 DMG 下载页，需要手动装。
+- **大版本更新**：当新版本包含破坏性变更（数据与配置不再沿用）时，不支持自动更新，界面会提示前往手动下载。
+
+## 数据目录
+
+桌面端与命令行共用同一个数据目录（默认 `~/.osw`），配置、密钥与日志都在里面。开发版用 `~/.osw-development`，因此开发实例不会碰到你的真实数据。详见[数据目录与保留](/observability/data)。
+
+---
+
+下一步：[三步搭好网关](/getting-started/quick-start)，或者先了解[核心概念](/getting-started/concepts)。
