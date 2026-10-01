@@ -8,6 +8,7 @@ import { closeDatabases, initDatabases } from '../database'
 import { createProvider } from '@server/database/provider-store'
 import { createProviderModelRoute } from '@server/database/model-store'
 import { createRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
+import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
 import { requestRewriteRuleRoutes } from './routes/relations/request-rewrite-rules'
 import { mockResponse } from './test-support'
 
@@ -113,6 +114,77 @@ describe('request rewrite rule routes', () => {
       },
     })
     expect(responseData(testRes).data).toMatchObject({ body: '{"hello":"world"}' })
+  })
+
+  /**
+   * 试跑要能把脚本的日志带回界面。`/test` 把引擎结果摊平后回给前端（body 转成字符串），
+   * `scriptLogs` 是新增字段，最怕在摊平时被顺手丢掉——那样脚本编辑器里永远看不到日志。
+   */
+  it('surfaces script logs and applied body from the test endpoint', async () => {
+    const testRes = mockResponse()
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', testRes, {
+      rule: {
+        id: 'rule_script',
+        name: 'scripted body',
+        description: '',
+        enabled: true,
+        global: true,
+        source: 'user',
+        match: { clientProtocols: ['openai-completions'], upstreamProtocols: [] },
+        schemaVersion: 1,
+        actions: [
+          { type: 'script', stage: 'request', code: 'console.log("seen", body.count); return { body: { ...body, count: body.count + 1 } }', timeoutMilliseconds: 200 },
+        ],
+        testCases: [],
+        createdTime: 0,
+        updatedTime: 0,
+        deletedTime: null,
+      },
+      testCase: {
+        stage: 'request',
+        body: '{"count":1}',
+        headers: '{"authorization":"Bearer token"}',
+        clientProtocol: 'openai-completions',
+        upstreamProtocol: 'openai-completions',
+        transport: 'http',
+      },
+    })
+    const data = responseData(testRes).data as { body: string, scriptLogs: string[], appliedRuleIds: string[] }
+    expect(JSON.parse(data.body)).toEqual({ count: 2 })
+    expect(data.scriptLogs).toEqual(['[log] seen 1'])
+    expect(data.appliedRuleIds).toEqual(['rule_script'])
+  })
+
+  it('reports a failing script as an error instead of a partial result', async () => {
+    const testRes = mockResponse()
+    // 脚本抛错时引擎抛 `RequestRewriteError`，路由不吞掉它：试跑请求以失败收场，
+    // 而不是 200 带一份脏数据回界面。
+    await expect(requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', testRes, {
+      rule: {
+        id: 'rule_boom',
+        name: 'throwing script',
+        description: '',
+        enabled: true,
+        global: true,
+        source: 'user',
+        match: { clientProtocols: ['openai-completions'], upstreamProtocols: [] },
+        schemaVersion: 1,
+        actions: [{ type: 'script', stage: 'request', code: 'throw new Error("boom")' }],
+        testCases: [],
+        createdTime: 0,
+        updatedTime: 0,
+        deletedTime: null,
+      },
+      testCase: {
+        stage: 'request',
+        body: '{"count":1}',
+        headers: '{}',
+        clientProtocol: 'openai-completions',
+        upstreamProtocol: 'openai-completions',
+        transport: 'http',
+      },
+    })).rejects.toThrow(RequestRewriteError)
+    expect(vi.mocked(testRes.end)).not.toHaveBeenCalled()
   })
 
   /**
