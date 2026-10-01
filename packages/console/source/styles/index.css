@@ -15,10 +15,16 @@
   -webkit-app-region: no-drag;
 }
 
+/* 揭示期间浏览器会在最上层铺一整棵快照伪元素（`::view-transition`），它默认会吃掉
+   指针事件：鼠标底下的侧栏因此收到一次 `pointerleave`（悬停态归零、收起），动画一结束
+   指针又落回侧栏、`pointerenter` 再次触发（又展开）——表现成「点主题，侧栏抽一下」。
+   让整层对指针透明即可；`pointer-events` 可继承，写在根伪元素上就够。 */
+::view-transition,
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
+  pointer-events: none;
 }
 
 /* 主题切换走「圆形揭示」：新旧两张快照必须落在同一个展开状态，

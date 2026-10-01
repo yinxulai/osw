@@ -47,6 +47,36 @@ function revealClassName(expanded: boolean) {
   )
 }
 
+interface PointerLike {
+  clientX: number
+  clientY: number
+  pointerType?: string
+}
+
+/**
+ * 这次 `pointerleave` 是不是「假离开」。
+ *
+ * 主题切换走 View Transition：浏览器会把一整棵快照伪元素铺在页面最上层，它抢走指针的
+ * 命中测试，侧栏因此收到一次边界事件——可指针其实还停在侧栏上。照单全收的话，悬停态被
+ * 清零（侧栏收起），动画一结束指针落回又触发 `pointerenter`（侧栏展开），表现成「点主题，
+ * 侧栏抽一下」。只认「指针确实已在盒外」的离开，就能把这种假离开滤掉：
+ * 真离开时坐标必然落在盒外（向左、向上、或越过右边缘进主内容区）。
+ *
+ * 用严格不等号：贴着边界（例如左上角 `(0,0)`，侧栏正好以它为原点）的离开一律当作真离开，
+ * 否则侧栏会卡在展开态下不来。非鼠标指针（触摸、笔）没有可靠坐标，不参与判定。
+ */
+export function isSpuriousHoverLeave(event: PointerLike, element: Element | null): boolean {
+  if (event.pointerType && event.pointerType !== 'mouse') return false
+  if (!element) return false
+  const rect = element.getBoundingClientRect()
+  return (
+    event.clientX > rect.left &&
+    event.clientX < rect.right &&
+    event.clientY > rect.top &&
+    event.clientY < rect.bottom
+  )
+}
+
 export function AppSidebar(props: AppSidebarProps) {
   const t = useTranslation()
   const expanded = props.expanded
@@ -56,6 +86,7 @@ export function AppSidebar(props: AppSidebarProps) {
   const [hoverRect, setHoverRect] = useState<IndicatorRect | null>(null)
   const [activeRect, setActiveRect] = useState<IndicatorRect | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef(new Map<AppNavPath, HTMLAnchorElement>())
   const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
@@ -105,11 +136,12 @@ export function AppSidebar(props: AppSidebarProps) {
 
   return (
     <div
+      ref={rootRef}
       data-slot="app-sidebar"
       data-expanded={expanded ? 'true' : undefined}
       data-pinned={props.pinned ? 'true' : undefined}
       onPointerEnter={() => props.onHoverChange(true)}
-      onPointerLeave={() => props.onHoverChange(false)}
+      onPointerLeave={event => { if (!isSpuriousHoverLeave(event, rootRef.current)) props.onHoverChange(false) }}
       className={cn(
         'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
         'transition-[width] duration-200 ease-out motion-reduce:transition-none',
