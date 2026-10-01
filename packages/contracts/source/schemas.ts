@@ -213,7 +213,7 @@ export type SchedulingPolicy = z.infer<typeof SchedulingPolicySchema>
  * 仍然拒绝空格、斜杠、冒号等：它会进日志与快照，标点保持在可枚举的安全子集里。
  *
  * 它与数据记录 id（`LogicalModel.id`）是**两个字段**：这一列可以被改（改名），
- * 也会在软删除时被改写成墓碑，因此不能拿来当外键的锚点，见 `logicalModelTombstoneModelId`。
+ * 因此不能拿来当外键的锚点——外键一律落在数据记录 id 上。
  */
 export const LogicalModelIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, 'logical model id must start with a letter or digit and may only contain letters, digits, dots, underscores and hyphens (max 64 characters)')
 
@@ -234,30 +234,6 @@ export const BUILT_IN_DEFAULT_LOGICAL_MODEL_ID = 'default'
  * 常量时，就换成目录里的本地化文案（用户改过的说明不受影响，照旧显示服务端值）。
  */
 export const BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION = 'Default fallback routing model'
-
-/**
- * 软删除的逻辑模型在 modelId 前加的前缀。
- *
- * `~` 落在 `LogicalModelIdSchema` 的字符集之外（id 必须以字母或数字开头），因此墓碑 modelId
- * 永远不可能与用户输入的 modelId 相撞。软删除把模型 id 让出来给将来的同名模型，
- * 历史行本身仍留在表里、仍被外键指着（外键指着的是数据记录 id，本来就不会动）。
- */
-export const LOGICAL_MODEL_TOMBSTONE_PREFIX = '~deleted.'
-
-/**
- * 给被软删除的逻辑模型算一个墓碑 modelId：前缀 + 删除时刻 + 原 modelId。
- *
- * 带上原 modelId 是为了让墓碑可读（一眼看出它是谁删的），带时刻是为了同一时刻
- * 建了又删时每一块墓碑都能区分开。
- */
-export function logicalModelTombstoneModelId(modelId: string, time: number): string {
-  return `${LOGICAL_MODEL_TOMBSTONE_PREFIX}${time}.${modelId}`
-}
-
-/** 这个 modelId 是不是一条墓碑（某个被软删除的逻辑模型留下的历史行）。 */
-export function isLogicalModelTombstoneModelId(modelId: string): boolean {
-  return modelId.startsWith(LOGICAL_MODEL_TOMBSTONE_PREFIX)
-}
 
 /** 只要能给出 modelId 就行：这个判断不关心记录 id，也不关心其余字段。 */
 type LogicalModelIdentity = { modelId: string }

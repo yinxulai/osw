@@ -189,9 +189,10 @@ export const logicalModels = sqliteTable(
      * 所以绝不能拿来当外键的锚点。它与数据记录 id 是**两个字段**，
      * 合成一个的代价是「改名」等于「换身份」，每加一处引用就要多一处搬运。
      *
-     * 活跃行之间唯一（部分唯一索引，见下方索引）；软删除时被改写成
-     * `~deleted.<时刻>.<原 modelId>`（见 `@common/schemas` 的 `logicalModelTombstoneModelId`），
-     * 让位给将来的同名模型。
+     * 活跃行之间唯一；已删除的行可以重名，因此这里**没有**唯一索引 —— 判据是「当前可用，
+     * 不许重复」，而不是「这个名字历史上出现过没有」。那条规则由
+     * `logical-model-store.ts` 的 `assertLogicalModelIdAvailable` 把守，给出一句能照做的
+     * 409，而不是让用户撞上一个语法层面的约束。
      */
     modelId: text('modelId').notNull(),
     description: text('description').notNull().default(''),
@@ -206,9 +207,6 @@ export const logicalModels = sqliteTable(
     deletedTime: integer('deletedTime'),
   },
   table => [
-    // 活跃行之间的 modelId 唯一：软删除的墓碑行已被改写名字，但部分索引才是硬保证
-    // （索引列不能条件化地放进主键，主键上是数据记录 id）。
-    uniqueIndex('idx_logical_models_model_id_active').on(table.modelId).where(sql`deletedTime IS NULL`),
     index('idx_logical_models_enabled').on(table.enabled),
     index('idx_logical_models_deleted_time').on(table.deletedTime),
   ],

@@ -154,7 +154,6 @@ CREATE TABLE `workflows` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_client_config_versions_hash` ON `client_config_versions` (`clientKey`,`filePath`,`contentHash`);--> statement-breakpoint
 CREATE INDEX `idx_client_config_versions_file` ON `client_config_versions` (`clientKey`,`filePath`,`createdTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_logical_models_model_id_active` ON `logical_models` (`modelId`) WHERE deletedTime IS NULL;--> statement-breakpoint
 CREATE INDEX `idx_logical_models_enabled` ON `logical_models` (`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_deleted_time` ON `logical_models` (`deletedTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_protocol_converters_unique_active` ON `protocol_converters` (`providerModelEndpointId`,`clientProtocol`) WHERE deletedTime IS NULL;--> statement-breakpoint

@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4a2201fb-1985-41b5-81cf-5c511c03d27e",
+  "id": "a98d395b-328d-4c7d-86e5-dc3d9862ce96",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -1391,20 +1391,6 @@
       "name": "idx_client_config_versions_file",
       "entityType": "indexes",
       "table": "client_config_versions"
-    },
-    {
-      "columns": [
-        {
-          "value": "modelId",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
-      "origin": "manual",
-      "name": "idx_logical_models_model_id_active",
-      "entityType": "indexes",
-      "table": "logical_models"
     },
     {
       "columns": [

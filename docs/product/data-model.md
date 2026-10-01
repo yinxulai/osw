@@ -516,9 +516,9 @@ CREATE INDEX idx_provider_endpoints_deleted_time
 
 除 `default` 之外，逻辑模型可以在控制台自由创建、改 `modelId`、改说明与软删除。删除只打 `deletedTime` 时间戳（§8），行留在表里——调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行；路由定义按 `modelId` 引用落点，历史请求日志只留当天的模型名快照。
 
-软删除会顺手把 `modelId` 改写成墓碑名 `~deleted.<时间戳>.<原名>`（见 `@common/schemas` 的 `logicalModelTombstoneModelId`）：`~` 不在模型名的字符集里，所以墓碑不可能与任何真实模型名相撞。这样做的收益是「删掉一个模型」立刻放出它的模型名，可以马上再建一个同名的。
+软删除只打 `deletedTime`（§8），行留在表里且 `modelId` 原样保留 —— 历史请求日志里的模型名快照要能对得上一条真实存在过的行；调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行。可删除的逻辑模型在删除时，它的调度绑定（该逻辑模型私有的编排）按记录 id 一并硬删除。
 
-「模型名在活跃行里唯一」由**部分唯一索引**保证，而不是列级 `UNIQUE`：墓碑行必须能与活跃行共存于同一个模型名下，列级唯一约束会把软删除过的名字永久占住，让「删掉再建同名」变成一次撞约束的 500。
+「模型名不许重复」的判据是**活跃行之间不许重复**，而不是「这个名字历史上出现过没有」。于是「删掉一个模型、再建一个同名的」是一次普通的成功，不需要在删除时把 `modelId` 改写成墓碑之类的把戏。这条规则由应用层把守（`logical-model-store.ts` 的 `assertLogicalModelIdAvailable`），因此 `logical_models` 上**没有** `modelId` 的唯一索引。
 
 ```sql
 CREATE TABLE logical_models (
@@ -532,9 +532,6 @@ CREATE TABLE logical_models (
   deletedTime INTEGER
 );
 
--- 活跃行的模型名唯一；软删除的名字可以立刻被新模型复用。
-CREATE UNIQUE INDEX idx_logical_models_model_id_active
-  ON logical_models(modelId) WHERE deletedTime IS NULL;
 CREATE INDEX idx_logical_models_enabled ON logical_models(enabled);
 CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 ```

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID, logicalModelTombstoneModelId } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import type { LogicalModel, SchedulingPolicy } from '@common/schemas'
 import { renameLogicalModelIdInGraph, renameLogicalModelIdInRuleSet } from '@common/router/rename-logical-model-id'
 import { RouteRuleSetSchema } from '@common/router/route-rules'
@@ -43,8 +43,11 @@ export async function getLogicalModel(id: string): Promise<LogicalModel | undefi
  * 按**模型 id** 取一个活跃的逻辑模型。
  *
  * 这是运行时（代理）唯一的入口：请求里带的是模型名，落点就是它。
- * 墓碑不会命中：软删除把模型 id 改写了，因此「已删除的模型能接到流量」这件事
- * 在查询层就不成立。
+ * 「已删除的模型能接到流量」在查询层就不成立：软删除的行 `deletedTime` 非空，一律落在
+ * 这里的 `isNull(deletedTime)` 之外。
+ *
+ * 模型名可能同时被多条已删除的行占着（软删除不改写它们），但活跃行之间唯一 —— 这个不变量
+ * 由 `assertLogicalModelIdAvailable` 把守，因此这里查到的永远是那一行。
  */
 export async function getLogicalModelByModelId(modelId: string): Promise<LogicalModel | undefined> {
   const row = getConfigDb().select().from(logicalModels)
@@ -62,6 +65,9 @@ export async function getLogicalModelByModelId(modelId: string): Promise<Logical
  *
  * 查不到的模型 id **不会**出现在结果里。调用方要据此当作「没有这个落点」，而不是拿着模型 id
  * 去查绑定表得到一份空绑定：结果看起来一样，但一个是事实，一个只是巧合。
+ *
+ * 活跃行之间模型名唯一（见 `assertLogicalModelIdAvailable`），所以一个模型名最多映射到一个
+ * 记录 id；已删除的行不参与，删掉的名字在这里查不到。
  */
 export async function mapLogicalModelIdsToRecordIds(modelIds: readonly string[]): Promise<Map<string, string>> {
   const result = new Map<string, string>()
@@ -92,19 +98,38 @@ export async function getDefaultLogicalModelRecordId(): Promise<string> {
 }
 
 /**
+ * 确认一个**模型 id** 当前没有被活跃的逻辑模型占用，否则抛 409。
+ *
+ * 收成一处，是因为三个入口问的是同一个问题（新建、改名、从快照导入），而答案必须一致：
+ * 重复检查查的是 `modelId` 而不是主键 —— 用户能用界面表达的只有模型名。
+ *
+ * 判据只有一条：**活跃行之间不许重复**。已软删除的行不参与判断，因此「删掉一个模型、
+ * 再建一个同名的」是一次普通的成功，不需要给删除动作补任何改名把戏。
+ *
+ * `excludeRecordId` 是本行自己的数据记录 id，改名场景要把它排除在外（它当下的 `modelId`
+ * 正是我们要改掉的那个，不排除就会自己跟自己撞）。
+ */
+export async function assertLogicalModelIdAvailable(modelId: string, excludeRecordId?: string): Promise<void> {
+  const taken = getConfigDb()
+    .select({ id: logicalModels.id })
+    .from(logicalModels)
+    .where(and(eq(logicalModels.modelId, modelId), isNull(logicalModels.deletedTime)))
+    .all()
+    .some(row => row.id !== excludeRecordId)
+  if (taken) throw duplicateLogicalModelError(modelId)
+}
+
+/**
  * 新建一个逻辑模型。
  *
  * 记录 id 在这里生成，**调用方给不了**：它是本机的内部主键，不是用户能用界面表达的东西。
- * 用户给的只有 `modelId`（模型名），所以重复检查查的是 `modelId` 而不是主键。
- * 不查也「能」跑，但那时 SQLite 的部分唯一索引冲突会直接漏成 500 —— 用户看到「内部错误」，
- * 完全不知道是模型 id 撞了。
+ * 用户给的只有 `modelId`（模型名），所以重复检查查的是 `modelId` 而不是主键 ——
+ * 用户看到的是「模型 id 已被占用」，而不是一句「内部错误」。
  */
 export async function createLogicalModel(input: CreateLogicalModelInput): Promise<LogicalModel> {
   const modelId = input.modelId
   const db = getConfigDb()
-  if (db.select({ id: logicalModels.id }).from(logicalModels).where(and(eq(logicalModels.modelId, modelId), isNull(logicalModels.deletedTime))).get()) {
-    throw duplicateLogicalModelError(modelId)
-  }
+  await assertLogicalModelIdAvailable(modelId)
   const time = now()
   const id = generateId('lm_')
   const description = input.description ?? ''
@@ -171,10 +196,7 @@ export async function updateLogicalModel(id: string, updates: UpdateLogicalModel
   if (renaming) {
     // 内建默认逻辑模型的模型 id 是所有兜底落点的归宿，改名等于把兜底搬走。
     if (existing.modelId === BUILT_IN_DEFAULT_LOGICAL_MODEL_ID) throw protectedLogicalModelError(existing.modelId)
-    const conflict = db.select({ id: logicalModels.id }).from(logicalModels)
-      .where(and(eq(logicalModels.modelId, nextModelId), isNull(logicalModels.deletedTime)))
-      .get()
-    if (conflict) throw duplicateLogicalModelError(nextModelId)
+    await assertLogicalModelIdAvailable(nextModelId, id)
   }
 
   db.transaction(transaction => {
@@ -213,17 +235,16 @@ export async function updateLogicalModel(id: string, updates: UpdateLogicalModel
 /**
  * 软删除一个逻辑模型。
  *
- * 只打 `deletedTime` 会让被删的 `modelId` 永远占着名字：用户再想建一个同名模型就会觉得
- * 「明明删了」却建不出来。所以软删除**顺带把模型 id 改写成墓碑**：
- * `~deleted.<时刻>.<原 modelId>`（见 `@common/schemas` 的 `logicalModelTombstoneModelId`）。
+ * 只打 `deletedTime`：被删的行原地留在表里，`modelId` 也原样保留 —— 历史请求记录（观测库）
+ * 里那些模型名快照要能对得上一条真实存在过的行，删掉的模型不该在表里变得「查无此人」。
  *
- * 改的是第二把钥匙，不是第一把：数据记录 id 一动不动，因此 `scheduling_policies` 的外键
- * 一行都不用搬（它指着的是那把稳定的钥匙），要做的只是就地关掉这些绑定。
+ * 名字的重用不需要在这里做任何事。判据是**活跃行之间不许重复**，
+ * 而不是「这个名字历史上出现过没有」：原 `modelId` 从这一刻起就不再被活跃行占用，
+ * 用户再建一个同名的就是一次普通的成功。所以这里**不**改写 `modelId`，也不需要墓碑。
  *
- * 写成墓碑之后：
- *   - 原模型 id 立刻可以重新使用（建出来就是一条全新的、正常的逻辑模型）；
- *   - 墓碑行仍在表里，历史请求记录（观测库）不动，那是不可变的事实；
- *   - 路由定义**不需要**改写：里面的落点仍指着原模型 id，将来原模型 id 被复用时自动重新生效。
+ * 数据记录 id 更是一动不动，因此 `scheduling_policies` 的外键一行都不用搬
+ * （它指着的是那把稳定的钥匙），要做的只是就地关掉这些绑定，再按记录 id 硬删除它们
+ * —— 绑定是该逻辑模型私有的编排，它已经不存在了，留着一行已删除的绑定没有任何读者。
  *
  * 内建默认逻辑模型不允许删除：它是所有兜底落点的归宿。
  */
@@ -235,14 +256,11 @@ export async function deleteLogicalModel(id: string): Promise<void> {
     if (!existing) throw logicalModelNotFoundError(id)
     if (existing.modelId === BUILT_IN_DEFAULT_LOGICAL_MODEL_ID) throw protectedLogicalModelError(existing.modelId)
     transaction.update(logicalModels)
-      .set({ modelId: logicalModelTombstoneModelId(existing.modelId, time), deletedTime: time, updatedTime: time })
+      .set({ deletedTime: time, updatedTime: time })
       .where(eq(logicalModels.id, id))
       .run()
-    // 墓碑上的绑定全部关掉：它们不该再被调度；模型 id 被复用后用户重新加回模型会原地复活它们。
-    transaction.update(schedulingPolicies)
-      .set({ enabled: false, deletedTime: time, updatedTime: time })
-      .where(and(eq(schedulingPolicies.logicalModelId, id), isNull(schedulingPolicies.deletedTime)))
-      .run()
+    // 绑定是逻辑模型私有的编排，跟着记录 id 一起退场（记录 id 永不复用，所以硬删除是安全的）。
+    transaction.delete(schedulingPolicies).where(eq(schedulingPolicies.logicalModelId, id)).run()
   })
 }
 

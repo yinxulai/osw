@@ -2,7 +2,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { closeDatabases, initDatabases } from './index'
+import { eq } from 'drizzle-orm'
+import { closeDatabases, getConfigDb, initDatabases } from './index'
+import { schedulingPolicies } from './config-schema'
 import { createLogicalModel, deleteLogicalModel, getLogicalModel, getLogicalModelByModelId, listLogicalModels, listSchedulingPolicies, mapLogicalModelIdsToRecordIds, reorderLogicalModels, updateLogicalModel, upsertSchedulingPolicy } from './logical-model-store'
 import { createProvider } from './provider-store'
 import { createProviderModelRoute, updateProviderModelRoute } from './model-store'
@@ -58,6 +60,23 @@ function ruleSetReferencing(modelId: string): RouteRuleSet {
   }
 }
 
+/** 建一个供应商并挂上一条模型路由，返回供应商记录 id 与**供应商模型记录 id**。 */
+async function createTestProviderWithModel(name: string, apiKeyReference: string): Promise<{ providerId: string; modelId: string }> {
+  const provider = await createProvider({ name, apiKeyReference, timeoutMilliseconds: 10_000, enabled: true })
+  const model = await createProviderModelRoute({
+    providerId: provider.id,
+    modelName: 'cleanup-model',
+    priority: 1,
+    endpoints: [{
+      protocol: 'openai-completions',
+      endpointUrl: 'https://example.com/v1/chat/completions',
+      customAuthHeader: null,
+      protocolConversionEnabled: false,
+    }],
+  })
+  return { providerId: provider.id, modelId: model.id }
+}
+
 describe('logical model store', () => {
   it('creates and updates logical models with real database persistence', async () => {
     const created = await createLogicalModel({ modelId: 'production', description: 'prod routing', enabled: true })
@@ -108,20 +127,36 @@ describe('logical model store', () => {
     expect(rulesAfter?.ruleSet.rules[0].conditions[0].value).toBe('fast-v2')
   })
 
-  it('soft deletes by tombstoning the model id so the name is free again while the record id survives', async () => {
+  it('soft deletes while keeping the model id, so the record id and the name snapshot both survive', async () => {
     const created = await createLogicalModel({ modelId: 'retired', description: '' })
 
     await deleteLogicalModel(created.id)
 
-    // 记录 id 不动：调度绑定的外键指着它，一行都不用搬。
+    // 记录 id 与模型名都不动：外键指着前者，历史请求日志记的是后者。
     const deleted = await getLogicalModel(created.id)
     expect(deleted?.id).toBe(created.id)
+    expect(deleted?.modelId).toBe('retired')
     expect(deleted?.deletedTime).toEqual(expect.any(Number))
-    expect(deleted?.modelId).not.toBe('retired')
-    // 模型 id 被改写成墓碑，原名字立刻可以重新使用，不会再撞上「已存在」。
+    // 已删除的行不参与路由：查询层只认活跃行，所以模型名查不到。
     expect(await getLogicalModelByModelId('retired')).toBeUndefined()
+    // 但这个名字不再被活跃行占用，可以立刻重新使用 —— 靠的是判据只算活跃行，不是靠改写墓碑。
     const reused = await createLogicalModel({ modelId: 'retired', description: '' })
     expect(reused.id).not.toBe(created.id)
+    expect(await getLogicalModelByModelId('retired')).toEqual(reused)
+  })
+
+  it('removes the scheduling bindings of a deleted logical model instead of leaving orphans', async () => {
+    const provider = await createTestProviderWithModel('Deletion Cleanup', 'key_deletion_cleanup')
+    const logicalModel = await createLogicalModel({ modelId: 'doomed', description: '' })
+    await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: provider.modelId, priority: 1, enabled: true })
+    expect(await listSchedulingPolicies(logicalModel.id)).toHaveLength(1)
+
+    await deleteLogicalModel(logicalModel.id)
+
+    // 绑定是该逻辑模型私有的编排，它已经不存在了：留着「已删除的绑定」没有任何读者。
+    // 直接看表 —— store 的读接口本来就会过滤 `deletedTime`，只有裸表能证明行是没了还是被打标了。
+    expect(await listSchedulingPolicies(logicalModel.id)).toEqual([])
+    expect(getConfigDb().select().from(schedulingPolicies).where(eq(schedulingPolicies.logicalModelId, logicalModel.id)).all()).toEqual([])
   })
 
   it('refuses to delete or rename the built-in default logical model', async () => {
@@ -131,10 +166,10 @@ describe('logical model store', () => {
     await expect(updateLogicalModel(recordId, { modelId: 'renamed-default' })).rejects.toMatchObject({ code: 'RESOURCE_CONFLICT' })
   })
 
-  it('maps model ids to record ids, ignoring unknown and retired ones', async () => {
+  it('maps model ids to record ids, ignoring unknown and deleted ones', async () => {
     const mapped = await createLogicalModel({ modelId: 'mapped', description: '' })
-    const retired = await createLogicalModel({ modelId: 'gone', description: '' })
-    await deleteLogicalModel(retired.id)
+    const removed = await createLogicalModel({ modelId: 'gone', description: '' })
+    await deleteLogicalModel(removed.id)
 
     const byModelId = await mapLogicalModelIdsToRecordIds(['mapped', 'gone', 'never-existed'])
 
