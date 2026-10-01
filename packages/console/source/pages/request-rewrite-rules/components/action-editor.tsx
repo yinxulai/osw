@@ -6,8 +6,11 @@ import { FormField } from '@/components/form-kit'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { PanelCodeEditor } from '@/pages/router/panel/panel-code-editor'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
+import { REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT } from '@common/schemas'
+import type { SchemaFieldDescriptor } from '@common/router/types'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
 
 const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
@@ -41,9 +44,73 @@ function targetFieldLabels(t: AppTranslator, target: RuleActionTarget, operation
   }
 }
 
+/**
+ * 脚本编辑器里的路径候选。
+ *
+ * 修改器脚本能读的是「当前阶段报文的任意字段」，不对应任何上游 schema，因此这里给的是一份
+ * 面向三个协议共同根字段的静态清单，而不是拼上给智能路由用的动态 `SchemaFieldDescriptor`。
+ * 目的是让 `get('` 与 `body.` 后弹出的候选能覆盖到最常见的几个字段，而不是提供穷举。
+ */
+const SCRIPT_FIELDS: SchemaFieldDescriptor[] = [
+  { path: 'model', valueType: 'string', sourceNodeId: '', sourcePort: '', note: 'Model identifier' },
+  { path: 'messages', valueType: 'array', sourceNodeId: '', sourcePort: '', note: 'Chat messages' },
+  { path: 'messages[*]', valueType: 'object', sourceNodeId: '', sourcePort: '' },
+  { path: 'messages[*].role', valueType: 'enum', sourceNodeId: '', sourcePort: '', enumOptions: ['system', 'user', 'assistant', 'tool'] },
+  { path: 'messages[*].content', valueType: 'unknown', sourceNodeId: '', sourcePort: '' },
+  { path: 'input', valueType: 'unknown', sourceNodeId: '', sourcePort: '', note: 'Responses API input' },
+  { path: 'instructions', valueType: 'string', sourceNodeId: '', sourcePort: '', note: 'Responses API system instructions' },
+  { path: 'system', valueType: 'unknown', sourceNodeId: '', sourcePort: '', note: 'Anthropic system prompt' },
+  { path: 'max_tokens', valueType: 'number', sourceNodeId: '', sourcePort: '' },
+  { path: 'max_output_tokens', valueType: 'number', sourceNodeId: '', sourcePort: '' },
+  { path: 'temperature', valueType: 'number', sourceNodeId: '', sourcePort: '' },
+  { path: 'top_p', valueType: 'number', sourceNodeId: '', sourcePort: '' },
+  { path: 'stream', valueType: 'boolean', sourceNodeId: '', sourcePort: '', note: 'Delivery mode; protected against modification' },
+  { path: 'metadata', valueType: 'object', sourceNodeId: '', sourcePort: '' },
+  { path: 'tools', valueType: 'array', sourceNodeId: '', sourcePort: '' },
+  { path: 'tool_choice', valueType: 'unknown', sourceNodeId: '', sourcePort: '' },
+]
+
 interface ActionEditorProps {
   actions: RuleAction[]
   onChange: (actions: RuleAction[]) => void
+}
+
+interface ScriptTimeoutInputProps {
+  action: RuleAction
+  onChange: (patch: Partial<RuleAction>) => void
+  t: AppTranslator
+}
+
+/**
+ * 脚本超时输入框。
+ *
+ * 输入过程中允许出现非数字／超范围的中间态，失去焦点时才归一：直接边输入边钳制，
+ * 用户删光重敲（`""` → 想输 `1500`）会被立刻回填成默认值，反而没法编辑。
+ */
+function ScriptTimeoutInput(props: ScriptTimeoutInputProps) {
+  const { action, onChange, t } = props
+  const [draft, setDraft] = useState<string | undefined>(undefined)
+  const value = draft ?? String(action.timeoutMilliseconds ?? REWRITE_SCRIPT_TIMEOUT_DEFAULT)
+  const commit = () => {
+    const parsed = Number(draft)
+    onChange({ timeoutMilliseconds: Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.round(parsed), REWRITE_SCRIPT_TIMEOUT_LIMIT) : REWRITE_SCRIPT_TIMEOUT_DEFAULT })
+    setDraft(undefined)
+  }
+  return (
+    <FormField label={t('rules.actions.scriptTimeoutLabel')} htmlFor={`${action.id}-timeout`} hint={t('rules.actions.scriptTimeoutHint', { limit: REWRITE_SCRIPT_TIMEOUT_LIMIT })}>
+      <Input
+        id={`${action.id}-timeout`}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={REWRITE_SCRIPT_TIMEOUT_LIMIT}
+        value={value}
+        className="font-mono"
+        onChange={event => setDraft(event.target.value)}
+        onBlur={commit}
+      />
+    </FormField>
+  )
 }
 
 export function ActionEditor(props: ActionEditorProps) {
@@ -78,6 +145,7 @@ export function ActionEditor(props: ActionEditorProps) {
           </div>
         )}
         {props.actions.map((action, index) => {
+          const isScript = action.target === 'script'
           const isHeader = action.target === 'header'
           const isRemove = action.operation === 'remove'
           const isReplace = action.operation === 'replace'
@@ -94,17 +162,35 @@ export function ActionEditor(props: ActionEditorProps) {
                 </Select>
                 <Select value={action.target} onValueChange={value => updateAction(action.id, { target: value as RuleActionTarget, operation: 'set', value: '' })}>
                   <SelectTrigger aria-label={t('rules.actions.targetAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="header">{t('rules.actions.target.header')}</SelectItem><SelectItem value="body">{t('rules.actions.target.body')}</SelectItem><SelectItem value="script">{t('rules.actions.target.script')}</SelectItem></SelectContent>
                 </Select>
-                <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
-                  <SelectTrigger aria-label={t('rules.actions.operationAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
-                  <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{t(OPERATION_LABEL_KEY[operation])}</SelectItem>)}</SelectContent>
-                </Select>
+                {!isScript && (
+                  <Select value={action.operation} onValueChange={value => updateAction(action.id, { operation: value as RuleActionOperation })}>
+                    <SelectTrigger aria-label={t('rules.actions.operationAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
+                    <SelectContent>{operations.map(operation => <SelectItem key={operation} value={operation}>{t(OPERATION_LABEL_KEY[operation])}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
                 <Button type="button" variant="ghost" size="icon-sm" aria-label={t('rules.actions.deleteAria')} className="ml-auto text-text-tertiary hover:text-text-destructive" onClick={() => setDeleteActionId(action.id)}>
                   <Trash2 />
                 </Button>
               </div>
 
+              {isScript ? (
+                <div className="mt-3 grid gap-3">
+                  <FormField label={t('rules.actions.scriptCodeLabel')} htmlFor={`${action.id}-code`} hint={t('rules.actions.scriptCodeHint')}>
+                    <PanelCodeEditor
+                      language="rewrite-script"
+                      fields={SCRIPT_FIELDS}
+                      value={action.code ?? ''}
+                      minHeight={140}
+                      maxHeight={280}
+                      placeholder={action.stage === 'response' ? t('rules.actions.scriptPlaceholder.response') : t('rules.actions.scriptPlaceholder.request')}
+                      onChange={code => updateAction(action.id, { code })}
+                    />
+                  </FormField>
+                  <ScriptTimeoutInput action={action} t={t} onChange={patch => updateAction(action.id, patch)} />
+                </div>
+              ) : (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <FormField label={labels.path} htmlFor={`${action.id}-target`} className="sm:col-span-2">
                   <Input
@@ -150,6 +236,7 @@ export function ActionEditor(props: ActionEditorProps) {
                   </FormField>
                 )}
               </div>
+              )}
             </div>
           )
         })}

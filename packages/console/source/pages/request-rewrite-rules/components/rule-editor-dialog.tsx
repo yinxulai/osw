@@ -19,7 +19,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
-import { parseJsonActionValue, type RequestRewriteRule, type RuleTestCase } from '../types'
+import { toApiRuleAction, type RequestRewriteRule, type RuleTestCase } from '../types'
 import type { RequestRewriteRule as ApiRequestRewriteRule } from '@common/schemas'
 
 interface RuleTestResult {
@@ -27,6 +27,7 @@ interface RuleTestResult {
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
   skippedRuleIds: string[]
+  scriptLogs: string[]
 }
 
 interface RuleEditorDialogProps {
@@ -81,9 +82,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
       source: props.rule.source,
       match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'] },
       testCases: [],
-      actions: props.rule.actions.map(action => action.target === 'header'
-        ? action.operation === 'remove' ? { type: 'header-remove', stage: action.stage, name: action.path } : { type: action.operation === 'append' ? 'header-append' : 'header-set', stage: action.stage, name: action.path, value: action.value ?? '' }
-        : action.operation === 'remove' ? { type: 'body-delete', stage: action.stage, path: action.path } : action.operation === 'replace' ? { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false } : { type: 'body-set', stage: action.stage, path: action.path, value: parseJsonActionValue(action.value) }),
+      actions: props.rule.actions.map(toApiRuleAction),
       createdTime: 0,
       updatedTime: 0,
       deletedTime: null,
@@ -164,6 +163,12 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                                 <span>{t('rules.tests.skipped', { value: result.skippedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
                               </div>
                               <div className="grid gap-2 sm:grid-cols-2"><pre className="max-h-36 overflow-auto rounded-md bg-card p-2 font-mono">{JSON.stringify(result.headers, null, 2)}</pre><pre className="max-h-36 overflow-auto rounded-md bg-card p-2 font-mono">{result.body}</pre></div>
+                              {result.scriptLogs.length > 0 && (
+                                <div className="grid gap-1">
+                                  <span className="text-text-tertiary">{t('rules.tests.scriptLogs', { count: result.scriptLogs.length })}</span>
+                                  <pre className="max-h-36 overflow-auto rounded-md bg-card p-2 font-mono">{result.scriptLogs.join('\n')}</pre>
+                                </div>
+                              )}
                             </div>
                           )}
                         </article>

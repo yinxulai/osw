@@ -146,3 +146,78 @@ describe('applyRequestRewriteRules', () => {
     }
   })
 })
+
+type ScriptActionOverrides = Partial<Extract<RequestRewriteRuleAction, { type: 'script' }>>
+
+const scriptAction = (code: string, overrides: ScriptActionOverrides = {}): RequestRewriteRuleAction =>
+  ({ type: 'script', stage: 'request', code, timeoutMilliseconds: 1000, ...overrides })
+
+describe('applyRequestRewriteRules - script action', () => {
+  it('把脚本交回的 body 与 headers 合并回报文', () => {
+    const result = applyRequestRewriteRules(
+      body({ temperature: 1, marker: 'apply-strict' }),
+      { 'X-Old': 'kept' },
+      [rule([scriptAction("return { body: { ...body, temperature: 0 }, headers: { ...headers, 'x-script': 'yes' } }")])],
+      context(),
+    )
+    expect(parsed(result)).toEqual({ temperature: 0, marker: 'apply-strict' })
+    expect(result.headers['x-script']).toBe('yes')
+    expect(result.headers['X-Old']).toBe('kept')
+    expect(result.scriptLogs).toEqual([])
+  })
+
+  it('只交回 body 时 headers 保持原样，交回空值则整条不改动', () => {
+    const onlyBody = applyRequestRewriteRules(body({ a: 1 }), { 'X-Keep': 'yes' }, [rule([scriptAction('return { body: { a: 2 } }')])], context())
+    expect(parsed(onlyBody)).toEqual({ a: 2 })
+    expect(onlyBody.headers['X-Keep']).toBe('yes')
+
+    const untouched = applyRequestRewriteRules(body({ a: 1 }), { 'X-Keep': 'yes' }, [rule([scriptAction('console.log("no change")')])], context())
+    expect(parsed(untouched)).toEqual({ a: 1 })
+    expect(untouched.headers['X-Keep']).toBe('yes')
+    expect(untouched.scriptLogs).toEqual(['[log] no change'])
+  })
+
+  it('正文不是 JSON 时把 null 交给脚本，而不是直接报错', () => {
+    const result = applyRequestRewriteRules(Buffer.from('not-json'), {}, [rule([scriptAction('return { body: body === null ? "was-null" : "unexpected" }')])], context())
+    expect(result.body.toString('utf8')).toBe(JSON.stringify('was-null'))
+  })
+
+  it('脚本抛异常时抛出带规则 ID 的 RequestRewriteError', () => {
+    expect(() => applyRequestRewriteRules(body({}), {}, [rule([scriptAction('throw new Error("boom")')])], context()))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('脚本死循环被超时中断并失败', () => {
+    expect(() => applyRequestRewriteRules(body({}), {}, [rule([scriptAction('while (true) {}', { timeoutMilliseconds: 50 })])], context()))
+      .toThrow(/timed out/i)
+  })
+
+  it.each([
+    ['修改受保护 Header', 'return { headers: { Authorization: "x" } }'],
+    ['交回非对象', 'return 42'],
+    ['改动投递形态字段', 'return { body: { ...body, stream: true } }'],
+  ] as const)('脚本%s时失败', (_label, code) => {
+    expect(() => applyRequestRewriteRules(body({ stream: false }), {}, [rule([scriptAction(code)])], context()))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('脚本原样带出 stream 而不改动时不算违规', () => {
+    const result = applyRequestRewriteRules(body({ stream: false, a: 1 }), {}, [rule([scriptAction('return { body: { ...body, a: 2 } }')])], context())
+    expect(parsed(result)).toEqual({ stream: false, a: 2 })
+  })
+
+  it('响应流式场景跳过脚本动作', () => {
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([scriptAction('return { body: {} }', { stage: 'response' })])], context('response', { shape: 'incremental' }))
+    expect(result.skippedRuleIds).toEqual(['rule-test'])
+    expect(parsed(result)).toEqual({ text: 'old' })
+    expect(result.scriptLogs).toEqual([])
+  })
+
+  it('脚本能通过 get() 读取字段并按内容决定是否改动', () => {
+    const code = 'if (get("marker") === "apply-strict") return { body: { ...body, temperature: 0 } }'
+    const matched = applyRequestRewriteRules(body({ marker: 'apply-strict', temperature: 1 }), {}, [rule([scriptAction(code)])], context())
+    expect(parsed(matched)).toEqual({ marker: 'apply-strict', temperature: 0 })
+    const missed = applyRequestRewriteRules(body({ temperature: 1 }), {}, [rule([scriptAction(code)])], context())
+    expect(parsed(missed)).toEqual({ temperature: 1 })
+  })
+})
