@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
+import { BookText, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { RELEASE_URL, REPO_URL } from '../downloads'
+import { DOCS_URL, RELEASE_URL, REPO_URL } from '../downloads'
 import { LANGS, type Lang } from '../i18n'
 import type { Theme } from '../theme'
 
@@ -68,6 +68,14 @@ export function SiteHeader(props: SiteHeaderProps) {
             onChange={(next) => void i18n.changeLanguage(next)}
             compact
           />
+          <a
+            href={DOCS_URL}
+            aria-label={t('nav.docs', '查看使用文档')}
+            title={t('nav.docs', '查看使用文档')}
+            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-3 transition-colors hover:border-line-strong hover:text-ink sm:flex"
+          >
+            <BookText className="h-4 w-4" aria-hidden="true" />
+          </a>
           <a
             href={REPO_URL}
             target="_blank"

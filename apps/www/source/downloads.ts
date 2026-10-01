@@ -1,4 +1,4 @@
-// 下载区的数据：构建期注入的版本号 + 最新发布页地址。
+// 站点的外部链接常量：构建期注入的版本号 + 发布页 / 仓库 / 文档站的永久地址。
 //
 // 这一版**不做**站内分发（不代理安装包、不按平台挑文件）：只有一个公共按钮，直接跳
 // GitHub 的最新 release 页，用户在那里按平台自取。好处是站点不需要跟发版同步任何状态
@@ -13,3 +13,6 @@ export const RELEASE_URL = 'https://github.com/yinxulai/osw/releases/latest'
 
 /** 仓库地址，用于 Hero 的「查看源码」。 */
 export const REPO_URL = 'https://github.com/yinxulai/osw'
+
+/** 使用手册站（Clarify 静态站，见 `apps/docs`），部署在独立子域上。 */
+export const DOCS_URL = 'https://docs.osw.yinxulai.com'

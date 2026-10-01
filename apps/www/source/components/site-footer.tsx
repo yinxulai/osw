@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { REPO_URL } from '../downloads'
+import { DOCS_URL, REPO_URL } from '../downloads'
 import { GitHubMark } from './site-header'
 
 /**
@@ -21,15 +21,23 @@ export function SiteFooter() {
           </span>
         </div>
 
-        <a
-          href={REPO_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-[12px] text-ink-4 transition-colors hover:text-ink-2"
-        >
-          <GitHubMark className="h-3.5 w-3.5" />
-          {t('footerRepo', '在 GitHub 上查看源码')}
-        </a>
+        <div className="flex items-center gap-4 sm:gap-5">
+          <a
+            href={DOCS_URL}
+            className="text-[12px] text-ink-4 transition-colors hover:text-ink-2"
+          >
+            {t('footerDocs', '使用文档')}
+          </a>
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-[12px] text-ink-4 transition-colors hover:text-ink-2"
+          >
+            <GitHubMark className="h-3.5 w-3.5" />
+            {t('footerRepo', '在 GitHub 上查看源码')}
+          </a>
+        </div>
       </div>
     </footer>
   )

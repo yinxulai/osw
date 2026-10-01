@@ -30,6 +30,7 @@ export const en = {
     privacy: 'Privacy',
     downloads: 'Download',
     download: 'Download',
+    docs: 'Read the docs',
     themeLight: 'Switch to light theme',
     themeDark: 'Switch to dark theme',
   },
@@ -41,6 +42,7 @@ export const en = {
     lead: 'Your clients only ever need to know a single address. Protocol detection, channel selection, failover and request logging all happen on 127.0.0.1 — when a channel dies the request moves on, and the client only ever sees the attempt that succeeded.',
     download: 'Download the latest release',
     source: 'View source',
+    docs: 'Read the docs',
     metaOs: 'macOS · Windows · Linux',
     metaNoAccount: 'No account needed',
     metaPolyform: 'PolyForm Noncommercial',
@@ -181,9 +183,13 @@ export const en = {
     host: 'Opens GitHub Releases',
     detail:
       'macOS builds are ad-hoc signed and not notarized — if the first launch is blocked, allow it under System Settings → Privacy & Security.',
+    docsLead: 'New here? Start with the ',
+    docsLink: 'docs',
+    docsTail: ' — step-by-step from install to configuring channels.',
   },
   footer: 'Source-available under PolyForm Noncommercial · macOS · Windows · Linux',
   footerRepo: 'View the source on GitHub',
+  footerDocs: 'Documentation',
 }
 
 /** 首次进入优先沿用上次选择，其次按浏览器语言；识别不到就用兜底语言（中文）。 */

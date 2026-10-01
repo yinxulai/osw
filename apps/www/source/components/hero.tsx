@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { DOWNLOAD_VERSION, RELEASE_URL, REPO_URL } from '../downloads'
+import { DOCS_URL, DOWNLOAD_VERSION, RELEASE_URL, REPO_URL } from '../downloads'
 import { RequestTrace } from './request-trace'
 import { Reveal } from './reveal'
 
@@ -81,6 +81,13 @@ export function Hero() {
                 className="inline-flex h-11 items-center justify-center rounded-xl border border-line px-5 text-sm font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-ink/4 hover:text-ink"
               >
                 {t('hero.source', '查看源码')}
+              </a>
+              <a
+                href={DOCS_URL}
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-line px-5 text-sm font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-ink/4 hover:text-ink"
+              >
+                {t('hero.docs', '使用文档')}
+                <span aria-hidden="true" className="text-ink-4">→</span>
               </a>
             </div>
           </Reveal>

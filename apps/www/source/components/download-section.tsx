@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { DOWNLOAD_VERSION, RELEASE_URL } from '../downloads'
+import { DOCS_URL, DOWNLOAD_VERSION, RELEASE_URL } from '../downloads'
 import { PlatformIcon } from '../platform-icons'
 import { PLATFORMS } from '../platforms'
 import { Reveal } from './reveal'
@@ -87,6 +87,19 @@ export function DownloadSection() {
             'downloads.detail',
             'macOS 构建为 ad-hoc 签名且未公证——若首次启动被阻止，请在「系统设置 → 隐私与安全性」中允许。',
           )}
+        </p>
+      </Reveal>
+
+      <Reveal delay={120}>
+        <p className="mt-4 text-center text-[13px] text-ink-3">
+          {t('downloads.docsLead', '第一次上手？先看')}
+          <a
+            href={DOCS_URL}
+            className="font-medium text-ink-2 underline decoration-line-strong underline-offset-4 transition-colors hover:text-ink"
+          >
+            {t('downloads.docsLink', '使用文档')}
+          </a>
+          {t('downloads.docsTail', '，从安装到配置渠道都有分步骤说明。')}
         </p>
       </Reveal>
     </section>
