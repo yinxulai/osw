@@ -22,6 +22,8 @@ vi.mock('@/pages/model-management/hooks/use-model-management', () => ({
     models: models.current,
     providerName: '',
     selectedProvider: providers.current[0] ?? null,
+    dialogProvider: null,
+    selectDialogProvider: () => {},
     openPresetDialog: () => {},
     openProviderDialog: async () => {},
     openModelDialog: () => {},
@@ -30,9 +32,6 @@ vi.mock('@/pages/model-management/hooks/use-model-management', () => ({
 
 vi.mock('@/pages/model-management/components/provider-dialog', () => ({ ProviderDialog: () => null }))
 vi.mock('@/pages/model-management/components/model-dialog', () => ({ ModelDialog: () => null }))
-vi.mock('@/pages/model-management/components/provider-preset-picker', () => ({
-  ProviderPresetPicker: () => <div data-testid="preset-picker" />,
-}))
 
 interface WrapperProps { children: ReactNode }
 
@@ -49,31 +48,32 @@ describe('AddModelStep', () => {
     models.current = []
   })
 
-  it('一个供应商都没有时，就地说明该先做什么，而不是让按钮静默禁用', () => {
+  it('一个供应商都没有时：摊成一张预设卡片墙（含首位「自定义供应商」），没有并列的顶层按钮', () => {
     render(<AddModelStep />, { wrapper: Wrapper })
 
     expect(screen.getByText(en('onboarding.models.empty'))).not.toBeNull()
-    // 控件本身交代自己是干什么的，页头那句描述交代整条路径：这里不再叠第三段操作说明。
-    expect(screen.getByTestId('preset-picker')).not.toBeNull()
-    expect(screen.queryByText(en('onboarding.models.nextAddModel'))).toBeNull()
+    // 起点是整面卡片墙：第一张是「自定义供应商」，其余是内置预设，都在页面上直接可点。
+    expect(screen.getByRole('button', { name: en('onboarding.models.customProvider') })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'OpenAI' })).not.toBeNull()
+    // 空状态没有「已接入」列表，也不该再摆一颗孤立的「添加模型」。
+    expect(screen.queryByRole('button', { name: en('onboarding.models.addModel') })).toBeNull()
   })
 
-  it('有供应商但还没有模型时，把「点添加模型去拉取」说在列表旁边', () => {
+  it('每个供应商行尾就地给出「添加模型」：模型加给哪一家写在脸上', () => {
     providers.current = [{ id: 'prov_1', name: 'Example' }]
     render(<AddModelStep />, { wrapper: Wrapper })
 
     expect(screen.getByText('Example')).not.toBeNull()
     expect(screen.getByText(en('onboarding.models.modelCount', { count: 0 }))).not.toBeNull()
-    // 用户真正会停下来的位置就是这里，所以话放在这里，而不是页面开头。
-    expect(screen.getByText(en('onboarding.models.nextAddModel'))).not.toBeNull()
+    // 归属由按钮所在的那一行表达，而不是靠一个隐式的「当前供应商」。
+    expect(screen.getByRole('button', { name: en('onboarding.models.addModel') })).not.toBeNull()
   })
 
-  it('模型拉起来之后那句下一步就该退场，不留在列表里当噪音', () => {
+  it('模型接进来之后行尾的数量跟着更新', () => {
     providers.current = [{ id: 'prov_1', name: 'Example' }]
     models.current = [{ providerId: 'prov_1' }, { providerId: 'prov_1' }]
     render(<AddModelStep />, { wrapper: Wrapper })
 
     expect(screen.getByText(en('onboarding.models.modelCount', { count: 2 }))).not.toBeNull()
-    expect(screen.queryByText(en('onboarding.models.nextAddModel'))).toBeNull()
   })
 })

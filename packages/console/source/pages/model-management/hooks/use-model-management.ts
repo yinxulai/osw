@@ -27,7 +27,7 @@ export function useModelManagement() {
   const selectedModels = useMemo(() => data.models.filter(model => model.providerId === data.selectedProviderId).sort((a, b) => a.priority - b.priority), [data.models, data.selectedProviderId])
   const providerDialog = useProviderDialog({ reload: data.reload, selectProvider: data.setSelectedProviderId })
   const providerManagement = useProviderManagement({ reload: data.reload })
-  const modelDialog = useModelDialog({ selectedProvider, models: selectedModels, reload: data.reload })
+  const modelDialog = useModelDialog({ providers: data.providers, models: data.models, selectedProvider, reload: data.reload })
   const providerTransfer = useProviderTransfer({ reload: data.reload })
 
   const invalidateModels = useCallback(async () => { await Promise.all([client.invalidateQueries({ queryKey: modelKeys.all }), client.invalidateQueries({ queryKey: ['logical-model-provider-models'] })]) }, [client])

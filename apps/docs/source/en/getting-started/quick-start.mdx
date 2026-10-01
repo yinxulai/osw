@@ -1,32 +1,23 @@
 ---
-title: Three steps to a gateway
-description: Choose routing → add an upstream → connect a client, and get the local gateway running.
+title: Two steps to a gateway
+description: Add an upstream → connect a client, and get the local gateway running.
 keywords:
   - quick start
   - onboarding
   - getting started
 ---
 
-# Three steps to a gateway
+# Two steps to a gateway
 
-The first launch enters a three-step guide. It is a **straight line** — the order cannot be swapped, because each step's output is the next step's prerequisite: first decide how requests route → then decide what upstream to run them on → finally know what to fill in.
+The first launch enters a two-step guide. It is a **straight line** — the order cannot be swapped, because each step's output is the next step's prerequisite: first decide what upstream to run requests on → then know what to fill in.
 
-<Callout title="You can skip the choice" type="note">
-You do not have to pick anything in step one: a default policy is already running. The guide just wants you to choose a different starting point.
+<Callout title="Routing is not a step" type="note">
+The guide does not make you design a routing scheme first — a default policy is already running and is good enough for a new user. The model pool and landing points stay editable on the "Smart routing" page whenever you want.
 </Callout>
 
-## Step 1: Routing
+## Step 1: Add an upstream
 
-The first step asks "how should requests route?" and has you pick one of two routing modes. The two configs are stored independently, so switching back and forth never loses the other one.
-
-- **Workflow orchestration**: wire nodes into a chain on a canvas.
-- **Routing rules**: a rule table read top to bottom.
-
-For a detailed comparison, see [Request routing](/upstreams/routing). This step also lets you pick one of the **built-in schemes** to take effect immediately, then keep editing it on the "Smart routing" page.
-
-## Step 2: Add an upstream
-
-The second step, "where do requests go?", adds your first upstream provider:
+The first step, "where do requests go?", adds your first upstream provider:
 
 1. Pick a **preset** (presets pre-fill the base URL), or choose "Custom provider".
 2. Fill in the provider name and the **API key** (leave blank for upstreams that need no auth).
@@ -34,9 +25,9 @@ The second step, "where do requests go?", adds your first upstream provider:
 
 After fetching, remember to tick specific models — with no models under a provider, requests have nowhere to land. For the full model-management page, see [Providers & models](/upstreams/providers).
 
-## Step 3: Connect a client
+## Step 2: Connect a client
 
-The third step, "point your tools at this address", shows the local service address and the values to fill in. The same card has the other half of the answer: when a client is already installed on the machine, go to [Client configuration](/getting-started/client-config) and click **Apply all**, and OSW edits that client's own config file, keeping a revertible copy of every change first.
+The second step, "point your tools at this address", shows the one address a client should point at. The same step embeds the **config editor** inline, so you can pick a tool you use and point its config at the local service right there; for a tool not in the registry, copy that address in by hand. When a client is already installed on the machine, you can instead go to [Client configuration](/getting-started/client-config) and click **Apply all**, and OSW edits that client's own config file, keeping a revertible copy of every change first.
 
 Reference table:
 

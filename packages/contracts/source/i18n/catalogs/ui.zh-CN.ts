@@ -467,38 +467,20 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.contents.fact.noOutput': '无输出',
   'requestLogs.contents.fact.unrecognized': '未识别',
 
-  // ========== 页面 · 本机服务（引导页第三步） ==========
-  'access.service.running': '运行中',
-  'access.service.stopped': '未运行',
-  'access.service.reading': '正在读取服务状态…',
-  'access.service.listening': '监听 {host}:{port}',
-  'access.service.reachLocal': '只有这台机器上的程序连得上',
-  'access.service.reachAll': '监听在所有网卡上，局域网里的其他设备也能连；把地址里的 127.0.0.1 换成这台机器的 IP 即可',
-  'access.service.changeHost': '修改监听地址',
+  // ========== 页面 · 本机服务（引导页第二步） ==========
   'access.address.title': '本机服务地址',
   'access.address.description': '客户端要指向的那一条',
   'access.address.copy': '复制地址',
   'access.address.hint': '后面加不加 /v1 都认：每个受理路径都同时注册了两种写法',
-  'access.field.apiKey.label': 'API Key',
-  'access.field.apiKey.hint': '本地不校验鉴权，填任意非空字符串即可；转发时会被换成渠道自己的密钥',
-  'access.field.apiKey.copy': '复制 API Key',
-  'access.field.model.label': '模型名',
-  'access.field.model.hint': '不是固定值：任意非空模型名都受理，它只是路由的输入——命中哪个逻辑模型、最终连到哪个上游，都由路由决定。不知道填什么就用 default，它是兜底那一个',
-  'access.field.model.copy': '复制模型名',
-  'access.agent.hint': '每次写入都会先留一份可回退的版本',
-  'access.agent.open': '去客户端配置生效',
+  'access.field.baseUrl.label': '接口地址',
   'access.interface.title': '本服务接受的接口',
-  'access.interface.description': '下面这些都不是必须的；接不上时回来对一下路径',
-  // 收起态只说两件事：有几条、想看就点。数字由契约层的清单算出来，不在这里维护份数。
-  'access.interface.expand': '展开 {count} 条受理路径',
-  'access.interface.collapse': '收起这些路径',
+  'access.interface.description': '会被转发给上游模型；不带 /v1 的等价写法同样受理',
   'access.interface.entry.chatCompletions': '对话补全',
   'access.interface.entry.responses': '响应接口',
   'access.interface.entry.messages': '消息接口',
+  // 保留：`INTERFACE_DESCRIPTION_KEYS` 是 `Record<ProxyInterfaceId, …>`，`models` 仍是契约里的一个 id。
+  // 该条目已不在界面表格里渲染（本地应答、不转发上游），这里的说明只用于满足类型完整性。
   'access.interface.entry.models': '模型清单（只列兜底模型）',
-  'access.interface.localResponse': '本地应答',
-  'access.interface.verifyHint': '配完在客户端里发一句话：请求记录里出现这条请求，就说明接上了',
-  'access.interface.openLogs': '查看请求记录',
 
   // ========== 页面 · 逻辑模型 ==========
   'logicalModels.title': '逻辑模型',
@@ -624,7 +606,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'providers.dialog.endpointsDescription': '开启某个协议并填入默认地址；添加模型选择该协议时如不覆盖则沿用此地址。',
   'providers.dialog.save': '保存修改',
   'providers.dialog.submit': '创建供应商',
-  'providers.dialog.quickSelect': '快速选择',
   'providers.fields.name': '供应商名称',
   'providers.fields.namePlaceholder': '例如：OpenAI / DeepSeek',
   'providers.fields.websiteHint': '官网：',
@@ -682,6 +663,8 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'models.dialog.editTitle': '编辑供应商模型',
   'models.dialog.descriptionPrefix': '模型属于供应商 ',
   'models.dialog.descriptionSuffix': '，可配置多个协议接口',
+  'models.dialog.providerLabel': '供应商',
+  'models.dialog.providerPlaceholder': '选择一个供应商',
   'models.dialog.modelIdLabel': '模型 ID',
   'models.dialog.modelIdHint': '这是上游供应商识别的模型名称，请求会原样转发。',
   'models.dialog.modelIdPlaceholder': '例如：gpt-4o / claude-3-5-sonnet-20241022',
@@ -1595,6 +1578,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // ========== 页面 · 客户端配置 ==========
   'clientConfig.title': '客户端配置',
   'clientConfig.description': '把本机某个 Agent 客户端的配置直接改成指向 One Switch，每次改动前都会留一份可回退的版本。',
+  'clientConfig.editor.title': '配置客户端',
+  'clientConfig.editor.description': '选一个你在用的工具，直接把配置改成指向本机服务。',
+  'clientConfig.selectClient': '选择客户端',
   'clientConfig.list.title': 'Agent 客户端',
   'clientConfig.list.description': '一行一个本机客户端；点进去看并编辑它读取的配置文件。',
   'clientConfig.list.coverage': '配置状态',
@@ -1612,9 +1598,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'clientConfig.fill.skipped': '{count} 个跳过',
   'clientConfig.fill.failed': '{count} 个失败',
   'clientConfig.loadFailed': '读取配置文件失败。',
-  'clientConfig.manual.access.title': '接口地址与密钥',
+  'clientConfig.manual.access.title': '接口地址',
   // 说话对象是「列表里没有的工具」：它不需要知道我们的客户端清单长什么样，只需要知道填什么。
-  'clientConfig.manual.access.description': '下面清单以外的工具也接得上：把这两个值填进它自己的配置',
+  'clientConfig.manual.access.description': '下面清单以外的工具也接得上：把这个地址填进它自己的配置',
   'clientConfig.step.file': '配置文件',
   'clientConfig.step.values': '要写入的模型',
   'clientConfig.detail.description': '地址与密钥按本机服务固定写入，你只需要决定模型名；每次改动都会留一份可回退的版本。',
@@ -1719,42 +1705,28 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'errors.CLOUD_SYNC_REMOTE_FILE_INVALID': '远端的 {fileName} 不是合法的 JSON：它可能被手改坏了，重新上传一次就能覆盖',
 
   // ========== 新用户引导 ==========
-  // 引导是一条三步直线：怎么选路 → 拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
+  // 引导是一条两步直线：拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
+  // 选路不单独成步：内建默认已经在下，新手先跑起来，路由细节去「路由」页再调。
   // 步骤名在步进器里单独出现、没有上下文，所以 label 要能独立成词；title 才是那一屏的完整问法。
   'onboarding.eyebrow': '新手引导',
-  'onboarding.title': '三步搭好本地网关',
+  'onboarding.title': '两步搭好本地网关',
   'onboarding.progressLabel': '引导进度',
   'onboarding.action.previous': '上一步',
   'onboarding.action.next': '下一步',
   'onboarding.action.skip': '跳过',
   'onboarding.action.finish': '完成',
   'onboarding.topbar.language': '界面语言',
-  'onboarding.step.routeMode.label': '选路',
-  'onboarding.step.routeMode.title': '请求按什么选路？',
-  'onboarding.step.routeMode.description': '两种模式选一个。两份配置各自独立保存，来回切换不会丢掉在另一边配好的东西。',
-  // 结论先摆出来：这一步的困惑从来不是「选哪个」，而是「我是不是必须选」。默认已经有一套在跑。
-  'onboarding.step.routeMode.defaultHint': '这一步不选也行：已经有一套内置默认在按它跑。想换个起点再选。',
-  'onboarding.step.routeMode.traits.expand': '对比两种模式',
-  'onboarding.step.routeMode.traits.collapse': '收起对比',
-  'onboarding.step.routeMode.planTitle': '内置方案',
-  'onboarding.step.routeMode.planDescription':
-    '挑一套直接用。点一下立刻生效，之后想改去「路由」页接着编。',
-  'onboarding.step.routeMode.planApplied': '已套用「{name}」并保存为 v{version}',
-  // 方案名自带信息量，四段说明是补语；要看的人点开，不看的人不被四段话压着。
-  'onboarding.step.routeMode.plans.expand': '每套方案是做什么的',
-  'onboarding.step.routeMode.plans.collapse': '收起说明',
   'onboarding.step.models.label': '模型',
   'onboarding.step.models.title': '请求发到哪里？',
-  'onboarding.step.models.description': '添加一个上游供应商：选预设把地址填好，再填上 API Key，然后拉取并勾选要用的模型。',
+  'onboarding.step.models.description': '选一个内置供应商把地址填好，也可以从零开一个；填上 API Key，然后拉取并勾选要用的模型。',
   'onboarding.step.configure.label': '接工具',
   'onboarding.step.configure.title': '把工具指到这个地址',
   'onboarding.step.configure.description': '填进你正在用的客户端，或者交给客户端配置页代抄，请求就会经过本地服务。',
+  'onboarding.models.addProvider': '添加供应商',
   'onboarding.models.customProvider': '自定义供应商',
   'onboarding.models.addModel': '添加模型',
   'onboarding.models.connectedTitle': '已接入的供应商',
-  'onboarding.models.empty': '还没有供应商。先在上面选一个预设，把第一个加上。',
-  // 只在「有供应商、还没模型」时出现：那才是用户真的会停下来的位置。
-  'onboarding.models.nextAddModel': '点上面的「添加模型」，从这家拉取模型清单，再勾选要用的。',
+  'onboarding.models.empty': '还没有供应商。选一个，建起第一个。',
   'onboarding.models.modelCount': '{count} 个模型',
   'onboarding.settings.restart': '重新运行引导',
   'onboarding.settings.restartDescription': '再走一遍这几步的配置引导。',

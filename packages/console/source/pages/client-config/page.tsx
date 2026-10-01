@@ -22,11 +22,12 @@ import { describeFill, firstFillError } from './lib/fill-summary'
  * 所以主版面是一张客户端列表——一行一个，左边是图标与名字，右边是配置覆盖状态、最近更新时间
  * 与版本数，点任意一行进详情看那份文件的原文与历史，右上角一颗「一键生效」把能自动改的一次性改完。
  *
- * 列表上面**一张**参考卡，两段各回答一件事：
- * 「要填的值」（地址 + 密钥，能照抄）与「受理面」（哪些路径算接上了）。
- * 两段合成一张卡，是因为它们回答的是同一个问题——「我手上的工具不在下面这份名单里，怎么办」。
- * 并排摆成两张卡时，这一页的顶部会先出现两套卡头、两段说明、两条边线，读者要读四段文字
- * 才能回到正文（列表）；合成一张后，同一块版面只有一个卡头、一条收尾行，折叠的那一段默认收起。
+ * 列表上面**并排两张**参考卡，回答同一个问题——「我手上的工具不在下面这份名单里，怎么办」：
+ * 左边「要填的值」（接口地址 + API Key，能照抄），右边「支持哪些接口」（哪些路径算接上了）。
+ * 两张卡平级摆开，而不是叠成一张、把受理面收进收尾行：这一页的正文是客户端列表，
+ * 参考信息是读者横向扫一眼就对上的东西，左值右接口正好是最短的查找路径。
+ * 地址与密钥在左边那张卡里各占一整行——它们是两件并列的事（地址必填、密钥可留空），
+ * 值收进凹槽、行尾各给一个复制入口，比横向再拆栏更好读（左卡只有半页宽，拆栏后长地址必然折行）。
  *
  * 参考卡不写任何工具名（与引导页同一个规矩）：能接的是协议，不是我们认识的牌子，
  * 列名字等于替用户判断他手上的工具在不在其中。
@@ -74,18 +75,22 @@ export function ClientConfigPage() {
 
       <PageContent>
         {/*
-          参考卡与列表的读取状态无关：读不到列表时它照样成立，也不是「空列表」的替身。
-          两个值（地址 + 密钥）在上、受理面收在下：用户是来抄值的，受理面是「接不上时回来对一下」的东西。
+          两张参考卡与列表的读取状态无关：读不到列表时它们照样成立，也不是「空列表」的替身。
+          左「要填的值」、右「支持哪些接口」，都是读者横向扫一眼就能对上号的东西。
+          两卡等高（`items-stretch` 是网格默认值，这里写出来是为了顶掉原来的 `items-start`）：
+          内容一多一少时，两张卡底边不齐会显得整块版面缺了一角，而它们本来就是一组的左右两半。
         */}
-        <AddressCard
-          origin={access.origin}
-          copiedKey={copiedKey}
-          onCopy={copy}
-          title={t('clientConfig.manual.access.title')}
-          description={t('clientConfig.manual.access.description')}
-          showModelName={false}
-          footer={<InterfaceTableCard variant="flat" />}
-        />
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          <AddressCard
+            origin={access.origin}
+            copiedKey={copiedKey}
+            onCopy={copy}
+            title={t('clientConfig.manual.access.title')}
+            description={t('clientConfig.manual.access.description')}
+            layout="cards"
+          />
+          <InterfaceTableCard />
+        </div>
 
         {status.error ? (
           /*

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { providerApi } from '@/api/providers'
 import { providerModelApi } from '@/api/models'
@@ -6,30 +6,39 @@ import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import type { FetchedProviderModel } from '@/api/providers'
-import type { ProviderModelRoute } from '@common/schemas'
+import type { Provider, ProviderModelRoute } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
 import type { ProtocolEndpointEntry } from './types'
 
 interface UseModelDialogOptions {
-  selectedProvider: { id: string } | undefined
+  providers: Provider[]
   models: ProviderModelRoute[]
+  selectedProvider: { id: string } | undefined
   reload: () => Promise<void>
 }
 
 export function useModelDialog(options: UseModelDialogOptions) {
-  const { selectedProvider, models, reload } = options
+  const { providers, models, selectedProvider, reload } = options
   const toast = useToast()
   const t = useTranslation()
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [editingModel, setEditingModel] = useState<ProviderModelRoute | null>(null)
+  // 对话框自己记着「这次给哪个供应商加模型」，而不是看侧栏选中的那一个：
+  // 从某个供应商行上直接点「添加模型」时，目标就是那一行，跟当前选中谁无关。
+  const [dialogProviderId, setDialogProviderId] = useState('')
   const [modelId, setModelId] = useState('')
   const [protocolEntries, setProtocolEntries] = useState<ProtocolEndpointEntry[]>([])
   const [fetchedModels, setFetchedModels] = useState<FetchedProviderModel[]>([])
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
 
-  const openModelDialog = useCallback((model?: ProviderModelRoute) => {
+  const dialogProvider = useMemo(() => providers.find(provider => provider.id === dialogProviderId), [providers, dialogProviderId])
+  const dialogModels = useMemo(() => models.filter(model => model.providerId === dialogProviderId).sort((a, b) => a.priority - b.priority), [models, dialogProviderId])
+  const selectDialogProvider = useCallback((providerId: string) => setDialogProviderId(providerId), [])
+
+  const openModelDialog = useCallback((model?: ProviderModelRoute, providerId?: string) => {
     setEditingModel(model ?? null)
+    setDialogProviderId(model?.providerId ?? providerId ?? selectedProvider?.id ?? '')
     setModelId(model?.modelName ?? '')
     setFetchedModels([])
     setSelectedModelIds([])
@@ -40,12 +49,12 @@ export function useModelDialog(options: UseModelDialogOptions) {
         : { protocol: option.value, enabled: false, overrideUrl: false, endpointUrl: '', protocolConversionEnabled: false }
     }))
     setModelDialogOpen(true)
-  }, [])
+  }, [selectedProvider])
 
   const closeModelDialog = useCallback(() => setModelDialogOpen(false), [])
 
   const fetchModels = useCallback(async () => {
-    if (!selectedProvider) return
+    if (!dialogProvider) return
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
     const sourceEntries: ProtocolEndpointEntry[] = enabledEntries.length > 0
       ? enabledEntries
@@ -60,7 +69,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
     try {
       const results = await Promise.all(sourceEntries.map(entry => providerApi.fetchModels({
         protocol: entry.protocol,
-        providerId: selectedProvider.id,
+        providerId: dialogProvider.id,
         ...(entry.overrideUrl && entry.endpointUrl.trim() ? { baseUrl: entry.endpointUrl.trim() } : {}),
       })))
       const merged = new Map<string, FetchedProviderModel>()
@@ -71,7 +80,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
       if (merged.size === 0) { toast.error(t('models.toast.fetchEmpty')); return }
       setFetchedModels([...merged.values()].sort((a, b) => a.id.localeCompare(b.id)))
     } finally { setFetchingModels(false) }
-  }, [protocolEntries, selectedProvider, toast, t])
+  }, [protocolEntries, dialogProvider, toast, t])
 
   const updateProtocolEntry = useCallback((index: number, patch: Partial<ProtocolEndpointEntry>) => {
     setProtocolEntries(current => current.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
@@ -108,7 +117,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
   }, [])
 
   const saveMutation = useMutation({ mutationFn: async () => {
-    if (!selectedProvider) throw new Error(t('models.error.providerRequired'))
+    if (!dialogProvider) throw new Error(t('models.error.providerRequired'))
     const enabledEntries = protocolEntries.filter(entry => entry.enabled)
     if (enabledEntries.length === 0) throw new Error(t('models.error.modelRequired'))
     const endpoints = enabledEntries.map(entry => ({ protocol: entry.protocol, endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '', customAuthHeader: null, protocolConversionEnabled: entry.protocolConversionEnabled }))
@@ -118,14 +127,14 @@ export function useModelDialog(options: UseModelDialogOptions) {
       return { createdCount: 0, skippedCount: 0, updated: true }
     }
 
-    const existingNames = new Set(models.map(model => model.modelName))
+    const existingNames = new Set(dialogModels.map(model => model.modelName))
     const targets = (selectedModelIds.length > 0 ? selectedModelIds : [modelId.trim()])
       .map(id => id.trim())
       .filter(Boolean)
 
     if (targets.length === 0) throw new Error(t('models.error.modelRequired'))
 
-    let nextPriority = models.length ? Math.max(...models.map(model => model.priority)) + 1 : 1
+    let nextPriority = dialogModels.length ? Math.max(...dialogModels.map(model => model.priority)) + 1 : 1
     let createdCount = 0
     let skippedCount = 0
 
@@ -134,7 +143,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
         skippedCount += 1
         continue
       }
-      await unwrap(providerModelApi.create({ providerId: selectedProvider.id, modelName: target, endpoints, logicalModelId: 'default', priority: nextPriority }))
+      await unwrap(providerModelApi.create({ providerId: dialogProvider.id, modelName: target, endpoints, logicalModelId: 'default', priority: nextPriority }))
       existingNames.add(target)
       nextPriority += 1
       createdCount += 1
@@ -154,5 +163,5 @@ export function useModelDialog(options: UseModelDialogOptions) {
     await reload()
   }, onError: error => toast.error(error.message) })
   const saveModel = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
-  return { modelDialogOpen, setModelDialogOpen, editingModel, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, selectAllFetchedModels, invertFetchedModels, clearSelectedModels, updateProtocolEntry, openModelDialog, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
+  return { modelDialogOpen, setModelDialogOpen, editingModel, dialogProvider, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, selectAllFetchedModels, invertFetchedModels, clearSelectedModels, updateProtocolEntry, openModelDialog, selectDialogProvider, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
 }

@@ -16,7 +16,7 @@ import { z } from 'zod'
  *
  * 不是密钥：OSW 不签发调用方凭证，本地服务也不校验鉴权（见 `apps/docs/specs/security-privacy.md`），
  * 这个值只在转发时被换成渠道自己的密钥。写入客户端配置时由服务端就地取用，不需要用户填；
- * 唯一会把它摆到台面上的地方是引导页第三步的「要填的值」，那里得给用户一个能照抄的字符串。
+ * 唯一会把它摆到台面上的地方是引导页第二步的「要填的值」，那里得给用户一个能照抄的字符串。
  */
 export const CLIENT_CONFIG_SAMPLE_API_KEY = 'sk-osw'
 

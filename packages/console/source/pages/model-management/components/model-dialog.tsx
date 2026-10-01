@@ -2,21 +2,27 @@ import { useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { FORM_DIALOG_BODY_CLASSNAME, FormField, FormGroup, FormHint } from '@/components/form-kit'
+import { FormField, FormGroup, FormHint, FORM_DIALOG_BODY_CLASSNAME } from '@/components/form-kit'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
 import { FetchedModelPicker } from './fetched-model-picker'
 import { ModelProtocolEndpointCard } from './model-protocol-endpoint-card'
 import { ProviderRuleBindings } from './provider-rule-bindings'
+import { ProviderIcon } from './provider-icon'
 import type { FetchedProviderModel } from '@/api/providers'
+import type { Provider } from '@common/schemas'
 import type { ProtocolEndpointEntry } from '../hooks/types'
 
 interface ModelDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   editingModel: { id: string; modelName: string } | null
+  providers: Provider[]
+  providerId: string
   providerName: string
+  onSelectProvider: (providerId: string) => void
   modelId: string
   protocolEntries: ProtocolEndpointEntry[]
   saving: boolean
@@ -39,7 +45,10 @@ export function ModelDialog(props: ModelDialogProps) {
     open,
     onOpenChange,
     editingModel,
+    providers,
+    providerId,
     providerName,
+    onSelectProvider,
     modelId,
     protocolEntries,
     saving,
@@ -83,6 +92,32 @@ export function ModelDialog(props: ModelDialogProps) {
         </DialogHeader>
 
         <div className={FORM_DIALOG_BODY_CLASSNAME}>
+          {/* 供应商：新建时可选，也可以直接把供应商改成另一家；编辑已有模型时不让换家
+              （换家等于换一个模型，应该新建），这里只当一行只读说明。 */}
+          {editingModel ? (
+            <FormField label={t('models.dialog.providerLabel')}>
+              <Input value={providerName} readOnly disabled />
+            </FormField>
+          ) : (
+            <FormField label={t('models.dialog.providerLabel')} htmlFor="model-provider">
+              <Select value={providerId} onValueChange={onSelectProvider}>
+                <SelectTrigger id="model-provider" className="w-full">
+                  <SelectValue placeholder={t('models.dialog.providerPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.map(provider => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      <span className="inline-flex items-center gap-2">
+                        <ProviderIcon name={provider.name} size={16} />
+                        {provider.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          )}
+
           {/* 模型 ID */}
           <FormField label={t('models.dialog.modelIdLabel')} htmlFor="model-id" hint={t('models.dialog.modelIdHint')}>
             <div className="flex flex-col gap-2 sm:flex-row">

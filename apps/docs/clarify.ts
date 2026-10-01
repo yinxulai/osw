@@ -91,7 +91,7 @@ export default defineConfig({
             icon: 'Rocket',
             pages: [
               { page: 'getting-started/installation', title: zh('安装与启动', 'Install & run'), icon: 'Download' },
-              { page: 'getting-started/quick-start', title: zh('三步搭好网关', 'Three steps to a gateway'), icon: 'Flag' },
+              { page: 'getting-started/quick-start', title: zh('两步搭好网关', 'Two steps to a gateway'), icon: 'Flag' },
             ],
           },
           {

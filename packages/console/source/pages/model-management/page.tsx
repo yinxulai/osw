@@ -175,7 +175,10 @@ export function ModelManagementPage() {
         open={service.modelDialogOpen}
         onOpenChange={service.setModelDialogOpen}
         editingModel={service.editingModel}
-        providerName={service.selectedProvider?.name ?? ''}
+        providers={service.providers}
+        providerId={service.dialogProvider?.id ?? ''}
+        providerName={service.dialogProvider?.name ?? ''}
+        onSelectProvider={service.selectDialogProvider}
         modelId={service.modelId}
         protocolEntries={service.protocolEntries}
         saving={service.saving}

@@ -101,7 +101,7 @@ export function createProtocolAuthHeaders(protocol: Protocol, apiKey: string | n
  * 这份清单是**契约**而不是文档：它描述的是「这个服务对外长什么样」，这件事既不属于某一个宿主，
  * 也不属于实现细节。放在契约层之后，它可以被两边的测试各守一半——代理侧断言自己的注册表与它
  * 逐条一致（`packages/core/source/proxy/protocols/interface-surface.test.ts`），
- * 界面侧照着它渲染那张接口表（`packages/console/source/components/interface-table-card.tsx`，引导第三步与
+ * 界面侧照着它渲染那张接口表（`packages/console/source/components/interface-table-card.tsx`，引导第二步与
  * 客户端配置页共用）。于是「说明书过期」不再靠人记得同步，
  * 而是编译或测试直接失败。
  *

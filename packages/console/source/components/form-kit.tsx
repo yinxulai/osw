@@ -147,7 +147,8 @@ export function FormSection(props: FormSectionProps) {
 type FormRowProps = {
   title: ReactNode
   description?: ReactNode
-  control: ReactNode
+  /** 右侧控件；不传就是一条纯说明行（只有标题与说明，右端留空）。 */
+  control?: ReactNode
   error?: ReactNode
   className?: string
 }
@@ -166,7 +167,7 @@ export function FormRow(props: FormRowProps) {
         {description && <p className="mt-0.5 system-xs-regular text-text-tertiary">{description}</p>}
         {error && <p className="mt-0.5 system-xs-regular text-text-destructive">{error}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">{control}</div>
+      {control ? <div className="flex shrink-0 items-center gap-2">{control}</div> : null}
     </div>
   )
 }
