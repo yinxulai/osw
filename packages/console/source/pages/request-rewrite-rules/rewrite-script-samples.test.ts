@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { REWRITE_SCRIPT_SAMPLES, defaultRewriteScript } from './rewrite-script-samples'
+import { REWRITE_SCRIPT_SAMPLES, defaultRewriteScript, rewriteScriptSamplesForStage, shouldReseedScript } from './rewrite-script-samples'
 
 const CJK = /[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]/
 
@@ -42,5 +42,28 @@ describe('脚本示例', () => {
   it('切到脚本时的起始脚本按阶段区分，且与对应基线一致', () => {
     expect(defaultRewriteScript('request')).toBe(REWRITE_SCRIPT_SAMPLES.find(sample => sample.id === 'request-baseline')?.code)
     expect(defaultRewriteScript('response')).toBe(REWRITE_SCRIPT_SAMPLES.find(sample => sample.id === 'response-baseline')?.code)
+  })
+
+  it('示例按阶段成对：两个阶段都有条目，且下拉只列当前阶段', () => {
+    const request = rewriteScriptSamplesForStage('request')
+    const response = rewriteScriptSamplesForStage('response')
+    // 两个阶段都非空：只给请求示例，就是「响应脚本没得选」的那半个空缺。
+    expect(request.length).toBeGreaterThan(0)
+    expect(response.length).toBeGreaterThan(0)
+    // 过滤不能泄漏另一个阶段的条目，否则请求脚本会插入一段只在响应阶段才跑的代码。
+    expect(request.every(sample => sample.stage === 'request')).toBe(true)
+    expect(response.every(sample => sample.stage === 'response')).toBe(true)
+    expect(request.length + response.length).toBe(REWRITE_SCRIPT_SAMPLES.length)
+  })
+
+  it('切阶段只在「还没动过基线」时重填起始脚本', () => {
+    // 编辑器里还是请求阶段的默认基线：切到响应阶段应当换成响应基线，否则起点跑不通。
+    expect(shouldReseedScript(defaultRewriteScript('request'), 'request', 'response')).toBe(true)
+    // 用户改过几笔：那是他的劳动，切阶段不能冲掉。
+    expect(shouldReseedScript('return { body: { ...body, temperature: 1 } }', 'request', 'response')).toBe(false)
+    // 同一个阶段之间切换本就不该动它。
+    expect(shouldReseedScript(defaultRewriteScript('response'), 'response', 'response')).toBe(false)
+    // 没选目标时 code 为空，同样不重填。
+    expect(shouldReseedScript(undefined, 'request', 'response')).toBe(false)
   })
 })

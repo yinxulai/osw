@@ -13,7 +13,7 @@ import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT } from '@common/schemas'
 import type { SchemaFieldDescriptor } from '@common/router/types'
-import { defaultRewriteScript, REWRITE_SCRIPT_SAMPLES } from '../rewrite-script-samples'
+import { defaultRewriteScript, rewriteScriptSamplesForStage, shouldReseedScript } from '../rewrite-script-samples'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
 
 const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
@@ -159,7 +159,15 @@ export function ActionEditor(props: ActionEditorProps) {
             <div key={action.id} className="rounded-lg border border-module-border p-3">
               <div className="flex flex-wrap items-center gap-1.5 pb-3">
                 <span className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md bg-inset font-mono system-2xs-medium text-text-tertiary">{index + 1}</span>
-                <Select value={action.stage} onValueChange={value => updateAction(action.id, { stage: value as 'request' | 'response' })}>
+                <Select value={action.stage} onValueChange={value => {
+                  const stage = value as 'request' | 'response'
+                  // 阶段改了，起始脚本也该跟着换：请求基线和响应基线读的是两个不一样的报文，
+                  // 把请求脚本留在响应阶段等于给用户一个跑不通的起点。是否替换由 `shouldReseedScript`
+                  // 判定——只有编辑器里还是「原阶段的默认基线」（用户没动过）时才换。
+                  updateAction(action.id, shouldReseedScript(action.code, action.stage, stage)
+                    ? { stage, code: defaultRewriteScript(stage) }
+                    : { stage })
+                }}>
                   <SelectTrigger aria-label={t('rules.actions.stageAria', { index: index + 1 })}><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="request">{t('rules.stage.request')}</SelectItem><SelectItem value="response">{t('rules.stage.response')}</SelectItem></SelectContent>
                 </Select>
@@ -184,7 +192,7 @@ export function ActionEditor(props: ActionEditorProps) {
                       {t('rules.actions.scriptSampleLabel')}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" sideOffset={6} className="w-80 min-w-80">
-                      {REWRITE_SCRIPT_SAMPLES.map(sample => (
+                      {rewriteScriptSamplesForStage(action.stage).map(sample => (
                         <DropdownMenuItem
                           key={sample.id}
                           onSelect={() => updateAction(action.id, { code: sample.code })}

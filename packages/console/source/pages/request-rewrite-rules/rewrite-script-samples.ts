@@ -8,13 +8,16 @@
  */
 
 export {
-  CONDITIONAL_CODE,
+  CONDITIONAL_REQUEST_CODE,
+  CONDITIONAL_RESPONSE_CODE,
   defaultRewriteScript,
   DROP_BODY_FIELD_CODE,
-  FILTER_HEADERS_CODE,
   PRESET_CONDITIONAL_SCRIPT_CODE,
   REQUEST_BASELINE_CODE,
   RESPONSE_BASELINE_CODE,
   REWRITE_SCRIPT_SAMPLES,
+  rewriteScriptSamplesForStage,
+  shouldReseedScript,
+  STRIP_REASONING_CODE,
 } from '@common/rewrite-script-samples'
 export type { RewriteScriptSample, RewriteScriptStage } from '@common/rewrite-script-samples'

@@ -55,33 +55,37 @@ const FIXTURES: Record<string, ScriptFixture> = {
     body: { model: 'demo', temperature: 1 },
     expect: ({ body }) => { expect((body as { temperature: number }).temperature).toBe(0) },
   },
+  'drop-body-field': {
+    stage: 'request',
+    body: { messages: [{ role: 'user' }], keep: 1 },
+    expect: ({ body }) => {
+      expect(body).toEqual({ keep: 1 })
+      expect(Object.hasOwn(body as object, 'messages')).toBe(false)
+    },
+  },
+  'conditional-request': {
+    stage: 'request',
+    body: { marker: 'apply-strict', temperature: 1 },
+    expect: ({ body }) => { expect((body as { temperature: number }).temperature).toBe(0) },
+  },
   'response-baseline': {
     stage: 'response',
     body: { id: 'abc', choices: [] },
     expect: ({ body }) => { expect((body as { id: string }).id).toBe('rw-abc') },
   },
-  'drop-body-field': {
-    stage: 'request',
-    body: { metadata: { source: 'old' }, keep: 1 },
+  'strip-reasoning': {
+    stage: 'response',
+    body: { id: 'r1', choices: [{ message: { content: 'hi', reasoning_content: 'secret' } }] },
     expect: ({ body }) => {
-      expect(body).toEqual({ keep: 1 })
-      expect(Object.hasOwn(body as object, 'metadata')).toBe(false)
+      const choice = (body as { choices: Array<{ message: Record<string, unknown> }> }).choices[0]
+      expect(Object.hasOwn(choice.message, 'reasoning_content')).toBe(false)
+      expect(choice.message.content).toBe('hi')
     },
   },
-  'filter-headers': {
-    stage: 'request',
-    body: {},
-    headers: { 'X-Debug': '1', 'X-Internal-Trace': '2', 'X-Keep': 'yes' },
-    expect: ({ headers }) => {
-      expect(headers['X-Keep']).toBe('yes')
-      expect(Object.keys(headers).map(key => key.toLowerCase())).not.toContain('x-debug')
-      expect(Object.keys(headers).map(key => key.toLowerCase())).not.toContain('x-internal-trace')
-    },
-  },
-  conditional: {
-    stage: 'request',
-    body: { marker: 'apply-strict', temperature: 1 },
-    expect: ({ body }) => { expect((body as { temperature: number }).temperature).toBe(0) },
+  'conditional-response': {
+    stage: 'response',
+    body: { id: 'abc', choices: [] },
+    expect: ({ body }) => { expect((body as { id: string }).id).toBe('rw-abc') },
   },
 }
 
@@ -112,10 +116,17 @@ describe('内置脚本执行', () => {
     fixture.expect(outcome)
   })
 
-  it('条件示例在不命中时保持原样（不 return 即整条不改动）', () => {
-    const outcome = run(REWRITE_SCRIPT_SAMPLES.find(sample => sample.id === 'conditional')!.code, 'request', { temperature: 1 })
+  it('请求条件示例不命中时保持原样（不 return 即整条不改动）', () => {
+    const outcome = run(REWRITE_SCRIPT_SAMPLES.find(sample => sample.id === 'conditional-request')!.code, 'request', { temperature: 1 })
     expect(outcome.applied).toEqual(['builtin-script'])
     expect(outcome.body).toEqual({ temperature: 1 })
+  })
+
+  it('响应条件示例对失败的响应放行——「不 return」的语义在响应阶段同样成立', () => {
+    const code = REWRITE_SCRIPT_SAMPLES.find(sample => sample.id === 'conditional-response')!.code
+    const outcome = run(code, 'response', { error: { message: 'boom' } })
+    expect(outcome.applied).toEqual(['builtin-script'])
+    expect(outcome.body).toEqual({ error: { message: 'boom' } })
   })
 
   it('规则模板自带的脚本真正执行且两种分支都成立', () => {
