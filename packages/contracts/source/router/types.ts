@@ -694,9 +694,11 @@ export const FIELD_OPERAND_OPERATORS: ConditionOperator[] = ['equals', 'notEqual
  * 而列表里真正要显示的只有「第几版 / 什么时候 / 几个节点」。
  */
 export interface RouterGraphVersionSummary {
-  /** 单调递增的版本号（v1、v2 …），也就是「恢复这个版本」时要传的号 */
+  /** **数据记录 id**：这一版的身份，读/恢复某一版时传它 */
+  id: string
+  /** 展示用的版本号（v1、v2 …），单调递增，只用来在界面上标「第几版」 */
   version: number
-  /** 用户给这一版起的名字；没起名时是空字符串（版本的身份是 `version`，不需要唯一的名字） */
+  /** 用户给这一版起的名字；没起名时是空字符串 */
   name: string
   /** 这次保存给版本写的说明；没写时是空字符串 */
   description: string
@@ -717,7 +719,9 @@ export const UNSAVED_ROUTER_GRAPH_VERSION = 0
 /** 当前生效的路由图：代理运行时读的就是这一份（一版都没保存过时是内建默认策略）。 */
 export interface RouterGraphSnapshot {
   graph: WorkflowGraph
-  /** 版本号；内建默认策略固定为 `UNSAVED_ROUTER_GRAPH_VERSION` */
+  /** 这一版的记录 id；内建默认策略不属于任何已保存版本，为 `null` */
+  id: string | null
+  /** 展示用的版本号；内建默认策略固定为 `UNSAVED_ROUTER_GRAPH_VERSION` */
   version: number
   /** 保存时间（epoch 毫秒）；内建默认策略（版本号 0）没有保存时间，为 0 */
   savedAt: number

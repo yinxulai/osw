@@ -13,9 +13,9 @@ import type { RuntimeLogicalModel } from '@common/router/types'
 import { closeDatabases, initDatabases } from './index'
 import { listLogicalModels } from './logical-model-store'
 import {
-  ROUTE_RULE_TYPE,
   listRouteRuleSetVersions,
   readRouteRuleSetVersion,
+  readRouteRuleSetVersionByNumber,
   readRouteRuleSnapshot,
   resolveRouteRuleSet,
   saveRouteRuleSetVersion,
@@ -49,8 +49,9 @@ function ruleSetWithMarker(marker: string): RouteRuleSet {
 }
 
 async function countRows(): Promise<number> {
-  const { listWorkflows } = await import('./workflow-store')
-  return (await listWorkflows()).filter(record => record.type === ROUTE_RULE_TYPE).length
+  const { getConfigDb } = await import('./index')
+  const { routeRuleSets } = await import('./config-schema')
+  return getConfigDb().select().from(routeRuleSets).all().length
 }
 
 describe('route rule store', () => {
@@ -76,6 +77,7 @@ describe('route rule store', () => {
 
     const second = await saveRouteRuleSetVersion(ruleSetWithMarker('v2-'), '第二版', undefined)
     expect(second).toMatchObject({ version: 2, created: true, name: '第二版', description: '' })
+    expect(first.id).not.toBe(second.id)
 
     // 版本列表新的在前，两个版本都在（保存不是原地改写）。
     const versions = await listRouteRuleSetVersions()
@@ -83,15 +85,17 @@ describe('route rule store', () => {
     expect(versions.map(summary => summary.name)).toEqual(['第二版', '第一版'])
     expect(await countRows()).toBe(2)
 
-    // 代理此刻执行的是第二版，旧版仍然可按版本号取回来。
+    // 代理此刻执行的是第二版，旧版仍然可按记录 id 取回来。
     const resolved = await resolveRouteRuleSet()
     expect(resolved.version).toBe(2)
     expect(isSameRouteRuleSet(resolved.ruleSet, ruleSetWithMarker('v2-'))).toBe(true)
 
-    const rolledBack = await readRouteRuleSetVersion(1)
+    const rolledBack = await readRouteRuleSetVersion(first.id)
     expect(rolledBack?.version).toBe(1)
     expect(isSameRouteRuleSet(rolledBack!.ruleSet, ruleSetWithMarker('v1-'))).toBe(true)
-    expect(await readRouteRuleSetVersion(99)).toBeNull()
+    expect(await readRouteRuleSetVersion('route_does_not_exist')).toBeNull()
+    // 按展示用的版本号也能找到同一行（恢复入口走的就是它）。
+    expect(await readRouteRuleSetVersionByNumber(1)).toMatchObject({ id: first.id, version: 1 })
   })
 
   it('内容与最新版一致时不再新增版本，名字与说明一并丢弃', async () => {
@@ -106,17 +110,17 @@ describe('route rule store', () => {
     expect(await countRows()).toBe(1)
   })
 
-  it('名字可以留空：版本的身份是版本号，不是名字', async () => {
+  it('名字可以留空：一个人认这一版靠的是记录 id，不是名字', async () => {
     await initTemporaryDatabase()
 
     const saved = await saveRouteRuleSetVersion(ruleSetWithMarker('anon-'), undefined, undefined)
 
     expect(saved).toMatchObject({ version: 1, created: true, name: '', description: '' })
-    // 名字空着也要能载回来：它是这一版的内容，不是它的标识。
-    expect(isSameRouteRuleSet((await readRouteRuleSetVersion(1))!.ruleSet, ruleSetWithMarker('anon-'))).toBe(true)
+    // 名字空着也要能载回来：它是这一版的内容，不是它的身份。
+    expect(isSameRouteRuleSet((await readRouteRuleSetVersion(saved.id))!.ruleSet, ruleSetWithMarker('anon-'))).toBe(true)
   })
 
-  it('与路由图共用同一张表，但双方各写各的行、各算各的版本号', async () => {
+  it('两种定义各住各的表：读规则表看不见图的版本行', async () => {
     await initTemporaryDatabase()
     const { saveRouterGraphVersion, listRouterGraphVersions, resolveRouterGraph } = await import('./router-graph-store')
     const { createDefaultPolicyGraph } = await import('@common/router/presets')
@@ -138,15 +142,14 @@ describe('route rule store', () => {
     expect(isSameRouteRuleSet((await resolveRouteRuleSet()).ruleSet, ruleSetWithMarker('r1-'))).toBe(true)
   })
 
-  it('跳过内容损坏的行，不和图的行串味，也不让损坏行把版本号顶住', async () => {
+  it('跳过内容损坏的行，也不让损坏行把版本号顶住', async () => {
     await initTemporaryDatabase()
     await saveRouteRuleSetVersion(ruleSetWithMarker('ok-'), '', '')
 
-    const { createWorkflow } = await import('./workflow-store')
+    const { getConfigDb } = await import('./index')
+    const { routeRuleSets } = await import('./config-schema')
     // 手工塞一行损坏的规则表（历史数据或手改过的记录），版本号排在可解析那一行之上。
-    await createWorkflow({ type: ROUTE_RULE_TYPE, version: 2, name: '', description: '', definition: { version: 1, rules: 'not-an-array' } })
-    // 同一张表里的图版本行不该被规则表的读取看见。
-    await createWorkflow({ type: 'router', version: 9, name: '这是图', description: '', definition: { version: 1, nodes: [], edges: [] } })
+    getConfigDb().insert(routeRuleSets).values({ id: 'route_corrupt', version: 2, name: '', description: '', definition: JSON.stringify({ version: 1, rules: 'not-an-array' }), createdTime: 0, updatedTime: 0 }).run()
 
     // 最新那一行坏了也不能把整个读取拖下水：退回下一行可解析的规则表。
     expect((await readRouteRuleSnapshot())?.version).toBe(1)
@@ -157,7 +160,7 @@ describe('route rule store', () => {
     expect((await saveRouteRuleSetVersion(ruleSetWithMarker('next-'), '', ''))).toMatchObject({ version: 3, created: true })
   })
 
-  it('超出上限时从最旧的开始丢，历史行还在但不再参与读取', async () => {
+  it('超出上限时列表只展示最近若干版，更旧的行还在库里', async () => {
     await initTemporaryDatabase()
 
     for (let index = 1; index <= MAX_ROUTE_RULE_VERSIONS + 2; index += 1) {
@@ -168,7 +171,7 @@ describe('route rule store', () => {
     expect(versions).toHaveLength(MAX_ROUTE_RULE_VERSIONS)
     expect(versions[0].version).toBe(MAX_ROUTE_RULE_VERSIONS + 2)
     expect(versions[versions.length - 1].version).toBe(3)
-    expect(await readRouteRuleSetVersion(2)).toBeNull()
-    expect(await countRows()).toBe(MAX_ROUTE_RULE_VERSIONS)
+    // 列表截断不是删除：行都还在库里，只是不再列出来。
+    expect(await countRows()).toBe(MAX_ROUTE_RULE_VERSIONS + 2)
   })
 })

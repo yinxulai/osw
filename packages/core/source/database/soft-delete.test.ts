@@ -94,7 +94,8 @@ describe('soft deletion', () => {
     ])
     expect(allSoftDeleted(converterRows(binding.id))).toBe(true)
 
-    // 唯一索引是部分索引（只约束 deletedTime IS NULL 的行），因此删除后可以再配同协议端点。
+    // 「同一供应商同协议只留一条活跃端点」由 store 保证（不做成唯一索引），因此删除后
+    // 可以再配同协议端点；再次配上的那一行就是原来那一行被复活。
     const recreated = await createProviderEndpoint({
       providerId: provider.id,
       protocol: 'openai-completions',
@@ -102,7 +103,12 @@ describe('soft deletion', () => {
       enabled: true,
     })
     expect(await listProviderEndpoints(provider.id)).toEqual([expect.objectContaining({ id: recreated.id })])
-    expect(endpointRows(provider.id)).toHaveLength(2)
+    // 同一协议再加回来是在**原来那一行上复活**（id 不变、地址与开关重新盖上），不是插一行新的：
+    // 删掉再加回来不该在表里留下一条看不见的历史行，而老行下面的绑定也重新连回同一个 id。
+    expect(recreated.id).toBe(binding.providerEndpointId)
+    expect(endpointRows(provider.id)).toEqual([
+      expect.objectContaining({ id: binding.providerEndpointId, enabled: true, deletedTime: null }),
+    ])
   })
 
   it('reuses binding rows when a route is re-saved and only soft-deletes what was removed', async () => {

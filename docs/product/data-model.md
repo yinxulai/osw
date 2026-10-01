@@ -491,10 +491,10 @@ CREATE TABLE provider_endpoints (
   deletedTime INTEGER
 );
 
--- 同一供应商同一协议只允许一条未删除的端点；软删除的行留在表里，
--- 因此唯一约束必须是部分索引，否则重新添加同一协议会撞上历史行。
-CREATE UNIQUE INDEX idx_provider_endpoints_provider_protocol_active
-  ON provider_endpoints(providerId, protocol) WHERE deletedTime IS NULL;
+-- 「同一供应商同一协议只留一条活跃端点」由应用层回答，不做成索引：
+-- 写成部分唯一索引就等于让删除路径去「让位」，而判据其实只是「现在有没有另一条活跃行占着」。
+CREATE INDEX idx_provider_endpoints_provider_protocol
+  ON provider_endpoints(providerId, protocol);
 CREATE INDEX idx_provider_endpoints_protocol
   ON provider_endpoints(protocol, enabled);
 CREATE INDEX idx_provider_endpoints_deleted_time
@@ -568,7 +568,7 @@ CREATE INDEX idx_scheduling_policies_deleted_time
 
 ### 3.7 `provider_models`、`provider_model_endpoints` 与 `protocol_converters`
 
-`provider_models` 是 Provider 上可被路由的真实模型配置。路由、启用和协议端点都是稳定且经常查询的字段，必须拆成列和子表，不再放进 JSON。ProviderModel 的 `modelName` 表示供应商 API 中的实际模型名；表自身的实体身份使用 `id`，其他表通过 `providerModelId` 引用。
+`provider_models` 是 Provider 上可被路由的真实模型配置。路由、启用和协议端点都是稳定且经常查询的字段，必须拆成列和子表，不再放进 JSON。ProviderModel 的 `modelName` 表示供应商 API 中的实际模型名；表自身的实体身份使用 `id`（`model_*`），其他表通过 `providerModelId` 引用。**同一个供应商下允许存在多条同名模型**：同一个模型接两个区域、两套密钥、两条不同端点是很正常的用法，两条记录各自绑自己的端点，靠 `id` 区分而不是靠名字。
 
 ```sql
 CREATE TABLE provider_models (
@@ -602,23 +602,25 @@ CREATE TABLE protocol_converters (
   deletedTime INTEGER
 );
 
-CREATE UNIQUE INDEX idx_provider_models_provider_model_active
-  ON provider_models(providerId, modelName) WHERE deletedTime IS NULL;
+CREATE INDEX idx_provider_models_provider_model
+  ON provider_models(providerId, modelName);
 CREATE INDEX idx_provider_models_enabled
   ON provider_models(providerId, enabled, deletedTime);
-CREATE UNIQUE INDEX idx_provider_model_endpoints_unique_active
-  ON provider_model_endpoints(providerModelId, providerEndpointId) WHERE deletedTime IS NULL;
+CREATE INDEX idx_provider_model_endpoints_unique
+  ON provider_model_endpoints(providerModelId, providerEndpointId);
 CREATE INDEX idx_provider_model_endpoints_provider_endpoint
   ON provider_model_endpoints(providerEndpointId, enabled);
 CREATE INDEX idx_provider_model_endpoints_deleted_time
   ON provider_model_endpoints(deletedTime);
-CREATE UNIQUE INDEX idx_protocol_converters_unique_active
-  ON protocol_converters(providerModelEndpointId, clientProtocol) WHERE deletedTime IS NULL;
+CREATE INDEX idx_protocol_converters_unique
+  ON protocol_converters(providerModelEndpointId, clientProtocol);
 CREATE INDEX idx_protocol_converters_protocol
   ON protocol_converters(clientProtocol, enabled);
 CREATE INDEX idx_protocol_converters_deleted_time
   ON protocol_converters(deletedTime);
 ```
+
+上面三张表里的三组「一对一关系」都由**应用层 + 原地复活**保证，都不做成唯一索引：`provider_models` 允许同一供应商下多条同名模型（同一个模型接两个区域、两套密钥是正常用法），`provider_model_endpoints` 与 `protocol_converters` 则由 store 先找活跃行、没有就找同一对键的历史行**原地复活**、都没有才插入新行。把「一条活跃行」写成部分唯一索引，等于把「删掉再加回来」的责任推给删除路径去腾位置；而真正的判据只是一句「现在有没有另一条活跃行占着这对键」，这句话本来就该在 store 里回答。
 
 端点解析规则：优先使用 `provider_model_endpoints.url`，为空时使用其 `providerEndpointId` 对应的 `provider_endpoints.url`；两者都没有地址时，这个协议按「未配置」处理，候选不可用。**两层都没有地址不许落库**：保存模型时直接报 `ENDPOINT_URL_MISSING`，把「哪个供应商的哪个协议缺地址」说清楚，而不是存一个打不出去的模型让用户在请求时才撞上。为此**也不允许用占位地址顶替空值**：占位值会被当成用户自己配的地址展示出来、被模型列表探测、被真实请求打出去，用户看到的只是一串自己没写过的 URL，完全不知道问题出在哪。协议始终来自 Provider 端点，不在端点绑定表重复保存。
 
@@ -1097,14 +1099,27 @@ CREATE TABLE provider_model_request_rewrite_rules (
   FOREIGN KEY (requestRewriteRuleId) REFERENCES request_rewrite_rules(id)
 );
 
--- 同一 ProviderModel 下，同一个 priority 只能有一条生效绑定
-CREATE UNIQUE INDEX idx_provider_model_request_rewrite_rule_priority_active
-  ON provider_model_request_rewrite_rules(providerModelId, priority)
-  WHERE deletedTime IS NULL;
+-- 绑定表主键为 (providerModelId, requestRewriteRuleId)：一条绑定要么在，要么不在。
+-- 「同一 ProviderModel 下 priority 不重复」由应用层把关（不做成索引）。
+CREATE TABLE provider_model_request_rewrite_rules (
+  providerModelId TEXT NOT NULL,
+  requestRewriteRuleId TEXT NOT NULL,
+  priority INTEGER NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER,
+
+  PRIMARY KEY (providerModelId, requestRewriteRuleId)
+);
+
+CREATE INDEX idx_provider_model_request_rewrite_rules_priority
+  ON provider_model_request_rewrite_rules(providerModelId, priority);
 
 CREATE INDEX idx_provider_model_request_rewrite_rules_deleted_time
   ON provider_model_request_rewrite_rules(deletedTime);
 
+-- 路由图：一行一版，只装 type = 'router'
 CREATE TABLE workflows (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -1114,22 +1129,41 @@ CREATE TABLE workflows (
   definition TEXT NOT NULL,
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
-  deletedTime INTEGER,
-
-  UNIQUE (type, version)
+  deletedTime INTEGER
 );
+
+CREATE INDEX idx_workflows_type_version
+  ON workflows(type, version);
 
 CREATE INDEX idx_workflows_type
   ON workflows(type, deletedTime);
 
 CREATE INDEX idx_workflows_deleted_time
   ON workflows(deletedTime);
+
+-- 路由规则表：一行一版，独立于 workflows
+CREATE TABLE route_rule_sets (
+  id TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  definition TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL
+);
+
+CREATE INDEX idx_route_rule_sets_version
+  ON route_rule_sets(version);
+
+CREATE INDEX idx_route_rule_sets_updated_time
+  ON route_rule_sets(updatedTime);
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
 - `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；日志级别与保留策略见 [observability.md](./observability.md)。
-- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
-- `workflows` 按 `type + version` 唯一保存路由定义，`definition` 是 JSON 文本，`version` 是这一份定义的版本号；`type = 'router'` 存工作流图，一行一版、版本号单调递增；`type = 'route-rules'` 存规则模式的规则表，**同样是每次保存一行、版本号各自从 1 单调递增**（上限 30 版），两种定义各写各的行、各算各的版本号，互不干扰；`name` 与 `description` 是用户在保存时给这一版写的人类注记，不参与任何运行时判定，也不承担唯一性 ——**版本的身份是 `version` 本身**，同名多版完全正常，两者留空即空串（不会自动填成 `Version N`）。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
+- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
+- `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
+- `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
 
 ## 4. JSON 文档版本
 
@@ -1261,7 +1295,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 | 库 | Store |
 | --- | --- |
-| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`request-rewrite-rule-store.ts` |
+| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`route-rule-store.ts`、`router-graph-store.ts`、`request-rewrite-rule-store.ts` |
 | 观测 | `health-store.ts`、`request-log-store.ts`、`analytics-store.ts`、`runtime-log-store.ts` |
 
 **不许为了「读起来方便」合并出一个跨库 store**：需要同时看配置和观测的用例（比如供应商详情页）由调用方分别取，或者先把一个库的结果算成一个小集合，再拿去过滤另一个库。这个约束由 `packages/core/scripts/check-database-boundaries.mjs` 断言——它是最容易被一次「顺手重构」破坏、又最难在运行时发现的边界（跨库 join 不报错，只会静默退化成两次全表扫）。
@@ -1285,10 +1319,11 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 理由很直接：`request_logs` 与 `request_attempts` 里保存的是 `providerId` / `providerModelId` / `logicalModelId` 这类标识。如果配置实体物理删除，历史请求就会指向一个不存在的行——「这条 3 天前的失败请求属于哪个供应商、哪个逻辑模型」将无法回答。历史请求本身仍要按保留策略物理删除（见下文），但它删除的是请求侧的行，不是被引用的配置行。
 
-软删除带来两条配套约束：
+软删除带来三条配套约束：
 
-1. **唯一约束必须写成部分唯一索引**（`... WHERE deletedTime IS NULL`）。软删除的行留在表里，如果沿用普通 `UNIQUE`，重新添加同一个协议端点、同一对绑定关系会直接撞上历史行而失败。
-2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`，因此它的「复活」天然是主键冲突更新。
+1. **业务唯一性一律由应用层把关，不写成数据库唯一索引。** 软删除的行留在表里，任何面向「活跃行」的唯一性（同一供应商下同协议的端点、同一模型对同一端点/规则只留一条绑定、同一逻辑模型下 `modelId` 不重复）都要写成 `... WHERE deletedTime IS NULL` 的部分唯一索引；而不是这样写的时候，约束就落回 store 里「先查后插」，且查与插必须在同一个事务里。库里只保留真正的结构约束：主键、外键，以及极少数「内容本身就是身份」的表（`client_config_versions` 的 `contentHash`）。
+2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`、`provider_model_request_rewrite_rules` 的主键是 `(providerModelId, requestRewriteRuleId)`，因此它们的「复活」天然是主键冲突更新；端点、绑定、协议转换器则由 store 先找历史行、命中就原地复活。
+3. **身份是记录 id，不是名字。** `providerModels` 允许同一供应商下存在多条同名模型，逻辑模型、路由图版本、规则表版本同理——名字是给人看的注记，唯一性不成立，删掉再建一条同名的是常见动作。删除时也**不改写标识**（不造墓碑名），因为身份本来就不是靠名字成立。
 
 ### 运行状态
 

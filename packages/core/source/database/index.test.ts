@@ -164,6 +164,7 @@ describe('schema split', () => {
       'provider_settings',
       'providers',
       'request_rewrite_rules',
+      'route_rule_sets',
       'scheduling_policies',
       'settings',
       'workflows',
@@ -265,15 +266,48 @@ describe('schema split', () => {
       'createdTime', 'definition', 'deletedTime', 'description', 'id', 'name', 'type', 'updatedTime', 'version',
     ])
     expect(indexNames(config)).toEqual(
-      expect.arrayContaining(['idx_scheduling_policies_route', 'idx_workflows_type_version', 'idx_provider_model_request_rewrite_rule_priority_active']),
+      expect.arrayContaining(['idx_scheduling_policies_route', 'idx_workflows_type_version', 'idx_provider_model_request_rewrite_rules_priority', 'idx_route_rule_sets_version']),
     )
     expect(indexNames(data)).toEqual(
       expect.arrayContaining(['idx_request_attempts_request_order', 'idx_request_attributes_key_value', 'idx_runtime_logs_timestamp']),
     )
-    // 唯一性只能由**部分**唯一索引表达（只约束未删除的行），这里断言不存在全量唯一索引：
+    // 业务唯一性一律由应用层把关，库里不留任何「活跃行唯一」的部分唯一索引：
     // 它会把「软删除旧绑定后在同 priority 绑定新规则」这条最常见的换绑路径堵死，
-    // 而且只会在运行期以写入失败的形式暴露。
-    expect([...indexNames(config), ...indexNames(data)]).not.toContain('idx_model_request_rewrite_rule_priority')
+    // 而且只会在运行期以写入失败的形式暴露。这里把配置库的索引逐个列全，
+    // 少一个多一个都要在评审时被看见。
+    expect(indexNames(config).filter(name => name.startsWith('idx_')).sort()).toEqual([
+      'idx_client_config_versions_file',
+      'idx_client_config_versions_hash',
+      'idx_logical_models_deleted_time',
+      'idx_logical_models_enabled',
+      'idx_protocol_converters_deleted_time',
+      'idx_protocol_converters_protocol',
+      'idx_protocol_converters_unique',
+      'idx_provider_endpoints_deleted_time',
+      'idx_provider_endpoints_protocol',
+      'idx_provider_endpoints_provider_protocol',
+      'idx_provider_model_endpoints_deleted_time',
+      'idx_provider_model_endpoints_provider_endpoint',
+      'idx_provider_model_endpoints_unique',
+      'idx_provider_model_request_rewrite_rules_deleted_time',
+      'idx_provider_model_request_rewrite_rules_priority',
+      'idx_provider_models_enabled',
+      'idx_provider_models_provider_model',
+      'idx_provider_settings_key',
+      'idx_providers_deleted_time',
+      'idx_providers_enabled',
+      'idx_request_rewrite_rules_deleted_time',
+      'idx_request_rewrite_rules_enabled',
+      'idx_request_rewrite_rules_scope',
+      'idx_route_rule_sets_updated_time',
+      'idx_route_rule_sets_version',
+      'idx_scheduling_policies_deleted_time',
+      'idx_scheduling_policies_route',
+      'idx_settings_updated_time',
+      'idx_workflows_deleted_time',
+      'idx_workflows_type',
+      'idx_workflows_type_version',
+    ])
   })
 })
 

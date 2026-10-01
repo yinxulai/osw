@@ -19,7 +19,7 @@ export const routerRulesApi = {
   /** 版本摘要列表（新的在前）。 */
   getRuleVersions: () => request<RouteRuleSetVersionSummary[]>('/router/rules/versions'),
   /** 按版本号读规则表；版本不存在时返回 `null`。 */
-  getRuleVersion: (version: number) => request<RouteRuleSnapshot | null>('/router/rules/version', { version }),
+  getRuleVersion: (id: string) => request<RouteRuleSnapshot | null>('/router/rules/version', { id }),
   /** 保存为新版本，它立即对代理生效；内容与最新版一致时不新建版本。 */
   saveRules: (ruleSet: RouteRuleSet, name: string, description: string) =>
     request<RouteRuleSetSaveResult>('/router/rules/save', { ruleSet, name, description }),

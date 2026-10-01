@@ -189,21 +189,31 @@ export function protectedLogicalModelError(modelId: string): AppError {
 }
 
 /**
- * 「这个模型名在这个供应商下已经有一个活跃行了」。
+ * 「这个供应商下已经有一条同协议的活跃端点了」。
  *
- * 与 `duplicateLogicalModelError` 是同一件事的另一张表：`provider_models` 也靠
- * `(providerId, modelName)` 的部分唯一索引保证「活跃行之间不重名」，软删除会把这些名字让出来。
- * 用户能在模型管理页把名字改成同供应商下已有的那个，那是一次**输入错误**（换个名字，或者先
- * 把原来那个删掉/改名），不是服务端故障——所以用 400 系的 `DUPLICATE_RESOURCE` 暴露出去，
- * 界面按 `errors.DUPLICATE_RESOURCE` 说「同名资源已存在」，而不是一句「内部错误」。
+ * 供应商端点过去靠 `(providerId, protocol) WHERE deletedTime IS NULL` 的部分唯一索引把关。
+ * 索引撤掉之后（删掉的行让位，见 `config-schema.ts`），这条规则就只剩应用层在守——
+ * 命中就是用户可修正的输入问题（换个协议，或者先把原来那条删掉），
+ * 用 409 + `DUPLICATE_RESOURCE` 说清楚，不要让它变成两条同协议行里随缘读到一条。
  */
-export function duplicateProviderModelError(modelName: string): AppError {
+export function duplicateProviderEndpointError(protocol: string): AppError {
   return new AppError(
     'DUPLICATE_RESOURCE',
     409,
-    `Provider model ${modelName} already exists for this provider`,
-    { details: { modelName } },
+    `This provider already has an endpoint for protocol ${protocol}`,
+    { details: { protocol } },
   )
+}
+
+/**
+ * 「同一个身份已经有一条活跃行了」。
+ *
+ * 给那些不再由数据库唯一索引把关、改由 store 预检的绑定类关系（模型↔端点的绑定、
+ * 绑定↔客户端协议的转换器）用。它们的规则都是「同一对关系只留一条活跃行」，
+ * 违反它的是用户可修正的输入（先解绑再加回来，或者换一个协议），所以是 409 而不是 500。
+ */
+export function duplicateActiveResourceError(message: string, details: Record<string, unknown> = {}): AppError {
+  return new AppError('DUPLICATE_RESOURCE', 409, message, { details })
 }
 
 /** 「没有这个资源」。参数是给日志与外部工具看的那句英文诊断里的标识（id 或名字）。 */
@@ -248,24 +258,16 @@ function readSqliteError(error: unknown): { errcode: number; message: string } |
  * 于是 `INSERT` 直接抛 `SQLITE_CONSTRAINT_UNIQUE`，`normalizeError` 判不出来源，回给界面的
  * 就是一句「Internal server error」（HTTP 500）——用户明明只是填重了一个名字。
  *
- * 这里兜住的是那条兜底路径：抛出的仍然是 500 一条路以外的正确语义（409 + 可本地化的错误码），
- * 只是**冲突究竟撞在哪一列上，从 SQLite 的消息里读**，不猜。读不出来就原样放行，
+ * 这里要守的规则已经很少：这条链上凡是有用户名字的资源都改成「身份是记录 id、名字只写在应用层」，
+ * 唯一还真会来撞的只剩客户端配置快照的 `(clientKey, filePath, contentHash)`。
+ * 于是**不按表名分支**，一律给同一句可本地化的 409：多一个分支就要多维护一个永远不会走到的分支，
+ * 而「哪里撞了」直接附带在 `details.constraint` 里，界面要用再去读。读不出来就原样放行，
  * 让 `normalizeError` 按未知错误处理——宁可 500，也不要给一个编造的「哪里重了」。
  */
 export function translateSqliteUniqueViolation(error: unknown): AppError | null {
   const sqlite = readSqliteError(error)
   if (!sqlite || sqlite.errcode !== SQLITE_UNIQUE_VIOLATION) return null
-  // 消息形如 `UNIQUE constraint failed: provider_models.providerId, provider_models.modelName`
+  // 消息形如 `UNIQUE constraint failed: client_config_versions.clientKey, ...`
   const columns = sqlite.message.split(':').slice(1).join(':').trim()
-  if (columns.includes('provider_models.')) {
-    return new AppError('DUPLICATE_RESOURCE', 409, `A provider model with the same name already exists (${columns})`, { cause: error, details: { constraint: columns } })
-  }
-  if (columns.includes('logical_models.')) return duplicateLogicalModelError(columns)
-  if (columns.includes('provider_endpoints.') || columns.includes('provider_model_endpoints.') || columns.includes('protocol_converters.') || columns.includes('provider_model_request_rewrite_rules.')) {
-    return new AppError('DUPLICATE_RESOURCE', 409, `A resource with the same identity already exists (${columns})`, { cause: error, details: { constraint: columns } })
-  }
-  if (columns.includes('workflows.')) {
-    return new AppError('RESOURCE_CONFLICT', 409, `A workflow with the same type and version already exists (${columns})`, { cause: error, details: { constraint: columns } })
-  }
   return new AppError('DUPLICATE_RESOURCE', 409, `A resource with the same identity already exists (${columns})`, { cause: error, details: { constraint: columns } })
 }

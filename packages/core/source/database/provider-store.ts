@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray } from 'drizzl
 import { ProviderEndpointSchema, ProviderSchema, ProviderSettingSchema } from '@common/schemas'
 import type { Provider, ProviderEndpoint, ProviderSetting } from '@common/schemas'
 import { generateId, now } from '@common/utils'
-import { endpointUrlInUseError, resourceNotFoundError, translateSqliteUniqueViolation } from '../errors'
+import { duplicateProviderEndpointError, endpointUrlInUseError, resourceNotFoundError } from '../errors'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -11,6 +11,7 @@ import {
   protocolConverters,
   providerSettings,
   providers,
+  type ProviderEndpointRow,
 } from './config-schema'
 
 export async function listProviders(includeDeleted = false): Promise<Provider[]> {
@@ -122,27 +123,60 @@ function mapProviderEndpoint(row: typeof providerEndpoints.$inferSelect): Provid
 
 type CreateProviderEndpointInput = Omit<ProviderEndpoint, 'id' | 'createdTime' | 'updatedTime' | 'enabled' | 'deletedTime'> & { enabled?: boolean }
 
+type Transaction = Parameters<Parameters<ReturnType<typeof getConfigDb>['transaction']>[0]>[0]
+
+/**
+ * 找出这次写入该落在哪一行上：活跃行优先，其次同（供应商，协议）的历史行，最后才是新行。
+ *
+ * 这是「删掉的行让出位置」这句话的落地点。**之所以要回头找历史行，而不是每次都插新行**：
+ * 一条被删掉的端点下面可能还挂着端点-模型绑定与协议转换器（它们是软删除，行还在），
+ * 这些行的外键指着这个端点 id。插入一条新的同协议端点会让它们永远指回那条老行——
+ * 「这个协议曾经绑过谁」这句话从此断开；在同一个 id 上复活则让它们重新连上。
+ *
+ * 不设数据库唯一索引，因此这条「至多一条活跃行」的规则完全靠这里维持：调用方必须**先查后插**，
+ * 且查与插落在同一个事务里，否则并发写入会各插一条。
+ */
+function findResurrectableProviderEndpoint(transaction: Transaction, providerId: string, protocol: string): ProviderEndpointRow | undefined {
+  const rows = transaction.select().from(providerEndpoints)
+    .where(and(eq(providerEndpoints.providerId, providerId), eq(providerEndpoints.protocol, protocol))).all()
+  return rows.find(row => row.deletedTime === null) ?? rows[0]
+}
+
 export async function createProviderEndpoint(input: CreateProviderEndpointInput): Promise<ProviderEndpoint> {
+  const db = getConfigDb()
   const time = now()
   const endpoint = ProviderEndpointSchema.parse({ ...input, id: generateId('end_'), enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  try {
-    getConfigDb().insert(providerEndpoints).values({ ...endpoint, deletedTime: null }).run()
-  } catch (error) {
-    throw translateSqliteUniqueViolation(error) ?? error
-  }
-  return endpoint
+  let resolvedId = endpoint.id
+  db.transaction(transaction => {
+    const reusable = findResurrectableProviderEndpoint(transaction, endpoint.providerId, endpoint.protocol)
+    // 复活就是一次 UPDATE：地址、开关重新盖上，`createdTime` 保持原样（这一行确实还是原来那一行）。
+    // 记录 id 也保持原样，所以返回值必须按这一行的 id 再读一次，而不是拿刚生成的那个。
+    if (reusable) {
+      resolvedId = reusable.id
+      transaction.update(providerEndpoints).set({ url: endpoint.url, enabled: endpoint.enabled, deletedTime: null, updatedTime: time }).where(eq(providerEndpoints.id, reusable.id)).run()
+    } else {
+      transaction.insert(providerEndpoints).values({ ...endpoint, deletedTime: null }).run()
+    }
+  })
+  return await getProviderEndpoint(resolvedId) ?? { ...endpoint, id: resolvedId }
 }
 
 export async function updateProviderEndpoint(id: string, updates: Partial<Pick<ProviderEndpoint, 'protocol' | 'url' | 'enabled'>>): Promise<ProviderEndpoint> {
   const existing = await getProviderEndpoint(id)
   if (!existing) throw resourceNotFoundError('provider endpoint', id)
   const endpoint = ProviderEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
-  try {
-    getConfigDb().update(providerEndpoints).set({ protocol: endpoint.protocol, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
-      .where(and(eq(providerEndpoints.id, id), isNull(providerEndpoints.deletedTime))).run()
-  } catch (error) {
-    throw translateSqliteUniqueViolation(error) ?? error
-  }
+  // 改协议可能撞上同供应商下的另一条活跃行。过去这是数据库约束的活（翻译成 409），
+  // 现在约束没有了，重复就静静地变成两条同协议行、读取侧只会拿到其中一条——
+  // 所以这里必须自己把关：命中就拒绝，并说清楚撞的是哪个协议。
+  const conflict = getConfigDb().select({ id: providerEndpoints.id }).from(providerEndpoints)
+    .where(and(
+      eq(providerEndpoints.providerId, existing.providerId),
+      eq(providerEndpoints.protocol, endpoint.protocol),
+      isNull(providerEndpoints.deletedTime),
+    )).all()
+  if (conflict.some(row => row.id !== id)) throw duplicateProviderEndpointError(endpoint.protocol)
+  getConfigDb().update(providerEndpoints).set({ protocol: endpoint.protocol, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
+    .where(and(eq(providerEndpoints.id, id), isNull(providerEndpoints.deletedTime))).run()
   return endpoint
 }
 
@@ -242,7 +276,14 @@ export async function replaceProviderEndpointStates(providerId: string, endpoint
       const active = activeByProtocol.get(protocol)
       // 就地更新而不是「先删后插」：行的 id 保持不变，导出/导入和日志里的引用都不会跟着变。
       if (active) transaction.update(providerEndpoints).set({ url: trimmed, enabled, updatedTime: time }).where(eq(providerEndpoints.id, active.id)).run()
-      else transaction.insert(providerEndpoints).values({ id: generateId('end_'), providerId, protocol, url: trimmed, enabled, createdTime: time, updatedTime: time, deletedTime: null }).run()
+      // 没有活跃行时回头找同协议的历史行复活（而不是插新行）：绑定的协议记在供应商端点上，
+      // 新建一条会让旧绑定指回那条老行，见 `findResurrectableProviderEndpoint` 的说明。
+      // 模块级 `activeByProtocol` 里没有、但事务里查得到的，正是这种被删过又回来的协议。
+      else {
+        const reusable = findResurrectableProviderEndpoint(transaction, providerId, protocol)
+        if (reusable) transaction.update(providerEndpoints).set({ url: trimmed, enabled, deletedTime: null, updatedTime: time }).where(eq(providerEndpoints.id, reusable.id)).run()
+        else transaction.insert(providerEndpoints).values({ id: generateId('end_'), providerId, protocol, url: trimmed, enabled, createdTime: time, updatedTime: time, deletedTime: null }).run()
+      }
     }
     transaction.update(providerEndpoints).set({ enabled: false, updatedTime: time })
       .where(and(

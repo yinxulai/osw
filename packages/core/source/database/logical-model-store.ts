@@ -7,8 +7,7 @@ import { WorkflowGraphSchema } from '@common/router/schemas'
 import { generateId, now } from '@common/utils'
 import { duplicateLogicalModelError, logicalModelNotFoundError, protectedLogicalModelError, providerModelDisabledError } from '../errors'
 import { getConfigDb } from './index'
-import { logicalModels, providerModels, schedulingPolicies, workflows } from './config-schema'
-import { ROUTE_RULE_TYPE, ROUTER_GRAPH_TYPE } from './workflow-kind'
+import { logicalModels, providerModels, routeRuleSets, schedulingPolicies, workflows } from './config-schema'
 
 /**
  * 逻辑模型的两把钥匙，别混：
@@ -210,22 +209,22 @@ export async function updateLogicalModel(id: string, updates: UpdateLogicalModel
       .where(eq(logicalModels.id, id))
       .run()
     if (!renaming) return
-    for (const row of transaction.select().from(workflows).where(isNull(workflows.deletedTime)).all()) {
+    for (const row of transaction.select().from(workflows).all()) {
       const definition = JSON.parse(row.definition) as unknown
-      let rewritten: string | null = null
-      if (row.type === ROUTER_GRAPH_TYPE) {
-        const parsed = WorkflowGraphSchema.safeParse(definition)
-        if (!parsed.success) continue
-        const next = renameLogicalModelIdInGraph(parsed.data, existing.modelId, nextModelId)
-        if (next !== parsed.data) rewritten = JSON.stringify(next)
-      } else if (row.type === ROUTE_RULE_TYPE) {
-        const parsed = RouteRuleSetSchema.safeParse(definition)
-        if (!parsed.success) continue
-        const next = renameLogicalModelIdInRuleSet(parsed.data, existing.modelId, nextModelId)
-        if (next !== parsed.data) rewritten = JSON.stringify(next)
-      }
-      if (rewritten === null) continue
-      transaction.update(workflows).set({ definition: rewritten, updatedTime: time }).where(eq(workflows.id, row.id)).run()
+      const parsed = WorkflowGraphSchema.safeParse(definition)
+      if (!parsed.success) continue
+      const nextGraph = renameLogicalModelIdInGraph(parsed.data, existing.modelId, nextModelId)
+      if (nextGraph === parsed.data) continue
+      transaction.update(workflows).set({ definition: JSON.stringify(nextGraph), updatedTime: time }).where(eq(workflows.id, row.id)).run()
+    }
+    // 规则表住在自己的表里（与 `workflows` 不同表），单独扫一遍。
+    for (const row of transaction.select().from(routeRuleSets).all()) {
+      const definition = JSON.parse(row.definition) as unknown
+      const parsed = RouteRuleSetSchema.safeParse(definition)
+      if (!parsed.success) continue
+      const nextRuleSet = renameLogicalModelIdInRuleSet(parsed.data, existing.modelId, nextModelId)
+      if (nextRuleSet === parsed.data) continue
+      transaction.update(routeRuleSets).set({ definition: JSON.stringify(nextRuleSet), updatedTime: time }).where(eq(routeRuleSets.id, row.id)).run()
     }
   })
   const row = db.select().from(logicalModels).where(eq(logicalModels.id, id)).get()

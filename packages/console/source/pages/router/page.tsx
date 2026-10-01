@@ -663,7 +663,7 @@ function WorkflowStudioCanvas() {
    */
   const restoreVersion = useCallback(async (version: RouteVersion) => {
     try {
-      const snapshot = await unwrap(routerApi.getGraphVersion(version.sequence))
+      const snapshot = await unwrap(routerApi.getGraphVersion(version.id))
       if (!snapshot) {
         toast.error(t('router.error.versionMissing', { sequence: version.sequence }))
         return

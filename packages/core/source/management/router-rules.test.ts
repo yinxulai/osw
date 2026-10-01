@@ -99,27 +99,30 @@ describe('router rule routes', () => {
     expect(snapshot?.ruleSet.fallbackModelIds).toEqual(['model-edited'])
   })
 
-  it('lists versions and reads one by version number', async () => {
-    await routerRuleRoutes.invoke('/api/router/rules/save', mockResponse(), { ruleSet: ruleSetWith(['model-first']), name: '第一版' })
+  it('lists versions and reads one by record id', async () => {
+    const firstSaved = mockResponse()
+    await routerRuleRoutes.invoke('/api/router/rules/save', firstSaved, { ruleSet: ruleSetWith(['model-first']), name: '第一版' })
     await routerRuleRoutes.invoke('/api/router/rules/save', mockResponse(), { ruleSet: ruleSetWith(['model-second']), name: '第二版' })
+
+    const firstId = (responseData(firstSaved) as { data: { id: string } }).data.id
 
     const listRes = mockResponse()
     await routerRuleRoutes.invoke('/api/router/rules/versions', listRes, {})
     expect(responseData(listRes).data).toMatchObject([
       { version: 2, name: '第二版', ruleCount: 1 },
-      { version: 1, name: '第一版', ruleCount: 1 },
+      { id: firstId, version: 1, name: '第一版', ruleCount: 1 },
     ])
 
     const versionRes = mockResponse()
-    await routerRuleRoutes.invoke('/api/router/rules/version', versionRes, { version: 1 })
+    await routerRuleRoutes.invoke('/api/router/rules/version', versionRes, { id: firstId })
     expect(responseData(versionRes)).toMatchObject({
       success: true,
       data: { version: 1, ruleSet: { fallbackModelIds: ['model-first'] } },
     })
 
-    // 版本不存在时给 `null` 而不是报错：历史版本被裁掉是正常的事，界面得能区分「取不到了」与「请求失败了」。
+    // 记录 id 不存在时给 `null` 而不是报错：界面得能区分「取不到了」与「请求失败了」。
     const missingRes = mockResponse()
-    await routerRuleRoutes.invoke('/api/router/rules/version', missingRes, { version: 99 })
+    await routerRuleRoutes.invoke('/api/router/rules/version', missingRes, { id: 'route_does_not_exist' })
     expect(responseData(missingRes)).toMatchObject({ success: true, data: null })
   })
 

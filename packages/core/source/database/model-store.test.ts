@@ -9,6 +9,7 @@ import {
   createProtocolConverter,
   getProviderModel,
   getProviderModelRoute,
+  listProviderModels,
   listProviderModelRoutesByProvider,
   listProviderModelsForLogicalModel,
   updateProviderModelEndpoint,
@@ -313,35 +314,34 @@ describe('model store', () => {
     ]))
   })
 
-  it('rejects a duplicate model name inside one provider with a typed 409', async () => {
+  it('allows duplicate model names inside one provider — identity is the record id', async () => {
     const provider = await createProvider({ name: 'Dup Provider', apiKeyReference: 'key_dup', timeoutMilliseconds: 20_000, enabled: true })
-    await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
 
-    // 活跃行重名是用户可修正的输入错误：预检就要给出 409 + `DUPLICATE_RESOURCE`，
-    // 不能让 `provider_models (providerId, modelName)` 的唯一索引抛成一句 500。
-    await expect(createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 }))
-      .rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
+    // 同一供应商下同一个模型名接两个区域、两套密钥是正常用法：两条记录各自绑自己的端点，
+    // 靠记录 id 区分而不是靠名字，所以这里不该有任何冲突。
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
+    expect(second.id).not.toBe(first.id)
+    expect(second).toMatchObject({ providerId: provider.id, modelName: 'same-name' })
 
-    // 改名撞上已有的活跃行同样要被拦下。
-    const renamed = await createProviderModelRoute({ providerId: provider.id, modelName: 'other-name', priority: 0 })
-    await expect(updateProviderModelRoute(renamed.id, { modelName: 'same-name' }))
-      .rejects.toMatchObject({ code: 'DUPLICATE_RESOURCE', statusCode: 409 })
+    const listed = await listProviderModels()
+    expect(listed.filter(model => model.providerId === provider.id && model.modelName === 'same-name')).toHaveLength(2)
 
-    // 另一个供应商用同一个名字不受影响：唯一性只在供应商内部成立。
-    const another = await createProvider({ name: 'Another Provider', apiKeyReference: 'key_another', timeoutMilliseconds: 20_000, enabled: true })
-    await expect(createProviderModelRoute({ providerId: another.id, modelName: 'same-name', priority: 0 }))
-      .resolves.toMatchObject({ providerId: another.id, modelName: 'same-name' })
+    // 改名也一样：改成一个已经被同供应商另一条记录用着的名字是允许的。
+    await expect(updateProviderModelRoute(second.id, { modelName: 'same-name' }))
+      .resolves.toMatchObject({ id: second.id, modelName: 'same-name' })
   })
 
-  it('frees a model name again after the previous holder is deleted', async () => {
+  it('keeps two same-named models as two rows across a delete and a re-create', async () => {
     const provider = await createProvider({ name: 'Reuse Provider', apiKeyReference: 'key_reuse', timeoutMilliseconds: 20_000, enabled: true })
     const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
     const { deleteProviderModelRoute } = await import('./model-store')
     await deleteProviderModelRoute(first.id)
 
-    // 唯一索引是部分索引（`WHERE deletedTime IS NULL`），软删掉的旧行不该占住名字。
     const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
     expect(second.id).not.toBe(first.id)
     await expect(getProviderModel(second.id)).resolves.toMatchObject({ modelName: 'reusable', deletedTime: null })
+    // 删掉的那一行还在表里（软删除），只是不再出现于可用模型列表。
+    await expect(getProviderModel(first.id)).resolves.toMatchObject({ deletedTime: expect.any(Number) })
   })
 })

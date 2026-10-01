@@ -82,7 +82,12 @@ function sortEndpoints<T extends { protocol: string }>(endpoints: T[]): T[] {
   return [...endpoints].sort((left, right) => left.protocol.localeCompare(right.protocol))
 }
 
-/** 导出顺序依赖 `createdTime` 毫秒值，同毫秒创建的记录顺序不稳定，断言前先按业务键排序。 */
+/**
+ * 导出顺序依赖 `createdTime` 毫秒值，同毫秒创建的记录顺序不稳定，断言前先按业务键排序。
+ *
+ * `key` 是**源库里的记录 id**，导出再导入会重新生成，因此比较包内容时把它去掉；
+ * 「同一个包里的两条同名模型不会被压成一条」这件事由专门的用例盯着（见下）。
+ */
 function sortProvider(provider: ProviderBundleProvider): ProviderBundleProvider {
   return {
     ...provider,
@@ -90,7 +95,7 @@ function sortProvider(provider: ProviderBundleProvider): ProviderBundleProvider 
     settings: [...provider.settings].sort((left, right) => left.key.localeCompare(right.key)),
     models: [...provider.models]
       .sort((left, right) => left.modelName.localeCompare(right.modelName))
-      .map(model => ({ ...model, endpoints: sortEndpoints(model.endpoints) })),
+      .map(model => ({ ...model, key: undefined, endpoints: sortEndpoints(model.endpoints) })),
   }
 }
 
@@ -184,6 +189,11 @@ describe('provider bundle export', () => {
     expect(bundle.version).toBe(PROVIDER_BUNDLE_VERSION)
     expect(bundle.exportedAt).toBeGreaterThan(0)
     expect(bundle.providers.map(sortProvider)).toEqual([sortProvider(expectedSeededProvider())])
+    // `key` 是源库里的**记录 id**：模型名不承担唯一性，导入时要靠它把同名模型一一对上。
+    expect(bundle.providers[0]?.models.map(model => model.key)).toEqual([
+      expect.stringMatching(/^model_/),
+      expect.stringMatching(/^model_/),
+    ])
     expect(secretStore.get).toHaveBeenCalledWith(API_KEY_REFERENCE)
   })
 
@@ -234,6 +244,33 @@ describe('provider bundle import', () => {
 
     const reExported = await exportProviderBundle({ includeApiKeys: true })
     expect(reExported.bundle.providers.map(sortProvider)).toEqual(exported.bundle.providers.map(sortProvider))
+  })
+
+  it('keeps two same-named models as two rows when the bundle carries no record id', async () => {
+    const bundle = bundleWith([
+      {
+        name: 'Anthropic 直连',
+        description: '',
+        enabled: true,
+        timeoutMilliseconds: 30_000,
+        endpoints: [{ protocol: 'anthropic-messages', url: 'https://api.anthropic.com', enabled: true }],
+        settings: [],
+        models: [
+          { modelName: 'claude-sonnet-4', enabled: true, endpoints: [{ protocol: 'anthropic-messages', url: null, enabled: true, protocolConversionEnabled: false }] },
+          { modelName: 'claude-sonnet-4', enabled: false, endpoints: [] },
+        ],
+      },
+    ])
+
+    expect((await importProviderBundle({ bundle })).imported).toEqual({ providers: 1, models: 2 })
+    const kept = await listProviderModels(false)
+    expect(kept.map(model => model.modelName)).toEqual(['claude-sonnet-4', 'claude-sonnet-4'])
+    expect([...kept].map(model => model.enabled).sort()).toEqual([false, true])
+
+    // 再导一次仍然是两条：老包按名兜底时一条本地行只能被认领一次，
+    // 否则两条同名模型会一起压到同一行上、另一行还会被当成「包里没有」而删掉。
+    expect((await importProviderBundle({ bundle })).imported).toEqual({ providers: 1, models: 2 })
+    expect(await listProviderModels(false)).toHaveLength(2)
   })
 
   it('overwrites a same-named provider instead of merging into it', async () => {

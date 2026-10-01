@@ -15,14 +15,15 @@ import { sendSuccess } from '../../core/response'
 
 const SaveRouterGraphSchema = z.object({
   graph: WorkflowGraphSchema,
-  /** 版本名；留空即空串（版本的身份是版本号，不用名字占位）。 */
+  /** 版本名；留空即空串（版本的身份是记录 id，不用名字占位）。 */
   name: z.string().max(60).optional(),
   /** 版本说明；留空表示不写。 */
   description: z.string().max(200).optional(),
 })
 
 const RouterGraphVersionSchema = z.object({
-  version: z.number().int().positive(),
+  /** 要读哪一版：传它的**记录 id**，不是版本号。 */
+  id: z.string().min(1),
 })
 
 export const routerGraphRoutes = new HttpRouter<ManagementHandler>()
@@ -45,10 +46,10 @@ async function handleListRouterGraphVersions(_req: IncomingMessage, res: ServerR
   sendSuccess(res, await listRouterGraphVersions())
 }
 
-/** 按版本号读图；版本不存在时 `data` 为 `null`。 */
+/** 按记录 id 读图；那一版不存在时 `data` 为 `null`。 */
 async function handleGetRouterGraphVersion(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = RouterGraphVersionSchema.parse(body)
-  sendSuccess(res, await readRouterGraphVersion(input.version))
+  sendSuccess(res, await readRouterGraphVersion(input.id))
 }
 
 async function handleSaveRouterGraph(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {

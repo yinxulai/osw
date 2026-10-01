@@ -118,6 +118,16 @@ CREATE TABLE `request_rewrite_rules` (
 	`deletedTime` integer
 );
 --> statement-breakpoint
+CREATE TABLE `route_rule_sets` (
+	`id` text PRIMARY KEY,
+	`version` integer NOT NULL,
+	`name` text NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`definition` text NOT NULL,
+	`createdTime` integer NOT NULL,
+	`updatedTime` integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `scheduling_policies` (
 	`logicalModelId` text NOT NULL,
 	`providerModelId` text NOT NULL,
@@ -156,18 +166,18 @@ CREATE UNIQUE INDEX `idx_client_config_versions_hash` ON `client_config_versions
 CREATE INDEX `idx_client_config_versions_file` ON `client_config_versions` (`clientKey`,`filePath`,`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_enabled` ON `logical_models` (`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_deleted_time` ON `logical_models` (`deletedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_protocol_converters_unique_active` ON `protocol_converters` (`providerModelEndpointId`,`clientProtocol`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_protocol_converters_unique` ON `protocol_converters` (`providerModelEndpointId`,`clientProtocol`);--> statement-breakpoint
 CREATE INDEX `idx_protocol_converters_protocol` ON `protocol_converters` (`clientProtocol`,`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_protocol_converters_deleted_time` ON `protocol_converters` (`deletedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_provider_endpoints_provider_protocol_active` ON `provider_endpoints` (`providerId`,`protocol`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_provider_endpoints_provider_protocol` ON `provider_endpoints` (`providerId`,`protocol`);--> statement-breakpoint
 CREATE INDEX `idx_provider_endpoints_protocol` ON `provider_endpoints` (`protocol`,`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_provider_endpoints_deleted_time` ON `provider_endpoints` (`deletedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_provider_model_endpoints_unique_active` ON `provider_model_endpoints` (`providerModelId`,`providerEndpointId`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_provider_model_endpoints_unique` ON `provider_model_endpoints` (`providerModelId`,`providerEndpointId`);--> statement-breakpoint
 CREATE INDEX `idx_provider_model_endpoints_provider_endpoint` ON `provider_model_endpoints` (`providerEndpointId`,`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_provider_model_endpoints_deleted_time` ON `provider_model_endpoints` (`deletedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_provider_model_request_rewrite_rule_priority_active` ON `provider_model_request_rewrite_rules` (`providerModelId`,`priority`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_provider_model_request_rewrite_rules_priority` ON `provider_model_request_rewrite_rules` (`providerModelId`,`priority`);--> statement-breakpoint
 CREATE INDEX `idx_provider_model_request_rewrite_rules_deleted_time` ON `provider_model_request_rewrite_rules` (`deletedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_provider_models_provider_model_active` ON `provider_models` (`providerId`,`modelName`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_provider_models_provider_model` ON `provider_models` (`providerId`,`modelName`);--> statement-breakpoint
 CREATE INDEX `idx_provider_models_enabled` ON `provider_models` (`providerId`,`enabled`,`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_provider_settings_key` ON `provider_settings` (`key`);--> statement-breakpoint
 CREATE INDEX `idx_providers_enabled` ON `providers` (`enabled`);--> statement-breakpoint
@@ -175,9 +185,11 @@ CREATE INDEX `idx_providers_deleted_time` ON `providers` (`deletedTime`);--> sta
 CREATE INDEX `idx_request_rewrite_rules_enabled` ON `request_rewrite_rules` (`enabled`);--> statement-breakpoint
 CREATE INDEX `idx_request_rewrite_rules_scope` ON `request_rewrite_rules` (`scope`);--> statement-breakpoint
 CREATE INDEX `idx_request_rewrite_rules_deleted_time` ON `request_rewrite_rules` (`deletedTime`);--> statement-breakpoint
+CREATE INDEX `idx_route_rule_sets_version` ON `route_rule_sets` (`version`);--> statement-breakpoint
+CREATE INDEX `idx_route_rule_sets_updated_time` ON `route_rule_sets` (`updatedTime`);--> statement-breakpoint
 CREATE INDEX `idx_scheduling_policies_route` ON `scheduling_policies` (`logicalModelId`,`enabled`,`priority`,`weight`);--> statement-breakpoint
 CREATE INDEX `idx_scheduling_policies_deleted_time` ON `scheduling_policies` (`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_settings_updated_time` ON `settings` (`updatedTime`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_workflows_type_version` ON `workflows` (`type`,`version`) WHERE deletedTime IS NULL;--> statement-breakpoint
+CREATE INDEX `idx_workflows_type_version` ON `workflows` (`type`,`version`);--> statement-breakpoint
 CREATE INDEX `idx_workflows_type` ON `workflows` (`type`,`deletedTime`);--> statement-breakpoint
 CREATE INDEX `idx_workflows_deleted_time` ON `workflows` (`deletedTime`);

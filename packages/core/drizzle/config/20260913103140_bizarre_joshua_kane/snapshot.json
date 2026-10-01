@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "a98d395b-328d-4c7d-86e5-dc3d9862ce96",
+  "id": "75c8df04-a11c-41e6-a49d-c450d7cdcf3e",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -44,6 +44,10 @@
     },
     {
       "name": "request_rewrite_rules",
+      "entityType": "tables"
+    },
+    {
+      "name": "route_rule_sets",
       "entityType": "tables"
     },
     {
@@ -860,6 +864,76 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "definition",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -1332,6 +1406,15 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "route_rule_sets_pk",
+      "table": "route_rule_sets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "key"
       ],
       "nameExplicit": false,
@@ -1431,10 +1514,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_protocol_converters_unique_active",
+      "name": "idx_protocol_converters_unique",
       "entityType": "indexes",
       "table": "protocol_converters"
     },
@@ -1481,10 +1564,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_endpoints_provider_protocol_active",
+      "name": "idx_provider_endpoints_provider_protocol",
       "entityType": "indexes",
       "table": "provider_endpoints"
     },
@@ -1531,10 +1614,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_model_endpoints_unique_active",
+      "name": "idx_provider_model_endpoints_unique",
       "entityType": "indexes",
       "table": "provider_model_endpoints"
     },
@@ -1581,10 +1664,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_model_request_rewrite_rule_priority_active",
+      "name": "idx_provider_model_request_rewrite_rules_priority",
       "entityType": "indexes",
       "table": "provider_model_request_rewrite_rules"
     },
@@ -1613,10 +1696,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_models_provider_model_active",
+      "name": "idx_provider_models_provider_model",
       "entityType": "indexes",
       "table": "provider_models"
     },
@@ -1729,6 +1812,34 @@
     {
       "columns": [
         {
+          "value": "version",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_route_rule_sets_version",
+      "entityType": "indexes",
+      "table": "route_rule_sets"
+    },
+    {
+      "columns": [
+        {
+          "value": "updatedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_route_rule_sets_updated_time",
+      "entityType": "indexes",
+      "table": "route_rule_sets"
+    },
+    {
+      "columns": [
+        {
           "value": "logicalModelId",
           "isExpression": false
         },
@@ -1791,8 +1902,8 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
       "name": "idx_workflows_type_version",
       "entityType": "indexes",

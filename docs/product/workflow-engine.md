@@ -168,7 +168,7 @@ interface PromptNode extends WorkflowNodeBase {
 { version: 1, nodes: WorkflowNodeModel[], edges: WorkflowEdge[] }
 ```
 
-每次保存生成一个递增版本（最多保留 30 版），代理读的永远是「最新保存的那一版」；一版都没保存过时用内建默认策略现场生成。读写入口都在 `packages/core/source/database/router-graph-store.ts`，画布不保留本地副本。
+一行一版：**行的身份是记录 id（`id`，`workflow_` 前缀），`version` 只是给人看的展示编号**（本机「当前最大 + 1」）。每次保存生成一个新版本，版本列表只展示最近 30 版（`MAX_ROUTER_GRAPH_VERSIONS`），**更旧的行不删** —— 每一版都是用户可以回滚回去的历史；代理读的永远是「最新保存的那一版」。一版都没保存过时用内建默认策略现场生成。读写入口都在 `packages/core/source/database/router-graph-store.ts`，画布不保留本地副本。
 
 读取时执行 JSON 解析、Zod `safeParse` 与图校验。形状对不上就直接报错，不做就地修补：能跑的就是当前这份 schema 定义的图。
 

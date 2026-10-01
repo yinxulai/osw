@@ -128,6 +128,10 @@ async function applyLogicalModels(snapshot: ConfigSnapshot): Promise<Map<string,
 async function applyBindings(snapshot: ConfigSnapshot, recordIdByModelId: ReadonlyMap<string, string>): Promise<number> {
   // 供应商导入可能新建了供应商与模型，因此索引必须在它之后重建。
   const providerNameById = new Map((await listProviders()).map(provider => [provider.id, provider.name]))
+  // 快照只能用「供应商名 + 模型名」指认模型（记录 id 是本机生成的，跨机必然不同，见
+  // `contracts/cloud-sync.ts`），因此同一供应商下的同名模型在快照里无法区分，这里只保留一条。
+  // 这是「用名字跨机指认」本身的代价：要区分同名模型就得让快照带上一个跨机稳定的标识，
+  // 那是另一套设计，不在这次范围内。
   const modelByIdentity = new Map<string, { id: string; enabled: boolean }>()
   for (const model of await listProviderModels()) {
     const providerName = providerNameById.get(model.providerId)

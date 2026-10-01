@@ -127,10 +127,20 @@ async function applySettings(providerId: string, settings: ProviderBundleSetting
   }
 }
 
-/** 模型整体替换：按 `modelName` 匹配，包里没有的模型软删除。 */
+/**
+ * 模型整体替换：优先按包里的记录 id（`key`）匹配，老包没有 id 时退回按 `modelName` 匹配；
+ * 包里没有的模型软删除。
+ *
+ * 为什么不能只按名字匹配：同一个供应商下允许有多条同名模型（名字不是身份，记录 id 才是），
+ * 只按名字会把多条同名模型挤到同一行上，剩下那些还会被当成「包里没有」而删掉。
+ */
 async function applyModels(providerId: string, models: ProviderBundleModel[]): Promise<void> {
   const existing = (await listProviderModels(false)).filter(model => model.providerId === providerId)
+  const byId = new Map(existing.map(model => [model.id, model]))
+  const bundledIds = new Set(models.map(model => model.key).filter((key): key is string => !!key))
   const bundledNames = new Set(models.map(model => model.modelName))
+  // 按名字兜底时一条本地行只能被认领一次，否则两条同名模型包会同时落到同一行上。
+  const claimedByLegacyName = new Set<string>()
 
   for (const model of models) {
     const endpoints = model.endpoints.map(endpoint => ({
@@ -140,8 +150,12 @@ async function applyModels(providerId: string, models: ProviderBundleModel[]): P
       customAuthHeader: null,
       protocolConversionEnabled: endpoint.protocolConversionEnabled,
     }))
-    const matched = existing.find(candidate => candidate.modelName === model.modelName)
+    const byKey = model.key ? byId.get(model.key) : undefined
+    const matched = byKey && byKey.providerId === providerId && !claimedByLegacyName.has(byKey.id)
+      ? (claimedByLegacyName.add(byKey.id), byKey)
+      : existing.find(candidate => candidate.modelName === model.modelName && !claimedByLegacyName.has(candidate.id))
     if (matched) {
+      claimedByLegacyName.add(matched.id)
       await updateProviderModelRoute(matched.id, { enabled: model.enabled, endpoints })
     } else {
       // priority 属于调度策略（`scheduling_policies.priority`），不属于供应商包，这里只占位。
@@ -156,6 +170,8 @@ async function applyModels(providerId: string, models: ProviderBundleModel[]): P
   }
 
   for (const model of existing) {
-    if (!bundledNames.has(model.modelName)) await deleteProviderModelRoute(model.id)
+    if (bundledIds.has(model.id)) continue
+    if (bundledNames.has(model.modelName)) continue
+    await deleteProviderModelRoute(model.id)
   }
 }
