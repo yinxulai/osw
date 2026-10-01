@@ -9,6 +9,7 @@ import {
   createProtocolConverter,
   getProviderModel,
   getProviderModelRoute,
+  listProviderModels,
   listProviderModelRoutesByProvider,
   listProviderModelsForLogicalModel,
   updateProviderModelEndpoint,
@@ -92,7 +93,7 @@ describe('model store', () => {
     })
     expect(converter).toMatchObject({ providerModelEndpointId: extraEndpoint.id, clientProtocol: 'openai-responses', enabled: true })
 
-    const logicalModel = await createLogicalModel({ id: 'model-routing', name: 'model-routing', description: 'route test' })
+    const logicalModel = await createLogicalModel({ modelId: 'model-routing', description: 'route test' })
     await upsertSchedulingPolicy({
       logicalModelId: logicalModel.id,
       providerModelId: route.id,
@@ -251,7 +252,7 @@ describe('model store', () => {
       priority: 2,
       endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
     })
-    const logicalModel = await createLogicalModel({ id: 'binding-enabled', name: 'binding-enabled' })
+    const logicalModel = await createLogicalModel({ modelId: 'binding-enabled' })
     await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: enabledRoute.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: disabledRoute.id, priority: 2, enabled: false })
 
@@ -292,8 +293,8 @@ describe('model store', () => {
       priority: 2,
       endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
     })
-    const first = await createLogicalModel({ id: 'disable-cascade-a', name: 'disable-cascade-a' })
-    const second = await createLogicalModel({ id: 'disable-cascade-b', name: 'disable-cascade-b' })
+    const first = await createLogicalModel({ modelId: 'disable-cascade-a' })
+    const second = await createLogicalModel({ modelId: 'disable-cascade-b' })
     await upsertSchedulingPolicy({ logicalModelId: first.id, providerModelId: route.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: second.id, providerModelId: route.id, priority: 1, enabled: true })
     await upsertSchedulingPolicy({ logicalModelId: first.id, providerModelId: other.id, priority: 2, enabled: true })
@@ -311,5 +312,36 @@ describe('model store', () => {
     expect(await listSchedulingPolicies(first.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ providerModelId: other.id, enabled: true, deletedTime: null }),
     ]))
+  })
+
+  it('allows duplicate model names inside one provider — identity is the record id', async () => {
+    const provider = await createProvider({ name: 'Dup Provider', apiKeyReference: 'key_dup', timeoutMilliseconds: 20_000, enabled: true })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
+
+    // 同一供应商下同一个模型名接两个区域、两套密钥是正常用法：两条记录各自绑自己的端点，
+    // 靠记录 id 区分而不是靠名字，所以这里不该有任何冲突。
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'same-name', priority: 0 })
+    expect(second.id).not.toBe(first.id)
+    expect(second).toMatchObject({ providerId: provider.id, modelName: 'same-name' })
+
+    const listed = await listProviderModels()
+    expect(listed.filter(model => model.providerId === provider.id && model.modelName === 'same-name')).toHaveLength(2)
+
+    // 改名也一样：改成一个已经被同供应商另一条记录用着的名字是允许的。
+    await expect(updateProviderModelRoute(second.id, { modelName: 'same-name' }))
+      .resolves.toMatchObject({ id: second.id, modelName: 'same-name' })
+  })
+
+  it('keeps two same-named models as two rows across a delete and a re-create', async () => {
+    const provider = await createProvider({ name: 'Reuse Provider', apiKeyReference: 'key_reuse', timeoutMilliseconds: 20_000, enabled: true })
+    const first = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
+    const { deleteProviderModelRoute } = await import('./model-store')
+    await deleteProviderModelRoute(first.id)
+
+    const second = await createProviderModelRoute({ providerId: provider.id, modelName: 'reusable', priority: 0 })
+    expect(second.id).not.toBe(first.id)
+    await expect(getProviderModel(second.id)).resolves.toMatchObject({ modelName: 'reusable', deletedTime: null })
+    // 删掉的那一行还在表里（软删除），只是不再出现于可用模型列表。
+    await expect(getProviderModel(first.id)).resolves.toMatchObject({ deletedTime: expect.any(Number) })
   })
 })

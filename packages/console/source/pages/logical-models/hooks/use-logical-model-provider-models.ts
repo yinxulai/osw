@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { LogicalModelProviderModel } from '@common/schemas'
-import { logicalModelKeys, useLogicalModelProviderModelsQuery } from '../queries'
+import { logicalModelKeys, useLogicalModelProviderModelsQuery, type LogicalModelKeysRef } from '../queries'
 
 function toProviderModel(model: LogicalModelProviderModel): LogicalModelProviderModel {
   return {
@@ -25,12 +25,13 @@ function toProviderModel(model: LogicalModelProviderModel): LogicalModelProvider
   }
 }
 
-export function useLogicalModelProviderModels(logicalModelId: string) {
+export function useLogicalModelProviderModels(logicalModel: LogicalModelKeysRef | null) {
   const client = useQueryClient()
-  const query = useLogicalModelProviderModelsQuery(logicalModelId)
+  const query = useLogicalModelProviderModelsQuery(logicalModel)
   const models = useMemo(() => (query.data ?? []).map(toProviderModel), [query.data])
   const loadModels = useCallback(async () => { const result = await query.refetch(); return !result.isError }, [query])
-  const updateModels = useCallback((update: (models: LogicalModelProviderModel[]) => LogicalModelProviderModel[]) => client.setQueryData<LogicalModelProviderModel[]>(logicalModelKeys.models(logicalModelId), current => update(current ?? [])), [client, logicalModelId])
+  const recordId = logicalModel?.id ?? ''
+  const updateModels = useCallback((update: (models: LogicalModelProviderModel[]) => LogicalModelProviderModel[]) => client.setQueryData<LogicalModelProviderModel[]>(logicalModelKeys.models(recordId), current => update(current ?? [])), [client, recordId])
   const updateEnabledModel = useCallback((id: string, enabled: boolean) => updateModels(current => current.map(model => model.id === id ? { ...model, enabled } : model)), [updateModels])
   return { models, loading: query.isPending, loadModels, updateModels, updateEnabledModel }
 }

@@ -13,6 +13,7 @@ import type {
   UpstreamTarget,
 } from '@server/proxy/contracts'
 import { createHttpResponseSink, type HttpResponseSink } from '@server/proxy/adapters/http-response-sink'
+import { formatTarget } from '@server/proxy/execution/attempt-outcome'
 import { bodyDeliveryShape } from '@server/proxy/contracts'
 import { notifyObservers } from '@server/proxy/kernel/observer-notifications'
 import { createRequestModifiers, type RewriteEvaluation } from '@server/proxy/modifiers/request-modifiers'
@@ -197,8 +198,8 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     })
   }
 
-  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} providerId=${target.providerId} providerModelId=${target.providerModelId} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${target.timeoutMilliseconds}ms`)
-  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} providerModelId=${target.providerModelId} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
+  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${target.timeoutMilliseconds}ms`)
+  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
 
   const attemptLogger = createAttemptLogger({
     requestId,

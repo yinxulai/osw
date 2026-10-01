@@ -25,6 +25,8 @@ interface RequestLogTableRowProps {
   detailLoading: boolean
   detailError: string | null
   modelName: string
+  /** 这条记录指向的逻辑模型已被删除时为 `true`；名字照旧展示，只补一枚标签。 */
+  modelDeleted: boolean
   toggleExpand: (id: string) => void
 }
 
@@ -45,6 +47,8 @@ interface RequestLogsTableProps {
   detailLoadingIds: Record<string, boolean>
   detailErrors: Record<string, string>
   getModelName: (id: string | null) => string
+  /** 这条记录指向的逻辑模型是否已被删除（只影响是否补「已删除」标签）。 */
+  isModelDeleted: (id: string | null) => boolean
   toggleExpand: (id: string) => void
   onRetry: () => void
 }
@@ -237,6 +241,7 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
           log={props.log}
           detail={props.detail ?? null}
           modelName={props.modelName}
+          modelDeleted={props.modelDeleted}
           detailLoading={props.detailLoading}
           detailError={props.detailError}
         />
@@ -272,6 +277,7 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
           live={row.live}
           expanded={props.expandedId === row.live.id}
           modelName={props.getModelName(row.live.logicalModelId)}
+          modelDeleted={props.isModelDeleted(row.live.logicalModelId)}
           toggleExpand={props.toggleExpand}
         />
       )
@@ -284,6 +290,7 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
           detailLoading={props.detailLoadingIds[row.log.id] ?? false}
           detailError={props.detailErrors[row.log.id] || null}
           modelName={props.getModelName(row.log.logicalModelId)}
+          modelDeleted={props.isModelDeleted(row.log.logicalModelId)}
           toggleExpand={props.toggleExpand}
         />
       ))

@@ -186,7 +186,7 @@ export function createNodeByKind(kind: AppendableKind, position: NodePosition): 
       enabled: true,
       description: '在沙箱里跑一段 JS，把结果写回运行数据。',
       position,
-      code: '// payload 是本次运行数据的深拷贝，get(路径) 支持 a[*].b 通配投影\nreturn get(\'logicalModels[*].id\') || []',
+      code: '// payload 是本次运行数据的深拷贝，get(路径) 支持 a[*].b 通配投影\nreturn get(\'logicalModels[*].modelId\') || []',
       resultPath: 'route.scriptResult',
       timeoutMilliseconds: SCRIPT_TIMEOUT_DEFAULT,
     }
@@ -202,7 +202,7 @@ export function createNodeByKind(kind: AppendableKind, position: NodePosition): 
       position,
       logicalModelId: '',
       systemPrompt: '',
-      promptTemplate: '请从 ${logicalModels[*].id} 里挑一个最适合当前请求的逻辑模型，只回答 id。',
+      promptTemplate: '请从 ${logicalModels[*].modelId} 里挑一个最适合当前请求的逻辑模型，只回答 id。',
       resultPath: 'route.promptResult',
       temperature: 0.7,
       maxTokens: 1_024,
@@ -414,8 +414,8 @@ export function createPresetModelPool(models: RuntimeLogicalModel[]): PresetMode
   const enabledModels = models.filter(model => model.enabled)
   const fallbackModel = enabledModels.find(isBuiltInDefaultLogicalModel) ?? enabledModels[0]
   return {
-    fallbackModelId: fallbackModel?.id ?? null,
-    landingModelIds: enabledModels.filter(model => model.id !== fallbackModel?.id).map(model => model.id),
+    fallbackModelId: fallbackModel?.modelId ?? null,
+    landingModelIds: enabledModels.filter(model => model.modelId !== fallbackModel?.modelId).map(model => model.modelId),
   }
 }
 
@@ -435,7 +435,7 @@ export function resolveLandingModelIds(pool: PresetModelPool, index: number | nu
  *
  * 规则全部由基础节点组合而成，没有任何专用节点，
  * 命中判断就是一条普通的「字段 in 字段」条件：
- * 输入 → 协议发现 → 条件（request.body.model in logicalModels[*].id）
+ * 输入 → 协议发现 → 条件（request.body.model in logicalModels[*].modelId）
  *          ├─ IF   → 逻辑模型选择（变量取值 request.body.model）→ 出口
  *          └─ ELSE → 逻辑模型选择（兜底落点，生成时定好具体 id）→ 出口
  *
@@ -448,7 +448,7 @@ export function resolveLandingModelIds(pool: PresetModelPool, index: number | nu
  *
  * 左侧直接读请求里写的模型名，不在 `route` 下另存一份副本：
  * 派生副本会多出第二个事实源，副本与请求不同步时没人说得清哪个是真的。
- * 比较右侧用的是通配投影 `logicalModels[*].id`：
+ * 比较右侧用的是通配投影 `logicalModels[*].modelId`：
  * 上下文里本来就带着完整的逻辑模型列表，没必要再派生一份 id 数组。
  *
  * 兜底落点在生成时从传入的逻辑模型里挑真实 id，所以这条策略套用即可运行，
@@ -465,7 +465,7 @@ export function createDefaultPolicyGraph(models: RuntimeLogicalModel[]): Workflo
         valueType: 'string',
         operator: 'in',
         valueSource: 'field',
-        valueFieldPath: 'logicalModels[*].id',
+        valueFieldPath: 'logicalModels[*].modelId',
       },
     ],
   }
@@ -488,7 +488,7 @@ export function createDefaultPolicyGraph(models: RuntimeLogicalModel[]): Workflo
         kind: 'condition',
         name: '请求模型是否命中逻辑模型',
         enabled: true,
-        description: 'request.body.model 在 logicalModels[*].id 里时走直连分支，否则落到默认逻辑模型。',
+        description: 'request.body.model 在 logicalModels[*].modelId 里时走直连分支，否则落到默认逻辑模型。',
         position: { x: 760, y: 220 },
         cases: [conditionCase],
       },

@@ -6,9 +6,11 @@ import {
   createDatabaseFileName,
   type DatabaseRole,
 } from '@common/database-file'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
+import { generateId } from '@common/utils'
 import { drizzle } from 'drizzle-orm/node-sqlite'
 import { migrate } from 'drizzle-orm/node-sqlite/migrator'
+import { invalidateConfigReadCache } from './config-read-cache'
 
 /**
  * 数据库连接层：一个数据目录、两个文件。
@@ -56,6 +58,8 @@ export async function initDatabases(dataDir: string): Promise<void> {
     return
   }
 
+  // 开库前先作废常驻读缓存：新打开的是**另一份**配置，上一个库的值一个都不能留下。
+  invalidateConfigReadCache()
   const startedAt = Date.now()
   fs.mkdirSync(dataDir, { recursive: true })
   dataDirectory = dataDir
@@ -74,7 +78,14 @@ export async function initDatabases(dataDir: string): Promise<void> {
   console.info(`[database] initialization completed duration=${Date.now() - startedAt}ms`)
 }
 
-/** 配置库句柄：只放用户写的东西（见 `./config-schema.ts`）。 */
+/**
+ * 配置库句柄：只放用户写的东西（见 `./config-schema.ts`）。
+ *
+ * 返回的句柄外面包了一层**写失效**（见 `wrapConfigHandleWithInvalidation`）：任何一次配置写入
+ * 都会作废 `./config-read-cache.ts` 里的常驻读缓存。放在连接层而不是各个 store 里，是因为
+ * 「每个写路径都记得调一下失效」正是会漏的那一类约定；包在这里，`getConfigDb()` 的每一个
+ * 使用者都自动覆盖，新增 store 也不例外。
+ */
 export function getConfigDb(): Database {
   if (!configDatabase) throw new Error('Config database not initialized')
   return configDatabase.database
@@ -134,6 +145,8 @@ export async function closeDatabases(): Promise<void> {
   configDatabase = null
   dataDatabase = null
   dataDirectory = null
+  // 关库后常驻读缓存必须清空：同一个进程里再开一次库（测试会这么做）时，它拿到的必须是新库的值。
+  invalidateConfigReadCache()
   if (handles.length === 0) {
     console.debug('[database] close skipped reason=not-initialized')
     return
@@ -188,11 +201,36 @@ function openDatabase(role: DatabaseRole, dataDir: string): OpenedDatabase {
     // 因此常规启动几乎不花时间；新建的空库也会被它立刻标记为「已有统计信息」。
     client.exec('PRAGMA optimize')
     console.info(`[database] open completed role=${role} duration=${Date.now() - startedAt}ms`)
-    return { role, client, database }
+    return { role, client, database: role === 'config' ? wrapConfigHandleWithInvalidation(database) : database }
   } catch (error) {
     client.close()
     throw error
   }
+}
+
+/**
+ * 给配置库句柄包一层「写即失效」。
+ *
+ * 拦的是四个会改变配置的入口：`insert` / `update` / `delete` / `transaction`。命中就在真正执行
+ * **之前**作废整份常驻读缓存（见 `./config-read-cache.ts`），于是同一次请求里排在写之后的读
+ * 一定读到新值。`transaction` 的回调拿到的是另一个句柄（drizzle 自己造的），但我们在进
+ * `transaction` 那一刻就已经失效过了，回调里写多少都一样。
+ *
+ * 用 Proxy 而不是在每个 store 里手调：新增一个写路径时没人会记得「顺手失效一下」，
+ * 而这种漏失配是静默的——界面改了配置、代理却还按老值路由。包在这里，覆盖是穷尽的。
+ */
+function wrapConfigHandleWithInvalidation(database: Database): Database {
+  const writeMethods = new Set<PropertyKey>(['insert', 'update', 'delete', 'transaction'])
+  return new Proxy(database, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver)
+      if (!writeMethods.has(property) || typeof value !== 'function') return value
+      return (...args: unknown[]) => {
+        invalidateConfigReadCache()
+        return value.apply(target, args)
+      }
+    },
+  })
 }
 
 /**
@@ -340,15 +378,24 @@ function getMigrationsFolder(role: DatabaseRole): string {
  * 保证内建默认逻辑模型存在。
  *
  * 这条记录是内建「模型直达」规则的落点：客户端发来的模型名大概率不是本机配的逻辑模型，
- * 没有它就没有任何可用的上游起点。名字取 `BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME`，
- * 与服务端的回落匹配共用同一个常量。
+ * 没有它就没有任何可用的上游起点。
+ *
+ * 存在与否认的是 **modelId**（与服务端的回落匹配共用同一个常量）；数据记录 id 由这里现生成——
+ * 它是本机的内部主键，别处一律通过 `getLogicalModelByModelId` 查出来，不要写死，也不要拿它
+ * 当这个模型的标识去比较。
+ *
+ * 按 `modelId` 先查一次而不是 `INSERT OR IGNORE`：主键是记录 id（每次生成的都不一样），
+ * 拿它做冲突判定等于永远不冲突，每次启动都会多插一行。
  */
 function ensureDefaultLogicalModel(db: DatabaseSync): void {
+  const existing = db.prepare('SELECT id FROM logical_models WHERE modelId = ? AND deletedTime IS NULL')
+    .get(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
+  if (existing) return
   const time = BigInt(Date.now())
-  db.prepare(`INSERT OR IGNORE INTO logical_models
-    (id, name, description, enabled, createdTime, updatedTime)
+  db.prepare(`INSERT INTO logical_models
+    (id, modelId, description, enabled, createdTime, updatedTime)
     VALUES (?, ?, ?, 1, ?, ?)`)
-    .run(BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME, BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, time, time)
+    .run(generateId('lm_'), BUILT_IN_DEFAULT_LOGICAL_MODEL_ID, BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION, time, time)
 }
 
 /**

@@ -35,7 +35,7 @@ interface LogicalModelPickerProps {
  * 又要能逐个拿掉、还要能继续往后加 —— 那正好就是一个输入框：已选项是框里的 chip（带优先级序号），
  * 光标所在的地方永远可以接着打关键字，候选列表从框的正下方展开、宽度与框一致。
  *
- * 之前是「一排 chip + 一个添加模型按钮 + 弹层里再放一个搜索框」：同一次选择被拆成两处入口，
+ * 一排 chip + 一个「添加模型」按钮 + 弹层里再放一个搜索框的写法，把同一次选择拆成两处入口，
  * 而多出来的那个按钮并不能回答这里唯一的问题 —— 「现在有谁、顺序如何、还要加谁」。
  *
  * 候选列表不跳过已选项：跳过之后就没法取消勾选、也没法确认「它是不是已经在里面了」，
@@ -69,17 +69,17 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
   const normalizedKeyword = keyword.trim().toLowerCase()
   // 已选在前（维持勾选顺序 = 优先级），其余按名字排在后面：打开面板第一眼就是当前的优先级顺序。
   const ordered = [...logicalModels].sort((left, right) => {
-    const leftIndex = selectedIds.indexOf(left.id)
-    const rightIndex = selectedIds.indexOf(right.id)
+    const leftIndex = selectedIds.indexOf(left.modelId)
+    const rightIndex = selectedIds.indexOf(right.modelId)
     if (leftIndex >= 0 && rightIndex >= 0) return leftIndex - rightIndex
     if (leftIndex >= 0) return -1
     if (rightIndex >= 0) return 1
-    return left.name.localeCompare(right.name)
+    return left.modelId.localeCompare(right.modelId)
   })
   const visible = normalizedKeyword
-    // 筛的就是行里看得见的那三样：名字、描述、id。少筛一样，列表就会跟搜索框互相打脸 ——
+    // 筛的就是行里看得见的那两样：模型 id 与描述。少筛一样，列表就会跟搜索框互相打脸 ——
     // 明明眼前写着 fallback，打进去却说没有匹配。
-    ? ordered.filter(model => [model.name, model.description, model.id].some(field => field.toLowerCase().includes(normalizedKeyword)))
+    ? ordered.filter(model => [model.modelId, model.description].some(field => field.toLowerCase().includes(normalizedKeyword)))
     : ordered
 
   return (
@@ -107,8 +107,8 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
           }}
         >
           {selectedIds.map((modelId, index) => {
-            const model = logicalModels.find(item => item.id === modelId)
-            const name = model?.name ?? modelId
+            const model = logicalModels.find(item => item.modelId === modelId)
+            const name = model?.modelId ?? modelId
             return (
               <span
                 key={modelId}
@@ -154,7 +154,7 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
               if (event.key === 'Enter') {
                 event.preventDefault()
                 const first = visible[0]
-                if (first) onToggle(first.id, !selectedIds.includes(first.id))
+                if (first) onToggle(first.modelId, !selectedIds.includes(first.modelId))
                 return
               }
               // 光标已经在最前面、还没有打任何字时，退格退回上一个选择：删掉刚加错的那个不用去够那个叉。
@@ -185,11 +185,11 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
       >
         <div id={listId} role="listbox" aria-multiselectable className="max-h-72 overflow-y-auto">
           {visible.map(model => {
-            const priority = selectedIds.indexOf(model.id)
+            const priority = selectedIds.indexOf(model.modelId)
             const selected = priority >= 0
             return (
               <button
-                key={model.id}
+                key={model.modelId}
                 type="button"
                 role="option"
                 aria-selected={selected}
@@ -197,7 +197,7 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
                 // 不让这一次按下把焦点从输入框带走：焦点一走，框就失焦、列表就关，
                 // 而 React 会在 click 之前把列表卸掉，这一下点击等于没发生。
                 onMouseDown={event => event.preventDefault()}
-                onClick={() => onToggle(model.id, !selected)}
+                onClick={() => onToggle(model.modelId, !selected)}
               >
                 <span
                   className={cn(
@@ -210,12 +210,11 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
                 {/* 序号只在已选时出现：它就是 chip 上那个数字，两边指的是同一件事（优先级）。 */}
                 <span className="w-3 shrink-0 font-mono system-2xs-regular text-text-quaternary">{selected ? priority + 1 : ''}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate system-xs-medium text-text-primary">{model.name}</span>
+                  <span className="block truncate font-mono system-xs-medium text-text-primary">{model.modelId}</span>
                   {model.description
                     ? <span className="mt-0.5 block truncate system-2xs-regular text-text-tertiary">{model.description}</span>
                     : null}
                 </span>
-                <span className="shrink-0 font-mono system-2xs-regular text-text-quaternary">{model.id}</span>
               </button>
             )
           })}

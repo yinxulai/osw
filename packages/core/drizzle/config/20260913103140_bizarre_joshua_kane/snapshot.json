@@ -1,11 +1,15 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "266e49ca-bcd2-4e8b-96db-975e8f441870",
+  "id": "75c8df04-a11c-41e6-a49d-c450d7cdcf3e",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
+    {
+      "name": "client_config_versions",
+      "entityType": "tables"
+    },
     {
       "name": "logical_models",
       "entityType": "tables"
@@ -43,6 +47,10 @@
       "entityType": "tables"
     },
     {
+      "name": "route_rule_sets",
+      "entityType": "tables"
+    },
+    {
       "name": "scheduling_policies",
       "entityType": "tables"
     },
@@ -62,6 +70,96 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "clientKey",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "filePath",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "contentHash",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "sizeBytes",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'apply'",
+      "generated": null,
+      "name": "origin",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "note",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "client_config_versions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "logical_models"
     },
     {
@@ -70,7 +168,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "name",
+      "name": "modelId",
       "entityType": "columns",
       "table": "logical_models"
     },
@@ -766,6 +864,76 @@
     },
     {
       "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "description",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "definition",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "createdTime",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updatedTime",
+      "entityType": "columns",
+      "table": "route_rule_sets"
+    },
+    {
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
@@ -1169,6 +1337,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "client_config_versions_pk",
+      "table": "client_config_versions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "logical_models_pk",
       "table": "logical_models",
       "entityType": "pks"
@@ -1229,6 +1406,15 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "route_rule_sets_pk",
+      "table": "route_rule_sets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "key"
       ],
       "nameExplicit": false,
@@ -1244,6 +1430,50 @@
       "name": "workflows_pk",
       "table": "workflows",
       "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "clientKey",
+          "isExpression": false
+        },
+        {
+          "value": "filePath",
+          "isExpression": false
+        },
+        {
+          "value": "contentHash",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_client_config_versions_hash",
+      "entityType": "indexes",
+      "table": "client_config_versions"
+    },
+    {
+      "columns": [
+        {
+          "value": "clientKey",
+          "isExpression": false
+        },
+        {
+          "value": "filePath",
+          "isExpression": false
+        },
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_client_config_versions_file",
+      "entityType": "indexes",
+      "table": "client_config_versions"
     },
     {
       "columns": [
@@ -1284,10 +1514,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_protocol_converters_unique_active",
+      "name": "idx_protocol_converters_unique",
       "entityType": "indexes",
       "table": "protocol_converters"
     },
@@ -1334,10 +1564,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_endpoints_provider_protocol_active",
+      "name": "idx_provider_endpoints_provider_protocol",
       "entityType": "indexes",
       "table": "provider_endpoints"
     },
@@ -1384,10 +1614,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_model_endpoints_unique_active",
+      "name": "idx_provider_model_endpoints_unique",
       "entityType": "indexes",
       "table": "provider_model_endpoints"
     },
@@ -1434,10 +1664,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_model_request_rewrite_rule_priority_active",
+      "name": "idx_provider_model_request_rewrite_rules_priority",
       "entityType": "indexes",
       "table": "provider_model_request_rewrite_rules"
     },
@@ -1466,10 +1696,10 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
-      "where": "deletedTime IS NULL",
+      "isUnique": false,
+      "where": null,
       "origin": "manual",
-      "name": "idx_provider_models_provider_model_active",
+      "name": "idx_provider_models_provider_model",
       "entityType": "indexes",
       "table": "provider_models"
     },
@@ -1582,6 +1812,34 @@
     {
       "columns": [
         {
+          "value": "version",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_route_rule_sets_version",
+      "entityType": "indexes",
+      "table": "route_rule_sets"
+    },
+    {
+      "columns": [
+        {
+          "value": "updatedTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_route_rule_sets_updated_time",
+      "entityType": "indexes",
+      "table": "route_rule_sets"
+    },
+    {
+      "columns": [
+        {
           "value": "logicalModelId",
           "isExpression": false
         },
@@ -1644,7 +1902,7 @@
           "isExpression": false
         }
       ],
-      "isUnique": true,
+      "isUnique": false,
       "where": null,
       "origin": "manual",
       "name": "idx_workflows_type_version",
@@ -1682,15 +1940,6 @@
       "name": "idx_workflows_deleted_time",
       "entityType": "indexes",
       "table": "workflows"
-    },
-    {
-      "columns": [
-        "name"
-      ],
-      "nameExplicit": false,
-      "name": "logical_models_name_unique",
-      "entityType": "uniques",
-      "table": "logical_models"
     }
   ],
   "renames": []

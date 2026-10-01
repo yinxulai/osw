@@ -18,9 +18,9 @@ function runWorkflow(graph: WorkflowGraph, inputPayload: unknown, options?: Work
  * 所以这里至少给两个，才能验出「两个分支落点不同」。
  */
 const presetLogicalModels = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 function singleCase(conditions: ConditionRule[] = [{ fieldPath: 'request.body.tenant', valueType: 'string', operator: 'startsWith', value: 'vip-' }]): ConditionCase {
@@ -247,7 +247,7 @@ describe('router engine', () => {
           valueType: 'string',
           operator: 'in',
           valueSource: 'field',
-          valueFieldPath: 'logicalModels[*].id',
+          valueFieldPath: 'logicalModels[*].modelId',
         }])],
       },
       modelSelect: {
@@ -256,8 +256,8 @@ describe('router engine', () => {
     })
 
     const logicalModels = [
-      { id: 'model-hit', name: 'Model Hit', enabled: true },
-      { id: 'model-fallback', name: 'Model Fallback', enabled: true },
+      { modelId: 'model-hit', enabled: true },
+      { modelId: 'model-fallback', enabled: true },
     ]
 
     const hit = await runWorkflow(graph, {
@@ -288,7 +288,7 @@ describe('router engine', () => {
 
     const payload = hit.outputPayload as { request: { body: { model: string } }; route: Record<string, unknown> }
     // `route` 只装「决策结果 + 不可推导的一手事实」，其余一律不落：请求模型就是请求自己的字段
-    // （`request.body.model`），「可用逻辑模型 id」用 `logicalModels[*].id` 投影现算。
+    // （`request.body.model`），「可用逻辑模型 id」用 `logicalModels[*].modelId` 投影现算。
     // 用整键集合断言（而不是逐个 not.toContain）：将来任何新派生字段加进来都会在这里现形。
     expect(Object.keys(payload.route).sort()).toEqual(['controls', 'fallback', 'modelIds', 'protocol', 'traceId', 'transport'])
     expect(payload.request.body.model).toBe('model-hit')
@@ -414,7 +414,7 @@ describe('router engine', () => {
         headers: { 'x-provider': 'openai' },
         body: { tenant: 'vip-cn', model: 'model-vip' },
       },
-      logicalModels: [{ id: 'model-vip', name: 'VIP', enabled: true }],
+      logicalModels: [{ modelId: 'model-vip', enabled: true }],
       metadata: {},
     })
 
@@ -439,7 +439,7 @@ describe('router engine', () => {
 
     const result = await runWorkflow(graph, {
       request: { path: '/v1/chat/completions', headers: {}, body: { model: 'gpt-4o-mini' } },
-      logicalModels: [{ id: 'model-vip', name: 'VIP', enabled: true }],
+      logicalModels: [{ modelId: 'model-vip', enabled: true }],
       metadata: {},
     })
 
@@ -465,7 +465,7 @@ describe('router engine', () => {
           input: [{ role: 'user', content: '真正要读的' }],
         },
       },
-      logicalModels: [{ id: 'model-vip', name: 'VIP', enabled: true }],
+      logicalModels: [{ modelId: 'model-vip', enabled: true }],
       metadata: {},
     })
 
@@ -699,8 +699,8 @@ describe('router engine', () => {
 
   it('默认策略（基础节点组合）：请求模型是逻辑模型时直连该逻辑模型', async () => {
     const logicalModels = [
-      { id: 'model-hit', name: 'Model Hit', enabled: true },
-      { id: 'default', name: 'Default', enabled: true },
+      { modelId: 'model-hit', enabled: true },
+      { modelId: 'default', enabled: true },
     ]
     const result = await runWorkflow(createDefaultPolicyGraph(logicalModels), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'model-hit' } },
@@ -720,8 +720,8 @@ describe('router engine', () => {
 
   it('默认策略（基础节点组合）：请求模型不是逻辑模型时落到默认逻辑模型', async () => {
     const logicalModels = [
-      { id: 'model-hit', name: 'Model Hit', enabled: true },
-      { id: 'default', name: 'Default', enabled: true },
+      { modelId: 'model-hit', enabled: true },
+      { modelId: 'default', enabled: true },
     ]
     const result = await runWorkflow(createDefaultPolicyGraph(logicalModels), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'gpt-4o-mini' } },
@@ -904,7 +904,7 @@ describe('router engine', () => {
 
       expect({ id: preset.id, input: result.nodeOutputs.input }).toEqual({
         id: preset.id,
-        input: [{ name: '逻辑模型', value: presetLogicalModels.map(model => model.id) }],
+        input: [{ name: '逻辑模型', value: presetLogicalModels.map(model => model.modelId) }],
       })
 
       if (!graph.nodes.some(node => node.kind === 'protocol-discovery')) continue
@@ -918,7 +918,7 @@ describe('router engine', () => {
   it('变量取值：字段为空时回落到兜底逻辑模型', async () => {
     const result = await runWorkflow(createVariableModelGraph('model-fallback'), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: '' } },
-      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      logicalModels: [{ modelId: 'model-hit', enabled: true }],
       metadata: {},
     })
 
@@ -934,20 +934,20 @@ describe('router engine', () => {
   it('变量取值：字段是通配投影数组时整体作为落点', async () => {
     const graph = createVariableModelGraph()
     graph.nodes = graph.nodes.map(node => node.kind === 'model-select'
-      ? { ...node, variablePath: 'logicalModels[*].id' }
+      ? { ...node, variablePath: 'logicalModels[*].modelId' }
       : node)
 
     const result = await runWorkflow(graph, {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'gpt-4o-mini' } },
       logicalModels: [
-        { id: 'model-a', name: 'Model A', enabled: true },
-        { id: 'model-b', name: 'Model B', enabled: true },
+        { modelId: 'model-a', enabled: true },
+        { modelId: 'model-b', enabled: true },
       ],
       metadata: {},
     })
 
     expect(result.nodeOutputs['model-select']).toEqual([
-      { name: '取值字段', value: 'logicalModels[*].id' },
+      { name: '取值字段', value: 'logicalModels[*].modelId' },
       { name: '落点逻辑模型', value: ['model-a', 'model-b'] },
     ])
   })
@@ -957,7 +957,7 @@ describe('router engine', () => {
     // 引擎原样交给下游——「写错了」该由供应商规划报出来，而不是在这里静默换模型。
     const result = await runWorkflow(createVariableModelGraph(), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'deepseek-v4.1-flash' } },
-      logicalModels: [{ id: 'deepseek-v4-1-flash', name: 'deepseek-v4.1-flash', enabled: true }],
+      logicalModels: [{ modelId: 'deepseek-v4-1-flash', enabled: true }],
       metadata: {},
     })
 
@@ -975,7 +975,7 @@ describe('router engine', () => {
   it('变量取值：取值已经是逻辑模型 id 时原样直连', async () => {
     const result = await runWorkflow(createVariableModelGraph(), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'model-hit' } },
-      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      logicalModels: [{ modelId: 'model-hit', enabled: true }],
       metadata: {},
     })
 
@@ -993,7 +993,7 @@ describe('router engine', () => {
 
     const result = await runWorkflow(graph, {
       request: { path: '/v1/chat/completions', headers: { 'x-model-id': 'model-hit' }, body: { model: 'gpt-4o-mini' } },
-      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      logicalModels: [{ modelId: 'model-hit', enabled: true }],
       metadata: {},
     })
 
@@ -1004,7 +1004,7 @@ describe('router engine', () => {
   it('变量取值：没有兜底逻辑模型且取不到值时落点为空', async () => {
     const result = await runWorkflow(createVariableModelGraph(), {
       request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: '' } },
-      logicalModels: [{ id: 'model-hit', name: 'Model Hit', enabled: true }],
+      logicalModels: [{ modelId: 'model-hit', enabled: true }],
       metadata: {},
     })
 
@@ -1139,7 +1139,7 @@ function createIterationGraph(overrides?: IterationOverrides): WorkflowGraph {
       description: '',
       position: { x: 600, y: 0 },
       source: 'variable',
-      variablePath: 'route.iteration.item.id',
+      variablePath: 'route.iteration.item.modelId',
       modelIds: [],
       fallbackModelIds: [],
     },
@@ -1164,9 +1164,9 @@ function createIterationGraph(overrides?: IterationOverrides): WorkflowGraph {
 }
 
 const logicalModels = [
-  { id: 'model-off', name: 'Off', enabled: false },
-  { id: 'model-on', name: 'On', enabled: true },
-  { id: 'model-later', name: 'Later', enabled: true },
+  { modelId: 'model-off', enabled: false },
+  { modelId: 'model-on', enabled: true },
+  { modelId: 'model-later', enabled: true },
 ]
 
 describe('router engine · 遍历迭代', () => {
@@ -1233,7 +1233,7 @@ describe('router engine · 遍历迭代', () => {
   it('list 模式收集每轮命中值', async () => {
     // 让循环体每轮都命中：收集路径改读本轮作用域里的 enabled。
     const result = await runWorkflow(createIterationGraph({
-      iteration: { sourcePath: 'logicalModels[*].id', collectPath: 'route.iteration.item', collectMode: 'list', resultPath: 'route.hitIds' },
+      iteration: { sourcePath: 'logicalModels[*].modelId', collectPath: 'route.iteration.item', collectMode: 'list', resultPath: 'route.hitIds' },
     }), {
       request: { path: '/v1/chat/completions', headers: {}, body: { model: 'gpt-4o-mini' } },
       logicalModels,
@@ -1243,7 +1243,7 @@ describe('router engine · 遍历迭代', () => {
     // 通配投影把对象数组拍平成 id 数组，遍历的是字符串元素。
     const payload = result.outputPayload as { route: { hitIds: string[] } }
     expect(payload.route.hitIds).toEqual(['model-off', 'model-on', 'model-later'])
-    expect(result.trace.find(item => item.nodeId === 'iteration')?.details).toMatchObject({ sourcePath: 'logicalModels[*].id', executed: 3 })
+    expect(result.trace.find(item => item.nodeId === 'iteration')?.details).toMatchObject({ sourcePath: 'logicalModels[*].modelId', executed: 3 })
   })
 
   it('轮数上限生效，未遍历完的项会记录在 trace 里', async () => {
@@ -1335,7 +1335,7 @@ function createScriptGraph(overrides?: ScriptNodeOverrides): WorkflowGraph {
         enabled: true,
         description: '',
         position: { x: 100, y: 0 },
-        code: "return get('logicalModels[*].id')",
+        code: "return get('logicalModels[*].modelId')",
         resultPath: 'route.scriptResult',
         timeoutMilliseconds: SCRIPT_TIMEOUT_DEFAULT,
         ...overrides,
@@ -1348,7 +1348,7 @@ function createScriptGraph(overrides?: ScriptNodeOverrides): WorkflowGraph {
 
 const scriptPayload = {
   request: { path: '/v1/chat/completions', headers: {}, body: { model: 'gpt-4o-mini' } },
-  logicalModels: [{ id: 'model-vip', name: 'VIP', enabled: true }],
+  logicalModels: [{ modelId: 'model-vip', enabled: true }],
   metadata: {},
 }
 
@@ -1464,7 +1464,7 @@ function createPromptGraph(overrides?: PromptNodeOverrides): WorkflowGraph {
         position: { x: 200, y: 0 },
         logicalModelId: 'model-vip',
         systemPrompt: '租户 ${request.body.tenant} 的路由助手',
-        promptTemplate: '请在 ${logicalModels[*].id} 里挑一个，请求模型是 ${request.body.model}，未知字段是 ${route.neverSet}。',
+        promptTemplate: '请在 ${logicalModels[*].modelId} 里挑一个，请求模型是 ${request.body.model}，未知字段是 ${route.neverSet}。',
         resultPath: 'route.promptResult',
         temperature: 0.2,
         maxTokens: 256,
@@ -1479,7 +1479,7 @@ function createPromptGraph(overrides?: PromptNodeOverrides): WorkflowGraph {
 
 const promptPayload = {
   request: { path: '/v1/chat/completions', headers: { 'x-provider': 'openai' }, body: { model: 'gpt-4o-mini', tenant: 'vip-1' } },
-  logicalModels: [{ id: 'model-vip', name: 'VIP', enabled: true }, { id: 'model-default', name: '默认', enabled: true }],
+  logicalModels: [{ modelId: 'model-vip', enabled: true }, { modelId: 'model-default', enabled: true }],
   metadata: {},
 }
 

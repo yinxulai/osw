@@ -2,6 +2,9 @@ import type { ModelStat } from '@common/schemas'
 import { tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { DeletedTag } from '@/components/deleted-tag'
+import { useDeletedProviderIds } from '@/data/providers'
+import { useDeletedProviderModelIds } from '@/data/provider-models'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
@@ -25,6 +28,9 @@ export function ModelRanking(props: ModelRankingProps) {
   const t = useTranslation()
   const locale = useLocale()
   const rows = stats.slice(0, MODEL_RANKING_LIMIT)
+  // 统计里的供应商名/模型名是写入当时的快照，删掉配置行不会让它们从榜上消失——只补「已删除」标签。
+  const deletedProviderIds = useDeletedProviderIds()
+  const deletedProviderModelIds = useDeletedProviderModelIds()
 
   return (
     <Card className="w-full">
@@ -62,8 +68,18 @@ export function ModelRanking(props: ModelRankingProps) {
                       {idx + 1}
                     </span>
                   </td>
-                  <td className={cn(tableCellClass, 'system-xs-medium text-text-primary')}>{m.providerModelName}</td>
-                  <td className={cn(tableCellClass, 'text-text-tertiary')}>{m.providerName}</td>
+                  <td className={cn(tableCellClass, 'system-xs-medium text-text-primary')}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate">{m.providerModelName}</span>
+                      {deletedProviderModelIds.has(m.providerModelId) && <DeletedTag />}
+                    </span>
+                  </td>
+                  <td className={cn(tableCellClass, 'text-text-tertiary')}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate">{m.providerName}</span>
+                      {deletedProviderIds.has(m.providerId) && <DeletedTag />}
+                    </span>
+                  </td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatCount(locale, m.attempts)}</td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatMilliseconds(m.avgTtftMs)}</td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatOutputSpeed(m.avgTps)}</td>

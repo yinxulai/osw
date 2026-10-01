@@ -21,6 +21,8 @@ export interface FetchProviderModelsInput {
 
 export const providerApi = {
   list: () => request<Provider[]>('/provider/list'),
+  /** 连软删除的行一起回，用来认出厂告里那些已经删掉的供应商（历史快照仍按 id 引用它们）。 */
+  listIncludingDeleted: () => request<Provider[]>('/provider/list', { includeDeleted: true }),
   get: (id: string) => request<Provider>('/provider/get', { id }),
   endpoints: (id: string) => request<ProviderEndpoint[]>('/provider/endpoints', { id }),
   fetchModels: (input: FetchProviderModelsInput) => request<{ models: FetchedProviderModel[]; matchedUrl: string; attempts: { url: string; statusCode?: number; error?: string }[] }>('/provider/fetch-models', input),

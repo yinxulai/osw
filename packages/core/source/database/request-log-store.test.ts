@@ -3,7 +3,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabases, getDataDb, initDatabases } from './index'
-import { createProvider } from './provider-store'
+import { createProvider, deleteProvider, listProviders } from './provider-store'
+import { createProviderModelRoute, deleteProviderModelRoute } from './model-store'
+import { createLogicalModel, deleteLogicalModel, listLogicalModels } from './logical-model-store'
 import {
   countRequestLogs,
   createAttemptContent,
@@ -369,5 +371,102 @@ describe('request log store persistence', () => {
     // 服务那次尝试没观测到首字时，请求级只能是「不知道」——不能用更早的样本顶上。
     getDataDb().$client.prepare('UPDATE request_attempts SET ttftMilliseconds = NULL WHERE id = ?').run(serving.id)
     expect((await getRequestLog(log.id))?.ttftMilliseconds).toBeNull()
+  })
+})
+
+/**
+ * 请求日志查询读的是**尝试行上的快照**（`providerId` / `providerModelId`）以及请求行上的
+ * `logicalModelId`，都不是对配置表的一次实时 join。删除配置只该让供应商/模型退出
+ * 「可被调度」的名单，不该让已经发生过的请求从日志里消失——用户删掉一个不用的供应商，
+ * 恰恰还要回头查它以前处理过哪些请求。
+ */
+describe('request logs are unaffected by deleted configuration', () => {
+  interface LoggedFixture {
+    requestId: string
+    providerId: string
+    providerModelId: string
+    logicalModelId: string
+  }
+
+  /** 造一条「供应商 + 模型 + 逻辑模型 + 一次尝试」的完整记录，用于删除后比对。 */
+  async function createLoggedTraffic(): Promise<LoggedFixture> {
+    const logicalModel = await createLogicalModel({ modelId: 'deleted-logical-model', description: '', enabled: true })
+    const provider = await createProvider({ name: '要删掉的供应商', apiKeyReference: 'key_deleted_logs', timeoutMilliseconds: 30_000, enabled: true })
+    const model = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'deleted-model',
+      priority: 1,
+      endpoints: [{ protocol: 'openai-responses', endpointUrl: 'https://example.com/v1/responses', customAuthHeader: null, protocolConversionEnabled: false }],
+    })
+    const log = await createRequestLog({
+      id: 'req_deleted_config',
+      logicalModelId: logicalModel.id,
+      clientProtocol: 'openai-completions',
+      transport: 'http-stream',
+      status: 'success',
+      totalDurationMilliseconds: 10,
+    })
+    await createAttemptOrThrow({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: model.id,
+      providerName: provider.name,
+      providerModelName: model.modelName,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      status: 'success',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      durationMilliseconds: 5,
+    })
+    return { requestId: log.id, providerId: provider.id, providerModelId: model.id, logicalModelId: logicalModel.id }
+  }
+
+  it('still lists, reads, and counts the log after the provider is soft-deleted', async () => {
+    const fixture = await createLoggedTraffic()
+    const before = await getRequestLog(fixture.requestId)
+
+    await deleteProvider(fixture.providerId)
+
+    expect(await listRequestLogs(50, 0)).toEqual([expect.objectContaining({ id: fixture.requestId })])
+    expect(await getRequestLog(fixture.requestId)).toEqual(before)
+    expect(await countRequestLogs({})).toBe(1)
+    expect(await countRequestLogs({ providerId: fixture.providerId })).toBe(1)
+    expect(await countRequestLogs({ providerModelId: fixture.providerModelId })).toBe(1)
+    // 尝试行上的快照也一并保留：日志详情页靠它显示当时是哪个供应商/模型处理的。
+    expect(await listAttemptsByRequest(fixture.requestId)).toEqual([
+      expect.objectContaining({ providerId: fixture.providerId, providerModelId: fixture.providerModelId, providerName: '要删掉的供应商', providerModelName: 'deleted-model' }),
+    ])
+  })
+
+  it('still lists, reads, and counts the log after only the provider model row is soft-deleted', async () => {
+    const fixture = await createLoggedTraffic()
+    const before = await getRequestLog(fixture.requestId)
+
+    await deleteProviderModelRoute(fixture.providerModelId)
+
+    expect(await listRequestLogs(50, 0)).toEqual([expect.objectContaining({ id: fixture.requestId })])
+    expect(await getRequestLog(fixture.requestId)).toEqual(before)
+    expect(await countRequestLogs({ providerId: fixture.providerId })).toBe(1)
+    expect(await countRequestLogs({ providerModelId: fixture.providerModelId })).toBe(1)
+  })
+
+  it('still matches the deleted records when filtering by provider, model, and logical model', async () => {
+    const fixture = await createLoggedTraffic()
+
+    await deleteProvider(fixture.providerId)
+    // 逻辑模型是独立的一张表：删掉它同样不该让日志查不到。
+    await deleteLogicalModel(fixture.logicalModelId)
+
+    expect(await listProviders()).toEqual([])
+    // 库里还留着兜底逻辑模型，删掉的那个必须从活跃列表里消失。
+    expect((await listLogicalModels()).map(model => model.id)).not.toContain(fixture.logicalModelId)
+    expect(await listRequestLogs(50, 0, { providerId: fixture.providerId })).toEqual([expect.objectContaining({ id: fixture.requestId })])
+    expect(await listRequestLogs(50, 0, { providerModelId: fixture.providerModelId })).toEqual([expect.objectContaining({ id: fixture.requestId })])
+    expect(await listRequestLogs(50, 0, { logicalModelId: fixture.logicalModelId })).toEqual([expect.objectContaining({ id: fixture.requestId })])
+    expect(await listRequestLogs(50, 0, { providerId: 'prov_nonexistent' })).toEqual([])
   })
 })

@@ -54,6 +54,6 @@ describe('RULE_VARIABLE_PATH_HINTS', () => {
   it('留下落点真正会用到的两条：请求里的模型名与可用逻辑模型 id', () => {
     const variablePaths = RULE_VARIABLE_PATH_HINTS.map(hint => hint.path)
     expect(variablePaths).toContain('request.body.model')
-    expect(variablePaths).toContain('logicalModels[*].id')
+    expect(variablePaths).toContain('logicalModels[*].modelId')
   })
 })

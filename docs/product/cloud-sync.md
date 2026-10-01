@@ -33,7 +33,7 @@ OSW 的配置（供应商、上游模型、逻辑模型与它们的排队顺序�
 ### 首版范围
 
 - 供应商与上游模型（复用供应商包格式），**含各供应商的 API Key**；
-- 逻辑模型（id、名称、说明、启用状态）与它们的顺序；
+- 逻辑模型（`modelId`、说明、启用状态）与它们的顺序；
 - 逻辑模型到上游模型的绑定（优先级、启用状态）；
 - 手动上传、手动拉取；
 - 凭据的保存、清除与「能不能用」的校验；
@@ -151,22 +151,24 @@ interface CloudBackupProvider {
 
 ```typescript
 const CONFIG_SNAPSHOT_FORMAT = 'osw/config-snapshot'
-const CONFIG_SNAPSHOT_VERSION = 1
+const CONFIG_SNAPSHOT_VERSION = 3
 const CONFIG_SNAPSHOT_FILE_NAME = 'osw-config.json'
 
 interface ConfigSnapshot {
   format: 'osw/config-snapshot'
-  version: 1
+  version: 3
   exportedAt: number
   providers: ProviderBundleProvider[]
-  logicalModels: { id: string; name: string; description: string; enabled: boolean }[]
-  bindings: { logicalModelId: string; providerName: string; modelName: string; priority: number; enabled: boolean }[]
+  logicalModels: { modelId: string; description: string; enabled: boolean }[]
+  bindings: { modelId: string; providerName: string; modelName: string; priority: number; enabled: boolean }[]
 }
 ```
 
 `providers` 与供应商包共用同一个 schema（`provider-bundle.ts` 里的 `ProviderBundleProviderSchema`），因此上游模型、端点绑定等字段的变化会同时作用于两条通路。
 
 **绑定用名字而不是 id 指代供应商与模型。** id 是本机的（`prov_…`、`model_…`），换一台机器后必然对不上；名字是用户自己起的，也是他跨机器能认出来的东西。代价是「改名」在同步语义上等于「换一个对象」。
+
+**逻辑模型同样只带 `modelId`，不带数据记录 id。** 记录 id（`lm_*`）由 `generateId` 在本机生成，两台机器必然不同，同步过去只会让两边的引用互相污染；`modelId` 才是模型的身份——请求按它匹配、路由定义按它引用，所以它也是快照里唯一能拿来指认逻辑模型的东西。绑定里的 `modelId` 同理，指的不是外键那个记录 id。
 
 **快照带着密钥。** 导出的供应商条目里包含 `apiKey`，拉取时由供应商导入的既有规则写回本机密钥库。不带的话，新机器拉下来的是一堆需要逐个去官网重签的渠道，而不是一份能直接用的配置。代价是密钥离开了本机，所以界面与文档都把这件事写在明处。
 
@@ -192,8 +194,8 @@ interface ConfigSnapshot {
 2. 校验成快照，不通过则报「这不是一份配置快照」并附前几条字段级原因；
 3. 应用：
    - **供应商**按名称覆盖，含各自的 API Key，沿用供应商导入的规则（包内未提到的模型软删除）；
-   - **逻辑模型**按 id 新建或更新，快照里没有的逻辑模型**不动**；顺序整体按快照重排；
-   - **绑定**只重写快照里出现过的逻辑模型：这些逻辑模型上没被提到的绑定会撤销，其余逻辑模型完全不动；
+   - **逻辑模型**按 `modelId` 新建或更新，快照里没有的逻辑模型**不动**；顺序整体按快照重排；
+   - **绑定**只重写快照里出现过的逻辑模型：这些逻辑模型上没被提到的绑定会撤销，其余逻辑模型完全不动；因为快照按 `modelId` 说话而外键挂的是记录 id，写入前先做一次 `modelId → 记录 id` 的翻译（`mapLogicalModelIdsToRecordIds`），快照里与本机对不上的模型名不会静默地写坏外键；
 4. 记录拉取时间。
 
 第 2、3 条的取舍与供应商包一致：把一个模型从队列里移掉是常见的编辑动作，它必须能同步过去；但对快照没提到的对象动刀就不是同步而是删除了。

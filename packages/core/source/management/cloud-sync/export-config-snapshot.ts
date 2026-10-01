@@ -42,13 +42,19 @@ export async function exportConfigSnapshot(): Promise<ConfigSnapshotExportResult
     model.id,
     { providerName: providerNameById.get(model.providerId) ?? '', modelName: model.modelName },
   ]))
+  // 逻辑模型同理：快照里写 **模型 id**（`modelId`），不写那条数据记录的主键 ——
+  // 后者换台机器就是另一个值，写进去只会得到一堆指不到任何东西的悬空引用。
+  const modelIdByRecordId = new Map(logicalModels.map(model => [model.id, model.modelId]))
 
   const bindings = policies.flatMap(policy => {
     const identity = modelIdentityById.get(policy.providerModelId)
     // 供应商或模型已被删除时绑定会指向不存在的行：这种绑定没有可传输的语义，跳过而不是写一个空名字。
     if (!identity || identity.providerName.length === 0) return []
+    const modelId = modelIdByRecordId.get(policy.logicalModelId)
+    // 逻辑模型已被删除时同理：绑定指向一条不存在的记录，导出它没有意义。
+    if (modelId === undefined) return []
     return [{
-      logicalModelId: policy.logicalModelId,
+      modelId,
       providerName: identity.providerName,
       modelName: identity.modelName,
       priority: policy.priority,
@@ -62,8 +68,7 @@ export async function exportConfigSnapshot(): Promise<ConfigSnapshotExportResult
     exportedAt: Date.now(),
     providers: bundle.providers,
     logicalModels: logicalModels.map(model => ({
-      id: model.id,
-      name: model.name,
+      modelId: model.modelId,
       description: model.description,
       enabled: model.enabled,
     })),

@@ -29,7 +29,12 @@ export type HealthMap = Record<string, ProviderHealth>
 export type ProviderModelHealthMap = Record<string, ProviderModelHealth>
 
 interface LogicalModelCardProps {
-  logicalModelName: string
+  /**
+   * 模型 id：卡片标题，也是请求要发的模型名。
+   *
+   * 这里**不是**数据记录 id —— 那把钥匙是本机的内部主键，不该出现在界面上。
+   */
+  modelId: string
   /** 逻辑模型的用途说明；空串时以 `—` 占位，避免卡片头高度随数据有无变化。 */
   logicalModelDescription: string
   /** 内建兜底逻辑模型（请求未命中任何其他逻辑模型时的落点）。 */
@@ -61,7 +66,7 @@ interface LogicalModelCardProps {
 
 export function LogicalModelCard(props: LogicalModelCardProps) {
   const {
-    logicalModelName,
+    modelId,
     logicalModelDescription,
     builtIn,
     models,
@@ -120,7 +125,7 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
             // 静态画面里它只是一个没有文字的图标，浮入卡片头才出现（20px + 8px 间距）。
             dragging ? 'w-7' : 'group-hover/header:w-7',
           )}
-          aria-label={t('logicalModels.card.dragAria', { name: logicalModelName })}
+          aria-label={t('logicalModels.card.dragAria', { id: modelId })}
           title={t('logicalModels.card.dragTitle')}
           {...dragHandleProps}
         >
@@ -128,7 +133,7 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <CardTitle className="truncate">{logicalModelName}</CardTitle>
+            <CardTitle className="truncate">{modelId}</CardTitle>
             {builtIn && <Badge variant="muted" className="shrink-0">{t('logicalModels.card.builtIn')}</Badge>}
             {coolingCount > 0 && <Badge variant="destructive" className="shrink-0">{t('logicalModels.card.cooling', { count: coolingCount })}</Badge>}
           </div>
@@ -171,10 +176,10 @@ export function LogicalModelCard(props: LogicalModelCardProps) {
                 )}
               >
                 {onEdit && (
-                  <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={t('logicalModels.card.editAria', { name: logicalModelName })} title={t('logicalModels.card.editTitle')}><Pencil size={16} /></Button>
+                  <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={t('logicalModels.card.editAria', { id: modelId })} title={t('logicalModels.card.editTitle')}><Pencil size={16} /></Button>
                 )}
                 {onDelete && (
-                  <Button variant="ghost" size="icon-sm" onClick={onDelete} aria-label={t('logicalModels.card.deleteAria', { name: logicalModelName })} title={t('logicalModels.card.deleteTitle')}><Trash2 size={16} /></Button>
+                  <Button variant="ghost" size="icon-sm" onClick={onDelete} aria-label={t('logicalModels.card.deleteAria', { id: modelId })} title={t('logicalModels.card.deleteTitle')}><Trash2 size={16} /></Button>
                 )}
               </div>
             )}

@@ -158,6 +158,26 @@ describe('provider management', () => {
     expect(secretStore.delete).toHaveBeenCalledWith('key_delete_me')
   })
 
+  // 删除只是软删除：默认列表把它藏起来，但 `includeDeleted` 必须能把它拿回来。
+  // 统计分析里的供应商名是写入当时的快照，界面上要靠这份全量名单标出「这一家已经删了」。
+  it('hides deleted providers by default but returns them with includeDeleted', async () => {
+    const provider = await createProvider({ name: 'Deleted Provider', apiKeyReference: 'key_deleted', enabled: true })
+
+    const deleteRes = mockResponse()
+    await providerRoutes.invoke('/api/provider/delete', deleteRes, { id: provider.id })
+
+    const activeRes = mockResponse()
+    await providerRoutes.invoke('/api/provider/list', activeRes)
+    const active = responseData(activeRes).data as Array<{ id: string }>
+    expect(active.some(row => row.id === provider.id)).toBe(false)
+
+    const allRes = mockResponse()
+    await providerRoutes.invoke('/api/provider/list', allRes, { includeDeleted: true })
+    const all = responseData(allRes).data as Array<{ id: string; deletedTime: number | null }>
+    expect(all).toEqual(expect.arrayContaining([expect.objectContaining({ id: provider.id })]))
+    expect(all.find(row => row.id === provider.id)?.deletedTime).not.toBeNull()
+  })
+
   it('resets a provider health record', async () => {
     const provider = await createProvider({ name: 'Heal Me', apiKeyReference: 'key_heal_me', enabled: true })
 

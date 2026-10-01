@@ -67,7 +67,7 @@ describe('resolveInputHints', () => {
     const paths = hints.fields.map(field => field.path)
     expect(paths).toEqual(expect.arrayContaining([
       'logicalModels',
-      'logicalModels[*].id',
+      'logicalModels[*].modelId',
       'request.body',
       'request.body.model',
       'route.protocol',
@@ -87,7 +87,7 @@ describe('resolveInputHints', () => {
     // 入口节点不解析请求体：体里有哪些字段、是什么格式由协议决定，
     // 所以这里能声称的只有请求行、请求头、体整体，以及调用方自带的 metadata。
     // 逻辑模型列表是运行时注入的，任何静态示例里都不会有它，
-    // 所以这组通配投影必须无条件出现 —— 命中判断 `logicalModels[*].id` 靠它。
+    // 所以这组通配投影必须无条件出现 —— 命中判断 `logicalModels[*].modelId` 靠它。
     const target = condition('target')
     const hints = resolveInputHints(
       t,
@@ -103,7 +103,7 @@ describe('resolveInputHints', () => {
       'request.body',
       'metadata',
       'logicalModels',
-      'logicalModels[*].id',
+      'logicalModels[*].modelId',
       'logicalModels[*].enabled',
     ])
     expect(field('request.headers')).toMatchObject({ valueType: 'object', sourceNodeId: 'input' })
@@ -113,7 +113,7 @@ describe('resolveInputHints', () => {
     expect(field('metadata')?.note).toBeTruthy()
     expect(field('logicalModels')).toMatchObject({ valueType: 'array', sourceNodeId: 'input' })
     expect(field('logicalModels')?.note).toBeTruthy()
-    expect(field('logicalModels[*].id')).toMatchObject({ valueType: 'string', sourceNodeId: 'input' })
+    expect(field('logicalModels[*].modelId')).toMatchObject({ valueType: 'string', sourceNodeId: 'input' })
     expect(field('logicalModels[*].enabled')).toMatchObject({ valueType: 'boolean' })
   })
 
@@ -269,9 +269,9 @@ function readPathsOf(node: WorkflowNodeModel): string[] {
 
 /** 预设生成用的逻辑模型列表：`default` 是兜底落点，另两个给分流落点用。 */
 const presetModels: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 describe('内置策略 × 字段候选表', () => {

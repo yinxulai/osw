@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ThemeModeMenu, themeModeLabelKey } from '@/components/theme-mode-menu'
+import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
 import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
@@ -20,11 +20,10 @@ interface IndicatorRect {
 interface AppSidebarProps {
   showBrand: boolean
   theme: Theme
-  /** 主题偏好（含「跟随系统」）：菜单里勾着哪一项由它决定，与设置页同源。 */
-  themeMode: ThemeMode
   proxyRunning: boolean
   proxyPort?: number
-  onThemeModeChange: (mode: ThemeMode) => void
+  /** 亮暗翻转。偏好是三态，装不进一个按钮——「跟随系统」只在设置页里选。 */
+  onToggleTheme: () => void
   /** 展开态由上层维护，让侧栏宽度和主内容网格列同步变化。 */
   expanded: boolean
   onHoverChange: (hovered: boolean) => void
@@ -48,6 +47,36 @@ function revealClassName(expanded: boolean) {
   )
 }
 
+interface PointerLike {
+  clientX: number
+  clientY: number
+  pointerType?: string
+}
+
+/**
+ * 这次 `pointerleave` 是不是「假离开」。
+ *
+ * 主题切换走 View Transition：浏览器会把一整棵快照伪元素铺在页面最上层，它抢走指针的
+ * 命中测试，侧栏因此收到一次边界事件——可指针其实还停在侧栏上。照单全收的话，悬停态被
+ * 清零（侧栏收起），动画一结束指针落回又触发 `pointerenter`（侧栏展开），表现成「点主题，
+ * 侧栏抽一下」。只认「指针确实已在盒外」的离开，就能把这种假离开滤掉：
+ * 真离开时坐标必然落在盒外（向左、向上、或越过右边缘进主内容区）。
+ *
+ * 用严格不等号：贴着边界（例如左上角 `(0,0)`，侧栏正好以它为原点）的离开一律当作真离开，
+ * 否则侧栏会卡在展开态下不来。非鼠标指针（触摸、笔）没有可靠坐标，不参与判定。
+ */
+export function isSpuriousHoverLeave(event: PointerLike, element: Element | null): boolean {
+  if (event.pointerType && event.pointerType !== 'mouse') return false
+  if (!element) return false
+  const rect = element.getBoundingClientRect()
+  return (
+    event.clientX > rect.left &&
+    event.clientX < rect.right &&
+    event.clientY > rect.top &&
+    event.clientY < rect.bottom
+  )
+}
+
 export function AppSidebar(props: AppSidebarProps) {
   const t = useTranslation()
   const expanded = props.expanded
@@ -57,6 +86,7 @@ export function AppSidebar(props: AppSidebarProps) {
   const [hoverRect, setHoverRect] = useState<IndicatorRect | null>(null)
   const [activeRect, setActiveRect] = useState<IndicatorRect | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef(new Map<AppNavPath, HTMLAnchorElement>())
   const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
@@ -106,11 +136,12 @@ export function AppSidebar(props: AppSidebarProps) {
 
   return (
     <div
+      ref={rootRef}
       data-slot="app-sidebar"
       data-expanded={expanded ? 'true' : undefined}
       data-pinned={props.pinned ? 'true' : undefined}
       onPointerEnter={() => props.onHoverChange(true)}
-      onPointerLeave={() => props.onHoverChange(false)}
+      onPointerLeave={event => { if (!isSpuriousHoverLeave(event, rootRef.current)) props.onHoverChange(false) }}
       className={cn(
         'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
         'transition-[width] duration-200 ease-out motion-reduce:transition-none',
@@ -173,7 +204,7 @@ export function AppSidebar(props: AppSidebarProps) {
           <section key={section.key}>
             {/*
              * 分组标题固定 16px 高：折叠态只藏文字、不塌陷高度，
-             * 这样 hover 展开时导航项不会整体上下跳（旧实现是 `h-2` ↔ `h-5` 动画）。
+             * 这样 hover 展开时导航项不会整体上下跳（高度动画会让下面每一项都跟着挪）。
              */}
             <div className="relative mb-1 flex h-4 items-center px-2.5">
               <h2 className={cn('absolute inset-x-2.5 top-1/2 -translate-y-1/2 system-2xs-medium-uppercase tracking-[1.2px] text-sidebar-foreground/60', revealClassName(expanded))}>
@@ -257,10 +288,9 @@ export function AppSidebar(props: AppSidebarProps) {
           {props.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
           <span className={revealClassName(expanded)}>{t(props.pinned ? 'nav.sidebar.unpin' : 'nav.sidebar.pin')}</span>
         </button>
-        <ThemeModeMenu
+        <AnimatedThemeToggler
           theme={props.theme}
-          themeMode={props.themeMode}
-          onThemeModeChange={props.onThemeModeChange}
+          onThemeChange={() => props.onToggleTheme()}
           className={cn(
             // `[&_svg]:shrink-0` 是必需的：折叠态轨道只剩 48px，flex 会把没有 min-width 的 svg 压成一条 1px 竖线。
             'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
@@ -268,8 +298,8 @@ export function AppSidebar(props: AppSidebarProps) {
             'focus-visible:ring-2 focus-visible:ring-state-accent-solid',
           )}
         >
-          <span className={revealClassName(expanded)}>{t(themeModeLabelKey(props.themeMode))}</span>
-        </ThemeModeMenu>
+          <span className={revealClassName(expanded)}>{props.theme === 'dark' ? t('nav.theme.toLight') : t('nav.theme.toDark')}</span>
+        </AnimatedThemeToggler>
         {/*
          * 运行状态不单独圈框：它和上面的主题切换是同一族的脚注行，用一模一样的
          * `h-9 / px-2.5 / gap-2.5` 外壳 + `size-4` 前导图标盒。折叠态下小圆点就落在这条轨道的

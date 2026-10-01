@@ -14,9 +14,9 @@ import type { ConditionNode, ControlInputNode, RuntimeLogicalModel, WorkflowGrap
 
 /** 预设生成用的逻辑模型列表：`default` 是兜底落点，另两个给分流落点用。 */
 const presetLogicalModels: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 function nodeById(graph: WorkflowGraph, nodeId: string): WorkflowNodeModel {
@@ -269,7 +269,7 @@ describe('图谱校验（回归）', () => {
       fieldPath: 'request.body.model',
       operator: 'in',
       valueSource: 'field',
-      valueFieldPath: 'logicalModels[*].id',
+      valueFieldPath: 'logicalModels[*].modelId',
     })
   })
 
@@ -327,7 +327,7 @@ describe('图谱校验（回归）', () => {
 
   it('每个预设的落点 id 都是传入列表里的真实逻辑模型，不会留下写死的占位值', () => {
     // 「套用即能用」的核心判据：预设里出现的每个模型 id 都必须存在，否则一跑就报没有可用逻辑模型。
-    const knownIds = new Set(presetLogicalModels.map(model => model.id))
+    const knownIds = new Set(presetLogicalModels.map(model => model.modelId))
 
     for (const preset of ROUTER_POLICY_PRESETS) {
       const graph = preset.createGraph(presetLogicalModels)
@@ -359,31 +359,32 @@ describe('图谱校验（回归）', () => {
 describe('预设落点解析', () => {
   it('兜底落点取内建默认逻辑模型，其余逻辑模型留给分流', () => {
     const pool = createPresetModelPool([
-      { id: 'model-fast', name: 'Model Fast', enabled: true },
-      { id: 'default', name: 'default', enabled: true },
-      { id: 'model-smart', name: 'Model Smart', enabled: true },
+      { modelId: 'model-fast', enabled: true },
+      { modelId: 'default', enabled: true },
+      { modelId: 'model-smart', enabled: true },
     ])
     expect(pool.fallbackModelId).toBe('default')
     // 兜底落点要从分流候选里排除，否则两个分支会撞到同一个逻辑模型。
     expect(pool.landingModelIds).toEqual(['model-fast', 'model-smart'])
   })
 
-  it('内建默认逻辑模型只对上 id 或只对上 name 都算数', () => {
-    expect(createPresetModelPool([{ id: 'default', name: '默认模型', enabled: true }]).fallbackModelId).toBe('default')
-    expect(createPresetModelPool([{ id: 'model-default', name: 'default', enabled: true }]).fallbackModelId).toBe('model-default')
+  it('内建默认逻辑模型按 modelId 精确匹配，相近的名字不算', () => {
+    expect(createPresetModelPool([{ modelId: 'default', enabled: true }]).fallbackModelId).toBe('default')
+    // `model-default` 只是「名字里带 default」，不是内建默认本身，只能按列表顺序当兜底。
+    expect(createPresetModelPool([{ modelId: 'model-default', enabled: true }]).fallbackModelId).toBe('model-default')
   })
 
   it('停用的逻辑模型不参与落点', () => {
     const pool = createPresetModelPool([
-      { id: 'default', name: 'default', enabled: true },
-      { id: 'model-off', name: 'Model Off', enabled: false },
+      { modelId: 'default', enabled: true },
+      { modelId: 'model-off', enabled: false },
     ])
     expect(pool.landingModelIds).toEqual([])
   })
 
   it('内建默认逻辑模型不可用时退回第一个已启用模型', () => {
     // 生成预设是「帮你先把图填上」，前面有真模型就不留空落点；运行时遇到同样情况则是直接拒绝。
-    expect(createPresetModelPool([{ id: 'model-fast', name: 'Model Fast', enabled: true }]).fallbackModelId).toBe('model-fast')
+    expect(createPresetModelPool([{ modelId: 'model-fast', enabled: true }]).fallbackModelId).toBe('model-fast')
   })
 
   it('一个逻辑模型都没有时兜底为空，落点解析出空数组', () => {
@@ -395,8 +396,8 @@ describe('预设落点解析', () => {
 
   it('分流候选不够时退回兜底落点，不留死落点', () => {
     const pool = createPresetModelPool([
-      { id: 'default', name: 'default', enabled: true },
-      { id: 'model-fast', name: 'Model Fast', enabled: true },
+      { modelId: 'default', enabled: true },
+      { modelId: 'model-fast', enabled: true },
     ])
     expect(resolveLandingModelIds(pool, null)).toEqual(['default'])
     expect(resolveLandingModelIds(pool, 0)).toEqual(['model-fast'])

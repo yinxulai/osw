@@ -165,9 +165,11 @@ export interface MetaFactProps {
   tone?: 'default' | 'warning'
   /** 提供后在该事实右侧显示复制按钮。 */
   copyValue?: string
+  /** 值旁边的一枚小标签（例如「已删除」），说明这个事实此刻的状态。 */
+  tag?: React.ReactNode
 }
 
-/** 摘要事实：标签 + 值成对，替代原来用 `·` 串起来的文本墙。 */
+/** 摘要事实：标签 + 值成对，一眼看得出哪段是标签、哪段是值。 */
 export function MetaFact(props: MetaFactProps) {
   const t = useTranslation()
   return (
@@ -182,6 +184,7 @@ export function MetaFact(props: MetaFactProps) {
       >
         {props.value}
       </span>
+      {props.tag}
       {props.copyValue && <CopyIconButton label={t('requestLogs.detail.copyLabel', { label: props.label })} value={props.copyValue} />}
     </span>
   )

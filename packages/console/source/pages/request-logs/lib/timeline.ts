@@ -113,7 +113,9 @@ function messageOf(event: LiveRequestEvent, live: LiveRequest): TimelineMessage 
   switch (event.kind) {
     case 'route.resolved':
       // 候选名单比起一个数字有用得多：它把「为何会试到第二家」提前写在了轴上。
-      return { kind: 'routeResolved', candidates: live.candidates.map(candidate => candidate.providerModelName) }
+      // 每一格都写「供应商/模型」而不只是模型名：同一个模型名可以挂在多家供应商下，
+      // 只写模型名时，读者无从判断这次到底要往哪家发。
+      return { kind: 'routeResolved', candidates: live.candidates.map(candidate => `${candidate.providerName}/${candidate.providerModelName}`) }
 
     case 'attempt.start': {
       // 契约里这一格是 0 起的序号，界面上从 1 数起。

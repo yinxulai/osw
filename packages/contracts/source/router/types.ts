@@ -6,7 +6,7 @@ import type { UiCatalogKey } from '@common/i18n/catalogs'
  *
  * 写成**运行期的数组**再派生出类型，是为了让需要枚举它的地方（上报契约的 `node_kind` 字段）
  * 直接用同一份清单，而不是各抄一遍：抄一份的代价是「画布上能建的节点，上报接口不认识」。
- * `(typeof …)[number]` 与原来的联合类型完全等价，消费方不受影响。
+ * `WorkflowNodeKind` 由 `(typeof WORKFLOW_NODE_KINDS)[number]` 派生，清单与类型永远同一份。
  */
 export const WORKFLOW_NODE_KINDS = [
   'input',
@@ -72,8 +72,8 @@ export type AppendableKind = Extract<
 export type SchemaValueType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'object' | 'unknown'
 
 /**
- * 通配投影后缀：`logicalModels[*].id` 表示「先把 `logicalModels` 展开成元素集合，
- * 再对每个元素取 `id`，最后拍平成一个数组」。
+ * 通配投影后缀：`logicalModels[*].modelId` 表示「先把 `logicalModels` 展开成元素集合，
+ * 再对每个元素取 `modelId`，最后拍平成一个数组」。
  * 引擎的路径解析器和字段候选列表共用这个后缀，避免两边写法漂移。
  */
 export const PATH_WILDCARD_SUFFIX = '[*]'
@@ -134,14 +134,15 @@ export interface WorkflowGraph {
 }
 
 /**
- * 一次运行里可见的逻辑模型（运行时不缓存模型配置，只有 id / 名称 / 开关）。
+ * 一次运行里可见的逻辑模型（运行时不缓存模型配置，只有模型 id 与开关）。
  *
- * 主进程的 `LogicalModel` 天然满足这个形状（多出来的字段没人读），因此代理入口
- * 可以直接把 `listLogicalModels()` 的结果交进来。
+ * 字段名就是 `modelId`：路由的落点与命中判断认的始终是**模型 id**，
+ * 而主进程的 `LogicalModel` 上还有一个本机生成的**数据记录 id**（`id`）——
+ * 那个绝不能出现在图里，否则换台机器（或删了重建）图上写死的引用就全成了空洞。
+ * 代理入口因此必须显式映射，不能把 `listLogicalModels()` 的结果原样交进来。
  */
 export interface RuntimeLogicalModel {
-  id: string
-  name: string
+  modelId: string
   enabled: boolean
 }
 
@@ -230,7 +231,7 @@ export interface ConditionRule {
   operator: ConditionOperator
   /** 比较值来源：`literal`（默认）用 `value` / `enumOptions`，`field` 读取 `valueFieldPath` 的实时取值 */
   valueSource?: ConditionValueSource
-  /** `field` 来源的比较字段路径，例如 `logicalModels[*].id` */
+  /** `field` 来源的比较字段路径，例如 `logicalModels[*].modelId` */
   valueFieldPath?: string
   value?: string
   secondaryValue?: string
@@ -258,7 +259,7 @@ export interface ConditionNode extends WorkflowNodeBase {
  *   取不到值时使用兜底逻辑模型。
  *
  * 这里刻意不内置「跟随请求模型」这类专用语义：请求模型直连由
- * 「条件（`request.body.model in logicalModels[*].id`） + 逻辑模型选择(变量) +
+ * 「条件（`request.body.model in logicalModels[*].modelId`） + 逻辑模型选择(变量) +
  * 逻辑模型选择(固定 default)」等基础节点组合表达。
  */
 export type ModelSelectSource = 'fixed' | 'variable'
@@ -302,7 +303,7 @@ export const ITERATION_SCOPE_FIELDS = ['item', 'index', 'key', 'total'] as const
  */
 export interface IterationNode extends WorkflowNodeBase {
   kind: 'iteration'
-  /** 要遍历的字段路径；支持通配投影（`logicalModels[*].id`）。取到数组按元素遍历，取到对象按键值对遍历。 */
+  /** 要遍历的字段路径；支持通配投影（`logicalModels[*].modelId`）。取到数组按元素遍历，取到对象按键值对遍历。 */
   sourcePath: string
   /** 每轮结束后从该路径读取本轮结果；读到空值（undefined / null / 空数组 / 空字符串）视为未命中 */
   collectPath: string
@@ -501,7 +502,7 @@ export interface RunCapabilities {
  * - 决策结果（`modelIds`）与决策依据（协议、控制输入、迭代作用域）都放在 `route` 下；
  * - 过程性的调试数据（协议归一化结果、每个节点的判定明细）只进 trace，不进 payload；
  * - 不写派生冗余字段：请求模型直接读请求本身（`request.body.model`），
- *   「可用逻辑模型 id」由通配投影（`logicalModels[*].id`）现算，都不再各存一份副本。
+ *   「可用逻辑模型 id」由通配投影（`logicalModels[*].modelId`）现算，都不再各存一份副本。
  */
 export interface RouteDecision {
   /** 本次运行的追踪 id */
@@ -681,7 +682,7 @@ export const DEFAULT_OPERATOR_SET: Record<SchemaValueType, ConditionOperator[]> 
 
 /**
  * 支持「比较值来自另一个字段」的操作符。
- * 例如 `request.body.model in logicalModels[*].id` —— 通用的成员判定，
+ * 例如 `request.body.model in logicalModels[*].modelId` —— 通用的成员判定，
  * 不需要引擎为某个具体场景预先算好布尔结果。
  */
 export const FIELD_OPERAND_OPERATORS: ConditionOperator[] = ['equals', 'notEquals', 'in', 'notIn', 'contains', 'notContains']
@@ -693,9 +694,11 @@ export const FIELD_OPERAND_OPERATORS: ConditionOperator[] = ['equals', 'notEqual
  * 而列表里真正要显示的只有「第几版 / 什么时候 / 几个节点」。
  */
 export interface RouterGraphVersionSummary {
-  /** 单调递增的版本号（v1、v2 …），也就是「恢复这个版本」时要传的号 */
+  /** **数据记录 id**：这一版的身份，读/恢复某一版时传它 */
+  id: string
+  /** 展示用的版本号（v1、v2 …），单调递增，只用来在界面上标「第几版」 */
   version: number
-  /** 用户给这一版起的名字；没起名时是空字符串（版本的身份是 `version`，不需要唯一的名字） */
+  /** 用户给这一版起的名字；没起名时是空字符串 */
   name: string
   /** 这次保存给版本写的说明；没写时是空字符串 */
   description: string
@@ -716,7 +719,9 @@ export const UNSAVED_ROUTER_GRAPH_VERSION = 0
 /** 当前生效的路由图：代理运行时读的就是这一份（一版都没保存过时是内建默认策略）。 */
 export interface RouterGraphSnapshot {
   graph: WorkflowGraph
-  /** 版本号；内建默认策略固定为 `UNSAVED_ROUTER_GRAPH_VERSION` */
+  /** 这一版的记录 id；内建默认策略不属于任何已保存版本，为 `null` */
+  id: string | null
+  /** 展示用的版本号；内建默认策略固定为 `UNSAVED_ROUTER_GRAPH_VERSION` */
   version: number
   /** 保存时间（epoch 毫秒）；内建默认策略（版本号 0）没有保存时间，为 0 */
   savedAt: number

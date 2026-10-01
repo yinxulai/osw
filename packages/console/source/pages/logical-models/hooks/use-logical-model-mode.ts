@@ -2,17 +2,18 @@ import { isProviderModelCooling } from '@common/provider-model-status'
 import { useCallback } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useLogicalModelModeQuery, useSwitchManualModelMutation } from '../queries'
+import { EMPTY_LOGICAL_MODEL_REF, useLogicalModelModeQuery, useSwitchManualModelMutation, type LogicalModelKeysRef } from '../queries'
 import type { LogicalModelProviderModel, ProviderHealth, ProviderModelHealth } from '@common/schemas'
 
 type HealthMap = Record<string, ProviderHealth>
 type ProviderModelHealthMap = Record<string, ProviderModelHealth>
 
-export function useLogicalModelMode(logicalModelId: string, models: LogicalModelProviderModel[], health: HealthMap, providerModelHealth: ProviderModelHealthMap) {
+export function useLogicalModelMode(logicalModel: LogicalModelKeysRef | null, models: LogicalModelProviderModel[], health: HealthMap, providerModelHealth: ProviderModelHealthMap) {
   const toast = useToast()
   const t = useTranslation()
-  const query = useLogicalModelModeQuery(logicalModelId)
-  const mutation = useSwitchManualModelMutation(logicalModelId)
+  const query = useLogicalModelModeQuery(logicalModel)
+  // 手动锁定是运行时的状态，按**模型 id** 读写；列表未就绪时拿不到它，也就不会有人调这两个壳。
+  const mutation = useSwitchManualModelMutation(logicalModel ?? EMPTY_LOGICAL_MODEL_REF)
   const manualModelId = query.data?.manualModelId ?? null
   const mode: 'auto' | 'manual' = manualModelId ? 'manual' : 'auto'
   const refresh = query.refetch

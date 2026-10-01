@@ -12,19 +12,20 @@ import { sendSuccess } from '../../core/response'
  * 路由规则表的读写与试跑接口。
  *
  * 与图那一组**形状一致**：读当前生效的、列版本、读指定版本、保存为新版本。
- * 两组的共同点是「各自只碰自己 `type` 的行、各算各的版本号」，谁也不影响对方。
+ * 两组的共同点是「各自只碰自己表里的行、各算各的版本号」，谁也不影响对方。
  */
 
 const SaveRouteRuleSetSchema = z.object({
   ruleSet: RouteRuleSetSchema,
-  /** 版本名；留空即空串（版本的身份是版本号，不用名字占位）。 */
+  /** 版本名；留空即空串（版本的身份是记录 id，不用名字占位）。 */
   name: z.string().max(60).optional(),
   /** 版本说明；留空表示不写。 */
   description: z.string().max(200).optional(),
 })
 
 const RouteRuleSetVersionSchema = z.object({
-  version: z.number().int().positive(),
+  /** 要读哪一版：传它的**记录 id**，不是版本号。 */
+  id: z.string().min(1),
 })
 
 const RunRouteRulesSchema = z.object({
@@ -52,10 +53,10 @@ async function handleListRouteRuleSetVersions(_req: IncomingMessage, res: Server
   sendSuccess(res, await listRouteRuleSetVersions())
 }
 
-/** 按版本号读规则表；版本不存在时 `data` 为 `null`。 */
+/** 按记录 id 读规则表；那一版不存在时 `data` 为 `null`。 */
 async function handleGetRouteRuleSetVersion(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = RouteRuleSetVersionSchema.parse(body)
-  sendSuccess(res, await readRouteRuleSetVersion(input.version))
+  sendSuccess(res, await readRouteRuleSetVersion(input.id))
 }
 
 /**

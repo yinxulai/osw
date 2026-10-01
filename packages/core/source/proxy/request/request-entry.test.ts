@@ -58,8 +58,8 @@ vi.mock('@server/database/settings-store', () => ({
 
 vi.mock('@server/database/logical-model-store', () => ({
   listLogicalModels: async () => [
-    { id: 'default', name: 'default', enabled: true },
-    { id: 'secondary', name: 'secondary', enabled: true },
+    { modelId: 'default', enabled: true },
+    { modelId: 'secondary', enabled: true },
   ],
 }))
 
@@ -75,8 +75,8 @@ vi.mock('@server/database/router-graph-store', async () => {
   return {
     resolveRouterGraph: async () => ({
       graph: createDefaultPolicyGraph([
-        { id: 'default', name: 'default', enabled: true },
-        { id: 'secondary', name: 'secondary', enabled: true },
+        { modelId: 'default', enabled: true },
+        { modelId: 'secondary', enabled: true },
       ]),
       version: 0,
       savedAt: 0,

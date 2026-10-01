@@ -6,10 +6,10 @@ import { formatVersionTime, hasSavedVersion, toRouterGraphVersion, toRouterGraph
 
 describe('路由版本展示模型', () => {
   it('把服务端摘要翻成列表要用的形状', () => {
-    const version = toRouterGraphVersion({ version: 7, name: '命中分流', description: '按 UA 分流', savedAt: Date.parse('2026-09-11T14:41:05.000Z'), nodeCount: 4 })
+    const version = toRouterGraphVersion({ id: 'workflow_abc', version: 7, name: '命中分流', description: '按 UA 分流', savedAt: Date.parse('2026-09-11T14:41:05.000Z'), nodeCount: 4 })
 
-    expect(version.id).toBe('version-7')
-    // 版本号既是列表里的显示序号，也是恢复这一版时要传的号，必须同一个来源
+    // 记录 id 是这一版的身份，恢复时要传的就是它；版本号只是给人看的序号。
+    expect(version.id).toBe('workflow_abc')
     expect(version.sequence).toBe(7)
     expect(version.name).toBe('命中分流')
     expect(version.description).toBe('按 UA 分流')
@@ -18,7 +18,7 @@ describe('路由版本展示模型', () => {
   })
 
   it('没起名就是空串，版本号不塞进名字里', () => {
-    const version = toRouterGraphVersion({ version: 3, name: '', description: '', savedAt: 0, nodeCount: 2 })
+    const version = toRouterGraphVersion({ id: 'workflow_anon', version: 3, name: '', description: '', savedAt: 0, nodeCount: 2 })
 
     // 版本号有自己的字段（`sequence`），名字不该被它占位。
     expect(version.name).toBe('')
@@ -27,10 +27,11 @@ describe('路由版本展示模型', () => {
 
   it('摘要列表按服务端给的顺序逐一转换', () => {
     const versions = toRouterGraphVersions([
-      { version: 3, name: 'c', description: '', savedAt: 1_700_000_000_000, nodeCount: 5 },
-      { version: 2, name: 'b', description: '', savedAt: 1_600_000_000_000, nodeCount: 4 },
+      { id: 'workflow_c', version: 3, name: 'c', description: '', savedAt: 1_700_000_000_000, nodeCount: 5 },
+      { id: 'workflow_b', version: 2, name: 'b', description: '', savedAt: 1_600_000_000_000, nodeCount: 4 },
     ])
 
+    expect(versions.map(version => version.id)).toEqual(['workflow_c', 'workflow_b'])
     expect(versions.map(version => version.sequence)).toEqual([3, 2])
   })
 

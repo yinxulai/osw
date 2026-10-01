@@ -28,7 +28,7 @@ flowchart LR
 
 - 主进程**不得** import 任何会拉起 `node:sqlite` 的模块。宿主与服务进程共享的只有类型（`packages/core/source/host/protocol.ts`），一旦那个文件出现运行期代码，整个搬家就白做。
 - 跨进程传的东西必须能结构化克隆。`startProxyServer()` 返回的 `http.Server` 带函数字段，直接 `postMessage` 会 `DataCloneError`，所以协议里这两个方法的 `result` 就是 `void`。
-- 服务进程的启动参数（dataDir、监听端口…）没有 `workerData` 可用，改为服务进程起来后的第一个动作——主动向宿主调 `runtime.config`；宿主在 `fork()` 的同一拍就把这个 handler 注册好，因此不存在启动竞态。
+- 服务进程的启动参数（dataDir、监听端口…）没有 `workerData` 可用，所以取法是在服务进程起来后的第一个动作主动向宿主调 `runtime.config`；宿主在 `fork()` 的同一拍就把这个 handler 注册好，因此不存在启动竞态。
 - 进程隔离是双向的：服务进程崩了不会带走宿主，宿主在 `exit` 回调里按退避重启（`service-host.ts` 的 `RESTART_POLICY`），所以服务进程内 `process.exit()` 是安全的。
 
 两个监听器的内部模块划分与依赖方向见 [server-architecture.md](./server-architecture.md)；代理侧的分层职责见 [proxy-engine.md](./proxy-engine.md)；代理对外可见的行为契约见 [proxy.md](./proxy.md)；服务进程的打包与部署约束见 [packaging.md](./packaging.md)。

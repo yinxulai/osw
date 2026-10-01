@@ -4,16 +4,16 @@ import type { RouterGraphVersionSummary } from '@common/router/types'
 /**
  * 历史版本的展示模型：两种路由模式共用。
  *
- * 版本由服务端存（`workflows` 表，一行一版）：图的 `type = 'router'`、规则表的 `type = 'route-rules'`，
- * 两边各算各的版本号，互不影响。界面只把它翻成列表要显示的样子：保存时间统一成 ISO 字符串，
- * 版本号直接当「恢复第几版」的入参。
+ * 每一版在服务端都是一条**独立记录**（路由图在 `workflows` 表，规则表在 `route_rule_sets` 表），
+ * 记录 id 才是它的身份；`version` 只是给人看的排序号，删掉一版再存一版，版本号照旧往上走。
+ * 界面只把它翻成列表要显示的样子：保存时间统一成 ISO 字符串，恢复时传记录 id。
  *
  * 这里**没有任何本地存储**：定义存在哪、由谁读，都收敛到服务端一处。
  */
 export interface RouteVersion {
-  /** React key */
+  /** 服务端的记录 id：恢复这一版时要传的也是它。 */
   id: string
-  /** 单调递增的版本号（v1、v2 …），也是「恢复这一版」时要传的号 */
+  /** 给人看的版本号（v1、v2 …）；只用于显示与「下一个版本号」的推算。 */
   sequence: number
   /** 用户给这一版起的名字；没起名时为空串（列表就只显示版本号）。 */
   name: string
@@ -25,9 +25,9 @@ export interface RouteVersion {
   itemCount: number
 }
 
-function toRouteVersion(version: number, name: string, description: string, savedAt: number, itemCount: number): RouteVersion {
+function toRouteVersion(id: string, version: number, name: string, description: string, savedAt: number, itemCount: number): RouteVersion {
   return {
-    id: `version-${version}`,
+    id,
     sequence: version,
     name,
     description,
@@ -38,7 +38,7 @@ function toRouteVersion(version: number, name: string, description: string, save
 
 /** 路由图的服务端摘要 → 列表模型。 */
 export function toRouterGraphVersion(summary: RouterGraphVersionSummary): RouteVersion {
-  return toRouteVersion(summary.version, summary.name, summary.description, summary.savedAt, summary.nodeCount)
+  return toRouteVersion(summary.id, summary.version, summary.name, summary.description, summary.savedAt, summary.nodeCount)
 }
 
 /** 路由图的服务端摘要列表 → 列表模型；顺序沿用服务端给的（新的在前）。 */
@@ -48,7 +48,7 @@ export function toRouterGraphVersions(summaries: RouterGraphVersionSummary[]): R
 
 /** 规则表的服务端摘要 → 列表模型。 */
 export function toRouteRuleSetVersion(summary: RouteRuleSetVersionSummary): RouteVersion {
-  return toRouteVersion(summary.version, summary.name, summary.description, summary.savedAt, summary.ruleCount)
+  return toRouteVersion(summary.id, summary.version, summary.name, summary.description, summary.savedAt, summary.ruleCount)
 }
 
 /** 规则表的服务端摘要列表 → 列表模型；顺序沿用服务端给的（新的在前）。 */

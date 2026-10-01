@@ -72,7 +72,7 @@ export function RouteRulesStudio() {
   const logicalModels = useLogicalModels()
 
   const runtimeLogicalModels = useMemo(
-    () => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })),
+    () => logicalModels.map(model => ({ modelId: model.modelId, description: model.description, enabled: model.enabled })),
     [logicalModels],
   )
 
@@ -211,7 +211,7 @@ export function RouteRulesStudio() {
    */
   const restoreVersion = useCallback(async (version: RouteVersion) => {
     try {
-      const snapshot = await unwrap(routerRulesApi.getRuleVersion(version.sequence))
+      const snapshot = await unwrap(routerRulesApi.getRuleVersion(version.id))
       if (!snapshot) {
         toast.error(t('router.error.versionMissing', { sequence: version.sequence }))
         return

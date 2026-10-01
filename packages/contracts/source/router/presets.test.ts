@@ -45,9 +45,9 @@ import {
  */
 
 const presetModels: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 /** 兜底落点（'default' 是内建默认逻辑模型）。 */
@@ -485,7 +485,7 @@ describe('内置策略 · 边界与退化', () => {
   })
 
   it.each(ROUTER_POLICY_PRESETS.map(preset => preset.id))('只剩一个已启用模型时 %s 的每条分支都落到它，不留死落点', async (presetId) => {
-    const onlyModel: RuntimeLogicalModel[] = [{ id: 'only', name: 'Only', enabled: true }]
+    const onlyModel: RuntimeLogicalModel[] = [{ modelId: 'only', enabled: true }]
     const preset = findPolicyPreset(presetId)
     const graph = preset?.createGraph(onlyModel) as WorkflowGraph
     const nodeIdsWithLanding = graph.nodes.filter(node => node.kind === 'model-select').map(node => node.id)
@@ -510,7 +510,7 @@ describe('内置策略 · 边界与退化', () => {
   })
 
   it.each(ROUTER_POLICY_PRESETS.map(preset => preset.id))('模型全部停用时 %s 与没有模型一样，落点为空', async (presetId) => {
-    const disabledModels: RuntimeLogicalModel[] = [{ id: 'default', name: 'Default', enabled: false }]
+    const disabledModels: RuntimeLogicalModel[] = [{ modelId: 'default', enabled: false }]
     const preset = findPolicyPreset(presetId)
     const result = await runWorkflow(preset?.createGraph(disabledModels) as WorkflowGraph, { request: samplePayload.request, logicalModels: disabledModels })
 
@@ -550,7 +550,7 @@ describe('内置策略 · 注册表一致性', () => {
   })
 
   it('四条预设的落点都来自传入的逻辑模型列表', () => {
-    const knownIds = new Set(presetModels.map(model => model.id))
+    const knownIds = new Set(presetModels.map(model => model.modelId))
 
     for (const preset of ROUTER_POLICY_PRESETS) {
       const graph = preset.createGraph(presetModels)

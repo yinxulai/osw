@@ -39,11 +39,6 @@ const providerDarkIconModules = import.meta.glob('./*/icon.dark.svg', {
   import: 'default',
 }) as Record<string, string>
 
-const providerLegacyIconModules = import.meta.glob('./*/icon.svg', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>
-
 function getProviderKeyFromPath(path: string): string {
   const segments = path.split('/')
   return segments[1] ?? ''
@@ -61,10 +56,6 @@ const providerDarkIconsByKey = Object.fromEntries(
   Object.entries(providerDarkIconModules).map(([path, iconUrl]) => [getProviderKeyFromPath(path), iconUrl] as const),
 )
 
-const providerLegacyIconsByKey = Object.fromEntries(
-  Object.entries(providerLegacyIconModules).map(([path, iconUrl]) => [getProviderKeyFromPath(path), iconUrl] as const),
-)
-
 export const PROVIDER_DEFINITIONS: ProviderDefinition[] = Object.keys(providerConfigsByKey)
   // 顺序由 provider.json 的 `order` 决定（大的在前），同权重按 key 兜底，保证排序稳定。
   // 不再按 key 字母序：那等于把厂商的曝光顺序交给目录名的拼写。
@@ -74,7 +65,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = Object.keys(providerCo
   })
   .map((key) => {
     const config = providerConfigsByKey[key]
-    const lightIconUrl = providerLightIconsByKey[key] ?? providerLegacyIconsByKey[key]
+    const lightIconUrl = providerLightIconsByKey[key]
     const darkIconUrl = providerDarkIconsByKey[key] ?? lightIconUrl
 
     if (!config || !lightIconUrl || !darkIconUrl) {

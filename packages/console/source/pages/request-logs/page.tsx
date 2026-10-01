@@ -11,7 +11,7 @@ import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
   const t = useTranslation()
-  const { rows, total, providerOptions, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
+  const { rows, total, providerOptions, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, isModelDeleted, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -55,6 +55,7 @@ export function RequestLogsPage() {
           detailLoadingIds={detailLoadingIds}
           detailErrors={detailErrors}
           getModelName={getModelName}
+          isModelDeleted={isModelDeleted}
           toggleExpand={toggleExpand}
           onRetry={() => void refresh()}
         />

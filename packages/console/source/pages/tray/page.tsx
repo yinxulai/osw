@@ -17,7 +17,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { AppWindow, Power, Timer, X, Zap } from 'lucide-react'
-import type { LogicalModelProviderModel, Provider } from '@common/schemas'
+import type { LogicalModel, LogicalModelProviderModel, Provider } from '@common/schemas'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { providerModelMetricKey, type ProviderModelMetrics } from '@common/provider-model-metrics'
 import { providerModelProcessingCounts, resolveProviderModelBadge } from '@common/provider-model-status'
@@ -55,6 +55,7 @@ export function TrayPanelPage() {
   // 两条路径读的是同一个服务，不会各说各话。
   const { proxyStatus, toggleProxy } = useProxyToggle()
 
+  // 选中的标签用**数据记录 id** 记：模型名是可改的，拿它当选中态的开键，改完名选中就丢了。
   const [selectedLogicalModelId, setSelectedLogicalModelId] = useState<string | null>(null)
   const activeLogicalModelId = logicalModels.some(model => model.id === selectedLogicalModelId)
     ? selectedLogicalModelId
@@ -139,13 +140,13 @@ export function TrayPanelPage() {
                     <TabsTrigger
                       key={model.id}
                       value={model.id}
-                      title={model.name}
+                      title={model.modelId}
                       className={cn(
                         'min-w-0 max-w-full flex-none overflow-hidden text-ellipsis',
                         !model.enabled && 'text-text-quaternary',
                       )}
                     >
-                      {model.name}
+                      {model.modelId}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -154,7 +155,7 @@ export function TrayPanelPage() {
                 {logicalModels.map(model => (
                   <TabsContent key={model.id} value={model.id} className="mt-0">
                     <TrayProviderModelList
-                      logicalModelId={model.id}
+                      logicalModel={model}
                       processingCounts={processingCounts}
                     />
                   </TabsContent>
@@ -202,13 +203,14 @@ function TrayEmptyState(props: TrayEmptyStateProps) {
 }
 
 interface TrayProviderModelListProps {
-  logicalModelId: string
+  /** 整条逻辑模型交进来：绑定查记录 id，手动锁定比对模型 id。 */
+  logicalModel: LogicalModel
   processingCounts: Map<string, number>
 }
 
 function TrayProviderModelList(props: TrayProviderModelListProps) {
   const t = useTranslation()
-  const service = useLogicalModelControlService(props.logicalModelId)
+  const service = useLogicalModelControlService(props.logicalModel)
 
   if (service.models.length === 0) {
     return (

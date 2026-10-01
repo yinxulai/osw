@@ -47,8 +47,7 @@ export function RulesList(props: RulesListProps) {
   const t = useTranslation()
 
   const atLimit = ruleSet.rules.length >= MAX_ROUTE_RULES
-  const modelNameOf = (modelId: string) => logicalModels.find(model => model.id === modelId)?.name ?? modelId
-  const fallbackLanding = describeLanding({ source: 'fixed', logicalModelIds: ruleSet.fallbackModelIds, variablePath: '' }, t, modelNameOf)
+  const fallbackLanding = describeLanding({ source: 'fixed', logicalModelIds: ruleSet.fallbackModelIds, variablePath: '' }, t)
 
   return (
     <Card className="w-full gap-0 overflow-hidden py-0 ring-0">

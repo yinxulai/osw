@@ -13,6 +13,7 @@ import type {
 } from '@common/schemas'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DeletedTag } from '@/components/deleted-tag'
 import { useToast } from '@/components/ui/toast'
 import { useProxyStatus } from '@/data/proxy'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
@@ -39,6 +40,8 @@ interface RequestLogDetailRowProps {
   /** 展开后才按需取回的详情；正文摘要与改写规则名字都在这里。 */
   detail: RequestLogDetail | null
   modelName: string
+  /** 记录里那个逻辑模型名此刻已不再对应一条活跃配置（被删了）。 */
+  modelDeleted: boolean
   detailLoading: boolean
   detailError: string | null
 }
@@ -136,8 +139,7 @@ function routeSummaryHint(t: AppTranslator, summary: RouteSummary): string | und
 }
 
 /**
- * 「查看日志」原来是个无边框的小幽灵按钮，飘在大块留白里，与标题不成一体。
- * 改成与标题同一行的 outline 按钮，并沿用侧边栏对 `/logs` 的称呼。
+ * 「查看日志」是与标题同一行的 outline 按钮，文案沿用侧边栏对 `/logs` 的称呼。
  * 用 `Link` 而不是 `navigate()`：深链本身可被中键/右键新开，跳转语义正确。
  */
 function RequestLogIdLink(props: RequestLogIdLinkProps) {
@@ -465,12 +467,11 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                 {log.logicalModelId === null
                   ? <MetaFact label={t('requestLogs.detail.logicalModel')} value={t('requestLogs.detail.unresolved')} />
                   : (
-                    <>
-                      <MetaFact label={t('requestLogs.detail.logicalModel')} value={modelName} />
-                      {modelName !== log.logicalModelId && (
-                        <MetaFact label={t('requestLogs.detail.modelId')} value={log.logicalModelId} mono />
-                      )}
-                    </>
+                    <MetaFact
+                      label={t('requestLogs.detail.logicalModel')}
+                      value={modelName}
+                      tag={props.modelDeleted ? <DeletedTag /> : null}
+                    />
                   )}
                 <MetaFact
                   label={t(converted ? 'requestLogs.detail.convertedProtocol' : 'requestLogs.detail.protocol')}

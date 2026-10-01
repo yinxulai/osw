@@ -10,9 +10,9 @@ import type { RuntimeLogicalModel } from '@common/router/types'
 import { displayWorkflowNode, localizeNewNode } from './node-meta'
 
 const models: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Fast', enabled: true },
-  { id: 'model-smart', name: 'Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 describe('内置工作流节点本地化', () => {
@@ -47,7 +47,7 @@ describe('内置工作流节点本地化', () => {
 
     const displayed = displayWorkflowNode(t, { ...condition, name: 'My condition' })
     expect(displayed.name).toBe('My condition')
-    expect(displayed.description).toBe('When request.body.model is in logicalModels[*].id, use the direct branch; otherwise use the default logical model.')
+    expect(displayed.description).toBe('When request.body.model is in logicalModels[*].modelId, use the direct branch; otherwise use the default logical model.')
     expect(displayed.kind).toBe('condition')
     if (displayed.kind !== 'condition') throw new Error('condition node missing')
     expect(displayed.cases[0].name).toBe('The requested model is in the logical model list')

@@ -462,8 +462,8 @@ describe('LLM 能力 · 调用编排', () => {
  * ------------------------------------------------------------------------- */
 
 const policyModels: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'default', enabled: true },
-  { id: 'model-smart', name: 'Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 /**

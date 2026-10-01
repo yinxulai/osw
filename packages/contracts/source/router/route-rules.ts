@@ -126,7 +126,9 @@ export type RouteRuleSet = z.infer<typeof RouteRuleSetSchema>
 /** 当前生效的规则表：代理运行时读的就是这一份（一版都没保存过时是内建默认表）。 */
 export interface RouteRuleSnapshot {
   ruleSet: RouteRuleSet
-  /** 版本号；内建默认表固定为 `UNSAVED_ROUTE_RULE_VERSION` */
+  /** 这一版的记录 id；内建默认表不属于任何已保存版本，为 `null` */
+  id: string | null
+  /** 展示用的版本号；内建默认表固定为 `UNSAVED_ROUTE_RULE_VERSION` */
   version: number
   /** 保存时间（epoch 毫秒）；内建默认表没有保存时间，为 0 */
   savedAt: number
@@ -139,9 +141,11 @@ export interface RouteRuleSnapshot {
  * 而列表里真正要显示的只有「第几版 / 什么时候 / 几条规则」。
  */
 export interface RouteRuleSetVersionSummary {
-  /** 单调递增的版本号（v1、v2 …），也就是「恢复这个版本」时要传的号 */
+  /** **数据记录 id**：这一版的身份，读/恢复某一版时传它 */
+  id: string
+  /** 展示用的版本号（v1、v2 …），单调递增，只用来在界面上标「第几版」 */
   version: number
-  /** 用户给这一版起的名字；没起名时是空字符串（版本的身份是 `version`，不需要唯一的名字） */
+  /** 用户给这一版起的名字；没起名时是空字符串 */
   name: string
   /** 这次保存给版本写的说明；没写时是空字符串 */
   description: string
@@ -211,7 +215,7 @@ export const ROUTE_RULE_FIELD_KINDS: readonly RouteRuleFieldKindMeta[] = [
   { kind: 'transport', prefix: 'route.transport', valueType: 'string', labelKey: 'router.rules.field.transport', needsName: false },
   { kind: 'body', prefix: 'request.body.', valueType: 'unknown', labelKey: 'router.rules.field.body', needsName: true, namePlaceholderKey: 'router.rules.field.bodyPlaceholder' },
   { kind: 'metadata', prefix: 'metadata.', valueType: 'unknown', labelKey: 'router.rules.field.metadata', needsName: true, namePlaceholderKey: 'router.rules.field.metadataPlaceholder' },
-  { kind: 'logicalModelIds', prefix: 'logicalModels[*].id', valueType: 'string', labelKey: 'router.rules.field.logicalModelIds', needsName: false },
+  { kind: 'logicalModelIds', prefix: 'logicalModels[*].modelId', valueType: 'string', labelKey: 'router.rules.field.logicalModelIds', needsName: false },
   { kind: 'custom', prefix: '', valueType: 'unknown', labelKey: 'router.rules.field.custom', needsName: true, namePlaceholderKey: 'router.rules.field.customPlaceholder' },
 ]
 
@@ -315,7 +319,7 @@ export function createDefaultRouteRuleSet(models: RuntimeLogicalModel[]): RouteR
             valueType: 'string',
             operator: 'in',
             valueSource: 'field',
-            valueFieldPath: 'logicalModels[*].id',
+            valueFieldPath: 'logicalModels[*].modelId',
           },
         ],
         landing: {

@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Protocol, RequestAttribute, TransportKind } from '@common/schemas'
-import type { ClientDelivery } from '@server/proxy/contracts'
+import type { ClientDelivery, UpstreamTarget } from '@server/proxy/contracts'
 import { generateId } from '@common/utils'
 import { executeProxyRequest } from '../execution/attempt-executor'
+import { formatTarget } from '../execution/attempt-outcome'
 import { NodeProxyResponse, PROXY_ERROR_HEADERS, proxyErrorBody } from '../response/proxy-response'
 import { createRequestContext } from './request-context'
 import { proxyTargetPlanner } from '../planners/target-planner'
@@ -61,6 +62,18 @@ type AbortedExchange = ExchangeIdentity & ExchangeResolution
 
 /** 尚未读到请求体时的占位，避免在多个分支里重复分配。 */
 const NO_REQUEST_BODY = Buffer.alloc(0)
+
+/**
+ * 把落点顺序渲染成人能读的一串「供应商/模型」。
+ *
+ * 日志是给人看的，而人脑子里记的是 `openai/gpt-4o` 这种名字，不是 `model_ab12cd`。
+ * 只用名字也不行：同名落点是允许的，排障时得能把那一行对回数据库里的具体一行。
+ * 所以两个都给——直接复用执行层同一个 `formatTarget`，免得两处格式各自漂移。
+ */
+function describeTargetOrder(targets: readonly UpstreamTarget[]): string {
+  if (targets.length === 0) return 'none'
+  return targets.map(target => formatTarget(target)).join(' -> ')
+}
 
 /**
  * 读取客户端请求体的结果。
@@ -148,7 +161,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return
   }
   const clientRequestId = extractClientRequestId(req.headers)
-  console.debug(`[proxy] request accepted requestId=${requestId} clientRequestId=${clientRequestId ?? 'none'} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} endpoint=${endpoint.endpointId} bodyBytes=${requestBody.length}`)
+  console.debug(`[proxy] request accepted requestId=${requestId} clientRequestId=${clientRequestId ?? 'none'} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} bodyBytes=${requestBody.length}`)
   const envelopeInput = readEnvelope(requestBody)
   const transport = endpoint.envelope.resolveTransport(envelopeInput)
   await session.logger.updateRequest({ logicalModelId: null, clientProtocol: protocol, method, path, headers: req.headers, requestBody, transport })
@@ -190,7 +203,7 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   // 形态**不传**：上游跳用什么形态是规划器对那个候选的决定（端点地址的 scheme），客户端偏好从不改变哪个端点合法。
   // 会话键在入口已经解出来（`clientRequestId`），多个落点共用同一个：亲和是会话级的事实，不是落点级的。
   const plan = await planLandingTargets({ logicalModelIds: route.logicalModelIds, clientProtocol: route.protocol, sessionKey: clientRequestId })
-  console.debug(`[proxy] routing planned requestId=${requestId} landingModels=${route.logicalModelIds.join(',')} logicalModelId=${plan.logicalModelId ?? 'none'} protocol=${route.protocol} transport=${route.transport} planner=${proxyTargetPlanner.id} manualModelId=${plan.manualModelId ?? 'none'} reason=${plan.logicalModelId === null ? plan.reason : 'none'} targets=${plan.targets.length} targetOrder=${plan.targets.map(target => target.providerModelId).join(',') || 'none'} upstreamTransports=${plan.targets.map(target => resolveUpstreamTransport(target.url, route.transport)).join(',') || 'none'}`)
+  console.debug(`[proxy] routing planned requestId=${requestId} landingModels=${route.logicalModelIds.join(',')} logicalModelId=${plan.logicalModelId ?? 'none'} protocol=${route.protocol} transport=${route.transport} planner=${proxyTargetPlanner.id} manualModelId=${plan.manualModelId ?? 'none'} reason=${plan.logicalModelId === null ? plan.reason : 'none'} targets=${plan.targets.length} targetOrder=${describeTargetOrder(plan.targets)} upstreamTransports=${plan.targets.map(target => resolveUpstreamTransport(target.url, route.transport)).join(',') || 'none'}`)
   if (plan.logicalModelId === null) {
     // 落点一个都没成，但图确实选过落点：日志照记首选落点，否则「路由到了谁」会被记成空白。
     const landing = route.logicalModelIds[0]

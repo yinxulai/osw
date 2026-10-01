@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useToast } from '@/components/ui/toast'
-import { useUpdateProviderModelMutation } from '../queries'
+import { EMPTY_LOGICAL_MODEL_REF, useUpdateProviderModelMutation, type LogicalModelKeysRef } from '../queries'
 import { useHealth } from '@/data/health'
 import { useProviders } from '@/data/providers'
 import type { LogicalModelProviderModel } from '@common/schemas'
@@ -10,19 +10,26 @@ import { useLogicalModelMetrics } from './use-logical-model-metrics'
 import { useLogicalModelMode } from './use-logical-model-mode'
 import { useLogicalModelProviderModels } from './use-logical-model-provider-models'
 
-export function useLogicalModelControl(logicalModelId: string) {
+/**
+ * 一个逻辑模型的全部控制行为。
+ *
+ * 入参是整条记录而不是一个字符串：绑定接口要**数据记录 id**、手动锁定与请求日志要
+ * **模型 id**，两个都是字符串，只传一个的话下层只能猜。
+ * `null` 表示列表还没就绪，此时所有查询不开火，返回的是一个稳定的空壳。
+ */
+export function useLogicalModelControl(logicalModel: LogicalModelKeysRef | null) {
   const toast = useToast()
-  const updateModelMutation = useUpdateProviderModelMutation(logicalModelId)
+  const updateModelMutation = useUpdateProviderModelMutation(logicalModel ?? EMPTY_LOGICAL_MODEL_REF)
   const providers = useProviders()
   const healthState = useHealth()
   const health = healthState.providers
   const providerModelHealth = healthState.providerModels
-  const modelsState = useLogicalModelProviderModels(logicalModelId)
-  const metrics = useLogicalModelMetrics(logicalModelId)
+  const modelsState = useLogicalModelProviderModels(logicalModel)
+  const metrics = useLogicalModelMetrics(logicalModel)
   const proxy = useProxyToggle()
-  const routingMode = useLogicalModelMode(logicalModelId, modelsState.models, health, providerModelHealth)
+  const routingMode = useLogicalModelMode(logicalModel, modelsState.models, health, providerModelHealth)
   const interactions = useLogicalModelInteractions(
-    logicalModelId,
+    logicalModel?.id ?? '',
     modelsState.models,
     modelsState.updateModels,
     modelsState.loadModels,

@@ -53,7 +53,7 @@
 
 ### 单逻辑模型
 
-v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前生效的路由定义算出的落点逻辑模型绑定关系和客户端协议动态计算一个**自动切换候选列表**。请求中的 `model` 字段必须是非空字符串；代理把它交给当前生效的定义（工作流图或规则表，由 `settings.routeMode` 决定，见 [route-design.md](./route-design.md) §2.11）算出落点——内建默认策略就是「命中某个已启用逻辑模型的 id 或 name 就用它，否则回落到内建默认逻辑模型 `default`」（详见 [route-design.md](./route-design.md) §2.7）。转发时，客户端模型名会被替换为当前 ProviderModel 的 `modelName`。
+v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前生效的路由定义算出的落点逻辑模型绑定关系和客户端协议动态计算一个**自动切换候选列表**。请求中的 `model` 字段必须是非空字符串；代理把它交给当前生效的定义（工作流图或规则表，由 `settings.routeMode` 决定，见 [route-design.md](./route-design.md) §2.11）算出落点——内建默认策略就是「命中某个已启用逻辑模型的 modelId 就用它，否则回落到内建默认逻辑模型 `default`」（详见 [route-design.md](./route-design.md) §2.7）。转发时，客户端模型名会被替换为当前 ProviderModel 的 `modelName`。
 
 - 所有未匹配请求只使用 `scheduling_policies` 中绑定到 `default` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
 - 同一个 ProviderModel 可以绑定到多个逻辑模型，并在不同逻辑模型中拥有不同的优先级、权重和启用状态
@@ -67,7 +67,7 @@ v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_p
 ### 路由步骤
 
 1. **协议识别**：根据请求 path 自动匹配协议类型
-2. **路由求解与候选过滤**：把请求交给当前生效的路由定义（`resolveRoute()`，工作流图或规则表）算出落点逻辑模型列表（内建默认策略下就是「命中已启用逻辑模型的 id 或 name 即直连，否则回落到内建默认逻辑模型 `default`」），再从落点逻辑模型的自动切换候选列表中筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）；前一个落点没有可用候选时依次尝试下一个落点
+2. **路由求解与候选过滤**：把请求交给当前生效的路由定义（`resolveRoute()`，工作流图或规则表）算出落点逻辑模型列表（内建默认策略下就是「命中已启用逻辑模型的 modelId 即直连，否则回落到内建默认逻辑模型 `default`」），再从落点逻辑模型的自动切换候选列表中筛选出**协议匹配**且**可用**的 ProviderModel（未禁用、ProviderModel 未冷却、Provider 未冷却）；前一个落点没有可用候选时依次尝试下一个落点
 3. **确定起始位置**：如果用户手动指定了当前 ProviderModel，则从该模型开始；目标已禁用、冷却或协议不匹配时返回明确错误，不静默选择其他起始项；否则从候选列表头部开始
 4. **顺序尝试**：按当前逻辑模型绑定行的 `priority ASC, weight DESC, createdTime ASC, providerModelId ASC` 稳定排序依次尝试；v0.3 `priority` 策略不使用权重做随机调度。不同逻辑模型分别读取自己的绑定行，因此可以拥有不同顺序
 5. **模型名替换**：每个 ProviderModel 转发前，将请求体中的 model 替换为该模型的 `modelName`

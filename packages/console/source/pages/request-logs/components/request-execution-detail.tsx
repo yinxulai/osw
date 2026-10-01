@@ -4,6 +4,7 @@ import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import type { LiveRequest, LiveRequestPhase, RequestStatus } from '@common/schemas'
 import { ActivityPulse } from '@/components/activity-pulse'
+import { DeletedTag } from '@/components/deleted-tag'
 import type { LiveActivity } from '@/data/live-activity'
 import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
@@ -95,6 +96,8 @@ interface RequestExecutionDetailRowProps {
   live: LiveRequest
   /** 逻辑模型的展示名（由页面统一解析，缺失时页面已经兜过底）。 */
   modelName: string
+  /** 这个逻辑模型名此刻已不再对应一条活跃配置。 */
+  modelDeleted: boolean
   /** 由所在的行统一提供，保证同一块里几处耗时说的是同一个时刻。 */
   now: number
   /** 由所在的行统一提供，折叠态与展开态共享同一次活动语义。 */
@@ -127,6 +130,7 @@ export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps)
           <ExecutionHeadline
             live={live}
             modelName={props.modelName}
+            modelDeleted={props.modelDeleted}
             snapshot={snapshot}
             running={running}
             activity={props.activity}
@@ -146,6 +150,7 @@ export function RequestExecutionDetailRow(props: RequestExecutionDetailRowProps)
 interface ExecutionHeadlineProps {
   live: LiveRequest
   modelName: string
+  modelDeleted: boolean
   snapshot: ExecutionSnapshot
   running: boolean
   activity: LiveActivity | null
@@ -182,7 +187,11 @@ function ExecutionHeadline(props: ExecutionHeadlineProps) {
           <span className="system-sm-medium text-text-primary">{headline}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 system-2xs-regular">
-          <MetaFact label={t('requestLogs.detail.logicalModel')} value={modelLabel} />
+          <MetaFact
+            label={t('requestLogs.detail.logicalModel')}
+            value={modelLabel}
+            tag={props.modelDeleted && live.logicalModelId !== null ? <DeletedTag /> : null}
+          />
           {/* 落点还没选出来时整条不占位：这一行本来就是「有则读」的事实，不是固定栅格。 */}
           {targetLabel !== null && (
             <MetaFact label={t('requestLogs.table.providerModel')} value={targetLabel} mono />

@@ -32,6 +32,14 @@ const ProviderBundleModelEndpointSchema = z.object({
 })
 
 const ProviderBundleModelSchema = z.object({
+  /**
+   * 导出时这一条模型在源库里的**记录 id**；老包没有这个字段。
+   *
+   * 模型名不承担唯一性——同一个供应商下可以有多条同名模型（身份是记录 id，见 `schemas.ts`），
+   * 因此只按名字匹配的导入会把多条同名模型挤成一条。带上 id 就能让「原样导出再导回来」
+   * 一一对上；缺省时退回按名字匹配（老包的唯一可能）。
+   */
+  key: z.string().optional(),
   modelName: z.string().min(1),
   enabled: z.boolean().default(true),
   endpoints: z.array(ProviderBundleModelEndpointSchema).default([]),

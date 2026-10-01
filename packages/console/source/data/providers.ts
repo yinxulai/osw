@@ -1,10 +1,10 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Provider } from '@common/schemas'
 import { providerApi } from '@/api/providers'
 import { unwrap } from '@/api/unwrap'
 
-export const providerKeys = { all: ['providers'] as const }
+export const providerKeys = { all: ['providers'] as const, withDeleted: ['providers', 'with-deleted'] as const }
 
 /** 数据未就绪时复用的空数组，避免 `?? []` 每次渲染都产生新引用。 */
 const EMPTY_PROVIDERS: Provider[] = []
@@ -13,6 +13,24 @@ const useProvidersQuery = () => useQuery({ queryKey: providerKeys.all, queryFn: 
 export function useProviders() { return useProvidersQuery().data ?? EMPTY_PROVIDERS }
 export function useProvidersLoading() { return useProvidersQuery().isPending }
 export function useProvidersError() { return useProvidersQuery().error?.message ?? null }
+
+/**
+ * 被软删除的供应商 id。
+ *
+ * 统计分析里分组用的是**写入当时的供应商名快照**，删掉配置行不会让那些统计消失。
+ * 界面上要能标出「这一家已经删了」，就得连删除行一起拿回来比对。与活跃列表分开缓存，
+ * 免得被各处的乐观写入（排序、增删改）牵连。
+ */
+const useDeletedProvidersQuery = () => useQuery({
+  queryKey: providerKeys.withDeleted,
+  queryFn: () => unwrap(providerApi.listIncludingDeleted()),
+  select: providers => providers.filter(provider => provider.deletedTime !== null),
+  refetchInterval: 30_000,
+})
+export function useDeletedProviderIds(): ReadonlySet<string> {
+  const deleted = useDeletedProvidersQuery().data ?? EMPTY_PROVIDERS
+  return useMemo(() => new Set(deleted.map(provider => provider.id)), [deleted])
+}
 export function useProvidersActions() {
   const client = useQueryClient()
   const refresh = useCallback(() => { void client.invalidateQueries({ queryKey: providerKeys.all }) }, [client])

@@ -192,19 +192,16 @@ function ModelPicker(props: ModelPickerProps) {
       {logicalModels.length === 0 && <NodePanelHint tone="warning">{emptyHint}</NodePanelHint>}
       <div className="grid gap-1.5">
         {logicalModels.map(logicalModel => (
-          <label key={logicalModel.id} className="flex items-start gap-2 rounded-lg border border-module-border bg-workflow-block-parma-bg px-2.5 py-2">
+          <label key={logicalModel.modelId} className="flex items-start gap-2 rounded-lg border border-module-border bg-workflow-block-parma-bg px-2.5 py-2">
             <input
               type="checkbox"
               className="mt-0.5 shrink-0"
-              checked={selectedIds.includes(logicalModel.id)}
-              onChange={event => onToggle(target, logicalModel.id, event.target.checked)}
+              checked={selectedIds.includes(logicalModel.modelId)}
+              onChange={event => onToggle(target, logicalModel.modelId, event.target.checked)}
             />
-            {/* 名称与 id 占一行、说明另起一行：说明通常比名称长得多，挤在同一行会把两者都截断。 */}
+            {/* 模型 id 占一行、说明另起一行：说明通常比 id 长得多，挤在同一行会把两者都截断。 */}
             <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 flex-1 truncate system-xs-medium text-text-secondary">{logicalModel.name}</span>
-                <span className="shrink-0 font-mono system-2xs-regular text-text-tertiary">{logicalModel.id}</span>
-              </span>
+              <span className="min-w-0 truncate font-mono system-xs-medium text-text-primary">{logicalModel.modelId}</span>
               <span className="line-clamp-2 system-xs-regular text-text-tertiary">
                 {logicalModel.description?.trim() || t('router.panel.modelNoDescription')}
               </span>

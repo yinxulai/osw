@@ -60,9 +60,9 @@ export function describeConditions(rule: RouteRule, t: Translate): string {
   return rule.conditions.map(condition => describeCondition(condition, t)).join(` ${joiner} `)
 }
 
-/** 落点读成一句：指定模型列名字，取字段列路径。 */
-export function describeLanding(landing: RouteRule['landing'], t: Translate, modelNameOf: (id: string) => string): string {
+/** 落点读成一句：指定模型列 id，取字段列路径。 */
+export function describeLanding(landing: RouteRule['landing'], t: Translate): string {
   if (landing.source === 'variable') return landing.variablePath.trim() || t('router.rules.variablePathEmpty')
   if (landing.logicalModelIds.length === 0) return t('router.rules.landingEmpty')
-  return landing.logicalModelIds.map(modelNameOf).join(', ')
+  return landing.logicalModelIds.join(', ')
 }

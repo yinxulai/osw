@@ -188,7 +188,7 @@ function createFailoverHandler(runtime: FinalizerRuntime): RequestFinalizer['onF
       healthFailureScope: healthScope,
     })
     console.warn(
-      `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextProviderModelId=${nextTarget?.providerModelId ?? 'none'} healthFailureScope=${healthScope}`,
+      `[proxy] upstream failover scheduled requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} status=${outcome.statusCode} duration=${outcome.durationMilliseconds}ms nextTarget=${nextTarget === undefined ? 'none' : formatTarget(nextTarget)} healthFailureScope=${healthScope}`,
     )
   }
 }
@@ -202,7 +202,7 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
     const lastError = error instanceof Error ? error : new Error(String(error))
 
     if (rootError instanceof RequestRewriteError) {
-      console.warn(`[proxy] request rewrite rejected requestId=${requestId} providerModelId=${target.providerModelId} ruleId=${rootError.ruleId ?? 'unknown'} error=${rootError.message}`)
+      console.warn(`[proxy] request rewrite rejected requestId=${requestId} target=${formatTarget(target)} ruleId=${rootError.ruleId ?? 'unknown'} error=${rootError.message}`)
       if (!response.headersSent) {
         // 响应体确实写给了客户端，就必须留证：否则这次失败在记录里只剩一个「failed」
         // 状态，看不出代理回了什么，也就无从判断客户端为什么报错。
@@ -230,7 +230,7 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
 
     const nextTarget = targets[attemptIndex + 1]
     console.warn(
-      `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} failover=${!response.headersSent && nextTarget !== undefined} nextProviderModelId=${nextTarget?.providerModelId ?? 'none'} error=${lastError.message}`,
+      `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} failover=${!response.headersSent && nextTarget !== undefined} nextTarget=${nextTarget === undefined ? 'none' : formatTarget(nextTarget)} error=${lastError.message}`,
     )
     await recordFailedAttempt({
       runtime,
@@ -255,7 +255,7 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
     }
     if (healthScope !== 'none') {
       console.debug(
-        `[proxy] health failure recorded requestId=${requestId} attempt=${attemptIndex} providerId=${target.providerId} providerModelId=${target.providerModelId} scope=${healthScope} status=${recordedOutcome?.statusCode ?? 'none'}`,
+        `[proxy] health failure recorded requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} scope=${healthScope} status=${recordedOutcome?.statusCode ?? 'none'}`,
       )
     }
     if (response.headersSent) {

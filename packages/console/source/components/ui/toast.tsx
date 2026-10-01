@@ -32,13 +32,12 @@ const showToast = (message: string, type: ToastType = 'info', duration = 4000) =
 }
 
 /**
- * context value 是模块级常量。
+ * context value 是模块级常量，`useToast()` 的返回值引用恒定。
  *
- * 原来它在 `ToastProvider` 里每次渲染都重新构造一个对象（连同里面的 5 个箭头函数），
- * 于是 `useToast()` 的返回值引用每次都变。任何把 `toast` / `toast.error` 写进
- * `useCallback`、`useEffect` 依赖数组的地方，都会跟着每次重渲染重跑一遍，
- * 而这类重跑经常带 `setState`——正是最容易演变成 `Maximum update depth exceeded` 的那类写法。
- * 现在引用恒定，这类级联从源头消失。
+ * 引用必须恒定：任何把 `toast` / `toast.error` 写进 `useCallback`、`useEffect` 依赖数组的
+ * 地方，都会在引用每次变化时重跑一遍，而这类重跑经常带 `setState`——正是最容易演变成
+ * `Maximum update depth exceeded` 的那类写法。在 `ToastProvider` 里构造对象就正好会引入
+ * 这种引用变化，所以整个 value 连里面的箭头函数一起提到模块作用域。
  */
 const TOAST_VALUE: ToastContextValue = {
   toast: showToast,

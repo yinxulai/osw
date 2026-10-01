@@ -4,7 +4,8 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabases, initDatabases } from '../database'
-import { createProvider } from '@server/database/provider-store'
+import { createProvider, deleteProvider } from '@server/database/provider-store'
+import { createProviderModelRoute, deleteProviderModelRoute } from '@server/database/model-store'
 import { createAttemptContent, createRequestAttempt, createRequestContent, createRequestLog } from '@server/database/request-log-store'
 import { createRequestRewriteRule, deleteRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
 import { liveRequestStore } from '@server/proxy/observability/live-request-store'
@@ -307,6 +308,72 @@ describe('request log management', () => {
     expect(responseData(res)).toEqual({
       success: true,
       data: expect.objectContaining({ id: 'diagnostic_detail' }),
+    })
+  })
+
+  it('still lists and opens a request after its provider and model are soft-deleted', async () => {
+    // 列表与详情读的是尝试行上的快照列，不 join 配置表：删掉供应商/模型之后，
+    // 历史请求仍要能被筛出来、能打开。这里走路由把端到端契约钉住。
+    const provider = await createProvider({ name: '要删掉的供应商', apiKeyReference: 'key_deleted_route', timeoutMilliseconds: 30_000, enabled: true })
+    const model = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'deleted-route-model',
+      priority: 1,
+      endpoints: [{ protocol: 'openai-responses', endpointUrl: 'https://example.com/v1/responses', customAuthHeader: null, protocolConversionEnabled: false }],
+    })
+    const log = await createRequestLog({
+      id: 'req_deleted_config',
+      logicalModelId: 'default',
+      clientProtocol: 'openai-responses',
+      transport: 'http',
+      status: 'success',
+      totalDurationMilliseconds: 10,
+    })
+    await createAttemptOrThrow({
+      requestId: log.id,
+      providerId: provider.id,
+      providerModelId: model.id,
+      providerName: provider.name,
+      providerModelName: model.modelName,
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      status: 'success',
+      durationMilliseconds: 10,
+    })
+
+    await deleteProviderModelRoute(model.id)
+    await deleteProvider(provider.id)
+
+    const listRes = mockResponse()
+    await requestLogRoutes.invoke('/api/request-log/list', listRes, {})
+    expect(listRes.statusCode).toBe(200)
+    expect(responseData(listRes)).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ total: 1, logs: [expect.objectContaining({ id: log.id })] }),
+    }))
+
+    // 按已删除的模型筛选同样要命中：筛选条件是尝试行上的快照列。
+    const filteredRes = mockResponse()
+    await requestLogRoutes.invoke('/api/request-log/list', filteredRes, { providerModelId: model.id })
+    expect(responseData(filteredRes)).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ total: 1, logs: [expect.objectContaining({ id: log.id })] }),
+    }))
+
+    const detailRes = mockResponse()
+    await requestLogRoutes.invoke('/api/request-log/detail', detailRes, { id: log.id })
+    expect(detailRes.statusCode).toBe(200)
+    expect(responseData(detailRes)).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        id: log.id,
+        attempts: [expect.objectContaining({ providerId: provider.id, providerName: provider.name, providerModelId: model.id, providerModelName: model.modelName })],
+      }),
     })
   })
 })

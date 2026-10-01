@@ -94,6 +94,8 @@ async function buildProviderEntry(provider: Provider, models: ProviderModelView[
       .filter(setting => !managedSettingKeys.has(setting.key))
       .map(setting => ({ key: setting.key, value: setting.value, valueType: setting.valueType })),
     models: models.map(model => ({
+      // 带上记录 id：同一个供应商下可以有多条同名模型，只靠名字无法一一对上。
+      key: model.id,
       modelName: model.modelName,
       enabled: model.enabled,
       endpoints: model.endpoints.map(endpoint => ({

@@ -14,7 +14,7 @@ import { restrictToWindowEdges } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useLogicalModelControlService } from './service'
 import { useLiveRequests } from '@/data/live-requests'
-import { useLogicalModels, useLogicalModelsActions } from '@/data/logical-models'
+import { useLogicalModels, useLogicalModelsActions, useLogicalModelsLoading } from '@/data/logical-models'
 import { LogicalModelCard } from './components/logical-model-card'
 import { LogicalModelSummary } from './components/logical-model-summary'
 import { SortableLogicalModel } from './components/sortable-logical-model'
@@ -32,13 +32,14 @@ interface LogicalModelColumnProps {
   dragging?: boolean
   /** 每个供应商模型此刻在途的请求数；只影响行内状态徽标，不参与排序或调度。 */
   processingCounts: Map<string, number>
-  /** 改名/改说明或删除之后刷新逻辑模型列表（列表变了，卡片才会跟着走）。 */
+  /** 改 id / 改说明 / 删除之后刷新逻辑模型列表（列表变了，卡片才会跟着走）。 */
   onChanged: () => void
 }
 
 function LogicalModelColumn(props: LogicalModelColumnProps) {
   const { logicalModel, dragHandleProps, dragging, processingCounts, onChanged } = props
-  const service = useLogicalModelControlService(logicalModel.id)
+  // 两把钥匙一整个交下去：绑定接口用记录 id，展示与手动锁定用模型 id。
+  const service = useLogicalModelControlService(logicalModel)
   const confirm = useConfirm()
   const toast = useToast()
   const t = useTranslation()
@@ -48,7 +49,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
   const removeModel = async (model: LogicalModelProviderModel) => {
     const confirmed = await confirm({
       title: t('logicalModels.remove.title'),
-      description: t('logicalModels.remove.description', { name: logicalModel.name, model: model.modelName }),
+      description: t('logicalModels.remove.description', { id: logicalModel.modelId, model: model.modelName }),
       confirmLabel: t('logicalModels.remove.confirm'),
       variant: 'destructive',
     })
@@ -64,7 +65,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
   const deleteLogicalModel = async () => {
     const confirmed = await confirm({
       title: t('logicalModels.delete.title'),
-      description: t('logicalModels.delete.description', { name: logicalModel.name }),
+      description: t('logicalModels.delete.description', { id: logicalModel.modelId }),
       confirmLabel: t('logicalModels.delete.confirm'),
       variant: 'destructive',
     })
@@ -80,7 +81,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
   return (
     <>
       <LogicalModelCard
-        logicalModelName={logicalModel.name}
+        modelId={logicalModel.modelId}
         logicalModelDescription={logicalModel.description}
         builtIn={builtIn}
         models={service.models}
@@ -105,7 +106,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
         dragging={dragging}
         processingCounts={processingCounts}
       />
-      <AddProviderModelDialog open={addModelOpen} logicalModelId={logicalModel.id} onOpenChange={setAddModelOpen} onAdded={() => void service.reload()} />
+      <AddProviderModelDialog open={addModelOpen} logicalModelRecordId={logicalModel.id} onOpenChange={setAddModelOpen} onAdded={() => void service.reload()} />
       <EditLogicalModelDialog
         logicalModel={logicalModel}
         builtIn={builtIn}
@@ -122,7 +123,12 @@ export function LogicalModelsPage() {
   const logicalModels = useLogicalModels()
   const liveRequests = useLiveRequests()
   const { refresh: refreshLogicalModels, reorder: reorderLogicalModels } = useLogicalModelsActions()
-  const service = useLogicalModelControlService('default')
+  // 页头代理开关与顶部指标卡都挂在**内建默认逻辑模型**上：它是请求未命中任何逻辑模型时的
+  // 落点，也是这一页唯一一个跨全部逻辑模型的全局口径。列表没回来时传 `null`，控制服务里
+  // 的查询一个都不开火，所以骨架屏只能由列表自身的就绪状态决定——挂在控制服务上会永远等下去。
+  const defaultLogicalModel = useMemo(() => logicalModels.find(isBuiltInDefaultLogicalModel) ?? null, [logicalModels])
+  const logicalModelsLoading = useLogicalModelsLoading()
+  const service = useLogicalModelControlService(defaultLogicalModel)
   const t = useTranslation()
   const [createLogicalModelOpen, setCreateLogicalModelOpen] = useState(false)
   const proxyRunning = service.proxyStatus?.running ?? false
@@ -163,7 +169,7 @@ export function LogicalModelsPage() {
         )}
       />
       <PageContent>
-        {service.loading ? (
+        {logicalModelsLoading ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (

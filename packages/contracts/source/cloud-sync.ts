@@ -26,9 +26,12 @@ export const CONFIG_SNAPSHOT_FORMAT = 'osw/config-snapshot'
  * 快照版本。
  *
  * 与供应商包同样的取舍：这里是字面量而不是可升级的联合类型，导入只接受当前这一个值，
- * 换代时把它改成 `2`，让上一代的文件明确报错，而不是被猜着读。
+ * 换代时把它改成 `4`，让上一代的文件明确报错，而不是被猜着读。
+ *
+ * `3` 这一代把逻辑模型与绑定从「数据记录 id / `logicalModelId`」改成了 **`modelId`**：
+ * 字段名换了，旧文件直接按字段报错会很难看懂，所以用版本号把它挡在前面。
  */
-export const CONFIG_SNAPSHOT_VERSION = 1
+export const CONFIG_SNAPSHOT_VERSION = 3
 
 /** 快照的文件名。固定不变：换名字等于换一个文件，旧内容会被留下变成孤儿。 */
 export const CONFIG_SNAPSHOT_FILE_NAME = 'osw-config.json'
@@ -36,12 +39,13 @@ export const CONFIG_SNAPSHOT_FILE_NAME = 'osw-config.json'
 /**
  * 快照里的逻辑模型条目。
  *
- * 只带 id 与展示信息，不带 `createdTime` / `deletedTime`：时间戳是本机的记账，
- * 同步过来只会让两边的排序与「什么时候建的」互相污染。
+ * 只带 **modelId** 与说明，不带数据记录 id、也不带 `createdTime` / `deletedTime`：
+ * 记录 id 与本机时间戳都是**这台机器上的记账**（记录 id 由 `generateId` 本地生成，
+ * 两台机器必然不同），同步过来只会让两边的引用互相污染。modelId 才是模型的身份，
+ * 请求按它匹配、路由定义按它引用，因此它也是快照里唯一能用来指认逻辑模型的东西。
  */
 const ConfigSnapshotLogicalModelSchema = z.object({
-  id: LogicalModelIdSchema,
-  name: z.string().min(1).max(100),
+  modelId: LogicalModelIdSchema,
   description: z.string().default(''),
   enabled: z.boolean().default(true),
 })
@@ -51,9 +55,10 @@ const ConfigSnapshotLogicalModelSchema = z.object({
  *
  * 供应商与模型用**名称**而不是 id 指向：供应商 id（`prov_*`）与模型 id 都是本机生成的主键，
  * 两台机器上必然不同，只有「哪个供应商的哪个模型」这个组合是跨机稳定的。
+ * 逻辑模型同理，所以这里指的是 `modelId`，不是数据记录 id。
  */
 const ConfigSnapshotBindingSchema = z.object({
-  logicalModelId: LogicalModelIdSchema,
+  modelId: LogicalModelIdSchema,
   providerName: z.string().min(1).max(100),
   modelName: z.string().min(1),
   priority: z.number().int().default(0),

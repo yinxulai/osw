@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import type { SecretStore } from '@common/secret-store'
 import { closeDatabases, getConfigDb, getDataDb, initDatabases } from './index'
 import { seedDevelopmentData } from './development-seed'
-import { providerModels } from './config-schema'
+import { providerModels, providers } from './config-schema'
 import { requestUsages } from './data-schema'
 import { createProvider, listProviders } from './provider-store'
 import { listLogicalModels } from './logical-model-store'
@@ -38,7 +38,15 @@ describe('development seed', () => {
     expect((await listProviders()).map(provider => provider.name)).toEqual(expect.arrayContaining(['OpenAI', 'Anthropic', 'Volcengine Ark', 'DeepSeek']))
     expect((await listProviders()).every(provider => !provider.name.includes('开发示例'))).toBe(true)
     expect(await listLogicalModels()).toHaveLength(1)
-    expect(getConfigDb().select({ id: providerModels.id }).from(providerModels).all()).toHaveLength(7)
+    // 已删除的供应商 / 模型不进活跃列表，但行确实在表里（`deletedTime` 非空即为证据）。
+    expect(await listProviders(true)).toHaveLength(5)
+    const deletedProviderRows = getConfigDb().select().from(providers).where(eq(providers.id, 'prov_dev_deleted')).all()
+    expect(deletedProviderRows).toEqual([expect.objectContaining({ name: 'Deleted Demo Provider', enabled: false, deletedTime: expect.any(Number) })])
+    const providerModelRows = getConfigDb().select().from(providerModels).all()
+    expect(providerModelRows).toHaveLength(8)
+    expect(providerModelRows.filter(row => row.deletedTime !== null)).toEqual([
+      expect.objectContaining({ id: 'model_dev_provider_8', providerId: 'prov_dev_deleted', modelName: 'deleted-demo-model', enabled: false }),
+    ])
     expect(await listRequestLogs(200)).toHaveLength(120)
     const firstBatchRequests = await listRequestLogs(120, 0)
     const successfulRequest = await getRequestLog(firstBatchRequests.find(request => request.status === 'success')!.id)
@@ -60,7 +68,7 @@ describe('development seed', () => {
         total_tokens: expect.any(Number),
       }),
     }))
-    expect(getConfigDb().select().from(providerModels).all()).toHaveLength(7)
+    expect(getConfigDb().select().from(providerModels).all()).toHaveLength(8)
     // 数值用量表里只有可求和的 token 类条目，原始报文另占一行 `raw`。
     const usageRows = getDataDb().select().from(requestUsages).where(eq(requestUsages.requestId, successfulRequestId)).all()
     expect(usageRows).toEqual(expect.arrayContaining([
@@ -93,7 +101,7 @@ describe('development seed', () => {
       'openai-responses',
       'anthropic-messages',
     ]))
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 
   it('does not modify a database that already has configuration', async () => {
@@ -120,13 +128,13 @@ describe('development seed', () => {
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(true)
     expect((await listProviders()).map(provider => provider.name)).toContain('Existing provider')
     expect(await listProviders()).toHaveLength(5)
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
 
     const firstBatchIds = new Set((await listRequestLogs(200)).map(request => request.id))
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(true)
     expect(await listProviders()).toHaveLength(5)
     expect(await listLogicalModels()).toHaveLength(1)
-    expect(getConfigDb().select({ id: providerModels.id }).from(providerModels).all()).toHaveLength(7)
+    expect(getConfigDb().select({ id: providerModels.id }).from(providerModels).all()).toHaveLength(8)
     const allRequests = await listRequestLogs(300)
     expect(allRequests).toHaveLength(240)
     const secondBatchRequests = allRequests.filter(request => !firstBatchIds.has(request.id))
@@ -136,6 +144,6 @@ describe('development seed', () => {
     expect((await getRequestUsage(secondBatchSuccess.id)).totalTokens).not.toBeNull()
     expect(await listRequestContents(secondBatchSuccess.id)).toHaveLength(1)
     expect(await listAttemptsByRequest(secondBatchFailure.id)).toHaveLength(2)
-    expect(secretStore.set).toHaveBeenCalledTimes(4)
+    expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 })

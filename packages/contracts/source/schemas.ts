@@ -206,22 +206,26 @@ export type SchedulingPolicy = z.infer<typeof SchedulingPolicySchema>
 // ========== Logical Model ==========
 
 /**
- * 逻辑模型 id：稳定、公开、**路由唯一的标识**。
+ * 逻辑模型 id（`LogicalModel.modelId`）：对外的路由目标，客户端请求里的模型名就是它。
  *
- * 落点只认 id，所以客户端请求里的模型名要能直接写成这个 id —— 于是约束必须容得下真实模型名：
+ * 落点只认它，所以客户端请求里的模型名要能直接写成它 —— 于是约束必须容得下真实模型名：
  * 版本号里的点（`deepseek-v4.1-flash`）、大小写（`GPT-4o`、`Qwen3-Max`）都是模型名的常态。
- * 仍然拒绝空格、斜杠、冒号等：id 会进日志与快照，标点保持在可枚举的安全子集里。
+ * 仍然拒绝空格、斜杠、冒号等：它会进日志与快照，标点保持在可枚举的安全子集里。
+ *
+ * 它与数据记录 id（`LogicalModel.id`）是**两个字段**：这一列可以被改（改名），
+ * 因此不能拿来当外键的锚点——外键一律落在数据记录 id 上。
  */
 export const LogicalModelIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, 'logical model id must start with a letter or digit and may only contain letters, digits, dots, underscores and hyphens (max 64 characters)')
 
 /**
- * 内建默认逻辑模型的名字：启动时由 `ensureDefaultLogicalModel` 建出来（id 与 name 都取这个值）。
+ * 内建默认逻辑模型的 **modelId**：启动时由 `ensureDefaultLogicalModel` 建出来。
  *
  * 它是内建「模型直达」规则的回落落点——请求模型没命中任何已启用逻辑模型时落到这里。
  * 服务端的回落匹配、启动时的种子写入、以及路由工作台里默认策略的落点都引用同一个常量，
- * 不再各自重复写这个字面量。
+ * 不再各自重复写这个字面量。它的数据记录 id 是本机生成的，别处一律通过
+ * `getLogicalModelByModelId` 查出来，不要写死。
  */
-export const BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME = 'default'
+export const BUILT_IN_DEFAULT_LOGICAL_MODEL_ID = 'default'
 
 /**
  * 内建默认逻辑模型的种子说明。
@@ -231,26 +235,31 @@ export const BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME = 'default'
  */
 export const BUILT_IN_DEFAULT_LOGICAL_MODEL_DESCRIPTION = 'Default fallback routing model'
 
-/** 只用到 id 与 name 的模型描述，避免让谓词依赖完整的 `LogicalModel`。 */
-export interface LogicalModelIdentity {
-  id: string
-  name: string
-}
+/** 只要能给出 modelId 就行：这个判断不关心记录 id，也不关心其余字段。 */
+type LogicalModelIdentity = { modelId: string }
 
 /**
  * 是否是内建默认逻辑模型。
  *
- * 种子写入时 id 与 name 都是 `default`，但历史数据或手改过的记录可能只对上其中一个，
- * 所以两个都比对一次 —— 这里比的是「是不是那条内建记录」，与路由命中不是同一件事：
- * 路由只看 id。
+ * 只比 `modelId`：路由命中、兜底落点、启动种子认的都是同一个值，数据记录 id 是本机的、
+ * 不能参与这个判断。
  */
 export function isBuiltInDefaultLogicalModel(model: LogicalModelIdentity): boolean {
-  return model.id === BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME || model.name === BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME
+  return model.modelId === BUILT_IN_DEFAULT_LOGICAL_MODEL_ID
 }
 
+/**
+ * 一个逻辑模型。
+ *
+ * `id` 与 `modelId` 是两件事，别混：
+ *   - `id`：**数据记录 id**，本机生成、永不变。它是所有外键（调度绑定）与本机引用
+ *     （界面里拖动排序、接口入参）的锚点。
+ *   - `modelId`：**模型 id**，用户起的、可以被改的、请求按它匹配的名字。
+ *     跨机传输（云同步快照）只能用它，因为记录 id 换台机器就不一样了。
+ */
 export const LogicalModelSchema = z.object({
-  id: LogicalModelIdSchema,
-  name: z.string().min(1).max(100),
+  id: z.string(),
+  modelId: LogicalModelIdSchema,
   description: z.string().default(''),
   enabled: z.boolean().default(true),
   createdTime: z.number().int(),
@@ -420,7 +429,7 @@ export const SettingsSchema = z.object({
    *
    * 字段本身仍然保留：它是「采集是否被允许」的唯一判据（开发档另有一条独立短路）。
    * 关掉后不再采集任何事件，队列里压着的那一批会尽力发完，但**没有**一条「开关被改了」的事件——
-   * 早先有过 `telemetry_toggled`，已撤掉（没有开关就触发不到）。代价与取舍见 telemetry.md §13。
+   * 用户触发不到的产品事实不占事件名。代价与取舍见 telemetry.md §13。
    *
    * 采集范围、事件白名单与保留期都在 telemetry.md，不在这里复述。
    */

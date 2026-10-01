@@ -62,9 +62,9 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| id | string | 唯一标识 |
+| id | string | 唯一标识（`model_*`）；**这一行的身份**，改名、软删除都不换它 |
 | providerId | string | 所属 Provider |
-| modelName | string | Provider API 中的实际模型名（转发时替换请求中的 `model` 字段） |
+| modelName | string | Provider API 中的实际模型名（转发时替换请求中的 `model` 字段）；**同一 Provider 下允许重名** |
 | endpointBindings | object[] | ProviderModel 与 `provider_endpoints` 的绑定视图；持久化使用 `provider_model_endpoints` 关系表 |
 | priority | number | 当前逻辑模型绑定中的候选顺序，数字越小优先级越高 |
 | enabled | boolean | 是否启用 |
@@ -84,10 +84,12 @@
 
 ### 约束
 
-- 同一 Provider 下可以有多个 ProviderModel；ProviderModel 可被多个逻辑模型复用。
+- 同一 Provider 下可以有多个 ProviderModel（**包括多条同名模型**——同一个模型接两个区域、两套密钥、两条不同端点是正常用法，两条记录各自绑自己的端点，靠 `id` 区分而不是靠名字）；ProviderModel 可被多个逻辑模型复用。
+- 模型的身份是记录 `id`，不是 `modelName`：改名只改一列文本，不换身份，因此绑定与历史引用不会悬空；删除时也不改名让位。
 - 每个逻辑模型通过 `scheduling_policies` 维护自己的绑定集合、启用状态和候选顺序。
 - 每个请求根据当前逻辑模型、客户端协议、绑定状态、绑定优先级和健康状态动态生成候选模型。
 - `provider_endpoints.protocol` 决定原生协议；协议转换由对应 `protocol_converters` 决定。
+- 一个模型对一条端点、一条端点对一个客户端协议都只留一条活跃行，由 store 先找活跃行、没有就找历史行原地复活、都没有才插入保证（不做成唯一索引）。
 - 转发请求时，请求体中的 `model` 字段会被替换为 `modelName` 的值。
 
 ### 配置示例（API/导出聚合视图）
@@ -181,6 +183,7 @@
       "settings": [{ "key": "region", "value": "us-east", "valueType": "string" }],
       "models": [
         {
+          "key": "model_7f3a",
           "modelName": "gpt-5",
           "enabled": true,
           "endpoints": [{ "protocol": "openai-completions", "url": null, "enabled": true, "protocolConversionEnabled": true }]
@@ -192,6 +195,7 @@
 ```
 
 - 包描述「一个供应商现在长什么样」，所以是**完整快照**而不是补丁：端点（包含被停用但保留了 URL 的行）、自定义设置、下属模型一并带上。
+- 每个模型带一个 `key`：**导出时这一条模型在源库里的记录 id**。同一供应商下允许存在多条同名模型，靠名字对不上号（导入时会把两条合成一条），`key` 就是让「导出再导入」把每一条模型放回它自己那一行的锚点；老包没有这个字段，此时退回按 `modelName` 取第一条未认领的同名模型。
 - 协议转换聚合成一个布尔值：当前实现里可转换的客户端协议集合完全由 `CONVERTIBLE_PROTOCOLS[protocol]` 决定，「这条绑定有没有开转换」是唯一的可配置自由度。
 - `security.secretReference` 与 `connection.timeoutMilliseconds` 不进 `settings`：前者是本机密钥库里的引用，换台机器就失去意义；后者已经是顶层字段。
 - 不含请求重写规则的绑定：规则本体是独立于供应商的实体，导入到另一个环境只会得到悬空引用（外键也不允许），需要单独迁移，见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
@@ -210,6 +214,7 @@
 
 - 按 `name` 匹配：匹配到即整体覆盖，否则新建供应商。缺省不做「合并」，避免导出再导入不断累积残留。
 - 覆盖时端点、自定义设置、模型全部以包为准：包里没提到的端点行保留但停用（URL 是用户可见状态，不是缓存），包里没有的自定义设置 key 删除，包里没有的模型软删除。
+- 模型按 `key`（记录 id）认领，认不到再退回按 `modelName` 找第一条尚未被本包认领的同名模型；因此「同一供应商下两条同名模型」导出再导入仍然是两条，不会被压成一条。
 - 新建的模型会像手工新建那样挂到 `default` 逻辑模型，保证导入后供应商立刻可用；已有模型的调度位置不动，导入不会重排候选顺序。
 - 密钥是唯一被刻意保留的字段：包里有 `apiKey` 就写入（新供应商使用新生成的密钥引用），没有就沿用目标环境已有密钥。
 - 包内数据在写入前整体校验（含包内供应商重名），失败返回 `VALIDATION_ERROR` 与「这不是一个可识别的供应商导出文件」。

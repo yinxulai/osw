@@ -75,7 +75,7 @@ export function useRoutePlans(mode: RouteMode): RoutePlansState {
   const logicalModels = useLogicalModels()
 
   const runtimeLogicalModels = useMemo(
-    () => logicalModels.map(model => ({ id: model.id, name: model.name, enabled: model.enabled })),
+    () => logicalModels.map(model => ({ modelId: model.modelId, enabled: model.enabled })),
     [logicalModels],
   )
 

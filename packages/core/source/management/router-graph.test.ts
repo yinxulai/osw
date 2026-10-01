@@ -19,7 +19,7 @@ import { mockResponse } from './test-support'
  * 读不到给 `null`）；图本身的构造与执行分别是 `presets.test.ts` / `route-rule-engine.test.ts` 的事。
  */
 
-const models: RuntimeLogicalModel[] = [{ id: 'default', name: 'Default', enabled: true }]
+const models: RuntimeLogicalModel[] = [{ modelId: 'default', enabled: true }]
 
 /** 试跑也会真的跑一遍引擎，所以「跑过哪些节点」同样是产品事实，要按同一口径埋点。 */
 const { reported } = vi.hoisted(() => ({ reported: [] as TelemetryEventInput[] }))
@@ -68,17 +68,18 @@ describe('router graph routes', () => {
       description: '  说明  ',
     })
 
-    const saved = responseData(saveResponse) as { version: number; created: boolean; name: string; description: string }
+    const saved = responseData(saveResponse) as { id: string; version: number; created: boolean; name: string; description: string }
     expect(saved).toMatchObject({ version: 1, created: true, name: '第一版', description: '说明' })
+    expect(saved.id).toMatch(/^workflow_/)
 
     const listResponse = mockResponse()
     await routerGraphRoutes.invoke('/api/router/graph/versions', listResponse)
     expect(responseData(listResponse)).toEqual([
-      expect.objectContaining({ version: 1, name: '第一版', nodeCount: graph.nodes.length }),
+      expect.objectContaining({ id: saved.id, version: 1, name: '第一版', nodeCount: graph.nodes.length }),
     ])
 
     const readResponse = mockResponse()
-    await routerGraphRoutes.invoke('/api/router/graph/version', readResponse, { version: 1 })
+    await routerGraphRoutes.invoke('/api/router/graph/version', readResponse, { id: saved.id })
     expect(responseData(readResponse)).toMatchObject({ version: 1, graph })
 
     const currentResponse = mockResponse()
@@ -107,9 +108,9 @@ describe('router graph routes', () => {
     expect(responseData(changed)).toMatchObject({ version: 2, created: true, name: '', description: '' })
   })
 
-  it('读取不存在的版本得到 null，而不是报错', async () => {
+  it('按不存在的记录 id 读取得到 null，而不是报错', async () => {
     const response = mockResponse()
-    await routerGraphRoutes.invoke('/api/router/graph/version', response, { version: 99 })
+    await routerGraphRoutes.invoke('/api/router/graph/version', response, { id: 'workflow_does_not_exist' })
     expect(responseData(response)).toBeNull()
   })
 })

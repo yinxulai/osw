@@ -1,5 +1,5 @@
 import { tokensPerSecondFromTotals } from '@common/metrics'
-import type { LiveRequest, LiveRequestAttempt, RequestStatus } from '@common/schemas'
+import type { LiveRequest, LiveRequestAttempt, LiveRequestCandidate, RequestStatus } from '@common/schemas'
 
 /**
  * 「执行中的请求」在界面上的一切取值。
@@ -25,6 +25,14 @@ export interface ExecutionSnapshot {
   attemptCount: number
   /** 路由选出的候选总数；还没路由时为 0。分母取它而不是已开始的次数，试到第几个才有意义。 */
   candidateCount: number
+  /**
+   * 还没轮到、接下来最可能被试的那个候选（队列里的下一个）。
+   *
+   * 尝试是按候选顺序依次开跑的，所以「已开始的次数」正好是下一个候选的下标。
+   * 界面在「一次尝试都还没开始」那一刻用它而不是写 `—`：那个瞬间唯一有信息量的答案
+   * 就是「它正要往谁发」。候选已试完或路由还没有结论时为 `null`。
+   */
+  nextTarget: LiveRequestCandidate | null
   /** 请求已经走了多久；已落定时是它的总耗时。 */
   elapsedMilliseconds: number
   ttftMilliseconds: number | null
@@ -64,6 +72,7 @@ export function executionSnapshotOf(live: LiveRequest, now: number): ExecutionSn
     attempt,
     attemptCount: live.attempts.length,
     candidateCount: live.candidates.length,
+    nextTarget: live.candidates[live.attempts.length] ?? null,
     elapsedMilliseconds: (live.endedAt ?? now) - live.startedAt,
     ttftMilliseconds: attempt?.ttftMilliseconds ?? null,
     inputTokens: attempt?.inputTokens ?? null,

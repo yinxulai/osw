@@ -3,7 +3,7 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { CircleSlash, Zap } from 'lucide-react'
 import type { ClientConfigVersionSummary } from '@common/client-config'
 import { agentClientModelSlots, findAgentClientApplyConfig } from '@common/clients'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -258,7 +258,7 @@ export function ClientConfigDetailPage() {
                 key={`values|${stateKey}|${draftReset}`}
                 autoFill={state.autoFill}
                 clientKey={clientKey}
-                defaultModel={BUILT_IN_DEFAULT_LOGICAL_MODEL_NAME}
+                defaultModel={BUILT_IN_DEFAULT_LOGICAL_MODEL_ID}
                 detected={state.detected}
                 onChange={changeValues}
               />

@@ -181,7 +181,7 @@ thinking/reasoning 不是三个协议中完全同构的字段。当前实现尚�
 两张表的字段、主键与索引定义在 [data-model.md](./data-model.md) §3.13，这里只写字段之外必须知道的约定。
 
 - `match`、`actions` 和 `testCases` 是真正适合 JSON 的内容，由 Zod 校验；名称、启用状态、阶段、时间等查询字段一律不放入 JSON。`scope` 取 `global` 或 `model`，决定是否自动应用以及模型窗口是否可编辑。`source` 取 `user`、`builtin` 或 `imported`。
-- 绑定表主键为 `(providerModelId, requestRewriteRuleId)`；同一 ProviderModel 下同一个 `priority` 只能有一条生效绑定（部分唯一索引，软删除行不占位）。绑定表不保存规则副本——请求执行时读取规则快照，历史 attempt 只记录规则 ID 列表。
+- 绑定表主键为 `(providerModelId, requestRewriteRuleId)`：一条绑定要么在，要么不在；**取消绑定再加回来是在同一行上复活**（主键冲突更新并把 `deletedTime` 清回 `null`），不会新增、也不撞历史行。同一 ProviderModel 下同一个 `priority` 只能有一条生效绑定，这条由应用层把关（不做成部分唯一索引：违反它的是用户在一个请求体里填了两个相同的优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名）。绑定表不保存规则副本——请求执行时读取规则快照，历史 attempt 只记录规则 ID 列表。
 - 首期不新增端点级绑定表。若后续确认同一 ProviderModel 的不同协议必须有不同规则链，再扩展为 `provider_model_endpoint_request_rewrite_rules`，并同时定义模型级默认规则与端点级覆盖关系，不能直接叠加两套隐式规则。
 
 ### 7.1 观测数据

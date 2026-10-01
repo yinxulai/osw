@@ -2,7 +2,7 @@
 
 > 本文是新大版本的目标数据库结构。
 >
-> **发布策略：迁移优先，换代只在大版本发布时发生。** 结构变化默认加一条迁移（`packages/core/drizzle/<role>/` 下每个目录是一条，启动时按目录名顺序执行）；只有应用大版本发布时才把 `DATABASE_SCHEMA_VERSIONS` 里对应角色那个数字加一，以换文件名的方式甩掉累积的迁移历史——那时才会在一个全新的空文件上初始化，旧文件既不读取、不迁移、不检测。
+> **发布策略：不保留增量迁移，结构变化就地重画基线。** 每条链只有**一条**基线（`packages/core/drizzle/<role>/` 下唯一那个目录），它由当前 schema 直接生成。改结构 = 改 `packages/core/source/database/<role>-schema.ts`，再把那条基线重新生成一遍、**沿用原来的目录名**；不追加迁移、不留历史目录。`DATABASE_SCHEMA_VERSIONS` 只在应用大版本发布时加一，用来甩掉磁盘上的旧文件——它与「这次改了多少结构」无关。
 > 数据库由**两个**文件组成：用户写的配置和系统写的观测数据各自独立（理由见 §2.1）。
 
 ## 1. 设计目标
@@ -17,9 +17,9 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 6. **请求/响应正文与日志索引分离，正文按需记录并完整保留。**
 7. **历史日志不依赖可变配置，不为日志快照增加外键。**
 8. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
-9. **数据库结构以 Drizzle schema 为唯一代码定义，由生成的 migration 在应用启动时执行；不提供兼容迁移。**
+9. **数据库结构以 Drizzle schema 为唯一代码定义；链上只保留一条从当前 schema 生成的基线，不提供兼容迁移。**
 10. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
-11. **表名统一为 `settings`，不再引入 `app_config` 作为数据库表名。**
+11. **数据库表名统一为 `settings`。**
 12. **领域前缀按对象边界使用：`provider*` 是配置身份，`client*` 是客户端一侧，`upstream*` 是实际远端 hop。**
 13. **请求级协议是 `clientProtocol`；每次 attempt 保存自己的 `upstreamProtocol`。**
 14. **一张表 = 一个视角。列名不带视角前缀——视角由表名唯一确定。**
@@ -48,13 +48,13 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `config-<v>.db` | 配置库 | 12 | 用户 | 供应商、模型、路由、改写规则全没了——**不可再生** |
 | `data-<v>.db` | 数据库 | 10 | 系统 | 历史请求、日志与健康状态归零，代理照常工作——**可丢弃** |
 
-文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**，且这一下必须与「重新生成首发基线、丢掉旧链」一起做：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。**日常改结构不走这条路，加一条迁移就好**——把每次加列都做成换代，等于每加一列就让用户在一张空表上重新开始。两个库的版本各自独立，可以停在不同的数字上。
+文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。它与本次改动动了多少结构无关——**日常改结构不换代**，直接改 schema 再把基线重画一遍即可（见下一段）。两个库的版本各自独立，可以停在不同的数字上。
 
-两条路的代价完全不同，选错了会直接伤到用户：**加迁移**保留用户已有数据，只是启动时多跑几条语句；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布、要甩掉迁移历史。为了给某次加列省一条迁移而换代，是拿用户的配置当耗材。
+**日常改结构：改 schema，重画基线，目录名不动。** 库里没有增量迁移这回事，链上永远只有一条由当前 schema 直接生成的基线；改完 schema 就用 `drizzle-kit generate` 把那条基线重新生成一遍，并把目录名**沿用原来那一个**。为什么必须沿用：运行时迁移器的判定依据是**目录名**，已有库的 `__drizzle_migrations` 里记的就是它——换个新名字，那条基线在已有库眼里就是一条从没跑过的新迁移，会被拿去对已经存在的表再跑一遍 `CREATE TABLE`。而重画**内容**是安全的：目录名没变，迁移器认为它已经应用过，不会重放。
 
-**不换代也能把迁移链压平，前提是基线目录名沿用原来那一条。** 换代之外还有第三种操作：把 `drizzle/<role>/` 下累积的目录合成一条覆盖当前全部结构的基线，文件名不变、`DATABASE_SCHEMA_VERSIONS` 不加一。做法必须是「**沿用第一条基线的目录名、内容换成合并后的全量结构、删掉它后面所有目录**」，而不是「重新生成一个新名字的基线、把旧的删掉」——已有库的 `__drizzle_migrations` 里记的是旧基线目录名，新名字在它眼里是一条从没跑过的新迁移，会被拿去对已经存在的表再跑一遍 `CREATE TABLE`（见本节末关于判定依据的说明）。反过来，被删掉的那些后续目录对已有库只是「库里多了几行没对应本地文件的记录」，migrator 不会因此报错。这条路只在**明确不需要换代**（非主版本发布）而链已经太长时使用；它不换文件名，所以旧用户的库原地不动。
+换代与改结构的代价完全不同，选错了会直接伤到用户：**重画基线**只在文件里重建表结构，用户已有的数据由基线自己那条 `CREATE TABLE` 链在新库上重建、旧数据不受影响；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布。
 
-两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，所以重命名一个已发布的迁移目录会被当成一条新迁移而重放。`logical_models.default` 是应用 seed，不属于 schema migration。
+两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，这正是重画基线必须沿用旧目录名的原因；反过来说，目录名没变时改内容不会被重放，所以链上只留一条基线是安全的。`logical_models.default` 是应用 seed，不属于 schema migration。
 
 两条链互相独立：一个库的演进不会牵扯另一个库，也不存在同时改两个库的事务。
 
@@ -190,7 +190,7 @@ erDiagram
 
   logical_models {
     text id PK
-    text name UK
+    text modelId
     text description
     boolean enabled
     integer sortOrder
@@ -491,10 +491,10 @@ CREATE TABLE provider_endpoints (
   deletedTime INTEGER
 );
 
--- 同一供应商同一协议只允许一条未删除的端点；软删除的行留在表里，
--- 因此唯一约束必须是部分索引，否则重新添加同一协议会撞上历史行。
-CREATE UNIQUE INDEX idx_provider_endpoints_provider_protocol_active
-  ON provider_endpoints(providerId, protocol) WHERE deletedTime IS NULL;
+-- 「同一供应商同一协议只留一条活跃端点」由应用层回答，不做成索引：
+-- 写成部分唯一索引就等于让删除路径去「让位」，而判据其实只是「现在有没有另一条活跃行占着」。
+CREATE INDEX idx_provider_endpoints_provider_protocol
+  ON provider_endpoints(providerId, protocol);
 CREATE INDEX idx_provider_endpoints_protocol
   ON provider_endpoints(protocol, enabled);
 CREATE INDEX idx_provider_endpoints_deleted_time
@@ -505,16 +505,26 @@ CREATE INDEX idx_provider_endpoints_deleted_time
 
 ### 3.5 `logical_models`
 
-`default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**id 固定**（请求按 id 命中它），只有说明可编辑。
+逻辑模型有**两个键，职责不重叠**：
 
-除 `default` 之外，逻辑模型可以在控制台自由创建、改名、改说明与软删除：**id 是路由唯一使用的标识**，也是客户端请求里那个 `model` 必须写的值，约束为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（容得下 `deepseek-v4.1-flash`、`GPT-4o` 这类真实模型名）；名称是纯展示名，不参与路由，说明是自由文本。删除只打 `deletedTime` 时间戳（§8），行留在表里——历史请求日志、调度绑定与路由落点都按 ID 引用逻辑模型，硬删会把它们变成悬空引用。
+- **`id`：数据记录 id**（`lm_*`，本机生成）。它是这一行的稳定主键，也是所有外键盯着的那一列——`scheduling_policies.logicalModelId` 指的是它。用户看不见、也不需要它，**改名不换它、软删除也不换它**。
+- **`modelId`：模型 id（对外的模型名）**。客户端请求里的 `model` 写的就是它，路由匹配也只用它。它由用户填写，约束为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（容得下 `deepseek-v4.1-flash`、`GPT-4o` 这类真实模型名），**可以随时改**。
+
+把这两个键分开，是为了让「改名」不再等于「换身份」：外键指向 `id`，一次改名就只是改一列文本，不需要 `ON UPDATE CASCADE`，也不会有任何引用变成悬空行。反过来，只用一个键的最省事写法很快会撞上「用户想改名，而历史日志、调度绑定、路由落点都写着旧名字」这件事。
+
+`default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**`modelId` 固定为 `default`**，不可改名、不可删除，只有说明可编辑。
+
+除 `default` 之外，逻辑模型可以在控制台自由创建、改 `modelId`、改说明与软删除。删除只打 `deletedTime` 时间戳（§8），行留在表里且 `modelId` 原样保留——历史请求日志里的模型名快照要能对得上一条真实存在过的行；调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行。路由定义按 `modelId` 引用落点。可删除的逻辑模型在删除时，它的调度绑定（该逻辑模型私有的编排）按记录 id 一并硬删除。
+
+「模型名不许重复」的判据是**活跃行之间不许重复**，而不是「这个名字历史上出现过没有」。于是「删掉一个模型、再建一个同名的」是一次普通的成功，不需要在删除时把 `modelId` 改写成墓碑之类的把戏。这条规则由应用层把守（`logical-model-store.ts` 的 `assertLogicalModelIdAvailable`），因此 `logical_models` 上**没有** `modelId` 的唯一索引。
 
 ```sql
 CREATE TABLE logical_models (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
+  modelId TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  sortOrder INTEGER NOT NULL DEFAULT 0,
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
   deletedTime INTEGER
@@ -524,13 +534,13 @@ CREATE INDEX idx_logical_models_enabled ON logical_models(enabled);
 CREATE INDEX idx_logical_models_deleted_time ON logical_models(deletedTime);
 ```
 
-初始化时必须幂等创建 `default`。
+初始化时必须幂等创建 `modelId = 'default'` 的那一行。
 
 ### 3.6 `scheduling_policies`
 
 `scheduling_policies` 是 **LogicalModel 与 ProviderModel 之间的调度绑定表**，不是逻辑模型的单独全局策略配置。每一行表示一个 ProviderModel 是否加入某个逻辑模型的候选池，以及它在该候选池中的顺序和权重。因此，不同逻辑模型可以绑定相同的 ProviderModel，但为其配置不同的 `priority`、`weight` 和启用状态；ProviderModel 本身不再拥有跨逻辑模型共享的全局排序。
 
-v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 ID 时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改名与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
+v0.3 只支持 `strategy = priority`，并在 `default` 初始化时为需要的 ProviderModel 创建绑定。请求体中的 `model` 命中已启用逻辑模型的 `modelId` 时使用该逻辑模型；未命中时使用已启用的 `default` 逻辑模型。逻辑模型的创建、改 `modelId` 与软删除在控制台完成，每个逻辑模型的调度绑定在模型管理里维护。
 
 ```sql
 CREATE TABLE scheduling_policies (
@@ -552,11 +562,11 @@ CREATE INDEX idx_scheduling_policies_deleted_time
   ON scheduling_policies(deletedTime);
 ```
 
-`request_logs.logicalModelId` 保留实际处理请求的逻辑模型标识，但不建立外键。MVP 中请求体只要求 `model` 为非空字符串；路由先按请求模型匹配逻辑模型，未匹配时才回退到 `default` 的启用绑定。
+`request_logs.logicalModelId` 保留实际处理请求的逻辑模型标识（即当时的 modelId），但不建立外键。MVP 中请求体只要求 `model` 为非空字符串；路由先按请求模型匹配逻辑模型，未匹配时才回退到 `default` 的启用绑定。
 
 ### 3.7 `provider_models`、`provider_model_endpoints` 与 `protocol_converters`
 
-`provider_models` 是 Provider 上可被路由的真实模型配置。路由、启用和协议端点都是稳定且经常查询的字段，必须拆成列和子表，不再放进 JSON。ProviderModel 的 `modelName` 表示供应商 API 中的实际模型名；表自身的实体身份使用 `id`，其他表通过 `providerModelId` 引用。
+`provider_models` 是 Provider 上可被路由的真实模型配置。路由、启用和协议端点都是稳定且经常查询的字段，必须拆成列和子表，不再放进 JSON。ProviderModel 的 `modelName` 表示供应商 API 中的实际模型名；表自身的实体身份使用 `id`（`model_*`），其他表通过 `providerModelId` 引用。**同一个供应商下允许存在多条同名模型**：同一个模型接两个区域、两套密钥、两条不同端点是很正常的用法，两条记录各自绑自己的端点，靠 `id` 区分而不是靠名字。
 
 ```sql
 CREATE TABLE provider_models (
@@ -590,23 +600,25 @@ CREATE TABLE protocol_converters (
   deletedTime INTEGER
 );
 
-CREATE UNIQUE INDEX idx_provider_models_provider_model_active
-  ON provider_models(providerId, modelName) WHERE deletedTime IS NULL;
+CREATE INDEX idx_provider_models_provider_model
+  ON provider_models(providerId, modelName);
 CREATE INDEX idx_provider_models_enabled
   ON provider_models(providerId, enabled, deletedTime);
-CREATE UNIQUE INDEX idx_provider_model_endpoints_unique_active
-  ON provider_model_endpoints(providerModelId, providerEndpointId) WHERE deletedTime IS NULL;
+CREATE INDEX idx_provider_model_endpoints_unique
+  ON provider_model_endpoints(providerModelId, providerEndpointId);
 CREATE INDEX idx_provider_model_endpoints_provider_endpoint
   ON provider_model_endpoints(providerEndpointId, enabled);
 CREATE INDEX idx_provider_model_endpoints_deleted_time
   ON provider_model_endpoints(deletedTime);
-CREATE UNIQUE INDEX idx_protocol_converters_unique_active
-  ON protocol_converters(providerModelEndpointId, clientProtocol) WHERE deletedTime IS NULL;
+CREATE INDEX idx_protocol_converters_unique
+  ON protocol_converters(providerModelEndpointId, clientProtocol);
 CREATE INDEX idx_protocol_converters_protocol
   ON protocol_converters(clientProtocol, enabled);
 CREATE INDEX idx_protocol_converters_deleted_time
   ON protocol_converters(deletedTime);
 ```
+
+上面三张表里的三组「一对一关系」都由**应用层 + 原地复活**保证，都不做成唯一索引：`provider_models` 允许同一供应商下多条同名模型（同一个模型接两个区域、两套密钥是正常用法），`provider_model_endpoints` 与 `protocol_converters` 则由 store 先找活跃行、没有就找同一对键的历史行**原地复活**、都没有才插入新行。把「一条活跃行」写成部分唯一索引，等于把「删掉再加回来」的责任推给删除路径去腾位置；而真正的判据只是一句「现在有没有另一条活跃行占着这对键」，这句话本来就该在 store 里回答。
 
 端点解析规则：优先使用 `provider_model_endpoints.url`，为空时使用其 `providerEndpointId` 对应的 `provider_endpoints.url`；两者都没有地址时，这个协议按「未配置」处理，候选不可用。**两层都没有地址不许落库**：保存模型时直接报 `ENDPOINT_URL_MISSING`，把「哪个供应商的哪个协议缺地址」说清楚，而不是存一个打不出去的模型让用户在请求时才撞上。为此**也不允许用占位地址顶替空值**：占位值会被当成用户自己配的地址展示出来、被模型列表探测、被真实请求打出去，用户看到的只是一串自己没写过的 URL，完全不知道问题出在哪。协议始终来自 Provider 端点，不在端点绑定表重复保存。
 
@@ -1085,14 +1097,27 @@ CREATE TABLE provider_model_request_rewrite_rules (
   FOREIGN KEY (requestRewriteRuleId) REFERENCES request_rewrite_rules(id)
 );
 
--- 同一 ProviderModel 下，同一个 priority 只能有一条生效绑定
-CREATE UNIQUE INDEX idx_provider_model_request_rewrite_rule_priority_active
-  ON provider_model_request_rewrite_rules(providerModelId, priority)
-  WHERE deletedTime IS NULL;
+-- 绑定表主键为 (providerModelId, requestRewriteRuleId)：一条绑定要么在，要么不在。
+-- 「同一 ProviderModel 下 priority 不重复」由应用层把关（不做成索引）。
+CREATE TABLE provider_model_request_rewrite_rules (
+  providerModelId TEXT NOT NULL,
+  requestRewriteRuleId TEXT NOT NULL,
+  priority INTEGER NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER,
+
+  PRIMARY KEY (providerModelId, requestRewriteRuleId)
+);
+
+CREATE INDEX idx_provider_model_request_rewrite_rules_priority
+  ON provider_model_request_rewrite_rules(providerModelId, priority);
 
 CREATE INDEX idx_provider_model_request_rewrite_rules_deleted_time
   ON provider_model_request_rewrite_rules(deletedTime);
 
+-- 路由图：一行一版，只装 type = 'router'
 CREATE TABLE workflows (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -1102,22 +1127,41 @@ CREATE TABLE workflows (
   definition TEXT NOT NULL,
   createdTime INTEGER NOT NULL,
   updatedTime INTEGER NOT NULL,
-  deletedTime INTEGER,
-
-  UNIQUE (type, version)
+  deletedTime INTEGER
 );
+
+CREATE INDEX idx_workflows_type_version
+  ON workflows(type, version);
 
 CREATE INDEX idx_workflows_type
   ON workflows(type, deletedTime);
 
 CREATE INDEX idx_workflows_deleted_time
   ON workflows(deletedTime);
+
+-- 路由规则表：一行一版，独立于 workflows
+CREATE TABLE route_rule_sets (
+  id TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  definition TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL
+);
+
+CREATE INDEX idx_route_rule_sets_version
+  ON route_rule_sets(version);
+
+CREATE INDEX idx_route_rule_sets_updated_time
+  ON route_rule_sets(updatedTime);
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
 - `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；日志级别与保留策略见 [observability.md](./observability.md)。
-- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
-- `workflows` 按 `type + version` 唯一保存路由定义，`definition` 是 JSON 文本，`version` 是这一份定义的版本号；`type = 'router'` 存工作流图，一行一版、版本号单调递增；`type = 'route-rules'` 存规则模式的规则表，**同样是每次保存一行、版本号各自从 1 单调递增**（上限 30 版），两种定义各写各的行、各算各的版本号，互不干扰；`name` 与 `description` 是用户在保存时给这一版写的人类注记，不参与任何运行时判定，也不承担唯一性 ——**版本的身份是 `version` 本身**，同名多版完全正常，两者留空即空串（不会自动填成 `Version N`）。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
+- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
+- `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
+- `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
 
 ## 4. JSON 文档版本
 
@@ -1183,7 +1227,7 @@ settings.value（仅保留真正动态的扩展设置；标准设置必须有独
 
 ```text
 Provider name / enabled / timeout / auth type
-LogicalModel name / description / enabled / routing strategy
+LogicalModel modelId / description / enabled / routing strategy
 ProviderModel modelName / enabled；scheduling_policies priority / weight / enabled
 Provider protocol / URL / ProviderModel endpoint binding / conversion client protocol / enabled
 日志 status / protocol / model IDs / provider ID
@@ -1249,14 +1293,14 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 | 库 | Store |
 | --- | --- |
-| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`request-rewrite-rule-store.ts` |
+| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`route-rule-store.ts`、`router-graph-store.ts`、`request-rewrite-rule-store.ts` |
 | 观测 | `health-store.ts`、`request-log-store.ts`、`analytics-store.ts`、`runtime-log-store.ts` |
 
 **不许为了「读起来方便」合并出一个跨库 store**：需要同时看配置和观测的用例（比如供应商详情页）由调用方分别取，或者先把一个库的结果算成一个小集合，再拿去过滤另一个库。这个约束由 `packages/core/scripts/check-database-boundaries.mjs` 断言——它是最容易被一次「顺手重构」破坏、又最难在运行时发现的边界（跨库 join 不报错，只会静默退化成两次全表扫）。
 
 ## 8. 删除与历史数据规则
 
-初始化时必须幂等创建 `logical_models.default` 及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、id 也不可改（请求按 id 命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
+初始化时必须幂等创建 `modelId = 'default'` 的逻辑模型及其 `scheduling_policies` 默认行。`default` 是未命中任何逻辑模型时的落点，因此它不可删除、`modelId` 也不可改（请求按模型名命中它），只有说明可以编辑；其他逻辑模型可以自由创建与软删除。
 
 ### 配置实体
 
@@ -1273,10 +1317,13 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 理由很直接：`request_logs` 与 `request_attempts` 里保存的是 `providerId` / `providerModelId` / `logicalModelId` 这类标识。如果配置实体物理删除，历史请求就会指向一个不存在的行——「这条 3 天前的失败请求属于哪个供应商、哪个逻辑模型」将无法回答。历史请求本身仍要按保留策略物理删除（见下文），但它删除的是请求侧的行，不是被引用的配置行。
 
-软删除带来两条配套约束：
+软删除带来三条配套约束：
 
-1. **唯一约束必须写成部分唯一索引**（`... WHERE deletedTime IS NULL`）。软删除的行留在表里，如果沿用普通 `UNIQUE`，重新添加同一个协议端点、同一对绑定关系会直接撞上历史行而失败。
-2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`，因此它的「复活」天然是主键冲突更新。
+1. **业务唯一性一律由应用层把关，不写成数据库唯一索引。** 软删除的行留在表里，任何面向「活跃行」的唯一性（同一供应商下同协议的端点、同一模型对同一端点/规则只留一条绑定、同一逻辑模型下 `modelId` 不重复）都要写成 `... WHERE deletedTime IS NULL` 的部分唯一索引；而不是这样写的时候，约束就落回 store 里「先查后插」，且查与插必须在同一个事务里。库里只保留真正的结构约束：主键、外键，以及极少数「内容本身就是身份」的表（`client_config_versions` 的 `contentHash`）。
+2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`、`provider_model_request_rewrite_rules` 的主键是 `(providerModelId, requestRewriteRuleId)`，因此它们的「复活」天然是主键冲突更新；端点、绑定、协议转换器则由 store 先找历史行、命中就原地复活。
+3. **身份是记录 id，不是名字。** `providerModels` 允许同一供应商下存在多条同名模型，逻辑模型、路由图版本、规则表版本同理——名字是给人看的注记，唯一性不成立，删掉再建一条同名的是常见动作。删除时也**不改写标识**（不造墓碑名），因为身份本来就不是靠名字成立。
+
+软删除的行因此仍会被观测侧读到：请求日志、统计分析里的名字与 id 都能对上一条真实存在过的配置，记录照旧展示、照旧计账。列表接口默认只回活跃行，观测侧要分辨「这个名字还在用」与「它的主人已经删了」时，用 `includeDeleted` 一并取回（`/api/logical-model/list`、`/api/provider/list`、`/api/provider-model/list`），比对后给名字补一枚「已删除」标签——纯展示，见 [observability.md](./observability.md)。
 
 ### 运行状态
 
@@ -1337,7 +1384,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 7. 分域 Store 测试（`store-boundaries.test.ts`、各领域测试）；
 8. 供应商包导入导出逻辑（`packages/core/source/management/provider-transfer/`、`packages/contracts/source/provider-bundle.ts`）；
 9. Provider、模型、路由和统计相关 SQL；
-10. 删除旧版 Drizzle 迁移文件，生成新的首发基线；
+10. 生成首发基线（链上只保留这一条，见开头“发布策略”）；
 11. 数据文件名规则（`packages/contracts/source/database-file.ts`，两个角色各自的 schema 版本常量）及其在 `apps/app/source/index.ts`、`packages/core/source/database/index.ts` 之间的传递；测试用自己的临时目录与 `createDatabaseFileName(role)`，不再有共享的固定文件名常量；
 12. 数据库边界静态守卫 `packages/core/scripts/check-database-boundaries.mjs`（并入 `pnpm lint` 的编排）。
 

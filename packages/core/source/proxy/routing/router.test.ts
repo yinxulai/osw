@@ -23,6 +23,12 @@ vi.mock('@server/database/provider-store', () => ({
   listProviders: async () => mocks.providers,
 }))
 
+// 路由决策产出的是**模型 id**，而调度绑定挂的是**数据记录 id**，中间这一次翻译由
+// 逻辑模型仓库负责。这里把它换成恒等映射：用例里两个 id 取同一个值，翻译就成了透明的一层。
+vi.mock('@server/database/logical-model-store', () => ({
+  mapLogicalModelIdsToRecordIds: async (modelIds: readonly string[]) => new Map(modelIds.map(modelId => [modelId, modelId])),
+}))
+
 vi.mock('@server/database/health-store', () => ({
   listProviderHealth: async () => mocks.providerCooldowns,
   listProviderModelHealth: async () => mocks.modelCooldowns,

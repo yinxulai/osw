@@ -23,9 +23,9 @@ import type { RouteContextInput, RuntimeLogicalModel } from './types'
  */
 
 const models: RuntimeLogicalModel[] = [
-  { id: 'default', name: 'Default', enabled: true },
-  { id: 'model-fast', name: 'Model Fast', enabled: true },
-  { id: 'model-smart', name: 'Model Smart', enabled: true },
+  { modelId: 'default', enabled: true },
+  { modelId: 'model-fast', enabled: true },
+  { modelId: 'model-smart', enabled: true },
 ]
 
 /** 条件：`request.headers.user-agent` 含某个客户端标识。 */

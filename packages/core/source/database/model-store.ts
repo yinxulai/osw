@@ -10,7 +10,8 @@ import type {
 } from '@common/schemas'
 import { generateId, now } from '@common/utils'
 import { CONVERTIBLE_PROTOCOLS } from '@common/protocols'
-import { endpointUrlMissingError } from '../errors'
+import { endpointUrlMissingError, resourceNotFoundError } from '../errors'
+import { cachedConfigRead } from './config-read-cache'
 import { getConfigDb } from './index'
 import {
   providerEndpoints,
@@ -37,10 +38,25 @@ export async function listProviderModels(includeDeleted = false): Promise<Provid
   return rows.map(mapProviderModelView)
 }
 
-export async function listProviderModelsForLogicalModel(logicalModelId: string, includeDeleted = false, includeDisabled = false): Promise<LogicalModelProviderModel[]> {
+/**
+ * 列出一个逻辑模型（**按数据记录 id**，不是模型名）的绑定。
+ *
+ * 运行时拿到的是请求里的模型名，翻译成记录 id 由 `@server/proxy/routing/router` 负责；
+ * 这里只认外键那一把钥匙，两把混用不会报错，只会静静查到另一个模型的绑定。
+ *
+ * 走常驻读缓存：这是代理每请求的读路径（见 `./config-read-cache.ts`）。
+ */
+export async function listProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted = false, includeDisabled = false): Promise<LogicalModelProviderModel[]> {
+  return cachedConfigRead(
+    `provider-models-for-logical-model:${logicalModelRecordId}:${includeDeleted}:${includeDisabled}`,
+    () => readProviderModelsForLogicalModel(logicalModelRecordId, includeDeleted, includeDisabled),
+  )
+}
+
+async function readProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted: boolean, includeDisabled: boolean): Promise<LogicalModelProviderModel[]> {
   // 这里必须分开取「绑定开关」与「模型本体开关」：两列同名（`scheduling_policies.enabled`
   // 与 `provider_models.enabled`），把策略行整行嵌进 select 时后者会被前者盖住——不是
-  // node:sqlite 折叠了列名，而是早先的实现直接写了 `enabled: model.enabled`。
+  // node:sqlite 折叠了列名，而是整行嵌入时后一个 `enabled` 覆盖了前一个。
   // 逻辑模型页的开关写的是绑定开关，列表要读同一列，否则刷新会把已关闭的绑定弹回去；
   // 同时还要把模型本体的开关带出去，界面才能把「模型已停用」和「这个逻辑模型没启用它」
   // 分开画——前者不会被调度。
@@ -51,7 +67,7 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
   })
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
-    .where(and(eq(schedulingPolicies.logicalModelId, logicalModelId), isNull(schedulingPolicies.deletedTime)))
+    .where(and(eq(schedulingPolicies.logicalModelId, logicalModelRecordId), isNull(schedulingPolicies.deletedTime)))
     .orderBy(asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
     .all()
   return rows
@@ -65,14 +81,24 @@ export async function listProviderModelsForLogicalModel(logicalModelId: string, 
 }
 
 /**
- * 批量读取多个逻辑模型的绑定。
+ * 批量读取多个逻辑模型的绑定（同样按**数据记录 id**）。
  *
  * 返回 Map 而不是扁平数组，因为调用方已经拿着「落点顺序」；把排序重新塞回数组里只会
- * 多一层按 id 分组的逻辑。查询仍按调度策略的优先级、权重和创建时间稳定排序。
+ * 多一层按 id 分组的逻辑。键就是传进来的记录 id，查询仍按调度策略的优先级、权重和创建时间稳定排序。
+ *
+ * 走常驻读缓存；键把「哪些落点」编码进去，所以不同的落点组合各存一份，
+ * 而一次批量规划里的同一组合也会命中（见 `./config-read-cache.ts`）。
  */
-export async function listProviderModelsForLogicalModels(logicalModelIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
+export async function listProviderModelsForLogicalModels(logicalModelRecordIds: readonly string[], includeDeleted = false, includeDisabled = false): Promise<Map<string, LogicalModelProviderModel[]>> {
+  return cachedConfigRead(
+    `provider-models-for-logical-models:${[...logicalModelRecordIds].join(',')}:${includeDeleted}:${includeDisabled}`,
+    () => readProviderModelsForLogicalModels(logicalModelRecordIds, includeDeleted, includeDisabled),
+  )
+}
+
+async function readProviderModelsForLogicalModels(logicalModelRecordIds: readonly string[], includeDeleted: boolean, includeDisabled: boolean): Promise<Map<string, LogicalModelProviderModel[]>> {
   const result = new Map<string, LogicalModelProviderModel[]>()
-  if (logicalModelIds.length === 0) return result
+  if (logicalModelRecordIds.length === 0) return result
 
   const rows = getConfigDb().select({
     logicalModelId: schedulingPolicies.logicalModelId,
@@ -83,7 +109,7 @@ export async function listProviderModelsForLogicalModels(logicalModelIds: readon
     .from(schedulingPolicies)
     .innerJoin(providerModels, eq(schedulingPolicies.providerModelId, providerModels.id))
     .where(and(
-      inArray(schedulingPolicies.logicalModelId, [...logicalModelIds]),
+      inArray(schedulingPolicies.logicalModelId, [...logicalModelRecordIds]),
       isNull(schedulingPolicies.deletedTime),
     ))
     .orderBy(asc(schedulingPolicies.logicalModelId), asc(schedulingPolicies.priority), desc(schedulingPolicies.weight), asc(schedulingPolicies.createdTime), asc(schedulingPolicies.providerModelId))
@@ -130,6 +156,13 @@ export async function getProviderModelRoute(id: string): Promise<ProviderModelRo
 
 type CreateProviderModelRouteInput = Pick<ProviderModelRoute, 'providerId' | 'modelName' | 'priority'> & Partial<Pick<ProviderModelRoute, 'endpoints' | 'enabled'>>
 
+/**
+ * 新建一个供应商模型。
+ *
+ * **不做重名检查**：同一供应商下允许存在多条同名模型 —— 同一个模型接两个区域、两套密钥、
+ * 两条不同端点，是很正常的用法，两条记录各自绑自己的端点。删掉再建一个同名的，走的也是这里，
+ * 不会撞上任何既有的行。要区分它们靠的是这行的 `id`，不是名字。
+ */
 export async function createProviderModelRoute(input: CreateProviderModelRouteInput): Promise<ProviderModelRoute> {
   const id = generateId('model_')
   const time = now()
@@ -141,11 +174,12 @@ export async function createProviderModelRoute(input: CreateProviderModelRouteIn
   return { id, providerId: input.providerId, modelName: input.modelName, endpoints: input.endpoints ?? [], priority: input.priority, enabled: input.enabled ?? true, createdTime: time, updatedTime: time, deletedTime: null }
 }
 
+/** 改一个供应商模型。改名不撞任何东西：同名是允许的，身份是 `id`。 */
 export async function updateProviderModelRoute(id: string, updates: Partial<Omit<ProviderModelRoute, 'id' | 'createdTime'>>): Promise<ProviderModelRoute> {
   const time = now()
   const db = getConfigDb()
   const existing = await getProviderModelRoute(id)
-  if (!existing) throw new Error(`provider model not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('provider model', id)
   db.transaction(transaction => {
     transaction.update(providerModels).set({
       ...(updates.providerId !== undefined ? { providerId: updates.providerId } : {}),
@@ -207,16 +241,28 @@ export async function getProviderModelEndpoint(id: string): Promise<ProviderMode
 
 type CreateProviderModelEndpointInput = Omit<ProviderModelEndpoint, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime' | 'url' | 'enabled'> & { url?: string | null; enabled?: boolean }
 
+/**
+ * 建一条绑定。同一（模型，端点）若已有历史行，**原地复活**它（连同 id），不新增：
+ * 绑定的身份是这一对关系，不是这一行。
+ */
 export async function createProviderModelEndpoint(input: CreateProviderModelEndpointInput): Promise<ProviderModelEndpoint> {
   const time = now()
+  const db = getConfigDb()
+  const existing = db.select().from(providerModelEndpoints)
+    .where(and(eq(providerModelEndpoints.providerModelId, input.providerModelId), eq(providerModelEndpoints.providerEndpointId, input.providerEndpointId)))
+    .orderBy(desc(providerModelEndpoints.updatedTime)).get()
+  if (existing) {
+    db.update(providerModelEndpoints).set({ url: input.url ?? null, enabled: input.enabled ?? true, deletedTime: null, updatedTime: time }).where(eq(providerModelEndpoints.id, existing.id)).run()
+    return ProviderModelEndpointSchema.parse({ ...existing, url: input.url ?? null, enabled: input.enabled ?? true, updatedTime: time, deletedTime: null })
+  }
   const endpoint = ProviderModelEndpointSchema.parse({ ...input, id: generateId('pme_'), url: input.url ?? null, enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  getConfigDb().insert(providerModelEndpoints).values({ ...endpoint, deletedTime: null }).run()
+  db.insert(providerModelEndpoints).values({ ...endpoint, deletedTime: null }).run()
   return endpoint
 }
 
 export async function updateProviderModelEndpoint(id: string, updates: Partial<Pick<ProviderModelEndpoint, 'providerEndpointId' | 'url' | 'enabled'>>): Promise<ProviderModelEndpoint> {
   const existing = await getProviderModelEndpoint(id)
-  if (!existing) throw new Error(`provider model endpoint not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('provider model endpoint', id)
   const endpoint = ProviderModelEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
   getConfigDb().update(providerModelEndpoints).set({ providerEndpointId: endpoint.providerEndpointId, url: endpoint.url, enabled: endpoint.enabled, updatedTime: endpoint.updatedTime })
     .where(and(eq(providerModelEndpoints.id, id), isNull(providerModelEndpoints.deletedTime))).run()
@@ -247,16 +293,25 @@ export async function getProtocolConverter(id: string): Promise<ProtocolConverte
 
 type CreateProtocolConverterInput = Omit<ProtocolConverter, 'id' | 'createdTime' | 'updatedTime' | 'enabled' | 'deletedTime'> & { enabled?: boolean }
 
+/** 建一个协议转换器；同一（绑定，客户端协议）已有历史行时原地复活。 */
 export async function createProtocolConverter(input: CreateProtocolConverterInput): Promise<ProtocolConverter> {
   const time = now()
+  const db = getConfigDb()
+  const existing = db.select().from(protocolConverters)
+    .where(and(eq(protocolConverters.providerModelEndpointId, input.providerModelEndpointId), eq(protocolConverters.clientProtocol, input.clientProtocol)))
+    .orderBy(desc(protocolConverters.updatedTime)).get()
+  if (existing) {
+    db.update(protocolConverters).set({ enabled: input.enabled ?? true, deletedTime: null, updatedTime: time }).where(eq(protocolConverters.id, existing.id)).run()
+    return ProtocolConverterSchema.parse({ ...existing, enabled: input.enabled ?? true, updatedTime: time, deletedTime: null })
+  }
   const converter = ProtocolConverterSchema.parse({ ...input, id: generateId('conv_'), enabled: input.enabled ?? true, createdTime: time, updatedTime: time })
-  getConfigDb().insert(protocolConverters).values({ ...converter, deletedTime: null }).run()
+  db.insert(protocolConverters).values({ ...converter, deletedTime: null }).run()
   return converter
 }
 
 export async function updateProtocolConverter(id: string, updates: Partial<Pick<ProtocolConverter, 'clientProtocol' | 'enabled'>>): Promise<ProtocolConverter> {
   const existing = await getProtocolConverter(id)
-  if (!existing) throw new Error(`protocol converter not found: ${id}`)
+  if (!existing) throw resourceNotFoundError('protocol converter', id)
   const converter = ProtocolConverterSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
   getConfigDb().update(protocolConverters).set({ clientProtocol: converter.clientProtocol, enabled: converter.enabled, updatedTime: converter.updatedTime })
     .where(and(eq(protocolConverters.id, id), isNull(protocolConverters.deletedTime))).run()
@@ -282,8 +337,9 @@ type Transaction = Parameters<Parameters<ReturnType<typeof getConfigDb>['transac
  * 直接抛错，一个字节都不落库（见 `endpointUrlMissingError`）。
  */
 function replaceRouteEndpoints(transaction: Transaction, modelId: string, providerId: string, endpoints: ProviderModelRouteEndpoint[], time: number): void {
-  const activeBindings = transaction.select().from(providerModelEndpoints)
-    .where(and(eq(providerModelEndpoints.providerModelId, modelId), isNull(providerModelEndpoints.deletedTime))).all()
+  const allBindings = transaction.select().from(providerModelEndpoints)
+    .where(eq(providerModelEndpoints.providerModelId, modelId)).all()
+  const activeBindings = allBindings.filter(binding => binding.deletedTime === null)
   const retainedBindingIds = new Set<string>()
 
   // 模型自己没写地址时，地址只能来自供应商那一层，而且必须是**带地址且启用**的行：
@@ -321,11 +377,13 @@ function replaceRouteEndpoints(transaction: Transaction, modelId: string, provid
     if (!endpointRow) transaction.insert(providerEndpoints).values({ id: endpointId, providerId, protocol: endpoint.protocol, url: '', enabled: true, createdTime: time, updatedTime: time, deletedTime: null }).run()
 
     const binding = activeBindings.find(item => item.providerEndpointId === endpointId)
+      // 没有活跃绑定就找同一（模型，端点）的**历史**绑定原地复活：取消绑定再重新绑上时，
+      // 复用原来那行的 id，跟它一起被软删的转换器也能用同一个 id 复活，不会每来一次就多一行。
+      ?? allBindings.find(item => item.providerEndpointId === endpointId)
     const bindingId = binding?.id ?? generateId('pme_')
-    if (binding) transaction.update(providerModelEndpoints).set({ url: endpoint.endpointUrl || null, enabled: true, updatedTime: time }).where(eq(providerModelEndpoints.id, bindingId)).run()
+    if (binding) transaction.update(providerModelEndpoints).set({ url: endpoint.endpointUrl || null, enabled: true, deletedTime: null, updatedTime: time }).where(eq(providerModelEndpoints.id, bindingId)).run()
     else transaction.insert(providerModelEndpoints).values({ id: bindingId, providerModelId: modelId, providerEndpointId: endpointId, url: endpoint.endpointUrl || null, enabled: true, createdTime: time, updatedTime: time, deletedTime: null }).run()
     retainedBindingIds.add(bindingId)
-
     syncProtocolConverters(transaction, bindingId, endpoint.protocol, endpoint.protocolConversionEnabled, time)
   }
 
@@ -346,9 +404,12 @@ function replaceRouteEndpoints(transaction: Transaction, modelId: string, provid
  */
 function syncProtocolConverters(transaction: Transaction, providerModelEndpointId: string, protocol: ProviderModelRouteEndpoint['protocol'], enabled: boolean, time: number): void {
   const desiredProtocols = enabled ? CONVERTIBLE_PROTOCOLS[protocol] : []
-  const activeConverters = transaction.select().from(protocolConverters)
-    .where(and(eq(protocolConverters.providerModelEndpointId, providerModelEndpointId), isNull(protocolConverters.deletedTime))).all()
-  const activeByProtocol = new Map(activeConverters.map(converter => [converter.clientProtocol, converter]))
+  const allConverters = transaction.select().from(protocolConverters)
+    .where(eq(protocolConverters.providerModelEndpointId, providerModelEndpointId)).all()
+  const activeByProtocol = new Map(allConverters.filter(converter => converter.deletedTime === null).map(converter => [converter.clientProtocol, converter]))
+  // 没有活跃行就找同一（绑定，客户端协议）的历史行原地复活：与绑定同一套做法，
+  // 关掉再打开转换不会每次多留一行。
+  const historicalByProtocol = new Map(allConverters.map(converter => [converter.clientProtocol, converter]))
   const retainedProtocols: string[] = []
 
   for (const clientProtocol of desiredProtocols) {
@@ -356,6 +417,11 @@ function syncProtocolConverters(transaction: Transaction, providerModelEndpointI
     const active = activeByProtocol.get(clientProtocol)
     if (active) {
       if (!active.enabled) transaction.update(protocolConverters).set({ enabled: true, updatedTime: time }).where(eq(protocolConverters.id, active.id)).run()
+      continue
+    }
+    const historical = historicalByProtocol.get(clientProtocol)
+    if (historical) {
+      transaction.update(protocolConverters).set({ enabled: true, deletedTime: null, updatedTime: time }).where(eq(protocolConverters.id, historical.id)).run()
       continue
     }
     transaction.insert(protocolConverters).values({ id: generateId('conv_'), providerModelEndpointId, clientProtocol, enabled: true, createdTime: time, updatedTime: time, deletedTime: null }).run()

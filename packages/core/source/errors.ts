@@ -41,6 +41,12 @@ export function normalizeError(error: unknown): AppError {
     return new AppError(CLIENT_REQUEST_ABORTED, 499, 'Client aborted the request', { cause: error })
   }
 
+  // 唯一约束冲突是**可修正的输入问题**，不是服务端故障。放在这里统一翻译，是因为
+  // 「先查后写」的预检在任何一条写路径上都隔着一段窗口，兜底必须在最后一道口收口
+  // （见 `translateSqliteUniqueViolation` 的说明）。
+  const constraint = translateSqliteUniqueViolation(error)
+  if (constraint) return constraint
+
   return new AppError('INTERNAL_ERROR', 500, 'Internal server error', {
     expose: false,
     cause: error,
@@ -134,4 +140,133 @@ export function providerModelDisabledError(modelName: string): AppError {
     `Provider model ${modelName} is disabled and cannot be enabled in a logical model`,
     { details: { modelName } },
   )
+}
+
+/**
+ * 「这个模型 id 已经被占用了」。
+ *
+ * `modelId` 是逻辑模型对外的唯一身份（请求里的模型名就是它，活跃行之间由部分唯一索引保证），
+ * 所以重名不是「换个名字」而是「要一个已经被人拿走的身份」——只能拒绝。
+ * 400 与 500 的差别在这里很实在：这是用户可修正的输入问题（换个模型 id，或者先把原来那个
+ * 删掉/改名），不是服务端故障，把它的 `errorCode` 暴露出去，界面才能把「哪个模型 id 撞了」
+ * 说清楚，而不是给一句没有上下文的「内部错误」。
+ *
+ * 数据记录 id 不会走到这里：它由服务端生成。
+ */
+export function duplicateLogicalModelError(modelId: string): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `Logical model ${modelId} already exists`,
+    { details: { modelId } },
+  )
+}
+
+/** 「没有这个逻辑模型」。读、改、删共用同一个说法；`id` 是**数据记录 id**。 */
+export function logicalModelNotFoundError(id: string): AppError {
+  return new AppError(
+    'RESOURCE_NOT_FOUND',
+    404,
+    `Logical model ${id} not found`,
+    { details: { id } },
+  )
+}
+
+/**
+ * 「内建默认逻辑模型不能删、也不能改名」。
+ *
+ * 它是所有兜底落点的归宿：请求没命中任何逻辑模型时落到这里，删掉它等于让代理没有可用的上游
+ * 起点。用户能改的是它的说明与开关。参数是它的 **modelId**（内建默认模型认的是模型 id，
+ * 因为数据记录 id 是本机生成的、不能参与这个判断）。
+ */
+export function protectedLogicalModelError(modelId: string): AppError {
+  return new AppError(
+    'RESOURCE_CONFLICT',
+    409,
+    `Logical model ${modelId} is built in and cannot be deleted or renamed`,
+    { details: { modelId } },
+  )
+}
+
+/**
+ * 「这个供应商下已经有一条同协议的活跃端点了」。
+ *
+ * 这条规则由应用层守（见 `config-schema.ts`：删掉的行让位，因此没有部分唯一索引可用）——
+ * 命中就是用户可修正的输入问题（换个协议，或者先把那条删掉），
+ * 用 409 + `DUPLICATE_RESOURCE` 说清楚，不要让它变成两条同协议行里随缘读到一条。
+ */
+export function duplicateProviderEndpointError(protocol: string): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `This provider already has an endpoint for protocol ${protocol}`,
+    { details: { protocol } },
+  )
+}
+
+/**
+ * 「同一个身份已经有一条活跃行了」。
+ *
+ * 给那些不再由数据库唯一索引把关、改由 store 预检的绑定类关系（模型↔端点的绑定、
+ * 绑定↔客户端协议的转换器）用。它们的规则都是「同一对关系只留一条活跃行」，
+ * 违反它的是用户可修正的输入（先解绑再加回来，或者换一个协议），所以是 409 而不是 500。
+ */
+export function duplicateActiveResourceError(message: string, details: Record<string, unknown> = {}): AppError {
+  return new AppError('DUPLICATE_RESOURCE', 409, message, { details })
+}
+
+/** 「没有这个资源」。参数是给日志与外部工具看的那句英文诊断里的标识（id 或名字）。 */
+export function resourceNotFoundError(resource: string, identifier: string): AppError {
+  return new AppError(
+    'RESOURCE_NOT_FOUND',
+    404,
+    `${resource} ${identifier} not found`,
+    { details: { resource, identifier } },
+  )
+}
+
+/**
+ * 「这一条改写规则已经绑过了」。`replaceProviderModelRequestRewriteRuleBindings` 收的是整份
+ * 绑定表，重复的 `ruleId` 说明请求体自己前后矛盾；`priority` 重复则撞上
+ * `(providerModelId, priority)` 的部分唯一索引，两条都是用户可修正的输入，不是 500。
+ */
+export function duplicateRequestRewriteRuleBindingError(kind: 'rule' | 'priority'): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `A request rewrite rule with the same binding and priority already exists (duplicate ${kind})`,
+    { details: { kind } },
+  )
+}
+
+/** `node:sqlite` 的约束冲突错误码：`errstr` 是 `SQLITE_CONSTRAINT_UNIQUE` / `SQLITE_CONSTRAINT`。 */
+const SQLITE_UNIQUE_VIOLATION = 2067
+
+function readSqliteError(error: unknown): { errcode: number; message: string } | null {
+  if (typeof error !== 'object' || error === null) return null
+  const candidate = error as { code?: unknown; errcode?: unknown; message?: unknown }
+  if (candidate.code !== 'ERR_SQLITE_ERROR' || typeof candidate.errcode !== 'number') return null
+  return { errcode: candidate.errcode, message: typeof candidate.message === 'string' ? candidate.message : '' }
+}
+
+/**
+ * 把裸的 SQLite 唯一约束冲突翻译成用户看得懂的错误。
+ *
+ * 为什么不指望调用方「每次都先查一遍」：先查后写之间永远有一段窗口（同一个进程里两个
+ * 异步写、两个管理页签、导入文件与手改同时发生），窗口里插进去的那一行只有数据库自己知道。
+ * 于是 `INSERT` 直接抛 `SQLITE_CONSTRAINT_UNIQUE`，`normalizeError` 判不出来源，回给界面的
+ * 就是一句「Internal server error」（HTTP 500）——用户明明只是填重了一个名字。
+ *
+ * 这里要守的规则已经很少：这条链上凡是有用户名字的资源都改成「身份是记录 id、名字只写在应用层」，
+ * 唯一还真会来撞的只剩客户端配置快照的 `(clientKey, filePath, contentHash)`。
+ * 于是**不按表名分支**，一律给同一句可本地化的 409：多一个分支就要多维护一个永远不会走到的分支，
+ * 而「哪里撞了」直接附带在 `details.constraint` 里，界面要用再去读。读不出来就原样放行，
+ * 让 `normalizeError` 按未知错误处理——宁可 500，也不要给一个编造的「哪里重了」。
+ */
+export function translateSqliteUniqueViolation(error: unknown): AppError | null {
+  const sqlite = readSqliteError(error)
+  if (!sqlite || sqlite.errcode !== SQLITE_UNIQUE_VIOLATION) return null
+  // 消息形如 `UNIQUE constraint failed: client_config_versions.clientKey, ...`
+  const columns = sqlite.message.split(':').slice(1).join(':').trim()
+  return new AppError('DUPLICATE_RESOURCE', 409, `A resource with the same identity already exists (${columns})`, { cause: error, details: { constraint: columns } })
 }

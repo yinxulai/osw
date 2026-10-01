@@ -32,9 +32,9 @@ async function initTemporaryDatabase(): Promise<void> {
 }
 
 async function createModels(): Promise<RuntimeLogicalModel[]> {
-  // 内建默认逻辑模型由 `initDatabases` 落库，这里不重复创建它（`logical_models.name` 上是唯一索引）。
+  // 内建默认逻辑模型由 `initDatabases` 落库，这里不重复创建它（活跃行的 `modelId` 上是唯一索引）。
   const seeded = await listLogicalModels()
-  return seeded.map(model => ({ id: model.id, name: model.name, enabled: model.enabled }))
+  return seeded.map(model => ({ modelId: model.modelId, enabled: model.enabled }))
 }
 
 /** 造一张与基准图不同的图：只改节点名，结构仍然合法。 */
@@ -81,23 +81,26 @@ describe('router graph store', () => {
     expect(snapshot?.version).toBe(2)
     expect(snapshot?.graph && isSameGraph(snapshot.graph, second)).toBe(true)
 
-    const restored = await readRouterGraphVersion(1)
+    const restored = await readRouterGraphVersion(savedFirst.id)
     expect(restored?.version).toBe(1)
     expect(restored?.graph && isSameGraph(restored.graph, first)).toBe(true)
-    expect(await readRouterGraphVersion(9)).toBeNull()
+    expect(await readRouterGraphVersion('workflow_does_not_exist')).toBeNull()
 
     expect((await resolveRouterGraph()).version).toBe(2)
   })
 
-  it('版本号是版本的身份，名字重复不阻止新版本', async () => {
+  it('每一版都是一条独立记录：删掉一版再存一版，版本号不会被人用过的号卡住', async () => {
     await initTemporaryDatabase()
 
     const first = await saveRouterGraphVersion(graphWithMarker('a-'), '按来源分流', '先把 UA 分流出来')
     const second = await saveRouterGraphVersion(graphWithMarker('b-'), '按来源分流', '再补一条分支')
 
-    // 名字不承担唯一性：两版同名，靠版本号区分。
+    // 名字不承担唯一性：两版同名各有一条记录，靠记录 id 与展示用的版本号区分。
     expect(first).toMatchObject({ version: 1, name: '按来源分流', created: true })
     expect(second).toMatchObject({ version: 2, name: '按来源分流', created: true })
+    expect(first.id).not.toBe(second.id)
+    expect(await readRouterGraphVersion(first.id)).toMatchObject({ id: first.id, version: 1 })
+    expect(await readRouterGraphVersion(second.id)).toMatchObject({ id: second.id, version: 2 })
     expect((await listRouterGraphVersions()).map(summary => [summary.version, summary.name])).toEqual([
       [2, '按来源分流'],
       [1, '按来源分流'],
@@ -127,19 +130,24 @@ describe('router graph store', () => {
     expect(repeated.description).toBe('')
   })
 
-  it('archives the oldest versions beyond the retention limit', async () => {
+  it('超过展示上限的旧版本不再出现在列表里，但行没被删掉', async () => {
     await initTemporaryDatabase()
 
-    for (let index = 1; index <= MAX_ROUTER_GRAPH_VERSIONS + 3; index += 1) {
+    const first = await saveRouterGraphVersion(graphWithMarker('v1-'), undefined, undefined)
+    for (let index = 2; index <= MAX_ROUTER_GRAPH_VERSIONS + 3; index += 1) {
       await saveRouterGraphVersion(graphWithMarker(`v${index}-`), undefined, undefined)
     }
 
     const versions = await listRouterGraphVersions()
     expect(versions).toHaveLength(MAX_ROUTER_GRAPH_VERSIONS)
-    // 新的在前往前，最旧的三版已经不再出现在列表里，也读不回来。
+    // 新的在前往前，最旧的三版已经不再出现在列表里……
     expect(versions[0].version).toBe(MAX_ROUTER_GRAPH_VERSIONS + 3)
-    expect(await readRouterGraphVersion(1)).toBeNull()
-    expect(await readRouterGraphVersion(4)).not.toBeNull()
+    // ……但它们仍然能被 id 读回来：展示上限不是删除。
+    expect(await readRouterGraphVersion(first.id)).toMatchObject({ id: first.id, version: 1 })
+    // 版本号也不会被回收：下一个号接在真实的最新号后面。
+    const saved = await saveRouterGraphVersion(graphWithMarker('after-limit-'), undefined, undefined)
+    expect(saved).toMatchObject({ version: MAX_ROUTER_GRAPH_VERSIONS + 4, created: true })
+    expect((await listRouterGraphVersions())[0].version).toBe(MAX_ROUTER_GRAPH_VERSIONS + 4)
   })
 
   it('skips stored rows whose definition is not a valid graph', async () => {

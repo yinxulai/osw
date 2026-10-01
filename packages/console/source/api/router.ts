@@ -14,6 +14,6 @@ export const routerApi = {
    */
   getGraph: () => request<RouterGraphSnapshot>('/router/graph'),
   getGraphVersions: () => request<RouterGraphVersionSummary[]>('/router/graph/versions'),
-  getGraphVersion: (version: number) => request<RouterGraphSnapshot | null>('/router/graph/version', { version }),
+  getGraphVersion: (id: string) => request<RouterGraphSnapshot | null>('/router/graph/version', { id }),
   saveGraph: (graph: WorkflowGraph, name?: string, description?: string) => request<RouterGraphSaveResult>('/router/graph/save', { graph, name, description }),
 }
