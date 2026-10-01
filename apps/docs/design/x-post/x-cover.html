@@ -11,7 +11,7 @@
 
   两个必须留意的点：
   1. @font-face 的路径是相对本文件的。本文件在 apps/docs/design/x-post/ 下，离仓库根 3 层，
-     所以是 ../../../node_modules/... —— 移动文件后必须同步改，写错的后果是
+     所以是 ../../../../node_modules/... —— 移动文件后必须同步改，写错的后果是
      静默回退到 Segoe UI（渲染出来「很粗糙」，但控制台不报错到脸上）。
      仓库只装了 @fontsource-variable/geist，没有 geist-mono，别给 mono 另写 @font-face。
   2. 右侧是产品真实完整窗口截图 snapshot/en/dark/01-logical-models.png，等比铺满后向右裁切，
@@ -20,7 +20,7 @@
 <style>
   @font-face {
     font-family: 'Geist Variable';
-    src: url('../../../node_modules/.pnpm/@fontsource-variable+geist@5.3.0/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
+    src: url('../../../../node_modules/.pnpm/@fontsource-variable+geist@5.3.0/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
     font-weight: 100 900;
     font-style: normal;
     font-display: block;
@@ -206,21 +206,21 @@
     <p class="sub">Automatic failover across all your providers.</p>
 
     <div class="providers">
-      <span><img src="../../../packages/console/source/catalog/providers/openai/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/anthropic/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/google/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/xai/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/deepseek/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/moonshot/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/zhipu/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/minimax/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/qiniu/icon.dark.svg" alt="" /></span>
-      <span><img src="../../../packages/console/source/catalog/providers/volcengine/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/openai/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/anthropic/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/google/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/xai/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/deepseek/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/moonshot/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/zhipu/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/minimax/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/qiniu/icon.dark.svg" alt="" /></span>
+      <span><img src="../../../../packages/console/source/catalog/providers/volcengine/icon.dark.svg" alt="" /></span>
     </div>
   </div>
 
   <div class="shot">
-    <img src="../../../snapshot/en/dark/01-logical-models.png" alt="OSW logical models view" />
+    <img src="../../../../snapshot/en/dark/01-logical-models.png" alt="OSW logical models view" />
   </div>
 
 </div>
