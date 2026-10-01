@@ -1,7 +1,7 @@
 import { getSettings } from '@server/database/settings-store'
 
 /**
- * 会话级缓存亲和（见 `docs/product/proxy-engine.md` §缓存亲和）。
+ * 会话级缓存亲和（见 `apps/docs/product/proxy-engine.md` §缓存亲和）。
  *
  * 大上下文请求的成本由 provider 侧 prompt cache 的命中决定，而命中取决于
  * 「同一会话的请求是否连续落在同一家供应商上」。故障转移天然打破这一点，

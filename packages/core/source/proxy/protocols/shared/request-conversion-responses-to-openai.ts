@@ -4,7 +4,7 @@ import { ToolNameRegistry, toTargetName } from './tool-name-registry'
 /**
  * OpenAI Responses 请求 → OpenAI Chat Completions 请求。
  *
- * 字段依据见 docs/references/openai-responses.md 与 docs/references/openai-completions.md。
+ * 字段依据见 apps/docs/references/openai-responses.md 与 apps/docs/references/openai-completions.md。
  *
  * Responses 的 `input` 是「输入项列表」（EasyInputMessage / function_call /
  * function_call_output / custom_tool_call / custom_tool_call_output / reasoning /
@@ -90,8 +90,8 @@ function functionToolToOpenAi(tool: Json, name: string, namespaceDescription?: s
  *
  * 两侧取值相同（`{ type: "text" }` / grammar 语法 `lark` / `regex`），但 grammar 的嵌套层级不同：
  * Responses 是 `{ type: "grammar", definition, syntax }`，Chat 多一层 `{ type: "grammar", grammar: { definition, syntax } }`
- * （见 docs/references/openai-responses.md 的 `CustomToolInputFormat` 与
- * docs/references/openai-completions.md 的 `ChatCompletionCustomTool`），所以必须逐字段重建。
+ * （见 apps/docs/references/openai-responses.md 的 `CustomToolInputFormat` 与
+ * apps/docs/references/openai-completions.md 的 `ChatCompletionCustomTool`），所以必须逐字段重建。
  * 缺省即「不约束的自由文本」，两侧一致，故缺失时不写这个字段。
  */
 function customToolFormatToOpenAi(format: unknown): Json | undefined {
@@ -360,7 +360,7 @@ function convertInputItem(item: unknown, messages: Json[], toolNames: ToolNameRe
  * `item_reference` / `include: ["reasoning.encrypted_content"]`。这些都要求服务端保存会话，
  * 而 Chat Completions 没有会话概念，转换器又必须无状态（适配器是模块级单例、服务全部并发请求），
  * 所以直接丢弃、不编造近似值；丢了什么可以从 `request_contents` 与 `attempt_contents` 的差异看出来。
- * 详细清单见 docs/product/protocol-conversion.md「不可逆字段与已知限制」。
+ * 详细清单见 apps/docs/product/protocol-conversion.md「不可逆字段与已知限制」。
  */
 export function responsesToOpenAiRequest(body: Json, model: string, toolNames: ToolNameRegistry = new ToolNameRegistry()): Json {
   // 占位要早于 input 转换：历史里的 namespace 限定调用也会往同一张表里登记展平名。

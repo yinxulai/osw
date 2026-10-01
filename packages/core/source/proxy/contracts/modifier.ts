@@ -36,7 +36,7 @@ export interface ModifierContext {
    * 这里始终是上游的原始头，不会被任何修改器改写。它的用途只有两个：
    * 选**解析器**（手里这堆字节是 SSE 还是整包 JSON），以及**校验预期**（客户端要的传输
    * 形态到底兑现没有）。它不用来回答「该做什么」——那个问题的答案在
-   * `exchange.transport`（预期）里，早在上游回话之前就定了（见 `docs/product/proxy-engine.md` §1.2）。
+   * `exchange.transport`（预期）里，早在上游回话之前就定了（见 `apps/docs/product/proxy-engine.md` §1.2）。
    */
   readonly upstreamHead: HeadFrame | null
 }

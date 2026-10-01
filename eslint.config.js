@@ -47,7 +47,7 @@ export default [
   },
   {
     // 预设 / 种子数据是「用户数据」：写入即成为用户自己的内容，界面原样展示、永不翻译
-    // （见 docs/product/i18n.md §4）。
+    // （见 apps/docs/product/i18n.md §4）。
     files: [
       'packages/contracts/source/router/presets.ts',
       'packages/contracts/source/router/rule-presets.ts',

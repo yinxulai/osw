@@ -198,7 +198,7 @@ export class ServerRuntime {
  * 把启动异常归类成事件契约里的闭集。
  *
  * 归类粗是**故意的**：`service_start_failed` 要回答的是「最近失败变多了吗、主要是哪一类」
- * （见 `docs/product/telemetry.md` §7），把每个异常类型都映射成一档，只会把这张图画成噪声。
+ * （见 `apps/docs/product/telemetry.md` §7），把每个异常类型都映射成一档，只会把这张图画成噪声。
  * 归不进去的一律进 `other`——`other` 常年偏高才说明该来加一档了。
  */
 function classifyStartFailure(error: unknown): TelemetryServiceFailureReason {

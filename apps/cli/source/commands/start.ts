@@ -7,7 +7,7 @@
  *   1. 优雅退出的兜底时限（命令行不能让用户卡在「退不掉」的状态）
  *   2. 退出握手（`stop` 靠它停掉另一个进程）与运行时文件
  *   3. 终端语言要跟随后端设置
- * 另有两处固定值属于形态差异而非行为差异，见 `docs/product/packaging.md` §5.2 与 §5.1：
+ * 另有两处固定值属于形态差异而非行为差异，见 `apps/docs/product/packaging.md` §5.2 与 §5.1：
  * `--web` 默认开（命令行没有窗口，控制台只能由管理服务托管）、`secretStore` 用文件加密
  * （命令行拿不到系统钥匙串）。
  */
@@ -43,7 +43,7 @@ import type { CliArguments } from '../options'
  * 优雅退出的兜底时限。
  *
  * `Ctrl+C` 之后卡住不退，比退得不够漂亮严重得多：端口不释放，用户只能 `kill -9`。
- * 桌面形态不需要这个（进程自己说了算），见 `docs/product/packaging.md` §5.5。
+ * 桌面形态不需要这个（进程自己说了算），见 `apps/docs/product/packaging.md` §5.5。
  */
 const SHUTDOWN_TIMEOUT_MILLISECONDS = 5_000
 

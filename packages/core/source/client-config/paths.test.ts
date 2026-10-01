@@ -6,7 +6,7 @@ import { expandDeclaredPath, resolveClientConfigPath } from './paths'
 /**
  * 路径解析——整个功能的**安全边界**。
  *
- * 管理 API 没有鉴权（只绑回环 + CORS 白名单，见 `docs/product/security-privacy.md`），
+ * 管理 API 没有鉴权（只绑回环 + CORS 白名单，见 `apps/docs/product/security-privacy.md`），
  * 所以「能写哪个文件」这件事只能由注册表说了算：调用方给的是「客户端 key + 声明过的那条路径」，
  * 两者对不上就没有路径可写。下面一半的断言其实是**否定断言**：越界、猜测、拼路径都必须拿到 `null`。
  */

@@ -17,7 +17,7 @@
  *     同一行会被两条通道各记一次：一条进数据库（可查询），一条进文件（抗崩溃）。这是有意的
  *     冗余，代价是启动期几十行重复，换来的是「服务不在时也有据可查」。
  *   - **只记运行诊断**。正文、API Key、Authorization、Cookie 一律不进文件，与
- *     `docs/product/observability.md` 的口径一致；对象里的敏感键在这里再兜一层脱敏。
+ *     `apps/docs/product/observability.md` 的口径一致；对象里的敏感键在这里再兜一层脱敏。
  *
  * 本模块**不 import electron**：目录由调用方传入，于是它可以在纯 Node 环境下单测。
  */

@@ -21,7 +21,7 @@ import { getSettings } from '@server/database/settings-store'
  *
  * **客户端跳的取值不在这里。** 上游用哪种形态是上游侧的事实：它由端点自己配置的地址决定
  * （`wss://` 是 WebSocket，其余地址上忠实转发），客户端说要 WebSocket 也改变不了一个
- * `https://` 端点的形态。客户端偏好从不改变哪个上游端点合法（见 `docs/product/proxy-engine.md` §2.3.1）。
+ * `https://` 端点的形态。客户端偏好从不改变哪个上游端点合法（见 `apps/docs/product/proxy-engine.md` §2.3.1）。
  *
  * 三层信息在这里合成一份结果，任何一层都不需要知道另外两层：
  * - `routing/router`：谁能用（启用、健康、手动锁定）与端点匹配；

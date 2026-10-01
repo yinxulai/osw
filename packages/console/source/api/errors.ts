@@ -1,7 +1,7 @@
 /**
  * 管理 API 失败的统一错误类型与错误码本地化。
  *
- * 契约见 `docs/product/i18n.md` §5：
+ * 契约见 `apps/docs/product/i18n.md` §5：
  * - 服务端只输出**英文**诊断消息；
  * - `errorCode` 是机器契约，界面按它取本地化文案；
  * - `errorParams` 携带模板插值所需的值，避免服务端拼句子。

@@ -202,7 +202,7 @@ interface ConfigSnapshot {
 
 **已知限制：删除一个逻辑模型不会传播。** 因为「快照没提到」与「对面刚删了」是同一件事，无法区分，只能选择不动。要真正删掉它，需要在目标机器上手动删除。
 
-**应用不是事务。** 中途失败会留下半拉架子（比如供应商已经导入、绑定还没重写）；再拉一次即可收敛到同一状态。这与供应商导入的取舍一致，理由见 [import-config-snapshot.ts](../../packages/core/source/management/cloud-sync/import-config-snapshot.ts) 的函数头注释。
+**应用不是事务。** 中途失败会留下半拉架子（比如供应商已经导入、绑定还没重写）；再拉一次即可收敛到同一状态。这与供应商导入的取舍一致，理由见 [import-config-snapshot.ts](../../../packages/core/source/management/cloud-sync/import-config-snapshot.ts) 的函数头注释。
 
 ## 配置契约
 

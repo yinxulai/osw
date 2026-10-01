@@ -30,7 +30,7 @@ export type LanguagePreference = (typeof LANGUAGE_PREFERENCES)[number]
  */
 export type MessageValue = string | Partial<Record<Intl.LDMLPluralRule, string>>
 
-/** 一个语言的完整目录。key 规范见 `docs/product/i18n.md` §4。 */
+/** 一个语言的完整目录。key 规范见 `apps/docs/product/i18n.md` §4。 */
 export type Catalog = Record<string, MessageValue>
 
 /** 插值参数：整句作为一条消息，变量用 `{name}` 占位。 */

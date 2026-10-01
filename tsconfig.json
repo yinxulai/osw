@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     // 别名保留 S0 之前的名字（`@common` / `@server` / `@render` / `@`），只把目标改到 `source/`。
-    // 改名会同时动上千处 import 和 `docs/product/*.md` 里的说明，却换不来任何能力，不做。
+    // 改名会同时动上千处 import 和 `apps/docs/product/*.md` 里的说明，却换不来任何能力，不做。
     "paths": {
       "@/*": ["packages/console/source/*"],
       "@common/*": ["packages/contracts/source/*"],

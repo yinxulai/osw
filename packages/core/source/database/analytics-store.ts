@@ -504,7 +504,7 @@ function latencyBinIndex(edges: number[]): SQL<number> {
  *
  * 取值口径必须与分布本身完全一致（同一批过滤条件）：拿别处的 p95 去切这批样本，
  * 档位就会切在分布之外。排序留在 SQL 内完成——返回的只有一行，而不是把窗口内
- * 十几万个 TTFT 搬进 JS 再排一次（`docs/product/observability.md` §性能）。
+ * 十几万个 TTFT 搬进 JS 再排一次（`apps/docs/product/observability.md` §性能）。
  */
 function getTtftP95(filters: SQL[]): number | null {
   const ranked = getDataDb().select({

@@ -101,7 +101,7 @@ export function distinctAttemptErrorCode(attempt: RequestLogEntryAttempt): strin
  *
  * 上游非 2xx 时落库的错误信息只是状态码的自然语言副本，展示它等于把同一个事实说第二遍；
  * 只有 TLS 断开这类额外说明才值得占一行。判据取错误码而不是文案：文案是服务端诊断，
- * 按 `docs/product/i18n.md` §5 保持英文而不做本地化，界面不能反过来依赖它的措辞。
+ * 按 `apps/docs/product/i18n.md` §5 保持英文而不做本地化，界面不能反过来依赖它的措辞。
  */
 export function distinctAttemptErrorMessage(attempt: RequestLogEntryAttempt): string | null {
   if (!attempt.errorMessage) return null

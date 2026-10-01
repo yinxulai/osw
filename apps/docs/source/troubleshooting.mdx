@@ -1,0 +1,88 @@
+---
+title: 常见问题
+description: 请求失败、端口占用、代理不可用等常见症状的原因与处理。
+keywords:
+  - 排障
+  - 错误码
+  - FAQ
+---
+
+# 常见问题
+
+先分清「哪一层不对」，再对症处理：客户端到本地服务、本地服务到上游、还是本地服务自己。
+
+## 客户端连不上
+
+| 症状 | 可能原因 | 处理 |
+| --- | --- | --- |
+| `PROXY_NOT_RUNNING` / 无法连接到本地服务 | 代理没启动 | 托盘里点「启动服务」，或看主界面状态行。 |
+| Anthropic 客户端 404 | Base URL 多加了 `/v1` | 改成 `http://127.0.0.1:9300`（见[协议](/protocols)）。 |
+| 连接被拒 | 端口不对或被占用 | 确认监听端口（设置 → 网络 → 监听服务），必要时换端口。 |
+| `REQUEST_REWRITE_RULE_FAILED` | 重写规则拒绝了请求 | 逐条关掉[重写规则](/rewrite)定位。 |
+
+先跑一次 `curl http://127.0.0.1:9300/v1/models`：能返回模型列表，说明本地服务在跑，问题在客户端配置。
+
+## 请求到了本地但没跑通
+
+| 错误码 | 含义 | 处理 |
+| --- | --- | --- |
+| `NO_MODEL_CONFIGURED` | 没有可用的上游供应商 | 去[模型管理](/providers)加供应商与模型。 |
+| `NO_AVAILABLE_PROVIDER` | 该逻辑模型没有已启用且可用的供应商模型 | 在[逻辑模型](/logical-models)里添加可用模型，或等冷却结束。 |
+| `INVALID_MODEL` | 请求没有携带可用的模型名 | 客户端里填一个非空模型名（不知道就用 `default`）。 |
+| `MANUAL_MODEL_UNAVAILABLE` | 手动指定的模型当前不适用于该协议 | 换一个适用该协议的模型，或改用故障转移模式。 |
+| `ALL_PROVIDERS_FAILED` | 所有上游供应商都失败了 | 展开[请求记录](/request-logs)的逐次尝试，看每次具体错什么。 |
+| `UPSTREAM_MODELS_UNAVAILABLE` | 拉取不到模型列表 | 检查接口地址与协议是否匹配（[供应商与模型](/providers)）。 |
+
+## 上游相关
+
+| 错误码 | 含义 | 处理 |
+| --- | --- | --- |
+| `UPSTREAM_AUTH_FAILED` | 上游拒绝认证 | 检查 API Key 是否正确、是否过期。 |
+| `UPSTREAM_TIMEOUT` | 上游请求超时 | 看是否该调大超时，或该供应商在抖。 |
+| `UPSTREAM_STREAM_ERROR` | 流式响应意外中断 | 流式开始后中断即中止，不会拼接；重试看看。 |
+| `UPSTREAM_UNAVAILABLE` | 上游不可用 | 去[统计分析](/analytics)看是否集中发生。 |
+
+## 代理相关
+
+| 错误码 | 含义 |
+| --- | --- |
+| `SYSTEM_PROXY_RESOLUTION_FAILED` | 无法解析系统代理设置。 |
+| `OUTBOUND_PROXY_UNREACHABLE` | 无法通过出站代理连接到目标地址。 |
+| `OUTBOUND_PROXY_AUTH_REQUIRED` | 出站代理要求认证。 |
+| `OUTBOUND_PROXY_TUNNEL_REJECTED` | 出站代理拒绝建立隧道。 |
+
+<Callout title="先切直连排除代理" type="note">
+上游请求普遍失败时，把[上游代理](/outbound-proxy)切回「不使用任何代理」快速确认是不是代理的问题。
+</Callout>
+
+## 客户端配置
+
+| 错误码 | 含义 | 处理 |
+| --- | --- | --- |
+| `CLIENT_CONFIG_CLIENT_NOT_SUPPORTED` | 该客户端暂不支持自动填充 | 在配置页下方手动编辑内容。 |
+| `CLIENT_CONFIG_PARSE_FAILED` | 内容无法按格式解析 | 先修正原文件语法，再自动填充；或手动编辑。 |
+| `CLIENT_CONFIG_WRITE_FAILED` | 无法写入配置文件 | 检查文件路径与权限。 |
+| `CLIENT_CONFIG_PATH_NOT_ALLOWED` | 配置文件不在可写入清单里 | 只能填清单内的路径。 |
+
+## 云同步
+
+| 错误码 | 含义 | 处理 |
+| --- | --- | --- |
+| `CLOUD_SYNC_NOT_CONFIGURED` | 还没配好 | 先保存凭据。 |
+| `CLOUD_SYNC_AUTH_FAILED` | 凭据被拒 | 确认令牌有效且权限够用（只需 `gist`）。 |
+| `CLOUD_SYNC_UNREACHABLE` | 连不上云端 | 检查网络与[上游代理](/outbound-proxy)。 |
+| `CLOUD_SYNC_REMOTE_FILE_MISSING` | 远端还没这份文件 | 先在已有配置的机器上备份一次。 |
+| `CLOUD_SYNC_REMOTE_FILE_INVALID` | 远端文件不是合法 JSON | 可能被手改坏了，重新备份覆盖。 |
+
+## 服务自身
+
+| 现象 | 处理 |
+| --- | --- |
+| `DATABASE_UNAVAILABLE` | 检查[数据目录](/data)是否可写、磁盘是否满。 |
+| `SECRET_STORE_UNAVAILABLE` | 系统密钥库不可用，见[本地优先与密钥](/privacy)。 |
+| 启动失败、配置异常 | 看[运行日志](/runtime-logs)。 |
+| 版本行为不一致 | `osw status` 看是否有版本漂移（[命令行](/cli)）。 |
+
+---
+
+有些事 OSW 明确不做，先看[不支持的边界](/limitations)再排查。

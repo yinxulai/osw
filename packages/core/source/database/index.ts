@@ -17,7 +17,7 @@ import { invalidateConfigReadCache } from './config-read-cache'
  *
  * `config-v1.db`（用户配置）与 `data-v1.db`（观测数据）分别开连接、
  * 分别迁移、分别调优。文件名由 `@common/database-file` 自己推导，宿主与连接层都不参与，
- * 也不拼任何字面量。为什么要拆、拆的边界在哪，见那个文件与 `docs/product/data-model.md`；
+ * 也不拼任何字面量。为什么要拆、拆的边界在哪，见那个文件与 `apps/docs/product/data-model.md`；
  * 这里只讲连接层自己必须守住的三件事：
  *
  *   1. **没有跨库事务。** SQLite 的事务作用域是单个文件，`ATTACH` 也不会让 `BEGIN` 跨越两个

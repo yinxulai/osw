@@ -16,7 +16,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
  *      健康状态（连续失败次数与冷却截止时间）全部属于数据库。健康状态是这套拆分里最容易
  *      放错的一处：它的主键看着像配置（供应商 id、供应商模型 id），但它在**每一个成功的
  *      请求**上都要写一次——留在配置库等于「每个请求都写配置库」，那就把这次拆分想解决的
- *      问题原样搬了回来。见 `docs/product/data-model.md` 的数据库拆分一节。
+ *      问题原样搬了回来。见 `apps/docs/product/data-model.md` 的数据库拆分一节。
  *   3. 库内保留 `references()`：同一文件内的外键仍然由 SQLite 维护（连接时开
  *      `foreign_keys`）。跨库那两条已经删掉了，见数据库的说明。
  *   4. **「不许重名」这类规则只写在应用层，不写成唯一索引。** 这些表的每一行都有一个
