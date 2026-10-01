@@ -28,6 +28,14 @@ export const requestRewriteRuleRoutes = new HttpRouter<ManagementHandler>()
     // 试跑入参是传输形态本身（与落库的用例字段同名），引擎认的是**交付形态**，
     // 因此在这里换算一次：用例里存的是「客户端跳的 transport」，而规则能不能动手
     // 取决于「手里有没有一整份正文」（见 `BodyDeliveryShape`）。
+    //
+    // 换算之前先挡掉**未实现**的形态：WebSocket 是双向多轮，正文既不是一整份也不是向下分帧。
+    // 如果这里放着往下走，`bodyDeliveryShape('websocket')` 会给出一个形态，试跑就会一本正经地
+    // 报「改造成功了 N 条」——而真实入口对同一个请求回的是 501。两处对同一份输入给出两个答案，
+    // 比试跑直接失败更糟：它会让用户以为规则在 WS 上生效了。
+    if (input.testCase.transport === 'websocket') {
+      return sendError(res, 'TRANSPORT_NOT_IMPLEMENTED', 'WebSocket transport is not implemented: its request/response cannot be rewritten', 400)
+    }
     const result = applyRequestRewriteRules(Buffer.from(JSON.stringify(parsedBody)), parsedHeaders, [input.rule], { stage: input.testCase.stage, clientProtocol: input.testCase.clientProtocol as Parameters<typeof applyRequestRewriteRules>[3]['clientProtocol'], upstreamProtocol: input.testCase.upstreamProtocol as Parameters<typeof applyRequestRewriteRules>[3]['upstreamProtocol'], shape: bodyDeliveryShape(input.testCase.transport) })
     sendSuccess(res, { ...result, body: result.body.toString('utf8') })
   })

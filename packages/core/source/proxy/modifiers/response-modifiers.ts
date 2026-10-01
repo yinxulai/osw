@@ -141,10 +141,15 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
     direction: 'response',
     frameMode: 'frame',
     /**
-     * 增量交付的响应里规则**没有能做的事**：出口拿到的是一段段 SSE 文本，而规则动作是在
-     * 一整份 JSON 上按路径取值（见 `request-rewrite-engine.ts` 的 `applyBody`）。
+     * 只声明 `whole`：增量交付的响应里规则**没有能做的事**——出口拿到的是一段段 SSE 文本，
+     * 而规则动作是在一整份 JSON 上按路径取值（见 `request-rewrite-engine.ts` 的 `applyBody`）。
      * 这是「这种形态下它没有职责」的静态陈述，在头帧之前就能算出来，因此写在 `scope` 上
      * 交给内核代筛，而不是让它在 `match` 里自己读一根轴。
+     *
+     * 它同时也把 `duplex`（WebSocket）排除在外——但那是另一回事：WS 双向多轮根本没有
+     * 「一份响应正文」，这里筛掉它不代表改写引擎会接受它（引擎对 `duplex` 直接抛错，
+     * 见 `resolveStageShape`）。列表**只含 `whole`** 是刻意的：将来流式事件级改写真上了，
+     * 要在这里显式加上 `incremental`，而不是靠一个「非 whole 都排除」的兜底。
      *
      * 它限制的是**交付形态**而不是「客户端跳的 transport」：同一个事实，取后者只是
      * 在当前取值域下恰好同义（见 `BodyDeliveryShape`）。
@@ -176,6 +181,7 @@ function createResponseRewriteModifier(options: ResponseModifierOptions): Modifi
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,
         skippedRuleIds: modified.skippedRuleIds,
+        skippedRules: modified.skippedRules,
         bodyBytesBefore: body.length,
         bodyBytesAfter: modified.body.length,
       })

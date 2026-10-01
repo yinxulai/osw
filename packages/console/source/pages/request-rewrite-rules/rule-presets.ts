@@ -1,4 +1,5 @@
 import type { UiCatalogKey } from '@common/i18n/catalogs'
+import { PRESET_CONDITIONAL_SCRIPT_CODE } from '@common/rewrite-script-samples'
 import type { AppTranslator } from '@/i18n/provider'
 import type { RequestRewriteRule, RuleAction, RuleTestCase } from './types'
 
@@ -104,17 +105,9 @@ export const RULE_PRESETS: readonly RulePreset[] = [
       operation: 'set',
       path: '',
       // 脚本里的注释与标识符保持英文：这段代码会直接进代码编辑器。
-      // 它演示的是结构化动作表达不了的那件事 —— 先看内容，再决定这条规则要不要动手。
-      code: `// Rewrite only when this request asks for strict mode; otherwise do nothing.
-// Returning nothing leaves the payload untouched, so this rule stays out of the way.
-const marker = JSON.stringify(body || {})
-if (marker.indexOf('apply-strict') === -1) {
-  console.log('not a strict request, skipping')
-} else {
-  console.log('forcing temperature to 0')
-  return { body: { ...body, temperature: 0 }, headers: { ...headers } }
-}
-`,
+      // 代码本体住在 `@common/rewrite-script-samples`：它会被真正执行，因此必须与
+      // `@osw/core` 的测试共用同一份字符串，而不是在渲染层另抄一段。
+      code: PRESET_CONDITIONAL_SCRIPT_CODE,
     }],
     testCase: {
       stage: 'request',

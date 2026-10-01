@@ -78,7 +78,7 @@ describe('applyRequestRewriteRules', () => {
       jsonAction({ type: 'body-set', path: '$.response', value: 'yes' }, 'response'),
     ])
     const requestResult = applyRequestRewriteRules(body({}), {}, [mixed], context('request'))
-    const responseResult = applyRequestRewriteRules(body({}), {}, [mixed], context('response'))
+    const responseResult = applyRequestRewriteRules(body({}), {}, [mixed], context('response', { shape: 'whole' }))
     expect(requestResult.headers['X-Request']).toBe('yes')
     expect(parsed(requestResult)).toEqual({})
     expect(parsed(responseResult)).toEqual({ response: 'yes' })
@@ -219,6 +219,44 @@ describe('applyRequestRewriteRules - script action', () => {
     expect(result.skippedRuleIds).toEqual(['rule-test'])
     expect(parsed(result)).toEqual({ text: 'old' })
     expect(result.scriptLogs).toEqual([])
+  })
+
+  it('跳过原因带上「为什么没生效」：每条被跳过的规则都有具名原因', () => {
+    const disabled = rule([requestHeader('header-set')], { id: 'disabled', enabled: false })
+    const deleted = rule([requestHeader('header-set')], { id: 'deleted', deletedTime: 10 })
+    const unmatched = rule([requestHeader('header-set')], { id: 'unmatched', match: { clientProtocols: ['anthropic-messages'], upstreamProtocols: [] } })
+    const responseOnly = rule([jsonAction({ type: 'body-set', path: '$.x', value: 1 }, 'response')], { id: 'response-only' })
+    const result = applyRequestRewriteRules(body({}), {}, [disabled, deleted, unmatched, responseOnly], context('request'))
+    expect(result.skippedRules).toEqual([
+      { ruleId: 'disabled', reason: 'disabled' },
+      { ruleId: 'deleted', reason: 'deleted' },
+      { ruleId: 'unmatched', reason: 'unmatched-protocol' },
+      { ruleId: 'response-only', reason: 'no-stage-actions' },
+    ])
+    // 扁平视图与结构化视图永远同源，不能一处有一套。
+    expect(result.skippedRuleIds).toEqual(result.skippedRules.map(item => item.ruleId))
+  })
+
+  it('流式响应的跳过原因为 unsupported-shape，而不是笼统的「跳过」', () => {
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response', { shape: 'incremental' }))
+    expect(result.skippedRules).toEqual([{ ruleId: 'rule-test', reason: 'unsupported-shape' }])
+  })
+
+  it('WebSocket（duplex）在响应阶段不适用：直接报错而不是静默跳过', () => {
+    // 双向多轮没有「一份响应正文」。能走到这里说明调用方把形态传错了——静默跳过会让试跑
+    // 报「改造成功了 0 条」而真实入口回 501，两处对同一份输入给出两个答案。
+    expect(() => applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response', { shape: 'duplex' })))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('响应阶段必须显式给出形态：缺省即抛，不允许悄悄按整包处理', () => {
+    expect(() => applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'x' }, 'response')])], context('response')))
+      .toThrow(RequestRewriteError)
+  })
+
+  it('请求阶段无需形态：形态是响应交付才有的概念', () => {
+    const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-set', path: '$.text', value: 'new' })])], context('request'))
+    expect(result.appliedRuleIds).toEqual(['rule-test'])
   })
 
   it('脚本能通过 get() 读取字段并按内容决定是否改动', () => {

@@ -248,7 +248,9 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
   if (mode === 'incremental') {
     console.debug(`[proxy] response rewrite skipped requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} reason=modifier-not-applicable`)
   } else {
-    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'}`)
+    // 跳过原因一并打出来：「跳过了 3 条」回答不了用户真正想问的「我的规则为什么没生效」。
+    const skipReasons = responseEvaluation.skippedRules.map(item => `${item.ruleId}:${item.reason}`).join(',') || 'none'
+    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'} skippedReasons=${skipReasons}`)
   }
   return await concludeDeliveredAttempt({ ...conclusion, mode })
 }

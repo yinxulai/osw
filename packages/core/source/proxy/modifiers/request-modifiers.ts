@@ -5,12 +5,19 @@ import type { ProtocolAdapter } from '@server/proxy/protocols/shared/types'
 import type { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-registry'
 import type { RequestContext } from '@server/proxy/request/request-context'
 import { createUpstreamRequestHeaders } from '@server/proxy/response/headers'
+import type { RewriteSkippedRule } from '@server/proxy/request-rewrite/request-rewrite-engine'
 import { applyRequestRewriteRules } from '@server/proxy/request-rewrite/request-rewrite-engine'
 
-/** 一次规则评估的结果，供调用方落日志（规则数、命中数、字数变化）。 */
+/**
+ * 一次规则评估的结果，供调用方落日志（规则数、命中数、字数变化）。
+ *
+ * `skippedRules` 带上原因：只报「跳过了 3 条」没法回答用户最想问的那个问题——
+ * 「为什么我的规则没生效」。原因是枚举（见 `RewriteSkipReason`），可以直接映射成文案。
+ */
 export interface RewriteEvaluation {
   appliedRuleIds: string[]
   skippedRuleIds: string[]
+  skippedRules: RewriteSkippedRule[]
   bodyBytesBefore: number
   bodyBytesAfter: number
 }
@@ -102,6 +109,7 @@ function createRequestRewriteModifier(options: RequestModifierOptions): Modifier
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,
         skippedRuleIds: modified.skippedRuleIds,
+        skippedRules: modified.skippedRules,
         bodyBytesBefore: payload.body.length,
         bodyBytesAfter: modified.body.length,
       })
