@@ -2,7 +2,7 @@
  * 协议转换的请求上下文：命名空间工具名的双向映射表。
  *
  * Responses 的 `tools` 里可以有 `type: "namespace"` 的**工具组**，组内工具用
- * `(namespace, name)` 两个字段共同寻址（见 `docs/references/openai-responses.md` 的
+ * `(namespace, name)` 两个字段共同寻址（见 `apps/docs/references/openai-responses.md` 的
  * `Namespace object` 与 `function_call.namespace`）。Chat Completions 与 Anthropic
  * 都没有命名空间维度，只有一维的工具名，因此要支持这组工具就必须「展平」——
  * 但展平只有在能**还原**回 `(namespace, name)` 时才成立，否则客户端收到
@@ -19,7 +19,7 @@
 
 /**
  * 工具名在目标协议里的约束：Chat Completions 要求 `a-z A-Z 0-9 _ -`，最长 64
- * （见 `docs/references/openai-completions.md` 的 `FunctionDefinition.name`）。
+ * （见 `apps/docs/references/openai-completions.md` 的 `FunctionDefinition.name`）。
  * 命名空间目前只出现在 Responses 方向，因此取这条约束就够。
  */
 const TARGET_NAME_MAX_LENGTH = 64

@@ -9,7 +9,7 @@ import { z } from 'zod'
  *
  * 界面也**不硬编码任何后端**：`CloudSyncStatus` 会把可用后端连同它们的自述一起带回去，
  * 界面照着渲染就行。因此新增一个后端只动「契约里加一个 kind + core 里加一份实现 + 两套目录里的
- * 后端文案」，界面一行都不用改（见 `docs/product/cloud-sync.md`）。
+ * 后端文案」，界面一行都不用改（见 `apps/docs/product/cloud-sync.md`）。
  *
  * 自述里的文案一律是**目录 key** 而不是句子：服务端不知道用户用什么语言，界面才知道。
  */

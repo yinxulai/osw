@@ -8,7 +8,7 @@ import { LogicalModelIdSchema } from './schemas'
  *
  * 这里只描述**传输的是什么**与**一问一答的形状**，不描述怎么存、怎么取——
  * 「存在哪」由承载方式（后端）的实现决定，它的契约在 `cloud-backup.ts`，
- * 实现与注册表在 `packages/core/source/management/cloud-sync/backends`（见 `docs/product/cloud-sync.md`）。
+ * 实现与注册表在 `packages/core/source/management/cloud-sync/backends`（见 `apps/docs/product/cloud-sync.md`）。
  *
  * 所以下文尽量避免出现某一个后端的专名：快照里那两样东西一律叫**凭据**（`credential`）与
  * **远端句柄**（`target`），GitHub Gist 只是它们当前唯一的一种取值。

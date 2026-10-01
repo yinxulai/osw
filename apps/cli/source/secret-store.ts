@@ -1,7 +1,7 @@
 /**
  * 命令行的密钥存储：本地文件 + AES-256-GCM。
  *
- * 实现的是同一个 `SecretStore` 接口（`docs/product/packaging.md` §5.1），两种形态各有一份实现，
+ * 实现的是同一个 `SecretStore` 接口（`apps/docs/product/packaging.md` §5.1），两种形态各有一份实现，
  * 因为「密钥放哪儿」是宿主的能力差异：Electron 有 `safeStorage`（系统钥匙串），
  * 命令行没有原生依赖可依靠。算法不同，落盘文件也就不能同名——见下面 `SECRETS_FILE_NAME`。
  *
@@ -34,7 +34,7 @@ import { describeError } from './errors'
  * 代价写在明处：同一个数据目录里，两个形态的密钥各存各的，用命令行 Web 控制台配过的 key
  * 在桌面端不会自动出现（反之亦然）。共用的是数据库、设置与日志——供应商条目本身就带着
  * `keyReference`，所以另一边看到的是「这个供应商没配密钥」，而不是静默用空密钥发请求。
- * 想真正共用密钥只能让一边放弃自己的密码学实现，见 `docs/product/packaging.md` §5.1。
+ * 想真正共用密钥只能让一边放弃自己的密码学实现，见 `apps/docs/product/packaging.md` §5.1。
  */
 export const SECRETS_FILE_NAME = 'secrets.cli.json'
 export const MASTER_KEY_FILE_NAME = 'secrets.cli.key'

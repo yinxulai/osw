@@ -79,7 +79,7 @@ export function createConfigEditor(format: ClientConfigFormat, text: string): Co
   }
 }
 
-/** 支持自动填充的格式。`yaml` 没有结构化写入器（见 `docs/product/` 里的取舍说明）。 */
+/** 支持自动填充的格式。`yaml` 没有结构化写入器（见 `apps/docs/product/` 里的取舍说明）。 */
 export function supportsAutoFill(format: ClientConfigFormat): boolean {
   return format === 'json' || format === 'jsonc' || format === 'env' || format === 'toml'
 }

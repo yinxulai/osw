@@ -21,7 +21,7 @@
  *   apps/app/build/tray-icon@3x.png     48²   ↑ 的 3× 档
  *   apps/app/build/tray-icon-dev*.png   同上  托盘开发版（白蒙版 + 右下角一个圆点）
  *   apps/app/build/tray-icon-win*.png   48²   托盘 · Windows 专用大图（见文件尾部说明）
- *   docs/design/brand/**               文档 / 宣发用导出（含备选标志）
+ *   apps/docs/design/brand/**           文档 / 宣发用导出（含备选标志）
  */
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -34,10 +34,10 @@ const repoRoot = resolve(appDir, '..', '..')
 
 const SOURCE_SVG = resolve(repoRoot, 'packages/console/public/icon.svg')
 /** 备选标志：双刃（冷色霓虹），本轮不作为产品标志，但保留下来继续做视觉延续。 */
-const ALT_SVG = resolve(repoRoot, 'docs/design/brand/icon-alt-blades.svg')
+const ALT_SVG = resolve(repoRoot, 'apps/docs/design/brand/icon-alt-blades.svg')
 
 const BUILD_DIR = resolve(appDir, 'build')
-const BRAND_DIR = resolve(repoRoot, 'docs/design/brand')
+const BRAND_DIR = resolve(repoRoot, 'apps/docs/design/brand')
 const BRAND_PNG_DIR = resolve(BRAND_DIR, 'png')
 
 const XMLNS = 'http://www.w3.org/2000/svg'

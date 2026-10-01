@@ -1,5 +1,5 @@
 /**
- * 匿名使用统计的入口（默认开启、界面上不提供开关，见 `docs/product/telemetry.md`）。
+ * 匿名使用统计的入口（默认开启、界面上不提供开关，见 `apps/docs/product/telemetry.md`）。
  *
  * 对外只有四件事：
  *

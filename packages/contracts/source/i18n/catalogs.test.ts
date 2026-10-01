@@ -1,5 +1,5 @@
 /**
- * 目录门禁（对应 `docs/product/i18n.md` §9 第 2/3 条）。
+ * 目录门禁（对应 `apps/docs/product/i18n.md` §9 第 2/3 条）。
  *
  * 编译期已经保证两件事：`uiZhCN` 的类型是 `Record<keyof typeof uiEn, MessageValue>`（不会少 key），
  * `t('…')` 的 key 会在编译期校验（不会拼错）。这里补的是编译期看不见的那部分：

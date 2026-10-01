@@ -11,7 +11,7 @@ interface MockRequestOptions {
 
 /**
  * 守卫管两件事——路径/方法与 CORS 白名单。这里逐个断言，另外钉一条边界：
- * 它**不做**身份校验（本版本没有凭证，见 `docs/product/security-privacy.md`），
+ * 它**不做**身份校验（本版本没有凭证，见 `apps/docs/product/security-privacy.md`），
  * 任何一条 `/api/*` 的 POST 都会被放行到业务层。
  */
 function mockRequest(options: MockRequestOptions): IncomingMessage {

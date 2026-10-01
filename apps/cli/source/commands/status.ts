@@ -104,7 +104,7 @@ export async function runStatus(values: CliArguments): Promise<number> {
   }
 
   if (report.staleRuntimeFile) {
-    // 诊断行固定英文（见 docs/product/i18n.md §2），与日志共用一个 `[cli]` 前缀。
+    // 诊断行固定英文（见 apps/docs/product/i18n.md §2），与日志共用一个 `[cli]` 前缀。
     process.stderr.write(`[cli] stale runtime file: ${runtimeFilePath(dataDir)}\n`)
   }
   if (report.state === 'unresponsive' && report.portListening === false && report.management !== null) {
