@@ -189,7 +189,7 @@ if (body && JSON.stringify(body).includes('apply-strict')) {
 | `body` | 当前阶段报文的解析结果；正文不是合法 JSON 时为 `null` |
 | `headers` | 当前阶段报文的 Header（只读副本） |
 | `protocol` | `{ stage, clientProtocol, upstreamProtocol }`，只读 |
-| `get(path)` | 按 JSONPath 取值，语义同 §5.3 |
+| `get(path)` | 按点号路径取值，`[*]` 段表示数组投影；取不到返回 `undefined`。路径**不带 `$.` 前缀**——区别于结构化 Body 动作（§5.3）要求的 `$.` 前缀 |
 | `console.log/warn/error(...)` | 写入规则测试结果的日志区，最多 50 行 |
 
 交回约定：
