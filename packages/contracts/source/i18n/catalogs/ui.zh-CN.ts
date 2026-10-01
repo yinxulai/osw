@@ -901,6 +901,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'rules.script.getValueDetail': '按路径取值',
   'rules.script.consoleLogDetail': '写入测试结果日志',
   'rules.script.returnBodyDetail': '交回完整 body 以整体替换（省略的字段即删除）',
+  'rules.script.returnPayloadDetail': '交回完整 body 与 headers 以整体替换',
   'rules.script.returnHeadersDetail': '交回完整 headers 以整体替换（省略的键即删除）',
   'rules.script.samples.requestBaseline.name': '请求脚本基线',
   'rules.script.samples.requestBaseline.description': '读取请求、按需修改，再交回完整报文。适合当作起点。',

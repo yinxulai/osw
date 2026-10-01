@@ -897,6 +897,7 @@ export const uiEn = {
   'rules.script.getValueDetail': 'Read a value by path',
   'rules.script.consoleLogDetail': 'Write into the test result log',
   'rules.script.returnBodyDetail': 'Return the whole body to replace it (omitted fields are deleted)',
+  'rules.script.returnPayloadDetail': 'Return the whole body and headers to replace them',
   'rules.script.returnHeadersDetail': 'Return the whole header set to replace it (omitted keys are deleted)',
   'rules.script.samples.requestBaseline.name': 'Baseline request script',
   'rules.script.samples.requestBaseline.description': 'Read the request, tweak it, and return the whole payload. A good starting point.',

@@ -126,8 +126,11 @@ function rewriteScriptGlobalCompletions(t: AppTranslator): Completion[] {
     { label: 'protocol', type: 'variable', detail: t('rules.script.protocolDetail') },
     snippetCompletion("get('${0}')", { label: 'get(...)', type: 'function', detail: t('rules.script.getValueDetail') }),
     snippetCompletion('console.log(${0})', { label: 'console.log(...)', type: 'function', detail: t('rules.script.consoleLogDetail') }),
-    snippetCompletion('return { body: ${0} }', { label: 'return { body }', type: 'keyword', detail: t('rules.script.returnBodyDetail') }),
-    snippetCompletion('return { headers: ${0} }', { label: 'return { headers }', type: 'keyword', detail: t('rules.script.returnHeadersDetail') }),
+    // 补全里的 return 一律从 `{ ...body }` / `{ ...headers }` 起手：交回即整体替换，
+    // 只写改动字段的写法会把其余字段删光，补全不该把用户往那个坑里带。
+    snippetCompletion('return { body: { ...body }, headers: { ...headers } }', { label: 'return whole payload', type: 'keyword', detail: t('rules.script.returnPayloadDetail') }),
+    snippetCompletion('return { body: { ...body, ${0} } }', { label: 'return { body }', type: 'keyword', detail: t('rules.script.returnBodyDetail') }),
+    snippetCompletion('return { headers: { ...headers, ${0} } }', { label: 'return { headers }', type: 'keyword', detail: t('rules.script.returnHeadersDetail') }),
   ]
 }
 

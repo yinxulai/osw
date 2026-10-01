@@ -4,7 +4,7 @@ import { executeRewriteScript, type RewriteScriptInvocation } from './rewrite-sc
 /**
  * 修改器脚本沙箱的边界回归。
  *
- * 引擎测试覆盖的是「脚本结果怎么合并回报文」，这里盯的是沙箱本身：隔离边界、交回协议、
+ * 引擎测试覆盖的是「脚本结果怎么替换回报文」，这里盯的是沙箱本身：隔离边界、交回协议、
  * 日志与超时。沙箱只依赖 `node:vm` 与路径取值，可以脱离代理执行栈单独跑。
  */
 
