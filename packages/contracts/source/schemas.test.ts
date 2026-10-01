@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LogicalModelIdSchema } from './schemas'
+import { LogicalModelIdSchema, REWRITE_SCRIPT_CODE_LIMIT, REWRITE_SCRIPT_TIMEOUT_DEFAULT, REWRITE_SCRIPT_TIMEOUT_LIMIT, RequestRewriteRuleActionSchema } from './schemas'
 
 /**
  * 逻辑模型 id 的取值边界。
@@ -38,5 +38,42 @@ describe('LogicalModelIdSchema', () => {
 
   it('恰好 64 个字符仍然合法', () => {
     expect(LogicalModelIdSchema.safeParse('a'.repeat(64)).success).toBe(true)
+  })
+})
+
+/**
+ * 脚本动作的取值边界。
+ *
+ * 这些常量是「本地工具不设资源攻击假设」的对外承诺，前端编辑器也直接引用它们做提示，
+ * 所以边界值本身要钉死：代码长度上限、超时默认值与上限。
+ */
+describe('RequestRewriteRuleActionSchema - script action', () => {
+  it('不写超时时采用默认值', () => {
+    const result = RequestRewriteRuleActionSchema.parse({ type: 'script', code: 'return undefined' })
+    expect(result).toEqual({ type: 'script', stage: 'request', code: 'return undefined', timeoutMilliseconds: REWRITE_SCRIPT_TIMEOUT_DEFAULT })
+  })
+
+  it('接受自定义超时', () => {
+    const result = RequestRewriteRuleActionSchema.safeParse({ type: 'script', code: 'return undefined', timeoutMilliseconds: REWRITE_SCRIPT_TIMEOUT_LIMIT })
+    expect(result.success).toBe(true)
+  })
+
+  it('保留 stage', () => {
+    const result = RequestRewriteRuleActionSchema.safeParse({ type: 'script', stage: 'response', code: 'return undefined' })
+    expect(result.success && result.data.stage).toBe('response')
+  })
+
+  it.each([
+    ['空代码', { type: 'script', code: '' }],
+    ['超长代码', { type: 'script', code: 'a'.repeat(REWRITE_SCRIPT_CODE_LIMIT + 1) }],
+    ['超时为零', { type: 'script', code: 'return undefined', timeoutMilliseconds: 0 }],
+    ['超时超上限', { type: 'script', code: 'return undefined', timeoutMilliseconds: REWRITE_SCRIPT_TIMEOUT_LIMIT + 1 }],
+    ['超时非整数', { type: 'script', code: 'return undefined', timeoutMilliseconds: 1.5 }],
+  ])('拒绝 %s', (_label, action) => {
+    expect(RequestRewriteRuleActionSchema.safeParse(action).success).toBe(false)
+  })
+
+  it('恰好达到代码长度上限仍然合法', () => {
+    expect(RequestRewriteRuleActionSchema.safeParse({ type: 'script', code: 'a'.repeat(REWRITE_SCRIPT_CODE_LIMIT) }).success).toBe(true)
   })
 })

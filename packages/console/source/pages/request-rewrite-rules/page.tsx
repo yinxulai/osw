@@ -12,10 +12,10 @@ import { RulePresetMenu } from './components/rule-preset-menu'
 import { RuleStats } from './components/rule-stats'
 import { RulesTable } from './components/rules-table'
 import { createBlankRule, createRuleFromPreset, type RulePreset } from './rule-presets'
-import { formatJsonActionValue, parseJsonActionValue, type RequestRewriteRule, type RuleStatusFilter } from './types'
+import { toApiRuleAction, toUiRuleAction, type RequestRewriteRule, type RuleStatusFilter } from './types'
 import type { RequestRewriteRule as ApiRequestRewriteRule, Protocol } from '@common/schemas'
 
-function toUiRule(rule: ApiRequestRewriteRule): RequestRewriteRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', source: rule.source, protocols: rule.match.clientProtocols, match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols }, actions: rule.actions.map((action, index) => ({ id: `${rule.id}-action-${index}`, stage: action.stage, target: action.type.startsWith('header-') ? 'header' : 'body', operation: action.type.endsWith('set') ? 'set' : action.type.endsWith('append') ? 'append' : action.type.endsWith('remove') || action.type.endsWith('delete') ? 'remove' : 'replace', path: 'name' in action ? action.name : action.path, value: 'value' in action ? (action.type === 'body-set' ? formatJsonActionValue(action.value) : String(action.value)) : 'search' in action ? action.search : undefined, replacement: 'replacement' in action ? action.replacement : undefined, regex: 'regex' in action ? action.regex : undefined })), testCases: rule.testCases.map(testCase => ({ ...testCase })), boundProviders: 0, updatedTime: rule.updatedTime } }
+function toUiRule(rule: ApiRequestRewriteRule): RequestRewriteRule { return { id: rule.id, name: rule.name, description: rule.description, enabled: rule.enabled, global: rule.scope === 'global', source: rule.source, protocols: rule.match.clientProtocols, match: { clientProtocols: rule.match.clientProtocols, upstreamProtocols: rule.match.upstreamProtocols }, actions: rule.actions.map((action, index) => toUiRuleAction(action, `${rule.id}-action-${index}`)), testCases: rule.testCases.map(testCase => ({ ...testCase })), boundProviders: 0, updatedTime: rule.updatedTime } }
 function toApiRule(rule: RequestRewriteRule): Omit<ApiRequestRewriteRule, 'id' | 'createdTime' | 'updatedTime' | 'deletedTime'> {
   return {
     name: rule.name,
@@ -27,15 +27,7 @@ function toApiRule(rule: RequestRewriteRule): Omit<ApiRequestRewriteRule, 'id' |
     // 也是 `rewrite_rule_created.kind` 唯一的来源。
     source: rule.source,
     match: { clientProtocols: rule.protocols, upstreamProtocols: rule.match.upstreamProtocols as Protocol[] },
-    actions: rule.actions.map(action => {
-      if (action.target === 'header') {
-        if (action.operation === 'remove') return { type: 'header-remove', stage: action.stage, name: action.path }
-        return { type: action.operation === 'append' ? 'header-append' : 'header-set', stage: action.stage, name: action.path, value: action.value ?? '' }
-      }
-      if (action.operation === 'remove') return { type: 'body-delete', stage: action.stage, path: action.path }
-      if (action.operation === 'replace') return { type: 'body-replace', stage: action.stage, path: action.path, search: action.value ?? '', replacement: action.replacement ?? '', regex: action.regex ?? false }
-      return { type: 'body-set', stage: action.stage, path: action.path, value: parseJsonActionValue(action.value) }
-    }),
+    actions: rule.actions.map(toApiRuleAction),
     testCases: rule.testCases,
   }
 }

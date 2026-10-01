@@ -1,5 +1,6 @@
 import type { Protocol, RequestRewriteRule, RequestRewriteRuleAction } from '@common/schemas'
 import type { BodyDeliveryShape } from '@server/proxy/contracts'
+import { executeRewriteScript } from './rewrite-script-sandbox'
 
 const PROTECTED_HEADERS = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding'])
 /**
@@ -32,10 +33,13 @@ export interface RequestRewriteResult {
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
   skippedRuleIds: string[]
+  /** 本次执行里所有脚本动作回传的日志（`console.log / warn / error`），供规则试跑展示。 */
+  scriptLogs: string[]
 }
 
 type HeaderAction = Extract<RequestRewriteRuleAction, { type: `header-${string}` }>
 type BodyAction = Extract<RequestRewriteRuleAction, { type: `body-${string}` }>
+type ScriptAction = Extract<RequestRewriteRuleAction, { type: 'script' }>
 
 export class RequestRewriteError extends Error {
   readonly code = 'REQUEST_REWRITE_RULE_FAILED'
@@ -47,6 +51,7 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
   const currentHeaders = { ...headers }
   const appliedRuleIds: string[] = []
   const skippedRuleIds: string[] = []
+  const scriptLogs: string[] = []
   for (const rule of rules) {
     if (!rule.enabled || rule.deletedTime !== null) { skippedRuleIds.push(rule.id); continue }
     const actions = rule.actions.filter(action => action.stage === context.stage)
@@ -54,13 +59,14 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
     if (context.stage === 'response' && context.shape === 'incremental') { skippedRuleIds.push(rule.id); continue }
     if (actions.length > MAX_ACTIONS) throw new RequestRewriteError('Too many rule actions', rule.id)
     for (const action of actions) {
-      if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as Extract<RequestRewriteRuleAction, { type: `header-${string}` }>, rule.id)
-      else currentBody = Buffer.from(applyBody(currentBody, action as Extract<RequestRewriteRuleAction, { type: `body-${string}` }>, rule.id))
+      if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as HeaderAction, rule.id)
+      else if (action.type === 'script') currentBody = Buffer.from(applyScript(currentBody, currentHeaders, action as ScriptAction, rule, context, scriptLogs))
+      else currentBody = Buffer.from(applyBody(currentBody, action as BodyAction, rule.id))
     }
     appliedRuleIds.push(rule.id)
   }
   if (currentBody.length > 0) currentHeaders['content-length'] = String(currentBody.length)
-  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds }
+  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds, scriptLogs }
 }
 
 function matches(rule: RequestRewriteRule, context: RequestRewriteContext): boolean {
@@ -80,6 +86,76 @@ function applyHeader(headers: Record<string, string | string[] | undefined>, act
     const previous = headers[existingKey]
     headers[existingKey] = previous ? `${Array.isArray(previous) ? previous.join(', ') : previous}, ${action.value}` : action.value
   } else headers[existingKey] = action.value
+}
+
+/**
+ * 脚本动作：在沙箱里跑用户代码，把交回的 `{ body, headers }` 合并回当前报文。
+ *
+ * 与结构化 body 动作有一处刻意的差异：body 解析失败时**不报错**，而是把 `null` 交给脚本
+ * （`ctx.body === null` 由脚本自行决定是否 `throw`）。因为脚本要表达的正是「先看内容再决定
+ * 怎么改」，把「是不是 JSON」这个判断也交给它，比引擎替它先拒绝更贴合它的用途。
+ *
+ * 交回对象的合并语义见 {@link mergeScriptHeaders} 与 `rewrite-script-sandbox.ts` 的
+ * `normalizeOutcome`：`undefined` 表示该项不改动，脚本整体失败则阻断当前 attempt。
+ */
+function applyScript(body: Buffer, headers: Record<string, string | string[] | undefined>, action: ScriptAction, rule: RequestRewriteRule, context: RequestRewriteContext, scriptLogs: string[]): Buffer {
+  const parsedBody = parseBodyLenient(body)
+  const result = executeRewriteScript({
+    ruleId: rule.id,
+    code: action.code,
+    timeoutMilliseconds: action.timeoutMilliseconds,
+    body: parsedBody,
+    headers: { ...headers },
+    context: { stage: context.stage, clientProtocol: context.clientProtocol, upstreamProtocol: context.upstreamProtocol },
+  })
+  scriptLogs.push(...result.logs)
+  if (!result.success) throw new RequestRewriteError(result.error ?? 'Script execution failed', rule.id)
+  if (result.headers !== undefined) mergeScriptHeaders(headers, result.headers, rule.id)
+  if (result.body === undefined) return body
+  assertDeliveryModeUnchanged(parsedBody, result.body, rule.id)
+  return Buffer.from(JSON.stringify(result.body))
+}
+
+function parseBodyLenient(body: Buffer): unknown {
+  if (body.length === 0) return null
+  try { return JSON.parse(body.toString('utf8')) } catch { return null }
+}
+
+/**
+ * 脚本同样不许改动投递形态字段（`stream`）。
+ *
+ * 结构化 body 动作靠 `parsePath` 拒绝对根级 `stream` 取值来做这件事；脚本改的是整份 body，
+ * 没有「路径」可拦，因此改为**按改动结果判**：新旧 body 的 `stream` 取值不同即视为违规。
+ * 逐字比对而不是「禁止出现 `stream` 键」——脚本原样带上一个 `stream` 不算「改主意」。
+ */
+function assertDeliveryModeUnchanged(before: unknown, after: unknown, ruleId: string): void {
+  for (const field of PROTECTED_BODY_FIELDS) {
+    if (readOwnField(before, field) !== readOwnField(after, field)) {
+      throw new RequestRewriteError(`Modifying a delivery-mode field is not allowed: ${field}`, ruleId)
+    }
+  }
+}
+
+function readOwnField(value: unknown, field: string): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  return Object.prototype.hasOwnProperty.call(record, field) ? record[field] : undefined
+}
+
+/**
+ * 把脚本交回的 headers 覆盖回当前头。
+ *
+ * 脚本改的是**报文本身**，因此这里必须做和结构化 Header 动作同一级别的保护校验：
+ * 脚本一旦动了受保护 Header，整条规则失败（而不是静默忽略），与结构化动作的失败语义一致。
+ */
+function mergeScriptHeaders(headers: Record<string, string | string[] | undefined>, next: Record<string, string | string[] | undefined>, ruleId: string): void {
+  for (const [name, value] of Object.entries(next)) {
+    if (PROTECTED_HEADERS.has(name.toLowerCase())) throw new RequestRewriteError(`Modifying a protected header is not allowed: ${name}`, ruleId)
+    const existingKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase())
+    if (value === undefined) { delete headers[existingKey ?? name]; continue }
+    if (existingKey && existingKey !== name) delete headers[existingKey]
+    headers[name] = value
+  }
 }
 
 function applyBody(body: Buffer, action: BodyAction, ruleId: string): Buffer {

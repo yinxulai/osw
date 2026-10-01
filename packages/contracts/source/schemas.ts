@@ -66,6 +66,12 @@ export type RuleStage = z.infer<typeof RuleStageSchema>
 export const RuleScopeSchema = z.enum(['global', 'model']).default('model')
 export type RuleScope = z.infer<typeof RuleScopeSchema>
 
+/** 脚本动作的源码长度上限；与结构化动作的数量上限一样，是「本地工具不设资源攻击假设」的边界。 */
+export const REWRITE_SCRIPT_CODE_LIMIT = 20_000
+/** 脚本动作默认超时；沙箱在超时后中断执行，当前 attempt 阻断。 */
+export const REWRITE_SCRIPT_TIMEOUT_DEFAULT = 1_000
+/** 脚本动作超时上限。 */
+export const REWRITE_SCRIPT_TIMEOUT_LIMIT = 5_000
 const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
 export const RequestRewriteRuleMatchSchema = z.object({
   clientProtocols: z.array(ProtocolSchema).max(3).default([]),
@@ -86,6 +92,14 @@ export const RequestRewriteRuleTestCaseSchema = z.object({
 export type RequestRewriteRuleTestCase = z.infer<typeof RequestRewriteRuleTestCaseSchema>
 const RequestRewriteRuleActionBaseSchema = z.object({ stage: RuleStageSchema.default('request') })
 export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
+  /**
+   * 用户自定义脚本动作：在沙箱里跑一段 JS，实现结构化动作表达不了的条件判断与数据修改。
+   *
+   * `code` 是**函数体**形式，用 `return` 交回 `{ body, headers }`（见
+   * `request-rewrite-engine.ts` 的 `applyScript`）。它和其它动作一样带 `stage`，
+   * 因此可以只作用于请求或响应其中之一。
+   */
+  RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('script'), code: z.string().min(1).max(REWRITE_SCRIPT_CODE_LIMIT), timeoutMilliseconds: z.number().int().positive().max(REWRITE_SCRIPT_TIMEOUT_LIMIT).default(REWRITE_SCRIPT_TIMEOUT_DEFAULT) }),
   RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-set'), name: z.string().min(1), value: z.string() }),
   RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-append'), name: z.string().min(1), value: z.string() }),
   RequestRewriteRuleActionBaseSchema.extend({ type: z.literal('header-remove'), name: z.string().min(1) }),

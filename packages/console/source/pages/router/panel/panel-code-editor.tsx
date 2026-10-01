@@ -41,7 +41,7 @@ import type { SchemaFieldDescriptor } from '@common/router/types'
  * 外观全部写进 `EditorView.theme` / `HighlightStyle`（颜色一律取 CSS 变量），
  * 所以自动跟随明暗主题，也不需要在 `styles/index.css` 里再开一套 CodeMirror 选择器。
  */
-export type PanelCodeLanguage = 'javascript' | 'template'
+export type PanelCodeLanguage = 'javascript' | 'template' | 'rewrite-script'
 
 export interface PanelCodeEditorProps {
   value: string
@@ -100,6 +100,8 @@ const PANEL_EDITOR_THEME = EditorView.theme({
 const SCRIPT_GET_CALL = /\bget\(\s*(['"])[^'"]*$/
 /** `payload.route.` 这种成员访问：补全候选同样是字段路径。 */
 const SCRIPT_PAYLOAD_ACCESS = /\bpayload(?:\.[\w[\]]*)*\.?$/
+/** 修改器脚本里的 `body.route.` 成员访问：候选同样是字段路径。 */
+const REWRITE_BODY_ACCESS = /\bbody(?:\.[\w[\]]*)*\.?$/
 /** 提示词模板里正在写的 `${...}`。与引擎 `renderTemplate` 的正则保持一致。 */
 const TEMPLATE_VARIABLE = /\$\{[^}]*$/
 
@@ -108,6 +110,24 @@ function scriptGlobalCompletions(t: AppTranslator): Completion[] {
     { label: 'payload', type: 'variable', detail: t('router.panel.completion.payloadDetail') },
     snippetCompletion("get('${0}')", { label: 'get(...)', type: 'function', detail: t('router.panel.completion.getValueDetail') }),
     snippetCompletion('console.log(${0})', { label: 'console.log(...)', type: 'function', detail: t('router.panel.completion.consoleLogDetail') }),
+  ]
+}
+
+/**
+ * 修改器脚本的候选源。
+ *
+ * 与路由脚本的差别只在沙箱暴露的名字：这里没有 `payload`，取而代之的是当前阶段的
+ * `body` / `headers`，以及一个 `protocol` 上下文。`get(...)` 与 `console` 仍然给。
+ */
+function rewriteScriptGlobalCompletions(t: AppTranslator): Completion[] {
+  return [
+    { label: 'body', type: 'variable', detail: t('rules.script.bodyDetail') },
+    { label: 'headers', type: 'variable', detail: t('rules.script.headersDetail') },
+    { label: 'protocol', type: 'variable', detail: t('rules.script.protocolDetail') },
+    snippetCompletion("get('${0}')", { label: 'get(...)', type: 'function', detail: t('rules.script.getValueDetail') }),
+    snippetCompletion('console.log(${0})', { label: 'console.log(...)', type: 'function', detail: t('rules.script.consoleLogDetail') }),
+    snippetCompletion('return { body: ${0} }', { label: 'return { body }', type: 'keyword', detail: t('rules.script.returnBodyDetail') }),
+    snippetCompletion('return { headers: ${0} }', { label: 'return { headers }', type: 'keyword', detail: t('rules.script.returnHeadersDetail') }),
   ]
 }
 
@@ -177,6 +197,28 @@ function createTemplateCompletionSource(fields: MutableRefObject<SchemaFieldDesc
   }
 }
 
+/** 修改器脚本的候选源：`get('...')` / `body.` 给字段路径，裸标识符给沙箱内置。 */
+function createRewriteScriptCompletionSource(fields: MutableRefObject<SchemaFieldDescriptor[]>, t: AppTranslator) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const optionFields = fields.current.map(field => fieldCompletion(field, "'"))
+
+    const getCall = context.matchBefore(SCRIPT_GET_CALL)
+    if (getCall && optionFields.length) {
+      const quoteIndex = getCall.text.search(/['"]/)
+      return { from: getCall.from + quoteIndex + 1, options: optionFields, validFor: /^[^'"]*$/ }
+    }
+
+    const bodyAccess = context.matchBefore(REWRITE_BODY_ACCESS)
+    if (bodyAccess && optionFields.length) {
+      return { from: bodyAccess.from, options: optionFields, validFor: /^[\w.[\]*]*$/ }
+    }
+
+    const word = context.matchBefore(/[A-Za-z_$][\w$]*$/)
+    if (!word || (word.from === word.to && !context.explicit)) return null
+    return { from: word.from, options: rewriteScriptGlobalCompletions(t), validFor: /^[\w$]*$/ }
+  }
+}
+
 interface EditorRuntime {
   language: PanelCodeLanguage
   fields: MutableRefObject<SchemaFieldDescriptor[]>
@@ -211,7 +253,7 @@ function buildExtensions(runtime: EditorRuntime): Extension[] {
     EditorView.contentAttributes.of({
       'aria-label': language === 'javascript'
         ? t('router.panel.scriptEditorAria')
-        : t('router.panel.templateEditorAria'),
+        : language === 'rewrite-script' ? t('rules.script.editorAria') : t('router.panel.templateEditorAria'),
     }),
   ]
 
@@ -221,6 +263,12 @@ function buildExtensions(runtime: EditorRuntime): Extension[] {
       javascript(),
       // 语言自带的补全源（局部变量、成员访问）走 language data，不能被 override 顶掉。
       javascriptLanguage.data.of({ autocomplete: createScriptCompletionSource(fields, t) }),
+    )
+  } else if (language === 'rewrite-script') {
+    extensions.push(
+      autocompletion(completionOptions),
+      javascript(),
+      javascriptLanguage.data.of({ autocomplete: createRewriteScriptCompletionSource(fields, t) }),
     )
   } else {
     extensions.push(
