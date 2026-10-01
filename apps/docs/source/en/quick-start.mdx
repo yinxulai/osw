@@ -1,0 +1,64 @@
+---
+title: Three steps to a gateway
+description: Choose routing → add an upstream → connect a client, and get the local gateway running.
+keywords:
+  - quick start
+  - onboarding
+  - getting started
+---
+
+# Three steps to a gateway
+
+The first launch enters a three-step guide. It is a **straight line** — the order cannot be swapped, because each step's output is the next step's prerequisite: first decide how requests route → then decide what upstream to run them on → finally know what to fill in.
+
+<Callout title="You can skip the choice" type="note">
+You do not have to pick anything in step one: a default policy is already running. The guide just wants you to choose a different starting point.
+</Callout>
+
+## Step 1: Routing
+
+The first step asks "how should requests route?" and has you pick one of two routing modes. The two configs are stored independently, so switching back and forth never loses the other one.
+
+- **Workflow orchestration**: wire nodes into a chain on a canvas.
+- **Routing rules**: a rule table read top to bottom.
+
+For a detailed comparison, see [Request routing](/routing). This step also lets you pick one of the **built-in schemes** to take effect immediately, then keep editing it on the "Smart routing" page.
+
+## Step 2: Add an upstream
+
+The second step, "where do requests go?", adds your first upstream provider:
+
+1. Pick a **preset** (presets pre-fill the base URL), or choose "Custom provider".
+2. Fill in the provider name and the **API key** (leave blank for upstreams that need no auth).
+3. Click **Fetch models** and tick the models you want from this provider.
+
+After fetching, remember to tick specific models — with no models under a provider, requests have nowhere to land. For the full model-management page, see [Providers & models](/providers).
+
+## Step 3: Connect a client
+
+The third step, "point your tools at this address", shows the local service address and the values to fill in. The same card has the other half of the answer: when a client is already installed on the machine, go to [Client configuration](/client-config) and click **Apply all**, and OSW edits that client's own config file, keeping a revertible copy of every change first.
+
+Reference table:
+
+| Your client | Base URL |
+| --- | --- |
+| OpenAI-compatible (Chat Completions / Responses) | `http://127.0.0.1:9300/v1` |
+| Anthropic | `http://127.0.0.1:9300` |
+
+<Callout title="The pitfall everyone hits" type="warning">
+Anthropic clients append `/v1/messages` **themselves**, so the Base URL stops at the port. Adding an extra `/v1` makes it `/v1/v1/messages`, which the proxy does not recognize, and you get a 404.
+</Callout>
+
+The model name is up to you: `default`, or any non-empty name. OSW replaces it with the real model ID of the actually chosen channel. And if a client insists on an API key, any placeholder will do — the real secret is injected per provider.
+
+## Verify it is connected
+
+Whether the service is alive:
+
+```bash
+curl http://127.0.0.1:9300/v1/models
+```
+
+Send a message from your client, then go to [Request logs](/request-logs): once the request shows up, you are connected.
+
+The listen address and port are changed under **Settings → Network → Listener**; after saving, the proxy switches to the new port automatically.
