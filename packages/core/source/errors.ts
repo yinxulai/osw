@@ -191,9 +191,8 @@ export function protectedLogicalModelError(modelId: string): AppError {
 /**
  * 「这个供应商下已经有一条同协议的活跃端点了」。
  *
- * 供应商端点过去靠 `(providerId, protocol) WHERE deletedTime IS NULL` 的部分唯一索引把关。
- * 索引撤掉之后（删掉的行让位，见 `config-schema.ts`），这条规则就只剩应用层在守——
- * 命中就是用户可修正的输入问题（换个协议，或者先把原来那条删掉），
+ * 这条规则由应用层守（见 `config-schema.ts`：删掉的行让位，因此没有部分唯一索引可用）——
+ * 命中就是用户可修正的输入问题（换个协议，或者先把那条删掉），
  * 用 409 + `DUPLICATE_RESOURCE` 说清楚，不要让它变成两条同协议行里随缘读到一条。
  */
 export function duplicateProviderEndpointError(protocol: string): AppError {

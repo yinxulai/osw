@@ -82,8 +82,8 @@ function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): 
 
 /**
  * 供应商品牌图标。
- * 直接使用 packages/console/source/catalog/providers 中每个 provider 子目录的 icon.svg，
- * 缺失时回退到应用标志（`packages/console/public/icon.svg` 里那道彩虹闪电）。
+ * 取 `packages/console/source/catalog/providers/<key>/` 下的 icon.light.svg / icon.dark.svg
+ * （按当前主题选一张）；该供应商没有图标时回退到应用标志（`packages/console/public/icon.svg` 里那道彩虹闪电）。
  */
 export function ProviderIcon(props: ProviderIconProps) {
   const { name, size = 17, className } = props

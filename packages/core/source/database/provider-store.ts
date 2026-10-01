@@ -25,8 +25,8 @@ export async function listProviders(includeDeleted = false): Promise<Provider[]>
 
 async function readProviders(includeDeleted: boolean): Promise<Provider[]> {
   const db = getConfigDb()
-  // 侧栏顺序由用户在界面上拖出来（`sortOrder`）；序号相同的历史行再按创建时间倒序，
-  // 因此「全为 0」的老数据仍然稳定地保持原来的相对位置。
+  // 侧栏顺序由用户在界面上拖出来（`sortOrder`）；序号相同的行再按创建时间倒序，
+  // 因此「全为 0」的数据也稳定地保持一个确定的相对位置。
   const rows = includeDeleted
     ? db.select().from(providers).orderBy(asc(providers.sortOrder), desc(providers.createdTime)).all()
     : db.select().from(providers).where(isNull(providers.deletedTime)).orderBy(asc(providers.sortOrder), desc(providers.createdTime)).all()
@@ -179,9 +179,8 @@ export async function updateProviderEndpoint(id: string, updates: Partial<Pick<P
   const existing = await getProviderEndpoint(id)
   if (!existing) throw resourceNotFoundError('provider endpoint', id)
   const endpoint = ProviderEndpointSchema.parse({ ...existing, ...updates, id, updatedTime: now() })
-  // 改协议可能撞上同供应商下的另一条活跃行。过去这是数据库约束的活（翻译成 409），
-  // 现在约束没有了，重复就静静地变成两条同协议行、读取侧只会拿到其中一条——
-  // 所以这里必须自己把关：命中就拒绝，并说清楚撞的是哪个协议。
+  // 改协议可能撞上同供应商下的另一条活跃行。放过去就会静静地变成两条同协议行、
+  // 读取侧只会拿到其中一条——所以这里必须自己把关：命中就拒绝，并说清楚撞的是哪个协议。
   const conflict = getConfigDb().select({ id: providerEndpoints.id }).from(providerEndpoints)
     .where(and(
       eq(providerEndpoints.providerId, existing.providerId),

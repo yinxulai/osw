@@ -169,7 +169,7 @@ export interface MetaFactProps {
   tag?: React.ReactNode
 }
 
-/** 摘要事实：标签 + 值成对，替代原来用 `·` 串起来的文本墙。 */
+/** 摘要事实：标签 + 值成对，一眼看得出哪段是标签、哪段是值。 */
 export function MetaFact(props: MetaFactProps) {
   const t = useTranslation()
   return (

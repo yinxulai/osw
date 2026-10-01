@@ -14,7 +14,7 @@ import { useTranslation } from '@/i18n/provider'
  *
  * 选择即生效（不需要再点「确定」），但**切换失败就不收起**：
  * 收起弹窗等于替用户宣布「切好了」，而服务端可能刚拒绝这次写入 ——
- * 失败时留着弹窗，用户看到的就是「还停在原来那个上面」。
+ * 失败时留着弹窗，用户看到的还是当前生效的那一个。
  */
 export function RouteModeDialog() {
   const open = useRouteModeStore(state => state.dialogOpen)

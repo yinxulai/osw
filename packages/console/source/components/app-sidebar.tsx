@@ -171,7 +171,7 @@ export function AppSidebar(props: AppSidebarProps) {
           <section key={section.key}>
             {/*
              * 分组标题固定 16px 高：折叠态只藏文字、不塌陷高度，
-             * 这样 hover 展开时导航项不会整体上下跳（旧实现是 `h-2` ↔ `h-5` 动画）。
+             * 这样 hover 展开时导航项不会整体上下跳（高度动画会让下面每一项都跟着挪）。
              */}
             <div className="relative mb-1 flex h-4 items-center px-2.5">
               <h2 className={cn('absolute inset-x-2.5 top-1/2 -translate-y-1/2 system-2xs-medium-uppercase tracking-[1.2px] text-sidebar-foreground/60', revealClassName(expanded))}>

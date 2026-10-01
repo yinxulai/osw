@@ -33,8 +33,8 @@ interface ClientRowProps {
  * 单个客户端的生效在详情页里，那里能看到它要改的那几行。
  *
  * 三列事实**不带标签**：标签已经收进表头（`ClientListHeader`）只说一次。
- * 旧版把「配置状态 / 最近更新 / 历史版本」三个小标签印在**每一行**里，
- * 七行就等于把同一句话重复了 21 遍——这是这一版换掉它的唯一理由。
+ * 如果逐行再印一遍，七行就等于把同一句话重复 21 遍，每一行真正要看的「这一行改了什么」
+ * 反而被标签满屏的重复噪声盖住。
  */
 export function ClientRow(props: ClientRowProps) {
   const { item } = props

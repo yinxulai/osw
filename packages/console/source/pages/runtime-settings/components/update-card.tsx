@@ -16,14 +16,12 @@ type StatusBadgeProps = {
 }
 
 /**
- * 更新器是 contextBridge 暴露出来的跨进程对象。
+ * 更新器是 contextBridge 暴露出来的跨进程对象，只能经 `getPlatformCapabilities()` 取——
+ * 惰性探测一次并缓存整个对象，引用恒定。
  *
- * 原来是在渲染里现取（`typeof window !== 'undefined' ? window.electronAPI?.updater : undefined`）
- * 再把它写进 effect 的依赖数组。这种写法有两个问题：
- * 一是浏览器形态下根本没这个 API，二是跨进程对象的引用不保证稳定。
- * 一旦引用不稳定，下面的 effect 就会反复执行
+ * 引用必须恒定，且不能直接读 `window.electronAPI`：浏览器形态下根本没有这个 API，而跨进程
+ * 对象的引用不保证稳定。一旦引用不稳定，下面的 effect 就会反复执行
  * 「refresh() → setState → 重渲染 → 引用又变了 → 再 refresh()」，形成无终止的同步更新链。
- * `getPlatformCapabilities()` 惰性探测一次并缓存整个对象，引用恒定。
  */
 function getUpdater(): UpdaterAPI | undefined {
   return getPlatformCapabilities().updater ?? undefined

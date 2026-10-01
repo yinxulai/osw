@@ -57,9 +57,8 @@ export interface DeliveredAttemptInput extends AttemptConclusionInput {
   /**
    * 这次交付的正文形态（见 `BodyDeliveryShape`）。
    *
-   * 与旧实现相比，这里不再接收「交付完不完整」：那个事实已经随
-   * {@link HttpResponseSink.delivery} 从出口一起交出来——它是唯一知道「收尾跑完了没有」
-   * 的地方，调用方转述只会多一处可能说错的转述。
+   * 「交付完不完整」不在这里：那个事实已经随 {@link HttpResponseSink.delivery} 从出口
+   * 一起交出来——它是唯一知道「收尾跑完了没有」的地方，调用方转述只会多一处可能说错的转述。
    */
   readonly mode: BodyDeliveryShape
 }

@@ -139,8 +139,7 @@ function routeSummaryHint(t: AppTranslator, summary: RouteSummary): string | und
 }
 
 /**
- * 「查看日志」原来是个无边框的小幽灵按钮，飘在大块留白里，与标题不成一体。
- * 改成与标题同一行的 outline 按钮，并沿用侧边栏对 `/logs` 的称呼。
+ * 「查看日志」是与标题同一行的 outline 按钮，文案沿用侧边栏对 `/logs` 的称呼。
  * 用 `Link` 而不是 `navigate()`：深链本身可被中键/右键新开，跳转语义正确。
  */
 function RequestLogIdLink(props: RequestLogIdLinkProps) {

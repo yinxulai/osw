@@ -56,7 +56,7 @@ export async function listProviderModelsForLogicalModel(logicalModelRecordId: st
 async function readProviderModelsForLogicalModel(logicalModelRecordId: string, includeDeleted: boolean, includeDisabled: boolean): Promise<LogicalModelProviderModel[]> {
   // 这里必须分开取「绑定开关」与「模型本体开关」：两列同名（`scheduling_policies.enabled`
   // 与 `provider_models.enabled`），把策略行整行嵌进 select 时后者会被前者盖住——不是
-  // node:sqlite 折叠了列名，而是早先的实现直接写了 `enabled: model.enabled`。
+  // node:sqlite 折叠了列名，而是整行嵌入时后一个 `enabled` 覆盖了前一个。
   // 逻辑模型页的开关写的是绑定开关，列表要读同一列，否则刷新会把已关闭的绑定弹回去；
   // 同时还要把模型本体的开关带出去，界面才能把「模型已停用」和「这个逻辑模型没启用它」
   // 分开画——前者不会被调度。

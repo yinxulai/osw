@@ -19,7 +19,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 8. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
 9. **数据库结构以 Drizzle schema 为唯一代码定义；链上只保留一条从当前 schema 生成的基线，不提供兼容迁移。**
 10. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
-11. **表名统一为 `settings`，不再引入 `app_config` 作为数据库表名。**
+11. **数据库表名统一为 `settings`。**
 12. **领域前缀按对象边界使用：`provider*` 是配置身份，`client*` 是客户端一侧，`upstream*` 是实际远端 hop。**
 13. **请求级协议是 `clientProtocol`；每次 attempt 保存自己的 `upstreamProtocol`。**
 14. **一张表 = 一个视角。列名不带视角前缀——视角由表名唯一确定。**
@@ -514,9 +514,7 @@ CREATE INDEX idx_provider_endpoints_deleted_time
 
 `default` 是代理内部的兜底逻辑模型：客户端请求中的模型名没有命中其他逻辑模型时都由它处理，无需显式请求 `default`。它由初始化幂等创建，**`modelId` 固定为 `default`**，不可改名、不可删除，只有说明可编辑。
 
-除 `default` 之外，逻辑模型可以在控制台自由创建、改 `modelId`、改说明与软删除。删除只打 `deletedTime` 时间戳（§8），行留在表里——调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行；路由定义按 `modelId` 引用落点，历史请求日志只留当天的模型名快照。
-
-软删除只打 `deletedTime`（§8），行留在表里且 `modelId` 原样保留 —— 历史请求日志里的模型名快照要能对得上一条真实存在过的行；调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行。可删除的逻辑模型在删除时，它的调度绑定（该逻辑模型私有的编排）按记录 id 一并硬删除。
+除 `default` 之外，逻辑模型可以在控制台自由创建、改 `modelId`、改说明与软删除。删除只打 `deletedTime` 时间戳（§8），行留在表里且 `modelId` 原样保留——历史请求日志里的模型名快照要能对得上一条真实存在过的行；调度绑定按**记录 id** 引用逻辑模型，硬删会把它们变成悬空行。路由定义按 `modelId` 引用落点。可删除的逻辑模型在删除时，它的调度绑定（该逻辑模型私有的编排）按记录 id 一并硬删除。
 
 「模型名不许重复」的判据是**活跃行之间不许重复**，而不是「这个名字历史上出现过没有」。于是「删掉一个模型、再建一个同名的」是一次普通的成功，不需要在删除时把 `modelId` 改写成墓碑之类的把戏。这条规则由应用层把守（`logical-model-store.ts` 的 `assertLogicalModelIdAvailable`），因此 `logical_models` 上**没有** `modelId` 的唯一索引。
 
@@ -1386,7 +1384,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 7. 分域 Store 测试（`store-boundaries.test.ts`、各领域测试）；
 8. 供应商包导入导出逻辑（`packages/core/source/management/provider-transfer/`、`packages/contracts/source/provider-bundle.ts`）；
 9. Provider、模型、路由和统计相关 SQL；
-10. 删除旧版 Drizzle 迁移文件，生成新的首发基线；
+10. 生成首发基线（链上只保留这一条，见开头“发布策略”）；
 11. 数据文件名规则（`packages/contracts/source/database-file.ts`，两个角色各自的 schema 版本常量）及其在 `apps/app/source/index.ts`、`packages/core/source/database/index.ts` 之间的传递；测试用自己的临时目录与 `createDatabaseFileName(role)`，不再有共享的固定文件名常量；
 12. 数据库边界静态守卫 `packages/core/scripts/check-database-boundaries.mjs`（并入 `pnpm lint` 的编排）。
 

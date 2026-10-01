@@ -105,7 +105,7 @@ interface JsonContainer {
 /**
  * JSON 编辑器：**用解析结果读，用文本操作写**。
  *
- * 为什么不像以前那样把对象 `String` 化回去：`JSON.stringify(data, null, 2)` 只保证「值还在」，
+ * 为什么不把对象 `String` 化回去：`JSON.stringify(data, null, 2)` 只保证「值还在」，
  * 不保证「文件还是用户写的那一份」——它会把 4 空格或 Tab 压成 2 空格、吃掉空行与行尾空白、
  * 把末尾换行统一成一个。对一份别人（或者别的工具）也在编辑的 `settings.json` 来说，
  * 那就是改一个键留下一整份 diff。

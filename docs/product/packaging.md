@@ -199,12 +199,12 @@ osw/
 它的数据目录（`.osw-development`）会被反复重置、产物会被反复重打包，不该让这些
 实验污染用户真正在用的那一份密文。
 
-**历史遗留条目**：改名会留下不再被读、也不会被删的旧条目。本机登录钥匙串里曾有
-`one-switch Safe Storage`（仓库目录还叫 `one-switch` 时的 Electron 默认名）、
-`@osw/app Safe Storage`（包名曾是命名空间的旧约定）与 `OSW Safe Storage`。这些残留
-**不影响功能**——应用只查自己那一个 service 名，多余的条目只是噪音。清理按旧名执行
-`security delete-generic-password -s '<旧名>'`（会弹一次授权）；既然命名空间从
-`@osw/app` 改到了 `OSW`，旧密文本就解不开，留着作废的钥匙串项没有意义，清掉即可。
+**钥匙串条目的命名规约**：条目名是 `<app.name> Safe Storage`，只要 `app.name` 稳定，条目
+就稳定。用户机器上可能还留着以前用过的其他名字的条目（仓库名、旧的包名约定、旧的
+`productName` 都可能曾经当过命名空间）。这些残留**不影响功能**——应用只查自己那一个
+service 名，多余的条目只是噪音；想清理就按条目名执行
+`security delete-generic-password -s '<名字>'`（会弹一次授权）。旧名字下的密文本来也解不开
+（`safeStorage` 的密钥跟命名空间绑定），留着作废的钥匙串项没有意义，清掉即可。
 
 **为什么「每次都要求确认密码」与条目数量无关**：打包产物走的是 adhoc 签名
 （`identity: null` + `scripts/macos-adhoc-sign.cjs`），没有 Team ID，指定要求退化成一条裸
@@ -345,7 +345,7 @@ CLI 的 native 层需要一套独立文案（启动横幅、端口占用、数�
 
 打包形态只有上面**一种**：服务进程是 Electron 的 `utilityProcess`，走的是和主进程同一套模块加载路径（`fs` 上的 asar 补丁对它同样生效），于是 `service-main.mjs` 与其 chunk 直接住在 `app.asar/output/command/`，两者上溯层数天然一致，不需要任何刻意对齐。
 
-这也是从 `worker_threads` 搬家的根本原因：`worker_threads` 读不了 asar（Electron 只给主进程的 `fs` 装了 asar 解析，worker 线程没有这层补丁），所以才曾经不得不把服务代码与一份迁移基线摊到 `app.asar.unpacked/` 下，既多一层路径假设，又让产物分成两截。
+服务进程是 Electron 的 `utilityProcess`，不能是 `worker_threads`：后者读不了 asar（Electron 只给主进程的 `fs` 装了 asar 解析，worker 线程没有这层补丁），用它就只能把服务代码与一份迁移基线摊到 `app.asar.unpacked/` 下，既多一层路径假设，又让产物分成两截。
 
 `files` 里那两条排除模式（`!output/**/*.map`、`!node_modules`）**必须紧跟在 `output` 后面**：electron-builder 把连续的字符串项归一化成同一个 file set 的 `filter`，而每个 `{ from, to }` 项各自独立成一个 set；一旦排除项被 `{ from, to }` 隔开，它就退化成「只含排除项」的 set，而 `minimatchAll` 是逐个模式累进判定的，没有前置正向模式时排除项会静默失效。`!node_modules` 排除的是 `@osw/*` 那几包：它们以 `exports: "./source/*.ts"` 形态被 electron-builder 整包拷进 asar，里面只有 TS 源码与 `*.test.ts`，而 Vite 已经把要用的代码全部 bundle 进 `output/`（实测打包产物里 `@osw/` 的出现次数为 0），白白占掉约 3 MB / 29% 的 asar 体积。
 
@@ -406,7 +406,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 | Turbo 任务缓存 | `.turbo` | `turbo-cache`（默认开） | `release.yml` 的矩阵构建与 `ci.yml` 的 `Build application`：只有跑 `turbo run build` 的 job 会写（`pnpm build` / `pnpm release:*`），而 CI 的 typecheck / lint / test 由包内脚本直跑 |
 | ESLint 缓存 / tsc 增量信息 | `node_modules/.cache` | `tool-cache`（默认关） | `Lint`（`eslint . --cache`）与 `Typecheck`（`tsc --incremental`） |
 
-`ci.yml` **有** build job（`needs: [typecheck, test]`，跑 `pnpm build`，产物作为 `osw-build` 上传）。它曾经被删掉过，理由是「每 push 都打一遍只换来一份没人下载的 artifact」——但那是把两件事混成了一件：**CI 要回答的是「这次改动还能不能构建」**，而 `release.yml` 回答的是「发布产物对不对」。前者只有每次 push 都跑才有意义，后者只在发版时跑；产物路径、`entryFileNames`、`index.html` 里的模块引用这类错误，typecheck / lint / test 全绿也照样漏过去，只有真的跑一次 `pnpm build` 才看得见。上传的 `osw-build` 是打包的**输入**（`packages/console/output` + `apps/app/output` + `apps/cli/output`），不是可直接运行的安装包；要一个可下载、可运行的测试包走 `.github/workflows/test-build.yml`——手动触发，命令与 `release.yml` 完全相同，只是不创建 Release、不改版本号、不打标签。Worker 那边仍由 Cloudflare Workers Builds 里的 build 命令（与线上部署同参数）覆盖。
+`ci.yml` **有** build job（`needs: [typecheck, test]`，跑 `pnpm build`，产物作为 `osw-build` 上传）。它与 `release.yml` 回答的是两个不同的问题：**CI 要回答的是「这次改动还能不能构建」**，而 `release.yml` 回答的是「发布产物对不对」。前者只有每次 push 都跑才有意义，后者只在发版时跑；产物路径、`entryFileNames`、`index.html` 里的模块引用这类错误，typecheck / lint / test 全绿也照样漏过去，只有真的跑一次 `pnpm build` 才看得见。上传的 `osw-build` 是打包的**输入**（`packages/console/output` + `apps/app/output` + `apps/cli/output`），不是可直接运行的安装包；要一个可下载、可运行的测试包走 `.github/workflows/test-build.yml`——手动触发，命令与 `release.yml` 完全相同，只是不创建 Release、不改版本号、不打标签。Worker 那边仍由 Cloudflare Workers Builds 里的 build 命令（与线上部署同参数）覆盖。
 
 缓存一个命令根本不会创建的目录比不缓存更糟：`actions/cache` 在保存阶段报 `Path Validation Error`，job 白跑一趟，还占着日志让人以为缓存生效了——`typecheck` / `lint` / `test` 三个 job 的 `.turbo` 就属于这种情况，因此显式关掉。另一点是收益只出现在第二次运行（首次要写盘，约 15 s），所以 key 不能高频变化，否则等于每次都在付写入成本。本地冷热对照（同机、同一份工作树）：`tsc -p packages/toolkit/tsconfig.check.json` 16.7 s → 6.9 s；`eslint .` 6.1 s → 2.5 s（`pnpm lint` 整体只快一点，守卫脚本与 turbo/pnpm 启动占了大头）。electron-builder 的 Electron 二进制缓存（Windows 的 `%LOCALAPPDATA%\electron\Cache`、macOS 的 `~/Library/Caches/electron*`，每系统约 1.3 GB）**没有**纳入本次改动：Electron 压缩包从 CDN 下载是秒级的，而 Windows 87 s / macOS 91 s 的打包耗时主要在解压与封装本身，为它占掉一个可观份额的 10 GB 缓存配额不划算（未实测，只按量级判断）。
 
