@@ -1,0 +1,69 @@
+---
+title: 客户端配置
+description: 让 OSW 自动改写本机 AI 客户端的配置文件，含自动填充、应用与回退。
+keywords:
+  - 客户端配置
+  - 自动填充
+  - Base URL
+  - 回退
+---
+
+# 客户端配置
+
+**客户端配置**页让 OSW 直接改本机 AI 客户端的配置文件，省去手抄 Base URL 和模型名。
+
+## 支持的客户端
+
+| 客户端 | 协议 | 配置文件 |
+| --- | --- | --- |
+| Claude Code | Anthropic Messages | `~/.claude/settings.json`、凭据文件 |
+| Codex | OpenAI Responses | `~/.codex/config.toml`、`auth.json` |
+| OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json`、鉴权文件 |
+
+其它已知客户端（Cursor CLI、Copilot CLI 等）只提供**参考值**，需要你手动填。
+
+## 自动填充
+
+为一个客户端点**自动填充**：它会写接入地址，并把当前逻辑模型写成 `osw` 这个本地 provider 的模型。**每个客户端一次只写这一个**，它在 OSW 里是唯一的落点。
+
+<Callout title="一个客户端只写一份" type="note">
+自动填充不会遍历所有已配置的客户端，只处理你点的那个。要一次改多个，用下面的「全部生效」。
+</Callout>
+
+## 全部生效
+
+页头右上角的**全部生效**会一次性处理所有已配置且支持写入的客户端，成功后逐条给出结果。
+
+## 回退
+
+**每次写入前先备份**，并且每个客户端保留可回退的历史版本：
+
+- 点**回退**即可撤销自动填充，恢复原文件。
+- **历史版本**区域列出该客户端可回退到的时间点，可预览、手动选择，也可以删除不想留的备份。
+
+<Callout title="先备份再写" type="info">
+回退基于写入前留下的备份，所以第一次自动填充之前的原始内容一定还原得回来。
+</Callout>
+
+## 手动配置
+
+不想让 OSW 改文件，就手填这两行：
+
+```text
+Base URL: http://127.0.0.1:9300          # Anthropic 用这个，不要 /v1
+Base URL: http://127.0.0.1:9300/v1       # OpenAI 兼容用这个
+API Key:  任意非空字符串                    # 本地不校验，占位即可
+Model:    任意非空模型名                    # 不知道就用 default
+```
+
+<Callout title="API Key 只是占位" type="note">
+本机不校验鉴权，真正的密钥是按供应商注入的。客户端非要求一个 Key，就给个占位符。
+</Callout>
+
+## 验证
+
+配完在客户端里发一句话，然后去[请求记录](/request-logs)：出现这条请求就说明接上了。
+
+---
+
+请求进来之后，可能需要在路上做点改动——见[请求重写](/rewrite)。

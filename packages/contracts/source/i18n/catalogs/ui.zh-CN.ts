@@ -88,7 +88,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
 
   // ========== 模型诊断面板 ==========
   // 面板自身的界面文案进目录；表格里展示的诊断消息（服务端 `errorMessage`）保持英文原文，
-  // 见 `docs/product/i18n.md` §5「诊断 / 详情面板保留英文原文」。
+  // 见 `apps/docs/product/i18n.md` §5「诊断 / 详情面板保留英文原文」。
   'modelTest.title': '渠道诊断',
   'modelTest.description': '验证上游连通性与流式返回、测量 TTFT 与 TPS，覆盖协议转换链路',
   'modelTest.selection.title': '诊断范围',
@@ -2044,7 +2044,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'native.update.noneDownloadable': '当前没有可下载的更新',
 
   // ========== 命令行（终端输出） ==========
-  // 参数名与路径原样打印，不译；诊断消息仍固定英文（见 docs/product/i18n.md §2）。
+  // 参数名与路径原样打印，不译；诊断消息仍固定英文（见 apps/docs/product/i18n.md §2）。
   'native.cli.usage': '用法：osw [命令] [选项]',
   'native.cli.commands': '命令：',
   'native.cli.command.start': '启动服务（不写命令时的默认行为）',

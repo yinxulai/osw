@@ -12,7 +12,7 @@ export interface ModelSelectOutputField {
  * 逻辑模型选择节点交给下游的字段。
  *
  * 这个节点只交出**决策结果**，不产出模型回复 —— 真正的模型调用由代理按 `route.modelIds`
- * 里的逻辑模型配置完成（见 `docs/product/route-design.md` §2.6 的输出契约：由路由自身产生的
+ * 里的逻辑模型配置完成（见 `apps/docs/product/route-design.md` §2.6 的输出契约：由路由自身产生的
  * 数据一律写在 payload 顶层的 `route` 下，调用方的 `metadata` 引擎只读不写）。
  *
  * 两条字段都是**无条件**产出的，不随取值来源变：`route.modelIds` 是落点列表（空数组表示这次

@@ -497,7 +497,7 @@ export interface RunCapabilities {
 /**
  * 引擎写入 payload 的 `route` 命名空间：路由决策 + 决策依据。
  *
- * 设计约定（见 `docs/product/route-design.md`）：
+ * 设计约定（见 `apps/docs/product/route-design.md`）：
  * - `metadata` 里的内容归调用方所有，引擎只读不写；
  * - 决策结果（`modelIds`）与决策依据（协议、控制输入、迭代作用域）都放在 `route` 下；
  * - 过程性的调试数据（协议归一化结果、每个节点的判定明细）只进 trace，不进 payload；

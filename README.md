@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/design/brand/png/icon-256.png" width="128" height="128" alt="OSW" />
+  <img src="./apps/docs/design/brand/png/icon-256.png" width="128" height="128" alt="OSW" />
 </p>
 
 <h1 align="center">OSW</h1>
@@ -39,7 +39,7 @@ Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tie
 - **One entry point.** Clients only ever know one local address. Providers, accounts and models change behind it; nothing downstream ever has to be reconfigured again.
 - **Failure is normal.** Network hiccups, connection timeouts, rate limits, exhausted quotas, dead keys, upstream 5xx — a broken channel is the expected case, not the exception. Keeping you running through it is the product's job, not yours.
 - **Pass through by default.** No protocol parsing, no rewriting, no conversion unless you explicitly ask for it. The safest and fastest request is the one the proxy barely touches.
-- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS keychain, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay. The one exception is anonymous usage statistics, which are on by default and carry no request content — see [docs/product/telemetry.md](./docs/product/telemetry.md).
+- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS keychain, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay. The one exception is anonymous usage statistics, which are on by default and carry no request content — see [apps/docs/product/telemetry.md](./apps/docs/product/telemetry.md).
 - **Everything is on the record.** Which provider, which model, which attempt finally succeeded, how long it took, how fast the first token arrived, how many tokens it cost — every request leaves a trace you can query.
 
 ---
@@ -68,7 +68,7 @@ Download the installer for your platform from the [latest release](https://githu
 
 Once installed, OSW lives in the system tray and checks for updates itself. Windows and Linux download and install updates in place; on macOS the ad-hoc signature means it can only check for updates and open the DMG download page.
 
-Next: [Up and running in three steps](#up-and-running-in-three-steps).
+Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/docs`](./apps/docs) handbook (Chinese, built with [Clarify](https://github.com/taicode-labs/clarify)).
 
 ## Why it's worth installing
 
@@ -270,9 +270,9 @@ pnpm release:win     # build Windows arm64 / x64 installers
 pnpm release:linux   # build Linux arm64 / x64 installers
 ```
 
-The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
+The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a Clarify site, `pnpm --filter @osw/docs dev`), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
-Design goals, behaviour contracts and acceptance criteria have a single authority in [`docs/product/`](./docs/product/README.md); build and packaging details live in [packaging.md](./docs/product/packaging.md). Verbatim upstream API references are kept in [`docs/references/`](./docs/references/).
+Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/product/`](./apps/docs/product/README.md); build and packaging details live in [packaging.md](./apps/docs/product/packaging.md). Verbatim upstream API references are kept in [`apps/docs/references/`](./apps/docs/references/).
 
 ## Feedback
 

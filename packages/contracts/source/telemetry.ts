@@ -1,6 +1,6 @@
 /**
  * 上报接口契约：**客户端 → Worker 的报文格式**，也就是两端之间唯一的一份约定
- * （默认开启、界面上不提供开关，见 `docs/product/telemetry.md`）。
+ * （默认开启、界面上不提供开关，见 `apps/docs/product/telemetry.md`）。
  *
  * ## 这个接口只描述事实
  *
@@ -532,7 +532,7 @@ export type TelemetryBatch = z.infer<typeof TelemetryBatchSchema>
  *
  * 把每个信封字段钉到某家后端的某个概念上（`client_id` / `user_properties` / `device`…）的那份
  * 声明不能放在这里：一份 vendor 的表格放在双方的公共契约里，等于让「换一个存储」变成一次契约
- * 变更。换后端只写一个新的 sink 文件（见 `docs/product/telemetry.md` §6）。
+ * 变更。换后端只写一个新的 sink 文件（见 `apps/docs/product/telemetry.md` §6）。
  */
 
 // ========== 预览 ==========

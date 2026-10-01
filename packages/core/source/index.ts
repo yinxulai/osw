@@ -12,7 +12,7 @@ export type { ServerEndpoints, ShutdownHandshake }
  *
  * 刻意收得很窄：数据目录、端口、是否托管前端都在 `runtimeConfig` 里由宿主算好，
  * 这里只留「宿主实现的东西」（密钥存储、系统代理解析）和「只有命令行需要的握手」。
- * 桌面形态与命令行形态走的是同一条路径，差别只在这几个字段（见 `docs/product/packaging.md` §5）。
+ * 桌面形态与命令行形态走的是同一条路径，差别只在这几个字段（见 `apps/docs/product/packaging.md` §5）。
  */
 export interface StartServerOptions {
   runtimeConfig: RuntimeConfig

@@ -10,7 +10,7 @@ import { log } from './lib/log.mjs'
 // 直到想把 core 单独发布或想在 CLI 里复用时才发现拆不开。这里把
 // contract / core / console / cli / app 的依赖方向变成可执行的检查。
 //
-// 规则表（`RULES`）是声明式的：包边界见 docs/product/packaging.md §3，任何一次搬目录
+// 规则表（`RULES`）是声明式的：包边界见 apps/docs/product/packaging.md §3，任何一次搬目录
 // 或新包都要在同一份表里表达出来，边界被顺手弄脏会立刻失败。
 //
 // 与 check-proxy-layers.mjs 同一思路：静态 import 检查，新增文件自动纳入，不维护白名单。
@@ -53,7 +53,7 @@ const RULES = {
     summary: '控制台只通过管理 API 与核心通信，宿主能力走 platform 抽象层',
     forbiddenPackages: ['core', 'cli', 'app'],
     forbiddenSpecifiers: [
-      { pattern: /^electron$/, why: '控制台不得直接依赖 Electron，宿主能力见 docs/product/packaging.md §5.4' },
+      { pattern: /^electron$/, why: '控制台不得直接依赖 Electron，宿主能力见 apps/docs/product/packaging.md §5.4' },
     ],
   },
   api: {

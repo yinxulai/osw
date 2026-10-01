@@ -6,7 +6,7 @@ import { findAgentClient, findAgentClientFile, type AgentClientEnvOverride } fro
  * 把注册表里声明的那条 `~/` 路径展开成本机真实路径。
  *
  * 这条函数是**整个功能的安全边界**：管理 API 没有鉴权（只绑回环 + CORS 白名单，
- * 见 `docs/product/security-privacy.md`），所以「写哪个文件」绝不能由调用方给路径。
+ * 见 `apps/docs/product/security-privacy.md`），所以「写哪个文件」绝不能由调用方给路径。
  * 调用方只能给「客户端 key + 注册表里声明过的那条路径」，两者都对不上就没有路径可写。
  * 返回 `null` 即代表这次请求没有资格碰任何文件。
  *

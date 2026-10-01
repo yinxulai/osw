@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/design/brand/png/icon-256.png" width="128" height="128" alt="OSW" />
+  <img src="./apps/docs/design/brand/png/icon-256.png" width="128" height="128" alt="OSW" />
 </p>
 
 <h1 align="center">OSW</h1>
@@ -39,7 +39,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 - **一个入口。** 客户端只需要知道一个本地地址。供应商、账号、模型都在它后面换，下游再也不用跟着改。
 - **故障是常态。** 网络抖动、连接超时、限流、额度耗尽、密钥失效、上游 5xx —— 渠道会挂是预期内的事，不是意外。让你在渠道挂掉时继续干活，是产品该做的，不是你该做的。
 - **默认透传。** 不解析协议、不改写、不转换，除非你明确要求。最安全也最快的请求，是代理几乎没碰过的那一个。
-- **默认只在本地。** 默认只监听 `127.0.0.1`，密钥交给系统钥匙串，请求只发往你配置的上游。没有账号、没有云同步、没有中转。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容 —— 口径见 [docs/product/telemetry.md](./docs/product/telemetry.md)。
+- **默认只在本地。** 默认只监听 `127.0.0.1`，密钥交给系统钥匙串，请求只发往你配置的上游。没有账号、没有云同步、没有中转。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容 —— 口径见 [apps/docs/product/telemetry.md](./apps/docs/product/telemetry.md)。
 - **一切可查。** 实际走了哪个供应商、哪个模型、第几次尝试才成功、耗时多少、首字多快、消耗了多少 Token —— 每一次请求都留下可追溯的记录。
 
 ---
@@ -68,7 +68,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 
 装好后 OSW 常驻系统托盘，并会自己检查更新。Windows / Linux 上是下载后就地安装；macOS 因为签名状态，只能检查更新并跳到 DMG 下载页。
 
-装完接着看下面的[三步上手](#三步上手)。
+装完接着看下面的[三步上手](#三步上手)。想按功能逐项了解，见 [`apps/docs`](./apps/docs) 使用手册（基于 [Clarify](https://github.com/taicode-labs/clarify) 构建）。
 
 ## 为什么值得装
 
@@ -272,9 +272,9 @@ pnpm release:win     # 构建 Windows arm64 / x64 安装包
 pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 ```
 
-仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
+仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/docs` 是面向使用者的手册与仓库文档根（Clarify 站点，`pnpm --filter @osw/docs dev`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
 
-设计目标、行为契约和验收标准的唯一权威在 [`docs/product/`](./docs/product/README.md)，构建与打包细节见 [packaging.md](./docs/product/packaging.md)；上游 API 的逐字快照见 [`docs/references/`](./docs/references/)。
+设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/product/`](./apps/docs/product/README.md)，构建与打包细节见 [packaging.md](./apps/docs/product/packaging.md)；上游 API 的逐字快照见 [`apps/docs/references/`](./apps/docs/references/)。
 
 ## 反馈
 

@@ -13,7 +13,7 @@ import { run } from './lib/run.mjs'
 // 注意 `include` 的语义：`tsc` 对指向空气的条目**静默成功**（不报错、不提示，只是那份
 // 文件不再被检查），所以**改文件名时必须同步改它**。不要再为此加一道「校验每条 `include`
 // 都落到实文件」的前置检查：那是拿补丁替代约束，一旦开始加就加不完（见
-// docs/product/packaging.md §7 的工程约定）。
+// apps/docs/product/packaging.md §7 的工程约定）。
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 const main = async () => {
