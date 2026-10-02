@@ -1615,6 +1615,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'clientConfig.autoFill.unparsable': 'The content cannot be parsed, so values cannot be written automatically; edit the content below by hand.',
   'clientConfig.autoFill.unsupportedFormat': 'This format cannot be written automatically yet; edit the content below by hand.',
   'clientConfig.autoFill.unsupportedClient': 'This client has no base URL to point at the local service; edit the content below by hand.',
+  'clientConfig.autoFill.unsupportedEnvironment': 'This client supports only one provider, so the development build leaves it alone rather than overwrite your production configuration; edit the content below by hand.',
   'clientConfig.content.title': 'Config content',
   'clientConfig.content.exists': 'The file exists',
   'clientConfig.content.missing': 'The file does not exist yet; saving creates it.',
@@ -1714,21 +1715,18 @@ Score request size in a sandbox script, then route by score band to different lo
   // ========== 新用户引导 ==========
   // 引导是一条两步直线：拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
   // 选路不单独成步：内建默认已经在下，新手先跑起来，路由细节去「路由」页再调。
-  // 步骤名在步进器里单独出现、没有上下文，所以 label 要能独立成词；title 才是那一屏的完整问法。
+  // 不做步进器：两条直线的「现在在哪」由这一屏的标题（就是步骤名）回答，「将去哪」直接写进
+  // 「下一步」按钮（`onboarding.action.next` 带 `{step}`）——所以不再有 progressLabel 与
+  // step.*.title / description 这类与内容无关的元信息；只剩 `label`，一处措辞两处复用。
   'onboarding.eyebrow': 'Getting started',
   'onboarding.title': 'A working gateway in two steps',
-  'onboarding.progressLabel': 'Onboarding progress',
   'onboarding.action.previous': 'Back',
-  'onboarding.action.next': 'Next',
+  'onboarding.action.next': 'Next: {step}',
   'onboarding.action.skip': 'Skip',
   'onboarding.action.finish': 'Finish',
   'onboarding.topbar.language': 'Interface language',
-  'onboarding.step.models.label': 'Models',
-  'onboarding.step.models.title': 'Where do requests go?',
-  'onboarding.step.models.description': 'Pick a built-in provider to prefill the address, or start from scratch. Enter the API key, then fetch and tick the models to use.',
-  'onboarding.step.configure.label': 'Tools',
-  'onboarding.step.configure.title': 'Point your tools at this address',
-  'onboarding.step.configure.description': 'Fill these values into the client you already use, or let the Agent clients page write them for you. Requests then go out through the local service.',
+  'onboarding.step.models.label': 'Add a model',
+  'onboarding.step.configure.label': 'Point your tools here',
   'onboarding.models.addProvider': 'Add provider',
   'onboarding.models.customProvider': 'Custom provider',
   'onboarding.models.addModel': 'Add model',

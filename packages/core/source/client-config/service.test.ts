@@ -3,12 +3,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { parse } from 'yaml'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY, LOCAL_PROVIDER_NAME } from '@common/clients'
+import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY, LOCAL_PROVIDER_ID, LOCAL_PROVIDER_NAME, resolveLocalProviderIdentity } from '@common/clients'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import type { AppError } from '../errors'
 import { closeDatabases, initDatabases } from '../database'
 import { hashClientConfigContent } from '../database/client-config-version-store'
 import { updateSettings } from '../database/settings-store'
+import { configureClientConfigEnvironment, resetClientConfigEnvironment } from './environment'
 import {
   applyClientConfigDefaults,
   applyClientConfigOverrides,
@@ -123,6 +124,9 @@ const MODEL = { model: 'osw-model' }
 beforeEach(async () => {
   // 主目录说了算：把改道变量清空，写入才会落在本用例的临时目录里（见 `ENV_OVERRIDE_NAMES`）。
   for (const name of ENV_OVERRIDE_NAMES) vi.stubEnv(name, '')
+  // 环境身份是模块级状态（见 `environment.ts`），会跨用例留存：默认还原成正式，免得某条
+  // 「开发环境」用例把它留给后面的用例，让断言按另一套名字去校验。
+  resetClientConfigEnvironment()
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-client-config-'))
   mocks.home = temporaryDirectory
   await initDatabases(temporaryDirectory)
@@ -132,6 +136,7 @@ afterEach(async () => {
   await closeDatabases()
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
   mocks.home = ''
+  resetClientConfigEnvironment()
   vi.unstubAllEnvs()
 })
 
@@ -374,12 +379,12 @@ describe('applyClientConfigOverrides', () => {
     const content = readFile(CODEX_FILE)
 
     expect(content).toContain('model = "osw-model"')
-    expect(content).toContain('model_provider = "osw"')
+    expect(content).toContain(`model_provider = "${LOCAL_PROVIDER_ID}"`)
     expect(content).toContain('[model_providers.openai]')
-    expect(content).toContain(`[model_providers.osw]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"`)
+    expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"`)
     // 推理档位是用户自己的取舍，配方里显式放过了。
     expect(content).toContain('model_reasoning_effort = "high"')
-    expect(result.changes).toContainEqual({ path: 'model_providers.osw', before: null, after: expect.any(String) })
+    expect(result.changes).toContainEqual({ path: `model_providers.${LOCAL_PROVIDER_ID}`, before: null, after: expect.any(String) })
   })
 
   it('leaves a file that carries none of the fillable fields alone', async () => {
@@ -405,7 +410,7 @@ describe('applyClientConfigOverrides', () => {
     // provider 表项写进 models.json：baseUrl 带 `/v1`、models 是数组。
     expect(JSON.parse(readFile(PI_MODELS_FILE))).toEqual({
       providers: {
-        osw: {
+        [LOCAL_PROVIDER_ID]: {
           name: LOCAL_PROVIDER_NAME,
           baseUrl: 'http://127.0.0.1:9300/v1',
           api: 'openai-completions',
@@ -417,17 +422,17 @@ describe('applyClientConfigOverrides', () => {
 
     // settings.json 指到本地 provider，且保住了用户自己填的模型名。
     const settings = JSON.parse(readFile(PI_SETTINGS_FILE)) as Record<string, unknown>
-    expect(settings.defaultProvider).toBe('osw')
+    expect(settings.defaultProvider).toBe(LOCAL_PROVIDER_ID)
     expect(settings.defaultModel).toBe('my-model')
   })
 
   it('spells the opencode model with its provider prefix', async () => {
     await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...MODEL, smallModel: 'osw-small' })
     expect(JSON.parse(readFile(OPENCODE_FILE))).toEqual({
-      model: 'osw/osw-model',
-      small_model: 'osw/osw-small',
+      model: `${LOCAL_PROVIDER_ID}/osw-model`,
+      small_model: `${LOCAL_PROVIDER_ID}/osw-small`,
       provider: {
-        osw: {
+        [LOCAL_PROVIDER_ID]: {
           npm: '@ai-sdk/openai-compatible',
           name: LOCAL_PROVIDER_NAME,
           options: { baseURL: 'http://127.0.0.1:9300', apiKey: 'sk-osw' },
@@ -513,8 +518,7 @@ describe('applyClientConfigOverrides', () => {
       },
     ])
   })
-
-  it('rewrites only the osw entry and leaves the user other providers alone', async () => {
+  it('rewrites only the local provider entry and leaves the user other providers alone', async () => {
     writeFile(
       VSCODE_RESOLVED_FILE,
       JSON.stringify([
@@ -739,17 +743,18 @@ describe('applyClientConfigDefaults', () => {
   })
 
   it('keeps the model name the user picked, without doubling the prefix', async () => {
-    writeFile(OPENCODE_FILE, JSON.stringify({ model: 'osw/my-model' }))
+    writeFile(OPENCODE_FILE, JSON.stringify({ model: `${LOCAL_PROVIDER_ID}/my-model` }))
     await applyClientConfigDefaults('opencode')
 
     // 第二次会先把文件里的模型名读回来再写一遍；不去前缀就会变成 osw/osw/my-model。
     const [again] = await applyClientConfigDefaults('opencode')
 
     expect(again).toMatchObject({ status: 'unchanged', changeCount: 0 })
-    expect(JSON.parse(readFile(OPENCODE_FILE))).toMatchObject({ model: 'osw/my-model' })
+    expect(JSON.parse(readFile(OPENCODE_FILE))).toMatchObject({ model: `${LOCAL_PROVIDER_ID}/my-model` })
   })
 
-  it('reuses the model a codex config already names', async () => {    writeFile(CODEX_FILE, 'model = "gpt-5"\n')
+  it('reuses the model a codex config already names', async () => {
+    writeFile(CODEX_FILE, 'model = "gpt-5"\n')
 
     const [codex] = await applyClientConfigDefaults('codex')
 
@@ -758,7 +763,7 @@ describe('applyClientConfigDefaults', () => {
     expect(codex).toMatchObject({ status: 'applied' })
     const content = readFile(CODEX_FILE)
     expect(content).toContain('model = "gpt-5"')
-    expect(content).toContain('[model_providers.osw]')
+    expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]`)
   })
 
   it('fills the harness runtime settings with a route and a default model', async () => {
@@ -773,11 +778,11 @@ describe('applyClientConfigDefaults', () => {
       'llm-pi-ai'?: { providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string }> }> }
     }
 
-    // 新会话的默认路由指向本机服务提供方。
-    expect(settings['agent-default-model']).toMatchObject({ provider: LOCAL_PROVIDER_NAME.toLowerCase() })
+    // 新会话的默认路由指向本机服务提供方（表项键 = provider id）。
+    expect(settings['agent-default-model']).toMatchObject({ provider: LOCAL_PROVIDER_ID })
     // 手工声明的 provider 路由带上本机地址与 /v1，以及数组形态的模型清单。
-    expect(settings['llm-pi-ai']?.providers?.osw?.baseURL).toContain('127.0.0.1:9300/v1')
-    expect(settings['llm-pi-ai']?.providers?.osw?.models?.[0]).toMatchObject({ id: 'default' })
+    expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.baseURL).toContain('127.0.0.1:9300/v1')
+    expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.models?.[0]).toMatchObject({ id: 'default' })
   })
 
   it('is idempotent for the harness too: a second run has nothing to write', async () => {
@@ -811,5 +816,127 @@ describe('applyClientConfigDefaults', () => {
     // 注册表里每个客户端都有配方，所以「全部生效」不会跳过任何一个。
     expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['claude-code', 'codex', 'vscode', 'opencode', 'copilot-cli', 'pi', 'deepseek-harness'])
     expect(items.filter(item => item.status === 'skipped')).toEqual([])
+  })
+})
+
+describe('development environment', () => {
+  /** 开发实例该用的那一套身份；正式那套是 `LOCAL_PROVIDER_ID` / `LOCAL_PROVIDER_NAME`。 */
+  const DEVELOPMENT = resolveLocalProviderIdentity('development')
+
+  /** 开发环境装不下第二套 provider、会被忽略的两个客户端。 */
+  const SINGLE_PROVIDER_CLIENTS = ['claude-code', 'copilot-cli'] as const
+
+  it('writes the development provider name instead of the production one', async () => {
+    // 这条用例就是整个改动要守住的东西：客户端配置文件全机只有一份，开发实例必须写**自己的**
+    // 那一套名字。写正式的名字 = 用户真正在用的配置被改成指向 19300。
+    configureClientConfigEnvironment('development')
+
+    await applyClientConfigDefaults('codex')
+    const content = readFile(CODEX_FILE)
+
+    expect(content).toContain(`[model_providers.${DEVELOPMENT.id}]`)
+    expect(content).toContain(`[model_providers.${DEVELOPMENT.id}]\nname = "${DEVELOPMENT.name}"`)
+    expect(content).toContain(`model_provider = "${DEVELOPMENT.id}"`)
+    // 正式那一条表项不存在，连名字都不该出现。
+    expect(content).not.toContain(`[model_providers.${LOCAL_PROVIDER_ID}]`)
+    expect(content).not.toContain(`"${LOCAL_PROVIDER_NAME}"`)
+  })
+
+  it('lets the development entry live side by side with the production one', async () => {
+    // 多 provider 客户端的意义就在这里：两条表项共存，各指各的端口，谁都不用覆盖谁。
+    writeFile(
+      CODEX_FILE,
+      [`[model_providers.${LOCAL_PROVIDER_ID}]`, `name = "${LOCAL_PROVIDER_NAME}"`, 'base_url = "http://127.0.0.1:9300"', ''].join('\n'),
+    )
+
+    configureClientConfigEnvironment('development')
+    await applyClientConfigDefaults('codex')
+    const content = readFile(CODEX_FILE)
+
+    // 正式那一条原封不动。
+    expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"`)
+    // 开发那一条并排写进去。
+    expect(content).toContain(`[model_providers.${DEVELOPMENT.id}]`)
+  })
+
+  it('spells the opencode model prefix with the development provider id', async () => {
+    // 前缀是「那条表项」的键。前缀写 `osw/` 而表项叫 `osw-dev`，模型名就指到了正式那一条上去。
+    configureClientConfigEnvironment('development')
+
+    await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...MODEL, smallModel: 'osw-small' })
+    const config = JSON.parse(readFile(OPENCODE_FILE)) as {
+      model: string
+      small_model: string
+      provider: Record<string, unknown>
+    }
+
+    expect(config.model).toBe(`${DEVELOPMENT.id}/osw-model`)
+    expect(config.small_model).toBe(`${DEVELOPMENT.id}/osw-small`)
+    expect(Object.keys(config.provider)).toEqual([DEVELOPMENT.id])
+  })
+
+  it('leaves a development environment of its own behind, and still reads it back cleanly', async () => {
+    // 前缀随环境变，去前缀也得按**当前环境**去：读不回来就会在第二次点击时叠成 `osw-dev/osw-dev/xxx`。
+    configureClientConfigEnvironment('development')
+    await applyClientConfigDefaults('opencode')
+
+    const [again] = await applyClientConfigDefaults('opencode')
+
+    expect(again).toMatchObject({ status: 'unchanged', changeCount: 0 })
+  })
+
+  it('refuses to write a client that can hold only one provider, in every entry point', async () => {
+    // 这四种入口都可能在开发环境里被调到（界面按钮、列表页、接口直调），少拦一处就等于留了一个
+    // 「把用户正式配置改掉」的后门。所以逐个都断言，而不是只测最外层那一个。
+    configureClientConfigEnvironment('development')
+
+    const [defaults] = await applyClientConfigDefaults(CLAUDE)
+    expect(defaults).toMatchObject({ clientKey: CLAUDE, status: 'skipped', filePaths: [], changeCount: 0 })
+    expect(defaults!.message).toContain('development')
+    expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
+
+    expect((await readClientConfigFile(CLAUDE, CLAUDE_FILE)).autoFill).toBe('unsupported-environment')
+    expect(await overviewOf(CLAUDE)).toMatchObject({ coverage: 'unavailable', pendingChanges: 0 })
+    await expect(applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)).rejects.toMatchObject({ code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', statusCode: 400 })
+    await expect(previewClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)).rejects.toMatchObject({ code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', statusCode: 400 })
+    expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
+  })
+
+  it('skips exactly the clients that cannot hold a second provider when filling everything', async () => {
+    configureClientConfigEnvironment('development')
+
+    const items = await applyClientConfigDefaults()
+
+    expect(items.filter(item => item.status === 'skipped').map(item => item.clientKey)).toEqual([...SINGLE_PROVIDER_CLIENTS])
+    // 其余全部照常生效，只是写的是开发那一套名字。
+    expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['codex', 'vscode', 'opencode', 'pi', 'deepseek-harness'])
+    // 被跳过的客户端一个文件都没碰。
+    for (const clientKey of SINGLE_PROVIDER_CLIENTS) {
+      const files = AGENT_CLIENT_DEFINITION_BY_KEY[clientKey]!.files
+      for (const file of files) expect(fs.existsSync(fullPath(file.path))).toBe(false)
+    }
+  })
+
+  it('still refuses a claude-code file that a production run wrote, then leaves it alone', async () => {
+    // 真实场景：用户先用正式版跑过一次，`~/.claude/settings.json` 已经指向 9300；随后开开发版。
+    // 开发版必须**一动不动**——那正是用户每天在用、且不会被 19300 实例路由到的那份配置。
+    configureClientConfigEnvironment('production')
+    await applyClientConfigDefaults(CLAUDE)
+    const before = readFile(CLAUDE_FILE)
+
+    configureClientConfigEnvironment('development')
+    const [result] = await applyClientConfigDefaults(CLAUDE)
+
+    expect(result).toMatchObject({ status: 'skipped', changeCount: 0 })
+    expect(readFile(CLAUDE_FILE)).toBe(before)
+  })
+
+  it('answers the production identity again once the environment is reset', async () => {
+    // 模块级状态可被覆盖，所以默认值得能回去——否则测试之间会互相污染，正式构建也可能残留。
+    configureClientConfigEnvironment('development')
+    expect((await readClientConfigFile(CLAUDE, CLAUDE_FILE)).autoFill).toBe('unsupported-environment')
+
+    resetClientConfigEnvironment()
+    expect((await readClientConfigFile(CLAUDE, CLAUDE_FILE)).autoFill).toBe('ready')
   })
 })

@@ -28,6 +28,7 @@ import {
 } from '../database/client-config-version-store'
 import { getSettings } from '../database/settings-store'
 import { ConfigParseError, createConfigEditor, supportsAutoFill, type ConfigEditor } from './formats'
+import { clientSupportsCurrentEnvironment, currentLocalProviderIdentity } from './environment'
 import { resolveClientConfigPath } from './paths'
 import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, stripModelPrefix, type ClientApplyContext, type ClientApplyRule, type ClientFieldRole } from './rules'
 import { currentShellPlatform, defaultShellProfileCandidates, envFileHeader, managedBlock, resolveShellProfilePath, stripEnvFileHeader, upsertManagedBlock, type ShellPlatform } from './shell'
@@ -111,9 +112,12 @@ export async function readClientConfigFile(clientKey: string, filePath: string):
   }
 
   // 顺序即优先级：没有配方就没有「该填什么」这一说，格式能不能解析都无关。
+  // 「环境装不下」排在格式之后：格式能不能写是这份文件本身的事，而我们能不能写是环境的事——
+  // 前者更具体，说给用户听更近一步。
   const rule = getClientApplyRule(clientKey)
   if (!rule) return { ...base, autoFill: 'unsupported-client', detected: {} }
   if (!supportsAutoFill(target.file.format)) return { ...base, autoFill: 'unsupported-format', detected: {} }
+  if (!clientSupportsCurrentEnvironment(clientKey)) return { ...base, autoFill: 'unsupported-environment', detected: {} }
 
   const fields = agentClientFieldsOfFile(client, filePath)
 
@@ -323,7 +327,8 @@ function planClientConfigChanges(target: ClientConfigTarget, text: string, value
     const path = concreteProviderEntryPath(rule)
     const owned = path !== null && fields.some(field => rule.roles[field.key] === 'providerEntry')
     if (path && owned) {
-      const entry = rule.providerEntry.build(context)
+      // 路径与内容必须用**同一套身份**展开（VS Code 的路径就是展示名），否则会写成两条互不相认的表项。
+      const entry = rule.providerEntry.build(context, currentLocalProviderIdentity())
       const snapshot = editor.serialize()
       // 「改前」由编辑器回传（`get` 只认标量，读不到一个对象），但**算不算改动要看文本有没有变**：
       // 回传的是原文那一截、写进去的是规范写法，两者空白不同不等于值变了；
@@ -350,6 +355,13 @@ export async function applyClientConfigOverrides(clientKey: string, filePath: st
   if (!rule) {
     // 界面在 `autoFill === 'unsupported-client'` 时不会给出这个按钮，这里是兜底。
     throw new AppError('CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', 400, `Automatic filling is not available for ${client.name}`, {
+      details: { clientName: client.name },
+    })
+  }
+  // 兜底同上：开发环境装不下第二套 provider 的客户端，界面不会给按钮，但接口不该因为界面没拦就写下去。
+  // 这里拒绝得比「写进去」更严格是故意的——写错了是把用户正式的配置改掉，那没法自动恢复。
+  if (!clientSupportsCurrentEnvironment(clientKey)) {
+    throw new AppError('CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', 400, `Skipped in development: ${client.name} supports only one provider, so writing it would overwrite your production configuration`, {
       details: { clientName: client.name },
     })
   }
@@ -386,6 +398,12 @@ export async function previewClientConfigOverrides(clientKey: string, filePath: 
   const rule = getClientApplyRule(clientKey)
   if (!rule) {
     throw new AppError('CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', 400, `Automatic filling is not available for ${client.name}`, {
+      details: { clientName: client.name },
+    })
+  }
+  // 与写入同一条判断：预览就是「保存会写成什么」，不能在开发环境里演示一段它不会去写的内容。
+  if (!clientSupportsCurrentEnvironment(clientKey)) {
+    throw new AppError('CLIENT_CONFIG_CLIENT_NOT_SUPPORTED', 400, `Skipped in development: ${client.name} supports only one provider, so writing it would overwrite your production configuration`, {
       details: { clientName: client.name },
     })
   }
@@ -532,6 +550,9 @@ interface ClientConfigCoverageReport {
 async function readClientConfigCoverage(client: AgentClientDefinition, defaults: ClientConfigDefaults): Promise<ClientConfigCoverageReport> {
   const rule = getClientApplyRule(client.key)
   if (!rule) return { coverage: 'unavailable', pendingChanges: 0 }
+  // 开发环境装不下的客户端直接算「不可自动生效」：不能去跑 dry run——那个规划算的是「正式环境
+  // 会写成什么」，把它当成这一行的状态会让列表显示「待写入几项」，点下去却什么也不该发生。
+  if (!clientSupportsCurrentEnvironment(client.key)) return { coverage: 'unavailable', pendingChanges: 0 }
   const files = writableClientConfigFiles(client, rule)
   if (files.length === 0) return { coverage: 'unavailable', pendingChanges: 0 }
 
@@ -614,6 +635,19 @@ export async function applyClientConfigDefaults(clientKey?: string): Promise<Cli
         changeCount: 0,
         newVersions: 0,
         message: `Automatic filling is not available for ${client.name}`,
+      })
+      continue
+    }
+    // 开发环境装不下第二套 provider 的客户端在这里被**忽略**：写进去就是抢正式环境那一套。
+    // 这是「按用户要求跳过」而不是「出错」，所以在结果里同样算 `skipped`，与「本来就没有配方」同类。
+    if (!clientSupportsCurrentEnvironment(client.key)) {
+      items.push({
+        clientKey: client.key,
+        status: 'skipped',
+        filePaths: [],
+        changeCount: 0,
+        newVersions: 0,
+        message: `Skipped in development: ${client.name} supports only one provider, so writing it would overwrite your production configuration`,
       })
       continue
     }

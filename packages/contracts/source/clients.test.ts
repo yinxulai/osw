@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_CLIENT_DEFINITIONS,
   AGENT_CLIENT_DEFINITION_BY_KEY,
+  LOCAL_PROVIDER_ID,
+  LOCAL_PROVIDER_NAME,
   agentClientFieldFile,
   agentClientFieldsOfFile,
+  agentClientSupportsLocalProviderEntry,
+  expandLocalProviderTemplate,
   findAgentClient,
   findAgentClientFile,
   isKnownAgentClient,
+  resolveLocalProviderIdentity,
   type AgentClientDefinition,
   type AgentClientFieldDefinition,
 } from './clients'
@@ -209,6 +214,53 @@ describe('agent client registry', () => {
         }
       }
     }
+  })
+})
+
+describe('provider identity', () => {
+  it('keeps the development identity different from the production one', () => {
+    // 客户端配置文件全机只有一份，开发实例与正式实例会争同一个位置。同名就意味着互相覆盖。
+    const development = resolveLocalProviderIdentity('development')
+    const production = resolveLocalProviderIdentity('production')
+
+    expect(development.id).not.toBe(production.id)
+    expect(development.name).not.toBe(production.name)
+  })
+
+  it('matches the published constants on production', () => {
+    // 示例代码、文档与用户手抄的值都认这一对常量，所以正式环境的身价必须与它们逐字相同。
+    expect(resolveLocalProviderIdentity('production')).toEqual({ id: LOCAL_PROVIDER_ID, name: LOCAL_PROVIDER_NAME })
+  })
+
+  it('expands both placeholders and leaves everything else alone', () => {
+    const development = resolveLocalProviderIdentity('development')
+
+    expect(expandLocalProviderTemplate('model_providers.{{providerId}}', development)).toBe(`model_providers.${development.id}`)
+    expect(expandLocalProviderTemplate('{{providerName}}', development)).toBe(development.name)
+    // 认不出来的占位符原样留着——这里只替换自己那两个名字，不做通用模板引擎。
+    expect(expandLocalProviderTemplate('{{baseUrl}}', development)).toBe('{{baseUrl}}')
+    // 缺省（不带第二个参数）走正式那一套。
+    expect(expandLocalProviderTemplate('{{providerId}}')).toBe(LOCAL_PROVIDER_ID)
+  })
+
+  it('splits the registry into the clients that can hold a second provider and the ones that cannot', () => {
+    /*
+     * 这是「开发环境该跳过谁」的唯一判据，所以两边的名单都要钉住：
+     * 多出一半意味着开发实例会去写那些装不下第二套 provider 的客户端（抢正式的配置），
+     * 少一半意味着白白跳过了本来能并排写两个 provider 的客户端。
+     */
+    const holders = AGENT_CLIENT_DEFINITIONS.filter(client => agentClientSupportsLocalProviderEntry(client.key)).map(client => client.key)
+    const single = AGENT_CLIENT_DEFINITIONS.filter(client => !agentClientSupportsLocalProviderEntry(client.key)).map(client => client.key)
+
+    expect(holders.sort()).toEqual(['codex', 'deepseek-harness', 'opencode', 'pi', 'vscode'])
+    // 这两个的文件里没有任何地方能挂两套身份（Claude Code 的 `ANTHROPIC_*`、Copilot CLI 的 BYOK 变量），
+    // 所以开发实例只能忽略它们。
+    expect(single.sort()).toEqual(['claude-code', 'copilot-cli'])
+  })
+
+  it('answers false for an unknown client instead of throwing', () => {
+    expect(agentClientSupportsLocalProviderEntry('nope')).toBe(false)
+    expect(agentClientSupportsLocalProviderEntry('constructor')).toBe(false)
   })
 })
 

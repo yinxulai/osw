@@ -103,14 +103,14 @@ export interface AgentClientTemplateContext {
   model: string
   /** 用户选定的小模型（已回落到主模型）。 */
   smallModel: string
-  /** 见 `clients.ts` 的 `LOCAL_PROVIDER_ID`。 */
+  /** 本地 provider 的 id；见 `clients.ts` 的 `resolveLocalProviderIdentity`（随环境而变）。 */
   providerId: string
-  /** 见 `clients.ts` 的 `LOCAL_PROVIDER_NAME`。 */
+  /** 本地 provider 的展示名；见 `clients.ts` 的 `resolveLocalProviderIdentity`（随环境而变）。 */
   providerName: string
 }
 
 export interface AgentClientProviderEntryTemplate {
-  /** 表项路径的点号写法；`{{providerId}}` 会被换成本地 provider id。 */
+  /** 表项路径的点号写法；`{{providerId}}` / `{{providerName}}` 会被换成本地 provider 身份。 */
   path: string
   /** 表项骨架，键与值里的占位符在写入前统一替换。 */
   template: Record<string, AgentClientTemplateValue>
@@ -129,7 +129,13 @@ export interface AgentClientApplyConfig {
   roles: Record<string, AgentClientFieldRole>
   /** 明确放过、但确实属于这个客户端的键（有意的「不碰」清单）。 */
   ignored: string[]
-  /** 模型字段的值前缀，如 OpenCode 要求 `provider/model`。 */
+  /**
+   * 模型字段的值前缀，如 OpenCode 要求 `provider/model`。
+   *
+   * 是**模板**而非字面量：这里的 provider 就是本地身份本身，所以开发环境必须落成
+   * `osw-dev/`（见 `clients.ts` 的 `resolveAgentClientModelPrefix`）——写死 `osw/` 会让
+   * 开发环境写出的模型名指向正式那一条表项。
+   */
   modelPrefix?: string
   /** provider 表项的路径与模板。 */
   providerEntry?: AgentClientProviderEntryTemplate

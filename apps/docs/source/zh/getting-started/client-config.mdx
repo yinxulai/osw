@@ -38,6 +38,12 @@ Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）
 自动填充不会遍历所有已配置的客户端，只处理你点的那个。要一次改多个，用下面的「全部生成配置并应用」。
 </Callout>
 
+<Callout title="开发版写的是另一个 provider 名" type="note">
+客户端配置文件在本机只有一份，所以**开发版**（`pnpm dev` 起的那套）写进去的 provider 名与正式版不同：正式写 `osw` / `OSW`，开发写 `osw-dev` / `OSW Development`。这样两套环境可以并存，开发时点「生成配置」不会把你正在用的正式配置改到开发端口上去。
+
+一份配置里能并排放两条 provider 表项的客户端（Codex、OpenCode、VS Code、Pi、DeepSeek Harness）开发版写的是**另一条**表项；装不下第二套的（Claude Code、Copilot CLI）在开发版里会被**直接跳过**——这些客户端没有地方放第二套地址与模型，写进去只会覆盖正式的配置。被跳过时列表会标出「当前环境不支持」，你也可以在下方手动编辑。
+</Callout>
+
 ## 全部生成配置并应用
 
 页头右上角的**全部生成配置并应用**会一次性处理所有已配置且支持写入的客户端，成功后逐条给出结果。

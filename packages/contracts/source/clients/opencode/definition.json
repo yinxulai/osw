@@ -56,7 +56,7 @@
       "provider": "providerEntry"
     },
     "ignored": [],
-    "modelPrefix": "osw/",
+    "modelPrefix": "{{providerId}}/",
     "providerEntry": {
       "path": "provider.{{providerId}}",
       "template": {

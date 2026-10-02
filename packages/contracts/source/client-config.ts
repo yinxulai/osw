@@ -26,12 +26,12 @@ export type ClientConfigFormat = z.infer<typeof ClientConfigFormatSchema>
 /**
  * 自动填充在该文件上是否可用。
  *
- * `unparsable`、`unsupported-format` 与 `unsupported-client` 是三种不同的失败：
+ * `unparsable`、`unsupported-format`、`unsupported-client` 与 `unsupported-environment` 是四种不同的失败：
  * 分别是「内容坏了（用户自己写错了语法）」「这个格式我们还没有结构化写入器」
- * 与「这个客户端没有可指向本地服务的地址字段」——三种要用户做的事不一样（改语法 / 改手填 /
- * 换个客户端），所以不能合并成一句「不支持」。
+ * 「这个客户端没有可指向本地服务的地址字段」与「这个客户端装不下第二套 provider」——
+ * 四种要用户做的事不一样（改语法 / 改手填 / 换个客户端 / 用正式环境），所以不能合并成一句「不支持」。
  */
-export const ClientConfigAutoFillSchema = z.enum(['ready', 'unparsable', 'unsupported-format', 'unsupported-client'])
+export const ClientConfigAutoFillSchema = z.enum(['ready', 'unparsable', 'unsupported-format', 'unsupported-client', 'unsupported-environment'])
 export type ClientConfigAutoFill = z.infer<typeof ClientConfigAutoFillSchema>
 
 // ========== 文件当前状态 ==========

@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, LayoutGrid, Plug, type LucideIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
 import { routePaths } from '@/routing/routes'
 import { useAppUiStore } from '@/store/app-ui-store'
@@ -13,9 +12,9 @@ import { AddModelStep } from './steps/add-model-step'
 import { ConfigureStep } from './steps/configure-step'
 
 interface OnboardingStep {
+  /** 这一步的名字，也是唯一的一处措辞：它同时是这一屏的标题与「下一步」按钮上的去向。 */
   labelKey: UiCatalogKey
-  titleKey: UiCatalogKey
-  descriptionKey: UiCatalogKey
+  icon: LucideIcon
   render: () => ReactNode
 }
 
@@ -35,14 +34,12 @@ interface OnboardingStep {
 const STEPS: OnboardingStep[] = [
   {
     labelKey: 'onboarding.step.models.label',
-    titleKey: 'onboarding.step.models.title',
-    descriptionKey: 'onboarding.step.models.description',
+    icon: LayoutGrid,
     render: () => <AddModelStep />,
   },
   {
     labelKey: 'onboarding.step.configure.label',
-    titleKey: 'onboarding.step.configure.title',
-    descriptionKey: 'onboarding.step.configure.description',
+    icon: Plug,
     render: () => <ConfigureStep />,
   },
 ]
@@ -64,6 +61,10 @@ export const ONBOARDING_ACTION_BAR_CLEARANCE = 76
  *
  * 完成标记存本地（见 `app-ui-store`），不进服务端设置：它回答的是「这台机器上这个人见没见过」，
  * 换台机器、换个用户，该重新讲一遍。
+ *
+ * 版面不做 step 展示：只有两步的一条直线不需要步进器，也不需要「第 N 步 / 共 2 步」这种
+ * 与内容无关的元信息。现在在哪（这一屏的标题就是这一步的名字）、将去哪、能不能回头，
+ * 全部写在标题与底部按钮上，用户不必先读懂一套骨架才能开始干活。
  */
 export function OnboardingPage() {
   const [index, setIndex] = useState(0)
@@ -72,7 +73,9 @@ export function OnboardingPage() {
   const t = useTranslation()
 
   const step = STEPS[index]
+  const nextStep = STEPS[index + 1]
   const isLast = index === STEPS.length - 1
+  const StepIcon = step.icon
 
   /**
    * 收尾。「跳过」与「完成」走同一条路，区别只在 `skipped`：把不能跳过的东西做成引导，
@@ -85,61 +88,27 @@ export function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-8 px-6 pt-16">
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 px-6 pt-16">
       <header className="space-y-1.5">
         <p className="system-2xs-medium text-text-accent">{t('onboarding.eyebrow')}</p>
         <h1 className="system-xl-semibold text-text-primary">{t('onboarding.title')}</h1>
       </header>
 
-      {/* 进度条本身就是可点的回头路：走过头了要能回到第一步改模式，而不是退出重来。 */}
-      <ol aria-label={t('onboarding.progressLabel')} className="flex items-center gap-2">
-        {STEPS.map((item, itemIndex) => {
-          const done = itemIndex < index
-          const current = itemIndex === index
-          return (
-            <li key={item.labelKey} className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                aria-current={current ? 'step' : undefined}
-                // 只挡还没走到的步骤：已走过的可以点回去，当前这一步点了是空操作，但不该被说成不可用。
-                disabled={itemIndex > index}
-                onClick={() => setIndex(itemIndex)}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-2 py-1 system-xs-medium transition-colors',
-                  done && 'text-text-secondary hover:bg-state-base-hover-alt hover:text-text-primary',
-                  current && 'bg-secondary text-text-primary',
-                  !done && !current && 'text-text-quaternary',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex size-4 shrink-0 items-center justify-center rounded-full system-2xs-medium',
-                    current ? 'bg-state-accent-solid text-primary-foreground' : 'bg-secondary text-text-tertiary',
-                  )}
-                >
-                  {itemIndex + 1}
-                </span>
-                <span className="truncate">{t(item.labelKey)}</span>
-              </button>
-              {itemIndex < STEPS.length - 1 && (
-                <span aria-hidden className="h-px w-4 shrink-0 bg-border" />
-              )}
-            </li>
-          )
-        })}
-      </ol>
-
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="system-md-semibold text-text-primary">{t(step.titleKey)}</h2>
-          <p className="system-xs-regular text-text-tertiary">{t(step.descriptionKey)}</p>
+      {/* 这一屏的标题就是这一步的名字：内容自己会说话，不必再挂一句「第几步」的注脚。 */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <StepIcon aria-hidden className="size-4 text-text-tertiary" />
+          <h2 className="system-md-semibold text-text-primary">{t(step.labelKey)}</h2>
         </div>
         {step.render()}
-      </div>
+      </section>
 
       {/*
        * 操作条吸附在底部：第二步的内容比一屏高，而「完成」是这一屏唯一的出口 ——
        * 让它随内容滚到屏幕外，用户读完最后一张表还得先找回按钮在哪。
+       *
+       * 状态与步骤名都写在按钮上：「下一步」直接写着下一步是谁，回头路上也有「上一步」，
+       * 于是不必再摆一条步进器来表达「现在在哪、将去哪」——那是同一件事说两遍。
        */}
       <footer className="sticky bottom-0 -mx-6 mt-auto flex items-center gap-2 border-t border-module-border bg-background px-6 py-4">
         <Button
@@ -154,6 +123,11 @@ export function OnboardingPage() {
         <Button variant="ghost" size="sm" onClick={() => finish(true)}>
           {t('onboarding.action.skip')}
         </Button>
+        {/*
+          最右边这颗按钮同时承担「状态」与「步骤名」：没走完时写「下一步：<下一步的名字>」，
+          走完时写「完成」。于是这一屏不需要步进器，也不需要「第 N 步 / 共 2 步」的注脚 ——
+          现在在哪、再往前是什么、走完会怎样，都在这一颗按钮上。
+        */}
         <div className="ml-auto">
           {isLast ? (
             <Button size="sm" onClick={() => finish(false)}>
@@ -161,7 +135,7 @@ export function OnboardingPage() {
             </Button>
           ) : (
             <Button size="sm" onClick={() => setIndex(current => current + 1)}>
-              {t('onboarding.action.next')}
+              {t('onboarding.action.next', { step: t(nextStep.labelKey) })}
               <ArrowRight />
             </Button>
           )}

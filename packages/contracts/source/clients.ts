@@ -45,6 +45,7 @@ import type {
   AgentClientTemplateContext,
   AgentClientTemplateValue,
 } from './clients/types'
+import type { RuntimeEnvironment } from './runtime-profile'
 
 /**
  * 我们写进客户端配置里的 provider 身份。
@@ -52,8 +53,46 @@ import type {
  * 是**我们自己**在别人配置里的名字，所以它属于契约：core 拿它拼 provider 表项的路径与内容，
  * 控制台拿它拼需要展示的模型名，两边必须说同一个字符串。
  */
+export interface LocalProviderIdentity {
+  /** provider 表项的 id / 键（`model_providers.<id>`）。 */
+  id: string
+  /** 展示名（provider 表项的 `name` / `displayName`）。 */
+  name: string
+}
+
+/** 生产环境的身份，也是所有「没说要哪套环境」的调用点的默认值。 */
 export const LOCAL_PROVIDER_ID = 'osw'
 export const LOCAL_PROVIDER_NAME = 'OSW'
+
+/**
+ * 每种环境各一套身份——**开发环境必须换一个名字**。
+ *
+ * 客户端配置文件是**全机只有一份**的（`~/.codex/config.toml`、`~/.pi/agent/*.json`…），
+ * 开发实例与正式实例跑在同一台机器上时，如果两边写同一个 provider 名，后写的那次会直接
+ * 覆盖前一次的落点：开发时点一下「生成配置」，用户真正在用的正式配置就被改到 19300 端口去了，
+ * 而且改回来要靠记忆。所以开发环境写 `osw-dev` / `OSW Development`，与正式的那一份
+ * **并排共存**在同一份配置文件里，互不覆盖。
+ *
+ * 名字与 `runtime-profile.ts` 里开发环境的 `applicationName`（`OSW Development`）对齐——
+ * 同一台机器上的两套环境本来就该用同一套命名。多一个 `-dev` 后缀是因为 provider id 要当
+ * 配置文件里的**键**用（`model_providers.osw-dev`），带空格的名字做不了键。
+ */
+const LOCAL_PROVIDER_IDENTITIES: Record<RuntimeEnvironment, LocalProviderIdentity> = {
+  development: { id: 'osw-dev', name: 'OSW Development' },
+  production: { id: LOCAL_PROVIDER_ID, name: LOCAL_PROVIDER_NAME },
+}
+
+/** 「没说要哪套环境」时的身份：正式环境那份。 */
+export const LOCAL_PROVIDER_IDENTITY: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITIES.production
+
+export function resolveLocalProviderIdentity(environment: RuntimeEnvironment): LocalProviderIdentity {
+  return LOCAL_PROVIDER_IDENTITIES[environment]
+}
+
+/** 把 `{{providerId}}` / `{{providerName}}` 换成某套身份的实际值。 */
+export function expandLocalProviderTemplate(value: string, identity: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITY): string {
+  return value.replaceAll('{{providerId}}', identity.id).replaceAll('{{providerName}}', identity.name)
+}
 
 export type {
   AgentClientApplyConfig,
@@ -148,6 +187,21 @@ export function agentClientApplyConfigKeys(): string[] {
 }
 
 /**
+ * 这个客户端能不能在**同一份配置文件**里再放一条本地 provider 表项。
+ *
+ * 这就是「支持多 provider」的判据：配方里有 `providerEntry` 的客户端，开发环境的身份会落成
+ * 另一条表项（`model_providers.osw-dev`），与正式那一条并排存在，两边互不覆盖。
+ *
+ * 没有 `providerEntry` 的客户端（Claude Code 的 `ANTHROPIC_*`、Copilot CLI 的
+ * `COPILOT_PROVIDER_*`）在一份配置里只装得下**唯一一套**地址与模型：开发环境写进去就是抢
+ * 正式环境的位置，而这两个文件里也没有任何地方能用来区分两套身份。所以它们在开发环境里
+ * 被跳过（见 core 的 `client-config/environment.ts`）——宁可不写，也不能把用户正在用的正式配置改掉。
+ */
+export function agentClientSupportsLocalProviderEntry(clientKey: string): boolean {
+  return findAgentClientApplyConfig(clientKey)?.providerEntry !== undefined
+}
+
+/**
  * 表单上要用户填的模型槽位，固定「主模型在前、小模型在后」。
  *
  * 从配方**推**出来，而不是写死「永远两行」：配方里没有 `smallModel` 的客户端就只该出现一行；
@@ -165,13 +219,25 @@ export function agentClientModelSlots(config: AgentClientApplyConfig): AgentClie
  * 一个槽位可能对应多个键（Claude Code 的主模型有五个别名），取**声明顺序里第一个有值的**：
  * 顺序即优先级，与写入时「所有别名写同一个值」这件事同源。
  */
-export function resolveAgentClientSlotValue(config: AgentClientApplyConfig, detected: Record<string, string>, role: AgentClientModelSlot): string {
+export function resolveAgentClientSlotValue(config: AgentClientApplyConfig, detected: Record<string, string>, role: AgentClientModelSlot, identity: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITY): string {
   for (const fieldKey of Object.keys(config.roles)) {
     if (config.roles[fieldKey] !== role) continue
     const value = detected[fieldKey]
-    if (value !== undefined && value.trim() !== '') return stripAgentClientModelPrefix(config, value)
+    if (value !== undefined && value.trim() !== '') return stripAgentClientModelPrefix(config, value, identity)
   }
   return ''
+}
+
+/**
+ * 这个客户端要求模型值带的前缀（`{{providerId}}/`）；没有前缀返回 `null`。
+ *
+ * 前缀是**模板**而不是字面量：OpenCode 只认 `provider/model`，那个 provider 就是本地身份，
+ * 于是开发环境的前缀必须是 `osw-dev/`——写死 `osw/` 会让开发环境写进去的模型名指向正式那一条表项。
+ */
+export function resolveAgentClientModelPrefix(config: AgentClientApplyConfig, identity: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITY): string | null {
+  const prefix = config.modelPrefix
+  if (prefix === undefined || prefix === '') return null
+  return expandLocalProviderTemplate(prefix, identity)
 }
 
 /**
@@ -180,16 +246,16 @@ export function resolveAgentClientSlotValue(config: AgentClientApplyConfig, dete
  * 回填输入框时必须还原文：OpenCode 只认 `provider/model`，把读回来的整串再写回去会变成
  * `osw/osw/gpt-5`。
  */
-export function stripAgentClientModelPrefix(config: AgentClientApplyConfig, value: string): string {
-  const prefix = config.modelPrefix
-  if (prefix === undefined || prefix === '' || !value.startsWith(prefix)) return value
+export function stripAgentClientModelPrefix(config: AgentClientApplyConfig, value: string, identity: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITY): string {
+  const prefix = resolveAgentClientModelPrefix(config, identity)
+  if (prefix === null || !value.startsWith(prefix)) return value
   return value.slice(prefix.length)
 }
 
 /** provider 表项在该客户端上的具体路径（把 `{{providerId}}` / `{{providerName}}` 换成真实值）。 */
-export function concreteAgentClientProviderEntryPath(config: AgentClientApplyConfig): string | null {
+export function concreteAgentClientProviderEntryPath(config: AgentClientApplyConfig, identity: LocalProviderIdentity = LOCAL_PROVIDER_IDENTITY): string | null {
   if (!config.providerEntry) return null
-  return config.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID).replaceAll('{{providerName}}', LOCAL_PROVIDER_NAME)
+  return expandLocalProviderTemplate(config.providerEntry.path, identity)
 }
 
 const TEMPLATE_PLACEHOLDER = /\{\{(\w+)\}\}/g

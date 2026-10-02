@@ -46,6 +46,8 @@ const state = vi.hoisted(() => {
     savePayload: null as { files: { filePath: string; content: string }[] } | null,
     generatePayload: null as { filePaths: readonly string[]; model: string } | null,
     mutated: { restore: 0 },
+    // 服务端说这个客户端在当前环境下能不能写；默认 `ready`（正式环境，都能写）。
+    autoFill: 'ready' as ClientConfigFileState['autoFill'],
   }
 })
 
@@ -91,7 +93,7 @@ vi.mock('@/data/client-config', () => ({
       contentHash: `hash-${state.baseContent[filePath] ?? ''}`,
       sizeBytes: (state.baseContent[filePath] ?? '').length,
       modifiedTime: 1700000000000,
-      autoFill: 'ready',
+      autoFill: state.autoFill,
       detected: { model: 'old' },
     } satisfies ClientConfigFileState,
     loading: false,
@@ -131,6 +133,7 @@ import { useClientConfigEditor } from './use-client-config-editor'
 beforeEach(() => {
   state.savePayload = null
   state.generatePayload = null
+  state.autoFill = 'ready'
   mutated.restore = 0
 })
 
@@ -232,6 +235,23 @@ describe('useClientConfigEditor (multi-file)', () => {
     expect(result.current.valuesFile?.filePath).toBe('~/.demo/settings.json')
     expect(result.current.configurable).toBe(true)
     expect(result.current.slots).toBe(1)
+  })
+
+  it('hides the generate and save affordances when the server says the environment cannot hold it', () => {
+    /*
+     * 开发实例里一份配置装不下第二套 provider 的客户端，服务端会跳过它（`autoFill` 报
+     * `unsupported-environment`）。这条信号就是控制台唯一的判据：界面不能一边摆着「生成配置」
+     * 与保存按钮，一边等着用户点下去才告诉他「开发环境不会写这个客户端」——那正是「界面与接口
+     * 各说各话」的样子。图片同源：`canGenerate` 与 `configurable` 一起收起来。
+     */
+    state.autoFill = 'unsupported-environment'
+
+    const { result } = renderHook(() => useClientConfigEditor('demo'))
+
+    expect(result.current.canGenerate).toBe(false)
+    expect(result.current.configurable).toBe(false)
+    // 文件本身照常读得到、也照常能手改——被忽略的只是「自动写入」。
+    expect(result.current.files[0]?.state?.autoFill).toBe('unsupported-environment')
   })
 
   it('generates the config for every file into drafts, without writing anything', () => {

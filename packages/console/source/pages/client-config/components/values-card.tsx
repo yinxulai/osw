@@ -214,13 +214,14 @@ function ModelField(props: ModelFieldProps) {
 }
 
 /**
- * 写不了的时候要说清是哪一种（语法坏了 / 格式不支持 / 这个客户端没有可指的地方），
- * 三种要用户做的事完全不一样。写得了的文件不给提示——下方内容跟着动就是那句提示本身。
+ * 写不了的时候要说清是哪一种（语法坏了 / 格式不支持 / 这个客户端没有可指的地方 / 当前环境装不下第二套
+ * provider），四种要用户做的事完全不一样。写得了的文件不给提示——下方内容跟着动就是那句提示本身。
  */
 const AUTO_FILL_HINT_KEYS: Partial<Record<ClientConfigAutoFill, UiCatalogKey>> = {
   unparsable: 'clientConfig.autoFill.unparsable',
   'unsupported-format': 'clientConfig.autoFill.unsupportedFormat',
   'unsupported-client': 'clientConfig.autoFill.unsupportedClient',
+  'unsupported-environment': 'clientConfig.autoFill.unsupportedEnvironment',
 }
 
 /** 槽位在表单上的行标题。 */

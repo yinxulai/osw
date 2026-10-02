@@ -20,13 +20,14 @@ const COVERAGE_KEYS: Record<ClientConfigCoverage, UiCatalogKey> = {
 }
 
 /**
- * 「不可自动生效」的三种原因各有各的下一步，所以文案分开写，
+ * 「不可自动生效」的原因各有各的下一步，所以文案分开写，
  * 而不是统一说一句「不支持」让用户自己去猜。
  */
 const UNAVAILABLE_REASON_KEYS: Record<Exclude<ClientConfigAutoFill, 'ready'>, UiCatalogKey> = {
   unparsable: 'clientConfig.autoFill.unparsable',
   'unsupported-format': 'clientConfig.autoFill.unsupportedFormat',
   'unsupported-client': 'clientConfig.autoFill.unsupportedClient',
+  'unsupported-environment': 'clientConfig.autoFill.unsupportedEnvironment',
 }
 
 /**

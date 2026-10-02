@@ -38,6 +38,12 @@ Click **Auto-fill** for a client: it writes the access address and sets the curr
 Auto-fill does not walk every configured client — only the one you clicked. To change several at once, use "Generate & apply all" below.
 </Callout>
 
+<Callout title="The development build writes a different provider name" type="note">
+A client's config file exists only once per machine, so the **development build** (`pnpm dev`) writes a different provider name than the production build: production writes `osw` / `OSW`, development writes `osw-dev` / `OSW Development`. That is what lets the two run side by side — clicking "Generate config" while developing no longer rewrites the production config you are actually using onto the development port.
+
+Clients whose config can hold two provider entries side by side (Codex, OpenCode, VS Code, Pi, DeepSeek Harness) get the **other** entry written in development. Clients that cannot (Claude Code, Copilot CLI) are **skipped entirely** in development — there is nowhere to put a second address and model, so writing one would only overwrite your production config. Skipped clients are flagged as unsupported in this environment; you can still edit them by hand below.
+</Callout>
+
 ## Generate & apply all
 
 **Generate & apply all** in the top-right of the page header handles every configured client that supports writing, in one pass, and reports the result of each.

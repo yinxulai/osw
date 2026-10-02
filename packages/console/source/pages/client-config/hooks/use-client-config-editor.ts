@@ -176,6 +176,13 @@ export function useClientConfigEditor(clientKey: string): ClientConfigEditor {
   const applyConfig = findAgentClientApplyConfig(clientKey)
   const slots = applyConfig ? agentClientModelSlots(applyConfig) : []
 
+  /*
+   * 这个客户端在当前环境下是不是被服务端「忽略」了（开发实例里一份配置装不下第二套 provider 的客户端）。
+   * 判据只看服务端回话里的 `autoFill`，控制台不去猜环境：写入端拒绝它的原因正是这一条，
+   * 拿同一个信号决定按钮在不在，界面与接口就不会各说各话（点了只换来一个错误提示）。
+   */
+  const environmentBlocked = fileEntries.some(entry => entry.state?.autoFill === 'unsupported-environment')
+
   // 模型是客户端级的：任一份文件里选定的模型，对整页生效（改的其实是同一组值）。
   const model = Object.values(fresh.drafts).find(fileDraft => fileDraft.values)?.values?.model ?? ''
 
@@ -324,12 +331,12 @@ export function useClientConfigEditor(clientKey: string): ClientConfigEditor {
     discardFile,
     generateConfig,
     generating: generate.isPending,
-    canGenerate: applyConfig !== null,
+    canGenerate: applyConfig !== null && !environmentBlocked,
     dirtyFilePaths,
     saveAll,
     saving: saveMany.isPending,
     slots: slots.length,
-    configurable: slots.length > 0,
+    configurable: slots.length > 0 && !environmentBlocked,
     model,
     valuesFile,
     draftReset,

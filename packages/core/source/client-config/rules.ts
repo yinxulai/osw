@@ -14,16 +14,22 @@
 
 import {
   AGENT_CLIENT_DEFINITIONS,
-  LOCAL_PROVIDER_ID,
-  LOCAL_PROVIDER_NAME,
   expandAgentClientTemplate,
+  expandLocalProviderTemplate,
   findAgentClientApplyConfig,
   type AgentClientApplyConfig,
   type AgentClientFieldRole,
   type AgentClientTemplateContext,
 } from '@common/clients'
+import { currentLocalProviderIdentity } from './environment'
 
-export { LOCAL_PROVIDER_ID, LOCAL_PROVIDER_NAME }
+/**
+ * 这套 provider 身份本轮要用的实际值。
+ *
+ * **不是常量**：开发环境与正式环境在同一台机器上必须写不同的 provider 名，否则后写的那次会
+ * 覆盖前一次（见 `./environment.ts`）。所有涉及身份的展开都从这里取。
+ */
+export type ClientApplyIdentity = ReturnType<typeof currentLocalProviderIdentity>
 
 /** 见 `AgentClientFieldRole`：注册表字段在自动填充时的角色。 */
 export type ClientFieldRole = AgentClientFieldRole
@@ -42,24 +48,24 @@ export interface ClientApplyRule {
   roles: Record<string, ClientFieldRole>
   /** 明确放过、但确实属于这个客户端的键（有意的「不碰」清单）。 */
   ignored: string[]
-  /** provider 表项的路径与结构；路径里的 `{{providerId}}` 由调用方替换。 */
+  /** provider 表项的路径与结构；路径里的占位符由展开时的身份替换。 */
   providerEntry?: {
     path: string
-    build: (context: ClientApplyContext) => Record<string, unknown>
+    build: (context: ClientApplyContext, identity: ClientApplyIdentity) => Record<string, unknown>
   }
-  /** 模型字段的值前缀，如 OpenCode 要求 `provider/model`。 */
+  /** 模型字段的值前缀**模板**（如 `{{providerId}}/`）；展开时按身份替换。 */
   modelPrefix?: string
 }
 
 /** 模板展开用的实值：配方里的占位符与它一一对应。 */
-function templateContext(context: ClientApplyContext): AgentClientTemplateContext {
+function templateContext(context: ClientApplyContext, identity: ClientApplyIdentity): AgentClientTemplateContext {
   return {
     baseUrl: context.baseUrl,
     apiKey: context.apiKey,
     model: context.model,
     smallModel: context.smallModel,
-    providerId: LOCAL_PROVIDER_ID,
-    providerName: LOCAL_PROVIDER_NAME,
+    providerId: identity.id,
+    providerName: identity.name,
   }
 }
 
@@ -71,7 +77,7 @@ function toRule(config: AgentClientApplyConfig): ClientApplyRule {
     const { path, template } = config.providerEntry
     rule.providerEntry = {
       path,
-      build: context => expandAgentClientTemplate(template, templateContext(context)) as Record<string, unknown>,
+      build: (context, identity) => expandAgentClientTemplate(template, templateContext(context, identity)) as Record<string, unknown>,
     }
   }
   return rule
@@ -96,24 +102,31 @@ export function getClientApplyRuleKeys(): string[] {
  * 一个键最终要写什么值。
  *
  * 返回 `null` 表示**这个键本次不写**（例如小模型没填、角色是 `providerEntry` 由表项路径承载）。
+ * `identity` 省略时取当前环境的身份（见 `./environment.ts`）——开发环境因此写的是 `osw-dev`。
  */
-export function resolveFieldValue(role: ClientFieldRole, context: ClientApplyContext, rule: ClientApplyRule): string | boolean | null {
+export function resolveFieldValue(role: ClientFieldRole, context: ClientApplyContext, rule: ClientApplyRule, identity: ClientApplyIdentity = currentLocalProviderIdentity()): string | boolean | null {
   switch (role) {
     case 'baseUrl':
       return context.baseUrl
     case 'apiKey':
       return context.apiKey
     case 'model':
-      return `${rule.modelPrefix ?? ''}${context.model}`
+      return `${resolveModelPrefix(rule, identity)}${context.model}`
     case 'smallModel':
-      return `${rule.modelPrefix ?? ''}${context.smallModel}`
+      return `${resolveModelPrefix(rule, identity)}${context.smallModel}`
     case 'provider':
-      return LOCAL_PROVIDER_ID
+      return identity.id
     case 'flagTrue':
       return true
     case 'providerEntry':
       return null
   }
+}
+
+/** 模型字段的值前缀：配方里是模板，按身份展开（OpenCode 开发环境落成 `osw-dev/`）。 */
+export function resolveModelPrefix(rule: ClientApplyRule, identity: ClientApplyIdentity = currentLocalProviderIdentity()): string {
+  if (rule.modelPrefix === undefined) return ''
+  return expandLocalProviderTemplate(rule.modelPrefix, identity)
 }
 
 /**
@@ -122,11 +135,12 @@ export function resolveFieldValue(role: ClientFieldRole, context: ClientApplyCon
  * 路径本身也是模板：多数客户端用 `{{providerId}}` 当键（`model_providers.osw`），但
  * 「条目数组」形状的客户端（VS Code 的 `chatLanguageModels.json`）**以 `name` 字段当标识**，
  * 所以它的路径写 `{{providerName}}`（`OSW`），必须与模板里那个 `name` 字面相等才会命中同一条。
- * 两个占位符都换掉，两种写法因此都能用。
+ * 两个占位符都换掉，两种写法因此都能用——也因此必须**一起**按同一套身份展开，否则路径与内容会
+ * 指向两条不同的表项。
  */
-export function concreteProviderEntryPath(rule: ClientApplyRule): string | null {
+export function concreteProviderEntryPath(rule: ClientApplyRule, identity: ClientApplyIdentity = currentLocalProviderIdentity()): string | null {
   if (!rule.providerEntry) return null
-  return rule.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID).replaceAll('{{providerName}}', LOCAL_PROVIDER_NAME)
+  return expandLocalProviderTemplate(rule.providerEntry.path, identity)
 }
 
 /**
@@ -135,8 +149,8 @@ export function concreteProviderEntryPath(rule: ClientApplyRule): string | null 
  * 一键生效要「沿用用户已经选好的模型名」，而读回来的值是带前缀的（OpenCode 只认
  * `provider/model`），不脱掉前缀再写回去就会变成 `osw/osw/xxx`。
  */
-export function stripModelPrefix(rule: ClientApplyRule, value: string): string {
-  const prefix = rule.modelPrefix
+export function stripModelPrefix(rule: ClientApplyRule, value: string, identity: ClientApplyIdentity = currentLocalProviderIdentity()): string {
+  const prefix = resolveModelPrefix(rule, identity)
   if (!prefix || !value.startsWith(prefix)) return value
   return value.slice(prefix.length)
 }

@@ -4,6 +4,7 @@ import type { SecretStore } from '@common/secret-store'
 import type { TelemetryServiceFailureReason } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
+import { configureClientConfigEnvironment } from '../client-config/environment'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { configureCoreNetworkConnector, resetCoreNetworkConnector } from '../infrastructure/network/core-network'
 import { configureOutboundConnector, createOutboundConnector, destroyOutboundConnector, type SystemProxyResolver } from '../infrastructure/network/outbound-connector'
@@ -73,6 +74,11 @@ export class ServerRuntime {
       resetManualModels()
       configureSecretStore(this.options.secretStore)
       configureSettingsDefaults({ listenHost: config.proxyHost, listenPort: config.proxyPort })
+      // 开发实例与正式实例跑在同一台机器上，写的是**同一份**客户端配置文件（`~/.codex/config.toml`…）。
+      // 所以「写进客户端配置的 provider 叫什么」必须随环境变，否则开发时点一下「生成配置」就把
+      // 用户正在用的正式配置改掉了（见 `../client-config/environment.ts`）。与 POD 无关，只是把
+      // 这个启动期事实交给模块——和上一行的 `configureSettingsDefaults` 是同一种做法。
+      configureClientConfigEnvironment(config.environment)
       configureShutdownHandshake(this.options.shutdown ?? null)
       installLogCapture()
       // 单实例必须排在数据库之前：两个进程同时打开同一对 SQLite 文件是这套架构里

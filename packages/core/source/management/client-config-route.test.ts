@@ -10,6 +10,7 @@ import type {
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { closeDatabases, initDatabases } from '../database'
+import { resetClientConfigEnvironment } from '../client-config/environment'
 import { clientConfigRoutes } from './routes/operations/client-config'
 
 /**
@@ -37,6 +38,9 @@ interface SuccessBody<T> {
 }
 
 beforeEach(async () => {
+  // 路由用例走的是**默认（正式）**环境：写入按注册表里的文件与正式那一套身份来。
+  // 这里显式还原一次，免得同进程里别的用例把模块级环境改成开发版（那会让 claude-code 被跳过）。
+  resetClientConfigEnvironment()
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-client-config-route-'))
   mocks.home = temporaryDirectory
   await initDatabases(temporaryDirectory)
@@ -46,6 +50,7 @@ afterEach(async () => {
   await closeDatabases()
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
   mocks.home = ''
+  resetClientConfigEnvironment()
 })
 
 function fileBody(): Record<string, unknown> {

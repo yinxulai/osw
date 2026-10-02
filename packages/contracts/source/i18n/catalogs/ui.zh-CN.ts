@@ -1617,6 +1617,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'clientConfig.autoFill.unparsable': '内容无法解析，因而无法自动写入；请在下方手动编辑。',
   'clientConfig.autoFill.unsupportedFormat': '暂不支持自动写入这个格式，请在下方手动编辑内容。',
   'clientConfig.autoFill.unsupportedClient': '这个客户端没有可指向本地服务的地址配置，请在下方手动编辑内容。',
+  // 这一条只在开发实例里出现：开发环境的 provider 身份必须与正式不同，而这个客户端一份配置里
+  // 只能装一套，写进去就是抢正式那一套的位置。所以要交代的不是「坏了」，而是「为了不动你正式的配置，这里不写」。
+  'clientConfig.autoFill.unsupportedEnvironment': '这个客户端只能配一个 provider，开发环境不写入它，以免覆盖你的正式配置；请在下方手动编辑。',
   'clientConfig.content.title': '配置内容',
   'clientConfig.content.exists': '文件已存在',
   'clientConfig.content.missing': '文件还不存在，保存时会新建。',
@@ -1711,21 +1714,18 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // ========== 新用户引导 ==========
   // 引导是一条两步直线：拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
   // 选路不单独成步：内建默认已经在下，新手先跑起来，路由细节去「路由」页再调。
-  // 步骤名在步进器里单独出现、没有上下文，所以 label 要能独立成词；title 才是那一屏的完整问法。
+  // 不做步进器：两条直线的「现在在哪」由这一屏的标题（就是步骤名）回答，「将去哪」直接写进
+  // 「下一步」按钮（`onboarding.action.next` 带 `{step}`）——所以不再有 progressLabel 与
+  // step.*.title / description 这类与内容无关的元信息；只剩 `label`，一处措辞两处复用。
   'onboarding.eyebrow': '新手引导',
   'onboarding.title': '两步搭好本地网关',
-  'onboarding.progressLabel': '引导进度',
   'onboarding.action.previous': '上一步',
-  'onboarding.action.next': '下一步',
+  'onboarding.action.next': '下一步：{step}',
   'onboarding.action.skip': '跳过',
   'onboarding.action.finish': '完成',
   'onboarding.topbar.language': '界面语言',
-  'onboarding.step.models.label': '模型',
-  'onboarding.step.models.title': '请求发到哪里？',
-  'onboarding.step.models.description': '选一个内置供应商把地址填好，也可以从零开一个；填上 API Key，然后拉取并勾选要用的模型。',
-  'onboarding.step.configure.label': '接工具',
-  'onboarding.step.configure.title': '把工具指到这个地址',
-  'onboarding.step.configure.description': '填进你正在用的客户端，或者交给客户端配置页代抄，请求就会经过本地服务。',
+  'onboarding.step.models.label': '添加模型',
+  'onboarding.step.configure.label': '接入工具',
   'onboarding.models.addProvider': '添加供应商',
   'onboarding.models.customProvider': '自定义供应商',
   'onboarding.models.addModel': '添加模型',
