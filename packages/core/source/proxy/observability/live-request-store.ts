@@ -42,14 +42,7 @@ import {
  */
 
 // 保留口径（事件条数、分块预览字符数、保留区条数与时长）统一来自 `@server/realtime/retention`
-// ——那块内存该占多少只有一处事实来源，这里不再各自 `const` 一遍。原样再导出，是为了让
-// 「读台账上限」的既有调用方不必改 import 路径。
-export {
-  MAX_CHUNK_PREVIEW_CHARACTERS,
-  MAX_EVENTS_PER_REQUEST,
-  MAX_SETTLED_REQUESTS,
-  SETTLED_TTL_MILLISECONDS,
-}
+// ——那块内存该占多少只有一处事实来源，这里不再各自 `const` 一遍。
 
 interface LiveRequestRecord {
   id: string

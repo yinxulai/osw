@@ -8,7 +8,7 @@ const RECONNECT_BASE_MILLISECONDS = 500
 const RECONNECT_MAX_MILLISECONDS = 5_000
 
 /** 一条长活流的读法：建立连接，解析出的每条消息回调给 `onMessage`；返回的 Promise 在流结束时 resolve。 */
-export interface StreamReader<Message> {
+interface StreamReader<Message> {
   (args: { signal: AbortSignal; onMessage: (message: Message) => void }): Promise<void>
 }
 
