@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { log } from '../../../packages/toolkit/scripts/lib/log.mjs'
+import { waitForConsoleServer } from './lib/console-dev-server.mjs'
 
 // 宿主开发会话。
 //
@@ -37,20 +38,6 @@ let restartTimer = null
 let shuttingDown = false
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
-
-/** 控制台的 dev server 起来之前，Electron 只会加载到失败页，所以先等它。 */
-async function waitForConsoleServer() {
-  for (let attempt = 1; attempt <= 240; attempt += 1) {
-    try {
-      const response = await fetch(consoleDevUrl)
-      if (response.status < 500) return
-    } catch {
-      // 还没监听：继续等
-    }
-    await sleep(500)
-  }
-  throw new Error(`Console dev server is not reachable at ${consoleDevUrl}`)
-}
 
 /** 本包四份产物的就绪信号。缺一个就不用起 Electron 了。 */
 async function waitForBundles() {
@@ -183,7 +170,8 @@ async function main() {
   log.title('OSW development')
   log.info(`host: ${path.relative(repositoryRoot, appDirectory)}`)
 
-  await waitForConsoleServer()
+  log.info('waiting for console dev server ...')
+  await waitForConsoleServer({ consoleDevUrl })
   log.info('console dev server is ready')
 
   startViteWatchers()

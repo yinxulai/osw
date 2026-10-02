@@ -8,6 +8,13 @@ const SCREENSHOT_HEIGHT = 800
 const SCREENSHOT_PIXEL_WIDTH = SCREENSHOT_WIDTH * 2
 const SCREENSHOT_PIXEL_HEIGHT = SCREENSHOT_HEIGHT * 2
 const CAPTURE_SETTLE_MILLISECONDS = 1800
+/** 页面「真的画出来了」的等待上限；超时即失败，不拍空白页。 */
+const CAPTURE_READY_TIMEOUT_MILLISECONDS = 20000
+/** 探测脚本单次调用的等待上限：渲染进程主线程被同步 IPC 卡住时它永远不会返回。 */
+const RENDER_PROBE_TIMEOUT_MILLISECONDS = 2000
+const CAPTURE_READY_POLL_MILLISECONDS = 100
+/** 图片还没加载完也允许开拍的时刻（避免一张坏图把整轮导出拖死）。 */
+const CAPTURE_READY_IMAGE_GRACE_MILLISECONDS = 6000
 
 type ScreenshotLocale = 'en' | 'zh-CN'
 type ScreenshotTheme = 'light' | 'dark'
@@ -152,7 +159,114 @@ async function initializeExportWindow(target: BrowserWindow, baseUrl: string): P
   `)
 }
 
+/** 渲染进程主线程被同步 IPC 卡住时的哨兵：探测调用永远不 settle。 */
+const RENDERER_UNRESPONSIVE = Symbol('renderer-unresponsive')
+
+export interface CaptureReadiness {
+  hasRuntime: boolean
+  rootChildren: number
+  pendingImages: number
+}
+
+/**
+ * 一帧样本的判定结果。
+ *
+ *   - `empty`：页面还没画出来（preload 没跑完，或 React 还没挂载）；
+ *   - `content`：有内容了，但还有可见图片没加载完，且宽限期没过——再等等；
+ *   - `ready`：可以拍了。
+ *
+ * 拆成三档而不是布尔：调用方需要区分「什么都没等到」（要报错）与「等到了内容但图片慢」
+ * （可以先将就着拍）。合成一个布尔的话，前者就必须靠另一个变量记着，那个变量正是漏掉检查的入口。
+ */
+export type CaptureVerdict = 'empty' | 'content' | 'ready'
+
+/**
+ * 这一帧够不够开拍。
+ *
+ * 前两条缺一不可：`apiBase` 已注入说明 preload 真的跑完了（`sendSync` 拿到了宿主应答），
+ * `#root` 有子节点说明 React 挂载了。原版只看 `document.fonts.ready` 加一个固定延时，
+ * 渲染进程被卡住时照样一路放行，截出来一整批空白图且不报错——这两条就是那个教训的落点。
+ *
+ * 图片那一项可以通融：宽限期一过就先拍，一张坏图不该把整轮导出拖死。
+ */
+export function evaluateCapture(sample: CaptureReadiness, imagesSettled: boolean): CaptureVerdict {
+  if (!sample.hasRuntime || sample.rootChildren === 0) return 'empty'
+  return sample.pendingImages === 0 || imagesSettled ? 'ready' : 'content'
+}
+
+/**
+ * 探一次「页面到底画出来没有」。
+ *
+ * 单次探测用 `Promise.race` 限时：**主线程被卡住时 `executeJavaScript` 的 promise 永远不 settle**，
+ * 不设上限的话这里会取代原来那个 bug，变成另一种「卡住」。
+ */
+async function measureCaptureReadiness(target: BrowserWindow): Promise<CaptureReadiness> {
+  // 超时那一支要显式标成哨兵类型：`delay` 是 `Promise<void>`，直接写进 `race` 会让推断结果
+  // 带上 `void`，后面的哨兵比较就成了「永远为假的窄化」而不是一个真的联合分支。
+  const unresponsive = delay(RENDER_PROBE_TIMEOUT_MILLISECONDS).then(
+    (): typeof RENDERER_UNRESPONSIVE => RENDERER_UNRESPONSIVE,
+  )
+
+  const measured = await Promise.race([
+    target.webContents.executeJavaScript(`
+      (() => {
+        const root = document.querySelector('#root')
+        const images = Array.from(document.images).filter(image => {
+          const style = getComputedStyle(image)
+          return style.display !== 'none' && style.visibility !== 'hidden'
+        })
+        return {
+          hasRuntime: Boolean(window.__OSW__ && window.__OSW__.apiBase),
+          rootChildren: root ? root.childElementCount : 0,
+          pendingImages: images.filter(image => !(image.complete && image.naturalWidth > 0)).length,
+        }
+      })()
+    `) as Promise<CaptureReadiness>,
+    unresponsive,
+  ])
+
+  if (measured === RENDERER_UNRESPONSIVE) {
+    throw new Error(
+      'screenshot page is unresponsive: a synchronous IPC in preload never returned. '
+      + 'The host must register `runtime:get-config` before any window is created.',
+    )
+  }
+  return measured
+}
+
+/**
+ * 等页面「真的画完了」，等到就返回，等不到就抛。
+ *
+ * 原版只等 `document.fonts.ready` + 两帧 rAF + 固定 1800ms，**完全不检查页面渲染没渲染**。
+ * 于是渲染进程被卡住时（例如 preload 的 `sendSync` 没有监听者，主线程永久阻塞）这段代码照样
+ * 一路返回，24 张图全从一个死渲染进程上抓，出来一片空白，还一句错都不报——现象就是
+ * 「脚本像跑完了、截出来却什么都没有」，或者干脆卡在别处。现在改成轮询等真实内容：
+ * `__OSW__` 已注入（preload 跑完了）、`#root` 有子节点（React 挂载了）、可见图片都加载完。
+ *
+ * 等不到就抛：宁可红着退出，也不产出一批假图。
+ */
 async function waitForCaptureReady(target: BrowserWindow): Promise<void> {
+  const deadline = Date.now() + CAPTURE_READY_TIMEOUT_MILLISECONDS
+  const imageDeadline = Date.now() + CAPTURE_READY_IMAGE_GRACE_MILLISECONDS
+  let last: CaptureReadiness = { hasRuntime: false, rootChildren: 0, pendingImages: 0 }
+  let observedContent = false
+
+  while (Date.now() < deadline) {
+    last = await measureCaptureReadiness(target)
+    const verdict = evaluateCapture(last, Date.now() >= imageDeadline)
+    if (verdict !== 'empty') observedContent = true
+    if (verdict === 'ready') break
+    await delay(CAPTURE_READY_POLL_MILLISECONDS)
+  }
+
+  if (!observedContent) {
+    const seconds = Math.round(CAPTURE_READY_TIMEOUT_MILLISECONDS / 1000)
+    throw new Error(
+      `screenshot page did not render within ${seconds}s (apiBase=${last.hasRuntime}, root children=${last.rootChildren})`,
+    )
+  }
+
+  // 字体与第一帧动画都落定以后再抓；上面已经确认过有内容，这里只是让取景稳定。
   await target.webContents.executeJavaScript(`
     Promise.all([
       document.fonts?.ready ?? Promise.resolve(),

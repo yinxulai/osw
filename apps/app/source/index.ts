@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, nativeTheme, ipcMain, dialog, session, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, ipcMain, dialog, session } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,6 +23,18 @@ import { UpdaterManager, type UpdateState } from './updater'
 import { nativeTranslator, startNativeLanguageSync } from './i18n'
 import { installWindowShortcuts } from './window-actions'
 import { exportWebsiteScreenshots, type ScreenshotExportProgress } from './screenshot-export'
+import {
+  WINDOW_BACKGROUND,
+  WINDOW_TITLEBAR_HEIGHT,
+  applyWindowTheme,
+  registerExternalLinkIpc,
+  registerNativeThemeSync,
+  registerOpenDataDirectoryIpc,
+  registerRuntimeConfigIpc,
+  registerWindowFullScreenEvents,
+  registerWindowFullScreenIpc,
+  registerWindowThemeIpc,
+} from './host-ipc'
 // Vite 将 build/icon.png 打包为 data URL，避免运行时路径解析问题。
 // Windows 任务栏/窗口图标需要位图，PNG 可被 nativeImage 直接识别。
 import windowIconPng from '../build/icon.png?url'
@@ -110,56 +122,6 @@ function registerUpdaterIpc() {
   ipcMain.handle('updater:open-releases', () => updater.openReleasesPage())
 }
 
-/**
- * 控制台请求用系统默认方式打开外部链接（`PlatformCapabilities.openExternal`）。
- *
- * 只放行 `https:`：渲染进程发过来的字符串不能直接交给 `shell.openExternal`，
- * 否则 `file:` / 自定义协议会被当成命令执行。
- */
-function registerExternalLinkIpc(): void {
-  ipcMain.on('open-external', (_event, url: unknown) => {
-    if (typeof url !== 'string' || !url.startsWith('https://')) {
-      console.warn('[osw] refused to open external url', url)
-      return
-    }
-    void shell.openExternal(url).catch(error => {
-      console.error('[osw] failed to open external url', formatError(error))
-    })
-  })
-}
-
-/**
- * 渲染进程取运行时信息。
- *
- * 预加载脚本用 `sendSync` 读一次，所以这里必须用 `event.returnValue` 而不是 `ipcMain.handle`：
- * 渲染进程从 `file://` 加载，靠页面 URL 推不出管理服务在哪儿，得在第一个请求之前拿到基地址。
- * handler 在模块顶层注册，早于任何窗口创建，同步调用不会死等。
- */
-function registerRuntimeConfigIpc(): void {
-  ipcMain.on('runtime:get-config', event => {
-    event.returnValue = {
-      apiBase: runtimeProfile.managementApiUrl,
-    }
-  })
-}
-
-/**
- * 用系统文件管理器打开数据目录（`PlatformCapabilities.openDataDirectory`）。
- *
- * 目录**不带参数**、由这里自己取 `app.getPath('userData')`：渲染进程送过来的路径不能直接
- * 交给 `shell.openPath`，那等于把「打开任意目录」这个能力交回给了页面。这也是唯一正确的
- * 来源——数据目录就落在 userData 上（见文件顶部的 `app.setPath`）。
- *
- * 失败用 reject 回去而**不是**吞掉：调用方要能告诉用户「没打开」，否则按钮看起来像是点了没反应。
- */
-function registerOpenDataDirectoryIpc(): void {
-  ipcMain.handle('open-data-directory', async () => {
-    const target = app.getPath('userData')
-    const failure = await shell.openPath(target)
-    if (failure) throw new Error(failure)
-  })
-}
-
 let screenshotExportPromise: Promise<{ count: number; outputDirectory: string }> | null = null
 
 /**
@@ -201,12 +163,16 @@ const isPrimaryInstance = app.requestSingleInstanceLock()
 
 if (isPrimaryInstance) {
   registerUpdaterIpc()
+  // 宿主 IPC 面与无头补拍入口共用一份（见 `host-ipc.ts`）。这里传的是主进程这一侧独有的东西：
+  // 运行时基地址由本进程的档决定；系统主题变化只补主窗口——托盘面板是透明窗口
+  // （backgroundColor '#00000000'），`setBackgroundColor` 会把透明底换成实色，砸掉面板的浮层观感。
+  // 面板的亮暗由渲染层的 `prefers-color-scheme` 跟着变，不依赖这里的底色。
   registerExternalLinkIpc()
-  registerRuntimeConfigIpc()
+  registerRuntimeConfigIpc(runtimeProfile.managementApiUrl)
   registerOpenDataDirectoryIpc()
   registerScreenshotExportIpc()
   registerWindowThemeIpc()
-  registerNativeThemeSync()
+  registerNativeThemeSync(() => win)
   registerWindowFullScreenIpc()
 } else {
   console.info('[osw] another instance already owns this profile; exiting')
@@ -355,42 +321,7 @@ function resolveWindowIcon() {
   return nativeImage.createFromDataURL(windowIconPng)
 }
 
-const WINDOW_BACKGROUND = {
-  light: '#f5f5f5',
-  dark: '#0d0d0d',
-} as const
-
-// 与 renderer 里的 `WindowTitlebar` (`h-9`) 保持一致。
-const WINDOW_TITLEBAR_HEIGHT = 36
 const MAC_TRAFFIC_LIGHT_Y = 12
-
-function applyWindowChrome(target: BrowserWindow): void {
-  // 具体亮暗一律从 `shouldUseDarkColors` 解析：`themeSource` 写入的瞬间它就已同步成目标值
-  // （跟随系统时即操作系统当前值），不需要按模式分支。
-  const background = nativeTheme.shouldUseDarkColors
-    ? WINDOW_BACKGROUND.dark
-    : WINDOW_BACKGROUND.light
-  target.setBackgroundColor(background)
-  if (process.platform !== 'darwin') {
-    target.setTitleBarOverlay({
-      color: background,
-      symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
-      height: WINDOW_TITLEBAR_HEIGHT,
-    })
-  }
-}
-
-/**
- * `'system'` 必须原样进 `themeSource`，不能在这里解析成具体亮暗：`themeSource` 是整个应用
- * 的开关，一旦写成 `'light'` / `'dark'`，`shouldUseDarkColors` 和渲染层的
- * `prefers-color-scheme` 都被钉死在设置那一刻，操作系统后续怎么切换都不再更新——
- * 「跟随系统」就只剩启动那一瞬。留在 system 档，Electron 会自己跟随，渲染层的
- * `matchMedia` 订阅也因此保持有效。
- */
-function applyWindowTheme(target: BrowserWindow, mode: 'light' | 'dark' | 'system'): void {
-  nativeTheme.themeSource = mode
-  applyWindowChrome(target)
-}
 
 /**
  * macOS 不允许应用完全移除菜单栏，系统至少会保留应用菜单。
@@ -418,40 +349,6 @@ function installApplicationMenu(): void {
         ])
       : null,
   )
-}
-
-function registerWindowThemeIpc(): void {
-  ipcMain.on('appearance:set-theme', (event, mode: unknown) => {
-    if (mode !== 'light' && mode !== 'dark' && mode !== 'system') return
-    const target = BrowserWindow.fromWebContents(event.sender)
-    if (target) applyWindowTheme(target, mode)
-  })
-}
-
-function registerNativeThemeSync(): void {
-  // 「跟随系统」时操作系统切换亮暗，主进程只能从这里得知；手选亮暗走 `appearance:set-theme`
-  // （applyWindowTheme 自带同步），themeSource 不是 system 档，这里直接跳过。
-  nativeTheme.on('updated', () => {
-    if (nativeTheme.themeSource !== 'system') return
-    // 只补主窗口的原生外观：托盘面板是透明窗口（backgroundColor '#00000000'），
-    // setBackgroundColor 会把透明底换成实色，砸掉面板的浮层观感。面板的亮暗由渲染层的
-    // `prefers-color-scheme` 跟着变，不依赖这里的底色。
-    if (win && !win.isDestroyed()) applyWindowChrome(win)
-  })
-}
-
-function registerWindowFullScreenEvents(target: BrowserWindow): void {
-  const notify = () => {
-    if (!target.isDestroyed()) {
-      target.webContents.send('window:full-screen-changed', target.isFullScreen())
-    }
-  }
-  target.on('enter-full-screen', notify)
-  target.on('leave-full-screen', notify)
-}
-
-function registerWindowFullScreenIpc(): void {
-  ipcMain.handle('window:get-full-screen-state', () => win?.isFullScreen() ?? false)
 }
 
 function createWindow() {

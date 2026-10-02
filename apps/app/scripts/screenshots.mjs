@@ -3,7 +3,9 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getRuntimeProfile } from '@osw/contracts/runtime-profile'
 import { log } from '../../../packages/toolkit/scripts/lib/log.mjs'
+import { isManagementApiReachable, waitForConsoleServer } from './lib/console-dev-server.mjs'
 
 // 重拍官网截图。
 //
@@ -20,25 +22,10 @@ const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const repositoryRoot = path.resolve(appDirectory, '..', '..')
 const entryPath = path.join(appDirectory, 'output', 'command', 'screenshot-export.js')
 const consoleDevUrl = process.env.CONSOLE_DEV_URL ?? 'http://localhost:5173'
+const managementApiUrl = getRuntimeProfile('development').managementApiUrl
 
 // Electron 由本包声明（与 `scripts/dev.mjs` 同一条理由：electron-builder 只认本包的 node_modules）。
 const electronPath = createRequire(import.meta.url)('electron')
-
-const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
-
-/** 页面必须从 dev server 取，起不来就只会拍到一张错误页，所以先在命令行这层挡掉。 */
-async function waitForConsoleServer() {
-  for (let attempt = 1; attempt <= 240; attempt += 1) {
-    try {
-      const response = await fetch(consoleDevUrl)
-      if (response.status < 500) return
-    } catch {
-      // 还没监听：继续等
-    }
-    await sleep(500)
-  }
-  throw new Error(`Console dev server is not reachable at ${consoleDevUrl} (start it with: pnpm dev)`)
-}
 
 function runElectron(only) {
   return new Promise((resolve, reject) => {
@@ -72,9 +59,27 @@ const main = async () => {
     throw new Error(`Screenshot entry not found: ${path.relative(repositoryRoot, entryPath)} (run: pnpm build)`)
   }
 
-  await waitForConsoleServer()
+  // 先说清楚在等什么：以前这里一声不响地轮询两分钟，观感就是「卡住了」。
+  log.info(`waiting for renderer dev server at ${consoleDevUrl} ...`)
+  await waitForConsoleServer({
+    consoleDevUrl,
+    onWait: ({ elapsedMillis }) => {
+      if (elapsedMillis > 0 && Math.round(elapsedMillis / 1000) % 5 === 0) {
+        process.stdout.write(`\r  still waiting (${Math.round(elapsedMillis / 1000)}s) ...`)
+      }
+    },
+  })
+  process.stdout.write('\r')
+
   log.info(`renderer: ${consoleDevUrl}`)
   if (only) log.info(`only: ${only}`)
+
+  // 页面能画出来，但数据来自管理服务；它不在时截出来会是一批空列表，早点提醒。
+  if (await isManagementApiReachable(managementApiUrl)) {
+    log.info(`management api: ${managementApiUrl}`)
+  } else {
+    log.warn(`management api not reachable at ${managementApiUrl} — pages may render empty`)
+  }
 
   await runElectron(only)
   log.success('Screenshots written to snapshot/')
