@@ -1,14 +1,17 @@
 import type { SecretStore } from '@common/secret-store'
-import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID, type RequestRewriteRule } from '@common/schemas'
+import { PRESET_CONDITIONAL_SCRIPT_CODE } from '@common/rewrite-script-samples'
 import { and, eq, inArray } from 'drizzle-orm'
 import { getConfigDb, getDataDb } from './index'
 import { mapLogicalModelIdsToRecordIds } from './logical-model-store'
 import {
   providerEndpoints,
   providerModelEndpoints,
+  providerModelRequestRewriteRules,
   providerModels,
   providerSettings,
   providers,
+  requestRewriteRules,
   schedulingPolicies,
 } from './config-schema'
 import {
@@ -116,6 +119,100 @@ const PROVIDER_MODEL_FIXTURES = [
 /** 已软删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。 */
 const SOFT_DELETED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.length - 1
 
+/**
+ * 请求重写规则 fixture：让开发库里**真的有规则、也真的被命中过**。
+ *
+ * 三条规则各演示一种形态，也各自解释请求日志里会长出什么：全局 Header 改写对所有模型生效、
+ * 模型绑定的 Body 删除只在该模型上生效、脚本动作演示「先读正文再决定改不改」。没有这一块，
+ * 开发环境的规则页是空的，请求日志里那排命中的 chip 也永远无话可说。
+ *
+ * 规则名照供应商 / 模型 fixture 的惯例写英文：它落库后就是用户自己的数据，不随界面语言变化
+ * ——本文件因此被 `eslint.config.js` 豁免了 CJK 门禁，豁免的用意是「这里出现的中文是数据」，
+ * 不是「这里可以随手写中文」。
+ */
+interface RewriteRuleFixture {
+  id: string
+  name: string
+  description: string
+  /** `global` 对所有模型自动生效；`model` 要在下面的绑定表里挂到某个供应商模型上。 */
+  scope: 'global' | 'model'
+  match: RequestRewriteRule['match']
+  actions: RequestRewriteRule['actions']
+  testCases: RequestRewriteRule['testCases']
+}
+
+/** 试跑用例：三个 fixture 共用同一套协议与形态，只有正文不同。 */
+function rewriteRuleTestCase(ruleId: string, body: string): RequestRewriteRule['testCases'][number] {
+  return {
+    id: `${ruleId}-testcase-0`,
+    name: 'Sample request',
+    stage: 'request',
+    headers: '{\n  "content-type": "application/json"\n}',
+    body,
+    clientProtocol: 'openai-completions',
+    upstreamProtocol: 'openai-completions',
+    transport: 'http',
+  }
+}
+
+const REWRITE_RULE_FIXTURES: readonly RewriteRuleFixture[] = [
+  {
+    id: 'rule_dev_probe_header',
+    name: 'Stamp a probe header',
+    description: 'Add x-osw-probe to every forwarded request so a mock upstream can tell the seed traffic apart.',
+    scope: 'global',
+    match: { clientProtocols: [], upstreamProtocols: [] },
+    actions: [{ stage: 'request', type: 'header-set', name: 'x-osw-probe', value: 'development-seed' }],
+    testCases: [rewriteRuleTestCase('rule_dev_probe_header', '{\n  "model": "doubao-seed-1-6",\n  "messages": [{ "role": "user", "content": "hello" }]\n}')],
+  },
+  {
+    id: 'rule_dev_drop_debug_flag',
+    name: 'Drop the debug flag',
+    description: 'Remove the debug flag clients attach while developing, so it never reaches the upstream.',
+    scope: 'model',
+    match: { clientProtocols: [], upstreamProtocols: [] },
+    actions: [{ stage: 'request', type: 'body-delete', path: '$.debug' }],
+    testCases: [rewriteRuleTestCase('rule_dev_drop_debug_flag', '{\n  "model": "doubao-seed-1-6",\n  "debug": true,\n  "messages": [{ "role": "user", "content": "hello" }]\n}')],
+  },
+  {
+    id: 'rule_dev_strict_temperature',
+    name: 'Force temperature for strict requests',
+    description: 'Run the built-in conditional script: requests that mention "apply-strict" get temperature 0, the rest pass through untouched.',
+    scope: 'model',
+    match: { clientProtocols: [], upstreamProtocols: [] },
+    // 脚本取自 `@common/rewrite-script-samples`：这是会被沙箱真正执行的代码，与「写一段脚本」
+    // 模板共用同一份字符串，测试跑的也是它 —— 不在种子文件里另抄一段迟早会漂移的文本。
+    actions: [{ stage: 'request', type: 'script', code: PRESET_CONDITIONAL_SCRIPT_CODE, timeoutMilliseconds: 1000 }],
+    testCases: [rewriteRuleTestCase('rule_dev_strict_temperature', '{\n  "model": "doubao-seed-1-6",\n  "temperature": 0.9,\n  "messages": [{ "role": "user", "content": "apply-strict please" }]\n}')],
+  },
+]
+
+/**
+ * 规则绑定：把 `model` 作用域的规则挂到某个供应商模型上，`priority` 就是它的执行顺序。
+ *
+ * 两条都挂在 `model_dev_provider_1`（火山方舟的 `doubao-seed-1-6`）上，是因为下面的请求 fixture
+ * 正好让这个模型既中全局 Header、又中绑定的 Body 删除与脚本 —— 一条链上的三件事在同一个模型上
+ * 就都看得见。
+ */
+const REWRITE_RULE_BINDINGS = [
+  { providerModelId: 'model_dev_provider_1', ruleId: 'rule_dev_drop_debug_flag', priority: 1 },
+  { providerModelId: 'model_dev_provider_1', ruleId: 'rule_dev_strict_temperature', priority: 2 },
+] as const
+
+/**
+ * 请求命中规则 id 的落库事实。
+ *
+ * 与上面的**配置**分开写：绑定回答「此刻规则挂在谁身上」，这里是「那次请求当时命中了哪些」。
+ * 配置后来被改掉或删掉，都不该改写已经发生过的命中记录，因此这里按请求直接算，不查配置库。
+ *
+ * 「命中」是「这条规则跑过」，而不是「它改动了东西」：脚本没命中条件时什么都不返回，规则本身
+ * 也确实被应用过，照样要记进来。
+ */
+const GLOBAL_REWRITE_RULE_IDS = ['rule_dev_probe_header'] as const
+const BOUND_REWRITE_RULE_IDS_BY_PROVIDER_MODEL: Record<string, readonly string[]> = {
+  model_dev_provider_1: ['rule_dev_drop_debug_flag', 'rule_dev_strict_temperature'],
+}
+
 const DEVELOPMENT_REQUEST_COUNT = 120
 
 interface DevelopmentSeedOptions {
@@ -143,6 +240,14 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
   )
   const existingProviderModelIds = new Set(
     config.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, fixtureProviderModelIds)).all().map(row => row.id),
+  )
+  const existingRewriteRuleIds = new Set(
+    config.select({ id: requestRewriteRules.id }).from(requestRewriteRules).where(inArray(requestRewriteRules.id, REWRITE_RULE_FIXTURES.map(rule => rule.id))).all().map(row => row.id),
+  )
+  // 绑定按主键（模型，规则）判存在：补种时既不能重复插一行，也不能把用户主动解绑过的绑回来。
+  const existingRewriteRuleBindingKeys = new Set(
+    config.select({ providerModelId: providerModelRequestRewriteRules.providerModelId, ruleId: providerModelRequestRewriteRules.requestRewriteRuleId })
+      .from(providerModelRequestRewriteRules).all().map(row => `${row.providerModelId}\u0000${row.ruleId}`),
   )
 
   for (const provider of ALL_PROVIDER_FIXTURES) {
@@ -211,6 +316,41 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
       }
     }
+
+    // 规则本体独立于供应商模型，因此不跟着 `providerModelsToInsert` 的分支走：模型早就存在
+    // （补种）时，规则仍然要补上，否则新增 fixture 的升级路径会少一半。
+    const rewriteRulesToInsert = REWRITE_RULE_FIXTURES.filter(rule => !existingRewriteRuleIds.has(rule.id))
+    if (rewriteRulesToInsert.length > 0) {
+      transaction.insert(requestRewriteRules).values(rewriteRulesToInsert.map(rule => ({
+        id: rule.id,
+        name: rule.name,
+        description: rule.description,
+        // 种子规则与手写规则完全等价：可编辑、可停用、可删除。`source: 'user'` 正是这个意思
+        // ——`builtin` 那一档要回答的是「从模板起手的规则有人用吗」，不该被种子数据污染。
+        enabled: true,
+        scope: rule.scope,
+        schemaVersion: 1,
+        source: 'user',
+        match: JSON.stringify(rule.match),
+        actions: JSON.stringify(rule.actions),
+        testCases: JSON.stringify(rule.testCases),
+        createdTime: timestamp,
+        updatedTime: timestamp,
+        deletedTime: null,
+      }))).run()
+    }
+    const rewriteRuleBindingsToInsert = REWRITE_RULE_BINDINGS.filter(binding => !existingRewriteRuleBindingKeys.has(`${binding.providerModelId}\u0000${binding.ruleId}`))
+    if (rewriteRuleBindingsToInsert.length > 0) {
+      transaction.insert(providerModelRequestRewriteRules).values(rewriteRuleBindingsToInsert.map(binding => ({
+        providerModelId: binding.providerModelId,
+        requestRewriteRuleId: binding.ruleId,
+        priority: binding.priority,
+        enabled: true,
+        createdTime: timestamp,
+        updatedTime: timestamp,
+        deletedTime: null,
+      }))).run()
+    }
   })
 
   data.transaction(transaction => {
@@ -242,7 +382,11 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       // 归因**按模型认供应商**：两边各取各的模数会造出「OpenAI 的供应商配火山方舟的模型」
       // 这种库里根本不可能出现的尝试——而尝试快照恰恰是统计查询唯一的事实来源。
       const modelIndex = index % PROVIDER_MODEL_FIXTURES.length
+      const providerModelId = `model_dev_provider_${modelIndex + 1}`
       const provider = ALL_PROVIDER_FIXTURES.find(item => item.id === PROVIDER_MODEL_FIXTURES[modelIndex][1])!
+      // 那次尝试命中的改写规则。全局规则对所有模型生效，因此恒在；绑定的两条只挂在
+      // `model_dev_provider_1` 上，于是只有走到这个模型的请求才带它们。
+      const requestRewriteRuleIds = [...GLOBAL_REWRITE_RULE_IDS, ...(BOUND_REWRITE_RULE_IDS_BY_PROVIDER_MODEL[providerModelId] ?? [])]
       const duration = 480 + (index * 173) % 2_400
       const inputTokens = 320 + index * 47
       const outputTokens = 80 + (index * 29) % 360
@@ -262,6 +406,8 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         transport: index % 4 === 0 ? 'http-stream' as const : 'http' as const,
         createdTime: timestamp - index * 6 * 3_600_000,
         provider,
+        providerModelId,
+        requestRewriteRuleIds,
         index,
         modelIndex,
         failed,
@@ -294,7 +440,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
     if (usages.length > 0) transaction.insert(requestUsages).values(usages).run()
     transaction.insert(requestAttempts).values(sampleRequests.flatMap(request => {
       const fixture = PROVIDER_MODEL_FIXTURES[request.modelIndex]
-      const providerModelId = `model_dev_provider_${request.modelIndex + 1}`
+      const providerModelId = request.providerModelId
       // 开发示例：客户端跳要增量时，上游跳也以 SSE 返回（忠诚转发的典型情形）。
       const upstreamTransport = request.transport === 'http-stream' ? 'http-stream' as const : 'http' as const
       const attempt = {
@@ -317,8 +463,10 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         errorMessage: request.failed ? 'Development sample: upstream request timed out' : null,
         durationMilliseconds: request.totalDurationMilliseconds,
         ttftMilliseconds: request.ttftMilliseconds,
-        // 事实总是写入，与是否采集正文无关。
-        requestRewriteRuleIds: JSON.stringify([]),
+        // 事实总是写入，与是否采集正文无关。响应阶段整段关在 `RESPONSE_REWRITE_ENABLED` 后面，
+        // 因此响应侧永远是空的 —— fixture 要和闸门的真实状态一致，而不是摆一份「看起来有响应
+        // 规则」的假数据。
+        requestRewriteRuleIds: JSON.stringify(request.requestRewriteRuleIds),
         responseRewriteRuleIds: JSON.stringify([]),
         createdTime: request.createdTime,
       }
@@ -346,7 +494,9 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       const responseBody = request.failed
         ? JSON.stringify({ error: { type: 'upstream_timeout', message: 'Development sample: upstream request timed out' } })
         : JSON.stringify({ id: `chatcmpl-dev-${request.id}`, object: 'chat.completion', model: request.provider.name, choices: [{ index: 0, message: { role: 'assistant', content: 'This is a sample response generated by the development seeder.' }, finish_reason: 'stop' }], usage: { prompt_tokens: request.inputTokens, completion_tokens: request.outputTokens, total_tokens: request.totalTokens } })
-      const requestBody = JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: request.index % 3 === 0 ? 'Summarize this development sample content.' : 'Write a short development sample reply.' }], temperature: request.index % 2 === 0 ? 0.7 : 0.2, stream: request.index % 4 === 0 })
+      // 命中脚本规则的请求要能看出「它凭什么命中」：正文里就有那个标记。
+      const strictRequest = request.requestRewriteRuleIds.includes('rule_dev_strict_temperature')
+      const requestBody = JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: strictRequest ? 'apply-strict: summarize this development sample content.' : request.index % 3 === 0 ? 'Summarize this development sample content.' : 'Write a short development sample reply.' }], temperature: request.index % 2 === 0 ? 0.7 : 0.2, stream: request.index % 4 === 0 })
       const captureStatus = request.failed
         ? 'partial'
         : request.index % 11 === 0
@@ -370,19 +520,23 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         updatedTime: request.createdTime,
       }]
     }).flat()).run()
-    transaction.insert(attemptContents).values(sampleRequests.filter(request => request.index % 4 === 0).map(request => ({
+    transaction.insert(attemptContents).values(sampleRequests.filter(request => request.index % 4 === 0).map(request => {
       // 上游视角：每次尝试一行，只描述真正发给供应商 / 由供应商返回的内容。
-      id: `attempt_content_dev_${request.id}`,
-      attemptId: `att_dev_${request.id}${request.failed ? '_retry' : ''}`,
-      captureStatus: request.failed ? 'captured' : 'partial',
-      requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]', 'x-upstream-attempt': 'development-seed' }),
-      requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: 'This is an attempt-level request body.' }], stream: true }),
-      responseStatus: request.failed ? 504 : 200,
-      responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-upstream-request-id': `upstream-${request.id}` }),
-      responseBody: JSON.stringify({ id: `attempt-${request.id}`, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'This is an attempt-level response.' } }] }),
-      createdTime: request.createdTime,
-      updatedTime: request.createdTime,
-    }))).run()
+      // 这里也把两条规则的效果写进去：全局那条加了探针头，脚本那条把 temperature 压到 0。
+      const strictRequest = request.requestRewriteRuleIds.includes('rule_dev_strict_temperature')
+      return {
+        id: `attempt_content_dev_${request.id}`,
+        attemptId: `att_dev_${request.id}${request.failed ? '_retry' : ''}`,
+        captureStatus: request.failed ? 'captured' : 'partial',
+        requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]', 'x-upstream-attempt': 'development-seed', 'x-osw-probe': 'development-seed' }),
+        requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: strictRequest ? 'apply-strict: this is an attempt-level request body.' : 'This is an attempt-level request body.' }], temperature: strictRequest ? 0 : 0.2, stream: true }),
+        responseStatus: request.failed ? 504 : 200,
+        responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-upstream-request-id': `upstream-${request.id}` }),
+        responseBody: JSON.stringify({ id: `attempt-${request.id}`, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'This is an attempt-level response.' } }] }),
+        createdTime: request.createdTime,
+        updatedTime: request.createdTime,
+      }
+    })).run()
   })
 
   return true

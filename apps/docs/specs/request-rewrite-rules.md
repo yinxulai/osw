@@ -454,6 +454,33 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 - 模板定义留在渲染层（`packages/console/source/pages/.../rule-presets.ts`），不放进 `@common`：它没有服务端用途，
   与智能路由预设（服务端要在没有存过图时直接执行，因此必须在 `@common`）的约束不同。
 
+### 9.5 开发种子数据
+
+开发口子 `/api/development/seed`（仅 `development` 环境可用）会连同供应商、模型、请求日志一起写入三条
+规则和两条绑定，让开发环境的规则页与请求日志一开始就有东西可看：
+
+| 规则 | 作用域 | 动作 | 演示什么 |
+| --- | --- | --- | --- |
+| `rule_dev_probe_header` | `global` | 请求 Header `set` `x-osw-probe` | 全局规则对所有模型自动生效 |
+| `rule_dev_drop_debug_flag` | `model` | 请求 Body `delete` `$.debug` | 模型绑定只在挂上的那个模型生效 |
+| `rule_dev_strict_temperature` | `model` | 请求脚本动作 | 脚本动作「读正文再决定」；代码取自 §9.4 的模板字符串 |
+
+约定：
+
+- 种子规则与手写规则完全等价（`source: 'user'`、可编辑、可停用、可删除）；`builtin` 那一档要回答的是
+  「从模板起手的规则有人用吗」，不该被种子数据污染。
+- 两条 `model` 规则都绑在同一个供应商模型上，按 `priority` 排在全局规则之后，正好演示 §4.3 的
+  顺序语义：全局规则先按 `createdTime` 排在前，绑定规则再按 `priority` 追加。
+- 脚本动作直接引用 `@common/rewrite-script-samples` 的模板字符串，而不是在种子文件里另抄一段：
+  脚本是会被沙箱真正执行的代码，种子与模板共用同一份字符串，执行它的单测与种子的断言才指向同一个东西。
+- 每条种子请求的 attempt 都记录命中的规则 ID，且命中集合按模型分叉：走到被绑定模型的请求命中三条，
+  其他模型只命中全局那条。命中是历史事实，按请求直接算出来，不查配置库 —— 配置后来被改掉也不该
+  改写已经发生过的命中记录。
+- **响应命中恒为空**：`RESPONSE_REWRITE_ENABLED` 是 `false`，种子要和闸门的真实状态一致，
+  而不是摆一份「看起来有响应规则」的假数据。
+- 补种（`allowExisting: true`）按 id 与 `(providerModelId, requestRewriteRuleId)` 判存在后补齐，
+  不会堆出第二份规则或第二份绑定，也不会把用户主动解绑过的绑回来。
+
 ## 10. 供应商包导入导出
 
 供应商包（`/api/provider/export`、`/api/provider/import`）不包含请求重写规则：
