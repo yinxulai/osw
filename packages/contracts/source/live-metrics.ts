@@ -15,17 +15,28 @@
  *    和引擎认识的变量」两份。
  * 3. **渲染函数**（{@link renderLiveMetric}）：纯函数，输入模板与快照，输出一行文本。
  *
- * ## 为什么变量名是显式枚举（`liveMaxTps` / `liveTotalTps` / …）而不是含糊的 `tps`
+ * ## 为什么变量名是显式枚举（`liveTps` / `activeRequests`）而不是含糊的 `tps`
  *
- * 用户要的是几件**明确**的事：实时最大输出速度、实时合计输出速度、此刻并发请求。写成
- * `tps` / `requests` 会把不同口径的东西压成含糊的词——是最大还是合计，读不出来。所以变量名
- * 本身就把口径说完：`liveMaxTps` 是「在途请求里最快的那条有多快」、`liveTotalTps` 是「在途请求
- * 合起来现在多快」、`activeRequests` 是此刻并发数。
+ * 用户要的是几件**明确**的事：最近一条在途请求的实时输出速度、此刻并发请求。写成
+ * `tps` / `requests` 会把不同口径的东西压成含糊的词——是单条还是合计，读不出来。所以变量名
+ * 本身就把口径说完：`liveTps` 是「最近一个在途请求现在多快」、`activeRequests` 是此刻并发数。
+ *
+ * ## 速度为什么锁定「最近一个在途请求」
+ *
+ * 菜单栏/角标只有一格。用户刚发出的那条正是他此刻在等的，显示它的实时 TPS 最符合直觉：
+ * 合计会把并发压成一个与任何单条都对不上的数，取最大则会在用户切去看另一条时突然跳到别的
+ * 请求上。而「字节/秒」虽然更容易在途取到（每个分块一到达就已知），却衡量的是响应体量而非
+ * Token 产出——对 AI 来说，用户真正关心的是每秒出多少个 Token，所以这里坚持 TPS。
+ *
+ * 代价是：上游常在收尾那一帧才报输出 Token（见 `apps/docs/specs/observability.md`），一个
+ * 刚开始、还没吐字的请求会先显示 `--`，等 Token 到账才亮起来。这是诚实的——**没有速度**和
+ * **速度为零**本来就该分开，`--` 明确指向「此刻还没有」。
  *
  * ## 取值口径
  *
- * - 速度公式只有一份，在 `@common/metrics`；本文件不重写，只调用。
- * - 没有值（没有在途请求、没有样本）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
+ * - 输出速度公式只有一份，在 `@common/metrics`（{@link tokensPerSecondFromTotals}）；
+ *   本文件不重写，只调用。
+ * - 没有值（没有在途请求、还没有输出 Token）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
  *   一个 `0` 分不清「真的没有在跑」还是「页面没接上数」，而 `--` 明确指向「此刻没有」。
  *   它是一条给眼睛扫的状态条，不是一个要对账的计数。
  *
@@ -33,18 +44,21 @@
  */
 
 import { formatOutputSpeed, tokensPerSecondFromTotals } from './metrics'
-import type { LiveRequest } from './schemas'
+import type { LiveRequest, LiveRequestAttempt } from './schemas'
 
 /** 指标里「这个变量此刻没有值」的统一写法。用户可读、宽度稳定、不会与数字混淆。 */
 export const LIVE_METRIC_UNAVAILABLE = '--'
 
 /**
- * 默认模板：实时最大输出速度 + `TPS` 单位。
+ * 默认模板：最近一条在途请求的实时输出速度 + `TPS` 单位。
  *
  * 用户没配过模板时就是它，设置页里也拿它当占位示例——两处共用同一个常量，
  * 不会出现「默认值和界面上写的示例不一致」。
+ *
+ * `TPS` 单位写在模板里而不是变量里：数值本身只是一串数字，单位是用户对这段文本的排版选择，
+ * 想只留数字、或换成 `t/s` 都在模板这一层决定。
  */
-export const DEFAULT_LIVE_METRIC_TEMPLATE = '{liveMaxTps} TPS'
+export const DEFAULT_LIVE_METRIC_TEMPLATE = '{liveTps} TPS'
 
 /**
  * 模板允许的最大长度。
@@ -58,72 +72,59 @@ export const MAX_LIVE_METRIC_LENGTH = 64
 /**
  * 指标快照。
  *
- * 所有字段都是「已经算完的数」：`null` 表示此刻取不到（没有在途请求 / 没有样本 /
- * 用量还没读回来），与 `0`（真值为零）是两件事。渲染层不做任何再计算。
+ * 所有字段都是「已经算完的数」：`null` 表示此刻取不到（没有在途请求 / 还没有输出 Token），
+ * 与 `0`（真值为零）是两件事。渲染层不做任何再计算。
  */
 export interface LiveMetrics {
   /**
-   * 实时最大输出速度（TPS）：在途请求里**最大**的那个速度。
+   * 最近一个在途请求的实时输出速度（TPS）。
    *
-   * 没有在途请求、或没有一个够格算速度的样本时为 `null`。取最大值而不是求和：
-   * 这个数回答「现在跑得最快的那条有多快」，求和会稀释掉那条快请求。
+   * 没有在途请求、或那条请求还没读到输出 Token 时为 `null`。这个数回答「我刚发的那条现在
+   * 每秒出多少个 Token」，是全应用唯一的速度口径——不再有「最大 / 合计」两套聚合。
    */
-  liveMaxTps: number | null
-  /**
-   * 实时合计输出速度（TPS）：在途请求速度的**和**。
-   *
-   * 没有在途请求、或没有一个够格算速度的样本时为 `null`。这个数回答「此刻整体吞吐有多快」，
-   * 与 {@link LiveMetrics.liveMaxTps} 是同一批样本的两种聚合，缺一不可。
-   */
-  liveTotalTps: number | null
+  liveTps: number | null
   /** 此刻正在进行、且已进入上游阶段的请求条数。 */
   activeRequests: number
 }
 
-/** 判据：这次请求此刻是否正「在上游跑着」，且已进入上游阶段。三个速度/并发口径共用它。 */
-function liveAttemptOf(request: LiveRequest): { outputTokens: number | null; startedAt: number } | null {
-  if (request.status !== 'pending') return null
-  const attempt = request.attempts[request.attempts.length - 1]
-  if (attempt === undefined) return null
-  if (attempt.state !== 'streaming' && attempt.state !== 'awaiting-upstream') return null
-  return { outputTokens: attempt.outputTokens ?? null, startedAt: attempt.startedAt }
+/** 请求的最新一次尝试；没有任何尝试时为 `null`。故障转移时最新一次才是「正在跑」的那条。 */
+function liveAttemptOf(request: LiveRequest): LiveRequestAttempt | null {
+  return request.attempts[request.attempts.length - 1] ?? null
 }
 
 /**
- * 算出所有在途请求当下的输出速度样本。
+ * 此刻「最近一个在途请求」：所有还没落定（`pending`）的请求里，开始时间最晚的那条。
  *
- * 只认「此刻真的在上游跑着」的尝试（`streaming` / `awaiting-upstream`），且要用到该尝试
- * 当下的输出 Token 读数与已经过去的时长。分子分母必须同源（见 `metrics.ts`）：时长取
- * `now - startedAt`，这是**此刻**的端到端耗时，不是一个已经落定的最终值——所以它随请求进行
- * 而收敛，正是「实时」的含义。
+ * 为什么锤定「最近一个」而不是「最快的」或「合计的」：菜单栏只有一格，用户刚发出的那条正是
+ * 他此刻在等的。合计会把并发请求压成一个与任何单条都对不上的数；取最大则会在用户切去看另一条
+ * 时突然跳到另一个请求上。没有在途请求时返回 `null`。
  *
- * 输入是台账快照（{@link LiveRequest}），输出是一批数：口径只在这里写一遍，服务进程、
- * 渲染进程、测试都从这拿。
+ * 并列（`startedAt` 相同）时保留先遇到的那条：台账按开始时间倒序给出，先遇到的即最新的。
  */
-function liveOutputSpeeds(requests: readonly LiveRequest[], now: number): number[] {
-  const speeds: number[] = []
+function liveRequestOf(requests: readonly LiveRequest[]): LiveRequest | null {
+  let latest: LiveRequest | null = null
   for (const request of requests) {
-    const attempt = liveAttemptOf(request)
-    if (attempt === null) continue
-    const tps = tokensPerSecondFromTotals(attempt.outputTokens ?? 0, now - attempt.startedAt)
-    if (tps === null) continue
-    speeds.push(tps)
+    if (request.status !== 'pending') continue
+    if (latest === null || request.startedAt > latest.startedAt) latest = request
   }
-  return speeds
+  return latest
 }
 
-/** 在途请求的实时**最大**输出速度；没有一个够格样本时为 `null`（没有速度，不是零）。 */
-export function liveMaxOutputTokensPerSecond(requests: readonly LiveRequest[], now: number): number | null {
-  const speeds = liveOutputSpeeds(requests, now)
-  if (speeds.length === 0) return null
-  return Math.max(...speeds)
-}
-
-/** 在途请求的实时**合计**输出速度；没有一个够格样本时为 `null`。 */
-export function liveTotalOutputTokensPerSecond(requests: readonly LiveRequest[], now: number): number | null {
-  const speeds = liveOutputSpeeds(requests, now)
-  if (speeds.length === 0) return null
-  return speeds.reduce((sum, speed) => sum + speed, 0)
+/**
+ * 最近一个在途请求的实时输出速度（TPS）：那条请求**最新一次尝试**的输出 Token ÷ 端到端耗时。
+ *
+ * 分子是上游当下报的累计输出 Token（流式场景里随每个分块增长），分母是 `now - startedAt`——
+ * 这是**此刻**的端到端耗时，不是一个已经落定的最终值，所以数值随请求进行而收敛，正是「实时」
+ * 的含义。分子分母必须同源（见 `metrics.ts`）：没有输出 Token 就没有分子，耗时不正就没有分母，
+ * 两种情况都返回 `null`——**没有速度和速度为零是两件事**。时长口径与落库侧的
+ * `requestOutputTokensPerSecond` 完全一致，只是在途样本会随请求继续增长。
+ */
+export function liveTps(requests: readonly LiveRequest[], now: number): number | null {
+  const request = liveRequestOf(requests)
+  if (request === null) return null
+  const attempt = liveAttemptOf(request)
+  if (attempt === null || attempt.outputTokens === null) return null
+  return tokensPerSecondFromTotals(attempt.outputTokens, now - attempt.startedAt)
 }
 
 /**
@@ -151,8 +152,7 @@ export function activeRequestCount(requests: readonly LiveRequest[]): number {
  */
 export function computeLiveMetrics(requests: readonly LiveRequest[], now: number): LiveMetrics {
   return {
-    liveMaxTps: liveMaxOutputTokensPerSecond(requests, now),
-    liveTotalTps: liveTotalOutputTokensPerSecond(requests, now),
+    liveTps: liveTps(requests, now),
     activeRequests: activeRequestCount(requests),
   }
 }
@@ -163,7 +163,7 @@ export function computeLiveMetrics(requests: readonly LiveRequest[], now: number
  * 写成字面量联合而不是 `string`：设置界面要靠它把「变量名 → 说明文案」做成一张编译期
  * 可穷尽的表，漏一个变量会在类型层面直接报出来，而不是等到界面上出现一个空的说明。
  */
-export type LiveMetricVariableName = 'liveMaxTps' | 'liveTotalTps' | 'activeRequests'
+export type LiveMetricVariableName = 'liveTps' | 'activeRequests'
 
 /**
  * 模板变量的声明。
@@ -178,8 +178,7 @@ export interface LiveMetricVariable {
 
 /** 模板可用的全部变量，顺序即设置界面的展示顺序。 */
 export const LIVE_METRIC_VARIABLES: readonly LiveMetricVariable[] = [
-  { name: 'liveMaxTps', sample: '42' },
-  { name: 'liveTotalTps', sample: '86' },
+  { name: 'liveTps', sample: '42' },
   { name: 'activeRequests', sample: '3' },
 ]
 
@@ -226,10 +225,8 @@ function asUnavailable(value: number | null): string {
 export function renderLiveMetric(template: string, metrics: LiveMetrics): string {
   const rendered = template.replace(PLACEHOLDER_PATTERN, (match, name: string) => {
     switch (name) {
-      case 'liveMaxTps':
-        return metrics.liveMaxTps === null || metrics.liveMaxTps === 0 ? LIVE_METRIC_UNAVAILABLE : formatOutputSpeed(metrics.liveMaxTps)
-      case 'liveTotalTps':
-        return metrics.liveTotalTps === null || metrics.liveTotalTps === 0 ? LIVE_METRIC_UNAVAILABLE : formatOutputSpeed(metrics.liveTotalTps)
+      case 'liveTps':
+        return metrics.liveTps === null || metrics.liveTps === 0 ? LIVE_METRIC_UNAVAILABLE : formatOutputSpeed(metrics.liveTps)
       case 'activeRequests':
         return asUnavailable(metrics.activeRequests)
       default:

@@ -441,10 +441,10 @@ export const SettingsSchema = z.object({
   /**
    * 实时指标的字符串模板。
    *
-   * 变量与渲染规则在 `@common/live-metrics`：`{liveMaxTps}` 在途请求里最快的输出速度、
-   * `{liveTotalTps}` 在途请求的合计输出速度、`{activeRequests}` 此刻在途请求数。
+   * 变量与渲染规则在 `@common/live-metrics`：`{liveTps}` 最近一个在途请求的实时输出速度、
+   * `{activeRequests}` 此刻在途请求数。
    * **空串不是「不显示」，而是「用默认模板」**——默认模板即 `@common/live-metrics` 的
-   * `DEFAULT_LIVE_METRIC_TEMPLATE`（`{liveMaxTps} TPS`），界面以它兜底展示。要彻底关掉
+   * `DEFAULT_LIVE_METRIC_TEMPLATE`（`{liveTps} TPS`），界面以它兜底展示。要彻底关掉
    * 某个展示面，用该面的显示开关，而不是把模板清空。
    *
    * **指标是标准的、模板只有一份**：菜单栏标题与窗口角标两个展示面共用这一段模板，
@@ -454,7 +454,7 @@ export const SettingsSchema = z.object({
    */
   liveMetricTemplate: z.string().default(''),
   /**
-   * 是否在菜单栏图标右边显示实时指标。**默认开启**——一个实时 TPS 是这张网盘赖运行时的
+   * 是否在菜单栏图标右边显示实时指标。**默认开启**——一个实时流速是这张网盘赖运行时的
    * 主视图，默认就该让人能看到；要清静可在设置里关掉。目前只有 macOS 支持
    * （`Tray.setTitle` 是 macOS 概念），别的平台这一路根本不会启动。
    */

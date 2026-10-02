@@ -728,8 +728,7 @@ describe('托盘启停与轮询', () => {
 
 describe('菜单栏标题', () => {
   interface PushedMetrics {
-    liveMaxTps: number | null
-    liveTotalTps: number | null
+    liveTps: number | null
     activeRequests: number
   }
 
@@ -761,20 +760,20 @@ describe('菜单栏标题', () => {
 
   it('开关打开且模板非空时，把推来的指标渲染进标题', async () => {
     const push = captureMetricsPush()
-    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveMaxTps} TPS' })
+    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveTps} TPS' })
     manager = await initRunning()
 
     // 设置读回来之前标题保持空白——宁可空着，也不先报一个没数据的数。
-    push({ liveMaxTps: 42, liveTotalTps: 86, activeRequests: 1 })
+    push({ liveTps: 42, activeRequests: 1 })
     await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalledWith('42 TPS'))
   })
 
   it('没有在途请求时标题里的速度回落为占位符，而不是 0', async () => {
     const push = captureMetricsPush()
-    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveMaxTps} TPS' })
+    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveTps} TPS' })
     manager = await initRunning()
 
-    push({ liveMaxTps: null, liveTotalTps: null, activeRequests: 0 })
+    push({ liveTps: null, activeRequests: 0 })
     await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalledWith('-- TPS'))
   })
 
@@ -783,7 +782,7 @@ describe('菜单栏标题', () => {
     mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: false })
     manager = await initRunning()
 
-    push({ liveMaxTps: 42, liveTotalTps: 86, activeRequests: 1 })
+    push({ liveTps: 42, activeRequests: 1 })
     await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalled())
     expect(mocks.tray.setTitle).toHaveBeenLastCalledWith('')
   })

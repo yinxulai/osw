@@ -72,7 +72,7 @@ export function subscribeLiveMetrics(listener: LiveMetricsListener): () => void 
 
 function tick(): void {
   const metrics = snapshotOf(Date.now())
-  const signature = `${metrics.liveMaxTps ?? '-'}|${metrics.liveTotalTps ?? '-'}|${metrics.activeRequests}`
+  const signature = `${metrics.liveTps ?? '-'}|${metrics.activeRequests}`
   if (signature === lastSignature) return
   lastSignature = signature
   latest = metrics

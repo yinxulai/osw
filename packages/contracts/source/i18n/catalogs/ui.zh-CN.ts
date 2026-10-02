@@ -1887,11 +1887,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.liveMetric.windowEnabled': '在应用窗口显示',
   'settings.liveMetric.windowEnabledDescription': '在窗口标题栏「运行状态」左边显示同一份指标。',
   'settings.liveMetric.template': '模板',
-  'settings.liveMetric.templateDescription': '普通文本与花括号变量，例如 {liveMaxTps} TPS。留空则使用默认模板。',
+  'settings.liveMetric.templateDescription': '普通文本与花括号变量，例如 {liveTps} TPS。留空则使用默认模板。',
   'settings.liveMetric.unknownVariable': '模板里用到了不存在的变量，它会原样保留在渲染结果里。',
   'settings.liveMetric.variablesTitle': '可用变量',
-  'settings.liveMetric.variable.liveMaxTps': '实时输出速度（Token/秒），取在途请求里最快的那条',
-  'settings.liveMetric.variable.liveTotalTps': '实时输出速度（Token/秒），在途请求速度的合计',
+  'settings.liveMetric.variable.liveTps': '最近一个在途请求的实时输出速度（Token/秒）',
   'settings.liveMetric.variable.activeRequests': '此刻正在进行的请求数',
   'settings.liveMetric.variablesHint': '暂时取不到值的变量会显示成 --。示例：{example}',
 

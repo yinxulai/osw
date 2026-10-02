@@ -24,8 +24,7 @@ import { useTranslation } from '@/i18n/provider'
  * 表之后，变量名 → key 的对应关系是显式的，多一个变量会立刻在这里缺一项。
  */
 const VARIABLE_DESCRIPTION_KEYS: Record<LiveMetricVariableName, UiCatalogKey> = {
-  liveMaxTps: 'settings.liveMetric.variable.liveMaxTps',
-  liveTotalTps: 'settings.liveMetric.variable.liveTotalTps',
+  liveTps: 'settings.liveMetric.variable.liveTps',
   activeRequests: 'settings.liveMetric.variable.activeRequests',
 }
 
