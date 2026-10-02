@@ -22,6 +22,7 @@ import {
   saveClientConfigContent,
 } from './service'
 import { declaredPathForPlatform } from './paths'
+import { defaultShellProfileCandidates } from './shell'
 
 /**
  * 客户端配置文件服务。
@@ -51,10 +52,13 @@ const COPILOT = 'copilot-cli'
 const COPILOT_ENV_FILE = '~/.copilot/osw.env'
 const VSCODE = 'vscode'
 /**
- * VS Code 的配置文件在不同系统落在不同目录里，而 `resolveClientConfigTarget` 按**真实平台**选目录。
- * CI 跑在 ubuntu 上、本机是 macOS，所以这里从注册表按当前平台推导，而不是把 macOS 那条路径写死。
+ * 身份是注册表里的 `files[].path`（VS Code 写的是 macOS 那一份），**不是**当前平台展开后的落点：
+ * 调用方给的永远是前者，落点由服务端按平台展开（`declaredPathForPlatform`）。若这里按当前平台推导身份，
+ * 就只有 macOS 对得上——CI 的 ubuntu 会因路径与注册表不符被拒（`CLIENT_CONFIG_PATH_NOT_ALLOWED`）。
  */
-const VSCODE_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!, process.platform)
+const VSCODE_FILE = AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!.path
+/** 按当前平台展开后的真实落点，仅用于测试自己读写磁盘；服务端写入的就是这个路径。 */
+const VSCODE_RESOLVED_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!, process.platform)
 
 /**
  * 注册表里声明了「目录可被环境变量改道」的变量名（OpenCode 的 XDG、DeepSeek Harness 的 DSH_HOME）。
@@ -85,6 +89,17 @@ function writeFile(declaredPath: string, content: string): void {
 
 function readFile(declaredPath: string): string {
   return fs.readFileSync(fullPath(declaredPath), 'utf8')
+}
+
+/**
+ * `load` 文件的启动文件落点：候选里的第一个（`resolveShellProfilePath` 在候选都不存在时的兜底）。
+ *
+ * 候选顺序跟着 `$SHELL` 走——CI 的 ubuntu runner 用 bash，第一候选是 `.bash_profile` 而不是 `.zshrc`。
+ * 从 `defaultShellProfileCandidates()` 现取，保证与生产代码选中的是同一个文件，而不是把 `.zshrc` 写死。
+ */
+function firstShellProfilePath(): string {
+  const [first] = defaultShellProfileCandidates()
+  return first!.replace(`${mocks.home}/`, '~/')
 }
 
 /** 同步入口抛错时，把 `AppError` 的 code 取出来；这条路径本身不该走到返回值。 */
@@ -132,6 +147,16 @@ describe('resolveClientConfigTarget', () => {
   it('refuses a file the client never declared', () => {
     expect(syncErrorCode(() => resolveClientConfigTarget(CLAUDE, '~/.ssh/id_rsa'))).toBe('CLIENT_CONFIG_PATH_NOT_ALLOWED')
     expect(syncErrorCode(() => resolveClientConfigTarget('nope', CLAUDE_FILE))).toBe('CLIENT_CONFIG_PATH_NOT_ALLOWED')
+  })
+
+  it('identifies a multi-platform file by its declared path and expands it for the current platform', () => {
+    // 注册表里声明的路径（VS Code 是 macOS 那一份）才是身份，按平台展开只影响 `resolvedPath`。
+    // 曾经的 bug：身份也跟着平台走，于是只有 macOS 对得上，CI 的 ubuntu 被拒。
+    const declared = AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!
+    const target = resolveClientConfigTarget(VSCODE, declared.path)
+
+    expect(target.filePath).toBe(declared.path)
+    expect(target.resolvedPath).toBe(fullPath(declaredPathForPlatform(declared, process.platform)))
   })
 })
 
@@ -436,8 +461,8 @@ describe('applyClientConfigOverrides', () => {
     expect(env).toContain('COPILOT_MODEL=osw-model')
 
     // 2) 登录启动文件里有一段指向该 env 文件的哨兵区段。测试的主目录是空临时目录，
-    //    一个候选都不存在，于是落到第一候选 `.zshrc`。
-    const profile = readFile('~/.zshrc')
+    //    一个候选都不存在，于是落到第一候选（`firstShellProfilePath()`，通常是 `.zshrc`）。
+    const profile = readFile(firstShellProfilePath())
     expect(profile).toContain('>>> osw managed env >>>')
     expect(profile).toContain(fullPath(COPILOT_ENV_FILE))
   })
@@ -468,7 +493,7 @@ describe('applyClientConfigOverrides', () => {
     const result = await applyClientConfigOverrides(VSCODE, VSCODE_FILE, MODEL)
 
     expect(result.state.autoFill).toBe('ready')
-    expect(JSON.parse(readFile(VSCODE_FILE))).toEqual([
+    expect(JSON.parse(readFile(VSCODE_RESOLVED_FILE))).toEqual([
       {
         name: LOCAL_PROVIDER_NAME,
         vendor: 'customendpoint',
@@ -491,7 +516,7 @@ describe('applyClientConfigOverrides', () => {
 
   it('rewrites only the osw entry and leaves the user other providers alone', async () => {
     writeFile(
-      VSCODE_FILE,
+      VSCODE_RESOLVED_FILE,
       JSON.stringify([
         { name: 'Anthropic', vendor: 'customendpoint', apiKey: 'keep', models: [{ id: 'claude', name: 'Claude' }] },
         { name: LOCAL_PROVIDER_NAME, vendor: 'customendpoint', apiKey: 'old', models: [] },
@@ -499,7 +524,7 @@ describe('applyClientConfigOverrides', () => {
     )
 
     await applyClientConfigOverrides(VSCODE, VSCODE_FILE, MODEL)
-    const entries = JSON.parse(readFile(VSCODE_FILE)) as Array<Record<string, unknown>>
+    const entries = JSON.parse(readFile(VSCODE_RESOLVED_FILE)) as Array<Record<string, unknown>>
 
     // 别人的 provider 原封不动——条目数组形状下「只动目标键」就是这个意思。
     expect(entries[0]).toEqual({ name: 'Anthropic', vendor: 'customendpoint', apiKey: 'keep', models: [{ id: 'claude', name: 'Claude' }] })
@@ -525,7 +550,7 @@ describe('applyClientConfigOverrides', () => {
     await applyClientConfigOverrides(COPILOT, COPILOT_ENV_FILE, MODEL)
     await applyClientConfigDefaults(COPILOT)
 
-    const profile = readFile('~/.zshrc')
+    const profile = readFile(firstShellProfilePath())
     // 恰好一段：重复应用只改这一段，不追加第二段。
     expect(profile.split('>>> osw managed env >>>').length - 1).toBe(1)
   })
