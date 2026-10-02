@@ -1,0 +1,68 @@
+{
+  "key": "codex",
+  "name": "Codex",
+  "aliases": [
+    "codex-cli"
+  ],
+  "order": 96,
+  "websiteUrl": "https://github.com/openai/codex",
+  "description": "OpenAI's coding agent. Configured in TOML; speaks the OpenAI Responses API to whichever provider config.toml names.",
+  "protocol": "openai-responses",
+  "configDir": "~/.codex",
+  "files": [
+    {
+      "path": "~/.codex/config.toml",
+      "format": "toml",
+      "purpose": "Main config: model, provider, reasoning effort, provider tables."
+    },
+    {
+      "path": "~/.codex/auth.json",
+      "format": "json",
+      "purpose": "ChatGPT sign-in credentials."
+    }
+  ],
+  "fields": [
+    {
+      "key": "model",
+      "path": "model",
+      "type": "string",
+      "description": "Default model."
+    },
+    {
+      "key": "provider",
+      "path": "model_provider",
+      "type": "string",
+      "description": "Id of the provider table to use."
+    },
+    {
+      "key": "effort",
+      "path": "model_reasoning_effort",
+      "type": "string",
+      "description": "Reasoning effort (low/medium/high/xhigh)."
+    },
+    {
+      "key": "providerTable",
+      "path": "model_providers.<id>",
+      "type": "object",
+      "description": "A provider entry: name, base_url, wire_api, token."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "model": "model",
+      "provider": "provider",
+      "providerTable": "providerEntry"
+    },
+    "ignored": [
+      "effort"
+    ],
+    "providerEntry": {
+      "path": "model_providers.{{providerId}}",
+      "template": {
+        "name": "{{providerName}}",
+        "base_url": "{{baseUrl}}",
+        "wire_api": "responses"
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ function getThemeFromDocument(): AgentClientIconTheme {
  * Agent 客户端品牌图标。
  *
  * 两套主题的图分开取：客户端图标多半是彩色 logo，在暗底上需要另一张（或干脆是同一张，
- * 那就在 `catalog/clients/<key>/icon.svg` 放一张，注册表会把它铺给两套主题）。
+ * 那就在 `packages/contracts/source/clients/<key>/icon.svg` 放一张，注册表会把它铺给两套主题）。
  * 主题靠 `MutationObserver` 跟着 `<html class="dark">` 走，与 `ProviderIcon` 同一套做法——
  * 颜色切换发生在 DOM 上，没有可订阅的 React 状态。
  */

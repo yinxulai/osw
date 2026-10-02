@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { AGENT_CLIENT_DEFINITIONS, agentClientFieldsOfFile, findAgentClient, findAgentClientFile, type AgentClientDefinition, type AgentClientFileDefinition } from '@common/clients'
 import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
@@ -16,6 +16,7 @@ import type {
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { resolveProxyOrigin } from '@common/proxy-origin'
+import { resolveLocale, type Locale } from '@common/i18n'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { AppError } from '../errors'
 import {
@@ -29,6 +30,7 @@ import { getSettings } from '../database/settings-store'
 import { ConfigParseError, createConfigEditor, supportsAutoFill, type ConfigEditor } from './formats'
 import { resolveClientConfigPath } from './paths'
 import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, stripModelPrefix, type ClientApplyContext, type ClientApplyRule, type ClientFieldRole } from './rules'
+import { currentShellPlatform, defaultShellProfileCandidates, envFileHeader, managedBlock, resolveShellProfilePath, stripEnvFileHeader, upsertManagedBlock, type ShellPlatform } from './shell'
 import { diffClientConfigContent } from './version-diff'
 
 export interface ClientConfigTarget {
@@ -117,7 +119,7 @@ export async function readClientConfigFile(clientKey: string, filePath: string):
 
   let editor
   try {
-    editor = createConfigEditor(target.file.format, raw.content)
+    editor = createConfigEditor(target.file.format, raw.content, target.file.shape)
   } catch (error) {
     if (error instanceof ConfigParseError) return { ...base, autoFill: 'unparsable', detected: {} }
     throw error
@@ -166,9 +168,74 @@ async function commitClientConfig(target: ClientConfigTarget, nextContent: strin
     note,
   })
 
-  if (nextContent !== current.content) await writeAtomic(target.resolvedPath, nextContent)
+  // OSW 拥有的 load 文件（见 `AgentClientFileDefinition.load`）多一句「由 OSW 生成」的抬头：
+  // 这份文件工具自己不会读、全靠登录 shell 加载，用户手改它不会生效，写清楚比留白好。
+  const effectiveContent = target.file.load ? withEnvFileHeader(nextContent, await resolveContentLocale()) : nextContent
+  if (effectiveContent !== current.content) await writeAtomic(target.resolvedPath, effectiveContent)
+  if (target.file.load) await syncLoadFileShellIntegration(target)
 
   return { state: await readClientConfigFile(target.clientKey, target.filePath), backedUp }
+}
+
+/**
+ * env 文件抬头用哪种语言：跟着设置里的界面语言走，`system` 时按 core 进程的系统语言归一。
+ *
+ * env 文件的读者是用户自己，抬头就该跟界面同语言；core 拿不到 `app.getLocale()` /
+ * `navigator.language`（它在独立的 utilityProcess 里），沿用这里既有的 `Intl` 系统语言兜底。
+ */
+async function resolveContentLocale(): Promise<Locale> {
+  const settings = await getSettings()
+  return resolveLocale(settings.language, Intl.DateTimeFormat().resolvedOptions().locale)
+}
+
+/** env 文件顶部那句「由 OSW 生成」的注释；重复写入或换语言都不会叠加。 */
+function withEnvFileHeader(content: string, locale: Locale): string {
+  const header = envFileHeader(locale)
+  const body = stripEnvFileHeader(content)
+  if (body === '') return `${header}\n`
+  return `${header}\n\n${body}`
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 让登录 shell 加载这个 `load` 文件。
+ *
+ * 只有 `file.load` 的文件会走到这里：它承载的是客户端**只从进程环境读**的键（Copilot CLI 的
+ * `COPILOT_PROVIDER_*`），工具本身不会去读这个文件，全靠登录 shell 把它带进环境。
+ *
+ * 落点选择与写入规则都在 `./shell` 里（存在哪个启动文件就改哪个，找到哨兵就整段替换、
+ * 找不到才追加），这里只负责读盘、比对、落盘。
+ *
+ * 启动文件写失败**不**算整次失败：env 文件已经落盘，用户手边就有一份可用的值，大不了自己
+ * `source` 一下；把它判负反而连这份值也一并回滚掉。
+ */
+async function syncLoadFileShellIntegration(target: ClientConfigTarget): Promise<void> {
+  const platform: ShellPlatform = currentShellPlatform()
+  const candidates = defaultShellProfileCandidates()
+
+  const existingPaths: string[] = []
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) existingPaths.push(candidate)
+  }
+  const profilePath = resolveShellProfilePath(existingPaths, candidates)
+
+  const current = await readRaw(profilePath)
+  const next = upsertManagedBlock(current.content, managedBlock(platform, target.resolvedPath))
+  if (next === current.content) return
+
+  try {
+    await writeAtomic(profilePath, next)
+  } catch {
+    // 见上：加载失败不阻断配置写入。
+  }
 }
 
 /** 手动保存（用户在下方直接编辑内容）。 */
@@ -223,7 +290,7 @@ function planClientConfigChanges(target: ClientConfigTarget, text: string, value
 
   let editor
   try {
-    editor = createConfigEditor(target.file.format, text)
+    editor = createConfigEditor(target.file.format, text, target.file.shape)
   } catch (error) {
     if (error instanceof ConfigParseError) {
       throw new AppError('CLIENT_CONFIG_PARSE_FAILED', 400, `Cannot parse ${target.filePath} as ${target.file.format}`, {
@@ -294,6 +361,12 @@ export async function applyClientConfigOverrides(clientKey: string, filePath: st
   // 一处都不用改就直接返回：没有改动就不该落盘，也不该多出一个版本，
   // 否则反复点按钮会往历史里塞一堆内容相同的记录。
   if (plan.changes.length === 0) {
+    // 例外：`load` 文件的抬头随界面语言变化。切换语言本身不产生任何字段改动，
+    // 走早退分支会让抬头一直停在旧语言，所以这里比一次实际落盘内容，只在抬头确实不同时重写。
+    if (target.file.load && withEnvFileHeader(plan.nextContent, await resolveContentLocale()) !== raw.content) {
+      const result = await commitClientConfig(target, plan.nextContent, 'manual', 'header refresh')
+      return { ...result, changes: [] }
+    }
     return { state: await readClientConfigFile(clientKey, filePath), backedUp: null, changes: [] }
   }
 
@@ -401,29 +474,45 @@ function writableClientConfigFiles(client: AgentClientDefinition, rule: ClientAp
  */
 async function clientConfigFillValues(target: ClientConfigTarget, client: AgentClientDefinition, rule: ClientApplyRule, defaults: ClientConfigDefaults): Promise<ClientApplyValues> {
   const values: ClientApplyValues = { baseUrl: defaults.origin, apiKey: defaults.apiKey, model: defaults.model }
-  if (!supportsAutoFill(target.file.format)) return values
 
-  const raw = await readRaw(target.resolvedPath)
-  if (!raw.exists) return values
-
-  let editor: ConfigEditor
-  try {
-    editor = createConfigEditor(target.file.format, raw.content)
-  } catch {
-    // 内容坏了是「读不到」，不是「写不了」：兜底值照样写，语法错误会在规划那一步被报出来。
-    return values
+  /**
+   * 回读某个角色当前写着的值，在**该客户端的全部文件**里找。
+   *
+   * 不看目标文件一个：跨文件客户端的模型名与 provider 表项分在两个文件里（Pi 的模型名在
+   * settings.json，provider 表项在 models.json），只看本次要写的那个文件时，写 models.json 就
+   * 读不到用户选好的模型名，于是会把它悄悄换回兜底值。顺序上先看目标文件（就地的声明优先），
+   * 再看其余文件；「内容坏了 / 格式不支持 / 字段不在这个文件里」都算这一类读不到，跳过继续找。
+   */
+  const read = async (role: ClientFieldRole): Promise<string | null> => {
+    const ordered = [target.file, ...client.files.filter(file => file.path !== target.filePath)]
+    for (const file of ordered) {
+      if (!supportsAutoFill(file.format)) continue
+      const field = agentClientFieldsOfFile(client, file.path).find(item => rule.roles[item.key] === role)
+      if (!field) continue
+      const path = resolveClientConfigPath(client.key, file.path)
+      if (!path) continue
+      const raw = await readRaw(path)
+      if (!raw.exists) continue
+      let editor: ConfigEditor
+      try {
+        // 必须带上 `file.shape`：缺了它，`patchList` 文件会被当成普通映射来解析，
+        // 里层的字段路径（如 `agent-default-model.model`）读出来永远是空，于是跨文件回读
+        // 悄悄退回兜底值。这与读路径（`readClientConfigFile`）保持一致。
+        editor = createConfigEditor(file.format, raw.content, file.shape)
+      } catch {
+        // 内容坏了是「读不到」，不是「写不了」：跳过这个文件、兜底值照样写，
+        // 语法错误会在规划那一步被报出来。
+        continue
+      }
+      const value = editor.get(field.path)
+      if (value && value.trim()) return stripModelPrefix(rule, value)
+    }
+    return null
   }
 
-  const fields = agentClientFieldsOfFile(client, target.filePath)
-  const read = (role: ClientFieldRole): string | null => {
-    const field = fields.find(item => rule.roles[item.key] === role)
-    const value = field ? editor.get(field.path) : null
-    return value && value.trim() ? stripModelPrefix(rule, value) : null
-  }
-
-  const model = read('model')
+  const model = await read('model')
   if (model) values.model = model
-  const smallModel = read('smallModel')
+  const smallModel = await read('smallModel')
   if (smallModel) values.smallModel = smallModel
   return values
 }

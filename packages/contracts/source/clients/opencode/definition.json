@@ -1,0 +1,75 @@
+{
+  "key": "opencode",
+  "name": "OpenCode",
+  "aliases": [
+    "oc"
+  ],
+  "order": 88,
+  "websiteUrl": "https://opencode.ai",
+  "description": "Open-source terminal agent. Spells models as `provider/model`; its JSON (or JSONC) config and provider credentials sit under the XDG config and data dirs.",
+  "protocol": "openai-completions",
+  "configDir": "~/.config/opencode",
+  "files": [
+    {
+      "path": "~/.config/opencode/opencode.json",
+      "format": "jsonc",
+      "envVar": {
+        "name": "XDG_CONFIG_HOME",
+        "replaces": "~/.config"
+      },
+      "purpose": "Main config: `model`, `small_model`, and provider entries. May also be named opencode.jsonc."
+    },
+    {
+      "path": "~/.local/share/opencode/auth.json",
+      "format": "json",
+      "envVar": {
+        "name": "XDG_DATA_HOME",
+        "replaces": "~/.local/share"
+      },
+      "purpose": "Per-provider credentials."
+    }
+  ],
+  "fields": [
+    {
+      "key": "model",
+      "path": "model",
+      "type": "string",
+      "description": "Main `provider/model`."
+    },
+    {
+      "key": "small",
+      "path": "small_model",
+      "type": "string",
+      "description": "Small/background `provider/model`."
+    },
+    {
+      "key": "provider",
+      "path": "provider.<id>",
+      "type": "object",
+      "description": "A provider entry: npm, options (baseURL, apiKey), models."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "model": "model",
+      "small": "smallModel",
+      "provider": "providerEntry"
+    },
+    "ignored": [],
+    "modelPrefix": "osw/",
+    "providerEntry": {
+      "path": "provider.{{providerId}}",
+      "template": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "{{providerName}}",
+        "options": {
+          "baseURL": "{{baseUrl}}",
+          "apiKey": "{{apiKey}}"
+        },
+        "models": {
+          "{{model}}": {}
+        }
+      }
+    }
+  }
+}

@@ -69,6 +69,15 @@ describe('AddModelStep', () => {
     expect(screen.getByRole('button', { name: en('onboarding.models.addModel') })).not.toBeNull()
   })
 
+  it('已有供应商时，新建供应商同样是「自定义 + 预设」的宫格，而不是一颗通栏按钮', () => {
+    providers.current = [{ id: 'prov_1', name: 'Example' }]
+    render(<AddModelStep />, { wrapper: Wrapper })
+
+    expect(screen.getByText(en('onboarding.models.addProvider'))).not.toBeNull()
+    expect(screen.getByRole('button', { name: en('onboarding.models.customProvider') })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'OpenAI' })).not.toBeNull()
+  })
+
   it('模型接进来之后行尾的数量跟着更新', () => {
     providers.current = [{ id: 'prov_1', name: 'Example' }]
     models.current = [{ providerId: 'prov_1' }, { providerId: 'prov_1' }]

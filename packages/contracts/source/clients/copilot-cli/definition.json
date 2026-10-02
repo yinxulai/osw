@@ -1,0 +1,63 @@
+{
+  "key": "copilot-cli",
+  "name": "Copilot CLI",
+  "aliases": [
+    "gh-copilot"
+  ],
+  "order": 86,
+  "websiteUrl": "https://docs.github.com/copilot",
+  "description": "GitHub's Copilot CLI. It reads its model from settings.json, but points at a custom (BYOK) provider only through `COPILOT_PROVIDER_*` environment variables — which OSW delivers through a sourced env file.",
+  "configDir": "~/.copilot",
+  "files": [
+    {
+      "path": "~/.copilot/settings.json",
+      "format": "json",
+      "purpose": "Main config: the selected model (or `auto`). Not where the provider is set."
+    },
+    {
+      "path": "~/.copilot/osw.env",
+      "format": "env",
+      "load": true,
+      "purpose": "OSW-owned environment file: the BYOK provider address/key and model, loaded into the login shell."
+    }
+  ],
+  "fields": [
+    {
+      "key": "copilotModel",
+      "path": "model",
+      "type": "string",
+      "description": "GitHub-hosted model selection, or `auto`; overridden by `COPILOT_MODEL` in BYOK mode."
+    },
+    {
+      "key": "baseUrl",
+      "path": "COPILOT_PROVIDER_BASE_URL",
+      "type": "string",
+      "file": "~/.copilot/osw.env",
+      "description": "BYOK provider base URL."
+    },
+    {
+      "key": "apiKey",
+      "path": "COPILOT_PROVIDER_API_KEY",
+      "type": "string",
+      "file": "~/.copilot/osw.env",
+      "description": "BYOK provider API key."
+    },
+    {
+      "key": "model",
+      "path": "COPILOT_MODEL",
+      "type": "string",
+      "file": "~/.copilot/osw.env",
+      "description": "Model id sent to the BYOK provider."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "baseUrl": "baseUrl",
+      "apiKey": "apiKey",
+      "model": "model"
+    },
+    "ignored": [
+      "copilotModel"
+    ]
+  }
+}

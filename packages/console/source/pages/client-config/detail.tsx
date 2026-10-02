@@ -17,9 +17,10 @@ import { useClientConfigEditor } from './hooks/use-client-config-editor'
 /**
  * 单个客户端的详情与编辑。
  *
- * 版面自上而下是三件事——上面是**哪份文件**（只有多文件客户端才需要选），中间是**要写进去的值**
- * （决定），下面是**文件真正的样子**（事实）。退路不在版面里：版本历史是页头右上角的一个下拉，
- * 紧跟在「一键生效」右边，因为它是这两个动作的兜底，而不是某一块内容的附属品。
+ * 版面自上而下是两件事——上面是**要写进去的值**（决定），下面是**文件真正的样子**（事实）；
+ * 一个客户端可能有多份文件，它们收在内容模块里用标签切换，内容模块的「保存」一次写回所有改动过的文件。
+ * 退路不在版面里：版本历史是页头右上角的一个下拉，紧跟在「一键生效」右边，
+ * 因为它是这两个动作的兜底，而不是某一块内容的附属品。
  *
  * 客户端由路由参数决定，不从下拉里选：进详情页的前提就是「我要看这一个」。
  * 面包屑因此写全「客户端配置 › 当前客户端」两级——只写上一级的话，它读起来像一个小标题，
@@ -41,7 +42,7 @@ export function ClientConfigDetailPage() {
    * 页面头上只用到一小部分（状态徽标、版本下拉、骨架要的行数），正文整块交给 `ConfigEditorBody`。
    */
   const editor = useClientConfigEditor(clientKey)
-  const { client, state, status, versions, versionsLoading, restoreVersion, restoringId, slots, configurable } = editor
+  const { client, loading, error, versions, versionsLoading, restoreVersion, restoringId, slots, configurable } = editor
 
   const fill = useClientConfigFill()
 
@@ -82,7 +83,7 @@ export function ClientConfigDetailPage() {
               </Button>
             )}
             <VersionMenu
-              currentHash={state?.contentHash ?? ''}
+              currentHash={editor.files.find(file => file.filePath === editor.activeFilePath)?.state?.contentHash ?? ''}
               loading={versionsLoading}
               onRestore={restoreVersion}
               restoringId={restoringId}
@@ -99,15 +100,15 @@ export function ClientConfigDetailPage() {
             icon={CircleSlash}
             title={t('clientConfig.unknownClient')}
           />
-        ) : status.error ? (
+        ) : error ? (
           /*
            * 读不到就说读不到，不要一直摆骨架：管理服务没起来时首屏就是这个样子，
            * 而「永远在加载」会让人以为是自己等得不够久。原始报错留在描述里，
            * 好让「服务没开」和「文件权限不对」这两件事自己能分辨。
            */
-          <EmptyState icon={CircleSlash} title={t('clientConfig.loadFailed')} description={status.error} />
-        ) : status.loading || !state ? (
-          <CardSkeletons filePicker={client.files.length > 1} slots={slots} />
+          <EmptyState icon={CircleSlash} title={t('clientConfig.loadFailed')} description={error} />
+        ) : loading ? (
+          <CardSkeletons fileTabs={client.files.length > 1} slots={slots} />
         ) : (
           <ConfigEditorBody editor={editor} />
         )}
@@ -125,34 +126,35 @@ export function ClientConfigDetailPage() {
  */
 const SKELETON_CHROME_PLAIN = 67 // 卡片头（只有标题）49 + 18：可自动改写的客户端，`要写入的模型` 那张卡没有描述
 const SKELETON_ROW_HEIGHT = 56
-/** 文件选择那一块现在是一条只有一行的前提带（不是卡）：32px 下拉 + 上下各 10px + 上下边框。 */
-const SKELETON_FILE_BAND_HEIGHT = 54
+/** 内容模块的标签条：32px 标签 + 上方 12px（`pt-3`）。 */
+const SKELETON_FILE_TABS_HEIGHT = 44
 // 正文编辑器随着文件长度长，本来就没有标准高度，取一份十几行配置的落点——差几十像素看不出来，
 // 但按最小高度（`min-h-72`）摆的话，真实内容一到手整页就要往下跳一大截。
 const SKELETON_EDITOR_HEIGHT = 460
 
 interface CardSkeletonsProps {
-  /** 多文件客户端才有「选择配置文件」那一条前提带。 */
-  filePicker: boolean
+  /** 多文件客户端的内容模块才摆标签条。 */
+  fileTabs: boolean
   /** 「要写入的模型」有几行，由配方决定；0 表示这个客户端没有那一块，骨架也不能多摆一块。 */
   slots: number
 }
 
 function CardSkeletons(props: CardSkeletonsProps) {
-  const { filePicker, slots } = props
+  const { fileTabs, slots } = props
   // 返回 Fragment 而不是包一层 div：它们本来就该是 `PageContent` 网格的直接子项，间距才和真身一致。
   return (
     <>
-      {filePicker && (
-        <Skeleton className="w-full rounded-xl" style={{ height: SKELETON_FILE_BAND_HEIGHT }} />
-      )}
       {slots > 0 && (
         <Skeleton
           className="w-full rounded-xl"
           style={{ height: SKELETON_CHROME_PLAIN + slots * SKELETON_ROW_HEIGHT }}
         />
       )}
-      <Skeleton className="w-full rounded-xl" style={{ height: SKELETON_EDITOR_HEIGHT }} />
+      {/* 内容模块是一张卡：标签条（多文件才有）+ 正文。 */}
+      <Skeleton
+        className="w-full rounded-xl"
+        style={{ height: SKELETON_EDITOR_HEIGHT + (fileTabs ? SKELETON_FILE_TABS_HEIGHT : 0) }}
+      />
     </>
   )
 }

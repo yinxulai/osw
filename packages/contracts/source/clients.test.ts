@@ -49,6 +49,23 @@ describe('agent client registry', () => {
     expect(orders).toEqual([...orders].sort((left, right) => right - left))
   })
 
+  it('lists every auto-fillable client ahead of the ones that can only be hand-edited', () => {
+    // 列表与选择器都照注册表顺序排：能自动写入的客户端排在前面，用户扫一眼先看到「点了就能用」的那几个，
+    // 「只能手改」的沉到后面。这不是权重碰巧的结果，而是注册表要守住的一条次序。
+    // 目前注册表里每个客户端都有配方（没有「只能手改」的），这条次序因此是空成立的——但规则照旧，
+    // 以后再收一个没有地址字段的客户端时，它必须排到所有能自动写入的之后。
+    const fillable = AGENT_CLIENT_DEFINITIONS.filter(client => client.apply !== undefined)
+    const manual = AGENT_CLIENT_DEFINITIONS.filter(client => client.apply === undefined)
+
+    expect(fillable.length).toBeGreaterThan(0)
+    // 每个「只能手改」的都排在每个「能自动写入」的之后。
+    for (const manualClient of manual) {
+      for (const fillableClient of fillable) {
+        expect(fillableClient.order).toBeGreaterThan(manualClient.order)
+      }
+    }
+  })
+
   it('describes every client', () => {
     for (const client of AGENT_CLIENT_DEFINITIONS) {
       expect(client.name.trim().length).toBeGreaterThan(0)
@@ -96,6 +113,12 @@ describe('agent client registry', () => {
         expect(file.path.endsWith('/')).toBe(false)
         expect(CONFIG_FORMATS).toContain(file.format)
         expect(file.purpose.trim().length).toBeGreaterThan(0)
+
+        // 平台专有路径同样要守在主目录下：它们只是换一条 `~/` 路径，不是开一条绝对路径的后门。
+        for (const platformPath of Object.values(file.platformPaths ?? {})) {
+          expect(platformPath).toMatch(/^~\//)
+          expect(platformPath.endsWith('/')).toBe(false)
+        }
       }
 
       // 主配置文件必须在 `configDir` 下；其余文件可以是别的目录（OpenCode 的凭证在 XDG 数据目录）。
@@ -107,6 +130,18 @@ describe('agent client registry', () => {
     for (const client of AGENT_CLIENT_DEFINITIONS) {
       const paths = client.files.map(file => file.path)
       expect(new Set(paths).size).toBe(paths.length)
+    }
+  })
+
+  it('marks a shell-loaded file as env and nothing else', () => {
+    // `load` 的文件由 OSW 维护、登录 shell 加载，所以只能是 `KEY=VALUE` 的 env 文件。
+    // 别的格式挂上 `load` 没有加载机制可用，等于写了也不会生效。
+    for (const client of AGENT_CLIENT_DEFINITIONS) {
+      for (const file of client.files) {
+        if (file.load === undefined) continue
+        expect(file.load).toBe(true)
+        expect(file.format).toBe('env')
+      }
     }
   })
 
@@ -146,6 +181,32 @@ describe('agent client registry', () => {
         expect(file.envVar.replaces.endsWith('/')).toBe(false)
         // `replaces` 是路径前缀而不是随便一段字符串：对不上时 `expandDeclaredPath` 会静默忽略它。
         expect(file.path.startsWith(`${file.envVar.replaces}/`)).toBe(true)
+      }
+    }
+  })
+
+  it('declares a file storage shape the format editor can interpret', () => {
+    for (const client of AGENT_CLIENT_DEFINITIONS) {
+      for (const file of client.files) {
+        const shape = file.shape
+        if (shape === undefined) continue
+
+        if (shape.kind === 'map') continue
+
+        // 写名字的字段（`id` / `payload` / `idField`）缺省各有默认，写了就必须是能对上的非空标识符。
+        if (shape.kind === 'entryList') {
+          if (shape.idField === undefined) continue
+          expect(shape.idField.trim().length).toBeGreaterThan(0)
+          expect(shape.idField).not.toContain('.')
+          continue
+        }
+
+        expect(shape.kind).toBe('patchList')
+        for (const name of [shape.idField, shape.payloadField]) {
+          if (name === undefined) continue
+          expect(name.trim().length).toBeGreaterThan(0)
+          expect(name).not.toContain('.')
+        }
       }
     }
   })
@@ -191,8 +252,8 @@ describe('registry lookups', () => {
     const codex = AGENT_CLIENT_DEFINITION_BY_KEY['codex']!
     const keys = agentClientFieldsOfFile(codex, '~/.codex/config.toml').map(field => field.key)
 
-    // auth.json 与 magpie-models.json 上没有可改写的设置项（凭证与模型目录都不由我们管）。
-    expect(keys).toEqual(['model', 'provider', 'effort', 'catalog', 'providerTable'])
+    // auth.json 上没有可改写的设置项（凭证不由我们管）。
+    expect(keys).toEqual(['model', 'provider', 'effort', 'providerTable'])
     expect(agentClientFieldsOfFile(codex, '~/.codex/auth.json')).toEqual([])
   })
 })

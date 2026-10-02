@@ -1,0 +1,78 @@
+{
+  "key": "pi",
+  "name": "Pi",
+  "aliases": [],
+  "order": 84,
+  "description": "Pi agent. The default model is split across `defaultProvider` and `defaultModel` in settings.json; custom providers and their models live in models.json.",
+  "protocol": "openai-completions",
+  "configDir": "~/.pi/agent",
+  "files": [
+    {
+      "path": "~/.pi/agent/settings.json",
+      "format": "json",
+      "purpose": "Main config: defaultProvider, defaultModel, defaultThinkingLevel, theme."
+    },
+    {
+      "path": "~/.pi/agent/models.json",
+      "format": "json",
+      "purpose": "Custom provider definitions and their model lists."
+    },
+    {
+      "path": "~/.pi/agent/auth.json",
+      "format": "json",
+      "purpose": "Per-provider credentials."
+    }
+  ],
+  "fields": [
+    {
+      "key": "provider",
+      "path": "defaultProvider",
+      "type": "string",
+      "description": "Default provider id."
+    },
+    {
+      "key": "model",
+      "path": "defaultModel",
+      "type": "string",
+      "description": "Default model id."
+    },
+    {
+      "key": "thinking",
+      "path": "defaultThinkingLevel",
+      "type": "string",
+      "description": "Startup thinking level (off/minimal/low/medium/high/xhigh/max)."
+    },
+    {
+      "key": "providerTable",
+      "path": "providers.<id>",
+      "type": "object",
+      "file": "~/.pi/agent/models.json",
+      "description": "A provider entry: name, baseUrl, api, apiKey, models."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "provider": "provider",
+      "model": "model",
+      "providerTable": "providerEntry"
+    },
+    "ignored": [
+      "thinking"
+    ],
+    "providerEntry": {
+      "path": "providers.{{providerId}}",
+      "template": {
+        "name": "{{providerName}}",
+        "baseUrl": "{{baseUrl}}/v1",
+        "api": "openai-completions",
+        "apiKey": "{{apiKey}}",
+        "models": [
+          {
+            "id": "{{model}}",
+            "name": "{{model}}"
+          }
+        ]
+      }
+    }
+  }
+}

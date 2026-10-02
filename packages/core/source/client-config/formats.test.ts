@@ -10,17 +10,12 @@ import { ConfigParseError, createConfigEditor, supportsAutoFill } from './format
  */
 
 describe('format support', () => {
-  it('autofills the formats that have a structured writer', () => {
+  it('autofills every format that has a structured writer', () => {
     expect(supportsAutoFill('json')).toBe(true)
     expect(supportsAutoFill('jsonc')).toBe(true)
     expect(supportsAutoFill('env')).toBe(true)
     expect(supportsAutoFill('toml')).toBe(true)
-    // YAML 没有写入器（见 `apps/docs/specs/` 里的取舍）：只做备份、手动编辑与历史版本。
-    expect(supportsAutoFill('yaml')).toBe(false)
-  })
-
-  it('refuses to create an editor for yaml', () => {
-    expect(() => createConfigEditor('yaml', '')).toThrow(ConfigParseError)
+    expect(supportsAutoFill('yaml')).toBe(true)
   })
 })
 
@@ -271,10 +266,89 @@ describe('json editor', () => {
 
   it('refuses to guess at broken json', () => {
     expect(() => createConfigEditor('json', '{"model":')).toThrow(ConfigParseError)
+    // 普通 JSON 客户端要的是**对象**根：根是数组时属于另一种形状，不能当对象写。
     expect(() => createConfigEditor('json', '[1,2]')).toThrow(ConfigParseError)
     expect(() => createConfigEditor('json', '42')).toThrow(ConfigParseError)
     // jsonc 走同一条路：JSON.parse 认不下注释时按「解析失败」处理，而不是去猜注释。
     expect(() => createConfigEditor('jsonc', '{\n  // note\n  "model": "a"\n}')).toThrow(ConfigParseError)
+  })
+})
+
+/**
+ * 「条目数组」形状：根是一个对象数组，每个条目用某个字段当标识。
+ *
+ * VS Code 的 `chatLanguageModels.json` 就是这种——`[{ "name": "osw", ... }]`。写的时候只能命中
+ * `name` 相等的那一条，绝不能碰用户已经放进去的其它 provider。
+ */
+describe('json entry-list editor', () => {
+  const shape = { kind: 'entryList' as const, idField: 'name' }
+
+  it('reads members of the entry matched by the id field', () => {
+    const editor = createConfigEditor('json', '[{"name":"other","apiKey":"x"},{"name":"osw","apiKey":"sk-1"}]', shape)
+
+    expect(editor.get('osw.apiKey')).toBe('sk-1')
+    expect(editor.get('missing.apiKey')).toBeNull()
+  })
+
+  it('treats an empty file as an empty array', () => {
+    const editor = createConfigEditor('json', '', shape)
+    expect(editor.serialize()).toBe('[]\n')
+  })
+
+  it('refuses an object root when the shape is an entry list', () => {
+    expect(() => createConfigEditor('json', '{"provider":{}}', shape)).toThrow(ConfigParseError)
+  })
+
+  it('appends a whole entry when the id is not present yet', () => {
+    const editor = createConfigEditor('json', '', shape)
+
+    const before = editor.setObject('osw', { name: 'osw', vendor: 'customendpoint' })
+
+    expect(before).toBeNull()
+    expect(JSON.parse(editor.serialize())).toEqual([{ name: 'osw', vendor: 'customendpoint' }])
+  })
+
+  it('rewrites just the matching entry and leaves its neighbours untouched', () => {
+    const text = '[\n  {\n    "name": "anthropic",\n    "apiKey": "keep-me"\n  },\n  {\n    "name": "osw",\n    "apiKey": "old"\n  }\n]\n'
+    const editor = createConfigEditor('json', text, shape)
+
+    const before = editor.setObject('osw', { name: 'osw', apiKey: 'sk-new' })
+
+    expect(before).toContain('"apiKey": "old"')
+    const serialized = editor.serialize()
+    // 别的 provider 一个字节都不能动——这正是「只动目标键」在这层形状下的含义。
+    expect(serialized).toContain('"name": "anthropic"')
+    expect(serialized).toContain('"apiKey": "keep-me"')
+    expect(JSON.parse(serialized)).toEqual([
+      { name: 'anthropic', apiKey: 'keep-me' },
+      { name: 'osw', apiKey: 'sk-new' },
+    ])
+  })
+
+  it('writes a scalar into an existing entry', () => {
+    const editor = createConfigEditor('json', '[{"name":"osw","apiKey":"old"}]', shape)
+
+    const before = editor.set('osw.apiKey', 'sk-new')
+
+    expect(before).toBe('old')
+    expect(JSON.parse(editor.serialize())).toEqual([{ name: 'osw', apiKey: 'sk-new' }])
+  })
+
+  it('appends an entry that carries the id when only a nested scalar is set', () => {
+    const editor = createConfigEditor('json', '[{"name":"other"}]', shape)
+
+    editor.set('osw.apiKey', 'sk-1')
+
+    // 新条目必须带上 id 字段，否则下次读的时候按 `name` 找不到它。
+    expect(JSON.parse(editor.serialize())).toEqual([{ name: 'other' }, { name: 'osw', apiKey: 'sk-1' }])
+  })
+
+  it('keeps the file compact when the original was compact', () => {
+    const editor = createConfigEditor('json', '[{"name":"osw"}]', shape)
+
+    editor.setObject('osw', { name: 'osw', vendor: 'customendpoint' })
+
+    expect(editor.serialize()).toBe('[{"name":"osw","vendor":"customendpoint"}]')
   })
 })
 
@@ -641,5 +715,156 @@ describe('toml editor', () => {
     editor.set('model_providers.osw.name', 'One Switch')
 
     expect(editor.serialize()).toBe('[model_providers.osw]\nname = "One Switch"\n')
+  })
+})
+
+describe('yaml editor', () => {
+  const patchList = { kind: 'patchList' } as const
+
+  const text = [
+    '# 我的 dsh 配置',
+    '- id: agent-loop',
+    '  config:',
+    '    model: deepseek-v4 # 主模型',
+    '- id: llm-deepseek',
+    '  config:',
+    '    baseURL: https://api.deepseek.com',
+    '    apiKey: sk-1',
+    '    temperature: 0.7',
+    '',
+  ].join('\n')
+
+  it('reads a scalar inside an id-addressed entry, skipping the payload nesting', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    // 逻辑路径只写到载荷里的那个键：`config` 这一段是存储形状，由编辑器补齐，不写在声明里。
+    expect(editor.get('llm-deepseek.baseURL')).toBe('https://api.deepseek.com')
+    expect(editor.get('llm-deepseek.apiKey')).toBe('sk-1')
+    expect(editor.get('agent-loop.model')).toBe('deepseek-v4')
+  })
+
+  it('does not read an entry the document does not have', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    expect(editor.get('missing.key')).toBeNull()
+    expect(editor.get('llm-deepseek.missing')).toBeNull()
+  })
+
+  it('replaces a scalar in place, keeping comments and every other line', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    const before = editor.set('llm-deepseek.baseURL', 'http://127.0.0.1:9300')
+
+    expect(before).toBe('https://api.deepseek.com')
+    // 只动目标值那一处：文件头注释、行尾注释、缩进、键顺序全部原样。
+    expect(editor.serialize()).toBe(text.replace('https://api.deepseek.com', 'http://127.0.0.1:9300'))
+  })
+
+  it('zeroes in on the last entry when the same id appears twice', () => {
+    const duplicated = ['- id: llm-deepseek', '  config:', '    baseURL: https://a', '- id: llm-deepseek', '  config:', '    baseURL: https://b'].join('\n')
+    const editor = createConfigEditor('yaml', duplicated, patchList)
+
+    // 与工具自己一致：同名条目以最后一条为准，改的也是它。
+    expect(editor.get('llm-deepseek.baseURL')).toBe('https://b')
+    editor.set('llm-deepseek.baseURL', 'http://127.0.0.1:9300')
+    expect(editor.serialize()).toContain('baseURL: https://a')
+    expect(editor.serialize()).toContain('baseURL: http://127.0.0.1:9300')
+  })
+
+  it('appends a new entry when the id is not there yet', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    editor.set('api-gateway.model', 'osw/gpt-5')
+
+    const serialized = editor.serialize()
+    expect(serialized).toContain('- id: api-gateway')
+    expect(serialized).toContain('  config:\n    model: osw/gpt-5')
+    // 追加不碰旧内容：原来的条目与注释都还在。
+    expect(serialized).toContain('# 我的 dsh 配置')
+    expect(serialized).toContain('baseURL: https://api.deepseek.com')
+  })
+
+  it('creates the payload mapping when an entry exists without one', () => {
+    const editor = createConfigEditor('yaml', ['- id: agent-loop', '- id: llm-deepseek'].join('\n'), patchList)
+
+    editor.set('agent-loop.model', 'osw/gpt-5')
+
+    expect(editor.serialize()).toBe('- id: agent-loop\n  config:\n    model: osw/gpt-5\n- id: llm-deepseek\n')
+  })
+
+  it('starts a fresh patch list in an empty document', () => {
+    const editor = createConfigEditor('yaml', '', patchList)
+
+    editor.set('llm-deepseek.apiKey', 'sk-osw')
+
+    expect(editor.serialize()).toBe('- id: llm-deepseek\n  config:\n    apiKey: sk-osw\n')
+  })
+
+  it('writes a value the scalar type calls for, not a quoted string', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    editor.set('llm-deepseek.temperature', 1)
+    editor.set('llm-deepseek.enabled', true)
+
+    // 数字就是数字、布尔就是布尔（YAML 里 `"true"` 与 `true` 是两回事）；字符串才带引号。
+    expect(editor.serialize()).toContain('temperature: 1')
+    expect(editor.serialize()).toContain('enabled: true')
+  })
+
+  it('quotes a numeric string so it is not read back as a number', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    editor.set('llm-deepseek.temperature', '1')
+
+    // 字符串 `"1"` 与数字 `1` 在 YAML 里不是一回事：写出去的字面必须还能读回字符串。
+    expect(editor.serialize()).toContain('temperature: "1"')
+    expect(editor.get('llm-deepseek.temperature')).toBe('1')
+  })
+
+  it('does not need the shape declared at all for a plain nested mapping', () => {
+    // 缺省形状就是嵌套映射：不给 shape 也能读写一条点号路径。
+    const editor = createConfigEditor('yaml', 'model: gpt-5\nnested:\n  key: value\n')
+
+    expect(editor.get('nested.key')).toBe('value')
+    editor.set('nested.key', 'other')
+    expect(editor.serialize()).toBe('model: gpt-5\nnested:\n  key: other\n')
+  })
+
+  it('creates missing intermediate mappings for a plain nested mapping', () => {
+    const editor = createConfigEditor('yaml', 'model: gpt-5\n')
+
+    editor.set('provider.osw.name', 'One Switch')
+
+    expect(editor.serialize()).toBe('model: gpt-5\nprovider:\n  osw:\n    name: One Switch\n')
+  })
+
+  it('writes a whole object into an entry payload', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    editor.setObject('llm-deepseek.models', { 'gpt-5': {}, 'gpt-4': {} })
+
+    const serialized = editor.serialize()
+    expect(serialized).toContain('    models:\n      gpt-5: {}\n      gpt-4: {}')
+    // 表的其它键原样留着。
+    expect(serialized).toContain('baseURL: https://api.deepseek.com')
+  })
+
+  it('refuses to write into a document that is not a list of entries', () => {
+    // 一份把顶层写成映射的文件不是 dsh 的补丁列表；读不到、也绝不把用户的结构盖掉。
+    const editor = createConfigEditor('yaml', 'model: gpt-5\n', patchList)
+
+    expect(editor.get('llm-deepseek.apiKey')).toBeNull()
+    expect(() => editor.set('llm-deepseek.apiKey', 'sk-osw')).toThrow(ConfigParseError)
+  })
+
+  it('treats a broken document as unparsable instead of guessing', () => {
+    expect(() => createConfigEditor('yaml', '- id: a\n  config:\n    x: [unclosed', patchList)).toThrow(ConfigParseError)
+  })
+
+  it('keeps a placeholder path unreadable, like the other editors', () => {
+    const editor = createConfigEditor('yaml', text, patchList)
+
+    // `<id>` 是「运行期才知道的一段」，读的时候没有具体 id，只能当读不到。
+    expect(editor.get('<id>.baseURL')).toBeNull()
   })
 })

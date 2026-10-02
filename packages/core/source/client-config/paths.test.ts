@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { expandDeclaredPath, resolveClientConfigPath } from './paths'
+import { declaredPathForPlatform, expandDeclaredPath, resolveClientConfigPath } from './paths'
 
 /**
  * 路径解析——整个功能的**安全边界**。
@@ -116,5 +116,31 @@ describe('resolveClientConfigPath', () => {
   it('refuses a traversal dressed up as a declared path', () => {
     expect(resolveClientConfigPath('claude-code', '~/.claude/settings.json/../../../../etc/passwd')).toBeNull()
     expect(resolveClientConfigPath('claude-code', '~/.claude/../.ssh/id_rsa')).toBeNull()
+  })
+})
+
+describe('declaredPathForPlatform', () => {
+  const file = {
+    path: '~/Library/Application Support/Code/User/chatLanguageModels.json',
+    platformPaths: {
+      linux: '~/.config/Code/User/chatLanguageModels.json',
+      win32: '~/AppData/Roaming/Code/User/chatLanguageModels.json',
+    },
+  }
+
+  it('picks the path declared for each platform', () => {
+    // 平台是入参而不是就地读 `process.platform`：CI 跑在 ubuntu 上，靠真实平台
+    // 就永远断言不到 macOS / Windows 那两份落点。三个平台在这里都要能测到。
+    expect(declaredPathForPlatform(file, 'darwin')).toBe('~/Library/Application Support/Code/User/chatLanguageModels.json')
+    expect(declaredPathForPlatform(file, 'linux')).toBe('~/.config/Code/User/chatLanguageModels.json')
+    expect(declaredPathForPlatform(file, 'win32')).toBe('~/AppData/Roaming/Code/User/chatLanguageModels.json')
+  })
+
+  it('falls back to the canonical path when the platform is not declared', () => {
+    expect(declaredPathForPlatform(file, 'freebsd')).toBe(file.path)
+  })
+
+  it('keeps the canonical path for a file that declares no platform paths', () => {
+    expect(declaredPathForPlatform({ path: '~/.claude/settings.json' }, 'linux')).toBe('~/.claude/settings.json')
   })
 })

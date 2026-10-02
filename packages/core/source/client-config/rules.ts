@@ -116,9 +116,17 @@ export function resolveFieldValue(role: ClientFieldRole, context: ClientApplyCon
   }
 }
 
-/** provider 表项在某个客户端上使用的具体路径（把 `{{providerId}}` 换成真实 id）。 */
+/**
+ * provider 表项在某个客户端上使用的具体路径。
+ *
+ * 路径本身也是模板：多数客户端用 `{{providerId}}` 当键（`model_providers.osw`），但
+ * 「条目数组」形状的客户端（VS Code 的 `chatLanguageModels.json`）**以 `name` 字段当标识**，
+ * 所以它的路径写 `{{providerName}}`（`OSW`），必须与模板里那个 `name` 字面相等才会命中同一条。
+ * 两个占位符都换掉，两种写法因此都能用。
+ */
 export function concreteProviderEntryPath(rule: ClientApplyRule): string | null {
-  return rule.providerEntry ? rule.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID) : null
+  if (!rule.providerEntry) return null
+  return rule.providerEntry.path.replaceAll('{{providerId}}', LOCAL_PROVIDER_ID).replaceAll('{{providerName}}', LOCAL_PROVIDER_NAME)
 }
 
 /**

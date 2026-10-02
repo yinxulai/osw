@@ -1,8 +1,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parse } from 'yaml'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY } from '@common/clients'
+import { AGENT_CLIENT_DEFINITIONS, AGENT_CLIENT_DEFINITION_BY_KEY, LOCAL_PROVIDER_NAME } from '@common/clients'
+import { createAppTranslator } from '@common/i18n/catalogs'
 import type { AppError } from '../errors'
 import { closeDatabases, initDatabases } from '../database'
 import { hashClientConfigContent } from '../database/client-config-version-store'
@@ -19,6 +21,7 @@ import {
   restoreClientConfigVersion,
   saveClientConfigContent,
 } from './service'
+import { declaredPathForPlatform } from './paths'
 
 /**
  * 客户端配置文件服务。
@@ -40,6 +43,18 @@ const CLAUDE_FILE = '~/.claude/settings.json'
 const CODEX_FILE = '~/.codex/config.toml'
 const CODEX_AUTH_FILE = '~/.codex/auth.json'
 const OPENCODE_FILE = '~/.config/opencode/opencode.json'
+const PI_SETTINGS_FILE = '~/.pi/agent/settings.json'
+const PI_MODELS_FILE = '~/.pi/agent/models.json'
+const DSH_FILE = 'deepseek-harness'
+const DSH_SETTINGS_FILE = '~/.dsh/settings.yaml'
+const COPILOT = 'copilot-cli'
+const COPILOT_ENV_FILE = '~/.copilot/osw.env'
+const VSCODE = 'vscode'
+/**
+ * VS Code 的配置文件在不同系统落在不同目录里，而 `resolveClientConfigTarget` 按**真实平台**选目录。
+ * CI 跑在 ubuntu 上、本机是 macOS，所以这里从注册表按当前平台推导，而不是把 macOS 那条路径写死。
+ */
+const VSCODE_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!, process.platform)
 
 /**
  * 注册表里声明了「目录可被环境变量改道」的变量名（OpenCode 的 XDG、DeepSeek Harness 的 DSH_HOME）。
@@ -192,23 +207,6 @@ describe('readClientConfigFile', () => {
     expect(state.content).toBe('{"model":')
   })
 
-  it('says so when there is no recipe for the client', async () => {
-    // 没有配方时先报客户端维度：这类工具（Pi 的地址与凭证分在两个文件里；Copilot CLI、
-    // Cursor CLI 只存模型名；DeepSeek Harness 是 YAML）连「该填什么」都无从谈起，
-    // 格式能不能解析无关紧要。
-    const files = {
-      pi: '~/.pi/agent/settings.json',
-      'copilot-cli': '~/.copilot/settings.json',
-      'cursor-cli': '~/.cursor/cli-config.json',
-      'deepseek-harness': '~/.dsh/config.yaml',
-    }
-
-    for (const [client, filePath] of Object.entries(files)) {
-      const state = await readClientConfigFile(client, filePath)
-      expect({ client, autoFill: state.autoFill }).toEqual({ client, autoFill: 'unsupported-client' })
-    }
-  })
-
   it('refuses a disallowed path', async () => {
     await expect(readClientConfigFile(CLAUDE, '~/.ssh/id_rsa')).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PATH_NOT_ALLOWED' })
   })
@@ -288,15 +286,19 @@ describe('applyClientConfigOverrides', () => {
         // 没填小模型就回落主模型：空串会被客户端当成「没有模型」。
         ANTHROPIC_SMALL_FAST_MODEL: 'osw-model',
         ANTHROPIC_DEFAULT_OPUS_MODEL: 'osw-model',
+        ANTHROPIC_DEFAULT_OPUS_MODEL_NAME: 'osw-model',
         ANTHROPIC_DEFAULT_SONNET_MODEL: 'osw-model',
+        ANTHROPIC_DEFAULT_SONNET_MODEL_NAME: 'osw-model',
         ANTHROPIC_DEFAULT_HAIKU_MODEL: 'osw-model',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME: 'osw-model',
         ANTHROPIC_DEFAULT_FABLE_MODEL: 'osw-model',
+        ANTHROPIC_DEFAULT_FABLE_MODEL_NAME: 'osw-model',
         // 子代理也走本地：漏一个就会有一部分请求绕回去找真实上游。
         CLAUDE_CODE_SUBAGENT_MODEL: 'osw-model',
       },
     })
     expect(result.state.autoFill).toBe('ready')
-    expect(result.changes).toHaveLength(10)
+    expect(result.changes).toHaveLength(14)
     expect(result.changes[0]).toEqual({ path: 'model', before: null, after: 'osw-model' })
   })
 
@@ -304,6 +306,24 @@ describe('applyClientConfigOverrides', () => {
     await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, { ...MODEL, smallModel: 'osw-small' })
 
     expect(JSON.parse(readFile(CLAUDE_FILE)).env.ANTHROPIC_SMALL_FAST_MODEL).toBe('osw-small')
+  })
+
+  it('rewrites the model labels alongside the aliases', async () => {
+    // 用户文件里往往已经有一组 `*_MODEL_NAME`（有些工具/教程会写）。它们是 `/model` 选择器里的
+    // 展示名，如果只改别名不改它，用户切了模型却看到选择器还显示老模型，会以为切换没生效。
+    writeFile(CLAUDE_FILE, JSON.stringify({
+      env: {
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'default',
+        ANTHROPIC_DEFAULT_OPUS_MODEL_NAME: 'anthropic/claude-4.8-opus',
+      },
+    }))
+
+    const result = await applyClientConfigOverrides(CLAUDE, CLAUDE_FILE, MODEL)
+    const env = JSON.parse(readFile(CLAUDE_FILE)).env
+
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('osw-model')
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME).toBe('osw-model')
+    expect(result.changes).toContainEqual({ path: 'env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME', before: 'anthropic/claude-4.8-opus', after: 'osw-model' })
   })
 
   it('reports what each key looked like before', async () => {
@@ -331,7 +351,7 @@ describe('applyClientConfigOverrides', () => {
     expect(content).toContain('model = "osw-model"')
     expect(content).toContain('model_provider = "osw"')
     expect(content).toContain('[model_providers.openai]')
-    expect(content).toContain('[model_providers.osw]\nname = "One Switch"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"')
+    expect(content).toContain(`[model_providers.osw]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"`)
     // 推理档位是用户自己的取舍，配方里显式放过了。
     expect(content).toContain('model_reasoning_effort = "high"')
     expect(result.changes).toContainEqual({ path: 'model_providers.osw', before: null, after: expect.any(String) })
@@ -349,6 +369,33 @@ describe('applyClientConfigOverrides', () => {
     expect(JSON.parse(readFile(CODEX_AUTH_FILE))).toEqual({ tokens: { access_token: 'x' } })
   })
 
+  it('writes a cross-file client without losing the model the user already picked', async () => {
+    // Pi 的模型名在 settings.json、provider 表项在 models.json：两份文件各写各的那一半。
+    // 回读模型名必须在客户端的**全部文件**里找，否则写 models.json 那一次会把用户在
+    // settings.json 里选好的模型悄悄换回兜底值。
+    writeFile(PI_SETTINGS_FILE, JSON.stringify({ defaultModel: 'my-model' }))
+
+    await applyClientConfigDefaults('pi')
+
+    // provider 表项写进 models.json：baseUrl 带 `/v1`、models 是数组。
+    expect(JSON.parse(readFile(PI_MODELS_FILE))).toEqual({
+      providers: {
+        osw: {
+          name: LOCAL_PROVIDER_NAME,
+          baseUrl: 'http://127.0.0.1:9300/v1',
+          api: 'openai-completions',
+          apiKey: 'sk-osw',
+          models: [{ id: 'my-model', name: 'my-model' }],
+        },
+      },
+    })
+
+    // settings.json 指到本地 provider，且保住了用户自己填的模型名。
+    const settings = JSON.parse(readFile(PI_SETTINGS_FILE)) as Record<string, unknown>
+    expect(settings.defaultProvider).toBe('osw')
+    expect(settings.defaultModel).toBe('my-model')
+  })
+
   it('spells the opencode model with its provider prefix', async () => {
     await applyClientConfigOverrides('opencode', OPENCODE_FILE, { ...MODEL, smallModel: 'osw-small' })
     expect(JSON.parse(readFile(OPENCODE_FILE))).toEqual({
@@ -357,7 +404,7 @@ describe('applyClientConfigOverrides', () => {
       provider: {
         osw: {
           npm: '@ai-sdk/openai-compatible',
-          name: 'One Switch',
+          name: LOCAL_PROVIDER_NAME,
           options: { baseURL: 'http://127.0.0.1:9300', apiKey: 'sk-osw' },
           models: { 'osw-model': {} },
         },
@@ -375,10 +422,124 @@ describe('applyClientConfigOverrides', () => {
     expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
   })
 
-  it('refuses a client without a recipe', async () => {
-    await expect(applyClientConfigOverrides('pi', '~/.pi/agent/settings.json', MODEL)).rejects.toMatchObject({
-      code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED',
-    })
+  it('delivers env-only settings through a sourced env file and injects a loader into the login shell', async () => {
+    // Copilot CLI 的 BYOK 只读环境变量：能改的只有 shell。写入 env 文件之外，还要在登录启动文件里
+    // 留一段哨兵区段去 `source` 它——否则文件写了也没人读。
+    await updateSettings({ language: 'en' })
+    await applyClientConfigOverrides(COPILOT, COPILOT_ENV_FILE, MODEL)
+
+    // 1) env 文件带「由 OSW 生成」抬头，键值就是我们给的那些。
+    const env = readFile(COPILOT_ENV_FILE)
+    expect(env).toContain('# Generated by One Switch')
+    expect(env).toContain('COPILOT_PROVIDER_BASE_URL=http://127.0.0.1:9300')
+    expect(env).toContain('COPILOT_PROVIDER_API_KEY=sk-osw')
+    expect(env).toContain('COPILOT_MODEL=osw-model')
+
+    // 2) 登录启动文件里有一段指向该 env 文件的哨兵区段。测试的主目录是空临时目录，
+    //    一个候选都不存在，于是落到第一候选 `.zshrc`。
+    const profile = readFile('~/.zshrc')
+    expect(profile).toContain('>>> osw managed env >>>')
+    expect(profile).toContain(fullPath(COPILOT_ENV_FILE))
+  })
+
+  it('localizes the env file header to the configured language', async () => {
+    // 抬头跟着界面语言走；换成中文后重写同一份文件，不该叠出两段抬头。
+    await updateSettings({ language: 'zh-CN' })
+    await applyClientConfigOverrides(COPILOT, COPILOT_ENV_FILE, MODEL)
+
+    const env = readFile(COPILOT_ENV_FILE)
+    expect(env).toContain(createAppTranslator('zh-CN')('clientConfig.envFile.header.title'))
+    expect((env.match(/# 由 One Switch 生成/g) ?? []).length).toBe(1)
+  })
+
+  it('replaces the header in place when the language changes', async () => {
+    await updateSettings({ language: 'en' })
+    await applyClientConfigOverrides(COPILOT, COPILOT_ENV_FILE, MODEL)
+    await updateSettings({ language: 'zh-CN' })
+    await applyClientConfigDefaults(COPILOT)
+
+    const env = readFile(COPILOT_ENV_FILE)
+    // 换语言后只留一段当前语言的抬头，旧语言的抬头不残留。
+    expect((env.match(/# 由 One Switch 生成/g) ?? []).length).toBe(1)
+    expect(env).toContain('COPILOT_PROVIDER_BASE_URL=http://127.0.0.1:9300')
+  })
+
+  it('writes a vscode BYOK provider as one entry of the model list', async () => {
+    const result = await applyClientConfigOverrides(VSCODE, VSCODE_FILE, MODEL)
+
+    expect(result.state.autoFill).toBe('ready')
+    expect(JSON.parse(readFile(VSCODE_FILE))).toEqual([
+      {
+        name: LOCAL_PROVIDER_NAME,
+        vendor: 'customendpoint',
+        apiKey: 'sk-osw',
+        apiType: 'chat-completions',
+        models: [
+          {
+            id: 'osw-model',
+            name: 'osw-model',
+            url: 'http://127.0.0.1:9300/v1/chat/completions',
+            toolCalling: true,
+            vision: true,
+            maxInputTokens: 128000,
+            maxOutputTokens: 16000,
+          },
+        ],
+      },
+    ])
+  })
+
+  it('rewrites only the osw entry and leaves the user other providers alone', async () => {
+    writeFile(
+      VSCODE_FILE,
+      JSON.stringify([
+        { name: 'Anthropic', vendor: 'customendpoint', apiKey: 'keep', models: [{ id: 'claude', name: 'Claude' }] },
+        { name: LOCAL_PROVIDER_NAME, vendor: 'customendpoint', apiKey: 'old', models: [] },
+      ]),
+    )
+
+    await applyClientConfigOverrides(VSCODE, VSCODE_FILE, MODEL)
+    const entries = JSON.parse(readFile(VSCODE_FILE)) as Array<Record<string, unknown>>
+
+    // 别人的 provider 原封不动——条目数组形状下「只动目标键」就是这个意思。
+    expect(entries[0]).toEqual({ name: 'Anthropic', vendor: 'customendpoint', apiKey: 'keep', models: [{ id: 'claude', name: 'Claude' }] })
+    expect((entries[1] as { apiKey: string }).apiKey).toBe('sk-osw')
+    expect(entries).toHaveLength(2)
+  })
+
+  it('is idempotent for a vscode provider list', async () => {
+    await applyClientConfigDefaults(VSCODE)
+
+    const [second] = await applyClientConfigDefaults(VSCODE)
+
+    expect(second).toMatchObject({ status: 'unchanged', changeCount: 0 })
+  })
+
+  it('calls a vscode file that points at the local service applied', async () => {
+    await applyClientConfigDefaults(VSCODE)
+
+    expect(await overviewOf(VSCODE)).toMatchObject({ coverage: 'applied', pendingChanges: 0 })
+  })
+
+  it('rewrites the loader in place instead of stacking a second block', async () => {
+    await applyClientConfigOverrides(COPILOT, COPILOT_ENV_FILE, MODEL)
+    await applyClientConfigDefaults(COPILOT)
+
+    const profile = readFile('~/.zshrc')
+    // 恰好一段：重复应用只改这一段，不追加第二段。
+    expect(profile.split('>>> osw managed env >>>').length - 1).toBe(1)
+  })
+
+  it('prefers an existing shell profile over creating a new one', async () => {
+    // 用户实际在用的是 `.bash_profile`：就改它，别另外造一个 `.zshrc`。
+    writeFile('~/.bash_profile', 'export PATH="$HOME/bin:$PATH"\n')
+
+    await applyClientConfigDefaults(COPILOT)
+
+    const profile = readFile('~/.bash_profile')
+    expect(profile).toContain('export PATH="$HOME/bin:$PATH"')
+    expect(profile).toContain('>>> osw managed env >>>')
+    expect(fs.existsSync(fullPath('~/.zshrc'))).toBe(false)
   })
 
   it('refuses to overwrite a file it cannot parse', async () => {
@@ -429,12 +590,6 @@ describe('previewClientConfigOverrides', () => {
 
     // 列表页的「已生效」就是这个空数组。
     expect(preview.changes).toEqual([])
-  })
-
-  it('refuses a client without a recipe', async () => {
-    await expect(previewClientConfigOverrides('pi', '~/.pi/agent/settings.json', MODEL)).rejects.toMatchObject({
-      code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED',
-    })
   })
 })
 
@@ -502,10 +657,6 @@ describe('listClientConfigOverview', () => {
       versionCount: 0,
       lastVersionTime: null,
     })
-  })
-
-  it('marks a client without a recipe as unavailable', async () => {
-    expect(await overviewOf('pi')).toMatchObject({ coverage: 'unavailable', pendingChanges: 0 })
   })
 
   it('calls a file whose own syntax is broken unavailable', async () => {
@@ -585,11 +736,31 @@ describe('applyClientConfigDefaults', () => {
     expect(content).toContain('[model_providers.osw]')
   })
 
-  it('skips a client it has no recipe for, naming the client', async () => {
-    const [pi] = await applyClientConfigDefaults('pi')
+  it('fills the harness runtime settings with a route and a default model', async () => {
+    const [harness] = await applyClientConfigDefaults(DSH_FILE)
 
-    expect(pi).toMatchObject({ clientKey: 'pi', status: 'skipped', filePaths: [], changeCount: 0 })
-    expect(pi!.message).not.toBe('')
+    expect(harness).toMatchObject({ clientKey: DSH_FILE, status: 'applied' })
+    // 写的是运行期热加载的那份 settings.yaml，而不是只读的 config.yaml 图层。
+    expect(harness!.filePaths).toContain(DSH_SETTINGS_FILE)
+
+    const settings = parse(readFile(DSH_SETTINGS_FILE)) as {
+      'agent-default-model'?: { provider?: string; model?: string }
+      'llm-pi-ai'?: { providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string }> }> }
+    }
+
+    // 新会话的默认路由指向本机服务提供方。
+    expect(settings['agent-default-model']).toMatchObject({ provider: LOCAL_PROVIDER_NAME.toLowerCase() })
+    // 手工声明的 provider 路由带上本机地址与 /v1，以及数组形态的模型清单。
+    expect(settings['llm-pi-ai']?.providers?.osw?.baseURL).toContain('127.0.0.1:9300/v1')
+    expect(settings['llm-pi-ai']?.providers?.osw?.models?.[0]).toMatchObject({ id: 'default' })
+  })
+
+  it('is idempotent for the harness too: a second run has nothing to write', async () => {
+    await applyClientConfigDefaults(DSH_FILE)
+
+    const [second] = await applyClientConfigDefaults(DSH_FILE)
+
+    expect(second).toMatchObject({ clientKey: DSH_FILE, status: 'unchanged', changeCount: 0 })
   })
 
   it('refuses an unregistered client', async () => {
@@ -608,11 +779,12 @@ describe('applyClientConfigDefaults', () => {
     expect(readFile(CLAUDE_FILE)).toBe('{"model":')
   })
 
-  it('touches every fillable client when no key is given', async () => {
+  it('touches every registered client when no key is given', async () => {
     const items = await applyClientConfigDefaults()
 
     expect(items.map(item => item.clientKey)).toEqual(AGENT_CLIENT_DEFINITIONS.map(client => client.key))
-    expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['claude-code', 'codex', 'opencode'])
-    expect(items.filter(item => item.status === 'skipped').map(item => item.clientKey)).toEqual(['cursor-cli', 'copilot-cli', 'pi', 'deepseek-harness'])
+    // 注册表里每个客户端都有配方，所以「全部生效」不会跳过任何一个。
+    expect(items.filter(item => item.status === 'applied').map(item => item.clientKey)).toEqual(['claude-code', 'codex', 'vscode', 'opencode', 'copilot-cli', 'pi', 'deepseek-harness'])
+    expect(items.filter(item => item.status === 'skipped')).toEqual([])
   })
 })

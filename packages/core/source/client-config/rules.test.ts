@@ -46,12 +46,15 @@ const TEMPLATE_CONTEXT: AgentClientTemplateContext = {
 }
 
 /**
- * 没有配方的客户端，两种情形：地址与凭证分在两个文件里、或者配置是按条目打补丁的
- * （Pi、DeepSeek Harness，我们能读但写不对），以及压根没有可填的地址字段
- * （Copilot CLI、Cursor CLI 只存模型名）。两边的界面表现相同——详情页不摆「要写入的模型」，
- * 只让用户直接编辑文件。
+ * 没有配方的客户端：只能手改、没有任何可指向本地服务的字段。注册表里**每个**客户端目前都有配方，
+ * 所以下面这条「覆盖完整」的断言要求「有配方的客户端集合」等于「注册表全集」——这正是要守住的形状：
+ * 新收一个客户端却忘了给它配方，这里就会失败。
+ * 跨文件（地址与 provider 表项分在两个文件里）不构成「没有配方」——Pi 靠给字段标 `file` 走跨文件配方。
+ * 靠环境变量交付地址与密钥的（Copilot CLI 的 `COPILOT_PROVIDER_*`）也是正常配方——那正是 `file` + `load`
+ * 要覆盖的情形，配方照常给出 `roles`。
+ * 存储形状（如 `patchList`）也不构成「没有配方」——它已由 `files[].shape` 声明、由格式编辑器解释，
+ * 配方只管「往哪个逻辑路径写什么」。
  */
-const CLIENTS_WITHOUT_RULE = ['copilot-cli', 'cursor-cli', 'deepseek-harness', 'pi']
 
 describe('rule coverage', () => {
   it('only writes recipes for clients that exist', () => {
@@ -61,15 +64,9 @@ describe('rule coverage', () => {
   })
 
   it('knows exactly which clients it cannot autofill', () => {
-    for (const key of CLIENTS_WITHOUT_RULE) {
-      expect(getClientApplyRule(key)).toBeNull()
-      expect(AGENT_CLIENT_DEFINITIONS.map(client => client.key)).toContain(key)
-    }
-
+    // 注册表里每个客户端都必须有配方：漏一个，用户在这个客户端上就点不动「自动填充」。
     const covered = getClientApplyRuleKeys().sort()
-    const expected = AGENT_CLIENT_DEFINITIONS.map(client => client.key)
-      .filter(key => !CLIENTS_WITHOUT_RULE.includes(key))
-      .sort()
+    const expected = AGENT_CLIENT_DEFINITIONS.map(client => client.key).sort()
     expect(covered).toEqual(expected)
   })
 
@@ -106,8 +103,9 @@ describe('rule coverage', () => {
   it('sends every model alias to the local service', () => {
     // 漏掉任何一个别名，用户在 CLI 里切到它就会绕过本地路由——这是最难被发现的一类漏改。
     // 别名清单来自 Claude Code 自己的环境变量写法（含子代理用的 `CLAUDE_CODE_SUBAGENT_MODEL`）。
+    // `*Name` 是 `/model` 选择器里的展示名，留着旧值会让用户以为切换没生效，所以也一并改写。
     const claudeCode = getClientApplyRule('claude-code')!
-    for (const alias of ['mainModel', 'opus', 'sonnet', 'haiku', 'fable', 'subagent']) {
+    for (const alias of ['mainModel', 'opus', 'opusName', 'sonnet', 'sonnetName', 'haiku', 'haikuName', 'fable', 'fableName', 'subagent']) {
       expect(claudeCode.roles[alias]).toBe('model')
     }
     expect(claudeCode.roles['smallFast']).toBe('smallModel')
@@ -116,7 +114,7 @@ describe('rule coverage', () => {
   })
 
   it('keeps the user own choices out of the rewrite', () => {
-    expect(getClientApplyRule('codex')!.ignored).toEqual(['effort', 'catalog'])
+    expect(getClientApplyRule('codex')!.ignored).toEqual(['effort'])
   })
 })
 
@@ -124,6 +122,7 @@ describe('provider entries', () => {
   it('declares a concrete entry path only where one is needed', () => {
     expect(concreteProviderEntryPath(getClientApplyRule('codex')!)).toBe('model_providers.osw')
     expect(concreteProviderEntryPath(getClientApplyRule('opencode')!)).toBe('provider.osw')
+    expect(concreteProviderEntryPath(getClientApplyRule('deepseek-harness')!)).toBe('llm-pi-ai.providers.osw')
     expect(concreteProviderEntryPath(getClientApplyRule('claude-code')!)).toBeNull()
   })
 
@@ -143,6 +142,35 @@ describe('provider entries', () => {
       name: LOCAL_PROVIDER_NAME,
       options: { baseURL: CONTEXT.baseUrl, apiKey: CONTEXT.apiKey },
       models: { 'gpt-5': {} },
+    })
+  })
+
+  it('builds the pi provider with a bare origin plus /v1 and an array of models', () => {
+    const entry = getClientApplyRule('pi')!.providerEntry!.build({ ...CONTEXT, model: 'gpt-5' })
+
+    expect(entry).toEqual({
+      name: LOCAL_PROVIDER_NAME,
+      // Pi 要求 baseUrl 指向 `/v1`，而默认值给的是裸 origin。
+      baseUrl: `${CONTEXT.baseUrl}/v1`,
+      api: 'openai-completions',
+      apiKey: CONTEXT.apiKey,
+      // Pi 的 models 是**数组**（每个 { id, name }），不是对象。
+      models: [{ id: 'gpt-5', name: 'gpt-5' }],
+    })
+  })
+
+  it('builds the deepseek-harness route with /v1, an array of models, and a placeholder bearer header', () => {
+    const entry = getClientApplyRule('deepseek-harness')!.providerEntry!.build({ ...CONTEXT, model: 'gpt-5' })
+
+    expect(entry).toEqual({
+      displayName: LOCAL_PROVIDER_NAME,
+      api: 'openai-completions',
+      // baseURL 落在 route 上、指向本机服务的 `/v1`。
+      baseURL: `${CONTEXT.baseUrl}/v1`,
+      // 与 OpenCode/Pi 不同，dsh 的 models 是 { id } 数组。
+      models: [{ id: 'gpt-5' }],
+      // pi-ai 的 OpenAI 兼容实现即使本地服务不校验密钥也要求带一个凭证，于是写一个占位 Bearer 头。
+      headers: { Authorization: `Bearer ${CONTEXT.apiKey}` },
     })
   })
 })
@@ -208,7 +236,9 @@ describe('registry-declared recipes', () => {
   it('declares every provider entry path as a placeholder, never a literal id', () => {
     for (const key of getClientApplyRuleKeys()) {
       const entry = getClientApplyConfig(key)!.providerEntry
-      if (entry) expect(entry.path, `${key} 的表项路径写死了 provider id`).toContain('{{providerId}}')
+      // 表项路径必须是模板：多数客户端用 `{{providerId}}`，条目数组形状的（VS Code）按 `name` 认身份，
+      // 用 `{{providerName}}`。写死任何一个真实 id 都会在换 provider 身份时悄悄指错条目。
+      if (entry) expect(entry.path, `${key} 的表项路径写死了 provider id`).toMatch(/\{\{(providerId|providerName)\}\}/)
     }
   })
 
@@ -246,6 +276,8 @@ describe('model slots', () => {
   it('keeps the main model first and the small model last', () => {
     for (const key of getClientApplyRuleKeys()) {
       const slots = agentClientModelSlots(getClientApplyConfig(key)!)
+      // 没有模型槽位的客户端跳过：VS Code 的模型名写在 provider 条目里，注册表不为它登记 `model` 角色。
+      if (slots.length === 0) continue
       expect(slots[0], `${key} 的主模型槽位不在第一位`).toBe('model')
       if (slots.includes('smallModel')) expect(slots.indexOf('smallModel')).toBe(slots.length - 1)
     }

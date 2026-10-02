@@ -29,7 +29,7 @@ interface ValuesCardProps {
    * 任意一个槽位被改动时上报**整组值**。
    *
    * 这张卡不自己写文件：改动交给上层去问「这样会写成什么」再把结果摆到下方的内容里。
-   * 写入仍然只有「保存内容」一个按钮（见 `content-card.tsx`）——模型选择是内容编辑的一种方式，
+   * 落盘仍然只有内容模块的「保存」一个按钮（见 `content-module.tsx`）——模型选择是内容编辑的一种方式，
    * 不是第二个落盘入口。
    */
   onChange: (values: ClientConfigValues) => void

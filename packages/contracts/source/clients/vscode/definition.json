@@ -1,0 +1,60 @@
+{
+  "key": "vscode",
+  "name": "VS Code",
+  "aliases": [
+    "code"
+  ],
+  "order": 92,
+  "websiteUrl": "https://code.visualstudio.com",
+  "description": "Visual Studio Code. Chat models are declared in chatLanguageModels.json as a list of BYOK providers; a Custom Endpoint provider pointing at the local service is one entry in that list.",
+  "configDir": "~/Library/Application Support/Code/User",
+  "files": [
+    {
+      "path": "~/Library/Application Support/Code/User/chatLanguageModels.json",
+      "format": "json",
+      "shape": {
+        "kind": "entryList",
+        "idField": "name"
+      },
+      "platformPaths": {
+        "linux": "~/.config/Code/User/chatLanguageModels.json",
+        "win32": "~/AppData/Roaming/Code/User/chatLanguageModels.json"
+      },
+      "purpose": "BYOK model providers shown in the chat model picker: a top-level array of provider entries, each declaring its own `models`."
+    }
+  ],
+  "fields": [
+    {
+      "key": "provider",
+      "path": "<id>",
+      "type": "object",
+      "description": "A BYOK provider entry: `vendor: customendpoint`, the API key, and the models it exposes."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "provider": "providerEntry"
+    },
+    "ignored": [],
+    "providerEntry": {
+      "path": "{{providerName}}",
+      "template": {
+        "name": "{{providerName}}",
+        "vendor": "customendpoint",
+        "apiKey": "{{apiKey}}",
+        "apiType": "chat-completions",
+        "models": [
+          {
+            "id": "{{model}}",
+            "name": "{{model}}",
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "toolCalling": true,
+            "vision": true,
+            "maxInputTokens": 128000,
+            "maxOutputTokens": 16000
+          }
+        ]
+      }
+    }
+  }
+}

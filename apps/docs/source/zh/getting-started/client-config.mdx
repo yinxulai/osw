@@ -14,13 +14,21 @@ keywords:
 
 ## 支持的客户端
 
-| 客户端 | 协议 | 配置文件 |
-| --- | --- | --- |
-| Claude Code | Anthropic Messages | `~/.claude/settings.json`、凭据文件 |
-| Codex | OpenAI Responses | `~/.codex/config.toml`、`auth.json` |
-| OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json`、鉴权文件 |
+OSW 内置一份可自动配置的客户端清单。对每个客户端，它都知道配置文件在哪、是什么格式、以及哪些键把工具指向某个 provider。**一次写入只动这些键**——其余键、注释和文件原有的排版都原样保留。
 
-其它已知客户端（Cursor CLI、Copilot CLI 等）只提供**参考值**，需要你手动填。
+| 客户端 | 协议 | 配置文件 | OSW 写入什么 |
+| --- | --- | --- | --- |
+| Claude Code | Anthropic Messages | `~/.claude/settings.json` | `env.ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`、`model`，以及全部 `ANTHROPIC_DEFAULT_*_MODEL` 别名 |
+| Codex | OpenAI Responses | `~/.codex/config.toml` | `model`、`model_provider`，以及 `[model_providers.osw]` 表 |
+| VS Code | OpenAI Chat Completions | `chatLanguageModels.json` | 一条名为 `OSW` 的 `Custom Endpoint` provider 条目及其模型 |
+| OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json` | `model`、`small_model`，以及 `osw` provider 条目 |
+| Copilot CLI | OpenAI Chat Completions（BYOK） | `~/.copilot/osw.env` | `COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_API_KEY` 与 `COPILOT_MODEL` |
+| Pi | OpenAI Chat Completions | `~/.pi/agent/settings.json`、`~/.pi/agent/models.json` | `defaultProvider`、`defaultModel`，以及 `osw` provider 条目 |
+| DeepSeek Harness | OpenAI Chat Completions | `~/.dsh/settings.yaml` | `agent-default-model`，以及 `llm-pi-ai.providers.osw` 路由 |
+
+<Callout title="Copilot CLI 通过环境变量配置" type="note">
+Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）provider，所以 OSW 用一份独立的 env 文件交付它的地址、密钥与模型，并从你的登录 shell 加载它。
+</Callout>
 
 ## 自动填充
 

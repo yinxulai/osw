@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
-import { findAgentClient, findAgentClientFile, type AgentClientEnvOverride } from '@common/clients'
+import { findAgentClient, findAgentClientFile, type AgentClientEnvOverride, type AgentClientFileDefinition, type AgentClientPlatform } from '@common/clients'
 
 /**
  * 把注册表里声明的那条 `~/` 路径展开成本机真实路径。
@@ -11,12 +11,28 @@ import { findAgentClient, findAgentClientFile, type AgentClientEnvOverride } fro
  * 返回 `null` 即代表这次请求没有资格碰任何文件。
  *
  * 返回的值一定是绝对路径：`~/` 前缀由**主目录**兜底，`envVar` 只替换它声明的那一段。
+ * 声明了多个平台路径的文件（见 `AgentClientFileDefinition.platformPaths`）先按当前平台选一条，
+ * 再走同一套展开——同一客户端在别的操作系统上就该写到别的目录里。
  */
 export function resolveClientConfigPath(clientKey: string, filePath: string): string | null {
   const client = findAgentClient(clientKey)
   const file = findAgentClientFile(clientKey, filePath)
   if (!client || !file) return null
-  return expandDeclaredPath(file.path, file.envVar, homedir(), process.env)
+  return expandDeclaredPath(declaredPathForPlatform(file, process.platform), file.envVar, homedir(), process.env)
+}
+
+/**
+ * 一个文件在给定平台上该展开成哪条 `~/` 路径。
+ *
+ * 身份仍是 `file.path`（备份、版本、界面标签都用它），只有**展开成真实路径**这一步按平台换一份；
+ * 没声明、或当前平台没单独声明时一律回落 `file.path`。
+ *
+ * 平台作为入参而不是就地读 `process.platform`：这样测试可以在不改真实进程平台的前提下断言
+ * 三个平台各自的落点（CI 跑在 ubuntu 上，靠真实平台就永远测不到 macOS 那一份）。
+ */
+export function declaredPathForPlatform(file: Pick<AgentClientFileDefinition, 'path' | 'platformPaths'>, platform: NodeJS.Platform): string {
+  const platformPath = file.platformPaths?.[platform as AgentClientPlatform]
+  return platformPath ?? file.path
 }
 
 /**

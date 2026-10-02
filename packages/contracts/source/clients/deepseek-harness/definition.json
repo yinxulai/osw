@@ -1,0 +1,79 @@
+{
+  "key": "deepseek-harness",
+  "name": "DeepSeek Harness",
+  "aliases": [
+    "dsh"
+  ],
+  "order": 82,
+  "description": "DeepSeek Harness (dsh). The model new sessions start with and the hand-declared provider routes live in $DSH_HOME/settings.yaml, which the harness hot-reloads. The home directory is $DSH_HOME (default ~/.dsh).",
+  "configDir": "~/.dsh",
+  "files": [
+    {
+      "path": "~/.dsh/settings.yaml",
+      "format": "yaml",
+      "envVar": {
+        "name": "DSH_HOME",
+        "replaces": "~/.dsh"
+      },
+      "purpose": "Runtime settings the harness hot-reloads: the default model of new sessions and the hand-declared llm-pi-ai provider routes."
+    },
+    {
+      "path": "~/.dsh/config.yaml",
+      "format": "yaml",
+      "shape": {
+        "kind": "patchList",
+        "idField": "id",
+        "payloadField": "config"
+      },
+      "envVar": {
+        "name": "DSH_HOME",
+        "replaces": "~/.dsh"
+      },
+      "purpose": "Legacy machine-level patch list of {id, config} rows, replaced by the layered profile patches."
+    }
+  ],
+  "fields": [
+    {
+      "key": "model",
+      "path": "agent-default-model.model",
+      "type": "string",
+      "description": "Model new sessions start with."
+    },
+    {
+      "key": "provider",
+      "path": "agent-default-model.provider",
+      "type": "string",
+      "description": "Provider route new sessions start with."
+    },
+    {
+      "key": "providerTable",
+      "path": "llm-pi-ai.providers.<id>",
+      "type": "object",
+      "description": "A hand-declared provider route: endpoint, protocol, credential and model list."
+    }
+  ],
+  "apply": {
+    "roles": {
+      "model": "model",
+      "provider": "provider",
+      "providerTable": "providerEntry"
+    },
+    "ignored": [],
+    "providerEntry": {
+      "path": "llm-pi-ai.providers.{{providerId}}",
+      "template": {
+        "displayName": "{{providerName}}",
+        "api": "openai-completions",
+        "baseURL": "{{baseUrl}}/v1",
+        "models": [
+          {
+            "id": "{{model}}"
+          }
+        ],
+        "headers": {
+          "Authorization": "Bearer {{apiKey}}"
+        }
+      }
+    }
+  }
+}

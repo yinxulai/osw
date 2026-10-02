@@ -1,3 +1,5 @@
+import type { AgentClientFileShape } from '@common/clients'
+import { isMap, isScalar, isSeq, parseDocument, Scalar, YAMLMap, YAMLSeq, type Document, type Node } from 'yaml'
 import type { ClientConfigFormat } from '@common/client-config'
 
 /**
@@ -40,8 +42,12 @@ export type ConfigScalar = string | number | boolean
 /**
  * 一个配置文件编辑器。
  *
- * 路径都是点号分隔的键路径（注册表 `fields[].path` 的形态）。`get` 只认标量：
- * 读到对象/数组时返回 `null`（那是「这里不是个值」，不是「值是空」）。
+ * 路径都是点号分隔的键路径（注册表 `fields[].path` 的形态），一律表达**逻辑位置**：
+ * `get` 只认标量，读到对象/数组时返回 `null`（那是「这里不是个值」，不是「值是空」）。
+ *
+ * 这个接口刻意**不含任何存储形状的知识**——「逻辑路径怎么落到字节上」是构造时由
+ * `AgentClientFileShape` 带进来、由各自的实现解释的（嵌套映射、按 id 定位的条目列表……）。
+ * 于是同一份字段声明能落在不同的文件结构上，而调用方只递逻辑路径、收文本。
  */
 export interface ConfigEditor {
   /** 读标量；不存在或不是标量时返回 `null`。 */
@@ -65,23 +71,25 @@ export interface ConfigEditor {
   serialize(): string
 }
 
-export function createConfigEditor(format: ClientConfigFormat, text: string): ConfigEditor {
+export function createConfigEditor(format: ClientConfigFormat, text: string, shape?: AgentClientFileShape): ConfigEditor {
   switch (format) {
     case 'json':
     case 'jsonc':
-      return new JsonConfigEditor(text)
+      // 根是对象还是数组由存储形状说了算：`entryList` 的根是一个条目对象数组，
+      // 其余情况仍按一棵嵌套映射来读。
+      return shape?.kind === 'entryList' ? new JsonEntryListConfigEditor(text, shape.idField ?? 'name') : new JsonConfigEditor(text)
     case 'env':
       return new EnvConfigEditor(text)
     case 'toml':
       return new TomlConfigEditor(text)
     case 'yaml':
-      throw new ConfigParseError('yaml autofill is not supported')
+      return new YamlConfigEditor(text, shape)
   }
 }
 
-/** 支持自动填充的格式。`yaml` 没有结构化写入器（见 `apps/docs/specs/` 里的取舍说明）。 */
+/** 支持自动填充的格式。 */
 export function supportsAutoFill(format: ClientConfigFormat): boolean {
-  return format === 'json' || format === 'jsonc' || format === 'env' || format === 'toml'
+  return format === 'json' || format === 'jsonc' || format === 'env' || format === 'toml' || format === 'yaml'
 }
 
 // ========== JSON / JSONC ==========
@@ -364,6 +372,297 @@ class JsonConfigEditor implements ConfigEditor {
   }
 }
 
+/**
+ * 「根是条目对象数组」的 JSON 编辑器（`AgentClientFileShape` 的 `entryList`）。
+ *
+ * VS Code 的 `chatLanguageModels.json` 就是这个形状：根是一个数组，每个元素是一个 provider
+ * 对象（`{ name, vendor, models: [...] }`），`name` 是它的标识。逻辑路径的第一段是**条目标识**
+ * （按 `idField` 命中），其余段是条目对象内部的路径；只有一段时落在条目对象本身。
+ *
+ * 与 `JsonConfigEditor` 是**同一套读写哲学**（用 `JSON.parse` 读、用文本扫描器写、改完回读校验），
+ * 只是顶层从「一个对象」换成「一串对象」。所以这里没有另起一套扫描器，而是复用同一批
+ * `findJsonMember` / `jsonValueBounds` / `jsonBracketEnd` 工具，只在两处扩展：
+ *
+ *   - `entryIndex`：在一个**数组**里按 `idField` 找条目（数组扫描走 `findJsonArrayElement`）；
+ *   - `writeEntry`：数组里还没有这一条时，往数组里**追加**一个对象（不是往对象里加成员）。
+ *
+ * 为什么不复用 `JsonConfigEditor` 的 `set` 却把根对象伪装成数组的键：那会让数组的「追加」
+ * 与对象的「插成员」两套写法混在一处，改一个键要跨两层形状判断。分开写反而各只有一处分岔。
+ */
+class JsonEntryListConfigEditor implements ConfigEditor {
+  /** 原文。改动只在这份文本上做局部替换，`serialize()` 交出去的就是它。 */
+  private text: string
+  /** 只用于读取与形状判断。序列化不走这里——走了就退化成整文件重排。 */
+  private data: Record<string, unknown>[]
+  /** 条目标识键名。 */
+  private readonly idField: string
+
+  constructor(text: string, idField: string) {
+    this.text = text
+    this.idField = idField
+    if (text.trim() === '') {
+      this.data = []
+      return
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch (error) {
+      throw new ConfigParseError(error instanceof Error ? error.message : 'invalid JSON')
+    }
+    // 根不是数组就不是这个形状：宁可当作解析失败，也不要在一个对象上按条目数组来写。
+    if (!Array.isArray(parsed)) throw new ConfigParseError('root value must be an array')
+    this.data = parsed as Record<string, unknown>[]
+  }
+
+  get(path: string): string | null {
+    const segments = splitPath(path)
+    if (segments.length === 0) return null
+    const entry = this.entryOf(segments[0]!)
+    if (entry === undefined) return null
+    const found = segments.length === 1 ? entry : getInObject(entry, segments.slice(1))
+    if (found === undefined || found === null || typeof found === 'object') return null
+    return String(found)
+  }
+
+  set(path: string, value: ConfigScalar): string | null {
+    const segments = splitPath(path)
+    if (segments.length === 0) return null
+    const before = this.get(path)
+    this.text = this.writeScalar(segments, value)
+    // 数据视图也跟上：`verify` 拿它跟重新解析的结果比对。
+    const entry = this.ensureEntry(segments[0]!)
+    setInObject(entry, segments.slice(1), value)
+    this.verify()
+    return before
+  }
+
+  /**
+   * 整段写一个条目对象。
+   *
+   * 返回命中已有条目时它在原文里的样子（调用方拿它当「改前」）；新插入时返回 `null`。
+   * 只有一段路径（`osw`）时命中的就是条目本身（整条替换/追加）；更深时命中的是条目内部的键。
+   */
+  setObject(path: string, value: Record<string, unknown>): string | null {
+    const segments = splitPath(path)
+    if (segments.length === 0) return null
+    const before = this.rawValue(segments)
+    // 数据视图也要跟上：单段路径是整条替换/追加，多段路径是往条目内部的键覆盖。
+    if (segments.length === 1) {
+      const index = this.entryIndexOf(segments[0]!)
+      if (index >= 0) this.data[index] = value
+      else this.data.push(value)
+    } else {
+      setInObject(this.ensureEntry(segments[0]!), segments.slice(1), value)
+    }
+    this.text = this.writeObject(segments, value)
+    this.verify()
+    return before
+  }
+
+  serialize(): string {
+    // 没有原文可保时给一份最小的空数组：界面下次的写入就基于它。
+    return this.text.trim() === '' ? '[]\n' : this.text
+  }
+
+  /** 条目在数据视图里的下标；不存在时返回 `-1`。 */
+  private entryIndexOf(id: string): number {
+    return this.data.findIndex(item => item !== null && typeof item === 'object' && !Array.isArray(item) && (item as Record<string, unknown>)[this.idField] === id)
+  }
+
+  /** 条目在数据视图里的对象；不存在时返回 `undefined`。 */
+  private entryOf(id: string): Record<string, unknown> | undefined {
+    const index = this.entryIndexOf(id)
+    return index < 0 ? undefined : this.data[index]
+  }
+
+  /** 取条目对象（没有就现建一个并追加进数据视图）。 */
+  private ensureEntry(id: string): Record<string, unknown> {
+    const existing = this.entryOf(id)
+    if (existing) return existing
+    const created: Record<string, unknown> = { [this.idField]: id }
+    this.data.push(created)
+    return created
+  }
+
+  /** 条目在**原文**里的对象区间；不存在时返回 `null`。 */
+  private entrySpan(id: string): JsonValueSpan | null {
+    const root = this.arrayStart()
+    if (root === null) return null
+    return findJsonArrayValue(this.text, root, candidate => isJsonObject(candidate) && this.memberIdAt(candidate.start) === id)
+  }
+
+  /** 一个对象里 `idField` 的值（解码后的字符串）；不匹配、或不是字符串时返回 `null`。 */
+  private memberIdAt(containerStart: number): string | null {
+    const member = findJsonMember(this.text, containerStart, this.idField)
+    if (member === null || this.text[member.start] !== '"') return null
+    return decodeJsonString(this.text.slice(member.start, member.end))
+  }
+
+  /**
+   * 路径对应的**值**区间。
+   *
+   * 返回 `null` 表示路径上某个键（或条目）不存在；路径上有一层不是对象时**抛错**——
+   * 与 `JsonConfigEditor` 同一条闸：用户在那个位置放了自己的值，不能当垫脚石。
+   */
+  private valueSpan(segments: string[]): JsonValueSpan | null {
+    if (segments.length === 1) return this.entrySpan(segments[0]!)
+    const entry = this.entrySpan(segments[0]!)
+    if (entry === null) return null
+    let container = entry.start
+    let found: JsonValueSpan | null = null
+    for (let index = 1; index < segments.length; index += 1) {
+      const member = findJsonMember(this.text, container, segments[index]!)
+      if (member === null) return null
+      if (index < segments.length - 1 && member.object !== true) {
+        throw new ConfigParseError(`"${segments.slice(0, index + 1).join('.')}" is not an object`)
+      }
+      found = member
+      container = member.start
+    }
+    return found
+  }
+
+  /** 该路径上原文里的那一段（不存在时是 `null`）。版本摘要要的「改前」就取它。 */
+  private rawValue(segments: string[]): string | null {
+    const span = this.valueSpan(segments)
+    return span === null ? null : this.text.slice(span.start, span.end)
+  }
+
+  /** 根数组 `[` 的位置（空文件或只有空白时是 `null`）。 */
+  private arrayStart(): number | null {
+    const start = skipJsonSpace(this.text, 0)
+    return this.text[start] === '[' ? start : null
+  }
+
+  private writeScalar(segments: string[], value: ConfigScalar): string {
+    const span = this.valueSpan(segments)
+    if (span !== null) return spliceText(this.text, span.start, span.end, JSON.stringify(value))
+    const container = this.containerOf(segments)
+    if (container === null) return this.writeMissingChain(segments, value)
+    return this.addMember(container, segments[segments.length - 1]!, value)
+  }
+
+  private writeObject(segments: string[], value: Record<string, unknown>): string {
+    const span = this.valueSpan(segments)
+    if (span !== null) {
+      const indent = this.indentFor(segments.length)
+      const compact = !this.text.slice(span.start, span.end).includes('\n')
+      return spliceText(this.text, span.start, span.end, this.renderValue(value, compact, indent))
+    }
+    const container = this.containerOf(segments)
+    if (container === null) return this.writeMissingChain(segments, value)
+    return this.addMember(container, segments[segments.length - 1]!, value)
+  }
+
+  /**
+   * 承载最后一个键的那个对象：条目不存在（单段路径且条目还没建）时返回 `null`。
+   *
+   * 单段路径的「容器」就是条目本身，但此时条目还不存在，所以由 `writeScalar` / `writeObject`
+   * 转去 `writeMissingChain` 追加整条。
+   */
+  private containerOf(segments: string[]): JsonContainer | null {
+    if (segments.length === 1) return null
+    const entry = this.entrySpan(segments[0]!)
+    if (entry === null) return null
+    if (segments.length === 2) return { start: entry.start, depth: 1 }
+    const parent = segments.slice(1, -1)
+    const span = this.valueSpan([segments[0]!, ...parent])
+    if (span === null) return null
+    if (span.object !== true) throw new ConfigParseError(`"${parent.join('.')}" is not an object`)
+    return { start: span.start, depth: parent.length + 1 }
+  }
+
+  /**
+   * 整条缺失：往数组里追加一个条目（单段路径时 `value` 就是条目对象本身，多段时是条目里的一个键）。
+   *
+   * 与 `JsonConfigEditor.writeMissingChain` 同一角色，只是落点从「根对象加成员」换成「根数组加元素」。
+   */
+  private writeMissingChain(segments: string[], value: unknown): string {
+    // 单段路径：`value` 就是整条条目对象（`setObject('osw', {...})`）。
+    // 多段路径：新条目必须先带上标识字段，再挂上嵌套键——否则下次按 `idField` 找不到它。
+    const element = segments.length === 1 ? value : { [this.idField]: segments[0]!, ...buildJsonChain(segments.slice(1), value) as Record<string, unknown> }
+    const root = this.arrayStart()
+    // 空文件或空数组：整份写成 `[element]`（多段路径落下的是「一个具名条目」）。有数组就在它里面追加。
+    if (root === null) return `${JSON.stringify([element], null, this.indentUnit())}\n`
+    return this.appendElement({ start: root, depth: 0 }, element)
+  }
+
+  /** 往一个数组里追加一个元素，返回新的完整文本。 */
+  private appendElement(container: JsonContainer, value: unknown): string {
+    const bounds = jsonArrayBounds(this.text, container.start)
+    const compact = !this.text.includes('\n')
+    const memberIndent = this.indentFor(container.depth + 1)
+    const rendered = this.renderValue(value, compact, memberIndent)
+    const tail = lastMeaningfulIndex(this.text, bounds.end - 1)
+
+    if (tail < bounds.start + 1) {
+      if (compact) return spliceText(this.text, bounds.start + 1, bounds.start + 1, rendered)
+      const insertion = `\n${memberIndent}${rendered}`
+      const withMember = spliceText(this.text, bounds.start + 1, bounds.start + 1, insertion)
+      const closing = bounds.end - 1 + insertion.length
+      return spliceText(withMember, closing, closing, `\n${this.indentFor(container.depth)}`)
+    }
+
+    const comma = this.text[tail] === ',' ? '' : ','
+    const inserted = compact ? `${comma}${rendered}` : `${comma}\n${memberIndent}${rendered}`
+    return spliceText(this.text, tail + 1, tail + 1, inserted)
+  }
+
+  /** 在某个对象里加一个成员。与 `JsonConfigEditor.addMember` 同一套，供条目内部的键使用。 */
+  private addMember(container: JsonContainer, key: string, value: unknown): string {
+    const bounds = jsonObjectBounds(this.text, container.start)
+    const compact = !this.text.includes('\n')
+    const memberIndent = this.indentFor(container.depth + 1)
+    const rendered = this.renderValue(value, compact, memberIndent)
+    const member = compact ? `${JSON.stringify(key)}:${rendered}` : `${JSON.stringify(key)}: ${rendered}`
+    const tail = lastMeaningfulIndex(this.text, bounds.end - 1)
+
+    if (tail < bounds.start + 1) {
+      if (compact) return spliceText(this.text, bounds.start + 1, bounds.start + 1, member)
+      const insertion = `\n${memberIndent}${member}`
+      const withMember = spliceText(this.text, bounds.start + 1, bounds.start + 1, insertion)
+      const closing = bounds.end - 1 + insertion.length
+      return spliceText(withMember, closing, closing, `\n${this.indentFor(container.depth)}`)
+    }
+
+    const comma = this.text[tail] === ',' ? '' : ','
+    const inserted = compact ? `${comma}${member}` : `${comma}\n${memberIndent}${member}`
+    return spliceText(this.text, tail + 1, tail + 1, inserted)
+  }
+
+  private renderValue(value: unknown, compact: boolean, memberIndent: string): string {
+    if (compact) return JSON.stringify(value)
+    return indentBlock(JSON.stringify(value, null, this.indentUnit()), memberIndent)
+  }
+
+  /** 某个深度上的空白前缀。 */
+  private indentFor(depth: number): string {
+    return this.indentUnit().repeat(Math.max(0, depth))
+  }
+
+  /** 原文用的缩进单位（只看第一处缩进）。 */
+  private indentUnit(): string {
+    const whitespace = /\n([ \t]+)\S/.exec(this.text)?.[1]
+    if (!whitespace) return DEFAULT_JSON_INDENT
+    return whitespace.startsWith('\t') ? '\t' : whitespace
+  }
+
+  /** 改完之后重新解析一次，确认结果确实是我们以为的那份文档。 */
+  private verify(): void {
+    if (this.text.trim() === '') return
+    let reparsed: unknown
+    try {
+      reparsed = JSON.parse(this.text)
+    } catch (error) {
+      throw new ConfigParseError(`refusing to write malformed JSON: ${error instanceof Error ? error.message : 'parse failed'}`)
+    }
+    if (JSON.stringify(reparsed) !== JSON.stringify(this.data)) {
+      throw new ConfigParseError('refusing to write JSON that does not match the intended change')
+    }
+  }
+}
+
 function splitPath(path: string): string[] {
   return path.split('.').filter(segment => segment.length > 0)
 }
@@ -467,6 +766,42 @@ function jsonObjectBounds(text: string, start: number): { start: number; end: nu
   const end = jsonBracketEnd(text, start)
   if (end === null) throw new ConfigParseError(`unterminated object at offset ${start}`)
   return { start, end }
+}
+
+/** 一个数组所占的区间；`start` 上不是 `[`、或者括号配不上时抛错。 */
+function jsonArrayBounds(text: string, start: number): { start: number; end: number } {
+  if (text[start] !== '[') throw new ConfigParseError(`expected an array at offset ${start}`)
+  const end = jsonBracketEnd(text, start)
+  if (end === null) throw new ConfigParseError(`unterminated array at offset ${start}`)
+  return { start, end }
+}
+
+function isJsonObject(span: JsonValueSpan): boolean {
+  return span.object === true
+}
+
+/**
+ * 在一个**数组**里逐元素扫描，返回第一个让 `match` 为真的元素区间；没有命中的返回 `null`。
+ *
+ * 与对象扫描同一套：跳过字符串、按括号配对走，绝不用正则或「找下一个 `,`」这种写法——
+ * 值里的 `,`、`]` 会让位置算错，而算错位置的结果是往用户配置里写坏内容。
+ */
+function findJsonArrayValue(text: string, containerStart: number, match: (span: JsonValueSpan) => boolean): JsonValueSpan | null {
+  const container = jsonArrayBounds(text, containerStart)
+  let index = skipJsonSpace(text, containerStart + 1)
+  while (index < container.end - 1) {
+    const character = text[index]!
+    if (character === ',') {
+      index = skipJsonSpace(text, index + 1)
+      continue
+    }
+    const value = jsonValueBounds(text, index)
+    if (match(value)) return value
+    // 没有往前推进就说明这段文本不是我们以为的形状：宁可拒绝写，也不要原地打转。
+    if (value.end <= index) throw new ConfigParseError(`cannot scan the array at offset ${containerStart}`)
+    index = skipJsonSpace(text, value.end)
+  }
+  return null
 }
 
 /** `start` 上那个 `{` / `[` 配对符号**之后**的位置；配不上时返回 `null`。 */
@@ -811,4 +1146,209 @@ function formatTomlScalar(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// ========== YAML ==========
+
+/**
+ * YAML 编辑器：解析成**语法树**读改，只在目标节点上动刀。
+ *
+ * 与 JSON 那条路同一个理由，但手段不同：JSON 用手写的文本扫描器，因为 `JSON.parse` 会连
+ * 注释一起拒掉；而 YAML 有能保注释、保排版、保键顺序的官方 AST（`yaml` 包），改动落到节点上、
+ * 序列化时只重写被点到的那个值，其余（含行内/行尾注释、缩进风格、流式写法）原样交还。
+ *
+ * 这一层同时承担**解耦**：字段声明给的 `path` 只写逻辑位置（`llm-deepseek.baseURL`），
+ * 「它在字节上是一条按 `id` 定位的补丁条目里、`config` 下面的一个键」这件事由构造时的
+ * `shape` 带进来、在这里被翻译成对 AST 的遍历。换个存储形状（`map` ↔ `patchList`）只改
+ * 声明，编辑器与字段声明都不必知道对方。
+ *
+ * 读不出来时（`doc.errors` 非空）抛 `ConfigParseError`，与另两种格式一致：文件已经坏了的时候，
+ * 最不该做的就是再往里写点什么。
+ */
+class YamlConfigEditor implements ConfigEditor {
+  /** 存储形状；缺省是一棵嵌套映射（见 `AgentClientFileShape`）。 */
+  private readonly shape: AgentClientFileShape
+  private readonly doc: Document
+
+  constructor(text: string, shape?: AgentClientFileShape) {
+    this.shape = shape ?? { kind: 'map' }
+    this.doc = parseDocument(text)
+    if (this.doc.errors.length > 0) {
+      throw new ConfigParseError(this.doc.errors[0]!.message)
+    }
+  }
+
+  get(path: string): string | null {
+    const at = this.container(splitPath(path), false)
+    if (!at) return null
+    return scalarText(at.map.get(at.key, true))
+  }
+
+  set(path: string, value: ConfigScalar): string | null {
+    const segments = splitPath(path)
+    if (segments.length === 0) return null
+    const before = this.get(path)
+    const at = this.container(segments, true)
+    if (!at) return null
+    at.map.set(at.key, new Scalar(value))
+    return before
+  }
+
+  setObject(path: string, value: Record<string, unknown>): string | null {
+    const segments = splitPath(path)
+    if (segments.length === 0) return null
+    // 「改前」取那一处的整段原文（`get` 只认标量，读不到一个对象）。写进去的是规范写法，
+    // 与原文空白可能不同，算不算改动由调用方比对序列化结果决定——这与其它编辑器同一套。
+    const current = this.container(segments, false)
+    const existing = current ? current.map.get(current.key, true) : undefined
+    const before = existing && (isMap(existing) || isSeq(existing)) ? JSON.stringify(existing.toJSON()) : null
+    const at = this.container(segments, true)
+    if (!at) return null
+    at.map.set(at.key, toYamlNode(value))
+    return before
+  }
+
+  serialize(): string {
+    return this.doc.toString()
+  }
+
+  /** patchList 形状里条目的标识键名。 */
+  private idField(): string {
+    return this.shape.kind === 'patchList' ? this.shape.idField ?? 'id' : 'id'
+  }
+
+  /** patchList 形状里条目的载荷键名。 */
+  private payloadField(): string {
+    return this.shape.kind === 'patchList' ? this.shape.payloadField ?? 'config' : 'config'
+  }
+
+  /**
+   * 逻辑路径 → 「承载最后一个键的那个映射 + 那个键」。
+   *
+   * 两种形状在这里分岔，其余（`get` / `set` / `setObject`）都只面对「一个映射 + 一个键」：
+   *   - `map`：整条路径逐段走进嵌套映射；
+   *   - `patchList`：第一段是条目 `id`，其余是条目**载荷**里的路径；只有一段时落在载荷本身。
+   *
+   * `create` 为真时才现建缺失的中间层；为假时缺任何一段都返回 `null`（读不到就是不写）。
+   */
+  private container(segments: string[], create: boolean): { map: YAMLMap; key: string } | null {
+    if (segments.length === 0) return null
+    if (this.shape.kind === 'patchList') {
+      const entry = this.entryFor(segments[0]!, create)
+      if (!entry) return null
+      const internal = segments.slice(1)
+      if (internal.length === 0) return { map: entry, key: this.payloadField() }
+      const payload = create ? ensurePayload(entry, this.payloadField()) : payloadOf(entry, this.payloadField())
+      return descend(payload, internal, create)
+    }
+    return descend(this.rootMap(create), segments, create)
+  }
+
+  /**
+   * patchList 里 `id` 对应的条目；同名时**取最后一条**，与工具自己的行为一致。
+   */
+  private entryFor(id: string, create: boolean): YAMLMap | null {
+    const seq = this.sequence(create)
+    if (!seq) return null
+    const idField = this.idField()
+    for (let index = seq.items.length - 1; index >= 0; index -= 1) {
+      const item = seq.items[index]
+      if (isMap(item) && scalarText(item.get(idField, true)) === id) return item
+    }
+    if (!create) return null
+    const entry = new YAMLMap()
+    entry.set(idField, new Scalar(id))
+    seq.add(entry)
+    return entry
+  }
+
+  /** 文档根节点当作一条条目列表；不是列表时，读返回 `null`、写直接拒绝（不覆盖别人的结构）。 */
+  private sequence(create: boolean): YAMLSeq | null {
+    const root = this.doc.contents
+    if (root === null) {
+      if (!create) return null
+      const seq = new YAMLSeq()
+      this.doc.contents = seq
+      return seq
+    }
+    if (isSeq(root)) return root
+    if (create) throw new ConfigParseError('expected a list of patch entries')
+    return null
+  }
+
+  /** 文档根节点当作一棵映射；不是映射时，读返回 `null`、写直接拒绝。 */
+  private rootMap(create: boolean): YAMLMap | null {
+    const root = this.doc.contents
+    if (root === null) {
+      if (!create) return null
+      const map = new YAMLMap()
+      this.doc.contents = map
+      return map
+    }
+    if (isMap(root)) return root
+    if (create) throw new ConfigParseError('expected a mapping')
+    return null
+  }
+}
+
+/** 在一个映射里逐段走下 `segments`，返回最后一段所在的映射与键名；中间层不是映射时抛错。 */
+function descend(source: YAMLMap | null, segments: string[], create: boolean): { map: YAMLMap; key: string } | null {
+  if (!source || segments.length === 0) return null
+  let current: YAMLMap = source
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const segment = segments[index]!
+    const child = current.get(segment, true)
+    if (child === undefined || child === null) {
+      if (!create) return null
+      const next = new YAMLMap()
+      current.set(segment, next)
+      current = next
+      continue
+    }
+    // 中间层是用户自己的值（`config: "https://…"` 之类）：不能当垫脚石，也不能视而不见。
+    if (!isMap(child)) throw new ConfigParseError(`"${segments.slice(0, index + 1).join('.')}" is not a mapping`)
+    current = child
+  }
+  return { map: current, key: segments[segments.length - 1]! }
+}
+
+function payloadOf(entry: YAMLMap, field: string): YAMLMap | null {
+  const node = entry.get(field, true)
+  return isMap(node) ? node : null
+}
+
+function ensurePayload(entry: YAMLMap, field: string): YAMLMap {
+  const node = entry.get(field, true)
+  if (isMap(node)) return node
+  const map = new YAMLMap()
+  entry.set(field, map)
+  return map
+}
+
+/** AST 节点上的标量文本；不是标量、或值是 `null` 时返回 `null`。 */
+function scalarText(node: unknown): string | null {
+  if (isScalar(node)) {
+    return node.value === null || node.value === undefined ? null : String(node.value)
+  }
+  if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') return String(node)
+  return null
+}
+
+/** 普通 JS 值 → YAML AST 节点；对象/数组带着类型一起建，标量交给 `Scalar` 定夺真正的类型。 */
+function toYamlNode(value: unknown): Node {
+  if (value === null || value === undefined) return new Scalar(null)
+  if (Array.isArray(value)) {
+    const seq = new YAMLSeq()
+    for (const item of value) seq.add(toYamlNode(item))
+    return seq
+  }
+  if (typeof value === 'object') {
+    const map = new YAMLMap()
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (entry === undefined) continue
+      map.set(key, toYamlNode(entry))
+    }
+    return map
+  }
+  return new Scalar(value as string | number | boolean)
 }

@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   ClientConfigFileState,
   ClientConfigFillResultItem,
   ClientConfigOverviewItem,
   ClientConfigPreviewResult,
   ClientConfigVersionEntry,
+  ClientConfigVersionSummary,
   ClientConfigWriteResult,
 } from '@common/client-config'
 import { clientConfigApi, type ClientConfigApplyValues } from '@/api/client-config'
@@ -19,26 +20,38 @@ export const clientConfigKeys = {
     ['client-config', 'preview', clientKey, filePath, model, smallModel] as const,
 }
 
-/**
- * 一个客户端配置文件的当前状态。
- *
- * `enabled: false` 时不发请求：页面在还没选中文件（例如客户端一个文件都没声明）之前
- * 就不该拿空 key 去打接口。
- */
-const useFileQuery = (clientKey: string, filePath: string, enabled: boolean) =>
-  useQuery({
-    queryKey: clientConfigKeys.file(clientKey, filePath),
-    queryFn: () => unwrap(clientConfigApi.getFile(clientKey, filePath)),
-    enabled: enabled && clientKey !== '' && filePath !== '',
-  })
-
-export function useClientConfigFile(clientKey: string, filePath: string): ClientConfigFileState | null {
-  return useFileQuery(clientKey, filePath, true).data ?? null
+/** 一个配置文件在界面上的当前状态；多文件客户端一次拿全。 */
+export interface ClientConfigFileEntry {
+  filePath: string
+  /** 磁盘上那份文件现在的样子；还没读到是 `null`。 */
+  state: ClientConfigFileState | null
+  loading: boolean
+  error: string | null
 }
 
-export function useClientConfigFileStatus(clientKey: string, filePath: string): { loading: boolean; error: string | null } {
-  const query = useFileQuery(clientKey, filePath, true)
-  return { loading: query.isPending, error: query.error?.message ?? null }
+/**
+ * 一个客户端**全部**配置文件的当前状态。
+ *
+ * 一次问全而不是按选中的那份逐个问：内容模块把每个文件摆成一个标签，切换标签时不该再等一次请求，
+ * 而「保存全部」也要在看到所有文件之后才知道该写哪几份。空路径（客户端还没声明文件）直接不放请求。
+ */
+export function useClientConfigFiles(clientKey: string, filePaths: readonly string[]): ClientConfigFileEntry[] {
+  const results = useQueries({
+    queries: filePaths.map(filePath => ({
+      queryKey: clientConfigKeys.file(clientKey, filePath),
+      queryFn: () => unwrap(clientConfigApi.getFile(clientKey, filePath)),
+      enabled: clientKey !== '' && filePath !== '',
+    })),
+  })
+  return filePaths.map((filePath, index) => {
+    const result = results[index]
+    return {
+      filePath,
+      state: result?.data ?? null,
+      loading: result?.isPending ?? true,
+      error: result?.error?.message ?? null,
+    }
+  })
 }
 
 export function useClientConfigVersions(clientKey: string, filePath: string): ClientConfigVersionEntry[] {
@@ -59,10 +72,13 @@ export function useClientConfigVersionsLoading(clientKey: string, filePath: stri
 }
 
 /**
- * 三个写入口（填充 / 手动保存 / 恢复）。
+ * 一份文件上的写入口：回退到某个历史版本。
  *
- * 每次都同时失效「文件状态」与「版本列表」：任何一次提交都会先备份再落盘，
- * 所以两边**一定**一起变了，分开失效只会让界面出现「内容更新了但历史少一条」的瞬间。
+ * 手动保存走 `useClientConfigSaveMany`（一次写完所有改动过的文件），这里只留回退——
+ * 回退永远是「这一份文件」的事，不跨文件。
+ *
+ * 每次提交都同时失效「文件状态」与「版本列表」：两者**一定**一起变了，
+ * 分开失效只会让界面出现「内容更新了但历史少一条」的瞬间。
  * 列表页的概览也一并失效——它说的正是「这个客户端的配置现在对不对」，写入之后必然变。
  */
 export function useClientConfigActions(clientKey: string, filePath: string) {
@@ -75,34 +91,65 @@ export function useClientConfigActions(clientKey: string, filePath: string) {
     ])
   }
 
-  const save = useMutation<ClientConfigWriteResult, Error, { content: string; note?: string }>({
-    mutationFn: ({ content, note }) => unwrap(clientConfigApi.save(clientKey, filePath, content, note)),
-    onSuccess: invalidate,
-  })
-
   const restore = useMutation<ClientConfigWriteResult, Error, { id: string }>({
     mutationFn: ({ id }) => unwrap(clientConfigApi.restoreVersion(clientKey, filePath, id)),
     onSuccess: invalidate,
   })
 
-  return { save, restore, refresh: invalidate }
+  return { restore, refresh: invalidate }
+}
+
+/** 一次「保存全部」的结果：逐文件分成功与失败，一份失败不拦下其余。 */
+export interface ClientConfigSaveManyResult {
+  saved: { filePath: string; backedUp: ClientConfigVersionSummary | null }[]
+  failed: { filePath: string; message: string }[]
 }
 
 /**
- * 「这些模型值写进去，文件会变成什么样」——只算不写。
+ * 保存**多个**文件：逐个走同一条「先备份再落盘」的路径，一份失败不中断其余。
  *
- * 值没被改动（`values` 为 null）时不发请求：那时候下面的内容就是文件原文，
- * 没什么可预览的。请求本身是幂等的，同一组值重复问也只得到一个答案。
+ * 内容模块的「保存全部」按这份结果汇报：能写的先写下去，坏的单独点名——
+ * 因为某个文件语法坏了就把另外几个用户明明改对的也一起拦下，不符合「保存」的意思。
  */
-export function useClientConfigPreview(clientKey: string, filePath: string, values: ClientConfigApplyValues | null): ClientConfigPreviewResult | null {
+export function useClientConfigSaveMany(clientKey: string) {
+  const queryClient = useQueryClient()
+  return useMutation<ClientConfigSaveManyResult, Error, { files: { filePath: string; content: string }[] }>({
+    mutationFn: async ({ files }) => {
+      const saved: ClientConfigSaveManyResult['saved'] = []
+      const failed: ClientConfigSaveManyResult['failed'] = []
+      for (const file of files) {
+        try {
+          const result = await unwrap(clientConfigApi.save(clientKey, file.filePath, file.content))
+          saved.push({ filePath: file.filePath, backedUp: result.backedUp })
+        } catch (error) {
+          failed.push({ filePath: file.filePath, message: error instanceof Error ? error.message : String(error) })
+        }
+      }
+      return { saved, failed }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: clientConfigKeys.all })
+    },
+  })
+}
+
+/**
+ * 「这些模型值写进去，每个文件会变成什么样」——只算不写。
+ *
+ * 一次把客户端声明的文件都问一遍，返回值与 `filePaths` 一一对应：内容模块每个标签下摆的就是各自的预览。
+ * 值没被改动（`values` 为 null）时不发请求：那时候每个文件的内容就是原文，没什么可预览的。
+ */
+export function useClientConfigPreviews(clientKey: string, filePaths: readonly string[], values: ClientConfigApplyValues | null): (ClientConfigPreviewResult | null)[] {
   const model = values?.model ?? ''
   const smallModel = values?.smallModel ?? ''
-  const query = useQuery({
-    queryKey: clientConfigKeys.preview(clientKey, filePath, model, smallModel),
-    queryFn: () => unwrap(clientConfigApi.preview(clientKey, filePath, { model, smallModel: smallModel || undefined })),
-    enabled: values !== null && clientKey !== '' && filePath !== '',
+  const results = useQueries({
+    queries: filePaths.map(filePath => ({
+      queryKey: clientConfigKeys.preview(clientKey, filePath, model, smallModel),
+      queryFn: () => unwrap(clientConfigApi.preview(clientKey, filePath, { model, smallModel: smallModel || undefined })),
+      enabled: values !== null && clientKey !== '' && filePath !== '',
+    })),
   })
-  return query.data ?? null
+  return results.map(result => result.data ?? null)
 }
 
 const useOverviewQuery = () =>

@@ -122,13 +122,15 @@ describe('client config routes', () => {
       clientConfigRoutes.request('/api/client-config/get', { clientKey: 'claude-code', filePath: '~/.ssh/id_rsa' }),
     ).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PATH_NOT_ALLOWED', statusCode: 400 })
 
+    // 注册表里每个客户端都有配方，所以「没有配方」只能出现在一个未登记的 key 上；
+    // 路径校验先于配方查找，未登记 key 直接以路径拒绝冒出来。
     await expect(
       clientConfigRoutes.request('/api/client-config/apply', {
-        clientKey: 'pi',
-        filePath: '~/.pi/agent/settings.json',
+        clientKey: 'no-such-client',
+        filePath: '~/.no-such-client/config.json',
         model: 'osw-model',
       }),
-    ).rejects.toMatchObject({ code: 'CLIENT_CONFIG_CLIENT_NOT_SUPPORTED' })
+    ).rejects.toMatchObject({ code: 'CLIENT_CONFIG_PATH_NOT_ALLOWED' })
   })
 
   it('summarises every client for the list page', async () => {

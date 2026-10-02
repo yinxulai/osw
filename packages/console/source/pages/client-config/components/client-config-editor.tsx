@@ -33,7 +33,7 @@ export function ClientConfigEditor(props: ClientConfigEditorProps) {
   const t = useTranslation()
   const [clientKey, setClientKey] = useState(defaultClientKey ?? AGENT_CLIENT_DEFINITIONS[0]?.key ?? '')
   const editor = useClientConfigEditor(clientKey)
-  const { state, status, client } = editor
+  const { loading, error, client } = editor
 
   const options: FormOption[] = AGENT_CLIENT_DEFINITIONS.map(item => ({ value: item.key, label: item.name }))
 
@@ -61,10 +61,10 @@ export function ClientConfigEditor(props: ClientConfigEditorProps) {
       <CardContent className="space-y-4 pt-4">
         {!client ? (
           <EmptyState icon={CircleSlash} title={t('clientConfig.unknownClient')} />
-        ) : status.error ? (
-          <EmptyState icon={CircleSlash} title={t('clientConfig.loadFailed')} description={status.error} />
-        ) : status.loading || !state ? (
-          // 只摆一块正文高度的骨架：这张卡的头与选择器已经就位，等的只是那份文件。
+        ) : error ? (
+          <EmptyState icon={CircleSlash} title={t('clientConfig.loadFailed')} description={error} />
+        ) : loading ? (
+          // 只摆一块正文高度的骨架：这张卡的头与选择器已经就位，等的只是那几份文件。
           <div className="h-115 w-full animate-pulse rounded-xl bg-inset" />
         ) : (
           <ConfigEditorBody editor={editor} />

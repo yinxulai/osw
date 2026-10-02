@@ -14,13 +14,21 @@ The **Client configuration** page lets OSW edit local AI client config files dir
 
 ## Supported clients
 
-| Client | Protocol | Config files |
-| --- | --- | --- |
-| Claude Code | Anthropic Messages | `~/.claude/settings.json`, credential file |
-| Codex | OpenAI Responses | `~/.codex/config.toml`, `auth.json` |
-| OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json`, auth file |
+OSW keeps a built-in registry of the AI clients it can configure. For each one it knows where the config file lives, what format it is in, and which keys point the tool at a provider. **A write touches only those keys** — every other key, comment and the file's original formatting is left as it is.
 
-Other known clients (Cursor CLI, Copilot CLI, etc.) provide **reference values** only and must be filled in manually.
+| Client | Protocol | Config files | What OSW writes |
+| --- | --- | --- | --- |
+| Claude Code | Anthropic Messages | `~/.claude/settings.json` | `env.ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`, the `model`, and every `ANTHROPIC_DEFAULT_*_MODEL` alias |
+| Codex | OpenAI Responses | `~/.codex/config.toml` | `model`, `model_provider`, and the `[model_providers.osw]` table |
+| VS Code | OpenAI Chat Completions | `chatLanguageModels.json` | a `Custom Endpoint` provider entry named `OSW`, with its model |
+| OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json` | `model`, `small_model`, and the `osw` provider entry |
+| Copilot CLI | OpenAI Chat Completions (BYOK) | `~/.copilot/osw.env` | `COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_API_KEY` and `COPILOT_MODEL` |
+| Pi | OpenAI Chat Completions | `~/.pi/agent/settings.json`, `~/.pi/agent/models.json` | `defaultProvider`, `defaultModel`, and the `osw` provider entry |
+| DeepSeek Harness | OpenAI Chat Completions | `~/.dsh/settings.yaml` | `agent-default-model`, and the `llm-pi-ai.providers.osw` route |
+
+<Callout title="Copilot CLI is configured through the environment" type="note">
+Copilot CLI points at a custom (BYOK) provider only through `COPILOT_PROVIDER_*` environment variables, so OSW delivers its address, key and model through a dedicated env file and sources it from your login shell.
+</Callout>
 
 ## Auto-fill
 

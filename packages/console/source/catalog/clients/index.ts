@@ -5,8 +5,9 @@
  * 也要用它来解析与校验配置文件路径；控制台这一层只补上打包器才能处理的**图标**——
  * `import.meta.glob` 是 Vite 的能力，契约包（Node 侧与 Worker 也在消费）用不了。
  *
- * 目录约定：`./<key>/icon.svg`（同一张图两套主题都用），或分别提供
- * `icon.light.svg` / `icon.dark.svg` 覆盖单张图。
+ * 图标与定义同住在一个**客户端目录**里：`packages/contracts/source/clients/<key>/`，目录里是
+ * `definition.json` + `icon.svg`（或分开的 `icon.light.svg` / `icon.dark.svg`）。定义由
+ * `@common/clients` 静态引入，图标由这里按 key 扫出来——同一个目录，只是发现方式不同。
  */
 import { AGENT_CLIENT_DEFINITIONS as AGENT_CLIENT_BASE_DEFINITIONS, type AgentClientDefinition } from '@common/clients'
 
@@ -28,13 +29,17 @@ export interface AgentClientEntry extends AgentClientDefinition {
   iconUrls: Record<AgentClientIconTheme, string>
 }
 
-const lightIcons = import.meta.glob('./*/icon.light.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-const darkIcons = import.meta.glob('./*/icon.dark.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-const sharedIcons = import.meta.glob('./*/icon.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+// 图标与定义同住在契约包的客户端目录里（`@common/clients/<key>/icon*.svg`）；这里退四层到
+// `packages/` 再进契约包。定义是静态 import、不能 glob，图标却能——因为它是渲染进程才消费的
+// 资源，而 `import.meta.glob` 正是打包器的能力。
+const lightIcons = import.meta.glob('../../../../contracts/source/clients/*/icon.light.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const darkIcons = import.meta.glob('../../../../contracts/source/clients/*/icon.dark.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const sharedIcons = import.meta.glob('../../../../contracts/source/clients/*/icon.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
-/** `./claude-code/icon.light.svg` → `claude-code`。 */
+/** `.../clients/claude-code/icon.light.svg` → `claude-code`。 */
 function clientKeyOfModulePath(modulePath: string): string {
-  return modulePath.split('/')[1]
+  const segments = modulePath.split('/')
+  return segments[segments.length - 2] ?? ''
 }
 
 function buildIconUrls(): Map<string, Record<AgentClientIconTheme, string>> {
@@ -67,7 +72,7 @@ const ICON_URLS = buildIconUrls()
 export const AGENT_CLIENT_DEFINITIONS: readonly AgentClientEntry[] = AGENT_CLIENT_BASE_DEFINITIONS.map(definition => {
   const iconUrls = ICON_URLS.get(definition.key)
   if (!iconUrls?.light || !iconUrls.dark) {
-    throw new Error(`Agent client "${definition.key}" is missing an icon (expected catalog/clients/${definition.key}/icon.svg)`)
+    throw new Error(`Agent client "${definition.key}" is missing an icon (expected packages/contracts/source/clients/${definition.key}/icon.svg)`)
   }
   return { ...definition, iconUrls }
 })
