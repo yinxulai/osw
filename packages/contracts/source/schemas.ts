@@ -825,6 +825,10 @@ export const LiveRequestAttemptSchema = z.object({
    *
    * 输入侧上游通常在第一个事件就报完，输出侧则是一路累加，所以两个字段都可能比最终值小。
    * 它们只用来让「正在进行」的行也有数字可看，落库后一律以 `RequestLogEntry` 为准。
+   *
+   * 输出侧还有个例外：上游几乎只在收尾帧才报用量，流式期间本来读不到。为了让实时指标在正文
+   * 流动时就有数可看，观察者会在真实用量到账前写入一个**按正文估算**的输出 Token 数，真实值一
+   * 到就被覆盖。所以这个字段在途期间可能是估算值，落库后才是上游报的准确值。
    */
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),

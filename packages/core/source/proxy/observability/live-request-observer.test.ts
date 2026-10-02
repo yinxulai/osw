@@ -87,6 +87,30 @@ describe('createLiveAttemptObserver', () => {
     expect(handle.patches).toContainEqual({ outputTokens: 9 })
   })
 
+  it('流式：上游还没报用量时，用正文估算的输出 Token 顶上实时指标', () => {
+    // 上游几乎只在收尾帧才报输出 Token，流式期间读数一直为空——这正是实时指标永远显示
+    // `--` 的根因。正文已经在流动时先用估算值顶上，实时指标才有数可看。
+    const handle = handleOf()
+    const observer = createLiveAttemptObserver({ handle, streaming: true, startedAt: 1_000 })
+
+    observer.onUpstreamChunk?.(exchange, attempt, sseEvent({ choices: [{ delta: { content: 'hello world' } }] }))
+
+    const estimated = handle.patches.find(patch => typeof patch.outputTokens === 'number')
+    expect(estimated?.outputTokens).toBeGreaterThan(0)
+  })
+
+  it('流式：真实用量一到，立刻覆盖之前的估算值', () => {
+    const handle = handleOf()
+    const observer = createLiveAttemptObserver({ handle, streaming: true, startedAt: 1_000 })
+
+    observer.onUpstreamChunk?.(exchange, attempt, sseEvent({ choices: [{ delta: { content: 'hello world hello world' } }] }))
+    observer.onUpstreamChunk?.(exchange, attempt, sseEvent({ choices: [{ delta: {} }], usage: { output_tokens: 7 } }))
+
+    // 最后写入的应该是上游报的真实值，而不是估算值。
+    const lastOutputPatch = [...handle.patches].reverse().find(patch => typeof patch.outputTokens === 'number')
+    expect(lastOutputPatch?.outputTokens).toBe(7)
+  })
+
   it('首字一旦到了就只上报一次，后续字节不能改写那一刻', () => {
     // 「上游开始吐字了」是请求级的事实，由执行器拿它把阶段从「等首字节」推到「正在交付」；
     // 重复上报会让阶段在每个分块上都被重写一遍。

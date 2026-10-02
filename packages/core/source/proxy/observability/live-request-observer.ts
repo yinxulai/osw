@@ -91,6 +91,11 @@ class LiveAttemptObserver implements Observer {
   private publishUsage(handle: LiveAttemptHandle): void {
     const { inputTokens, outputTokens } = this.tracker.usage()
     if (inputTokens !== null) handle.patch({ inputTokens })
-    if (outputTokens !== null) handle.patch({ outputTokens })
+    // 上游只在收尾那一帧才报输出 Token，流式期间读数一直为空。实时指标要在这段空窗里
+    // 就有数可看，所以在真实用量到账前先用**估算值**顶上；真实值一到立刻覆盖。
+    // 估算只走这条路（实时展示），落库那条路径仍只认上游报的 usage。
+    // 台账里的 `outputTokens` 是整数（`LiveRequestAttemptSchema` 为 `.int()`），估算值取整后再写。
+    const pendingOutputTokens = outputTokens ?? Math.round(this.tracker.estimatedOutputTokens())
+    if (pendingOutputTokens > 0) handle.patch({ outputTokens: pendingOutputTokens })
   }
 }

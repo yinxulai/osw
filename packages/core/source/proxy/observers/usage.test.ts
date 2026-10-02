@@ -192,6 +192,64 @@ describe('first output detection', () => {
   })
 })
 
+describe('output token estimation', () => {
+  it('starts at zero before any content arrives', () => {
+    const tracker = createUsageTracker()
+    expect(tracker.estimatedOutputTokens()).toBe(0)
+  })
+
+  it('accumulates an estimate from streamed content deltas', () => {
+    // 上游只在收尾帧报真实用量，实时指标在流式期间只能靠估值。估值要随内容逐块增长。
+    const tracker = createUsageTracker()
+    tracker.consumeSseChunk('data: {"choices":[{"delta":{"content":"abcd"}}]}\n\n')
+    const afterFirst = tracker.estimatedOutputTokens()
+    expect(afterFirst).toBeGreaterThan(0)
+
+    tracker.consumeSseChunk('data: {"choices":[{"delta":{"content":"efgh"}}]}\n\n')
+    expect(tracker.estimatedOutputTokens()).toBeGreaterThan(afterFirst)
+  })
+
+  it('weights dense scripts heavier than ASCII', () => {
+    // 中文一字约一个 Token，英文约四字一个：同一段「字数」的中英文不该估出同一个数。
+    const ascii = createUsageTracker()
+    ascii.consumeSseChunk('data: {"choices":[{"delta":{"content":"ab"}}]}\n\n')
+    const cjk = createUsageTracker()
+    cjk.consumeSseChunk('data: {"choices":[{"delta":{"content":"中文"}}]}\n\n')
+    expect(cjk.estimatedOutputTokens()).toBeGreaterThan(ascii.estimatedOutputTokens())
+  })
+
+  it('does not count usage-only, role-only or sentinel frames', () => {
+    const tracker = createUsageTracker()
+    tracker.consumeSseChunk('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n')
+    tracker.consumeSseChunk('data: {"usage":{"output_tokens":9}}\n\n')
+    tracker.consumeSseChunk('data: [DONE]\n')
+    expect(tracker.estimatedOutputTokens()).toBe(0)
+  })
+
+  it('counts reasoning content toward the estimate', () => {
+    // 上游报的输出 Token 含推理 Token，估算也必须含，否则推理阶段的速度被系统性低估。
+    const tracker = createUsageTracker()
+    tracker.consumeSseChunk('data: {"choices":[{"delta":{"reasoning_content":"思考中"}}]}\n\n')
+    expect(tracker.estimatedOutputTokens()).toBeGreaterThan(0)
+  })
+
+  it('counts Anthropic and Responses deltas', () => {
+    const anthropic = createUsageTracker()
+    anthropic.consumeSseChunk('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}\n\n')
+    expect(anthropic.estimatedOutputTokens()).toBeGreaterThan(0)
+
+    const responses = createUsageTracker()
+    responses.consumeSseChunk('data: {"type":"response.output_text.delta","delta":"hello"}\n\n')
+    expect(responses.estimatedOutputTokens()).toBeGreaterThan(0)
+  })
+
+  it('estimates from a whole non-streaming JSON body too', () => {
+    const tracker = createUsageTracker()
+    tracker.consumeJson(JSON.stringify({ choices: [{ message: { content: 'hello world' } }] }))
+    expect(tracker.estimatedOutputTokens()).toBeGreaterThan(0)
+  })
+})
+
 describe('token usage extraction', () => {
   it('returns an empty reading for a payload without usage', () => {
     expect(extractTokenUsage({ id: 'resp-1' })).toMatchObject({ inputTokens: null, rawUsage: null })
