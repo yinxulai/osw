@@ -28,11 +28,7 @@
 
 import { computeLiveMetrics, type LiveMetrics } from '@common/live-metrics'
 import { liveRequestStore } from '../proxy/observability/live-request-store'
-
-/** 台账变动到重算一帧的最大合流窗口。 */
-const COALESCE_MILLISECONDS = 200
-/** 空闲时的心跳间隔：给 TPS 一个随时间衰减的出口。 */
-const HEARTBEAT_MILLISECONDS = 1000
+import { LIVE_METRICS_COALESCE_MILLISECONDS, LIVE_METRICS_HEARTBEAT_MILLISECONDS } from '../realtime/retention'
 
 type LiveMetricsListener = (metrics: LiveMetrics) => void
 
@@ -84,13 +80,13 @@ function markDirty(): void {
   coalesceTimer = setTimeout(() => {
     coalesceTimer = null
     tick()
-  }, COALESCE_MILLISECONDS)
+  }, LIVE_METRICS_COALESCE_MILLISECONDS)
   coalesceTimer.unref()
 }
 
 function start(): void {
   lastSignature = null
-  heartbeatTimer = setInterval(tick, HEARTBEAT_MILLISECONDS)
+  heartbeatTimer = setInterval(tick, LIVE_METRICS_HEARTBEAT_MILLISECONDS)
   heartbeatTimer.unref()
   unsubscribeStore = liveRequestStore.subscribe(markDirty)
   tick()

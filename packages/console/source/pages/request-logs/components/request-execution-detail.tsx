@@ -259,7 +259,41 @@ function TimelineEvent(props: TimelineEventProps) {
       last={props.last}
       title={description.title}
       detail={description.detail}
-    />
+    >
+      {description.candidates !== undefined && description.candidates.length > 0 && (
+        <CandidateLines candidates={description.candidates} />
+      )}
+    </TimelineItem>
+  )
+}
+
+interface CandidateLinesProps {
+  candidates: string[]
+}
+
+/**
+ * 候选链：一家一行。
+ *
+ * 候选按优先级排，**顺序本身就是信息**——它预告了出事之后会往谁那儿退。挤在一个 `·` 串里时，
+ * 名单一长就溢出那一行被截断，而「后面还排着谁」恰恰是这条轴上最该看全的一段。因此改成逐行
+ * 铺开：每行前面一个序号（就是尝试顺序），后面是「供应商/模型」，与列表行、尝试行同一套 mono 字形。
+ *
+ * 用 `break-all` 而不是截断：一条候选写的就是「供应商/模型」，这是判断「要发往哪家」的全量信息，
+ * 宁可折行也不能把尾巴吃掉。
+ */
+function CandidateLines(props: CandidateLinesProps) {
+  return (
+    <div className="mt-1 flex flex-col gap-0.5">
+      {props.candidates.map((candidate, index) => (
+        <div
+          key={`${index}:${candidate}`}
+          className="flex min-w-0 items-baseline gap-1.5 system-2xs-regular text-text-quaternary"
+        >
+          <span className="w-3 shrink-0 text-right font-mono tabular-nums">{index + 1}</span>
+          <span className="min-w-0 break-all font-mono text-text-tertiary">{candidate}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -307,21 +341,23 @@ interface ChunkPreviewProps {
 }
 
 /**
- * 上游最新一个分块的预览：一行、不换行、不解析。
+ * 上游最新一个分块的预览：两行、不解析。
  *
  * 只画**最新那一块**，不做历史列表。这里要回答的是「上游此刻在回什么」，而一份会自己滚动的
  * 列表既要求读者去追它，又要在内存里多存一份正文；正文该看的时候会在正文面板里。
  *
- * 这一个块里的换行（SSE 事件本来就带空行）折叠成一个空格，超出宽度的部分交给 CSS 截断——
- * 预览只负责「开头长什么样」。
+ * 给两行而不是一行：一行的量常常只够读到 SSE 的信封（`data: {"choices":[{"delta":`），
+ * 正文的第一个字恰好被截在边上，等于没回答「它在回什么」。两行把常见的开头连同第一小段正文
+ * 一起露出来，而两行仍是一个稳定高度，不会像三行那样把时间轴末端顶开。换行用 `break-all`
+ * 硬断（上游原文可能是一整行 JSON 或二进制），行数上限交给 `line-clamp-2` 收尾。
  *
- * 还没有分块时**也占着这一行**，只把内容换成占位符：这一行若随数据有无而出现、消失，
- * 尾巴节点就会在「上游还没回」到「上游回了」之间长高一行——一屏里别的都不动，只有它在跳，
- * 看起来就像面板在抖。行高恒定比省下那一行更要紧。
+ * 还没有分块时**也占着这两行**，只把内容换成占位符：这一块若随数据有无而出现、消失，
+ * 尾巴节点就会在「上游还没回」到「上游回了」之间长高——一屏里别的都不动，只有它在跳，
+ * 看起来就像面板在抖。行高恒定比省下那一两行更要紧。
  */
 function ChunkPreview(props: ChunkPreviewProps) {
   return (
-    <div className="mt-1.5 w-full truncate border-t border-border/40 pt-1.5 font-mono system-2xs-regular text-text-quaternary">
+    <div className="mt-1.5 line-clamp-2 w-full break-all border-t border-border/40 pt-1.5 font-mono system-2xs-regular text-text-quaternary">
       {props.preview ?? '—'}
     </div>
   )
@@ -378,6 +414,8 @@ function TimelineItem(props: TimelineItemProps) {
 interface DescriptionOfNode {
   title: string
   detail?: string
+  /** 需要逐行铺开的补充内容（目前只有候选链）；与 `detail` 互不排斥，前者说量、后者列项。 */
+  candidates?: string[]
 }
 
 /** 健康度被降到哪一档——`none` 没有可说的（它只说明这次没算作故障）。 */
@@ -402,10 +440,10 @@ function describeNode(message: TimelineMessage, t: AppTranslator): DescriptionOf
       const count = message.candidates.length
       return {
         title: t('requestLogs.execution.node.routeResolved'),
-        // 候选是按优先级排的，所以顺序本身就是信息：它预告了出事之后会往谁那儿退。
-        detail: count === 0
-          ? undefined
-          : `${t('requestLogs.execution.candidates', { count })} · ${message.candidates.join(' → ')}`,
+        // 候选按优先级排，顺序本身就是信息：它预告了出事之后会往谁那儿退。
+        // 名单独占几行（见 `CandidateLines`），这里只报总数，不把名单压成一行。
+        detail: count === 0 ? undefined : t('requestLogs.execution.candidates', { count }),
+        candidates: message.candidates,
       }
     }
 

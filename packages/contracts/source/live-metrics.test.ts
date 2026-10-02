@@ -66,6 +66,16 @@ function inFlight(requestState: 'pending' | 'success', attemptState: LiveRequest
   })
 }
 
+/** 一条已落定请求：尝试耗时段已冻结，速度是个定值。 */
+function settled(outputTokens: number | null, startedAt: number, endedAt: number, requestEndedAt: number = endedAt): LiveRequest {
+  return request({
+    status: 'success',
+    startedAt,
+    endedAt: requestEndedAt,
+    attempts: [attempt({ state: 'success', outputTokens, startedAt, endedAt })],
+  })
+}
+
 describe('liveTps', () => {
   it('divides the output tokens of the latest attempt by the whole attempt duration', () => {
     // 42 Token / 1 秒 = 42 TPS。
@@ -106,6 +116,34 @@ describe('liveTps', () => {
     })
     // 只认最新一次尝试：100 / 1 秒 = 100 TPS，被放弃那次不参与。
     expect(liveTps([request()], 1000)).toBe(100)
+  })
+
+  it('falls back to the most recent settled request speed when nothing is in flight', () => {
+    // 内存里最近一条已落定请求跑出 100 Token / 2 秒 = 50 TPS。
+    const finished = settled(100, 0, 2000)
+    // 没有在途请求：不返回 null，而是回落到刚跑完那条的最终速度。
+    expect(liveTps([finished], 9000)).toBe(50)
+  })
+
+  it('prefers the in-flight speed over any settled fallback', () => {
+    const finished = settled(100, 0, 2000)
+    const running = inFlight('pending', 'streaming', 42, 0)
+    // 有在途请求时只认它的实时速度，不回落到已落定那条。
+    expect(liveTps([finished, running], 1000)).toBe(42)
+  })
+
+  it('falls back to the most recently settled request among several', () => {
+    // 两条都落定：一条更早结束（速度更高），一条刚结束（速度更低）。按结束时间取最近的那条。
+    const older = settled(9000, 0, 1000, 1000)
+    const newer = settled(60, 0, 3000, 3000)
+    expect(liveTps([older, newer], 9000)).toBe(20)
+  })
+
+  it('stays null when no settled request yields a speed either', () => {
+    // 内存里只剩一条落定、但上游没报输出 Token 的请求：没有速度可言。
+    expect(liveTps([settled(null, 0, 1000)], 9000)).toBeNull()
+    // 上游报了 0：分子为零，仍然没有速度。
+    expect(liveTps([settled(0, 0, 1000)], 9000)).toBeNull()
   })
 })
 

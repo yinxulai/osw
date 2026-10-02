@@ -64,6 +64,8 @@ A few things about the tray:
 The icon itself does not distinguish running from stopped. To see state, open the tray or check the status line (running · port) in the main window title bar.
 </Callout>
 
+On **macOS**, a **live metric** also appears to the right of the menu bar icon (on by default): the latest known output speed (`{liveTps} TPS`). It measures how many tokens per second a running request produces; with no in-flight request it falls back to the speed of the most recent finished request, and shows `--` only when memory holds none. What it shows and where can be changed under **Settings → App → Live metric** (see [Settings](/reference/settings)).
+
 ## Launch at login
 
 Turn on "Launch at login" under **Settings → App → Appearance & startup** and OSW starts automatically when you log in, hidden in the tray. Enabling it for daily use is recommended: that way the local service is already running when a client's first request arrives.

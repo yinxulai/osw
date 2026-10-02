@@ -17,27 +17,30 @@
  *
  * ## 为什么变量名是显式枚举（`liveTps` / `activeRequests`）而不是含糊的 `tps`
  *
- * 用户要的是几件**明确**的事：最近一条在途请求的实时输出速度、此刻并发请求。写成
+ * 用户要的是几件**明确**的事：最近一次已知的输出速度、此刻并发请求。写成
  * `tps` / `requests` 会把不同口径的东西压成含糊的词——是单条还是合计，读不出来。所以变量名
- * 本身就把口径说完：`liveTps` 是「最近一个在途请求现在多快」、`activeRequests` 是此刻并发数。
+ * 本身就把口径说完：`liveTps` 是「最近一次已知的输出速度」、`activeRequests` 是此刻并发数。
  *
- * ## 速度为什么锁定「最近一个在途请求」
+ * ## 速度口径：优先在途请求，回落最近一条已落定请求
  *
- * 菜单栏/角标只有一格。用户刚发出的那条正是他此刻在等的，显示它的实时 TPS 最符合直觉：
- * 合计会把并发压成一个与任何单条都对不上的数，取最大则会在用户切去看另一条时突然跳到别的
- * 请求上。而「字节/秒」虽然更容易在途取到（每个分块一到达就已知），却衡量的是响应体量而非
- * Token 产出——对 AI 来说，用户真正关心的是每秒出多少个 Token，所以这里坚持 TPS。
+ * 菜单栏/角标只有一格。用户刚发出的那条正是他此刻在等的，有在途请求时显示它的实时 TPS
+ * 最符合直觉：合计会把并发压成一个与任何单条都对不上的数，取最大则会在用户切去看另一条时
+ * 突然跳到别的请求上。而「字节/秒」虽然更容易在途取到（每个分块一到达就已知），却衡量的是
+ * 响应体量而非 Token 产出——对 AI 来说，用户真正关心的是每秒出多少个 Token，所以坚持 TPS。
+ * 一条请求刚跑完、新的还没来时，回落到内存里最近一条已落定请求的最终速度，而不是立刻翻成
+ * `--`——「我这条到底多快」是同一个问题的另一种问法。
  *
  * 代价是：上游常在收尾那一帧才报输出 Token（见 `apps/docs/specs/observability.md`），一个
- * 刚开始、还没吐字的请求会先显示 `--`。正文一旦开始流动，观察者会用**正文估算**的输出 Token
- * 顶上，指标随即亮起来；上游报的真实用量到达后立刻覆盖估算值。`--` 只在「此刻还没有任何输出」
- * 时出现——**没有速度**和**速度为零**本来就该分开。
+ * 刚开始、还没吐字的请求本来取不到速度。两条兜底让这一格几乎不空着：正文一旦开始流动，
+ * 观察者会用**正文估算**的输出 Token 顶上（真实用量到达后立刻覆盖）；连在途速度都没有时，
+ * 回落到内存里**最近一条已落定请求**跑出的最终速度。只有内存里一条算得出速度的请求都没有，
+ * 才显示 `--`——**没有速度**和**速度为零**本来就该分开。
  *
  * ## 取值口径
  *
  * - 输出速度公式只有一份，在 `@common/metrics`（{@link tokensPerSecondFromTotals}）；
  *   本文件不重写，只调用。
- * - 没有值（没有在途请求、还没有输出 Token）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
+ * - 没有值（内存里没有任何算得出速度的请求）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
  *   一个 `0` 分不清「真的没有在跑」还是「页面没接上数」，而 `--` 明确指向「此刻没有」。
  *   它是一条给眼睛扫的状态条，不是一个要对账的计数。
  *
@@ -51,7 +54,7 @@ import type { LiveRequest, LiveRequestAttempt } from './schemas'
 export const LIVE_METRIC_UNAVAILABLE = '--'
 
 /**
- * 默认模板：最近一条在途请求的实时输出速度 + `TPS` 单位。
+ * 默认模板：最近一次已知的输出速度 + `TPS` 单位。
  *
  * 用户没配过模板时就是它，设置页里也拿它当占位示例——两处共用同一个常量，
  * 不会出现「默认值和界面上写的示例不一致」。
@@ -78,10 +81,11 @@ export const MAX_LIVE_METRIC_LENGTH = 64
  */
 export interface LiveMetrics {
   /**
-   * 最近一个在途请求的实时输出速度（TPS）。
+   * 最近一次**已知**的输出速度（TPS）。
    *
-   * 没有在途请求、或那条请求还没读到输出 Token 时为 `null`。这个数回答「我刚发的那条现在
-   * 每秒出多少个 Token」，是全应用唯一的速度口径——不再有「最大 / 合计」两套聚合。
+   * 有在途请求时是它的实时速度；没有在途速度时回落到内存里最近一条已落定请求的最终速度。
+   * 内存里没有任何算得出速度的请求时为 `null`。这个数回答「刚发的那条现在多快，或最近一条
+   * 到底多快」，是全应用唯一的速度口径——不再有「最大 / 合计」两套聚合。
    */
   liveTps: number | null
   /** 此刻正在进行、且已进入上游阶段的请求条数。 */
@@ -111,21 +115,52 @@ function liveRequestOf(requests: readonly LiveRequest[]): LiveRequest | null {
   return latest
 }
 
+/** 一条已落定请求的最终输出速度：输出 Token ÷ 那段**已经冻结**的尝试耗时。 */
+function settledTpsOf(request: LiveRequest): number | null {
+  if (request.status === 'pending') return null
+  const attempt = liveAttemptOf(request)
+  if (attempt === null || attempt.outputTokens === null) return null
+  const endedAt = attempt.endedAt ?? request.endedAt
+  if (endedAt === null) return null
+  return tokensPerSecondFromTotals(attempt.outputTokens, endedAt - attempt.startedAt)
+}
+
+/** 内存里最近一条已落定、且算得出速度的请求的速度；没有时返回 `null`。 */
+function mostRecentSettledTps(requests: readonly LiveRequest[]): number | null {
+  let latest: { at: number; tps: number } | null = null
+  for (const request of requests) {
+    if (request.status === 'pending') continue
+    const tps = settledTpsOf(request)
+    if (tps === null) continue
+    const at = request.endedAt ?? request.updatedAt
+    if (latest === null || at > latest.at) latest = { at, tps }
+  }
+  return latest === null ? null : latest.tps
+}
+
 /**
- * 最近一个在途请求的实时输出速度（TPS）：那条请求**最新一次尝试**的输出 Token ÷ 端到端耗时。
+ * 最近一次**已知**的输出速度（TPS）。
  *
- * 分子是上游当下报的累计输出 Token（流式场景里随每个分块增长），分母是 `now - startedAt`——
- * 这是**此刻**的端到端耗时，不是一个已经落定的最终值，所以数值随请求进行而收敛，正是「实时」
- * 的含义。分子分母必须同源（见 `metrics.ts`）：没有输出 Token 就没有分子，耗时不正就没有分母，
- * 两种情况都返回 `null`——**没有速度和速度为零是两件事**。时长口径与落库侧的
- * `requestOutputTokensPerSecond` 完全一致，只是在途样本会随请求继续增长。
+ * 优先取「此刻」：有在途请求时，是那条请求**最新一次尝试**的输出 Token ÷ `now - startedAt`，
+ * 数值随请求进行而收敛，正是「实时」的含义。取不到在途速度（没有在途请求、或那条请求还没读到
+ * 输出 Token）时，回落到内存里**最近一条已落定请求**的最终速度（输出 Token ÷ 那段已冻结的
+ * 尝试耗时）——菜单栏/角标只有一格，一条请求刚跑完，显示它刚跑出的速度，比立刻翻成 `--` 更
+ * 符合「我这条到底多快」的直觉。
+ *
+ * 分子分母必须同源（见 `metrics.ts`）：没有输出 Token 就没有分子，耗时不正就没有分母。
+ * 两档都取不到（内存里没有任何算得出速度的请求）时返回 `null`，渲染成 `--`——**没有速度
+ * 和速度为零是两件事**。时长口径与落库侧的 `requestOutputTokensPerSecond` 完全一致。
  */
 export function liveTps(requests: readonly LiveRequest[], now: number): number | null {
   const request = liveRequestOf(requests)
-  if (request === null) return null
-  const attempt = liveAttemptOf(request)
-  if (attempt === null || attempt.outputTokens === null) return null
-  return tokensPerSecondFromTotals(attempt.outputTokens, now - attempt.startedAt)
+  if (request !== null) {
+    const attempt = liveAttemptOf(request)
+    if (attempt !== null && attempt.outputTokens !== null) {
+      const speed = tokensPerSecondFromTotals(attempt.outputTokens, now - attempt.startedAt)
+      if (speed !== null) return speed
+    }
+  }
+  return mostRecentSettledTps(requests)
 }
 
 /**

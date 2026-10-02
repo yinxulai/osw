@@ -21,6 +21,25 @@ The **Settings** page manages app behavior, network connections, failover, and l
 | Language | UI language; logs and error messages are always English. |
 | Launch at login | Start automatically on login and hide to the tray. |
 
+### Live metric
+
+Show a template-built live metric on the **menu bar** (macOS only) and in the app **window title bar**, on by default. Both surfaces share the same numbers and the same template; only their visibility switches differ.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Show in menu bar | On | A line of text to the right of the menu bar icon. macOS only. |
+| Show in app window | On | The same metric to the left of the running-status line in the window title bar. |
+| Template | `{liveTps} TPS` | Plain text plus brace variables; empty means the default template. At most 64 characters. |
+
+Available variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `{liveTps}` | The latest known output speed (tokens/sec): the live speed of an in-flight request, or the speed of the most recent finished request. |
+| `{activeRequests}` | Number of requests running right now. |
+
+Speed prefers the **most recent in-flight request** (the one you just sent) and converges as it runs. Upstreams usually report output tokens only at the end; once content starts flowing an estimate stands in and is replaced when real usage arrives. With no in-flight speed it falls back to the final speed of the **most recent finished request** in memory. It renders as `--` (zero too) only when memory holds no request with a computable speed.
+
 ### Version updates
 
 Check for updates, download, and install. On macOS you can only check and open the DMG download page; major versions with breaking changes do not support auto-update and must be downloaded manually. See [Install & run](/getting-started/installation).

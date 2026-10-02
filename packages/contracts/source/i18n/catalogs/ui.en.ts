@@ -1891,9 +1891,9 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.liveMetric.templateDescription': 'Plain text plus variables in braces, e.g. {liveTps} TPS. Leave empty to fall back to the default.',
   'settings.liveMetric.unknownVariable': 'The template uses a variable that does not exist; it is kept as-is in the rendered text.',
   'settings.liveMetric.variablesTitle': 'Available variables',
-  'settings.liveMetric.variable.liveTps': 'live output speed (tokens/sec) of the most recent in-flight request',
+  'settings.liveMetric.variable.liveTps': 'the latest known output speed (tokens/sec): live speed of an in-flight request, else the speed of the most recent finished request',
   'settings.liveMetric.variable.activeRequests': 'requests in flight right now',
-  'settings.liveMetric.variablesHint': 'A variable with no value yet renders as --. Example: {example}',
+  'settings.liveMetric.variablesHint': 'Renders as -- when memory holds no request with a computable speed yet. Example: {example}',
 
   // 数据目录
   'settings.dataDirectory.title': 'Data directory',

@@ -10,6 +10,13 @@ import type {
   TransportKind,
 } from '@common/schemas'
 import type { UpstreamTarget } from '@server/proxy/contracts'
+import {
+  MAX_CHUNK_PREVIEW_CHARACTERS,
+  MAX_EVENTS_PER_REQUEST,
+  MAX_SETTLED_REQUESTS,
+  SETTLED_TTL_MILLISECONDS,
+  pruneNewestFirst,
+} from '@server/realtime/retention'
 
 /**
  * 进行中请求的内存台账。
@@ -34,20 +41,15 @@ import type { UpstreamTarget } from '@server/proxy/contracts'
  * 管理接口只读。
  */
 
-/** 单个请求保留的事件条数上限：超出后丢最旧的，时间轴仍保留最近的一段。 */
-const MAX_EVENTS_PER_REQUEST = 200
-/**
- * 每条分块预览保留的字符数：只看开头长什么样，超出部分以 `…` 收尾。
- *
- * 80 是照「界面上一行能读完」定的：预览用 11px 等宽字排在时间轴最右那一列，
- * 常见窗口下大约能显示 100 个字符，留出余量取 80。再多就只是让读者去数被截断的尾巴——
- * 这一段本来也不参与统计与落库，存下来的每个字符都可能被看到，看不到的部分就不该存。
- */
-const MAX_CHUNK_PREVIEW_CHARACTERS = 80
-/** 已结束请求在内存里保留的条数上限。 */
-const MAX_SETTLED_REQUESTS = 50
-/** 已结束请求在内存里保留的时长：够界面看到「刚刚结束」，又不至于一直占着。 */
-const SETTLED_TTL_MILLISECONDS = 60_000
+// 保留口径（事件条数、分块预览字符数、保留区条数与时长）统一来自 `@server/realtime/retention`
+// ——那块内存该占多少只有一处事实来源，这里不再各自 `const` 一遍。原样再导出，是为了让
+// 「读台账上限」的既有调用方不必改 import 路径。
+export {
+  MAX_CHUNK_PREVIEW_CHARACTERS,
+  MAX_EVENTS_PER_REQUEST,
+  MAX_SETTLED_REQUESTS,
+  SETTLED_TTL_MILLISECONDS,
+}
 
 interface LiveRequestRecord {
   id: string
@@ -97,7 +99,7 @@ export interface LiveAttemptHandle {
    *
    * 旧预览直接被覆写，不排队。因此突发一串分块时，界面上看到的一定是最后那一个——
    * 断流时留在屏上的也是它，正是排障最需要的那个现场。最长保留
-   * `MAX_CHUNK_PREVIEW_CHARACTERS` 个字符（够读开头，又不至于超出界面那一行的宽度）。
+   * `MAX_CHUNK_PREVIEW_CHARACTERS` 个字符（够读两行开头，又不至于把整段正文留在内存里）。
    */
   addUpstreamChunk(bytes: number, preview: string): void
   /** 记一段写给客户端的字节。 */
@@ -340,14 +342,18 @@ export class LiveRequestStore {
   /**
    * 丢弃过期的已结束请求。
    *
-   * 两个上限都在这里执行：条数（保留区容量）与时长（`SETTLED_TTL_MILLISECONDS`）。
-   * 时长按请求自己的结束时刻算，与进程跑了多久无关。
+   * 两个上限（保留区容量与时长）都在 `pruneNewestFirst` 里统一执行；保留区按 `unshift`
+   * 追加、天然是「新→旧」，正好对上它的输入约定。时长按请求自己的结束时刻算，与进程跑了
+   * 多久无关。
    */
   private prune(): void {
-    const deadline = Date.now() - SETTLED_TTL_MILLISECONDS
-    // 保留区里只放已经结束的请求，因此 `endedAt` 必然在；那个兼底只为了满足类型。
-    this.settled = this.settled.filter(request => (request.endedAt ?? request.updatedAt) >= deadline)
-    if (this.settled.length > MAX_SETTLED_REQUESTS) this.settled.length = MAX_SETTLED_REQUESTS
+    pruneNewestFirst(this.settled, {
+      // 保留区里只放已经结束的请求，因此 `endedAt` 必然在；那个兼底只为了满足类型。
+      newestAt: request => request.endedAt ?? request.updatedAt,
+      max: MAX_SETTLED_REQUESTS,
+      ttlMilliseconds: SETTLED_TTL_MILLISECONDS,
+      now: Date.now(),
+    })
   }
 }
 

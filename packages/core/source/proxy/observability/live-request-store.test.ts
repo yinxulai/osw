@@ -197,13 +197,13 @@ describe('LiveRequestStore', () => {
     expect(withAttempt?.attempts[0]?.chunkPreview).toBeNull()
   })
 
-  it('分块预览只留最新的一条，并且超过 80 个字符就截断', () => {
+  it('分块预览只留最新的一条，并且超过 240 个字符就截断', () => {
     const store = new LiveRequestStore()
     const handle = begin(store)
     const attempt = handle.startAttempt(targetOf('a'))
 
     attempt.addUpstreamChunk(500, 'x'.repeat(500))
-    expect(store.get('req_1')?.attempts[0]?.chunkPreview).toBe(`${'x'.repeat(80)}…`)
+    expect(store.get('req_1')?.attempts[0]?.chunkPreview).toBe(`${'x'.repeat(240)}…`)
 
     // 后一块直接覆写前一块：预览是「此刻收的是什么」，不是一段历史。
     for (let index = 0; index < 60; index += 1) attempt.addUpstreamChunk(1, `chunk-${index}`)

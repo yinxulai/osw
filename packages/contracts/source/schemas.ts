@@ -441,8 +441,8 @@ export const SettingsSchema = z.object({
   /**
    * 实时指标的字符串模板。
    *
-   * 变量与渲染规则在 `@common/live-metrics`：`{liveTps}` 最近一个在途请求的实时输出速度、
-   * `{activeRequests}` 此刻在途请求数。
+   * 变量与渲染规则在 `@common/live-metrics`：`{liveTps}` 最近一次已知的输出速度（有在途
+   * 请求时是它的实时速度，没有时回落到最近一条已落定请求的速度）、`{activeRequests}` 此刻在途请求数。
    * **空串不是「不显示」，而是「用默认模板」**——默认模板即 `@common/live-metrics` 的
    * `DEFAULT_LIVE_METRIC_TEMPLATE`（`{liveTps} TPS`），界面以它兜底展示。要彻底关掉
    * 某个展示面，用该面的显示开关，而不是把模板清空。
