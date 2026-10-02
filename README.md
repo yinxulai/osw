@@ -10,6 +10,10 @@
 
 <p align="center">English | <a href="./README.zh-CN.md">简体中文</a></p>
 
+<p align="center">
+  <img src="./apps/docs/assets/x-post/x-cover.png" alt="Every model, one address: automatic failover across all your providers" />
+</p>
+
 OSW runs a proxy on your machine. You register all the channels you have — different providers, different accounts, different models — put them in the order you want them tried, and point every AI client at a single local address. From then on it does the work: identify the protocol, pick a channel, send the request, move on when a channel fails, and record exactly what happened.
 
 Your client only ever sees the attempt that succeeded.
