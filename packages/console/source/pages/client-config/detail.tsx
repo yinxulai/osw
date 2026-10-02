@@ -1,26 +1,28 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { CircleSlash, Zap } from 'lucide-react'
+import { CircleSlash } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useClientConfigFill, useClientConfigOverview } from '@/data/client-config'
+import { useClientConfigOverview } from '@/data/client-config'
 import { routePaths } from '@/routing/routes'
 import { CoverageBadge } from './components/coverage-badge'
 import { ConfigEditorBody } from './components/config-editor-body'
 import { VersionMenu } from './components/version-menu'
-import { describeFill } from './lib/fill-summary'
 import { useClientConfigEditor } from './hooks/use-client-config-editor'
 
 /**
  * 单个客户端的详情与编辑。
  *
  * 版面自上而下是两件事——上面是**要写进去的值**（决定），下面是**文件真正的样子**（事实）；
- * 一个客户端可能有多份文件，它们收在内容模块里用标签切换，内容模块的「保存」一次写回所有改动过的文件。
- * 退路不在版面里：版本历史是页头右上角的一个下拉，紧跟在「一键生效」右边，
- * 因为它是这两个动作的兜底，而不是某一块内容的附属品。
+ * 一个客户端可能有多份文件，它们收在内容模块里用标签切换，页头的「保存」一次写回所有改动过的文件。
+ * 退路与写入同在页头右上角：保存、撤销，再往右是版本历史下拉——历史管的是整页、连手动保存
+ * 与自动填充一起管，因此和写入同一层级，而不是某一块内容的附属品。
+ *
+ * 详情页不再有一条单独的「一键生效」路径：地址与密钥由服务端固定写入，模型与内容都由这台编辑器
+ * 决定，用户要按的只有一颗保存——两种写入入口并存只会让人分不清哪一下才算数。列表页的「全部生成配置并应用」
+ * 仍在（那里没有编辑器），它写的是同一套默认值。
  *
  * 客户端由路由参数决定，不从下拉里选：进详情页的前提就是「我要看这一个」。
  * 面包屑因此写全「客户端配置 › 当前客户端」两级——只写上一级的话，它读起来像一个小标题，
@@ -30,7 +32,6 @@ import { useClientConfigEditor } from './hooks/use-client-config-editor'
  */
 export function ClientConfigDetailPage() {
   const t = useTranslation()
-  const toast = useToast()
   const navigate = useNavigate()
   // 详情子路由带 `$clientKey`，列表索引页没有，`strict: false` 拿到整个路由树的参数并集。
   const { clientKey = '' } = useParams({ strict: false })
@@ -39,24 +40,14 @@ export function ClientConfigDetailPage() {
   /*
    * 编辑这套（选文件 / 两处草稿 / 保存 / 回退）整体收在 `useClientConfigEditor` 里，
    * 引导页「接入工具」那一步嵌的就是同一套：状态与动作共用，版面各写各的。
-   * 页面头上只用到一小部分（状态徽标、版本下拉、骨架要的行数），正文整块交给 `ConfigEditorBody`。
+   * 页头用到的只有写入那几件（保存 / 撤销 / 版本下拉），正文整块交给 `ConfigEditorBody`。
    */
   const editor = useClientConfigEditor(clientKey)
-  const { client, loading, error, versions, versionsLoading, restoreVersion, restoringId, slots, configurable } = editor
+  const { client, loading, error, versions, versionsLoading, restoreVersion, restoringId, slots, configurable, dirtyFilePaths, saving, saveAll, discardFile } = editor
 
-  const fill = useClientConfigFill()
-
-  // 详情页复用列表页的一键生效：看到某一项「待生效」时，最自然的下一步是就地补上，
-  // 不必退回列表再找那一行。结果提示与列表页同一套口径。
-  const fillNow = () => {
-    fill.mutate(
-      { clientKey },
-      {
-        onSuccess: results => toast.success(describeFill(t, results)),
-        onError: error => toast.error(error.message),
-      },
-    )
-  }
+  // 撤销只作用于当前展开的那一份（与内容模块的标签同源）；保存写的是全部改动过的那几份。
+  const active = editor.files.find(file => file.filePath === editor.activeFilePath) ?? editor.files[0]
+  const dirtyCount = dirtyFilePaths.length
 
   const backToList = () => void navigate({ to: routePaths.clientConfig })
 
@@ -73,14 +64,19 @@ export function ClientConfigDetailPage() {
           )
         }
         description={t(configurable ? 'clientConfig.detail.description' : 'clientConfig.detail.descriptionManual')}
-        // 不支持自动填充的客户端不给那颗按钮：「点了没反应」比没有按钮更让人困惑。
-        // 版本历史不受这个限制——手改内容同样会产生版本，它不该跟着一键生效一起消失。
+        // 写入这件事只有一处：保存写的是编辑器里全部改动过的文件，撤销只退当前展开的那一份。
+        // 客户端还没到手时不摆这两颗按钮——那会儿既没有「当前文件」，也谈不上改动。
         actions={(
           <>
-            {overviewItem?.coverage === 'unavailable' ? null : (
-              <Button disabled={fill.isPending} onClick={fillNow}>
-                <Zap size={14} /> {t('clientConfig.fill.one')}
-              </Button>
+            {client && (
+              <>
+                <Button disabled={!active?.dirty || saving} variant="outline" onClick={() => active && discardFile(active.filePath)}>
+                  {t('clientConfig.discard')}
+                </Button>
+                <Button disabled={dirtyCount === 0 || saving} onClick={saveAll}>
+                  {saving ? t('clientConfig.saving') : dirtyCount > 1 ? t('clientConfig.saveAll', { count: dirtyCount }) : t('clientConfig.saveContent')}
+                </Button>
+              </>
             )}
             <VersionMenu
               currentHash={editor.files.find(file => file.filePath === editor.activeFilePath)?.state?.contentHash ?? ''}

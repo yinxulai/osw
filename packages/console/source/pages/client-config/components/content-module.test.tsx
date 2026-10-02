@@ -9,7 +9,9 @@ import { ContentModule } from './content-module'
 /*
  * 内容模块是**纯展示**的：它把 `editor` 算好的状态摆出来，把用户的动作转回 `editor` 的回调。
  * 所以这里给一个手搭的 `editor`，断言的是版面行为——多文件才会有标签条、改了的那份带圆点、
- * 「保存」按钮上的文案随改动份数变化、撤销只退当前份。
+ * 「生成配置」按钮只在有配方的客户端出现、点它转回 `generateConfig`。
+ *
+ * 保存与撤销不在这里：它们是整页（或整张卡）的写入动作，摆在页头，由各自的页面负责。
  */
 
 vi.mock('@/i18n/provider', () => ({
@@ -57,6 +59,9 @@ function makeEditor(overrides: Partial<ClientConfigEditor> = {}): ClientConfigEd
     changeValues: vi.fn(),
     changeContent: vi.fn(),
     discardFile: vi.fn(),
+    generateConfig: vi.fn(),
+    generating: false,
+    canGenerate: true,
     dirtyFilePaths: [],
     saveAll: vi.fn(),
     saving: false,
@@ -110,39 +115,38 @@ describe('ContentModule', () => {
     expect(cleanDot).toBeNull()
   })
 
-  it('labels a single change as a plain save', () => {
-    render(<ContentModule editor={makeEditor({ dirtyFilePaths: ['~/.demo/settings.json'] })} />)
-
-    expect(screen.getByRole('button', { name: 'clientConfig.saveContent' })).toBeTruthy()
+  it('offers to generate the config only when the client has a recipe', () => {
+    // 有配方（`canGenerate`）才摆生成按钮：没有配方就没有推荐内容可生成。
+    render(<ContentModule editor={makeEditor({ canGenerate: true })} />)
+    expect(screen.getByRole('button', { name: 'clientConfig.generate' })).toBeTruthy()
   })
 
-  it('counts the changed files on the save-all button', () => {
-    render(<ContentModule editor={makeEditor({ dirtyFilePaths: ['~/.demo/settings.json', '~/.demo/credentials.json'] })} />)
-
-    expect(screen.getByRole('button', { name: 'clientConfig.saveAll#{"count":2}' })).toBeTruthy()
+  it('hides the generate button when there is nothing to generate', () => {
+    render(<ContentModule editor={makeEditor({ canGenerate: false })} />)
+    expect(screen.queryByRole('button', { name: 'clientConfig.generate' })).toBeNull()
   })
 
-  it('writes every changed file when save is pressed', () => {
-    const editor = makeEditor({ dirtyFilePaths: ['~/.demo/settings.json', '~/.demo/credentials.json'] })
+  it('uses the actions the caller passes instead of its own generate button', () => {
+    // 引导页把「生成 / 撤销 / 保存」整排传进来：卡头就摆那一排，不再自带生成。
+    render(<ContentModule editor={makeEditor({ canGenerate: true })} actions={<button type="button">custom-action</button>} />)
+
+    expect(screen.getByRole('button', { name: 'custom-action' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'clientConfig.generate' })).toBeNull()
+  })
+
+  it('asks the editor to generate the config when pressed', () => {
+    const editor = makeEditor({ canGenerate: true })
     render(<ContentModule editor={editor} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'clientConfig.saveAll#{"count":2}' }))
-    expect(editor.saveAll).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'clientConfig.generate' }))
+    expect(editor.generateConfig).toHaveBeenCalledTimes(1)
   })
 
-  it('disables save while there is nothing to save', () => {
-    render(<ContentModule editor={makeEditor()} />)
+  it('disables generate while a generation is running', () => {
+    render(<ContentModule editor={makeEditor({ canGenerate: true, generating: true })} />)
 
-    const save = screen.getByRole('button', { name: 'clientConfig.saveContent' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-  })
-
-  it('discards only the file currently in view', () => {
-    const editor = makeEditor({ dirtyFilePaths: ['~/.demo/settings.json'], files: [file({ filePath: '~/.demo/settings.json', dirty: true }), file({ filePath: '~/.demo/credentials.json' })], activeFilePath: '~/.demo/settings.json' })
-    render(<ContentModule editor={editor} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'clientConfig.discard' }))
-    expect(editor.discardFile).toHaveBeenCalledWith('~/.demo/settings.json')
+    const generate = screen.getByRole('button', { name: 'clientConfig.generating' }) as HTMLButtonElement
+    expect(generate.disabled).toBe(true)
   })
 
   it('edits the content of the file in view', () => {

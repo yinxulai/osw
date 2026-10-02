@@ -29,7 +29,7 @@ export function CardSectionHeader(props: CardSectionHeaderProps) {
       </div>
       {/*
         容器自己带 8px 间距：调用方图省事会把两个 `Button` 直接塞进 Fragment，那两个就会贴成一颗
-        （`ContentCard` 的「撤销改动 / 保存内容」正是这么撞上的）。`self-start` 与 `items-center`
+        （客户端配置详情页的「撤销改动 / 保存内容」正是这么一对）。`self-start` 与 `items-center`
         各管一半：前者让控件与标题顶对齐，后者让控件彼此对齐。
       */}
       {actions && <div className="flex shrink-0 items-center gap-2 self-start">{actions}</div>}

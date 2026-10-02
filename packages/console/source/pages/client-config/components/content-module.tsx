@@ -1,4 +1,5 @@
-import { FileCode2 } from 'lucide-react'
+import { FileCode2, Sparkles } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsCardHeader } from '@/components/settings-card-header'
@@ -11,6 +12,14 @@ import type { ClientConfigEditor, ClientConfigEditorFile } from '../hooks/use-cl
 
 interface ContentModuleProps {
   editor: ClientConfigEditor
+  /**
+   * 卡头右边要摆的动作。
+   *
+   * 不传（详情页）：自带那一颗「生成配置」——它改的就是这一块的内容，摆在这里离作用对象最近。
+   * 传了（引导页）：改用传进来的这一排（生成 / 撤销 / 保存），不再自带生成——那一排是这一整张卡的
+   * 写入动作，摆在同一处才不至于让人迟疑该从哪里下手。
+   */
+  actions?: ReactNode
 }
 
 /**
@@ -19,19 +28,30 @@ interface ContentModuleProps {
  * 为什么收进一张卡而不是「上方选文件 + 下方编辑区」两块：选文件与文件内容不是两件事，
  * 标签条本身就是「这个客户端有哪几份、此刻在看哪一份」的答案，摊成两块反而要用户来回对。
  *
- * 「保存」写的是**全部改动过的文件**——用户改了几份，一次落盘就是几份；改了的那几个标签带一个小圆点，
- * 保存前就能看清这一次会写哪些。撤销则只作用于**当前展开的那一份**（改错了哪一份就撤哪一份）。
+ * 保存与撤销不在这一块里：它们写的是**整个客户端**的多份文件，属于整页的动作，所以摆在页头
+ * （详情页的动作区、引导页那张卡的卡头）。「生成配置」改的是这一块自己的内容，默认也就留在这里；
+ * 引导页把这一整排（生成 / 撤销 / 保存）经 `actions` 收上卡头，这一块就不再自带生成。
+ *
+ * 生成只改内存草稿、不落盘：用户看到生成后的内容，仍然要按页头那颗保存才写进文件。
  *
  * 标签只在多文件客户端出现：单文件客户端摆一条只有一个标签的标签条，是给「选文件」这个并不存在的
  * 选择造了个壳。
  */
 export function ContentModule(props: ContentModuleProps) {
-  const { editor } = props
-  const { files, activeFilePath, selectFile, dirtyFilePaths, saveAll, saving, changeContent, discardFile } = editor
+  const { editor, actions } = props
+  const { files, activeFilePath, selectFile, changeContent, generateConfig, generating, canGenerate } = editor
   const t = useTranslation()
 
   const active = files.find(file => file.filePath === activeFilePath) ?? files[0]
-  const dirtyCount = dirtyFilePaths.length
+
+  // 传了 `actions` 就用调用方那一排；没传则后退到自带的那颗生成（仅限有配方的客户端）。
+  const headerActions = actions ?? (canGenerate
+    ? (
+        <Button disabled={generating} variant="outline" onClick={() => generateConfig()}>
+          <Sparkles size={14} /> {generating ? t('clientConfig.generating') : t('clientConfig.generate')}
+        </Button>
+      )
+    : null)
 
   return (
     <Card>
@@ -41,18 +61,7 @@ export function ContentModule(props: ContentModuleProps) {
         // 卡头报**当前展开的**文件在磁盘上的真实路径：契约里 `resolvedPath` 就是这个意思。
         // 声明路径另有其处——那正是下面标签条上写着的 `~/` 写法。
         description={active ? <span className="font-mono">{active.state?.resolvedPath ?? active.filePath}</span> : undefined}
-        actions={(
-          <>
-            {/* 撤销只作用于当前这份；没有改动就没什么可撤的。 */}
-            <Button disabled={!active?.dirty || saving} variant="outline" onClick={() => active && discardFile(active.filePath)}>
-              {t('clientConfig.discard')}
-            </Button>
-            {/* 保存写的是全部改动过的那几份，按钮上带上数量，点之前就知道这一次会写几份。 */}
-            <Button disabled={dirtyCount === 0 || saving} onClick={saveAll}>
-              {saving ? t('clientConfig.saving') : dirtyCount > 1 ? t('clientConfig.saveAll', { count: dirtyCount }) : t('clientConfig.saveContent')}
-            </Button>
-          </>
-        )}
+        actions={headerActions}
       />
 
       <Tabs value={activeFilePath} onValueChange={selectFile}>

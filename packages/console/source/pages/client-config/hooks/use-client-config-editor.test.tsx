@@ -44,6 +44,7 @@ const state = vi.hoisted(() => {
     baseContent,
     previewContent,
     savePayload: null as { files: { filePath: string; content: string }[] } | null,
+    generatePayload: null as { filePaths: readonly string[]; model: string } | null,
     mutated: { restore: 0 },
   }
 })
@@ -53,6 +54,8 @@ const { baseContent, mutated } = state
 type AgentClientFieldRef = { file?: string }
 type SaveManyPayload = { files: { filePath: string; content: string }[] }
 interface SaveManyOptions { onSuccess?: (result: unknown) => void }
+type GeneratePayload = { filePaths: readonly string[]; model: string }
+interface GenerateOptions { onSuccess?: (generated: { filePath: string; content: string }[]) => void }
 
 
 vi.mock('@/catalog/clients', () => ({
@@ -65,6 +68,8 @@ vi.mock('@common/clients', () => ({
     : null),
   agentClientModelSlots: () => ['model'],
   agentClientFieldFile: (client: AgentClientDefinition, field: AgentClientFieldRef) => field.file ?? client.files[0].path,
+  // 生成配置时用来从文件已探测到的值里取模型槽位；这里直接返回映射好的那一个值。
+  resolveAgentClientSlotValue: (_applyConfig: unknown, detected: Record<string, unknown>, slot: string) => String(detected[slot] ?? ''),
 }))
 
 vi.mock('@/components/ui/toast', () => ({
@@ -109,12 +114,23 @@ vi.mock('@/data/client-config', () => ({
       options?.onSuccess?.({ saved: payload.files.map(file => ({ filePath: file.filePath, backedUp: null })), failed: [] })
     },
   }),
+  useClientConfigGenerate: () => ({
+    isPending: false,
+    mutate: (payload: GeneratePayload, options?: GenerateOptions) => {
+      state.generatePayload = payload
+      options?.onSuccess?.(payload.filePaths.map(filePath => ({
+        filePath,
+        content: state.previewContent[filePath] ?? state.baseContent[filePath] ?? '',
+      })))
+    },
+  }),
 }))
 
 import { useClientConfigEditor } from './use-client-config-editor'
 
 beforeEach(() => {
   state.savePayload = null
+  state.generatePayload = null
   mutated.restore = 0
 })
 
@@ -216,6 +232,26 @@ describe('useClientConfigEditor (multi-file)', () => {
     expect(result.current.valuesFile?.filePath).toBe('~/.demo/settings.json')
     expect(result.current.configurable).toBe(true)
     expect(result.current.slots).toBe(1)
+  })
+
+  it('generates the config for every file into drafts, without writing anything', () => {
+    const { result } = renderHook(() => useClientConfigEditor('demo'))
+    act(() => { result.current.generateConfig() })
+
+    // 生成的模型沿用文件已探测到的值（桩里是 "old"），不落磁盘：只有草稿变了、saveAll 没被触发。
+    expect(state.generatePayload?.model).toBe('old')
+    expect(state.savePayload).toBeNull()
+    const settings = result.current.files.find(file => file.filePath === '~/.demo/settings.json')
+    expect(settings?.content).toBe('{\n  "model": "gpt"\n}\n')
+    expect(settings?.dirty).toBe(true)
+  })
+
+  it('prefers the chosen model over the detected one when generating', () => {
+    const { result } = renderHook(() => useClientConfigEditor('demo'))
+    act(() => { result.current.changeValues({ model: 'chosen', smallModel: '' }) })
+    act(() => { result.current.generateConfig() })
+
+    expect(state.generatePayload?.model).toBe('chosen')
   })
 
   it('ignores a remembered file that does not belong to the current client', () => {

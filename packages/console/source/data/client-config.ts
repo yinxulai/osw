@@ -152,6 +152,28 @@ export function useClientConfigPreviews(clientKey: string, filePaths: readonly s
   return results.map(result => result.data ?? null)
 }
 
+/**
+ * 「生成配置」：把客户端声明的每一份文件按本机服务改写一遍，只算不写。
+ *
+ * 与 `useClientConfigPreviews` 走的是同一次规划（同一个 `preview` 端点、同一套地址与密钥），
+ * 差别只在用途：那个是「用户在改模型时，下面内容跟着变」，这个是**一次把推荐内容填进编辑区**，
+ * 之后仍然要用户按保存才会落盘。所以这里不失效任何查询——它什么都没写。
+ *
+ * 一份文件算不出来（没有配方 / 格式不支持）就整次失败：生成到一半的配置不该被保存下去。
+ */
+export function useClientConfigGenerate(clientKey: string) {
+  return useMutation<{ filePath: string; content: string }[], Error, { filePaths: readonly string[]; model: string }>({
+    mutationFn: async ({ filePaths, model }) => {
+      const generated: { filePath: string; content: string }[] = []
+      for (const filePath of filePaths) {
+        const preview = await unwrap(clientConfigApi.preview(clientKey, filePath, { model }))
+        generated.push({ filePath, content: preview.content })
+      }
+      return generated
+    },
+  })
+}
+
 const useOverviewQuery = () =>
   useQuery({
     queryKey: clientConfigKeys.overview(),

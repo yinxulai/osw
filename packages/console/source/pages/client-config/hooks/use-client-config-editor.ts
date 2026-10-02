@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react'
 import type { ClientConfigFileState, ClientConfigVersionEntry, ClientConfigVersionSummary } from '@common/client-config'
-import { agentClientFieldFile, agentClientModelSlots, findAgentClientApplyConfig } from '@common/clients'
+import { agentClientFieldFile, agentClientModelSlots, findAgentClientApplyConfig, resolveAgentClientSlotValue } from '@common/clients'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import {
   useClientConfigActions,
   useClientConfigFiles,
+  useClientConfigGenerate,
   useClientConfigPreviews,
   useClientConfigSaveMany,
   useClientConfigVersions,
@@ -65,6 +67,21 @@ export interface ClientConfigEditor {
   changeContent: (filePath: string, next: string) => void
   /** 把某一份文件的内容改回磁盘上的原文（不影响其余文件）。 */
   discardFile: (filePath: string) => void
+  /**
+   * 把「按本机服务改写」的推荐内容生成到编辑区（**只改内存草稿，不落盘**）。
+   *
+   * 地址、密钥与 provider 表项是既定事实，模型则有两种取法：
+   * - `keepDetectedModel`（默认，详情页）：沿用当前选择；没选过就沿用文件里已有的（不覆盖用户原来的模型），
+   *   最后才落回内置默认。
+   * - `false`（引导页）：没有「选模型」这一步，一律按内置默认逻辑模型生成，不沿用文件里的旧模型。
+   *
+   * 生成之后仍然要用户按保存才写进文件——落盘只有一个入口。
+   */
+  generateConfig: (keepDetectedModel?: boolean) => void
+  /** 生成进行中。 */
+  generating: boolean
+  /** 这个客户端有没有生成配方（`slots > 0`）；没有就不该摆生成按钮。 */
+  canGenerate: boolean
   /** 有改动、且没在读、也没在存的文件路径——「保存全部」要写的就是它们。 */
   dirtyFilePaths: string[]
   /** 保存**全部**改动过的文件（各自先备份再落盘）。 */
@@ -123,6 +140,7 @@ export function useClientConfigEditor(clientKey: string): ClientConfigEditor {
   const versionsLoading = useClientConfigVersionsLoading(clientKey, activeFilePath)
   const actions = useClientConfigActions(clientKey, activeFilePath)
   const saveMany = useClientConfigSaveMany(clientKey)
+  const generate = useClientConfigGenerate(clientKey)
 
   /*
    * 草稿按**文件路径**存，用「整套草稿带一个签名」而不是每份各带 key 的 state：保存一次会同时改写
@@ -221,6 +239,36 @@ export function useClientConfigEditor(clientKey: string): ClientConfigEditor {
     revise(filePath, { values: fresh.drafts[filePath]?.values ?? null, manual: next })
   }
 
+  /**
+   * 「生成配置」：把按本机服务改写的推荐内容填进编辑区。
+   *
+   * 生成的是**同一段规划**（服务端 preview），所以下面看到的就是按保存时会写进去的那一段。
+   * 模型怎么取见接口上的说明：详情页尽量沿用用户已有的选择，引导页一律按内置默认。
+   */
+  const generateConfig = (keepDetectedModel = true) => {
+    const detectedModel = valuesFile?.state && applyConfig
+      ? resolveAgentClientSlotValue(applyConfig, valuesFile.state.detected, 'model')
+      : ''
+    const nextModel = keepDetectedModel
+      ? model || detectedModel || BUILT_IN_DEFAULT_LOGICAL_MODEL_ID
+      : BUILT_IN_DEFAULT_LOGICAL_MODEL_ID
+    generate.mutate(
+      { filePaths, model: nextModel },
+      {
+        onSuccess: generated => {
+          setDraft(prev => {
+            const drafts = { ...(prev.signature === signature ? prev.drafts : {}) }
+            for (const item of generated) drafts[item.filePath] = { values: null, manual: item.content }
+            return { signature, drafts, draftReset: prev.draftReset }
+          })
+          // 上方模型卡自己拿着表单 state，给它一个重挂的理由（与撤销同一条路子）。
+          setDraftReset(prev => prev + 1)
+        },
+        onError: error => toast.error(error.message),
+      },
+    )
+  }
+
   /** 撤销某一份：模型选择与文本一起回到文件里的现状，只退一半就自相矛盾了。 */
   const discardFile = (filePath: string) => {
     revise(filePath, null)
@@ -274,6 +322,9 @@ export function useClientConfigEditor(clientKey: string): ClientConfigEditor {
     changeValues,
     changeContent,
     discardFile,
+    generateConfig,
+    generating: generate.isPending,
+    canGenerate: applyConfig !== null,
     dirtyFilePaths,
     saveAll,
     saving: saveMany.isPending,
