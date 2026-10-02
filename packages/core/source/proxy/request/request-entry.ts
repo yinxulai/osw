@@ -222,6 +222,11 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   }
 
   const logicalModelId = plan.logicalModelId
+  // 路由结论写回日志行：请求进入代理时还不知道要落到谁，`logicalModelId` 只能是 `null`；
+  // 到这里落点才定下来，必须补写这一次。成功路径的收尾（`finalizeRequestLog`）只改状态与耗时、
+  // 不回填上下文，所以缺了这一次补写，**只有成功请求**的 `logicalModelId` 会永远停在 `null`——
+  // 按逻辑模型过滤的统计（成功率、耗时、TPS）随即一条都查不到。
+  await session.logger.updateRequest({ logicalModelId, clientProtocol: route.protocol, method, path, headers: req.headers, requestBody, transport: route.transport })
   // 路由结论落进台账：这一步之后界面才谈得上「实时看见路由到了谁、按什么顺序试」。
   live.resolveRoute({ logicalModelId, clientProtocol: route.protocol, transport: route.transport, candidates: plan.targets })
   live.setPhase('connecting')

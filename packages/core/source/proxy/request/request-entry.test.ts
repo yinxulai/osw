@@ -363,6 +363,45 @@ describe('handleProxyRequest', () => {
     expect(firstHandler).not.toHaveBeenCalled()
   })
 
+  /**
+   * 成功请求的 `logicalModelId` 必须在日志行上落地。
+   *
+   * 请求进入代理时还不知道要落到谁，请求行只能先以 `null` 建；落点在路由求解之后才有。
+   * 而成功路径的收尾只写状态与耗时，不会回填上下文——如果入口不在执行前补写这一次，
+   * 成功请求的 `logicalModelId` 就永远是 `null`。按逻辑模型过滤的统计（成功率、耗时、TPS）
+   * 正是拿模型名去查这一列，于是整页数据变成 `—`。
+   */
+  it('records the resolved logical model on a successful request', async () => {
+    configureSecretStore({
+      set: async () => undefined,
+      get: async () => 'secret',
+      delete: async () => undefined,
+    })
+    const upstream = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ choices: [] }))
+    })
+    mocks.models = [model('model_default', 'prov_default', `${upstream.url}/v1/chat/completions`, 'default-model')]
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res)
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', messages: [] }),
+    })
+
+    expect(response.status).toBe(200)
+    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+      (input as { status?: string }).status === 'success'
+    )))
+    expect(mocks.updateRequestLogContext).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      logicalModelId: 'default',
+      clientProtocol: 'openai-completions',
+    }))
+  })
+
   it('keeps concurrent request logs, attempts, and health updates isolated', async () => {
     configureSecretStore({
       set: async () => undefined,
