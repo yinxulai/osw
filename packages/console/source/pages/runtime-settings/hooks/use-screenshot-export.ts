@@ -16,7 +16,9 @@ export function useScreenshotExport() {
     if (!screenshotExport || exporting) return
 
     setExporting(true)
-    setProgress({ completed: 0, total: 20, current: '' })
+    // 首帧进度先给一个「0 / 总数」：总数是页面数 × 中英 × 明暗，写死会随截图清单漂移，
+    // 这里等第一条真实进度回来再对齐（见 `screenshot-export.ts` 的 `SCREENSHOT_EXPORT_CASES`）。
+    setProgress({ completed: 0, total: 0, current: '' })
     try {
       const result = await screenshotExport.exportAll()
       toast.success(t('settings.development.screenshotsDone', {

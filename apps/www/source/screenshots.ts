@@ -2,6 +2,8 @@ import type { Lang } from './i18n'
 import type { Theme } from './theme'
 import analyticsEnDark from '../../../snapshot/en/dark/04-analytics.png'
 import analyticsEnLight from '../../../snapshot/en/light/04-analytics.png'
+import clientConfigEnDark from '../../../snapshot/en/dark/06-client-config.png'
+import clientConfigEnLight from '../../../snapshot/en/light/06-client-config.png'
 import logicalModelsEnDark from '../../../snapshot/en/dark/01-logical-models.png'
 import logicalModelsEnLight from '../../../snapshot/en/light/01-logical-models.png'
 import requestLogsEnDark from '../../../snapshot/en/dark/03-request-logs.png'
@@ -12,6 +14,8 @@ import smartRoutingEnDark from '../../../snapshot/en/dark/02-smart-routing.png'
 import smartRoutingEnLight from '../../../snapshot/en/light/02-smart-routing.png'
 import analyticsZhDark from '../../../snapshot/zh-CN/dark/04-analytics.png'
 import analyticsZhLight from '../../../snapshot/zh-CN/light/04-analytics.png'
+import clientConfigZhDark from '../../../snapshot/zh-CN/dark/06-client-config.png'
+import clientConfigZhLight from '../../../snapshot/zh-CN/light/06-client-config.png'
 import logicalModelsZhDark from '../../../snapshot/zh-CN/dark/01-logical-models.png'
 import logicalModelsZhLight from '../../../snapshot/zh-CN/light/01-logical-models.png'
 import requestLogsZhDark from '../../../snapshot/zh-CN/dark/03-request-logs.png'
@@ -91,9 +95,16 @@ const SHOTS: ShotSource[] = [
     title: '统计分析',
     caption: '成功率、延迟、首字延迟、每秒 token、缓存命中、模型排行与失败原因。',
   },
+  {
+    id: 'clientConfig',
+    light: { en: clientConfigEnLight, zh: clientConfigZhLight },
+    dark: { en: clientConfigEnDark, zh: clientConfigZhDark },
+    title: '客户端配置',
+    caption: '一次生成客户端要填的值与要改的文件，改前留版本、随时能回退；改哪些文件由注册表白名单说了算。',
+  },
 ]
 
-/** 进入页面时默认放大的那张（也是五个页面里最直接说明「这一步在解决什么」的一张）。 */
+/** 进入页面时默认放大的那张（也是六个页面里最直接说明「这一步在解决什么」的一张）。 */
 export const LEADING_SHOT_ID = SHOTS[0].id
 
 export function screenshotsFor(lang: Lang, theme: Theme): Screenshot[] {

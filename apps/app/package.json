@@ -11,6 +11,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "icons": "node scripts/generate-icons.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "package": "node scripts/build.mjs --package",
     "package:mac": "node scripts/build.mjs --package --mac --arm64 --x64",
     "package:win": "node scripts/build.mjs --package --win --arm64 --x64",

@@ -6,12 +6,12 @@ import { run } from '../../../packages/toolkit/scripts/lib/run.mjs'
 
 // 宿主构建。
 //
-//   node scripts/build.mjs                    只构建本包的四份产物（主进程、两个 preload、服务进程）
+//   node scripts/build.mjs                    只构建本包的产物（主进程、两个 preload、服务进程、截图补拍入口）
 //   node scripts/build.mjs --package          构建后交给 electron-builder 打包
 //   node scripts/build.mjs --package --win    打包指定平台（其余参数原样透传）
 //
-// 清空输出目录由这里负责而不是交给 Vite 的 `emptyOutDir`：四次构建共用 `output/command`，
-// 任何一次对自己做 emptyOutDir 都会抹掉另外三次的产物
+// 清空输出目录由这里负责而不是交给 Vite 的 `emptyOutDir`：几次构建共用 `output/command`，
+// 任何一次对自己做 emptyOutDir 都会抹掉另外几次的产物
 // （`--watch` 下尤其明显：改主进程会把 preload.js 删掉而不会重建）。
 
 const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -21,14 +21,17 @@ const arguments_ = process.argv.slice(2)
 const shouldPackage = arguments_.includes('--package')
 const electronBuilderArguments = arguments_.filter(argument => argument !== '--package')
 
-// 四次构建：主进程（ESM）、两个 preload（CJS）、核心服务进程（ESM）。
+// 五次构建：主进程（ESM）、两个 preload（CJS）、核心服务进程（ESM）、截图补拍入口（ESM）。
 // 顺序不重要，但都在清空目录之后。服务进程必须单独一份构建，因为它可以 import
 // `node:sqlite`，而主进程那份产物里出现它就等于主进程会卡（见 issue #9）。
+// 截图补拍入口同样单独编：主进程不需要懂它，但 `pnpm screenshots` 需要它在
+// `output/command` 里（见 `source/screenshot-export-entry.ts`）。
 const viteSteps = [
   { label: 'preload', args: ['exec', 'vite', 'build', '--config', 'vite.preload.config.ts'] },
   { label: 'main process', args: ['exec', 'vite', 'build'] },
   { label: 'service process', args: ['exec', 'vite', 'build', '--config', 'vite.server.config.ts'] },
   { label: 'tray panel preload', args: ['exec', 'vite', 'build', '--config', 'vite.tray-panel.config.ts'] },
+  { label: 'screenshot export', args: ['exec', 'vite', 'build', '--config', 'vite.screenshot.config.ts'] },
 ]
 
 const main = async () => {

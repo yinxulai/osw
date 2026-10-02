@@ -1984,7 +1984,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.development.seedExisting': '测试数据已存在',
   'settings.development.seedFailed': '插入失败：{message}',
   'settings.development.screenshots': '官网截图',
-  'settings.development.screenshotsDescription': '把五个主要页面按中英、明暗自动导出为 20 张完整原生窗口 PNG',
+  'settings.development.screenshotsDescription': '把六个主要页面按中英、明暗自动导出为 24 张完整原生窗口 PNG',
   'settings.development.screenshotsAction': '导出截图',
   'settings.development.screenshotsRunning': '正在导出',
   'settings.development.screenshotsProgress': '正在导出 {completed}/{total}',

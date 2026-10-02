@@ -25,6 +25,7 @@
     "release:linux": "pnpm build && pnpm --filter @osw/app run package:linux",
     "release:notes": "node apps/app/scripts/release-notes.mjs",
     "icons": "node apps/app/scripts/generate-icons.mjs",
+    "screenshots": "node apps/app/scripts/screenshots.mjs",
     "lint": "node packages/toolkit/scripts/lint.mjs",
     "lint:layers": "node packages/core/scripts/check-proxy-layers.mjs",
     "db": "node packages/core/scripts/db.mjs",

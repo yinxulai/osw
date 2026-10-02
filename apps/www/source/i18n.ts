@@ -126,7 +126,7 @@ export const en = {
   screenshots: {
     eyebrow: 'Interface',
     title: 'What it actually looks like',
-    lead: 'Five of the main pages, all real screenshots from the app — nothing redrawn or mocked up.',
+    lead: 'Six of the main pages, all real screenshots from the app — nothing redrawn or mocked up.',
     gallery: 'Interface screenshots',
     logicalModels: {
       title: 'Logical models',
@@ -152,6 +152,11 @@ export const en = {
       title: 'Analytics',
       caption:
         'Success rate, latency, first-token latency, tokens per second, cache hits, model ranking and failure reasons.',
+    },
+    clientConfig: {
+      title: 'Client config',
+      caption:
+        'Generate the values a client needs and the files to edit in one pass; every change is versioned and reversible, and which files get touched is decided by a registry whitelist.',
     },
   },
   privacy: {

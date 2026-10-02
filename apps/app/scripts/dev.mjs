@@ -108,7 +108,7 @@ function watchOutputDirectory() {
 }
 
 /**
- * 四个监听器：主进程、两个 preload、服务进程是四份配置、四次构建，但写入同一个目录。
+ * 五个监听器：主进程、两个 preload、服务进程、截图补拍入口是五份配置、五次构建，但写入同一个目录。
  * `shell: true` 而不是自己拼 `cmd.exe /c`：这里只需要长驻子进程，
  * 不需要 `packages/toolkit/scripts/lib/run.mjs` 那套退出码与信号转发。
  */
@@ -118,6 +118,7 @@ function startViteWatchers() {
     'pnpm exec vite build --watch --config vite.preload.config.ts',
     'pnpm exec vite build --watch --config vite.tray-panel.config.ts',
     'pnpm exec vite build --watch --config vite.server.config.ts',
+    'pnpm exec vite build --watch --config vite.screenshot.config.ts',
   ]
   for (const command of commands) {
     const child = spawn(command, { cwd: appDirectory, stdio: 'inherit', shell: true })

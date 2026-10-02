@@ -123,6 +123,14 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
   <img src="./snapshot/zh-CN/dark/05-request-rewrite.png" alt="请求重写：规则列表与模板菜单" />
 </picture>
 
+客户端配置：哪些客户端已经指向 OSW、哪些还需要改，能照抄的地址与密钥，以及每个客户端会动到哪些文件 —— 每次生成都是一个可回退的版本。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/zh-CN/dark/06-client-config.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/zh-CN/light/06-client-config.png" />
+  <img src="./snapshot/zh-CN/dark/06-client-config.png" alt="客户端配置：客户端列表、可复制的地址与密钥、生成文件的版本" />
+</picture>
+
 ## 三步上手
 
 ### 1. 添加渠道

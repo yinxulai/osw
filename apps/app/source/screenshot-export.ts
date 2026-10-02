@@ -34,6 +34,8 @@ interface ScreenshotExportOptions {
   baseUrl: string
   outputDirectory: string
   preloadPath: string
+  /** 只拍这几张（`ScreenshotExportCase.fileName`）；不传就拍全清单。用于补拍单页。 */
+  only?: readonly string[]
   onProgress?: (progress: ScreenshotExportProgress) => void
 }
 
@@ -43,6 +45,7 @@ const SHOTS = [
   { fileName: '03-request-logs', route: '/request-logs' },
   { fileName: '04-analytics', route: '/overview?range=7d' },
   { fileName: '05-request-rewrite', route: '/request-rewrite-rules' },
+  { fileName: '06-client-config', route: '/client-config' },
 ] as const
 
 const LOCALES: ScreenshotLocale[] = ['en', 'zh-CN']
@@ -227,10 +230,15 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
     const windowId = parseWindowId(target.getMediaSourceId())
     if (windowId === null) throw new Error('unable to resolve the native screenshot window id')
 
+    // `only` 只影响「拍哪些」，进度总数跟着缩小，两条入口（全量导出 / 补拍单页）共用同一段循环。
+    const cases = options.only
+      ? SCREENSHOT_EXPORT_CASES.filter(captureCase => options.only!.includes(captureCase.fileName))
+      : SCREENSHOT_EXPORT_CASES
+
     let completed = 0
-    for (const captureCase of SCREENSHOT_EXPORT_CASES) {
+    for (const captureCase of cases) {
       const current = `${captureCase.locale}/${captureCase.theme}/${captureCase.fileName}.png`
-      options.onProgress?.({ completed, total: SCREENSHOT_EXPORT_CASES.length, current })
+      options.onProgress?.({ completed, total: cases.length, current })
 
       await target.loadURL(screenshotUrl(options.baseUrl, captureCase))
       await waitForCaptureReady(target)
@@ -248,7 +256,7 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
       await normalizeCapture(outputPath)
 
       completed += 1
-      options.onProgress?.({ completed, total: SCREENSHOT_EXPORT_CASES.length, current })
+      options.onProgress?.({ completed, total: cases.length, current })
     }
 
     return {

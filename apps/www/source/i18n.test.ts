@@ -111,6 +111,8 @@ const DYNAMIC_TRANSLATION_KEYS = [
   'screenshots.requestRewrite.caption',
   'screenshots.analytics.title',
   'screenshots.analytics.caption',
+  'screenshots.clientConfig.title',
+  'screenshots.clientConfig.caption',
   'nav.screenshots',
   'nav.capabilities',
   'nav.failover',

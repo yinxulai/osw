@@ -123,6 +123,14 @@ Request Rewrite: stat cards, the rule list, and the templates behind **New rule*
   <img src="./snapshot/en/dark/05-request-rewrite.png" alt="Request Rewrite: rule list and template menu" />
 </picture>
 
+Client Config: which clients already point at OSW and which still need editing, with the address and key to copy and the files each one touches — every generated change is versioned and reversible.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./snapshot/en/dark/06-client-config.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./snapshot/en/light/06-client-config.png" />
+  <img src="./snapshot/en/dark/06-client-config.png" alt="Client Config: client list, copyable address and key, generated file versions" />
+</picture>
+
 ## Up and running in three steps
 
 ### 1. Add a channel
