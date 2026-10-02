@@ -14,7 +14,9 @@ import { RouteModeDialog } from '@/components/route-mode/route-mode-dialog'
 import { WindowTitlebar } from '@/components/window-titlebar'
 import { PageBreadcrumbsProvider } from '@/components/breadcrumbs'
 import { LiveRequestsProvider } from '@/data/live-requests'
+import { LiveMetricsProvider } from '@/data/live-metrics'
 import { useProxyStatus } from '@/data/proxy'
+import { useSettings } from '@/data/settings'
 import { findCurrentNavigationItem } from '@/routing/navigation'
 import { routePaths } from '@/routing/routes'
 import { useAppearance, useAppearanceUrlSync } from '@/hooks/use-appearance'
@@ -56,6 +58,7 @@ function App() {
   // 主题落到 `<html>` 上这件事与托盘面板共用同一份（见 hook 内部注释）。
   const theme = useDocumentTheme()
   const proxyStatus = useProxyStatus()
+  const settings = useSettings()
   const t = useTranslation()
   const isElectron = getPlatformCapabilities().name === 'electron'
   const currentPage = findCurrentNavigationItem(pathname)
@@ -85,6 +88,12 @@ function App() {
       <ConfirmProvider>
         <TooltipProvider>
           <PageBreadcrumbsProvider>
+            {/*
+             * 实时指标连接：托盘与窗口共用同一份标准指标（服务进程内唯一计算点）。
+             * 只有窗口那块画布需要它时才挂载连接——菜单栏标题走主进程里的另一条订阅，
+             * 与这里互不依赖，所以这里只看「窗口开关开着」。
+             */}
+            <LiveMetricsProvider enabled={isElectron && (settings?.liveMetricWindowEnabled ?? false)}>
             <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-sidebar text-foreground">
               {isElectron && (
                 <WindowTitlebar
@@ -138,6 +147,7 @@ function App() {
                */}
               <RouteModeDialog />
             </div>
+            </LiveMetricsProvider>
           </PageBreadcrumbsProvider>
         </TooltipProvider>
       </ConfirmProvider>

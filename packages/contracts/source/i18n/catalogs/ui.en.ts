@@ -1880,6 +1880,22 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.cacheAffinity.ttlDescription': 'A binding expires after the session has been idle for this long; the session is then scheduled as new.',
   'settings.cacheAffinity.rangeError': 'Enter an integer between {min} and {max}',
 
+  // Live realtime metric (a standard metric; menu bar and app window are two surfaces)
+  'settings.liveMetric.title': 'Realtime metric',
+  'settings.liveMetric.description': 'A live metric built from a template you write, shown on the menu bar and in the app window',
+  'settings.liveMetric.menuBarEnabled': 'Show on the menu bar',
+  'settings.liveMetric.menuBarEnabledDescription': 'Shows text to the right of the menu bar icon. macOS only.',
+  'settings.liveMetric.windowEnabled': 'Show in the app window',
+  'settings.liveMetric.windowEnabledDescription': 'Shows the same metric to the left of the running status in the window title bar.',
+  'settings.liveMetric.template': 'Template',
+  'settings.liveMetric.templateDescription': 'Plain text plus variables in braces, e.g. {liveMaxTps} TPS. Leave empty to fall back to the default.',
+  'settings.liveMetric.unknownVariable': 'The template uses a variable that does not exist; it is kept as-is in the rendered text.',
+  'settings.liveMetric.variablesTitle': 'Available variables',
+  'settings.liveMetric.variable.liveMaxTps': 'live output speed (tokens/sec) of the fastest in-flight request',
+  'settings.liveMetric.variable.liveTotalTps': 'summed live output speed (tokens/sec) of all in-flight requests',
+  'settings.liveMetric.variable.activeRequests': 'requests in flight right now',
+  'settings.liveMetric.variablesHint': 'A variable with no value yet renders as --. Example: {example}',
+
   // 数据目录
   'settings.dataDirectory.title': 'Data directory',
   'settings.dataDirectory.description': 'Configuration, databases and credentials all live here, shared by the desktop app and the CLI.',

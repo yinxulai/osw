@@ -27,6 +27,7 @@ import type { HostCalls, HostLogLine, RuntimeStartResult, ServiceCalls, ServiceE
 import type { Settings } from '@common/schemas'
 import type { SecretStore } from '@common/secret-store'
 import type { RuntimeConfig } from '@common/runtime-config'
+import type { LiveMetrics } from '@common/live-metrics'
 import type { ProxyServerStatus } from '../proxy/runtime/server'
 import type { SystemProxyResolver } from '../infrastructure/network/outbound-connector'
 
@@ -90,6 +91,7 @@ export type ServiceHostState =
 
 export type SettingsListener = (settings: Settings) => void
 export type ServiceHostStateListener = (state: ServiceHostState) => void
+export type LiveMetricsListener = (metrics: LiveMetrics) => void
 
 interface PendingReady {
   resolve: (value: RuntimeStartResult) => void
@@ -112,6 +114,8 @@ export class ServiceHost {
   private readonly settingsListeners = new Set<SettingsListener>()
 
   private readonly stateListeners = new Set<ServiceHostStateListener>()
+
+  private readonly liveMetricsListeners = new Set<LiveMetricsListener>()
 
   private state: ServiceHostState = { kind: 'created' }
 
@@ -218,6 +222,20 @@ export class ServiceHost {
     }
   }
 
+  /**
+   * 订阅服务推来的实时指标（标准的 {@link LiveMetrics}），供原生展示面（菜单栏标题）渲染。
+   *
+   * 只剩「一条服务进程」这一种情形要考虑，所以这里没有缓存最后一份指标：菜单栏什么时候
+   * 挂上、什么时候拆掉，都由宿主自己安排（见 `tray-manager.ts`），它会在订阅的那一刻
+   * 先用当前状态画一次。
+   */
+  onLiveMetrics(listener: LiveMetricsListener): () => void {
+    this.liveMetricsListeners.add(listener)
+    return () => {
+      this.liveMetricsListeners.delete(listener)
+    }
+  }
+
   getProxyStatus(): Promise<ProxyServerStatus> {
     return this.call('proxy.status')
   }
@@ -304,6 +322,10 @@ export class ServiceHost {
     endpoint.on('settings.changed', payload => {
       this.settings = payload as Settings
       this.notifySettingsChanged()
+    })
+    endpoint.on('live.metrics', payload => {
+      const metrics = payload as LiveMetrics
+      for (const listener of this.liveMetricsListeners) listener(metrics)
     })
 
     child.onExit(code => {

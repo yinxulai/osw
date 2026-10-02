@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { utilityProcess } from 'electron'
-import { ServiceHost, type ServiceHostState, type ServiceHostOptions, type ServiceProcess } from '@server/host/service-host'
+import { ServiceHost, type ServiceHostState, type ServiceHostOptions, type ServiceProcess, type LiveMetricsListener } from '@server/host/service-host'
 import type { Settings } from '@common/schemas'
 import type { ProxyServerStatus } from '@server/proxy/runtime/server'
 import type { ForwardedLogLine } from './log-forwarder'
@@ -145,6 +145,17 @@ export function getSettings(): Promise<Settings> {
 export function onSettingsChanged(listener: (settings: Settings) => void): () => void {
   if (host === null) return () => undefined
   return host.onSettingsChanged(listener)
+}
+
+/**
+ * 订阅服务推来的实时指标（标准的 `LiveMetrics`，见 `ServiceEvents['live.metrics']`）。
+ *
+ * 服务还没起 / 已停时给一个什么都不做的取消订阅：调用方（托盘）是无条件订阅的，
+ * 让它在启动的空窗里还要先判断「现在有没有服务」只会把同一段判空散到各处。
+ */
+export function onLiveMetrics(listener: LiveMetricsListener): () => void {
+  if (host === null) return () => undefined
+  return host.onLiveMetrics(listener)
 }
 
 export function getProxyServerStatus(): Promise<ProxyServerStatus> {

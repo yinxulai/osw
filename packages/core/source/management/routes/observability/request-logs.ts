@@ -6,11 +6,13 @@ import type { RequestAttempt, RequestLog, RequestLogEntry } from '@common/schema
 import { countRequestLogs, getRequestLog, listAttemptContentSummaries, listAttemptContents, listAttemptsByRequest, listAttemptsByRequests, listRequestContentSummaries, listRequestContents, listRequestLogs, pruneRequestContentsBefore, pruneRequestLogsBefore } from '@server/database/request-log-store'
 import { listRequestRewriteRulesByIds } from '@server/database/request-rewrite-rule-store'
 import { attachLiveRequestStream } from '../../infrastructure/live-request-stream'
+import { attachLiveMetricsStream } from '../../infrastructure/live-metrics-stream'
 import { HttpRouter } from '@server/http-router'
 
 export const requestLogRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/request-log/list', handleListRequestLogs)
   .post('/api/request-log/live/stream', handleStreamLiveRequests)
+  .post('/api/live-metrics/stream', handleStreamLiveMetrics)
   .post('/api/request-log/detail', handleRequestLogDetail)
   .post('/api/request-log/bodies', handleRequestLogBodies)
   .post('/api/request-log/prune', handlePruneRequestLogs)
@@ -57,6 +59,25 @@ async function handleStreamLiveRequests(_req: IncomingMessage, res: ServerRespon
   // 这份数据只在「此刻」有意义：任何一层的缓存或转换缓冲都会把它变成一份过期快照。
   res.setHeader('Cache-Control', 'no-store, no-transform')
   const detach = attachLiveRequestStream(res)
+  await new Promise<void>(resolve => {
+    res.once('close', resolve)
+  })
+  detach()
+}
+
+/**
+ * 实时指标——持续推送。
+ *
+ * 与「进行中的请求」同构的 NDJSON 长响应，区别只在数据源：它订阅服务进程内唯一的指标计算点
+ * （`observability/live-metrics-hub.ts`），把菜单栏标题用的同一份数也推给渲染进程，
+ * 供应用窗口角标渲染。同样是 `POST`、`/api/` 前缀、同样过守卫与 CORS，且同样**不结束**：
+ * 提前返回会让一条活了几分钟的连接在访问日志里被记成几毫秒就结束了。
+ */
+async function handleStreamLiveMetrics(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-store, no-transform')
+  const detach = attachLiveMetricsStream(res)
   await new Promise<void>(resolve => {
     res.once('close', resolve)
   })

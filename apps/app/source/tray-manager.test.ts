@@ -13,11 +13,20 @@ import { createAppTranslator } from '@common/i18n/catalogs'
 const mocks = vi.hoisted(() => {
   const tray = {
     setToolTip: vi.fn(),
+    setTitle: vi.fn(),
     setContextMenu: vi.fn(),
     popUpContextMenu: vi.fn(),
     getBounds: vi.fn(() => ({ x: 500, y: 0, width: 24, height: 24 })),
     destroy: vi.fn(),
     on: vi.fn(),
+  }
+  /**
+   * 托盘标题所需的设置。默认关着，于是标题那条链路在多数用例里都是安静的——只有专门
+   * 验收标题的用例才把开关打开、把指标推过来（见 `托盘标题`）。
+   */
+  const defaultSettings = {
+    liveMetricMenuBarEnabled: false,
+    liveMetricTemplate: '',
   }
   const mainWindow = {
     on: vi.fn(),
@@ -94,6 +103,10 @@ const mocks = vi.hoisted(() => {
     getProxyServerStatus: vi.fn(),
     startProxyServer: vi.fn(),
     stopProxyServer: vi.fn(),
+    getSettings: vi.fn(() => Promise.resolve(defaultSettings)),
+    onSettingsChanged: vi.fn((_listener: (settings: unknown) => void) => () => undefined),
+    onLiveMetrics: vi.fn((_listener: (metrics: unknown) => void) => () => undefined),
+    defaultSettings,
   }
 })
 
@@ -125,6 +138,9 @@ vi.mock('./server-host', () => ({
   getProxyServerStatus: mocks.getProxyServerStatus,
   startProxyServer: mocks.startProxyServer,
   stopProxyServer: mocks.stopProxyServer,
+  getSettings: mocks.getSettings,
+  onSettingsChanged: mocks.onSettingsChanged,
+  onLiveMetrics: mocks.onLiveMetrics,
 }))
 
 import { TrayManager } from './tray-manager'
@@ -707,5 +723,68 @@ describe('托盘启停与轮询', () => {
 
     await vi.waitFor(() => expect(mocks.buildFromTemplate).toHaveBeenCalled())
     expect(labels()).toEqual(['打开主界面', '退出 OSW'])
+  })
+})
+
+describe('菜单栏标题', () => {
+  interface PushedMetrics {
+    liveMaxTps: number | null
+    liveTotalTps: number | null
+    activeRequests: number
+  }
+
+  // 标题是 macOS 独有的（`Tray.setTitle`），`TrayManager` 会按 `process.platform` 决定
+  // 挂不挂订阅。平台是测试的输入，所以这里钉住 `darwin`，否则 CI 跑在 Linux 上时整条
+  // 链路根本不会启动、用例无从验起。
+  beforeAll(() => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+  })
+
+  afterAll(() => {
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * 抓一份 `onLiveMetrics` 的推送口，用例自己决定推什么指标。
+   *
+   * 标题的输入是**服务进程推来的**（不是这里读出来的），所以替身要能把「推一帧」这件事
+   * 交到用例手里，而不是只验一个订阅被挂上。
+   */
+  function captureMetricsPush(): (metrics: PushedMetrics) => void {
+    let push: ((metrics: PushedMetrics) => void) | null = null
+    mocks.onLiveMetrics.mockImplementation((listener: (metrics: PushedMetrics) => void) => {
+      push = listener
+      return () => undefined
+    })
+    return metrics => push?.(metrics)
+  }
+
+  it('开关打开且模板非空时，把推来的指标渲染进标题', async () => {
+    const push = captureMetricsPush()
+    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveMaxTps} TPS' })
+    manager = await initRunning()
+
+    // 设置读回来之前标题保持空白——宁可空着，也不先报一个没数据的数。
+    push({ liveMaxTps: 42, liveTotalTps: 86, activeRequests: 1 })
+    await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalledWith('42 TPS'))
+  })
+
+  it('没有在途请求时标题里的速度回落为占位符，而不是 0', async () => {
+    const push = captureMetricsPush()
+    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: true, liveMetricTemplate: '{liveMaxTps} TPS' })
+    manager = await initRunning()
+
+    push({ liveMaxTps: null, liveTotalTps: null, activeRequests: 0 })
+    await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalledWith('-- TPS'))
+  })
+
+  it('开关关掉时标题被清空，不留下一个过期数字', async () => {
+    const push = captureMetricsPush()
+    mocks.getSettings.mockResolvedValue({ ...mocks.defaultSettings, liveMetricMenuBarEnabled: false })
+    manager = await initRunning()
+
+    push({ liveMaxTps: 42, liveTotalTps: 86, activeRequests: 1 })
+    await vi.waitFor(() => expect(mocks.tray.setTitle).toHaveBeenCalled())
+    expect(mocks.tray.setTitle).toHaveBeenLastCalledWith('')
   })
 })

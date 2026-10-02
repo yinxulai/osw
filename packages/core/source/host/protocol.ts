@@ -20,6 +20,7 @@
  */
 import type { Settings } from '@common/schemas'
 import type { RuntimeConfig } from '@common/runtime-config'
+import type { LiveMetrics } from '@common/live-metrics'
 import type { ServerEndpoints } from '../runtime/server-runtime'
 import type { ProxyServerStatus } from '../proxy/runtime/server'
 import type { SerializedError } from './rpc'
@@ -90,6 +91,22 @@ export interface ServiceEvents {
   'service.failed': SerializedError
   /** 设置变了。宿主侧的托盘 / 菜单 / 自动启动都等这个（轮询做不到，见 `settings-store.ts`）。 */
   'settings.changed': Settings
+  /**
+   * 实时指标（标准的 {@link LiveMetrics}），供**原生展示面**渲染（目前是菜单栏标题）。
+   *
+   * 为什么是服务进程推、而不是宿主自己算：数据都在服务进程这边——进行中请求的台账
+   * （`liveRequestStore`）与用量统计的数据库。宿主既看不到台账，也不想为了一个标题去
+   * 查库（`node:sqlite` 是同步 API，见本文件开头）。所以服务算好推过来，宿主只负责画。
+   *
+   * **窗口角标走的是另一条出口**（管理 API 的 `/api/live-metrics/stream`）：那条画在
+   * 渲染进程里、够得着 HTTP，没必要绕经原生主进程。两个出口都由服务进程内同一个 hub
+   * （`observability/live-metrics-hub.ts`）供数，所以菜单栏与窗口永远是同一帧。
+   *
+   * 指标不是「托盘专用」的——这里只是它通往原生进程的那一段管道，事件名不绑定任何
+   * 一个展示面。展示面全部关掉时不会再有这一条——宿主收到停止推送后应清空，别把最后
+   * 一个数留在界面上。
+   */
+  'live.metrics': LiveMetrics
 }
 
 export interface RuntimeStartResult {

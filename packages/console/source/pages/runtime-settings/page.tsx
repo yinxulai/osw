@@ -16,6 +16,7 @@ import { LogRetentionCard } from './components/log-retention-card'
 import { RouteModeCard } from './components/route-mode-card'
 import { GeneralCard } from './components/general-card'
 import { DevelopmentCard } from './components/development-card'
+import { LiveMetricCard } from './components/live-metric-card'
 import { UpdateCard } from './components/update-card'
 import { useAppearance } from '@/hooks/use-appearance'
 import { useTranslation } from '@/i18n/provider'
@@ -110,6 +111,7 @@ export function RuntimeSettingsPage() {
                 language={locale ?? service.settings.language}
                 onLanguageChange={handleLanguageChange}
               />
+              <LiveMetricCard settings={service.settings} onUpdate={service.updateField} />
               <UpdateCard />
             </SettingsSection>
 

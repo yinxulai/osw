@@ -1879,6 +1879,22 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.cacheAffinity.ttlDescription': '会话空闲超过该时长后绑定作废，按新会话调度。',
   'settings.cacheAffinity.rangeError': '请输入 {min} 到 {max} 之间的整数',
 
+  // 菜单栏实时指标（仅 macOS）
+  'settings.liveMetric.title': '实时指标',
+  'settings.liveMetric.description': '按模板拼出的实时指标，可显示在菜单栏与应用窗口上',
+  'settings.liveMetric.menuBarEnabled': '在菜单栏显示',
+  'settings.liveMetric.menuBarEnabledDescription': '在菜单栏图标右侧显示一段文字。仅 macOS 支持。',
+  'settings.liveMetric.windowEnabled': '在应用窗口显示',
+  'settings.liveMetric.windowEnabledDescription': '在窗口标题栏「运行状态」左边显示同一份指标。',
+  'settings.liveMetric.template': '模板',
+  'settings.liveMetric.templateDescription': '普通文本与花括号变量，例如 {liveMaxTps} TPS。留空则使用默认模板。',
+  'settings.liveMetric.unknownVariable': '模板里用到了不存在的变量，它会原样保留在渲染结果里。',
+  'settings.liveMetric.variablesTitle': '可用变量',
+  'settings.liveMetric.variable.liveMaxTps': '实时输出速度（Token/秒），取在途请求里最快的那条',
+  'settings.liveMetric.variable.liveTotalTps': '实时输出速度（Token/秒），在途请求速度的合计',
+  'settings.liveMetric.variable.activeRequests': '此刻正在进行的请求数',
+  'settings.liveMetric.variablesHint': '暂时取不到值的变量会显示成 --。示例：{example}',
+
   // 数据目录
   'settings.dataDirectory.title': '数据目录',
   'settings.dataDirectory.description': '配置、数据库与凭据都保存在这个目录里，桌面端与命令行共用同一份。',

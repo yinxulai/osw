@@ -9,9 +9,11 @@ import { getSettings, onSettingsChanged } from '../database/settings-store'
 import { writeRuntimeLog } from '../management/infrastructure/log-buffer'
 import { startServer, stopServer } from '../index'
 import { getProxyServerStatus, startProxyServer, stopProxyServer } from '../proxy/runtime/server'
+import { subscribeLiveMetrics } from '../observability/live-metrics-hub'
 import { createCaller, createRpcEndpoint, describeError, type RpcPort } from './rpc'
 import type { HostCalls, HostLogLine, ServiceEvents } from './protocol'
 import type { SecretStore } from '@common/secret-store'
+import type { Settings } from '@common/schemas'
 import type { SystemProxyResolver } from '../infrastructure/network/outbound-connector'
 
 export interface ServiceRuntimeOptions {
@@ -29,6 +31,41 @@ export async function startServiceRuntime(options: ServiceRuntimeOptions): Promi
   const endpoint = createRpcEndpoint(options.port)
   const callHost = createCaller<HostCalls>(endpoint)
   let unsubscribeSettings: (() => void) | null = null
+  // 实时指标的推送源：服务起来后才有意义（要读台账与数据库），所以先留空、就绪时再挂。
+  let unsubscribeMetrics: (() => void) | null = null
+
+  /**
+   * 拆掉那条原生指标通道。
+   *
+   * 包成函数而不是就地写 `unsubscribeMetrics?.()`：赋值只发生在闭包里，TypeScript 看不到，
+   * 会把顶层的 `unsubscribeMetrics` 窄化成初始的 `null`，于是可选调用落成「对 null 调用的
+   * never」。进函数一趟，窄化从声明的联合类型重新开始。
+   */
+  function releaseMetrics(): void {
+    unsubscribeMetrics?.()
+    unsubscribeMetrics = null
+  }
+
+  /**
+   * 按设置决定那条通往主进程的原生指标通道挂不挂。
+   *
+   * 这条出口只服务**菜单栏标题**（窗口角标在渲染进程里直接订阅 HTTP 推送，不经过这里），
+   * 所以它的开合只由菜单栏开关决定：关掉菜单栏标题，就不该再有帧推给主进程——宿主收到
+   * 「不再推」之后会把标题清空（见 `tray-manager.ts`）。指标本身的标准性不受影响，
+   * 换的是「这条原生管道要不要接上」。
+   *
+   * 空的模板不算关闭——那是「用默认模板」（`DEFAULT_LIVE_METRIC_TEMPLATE`），
+   * 真正的开合只看菜单栏开关本身。
+   */
+  function syncLiveMetricsSubscription(settings: Settings): void {
+    const shouldSubscribe = settings.liveMetricMenuBarEnabled
+    if (shouldSubscribe && unsubscribeMetrics === null) {
+      unsubscribeMetrics = subscribeLiveMetrics(metrics => endpoint.emit('live.metrics', metrics))
+    } else if (!shouldSubscribe && unsubscribeMetrics !== null) {
+      unsubscribeMetrics()
+      unsubscribeMetrics = null
+    }
+  }
 
   try {
     // 配置向宿主要，而不是随进程一起传进来。`utilityProcess.fork()` 没有
@@ -67,13 +104,18 @@ export async function startServiceRuntime(options: ServiceRuntimeOptions): Promi
     // 设置变更只推一次、由宿主分发：托盘、菜单、自动启动都在主进程，它们读不到这个
     // 进程里的模块级监听表。宿主也不必轮询——`getSettings()` 每次都把 `updatedTime`
     // 写成当前时间，靠比对根本发现不了变化（见 `settings-store.ts`）。
-    unsubscribeSettings = onSettingsChanged(settings => endpoint.emit('settings.changed', settings))
+    // 同一条订阅顺手带上实时指标的开关，省得再挂一个监听表。
+    unsubscribeSettings = onSettingsChanged(settings => {
+      endpoint.emit('settings.changed', settings)
+      syncLiveMetricsSubscription(settings)
+    })
 
     endpoint.handle('runtime.stop', async () => {
       await stopServer()
       // 服务停了，这条通道也就没有下一条消息了：监听表和挂起表都跟着走，
       // 免得进程拒绝退出时靠 `kill` 来兜底。
       unsubscribeSettings?.()
+      releaseMetrics()
       endpoint.dispose(new Error('Service runtime stopped'))
     })
 
@@ -84,13 +126,16 @@ export async function startServiceRuntime(options: ServiceRuntimeOptions): Promi
       // 退出流程由宿主掌控（见 `service-host.ts`），核心不该再自己去关别人。
       shutdown: null,
     })
+    // 实时指标趁服务就绪时挂上：此刻数据库与台账都已经可用。
     const ready: ServiceEvents['service.ready'] = { endpoints, settings: await getSettings() }
+    syncLiveMetricsSubscription(ready.settings)
     endpoint.emit('service.ready', ready)
   } catch (error) {
     // 启动失败不吞：宿主会用「重启预算」来决定重试还是把错误弹给用户。
     const failure: ServiceEvents['service.failed'] = describeError(error)
     endpoint.emit('service.failed', failure)
     unsubscribeSettings?.()
+    releaseMetrics()
     endpoint.dispose(new Error('Service runtime failed to start'))
   }
 }

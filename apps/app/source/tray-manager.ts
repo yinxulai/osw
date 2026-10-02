@@ -1,4 +1,10 @@
 import { app, Tray, Menu, BrowserWindow, clipboard } from 'electron'
+import {
+  DEFAULT_LIVE_METRIC_TEMPLATE,
+  renderLiveMetric,
+  type LiveMetrics,
+} from '@common/live-metrics'
+import type { Settings } from '@common/schemas'
 import { generateTrayIcon } from './tray-icon'
 import { buildTrayMenuTemplate, type TrayProxySnapshot } from './tray-menu'
 import { TrayPanelManager } from './tray-panel'
@@ -6,6 +12,9 @@ import { nativeTranslator, onNativeLocaleChanged } from './i18n'
 import { noteQuitReason } from './main-log'
 import {
   getProxyServerStatus,
+  getSettings,
+  onSettingsChanged,
+  onLiveMetrics,
   startProxyServer,
   stopProxyServer,
 } from './server-host'
@@ -34,6 +43,17 @@ export class TrayManager {
   private isQuitting = false
   private statusReadFailed = false
   private unsubscribeLocale: (() => void) | null = null
+  /**
+   * 标题所需的两份输入：设置（决定开关与模板）与最新指标（由服务进程推来）。
+   *
+   * 分开存是因为它们的来路不同、速率也不同——设置安静得几乎不动，指标每几百毫秒就变一次。
+   * 只有两者都到齐才画得出标题，所以哪边先到都先记下来，各触发一次重绘。
+   */
+  private liveMetricMenuBarEnabled = false
+  private liveMetricTemplate = ''
+  private liveMetrics: LiveMetrics | null = null
+  private unsubscribeLiveMetrics: (() => void) | null = null
+  private unsubscribeSettings: (() => void) | null = null
 
   init(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
@@ -44,6 +64,10 @@ export class TrayManager {
     const icon = generateTrayIcon()
     this.tray = new Tray(icon)
     this.tray.setToolTip(nativeTranslator()('app.windowTitle'))
+    // 标题（图标右边那段文字）是 macOS 独有的概念：Windows 的托盘只有图标 + tooltip，
+    // 没有等价物；Linux 的 StatusNotifierItem 也没有。所以非 macOS 上连订阅都不挂，
+    // 免得白白接收一堆用不上的实时指标。
+    if (process.platform === 'darwin') this.startLiveMetricTitle()
     this.panel = new TrayPanelManager(this.tray, {
       openMainWindow: async () => {
         this.panel?.hide()
@@ -89,6 +113,10 @@ export class TrayManager {
   destroy(): void {
     this.unsubscribeLocale?.()
     this.unsubscribeLocale = null
+    this.unsubscribeLiveMetrics?.()
+    this.unsubscribeLiveMetrics = null
+    this.unsubscribeSettings?.()
+    this.unsubscribeSettings = null
     if (this.statusPoller) {
       clearInterval(this.statusPoller)
       this.statusPoller = null
@@ -279,5 +307,49 @@ export class TrayManager {
       ? t('native.tray.status.running', { port: this.snapshot.port ?? 0 })
       : t('native.tray.status.stopped')
     this.tray.setToolTip(`${t('app.windowTitle')} · ${status}`)
+  }
+
+  /**
+   * 挂上标题所需的两条数据源。
+   *
+   * 这条路径与 tooltip 的每 2 秒轮询不同：指标是**实时**的，轮询拿不到它——服务进程
+   * 那边一变就推（见 `ServiceEvents['live.metrics']`）。设置则从缓存读一次，之后靠
+   * `settings.changed` 推。
+   */
+  private startLiveMetricTitle(): void {
+    // 先拿一份当前设置，让标题在收到第一次指标推送之前就能就位（或确认它该关着）。
+    void getSettings()
+      .then(settings => this.applyLiveMetricSettings(settings))
+      .catch(error => console.warn('[tray] failed to read live metric settings', error))
+
+    this.unsubscribeSettings = onSettingsChanged(settings => this.applyLiveMetricSettings(settings))
+    this.unsubscribeLiveMetrics = onLiveMetrics(metrics => {
+      this.liveMetrics = metrics
+      this.refreshLiveMetricTitle()
+    })
+  }
+
+  /** 记录与菜单栏标题有关的设置。只关心这两个字段——别的设置变了没理由重画标题。 */
+  private applyLiveMetricSettings(settings: Settings): void {
+    this.liveMetricMenuBarEnabled = settings.liveMetricMenuBarEnabled
+    this.liveMetricTemplate = settings.liveMetricTemplate
+    this.refreshLiveMetricTitle()
+  }
+
+  /**
+   * 把最新指标渲染成菜单栏标题。
+   *
+   * 关掉开关或指标还没到时一律 `setTitle('')`：宁可空着，也不要留一个过期数字挂在菜单栏上
+   * 假装是实时的——那比不显示更糟。
+   */
+  private refreshLiveMetricTitle(): void {
+    if (!this.tray) return
+    const metrics = this.liveMetrics
+    if (!this.liveMetricMenuBarEnabled || metrics === null) {
+      this.tray.setTitle('')
+      return
+    }
+    const template = this.liveMetricTemplate.trim() === '' ? DEFAULT_LIVE_METRIC_TEMPLATE : this.liveMetricTemplate
+    this.tray.setTitle(renderLiveMetric(template, metrics))
   }
 }
