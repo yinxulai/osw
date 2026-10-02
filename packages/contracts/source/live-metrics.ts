@@ -28,19 +28,23 @@
  * 突然跳到别的请求上。而「字节/秒」虽然更容易在途取到（每个分块一到达就已知），却衡量的是
  * 响应体量而非 Token 产出——对 AI 来说，用户真正关心的是每秒出多少个 Token，所以坚持 TPS。
  * 一条请求刚跑完、新的还没来时，回落到内存里最近一条已落定请求的最终速度，而不是立刻翻成
- * `--`——「我这条到底多快」是同一个问题的另一种问法。
+ * `--`——「我这条到底多快」是同一个问题的另一种问法。但这条回落**有时限**（
+ * {@link LIVE_METRIC_SETTLED_TTL_MILLISECONDS}）：实时数据的时间语义是「此刻」，一条早就跑完
+ * 的请求在几秒后还占着那一格，读起来像「现在正这么跑」——那是错的。过了时限就翻回 `--`，
+ * 让「此刻没有」重新如实。
  *
  * 代价是：上游常在收尾那一帧才报输出 Token（见 `apps/docs/specs/observability.md`），一个
  * 刚开始、还没吐字的请求本来取不到速度。两条兜底让这一格几乎不空着：正文一旦开始流动，
  * 观察者会用**正文估算**的输出 Token 顶上（真实用量到达后立刻覆盖）；连在途速度都没有时，
- * 回落到内存里**最近一条已落定请求**跑出的最终速度。只有内存里一条算得出速度的请求都没有，
- * 才显示 `--`——**没有速度**和**速度为零**本来就该分开。
+ * 回落到内存里**最近一条已落定请求**跑出的最终速度——但只在这条请求刚落下不久、还在时限内
+ * 时才显示。只有内存里一条算得出速度、且还在时限内的请求都没有，才显示 `--`——**没有速度**
+ * 和**速度为零**本来就该分开。
  *
  * ## 取值口径
  *
  * - 输出速度公式只有一份，在 `@common/metrics`（{@link tokensPerSecondFromTotals}）；
  *   本文件不重写，只调用。
- * - 没有值（内存里没有任何算得出速度的请求）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
+ * - 没有值（没有在途速度、也没有时限内算得出速度的已落定请求）的变量渲染成 `--`。**零也渲染成 `--`**：指标条上
  *   一个 `0` 分不清「真的没有在跑」还是「页面没接上数」，而 `--` 明确指向「此刻没有」。
  *   它是一条给眼睛扫的状态条，不是一个要对账的计数。
  *
@@ -74,6 +78,16 @@ export const DEFAULT_LIVE_METRIC_TEMPLATE = '{liveTps} TPS'
 export const MAX_LIVE_METRIC_LENGTH = 64
 
 /**
+ * 已落定请求的速度还能顶替多显示一会儿的时限（毫秒）。
+ *
+ * 回落是为了让「刚跑完」的那一格不立刻翻成 `--`，但实时数据的语义是**此刻**：一条几秒前
+ * 就跑完的请求还挂在上面，读起来会像「现在正这么跑」。所以回落带一条短时限——一条请求落定
+ * 超过这么久，就不再拿它的速度充数，格子如实回到 `--`。5 秒够覆盖「刚发完、下一条还没来」
+ * 的空窗（人眼对「刚刚」的判定大致就是这个量级），又不至于让旧值赖着不走。
+ */
+export const LIVE_METRIC_SETTLED_TTL_MILLISECONDS = 5_000
+
+/**
  * 指标快照。
  *
  * 所有字段都是「已经算完的数」：`null` 表示此刻取不到（没有在途请求 / 还没有输出 Token），
@@ -83,9 +97,10 @@ export interface LiveMetrics {
   /**
    * 最近一次**已知**的输出速度（TPS）。
    *
-   * 有在途请求时是它的实时速度；没有在途速度时回落到内存里最近一条已落定请求的最终速度。
-   * 内存里没有任何算得出速度的请求时为 `null`。这个数回答「刚发的那条现在多快，或最近一条
-   * 到底多快」，是全应用唯一的速度口径——不再有「最大 / 合计」两套聚合。
+   * 有在途请求时是它的实时速度；没有在途速度时回落到内存里最近一条已落定请求的最终速度，
+   * 但**仅在这条已落定请求落定后 {@link LIVE_METRIC_SETTLED_TTL_MILLISECONDS} 以内**。内存里
+   * 没有任何算得出速度、且还在时限内的请求时为 `null`。这个数回答「刚发的那条现在多快，或最近
+   * 一条到底多快」，是全应用唯一的速度口径——不再有「最大 / 合计」两套聚合。
    */
   liveTps: number | null
   /** 此刻正在进行、且已进入上游阶段的请求条数。 */
@@ -115,27 +130,35 @@ function liveRequestOf(requests: readonly LiveRequest[]): LiveRequest | null {
   return latest
 }
 
-/** 一条已落定请求的最终输出速度：输出 Token ÷ 那段**已经冻结**的尝试耗时。 */
-function settledTpsOf(request: LiveRequest): number | null {
+/** 一条已落定请求的最终输出速度，连同它落定的时刻：输出 Token ÷ 那段**已经冻结**的尝试耗时。 */
+function settledSpeedOf(request: LiveRequest): { at: number; tps: number } | null {
   if (request.status === 'pending') return null
   const attempt = liveAttemptOf(request)
   if (attempt === null || attempt.outputTokens === null) return null
   const endedAt = attempt.endedAt ?? request.endedAt
   if (endedAt === null) return null
-  return tokensPerSecondFromTotals(attempt.outputTokens, endedAt - attempt.startedAt)
+  const tps = tokensPerSecondFromTotals(attempt.outputTokens, endedAt - attempt.startedAt)
+  if (tps === null) return null
+  return { at: endedAt, tps }
 }
 
-/** 内存里最近一条已落定、且算得出速度的请求的速度；没有时返回 `null`。 */
-function mostRecentSettledTps(requests: readonly LiveRequest[]): number | null {
+/**
+ * 内存里最近一条已落定、算得出速度、且**还在时限内**的请求的速度；没有时返回 `null`。
+ *
+ * 时限是这条回落的**全部要点**：实时数据回答「此刻」，一条落定超过
+ * {@link LIVE_METRIC_SETTLED_TTL_MILLISECONDS} 的请求已经不属于「此刻」，再拿它的速度充数
+ * 就等于把「刚才」说成「现在」。判据用请求自己的落定时刻算，与进程跑了多久无关。
+ */
+function mostRecentSettledTps(requests: readonly LiveRequest[], now: number): number | null {
   let latest: { at: number; tps: number } | null = null
   for (const request of requests) {
-    if (request.status === 'pending') continue
-    const tps = settledTpsOf(request)
-    if (tps === null) continue
-    const at = request.endedAt ?? request.updatedAt
-    if (latest === null || at > latest.at) latest = { at, tps }
+    const speed = settledSpeedOf(request)
+    if (speed === null) continue
+    if (latest === null || speed.at > latest.at) latest = speed
   }
-  return latest === null ? null : latest.tps
+  if (latest === null) return null
+  if (now - latest.at > LIVE_METRIC_SETTLED_TTL_MILLISECONDS) return null
+  return latest.tps
 }
 
 /**
@@ -145,11 +168,14 @@ function mostRecentSettledTps(requests: readonly LiveRequest[]): number | null {
  * 数值随请求进行而收敛，正是「实时」的含义。取不到在途速度（没有在途请求、或那条请求还没读到
  * 输出 Token）时，回落到内存里**最近一条已落定请求**的最终速度（输出 Token ÷ 那段已冻结的
  * 尝试耗时）——菜单栏/角标只有一格，一条请求刚跑完，显示它刚跑出的速度，比立刻翻成 `--` 更
- * 符合「我这条到底多快」的直觉。
+ * 符合「我这条到底多快」的直觉。但这条回落**只在这条请求落定后
+ * {@link LIVE_METRIC_SETTLED_TTL_MILLISECONDS} 以内**成立：实时数据的时间语义是「此刻」，一条
+ * 早已跑完的请求还占着那一格，读起来像「现在正这么跑」。
  *
  * 分子分母必须同源（见 `metrics.ts`）：没有输出 Token 就没有分子，耗时不正就没有分母。
- * 两档都取不到（内存里没有任何算得出速度的请求）时返回 `null`，渲染成 `--`——**没有速度
- * 和速度为零是两件事**。时长口径与落库侧的 `requestOutputTokensPerSecond` 完全一致。
+ * 两档都取不到（没有在途速度、也没有时限内算得出速度的已落定请求）时返回 `null`，渲染成
+ * `--`——**没有速度**和**速度为零**是两件事。时长口径与落库侧的
+ * `requestOutputTokensPerSecond` 完全一致。
  */
 export function liveTps(requests: readonly LiveRequest[], now: number): number | null {
   const request = liveRequestOf(requests)
@@ -160,7 +186,7 @@ export function liveTps(requests: readonly LiveRequest[], now: number): number |
       if (speed !== null) return speed
     }
   }
-  return mostRecentSettledTps(requests)
+  return mostRecentSettledTps(requests, now)
 }
 
 /**

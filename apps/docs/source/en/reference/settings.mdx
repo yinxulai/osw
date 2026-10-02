@@ -35,10 +35,10 @@ Available variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `{liveTps}` | The latest known output speed (tokens/sec): the live speed of an in-flight request, or the speed of the most recent finished request. |
+| `{liveTps}` | The latest known output speed (tokens/sec): the live speed of an in-flight request, or the speed of the most recent finished request (within 5 seconds of it finishing). |
 | `{activeRequests}` | Number of requests running right now. |
 
-Speed prefers the **most recent in-flight request** (the one you just sent) and converges as it runs. Upstreams usually report output tokens only at the end; once content starts flowing an estimate stands in and is replaced when real usage arrives. With no in-flight speed it falls back to the final speed of the **most recent finished request** in memory. It renders as `--` (zero too) only when memory holds no request with a computable speed.
+Speed prefers the **most recent in-flight request** (the one you just sent) and converges as it runs. Upstreams usually report output tokens only at the end; once content starts flowing an estimate stands in and is replaced when real usage arrives. With no in-flight speed it falls back to the final speed of the **most recent finished request** in memory, but **only within 5 seconds of that request finishing** — past that window the stale value stops standing in and the metric returns to `--`. It renders as `--` (zero too) only when memory holds no request with a computable speed inside the window.
 
 ### Version updates
 

@@ -122,7 +122,15 @@ describe('liveTps', () => {
     // 内存里最近一条已落定请求跑出 100 Token / 2 秒 = 50 TPS。
     const finished = settled(100, 0, 2000)
     // 没有在途请求：不返回 null，而是回落到刚跑完那条的最终速度。
-    expect(liveTps([finished], 9000)).toBe(50)
+    expect(liveTps([finished], 6000)).toBe(50)
+  })
+
+  it('stops showing a settled speed once it is older than the TTL', () => {
+    const finished = settled(100, 0, 2000)
+    // 落定后满 5 秒仍作数（边界含端点）……
+    expect(liveTps([finished], 7000)).toBe(50)
+    // ……越过时限就不再拿它充数：此刻并没有速度，如实回到 `--`。
+    expect(liveTps([finished], 7001)).toBeNull()
   })
 
   it('prefers the in-flight speed over any settled fallback', () => {
@@ -136,7 +144,7 @@ describe('liveTps', () => {
     // 两条都落定：一条更早结束（速度更高），一条刚结束（速度更低）。按结束时间取最近的那条。
     const older = settled(9000, 0, 1000, 1000)
     const newer = settled(60, 0, 3000, 3000)
-    expect(liveTps([older, newer], 9000)).toBe(20)
+    expect(liveTps([older, newer], 7000)).toBe(20)
   })
 
   it('stays null when no settled request yields a speed either', () => {
