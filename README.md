@@ -22,29 +22,15 @@ Your client only ever sees the attempt that succeeded.
 
 ---
 
-## Sponsors
+## Features
 
-### Top-tier sponsor
-
-<p align="center">
-  <a href="https://www.qiniu.com">
-    <img src="./packages/console/source/catalog/providers/qiniu/icon.light.svg" width="56" height="56" alt="Qiniu Cloud" />
-  </a>
-  <br />
-  <a href="https://www.qiniu.com"><strong>Qiniu Cloud</strong></a>
-</p>
-
-Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tier. Qiniu offers object storage, CDN and large-model inference among its cloud services, and its AI inference service ships as a built-in provider preset in OSW — pick Qiniu under **Model Management**, paste an API key, and it works out of the box.
-
----
-
-## What we believe
-
-- **One entry point.** Clients only ever know one local address. Providers, accounts and models change behind it; nothing downstream ever has to be reconfigured again.
-- **Failure is normal.** Network hiccups, connection timeouts, rate limits, exhausted quotas, dead keys, upstream 5xx — a broken channel is the expected case, not the exception. Keeping you running through it is the product's job, not yours.
+- **One entry point, set up once.** Every client knows one local address. Providers, accounts and models change behind it; swapping any of them means editing OSW, not hunting through each tool's settings.
+- **Failure is normal.** Network hiccups, connection timeouts, rate limits, exhausted quotas, dead keys and upstream 5xx are the expected case, not the exception — the request moves to the next channel automatically, and keeping you running is the product's job. A response that has already started streaming is never spliced together from a second channel: you get a failure, not a Frankenstein answer.
 - **Pass through by default.** No protocol parsing, no rewriting, no conversion unless you explicitly ask for it. The safest and fastest request is the one the proxy barely touches.
-- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS keychain, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay. The one exception is anonymous usage statistics, which are on by default and carry no request content — see [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md).
-- **Everything is on the record.** Which provider, which model, which attempt finally succeeded, how long it took, how fast the first token arrived, how many tokens it cost — every request leaves a trace you can query.
+- **Every request tells you the truth.** Which provider and model actually served it, which attempt succeeded, how long it took, how fast the first token arrived, tokens per second, how much of the prompt was cached — all of it stored and queryable.
+- **Provider quirks without writing code.** Need to add a `User-Agent`, drop a header, or pin a field to `0.7`? Request rewrite rules do it, and the editor validates the change against a test case on the spot.
+- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS-encrypted store, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay — the one exception is the anonymous usage statistics, on by default and carrying no request content (see [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md)).
+- **English and Chinese UI**, light / dark / follow-system themes, lives in the system tray, auto-launch at login, built-in updater.
 
 ---
 
@@ -72,16 +58,7 @@ Download the installer for your platform from the [latest release](https://githu
 
 Once installed, OSW lives in the system tray and checks for updates itself. Windows and Linux download and install updates in place; on macOS the ad-hoc signature means it can only check for updates and open the DMG download page.
 
-Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/docs`](./apps/docs) handbook (Chinese, a [Clarify](https://github.com/taicode-labs/clarify) site published to Cloudflare Pages).
-
-## Why it's worth installing
-
-- **Configure once, use it everywhere.** Every client points at one local address. Swapping providers, accounts or models later means editing OSW, not hunting through each tool's settings.
-- **Channels break; your work doesn't.** Network hiccups, connection timeouts, rate limits, exhausted quota, rejected keys and upstream 5xx all push the request to the next channel automatically. A response that has already started streaming is never spliced together from a second one — you get a failure instead of a Frankenstein answer.
-- **Every request tells you the truth.** Which provider and model actually served it, which attempt succeeded, how long it took, how fast the first token arrived, tokens per second, how much of the prompt was cached — all of it stored and queryable.
-- **Provider quirks without writing code.** Need to add a `User-Agent`, drop a header, or pin a field to `0.7`? Request rewrite rules do it, and the editor validates the change against a test case on the spot.
-- **Your data stays on your machine.** Local listener on `127.0.0.1`, keys in the OS-encrypted store, no account, no cloud sync, no relay server. Requests only go to the upstreams you configured.
-- **English and Chinese UI**, light / dark / follow-system themes, lives in the system tray, auto-launch at login, built-in updater.
+Next: [Up and running in three steps](#up-and-running-in-three-steps). For a feature-by-feature walkthrough, see the [`apps/docs`](./apps/docs) handbook (English and Chinese, a [Clarify](https://github.com/taicode-labs/clarify) site published to Cloudflare Workers).
 
 ## Screenshots
 
@@ -178,7 +155,11 @@ curl http://127.0.0.1:9300/v1/models
 
 The listener host and port live in **Settings → Network → Local Listener**; save and the proxy moves to the new port.
 
-## Failover rules
+## Under the hood
+
+The rest of this page is the detail behind those promises — skim what you need, and the [handbook](./apps/docs) covers each area in full.
+
+### Failover rules
 
 | What happens upstream | What OSW does |
 | --- | --- |
@@ -191,7 +172,7 @@ The listener host and port live in **Settings → Network → Local Listener**; 
 
 The defaults are 3 consecutive failures before a provider enters cooldown, a 30-second initial cooldown that grows with each failure up to 5 minutes, and a 30-second streaming idle timeout. All three live in **Settings → Reliability → Failover**.
 
-## Supported protocols
+### Supported protocols
 
 | Protocol | Local path | Typical upstreams |
 | --- | --- | --- |
@@ -203,7 +184,7 @@ These paths are recognised with or without the `/v1` prefix. `GET /v1/models` is
 
 **About protocol conversion:** nothing is converted by default — requests pass through untouched, which is both the safest and the fastest behaviour. If you genuinely need a Claude client to talk to an OpenAI-only channel, turn conversion on for that endpoint binding. Conversion is a best-effort compatibility layer and some parameters may be lost; a single failover will only ever consider channels that match natively or that you have explicitly enabled conversion for.
 
-## Smart Routing
+### Smart Routing
 
 This is the landing page after install, and it answers one question: **which requests belong to which channel group.** Two modes, switched from the page header — exactly one is in effect at a time, and neither rewrites the other's definition:
 
@@ -219,7 +200,7 @@ Both modes are versioned separately, and both cover the same everyday behaviour 
 
 The built-in `default` logical model is the safety net: anything no policy matches ends up there.
 
-## Request Rewrite
+### Request Rewrite
 
 Maintain rules on the **Request Rewrite** page to smooth over small differences between providers:
 
@@ -280,15 +261,31 @@ pnpm lint            # ESLint plus the layering and package-boundary guards
 pnpm test            # the whole test suite
 pnpm build           # compile every package (no installers)
 pnpm build:docs      # build the docs site (Clarify → static output)
-pnpm deploy:docs     # publish apps/docs/output to Cloudflare Pages
+pnpm deploy:docs     # publish apps/docs/output to Cloudflare Workers
 pnpm release:mac     # build macOS arm64 / x64 installers
 pnpm release:win     # build Windows arm64 / x64 installers
 pnpm release:linux   # build Linux arm64 / x64 installers
 ```
 
-The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a Clarify site published to Cloudflare Pages; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
+The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a bilingual Clarify site published to Cloudflare Workers; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
 Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
+
+## Sponsors
+
+### Top-tier sponsor
+
+<p align="center">
+  <a href="https://www.qiniu.com">
+    <img src="./packages/console/source/catalog/providers/qiniu/icon.light.svg" width="56" height="56" alt="Qiniu Cloud" />
+  </a>
+  <br />
+  <a href="https://www.qiniu.com"><strong>Qiniu Cloud</strong></a>
+</p>
+
+Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tier. Qiniu offers object storage, CDN and large-model inference among its cloud services, and its AI inference service ships as a built-in provider preset in OSW — pick Qiniu under **Model Management**, paste an API key, and it works out of the box.
+
+---
 
 ## Feedback
 
