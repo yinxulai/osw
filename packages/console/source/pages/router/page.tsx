@@ -25,7 +25,7 @@ import { routerApi } from '@/api/router'
 import { unwrap } from '@/api/unwrap'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import {
   Drawer,
   DrawerContent,
@@ -747,136 +747,139 @@ function WorkflowStudioCanvas() {
       <PageContent className="flex min-h-0 flex-1 flex-col">
         {/* 画布上不放图例行：节点名与配色在节点本身与节点选择器里已经出现一次，
             再列一行只是把同样的话说第二遍，白占画布上方的纵向空间。 */}
-        <Card className="flex min-h-0 w-full flex-1 flex-col ring-0">
-          <CardContent className="flex min-h-0 flex-1">
-            <div
-              ref={canvasRef}
-              className="relative min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-workflow-canvas-workflow-bg"
+        {/*
+          画布不再套 `CardContent`：`Card` 自带的内边距会给「铺满整格」的画布平白镶一圈留白，
+          而这里没有任何内容需要那圈内边距。容器本身仍用 `Card` 组件承载，
+          描边 / 圆角 / 底色都跟着卡片走，样式升级时会一起更新，不会漏掉这一处。
+        */}
+        <Card className="relative min-h-0 w-full flex-1 overflow-hidden p-0 ring-0">
+          <div
+            ref={canvasRef}
+            className="relative h-full w-full overflow-hidden rounded-xl bg-workflow-canvas-workflow-bg"
+          >
+            <ReactFlow
+              nodes={flowNodes}
+              edges={flowEdges}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              connectionLineComponent={WorkflowConnectionLine}
+              defaultEdgeOptions={{ type: 'workflow' }}
+              proOptions={{ hideAttribution: true }}
+              onlyRenderVisibleElements
+              snapToGrid
+              snapGrid={[16, 16]}
+              nodeDragThreshold={1}
+              nodesDraggable={draggable}
+              panOnDrag={dockMode === 'pan'}
+              selectionOnDrag={dockMode === 'select'}
+              selectionMode={SelectionMode.Partial}
+              deleteKeyCode={null}
+              multiSelectionKeyCode={null}
+              selectionKeyCode={null}
+              minZoom={0.25}
+              onConnect={handleConnect}
+              onEdgesDelete={handleEdgesDelete}
+              onNodesDelete={handleNodesDelete}
+              onNodeDrag={handleNodeDrag}
+              onNodeDragStop={handleNodeDragStop}
+              onNodeMouseEnter={handleNodeMouseEnter}
+              onNodeMouseLeave={handleNodeMouseLeave}
+              onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+              onPaneClick={() => setSelectedNodeId(null)}
+              className="workflow-reactflow workflow-ui-surface"
             >
-              <ReactFlow
-                nodes={flowNodes}
-                edges={flowEdges}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                connectionLineComponent={WorkflowConnectionLine}
-                defaultEdgeOptions={{ type: 'workflow' }}
-                proOptions={{ hideAttribution: true }}
-                onlyRenderVisibleElements
-                snapToGrid
-                snapGrid={[16, 16]}
-                nodeDragThreshold={1}
-                nodesDraggable={draggable}
-                panOnDrag={dockMode === 'pan'}
-                selectionOnDrag={dockMode === 'select'}
-                selectionMode={SelectionMode.Partial}
-                deleteKeyCode={null}
-                multiSelectionKeyCode={null}
-                selectionKeyCode={null}
-                minZoom={0.25}
-                onConnect={handleConnect}
-                onEdgesDelete={handleEdgesDelete}
-                onNodesDelete={handleNodesDelete}
-                onNodeDrag={handleNodeDrag}
-                onNodeDragStop={handleNodeDragStop}
-                onNodeMouseEnter={handleNodeMouseEnter}
-                onNodeMouseLeave={handleNodeMouseLeave}
-                onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-                onPaneClick={() => setSelectedNodeId(null)}
-                className="workflow-reactflow workflow-ui-surface"
-              >
-                {/* 点阵参数与底色逐字复制自上游 `workflow/index.tsx` 的 <Background>。 */}
-                <Background
-                  gap={[14, 14]}
-                  size={2}
-                  className="bg-workflow-canvas-workflow-bg"
-                  color="var(--color-workflow-canvas-workflow-dot-color)"
+              {/* 点阵参数与底色逐字复制自上游 `workflow/index.tsx` 的 <Background>。 */}
+              <Background
+                gap={[14, 14]}
+                size={2}
+                className="bg-workflow-canvas-workflow-bg"
+                color="var(--color-workflow-canvas-workflow-dot-color)"
+              />
+              <Controls className="router-controls" showInteractive={false} />
+            </ReactFlow>
+
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
+              {/* 容器样式对齐上游 `workflow/operator/control.tsx` 的悬浮控制条：
+                  actionbar 底色与画布只差一档明度，因此保留上游的 0.5px 描边、省略阴影。 */}
+              <div className="pointer-events-auto inline-flex max-w-full items-center gap-0.5 rounded-lg border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg p-0.5 text-text-tertiary backdrop-blur-[5px]">
+                <NodeSelector
+                  placement="top"
+                  onSelect={appendAtCanvasCenter}
+                  trigger={(
+                    <button
+                      type="button"
+                      aria-label={t('router.canvas.addNodeAria')}
+                      className="flex size-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-secondary"
+                    >
+                      <Plus className="size-3.5" aria-hidden />
+                    </button>
+                  )}
                 />
-                <Controls className="router-controls" showInteractive={false} />
-              </ReactFlow>
 
-              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
-                {/* 容器样式对齐上游 `workflow/operator/control.tsx` 的悬浮控制条：
-                    actionbar 底色与画布只差一档明度，因此保留上游的 0.5px 描边、省略阴影。 */}
-                <div className="pointer-events-auto inline-flex max-w-full items-center gap-0.5 rounded-lg border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg p-0.5 text-text-tertiary backdrop-blur-[5px]">
-                  <NodeSelector
-                    placement="top"
-                    onSelect={appendAtCanvasCenter}
-                    trigger={(
-                      <button
-                        type="button"
-                        aria-label={t('router.canvas.addNodeAria')}
-                        className="flex size-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-secondary"
-                      >
-                        <Plus className="size-3.5" aria-hidden />
-                      </button>
-                    )}
-                  />
+                <Separator orientation="vertical" className="mx-1!" />
 
-                  <Separator orientation="vertical" className="mx-1!" />
+                <button
+                  type="button"
+                  aria-label={t('router.canvas.selectModeAria')}
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-lg transition-colors',
+                    dockMode === 'select' ? 'bg-state-accent-solid text-components-button-primary-text' : 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary',
+                  )}
+                  onClick={() => setDockMode('select')}
+                >
+                  <MousePointer2 className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('router.canvas.panModeAria')}
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-lg transition-colors',
+                    dockMode === 'pan' ? 'bg-state-accent-solid text-components-button-primary-text' : 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary',
+                  )}
+                  onClick={() => setDockMode('pan')}
+                >
+                  <Hand className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={dragEnabled ? t('router.canvas.lockAria') : t('router.canvas.unlockAria')}
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-lg transition-colors',
+                    dragEnabled ? 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary' : 'bg-state-accent-solid text-components-button-primary-text',
+                  )}
+                  onClick={() => setDragEnabled(value => !value)}
+                >
+                  {dragEnabled ? <LockOpen className="size-3.5" aria-hidden /> : <Lock className="size-3.5" aria-hidden />}
+                </button>
 
-                  <button
-                    type="button"
-                    aria-label={t('router.canvas.selectModeAria')}
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-lg transition-colors',
-                      dockMode === 'select' ? 'bg-state-accent-solid text-components-button-primary-text' : 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary',
-                    )}
-                    onClick={() => setDockMode('select')}
-                  >
-                    <MousePointer2 className="size-3.5" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('router.canvas.panModeAria')}
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-lg transition-colors',
-                      dockMode === 'pan' ? 'bg-state-accent-solid text-components-button-primary-text' : 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary',
-                    )}
-                    onClick={() => setDockMode('pan')}
-                  >
-                    <Hand className="size-3.5" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={dragEnabled ? t('router.canvas.lockAria') : t('router.canvas.unlockAria')}
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-lg transition-colors',
-                      dragEnabled ? 'text-text-tertiary hover:bg-state-base-hover hover:text-text-secondary' : 'bg-state-accent-solid text-components-button-primary-text',
-                    )}
-                    onClick={() => setDragEnabled(value => !value)}
-                  >
-                    {dragEnabled ? <LockOpen className="size-3.5" aria-hidden /> : <Lock className="size-3.5" aria-hidden />}
-                  </button>
+                <Separator orientation="vertical" className="mx-1!" />
 
-                  <Separator orientation="vertical" className="mx-1!" />
-
-                  <button
-                    type="button"
-                    aria-label={t('router.canvas.fitViewAria')}
-                    className="flex size-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-secondary"
-                    onClick={() => void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS)}
-                  >
-                    <LocateFixed className="size-3.5" aria-hidden />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  aria-label={t('router.canvas.fitViewAria')}
+                  className="flex size-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-secondary"
+                  onClick={() => void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS)}
+                >
+                  <LocateFixed className="size-3.5" aria-hidden />
+                </button>
               </div>
-
-              {selectedNode && (
-                <WorkflowNodePanel
-                  model={selectedNode}
-                  canvasWidth={canvasWidth}
-                  width={panelWidth}
-                  onWidthChange={setPanelWidth}
-                  nodeModels={displayNodes}
-                  logicalModels={logicalModels}
-                  conditionFieldHints={conditionFieldHints}
-                  updateNode={updateNode}
-                  onDelete={handleDeleteNode}
-                  onClose={() => setSelectedNodeId(null)}
-                />
-              )}
             </div>
-          </CardContent>
+
+            {selectedNode && (
+              <WorkflowNodePanel
+                model={selectedNode}
+                canvasWidth={canvasWidth}
+                width={panelWidth}
+                onWidthChange={setPanelWidth}
+                nodeModels={displayNodes}
+                logicalModels={logicalModels}
+                conditionFieldHints={conditionFieldHints}
+                updateNode={updateNode}
+                onDelete={handleDeleteNode}
+                onClose={() => setSelectedNodeId(null)}
+              />
+            )}
+          </div>
         </Card>
       </PageContent>
 
