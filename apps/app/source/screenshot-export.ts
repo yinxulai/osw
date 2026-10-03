@@ -2,6 +2,14 @@ import { BrowserWindow, nativeImage } from 'electron'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import {
+  buildScreenshotUrl,
+  expandScreenshotSet,
+  findScreenshotSet,
+  findScreenshotShot,
+  SCREENSHOT_SETS,
+  type ScreenshotCase,
+} from './screenshot-sets'
 
 const SCREENSHOT_WIDTH = 1200
 const SCREENSHOT_HEIGHT = 800
@@ -16,16 +24,6 @@ const CAPTURE_READY_POLL_MILLISECONDS = 100
 /** 图片还没加载完也允许开拍的时刻（避免一张坏图把整轮导出拖死）。 */
 const CAPTURE_READY_IMAGE_GRACE_MILLISECONDS = 6000
 
-type ScreenshotLocale = 'en' | 'zh-CN'
-type ScreenshotTheme = 'light' | 'dark'
-
-export interface ScreenshotExportCase {
-  fileName: string
-  route: string
-  locale: ScreenshotLocale
-  theme: ScreenshotTheme
-}
-
 export interface ScreenshotExportProgress {
   completed: number
   total: number
@@ -37,46 +35,86 @@ export interface ScreenshotExportResult {
   outputDirectory: string
 }
 
-interface ScreenshotExportOptions {
+export interface ScreenshotExportOptions {
   baseUrl: string
   outputDirectory: string
   preloadPath: string
-  /** 只拍这几张（`ScreenshotExportCase.fileName`）；不传就拍全清单。用于补拍单页。 */
-  only?: readonly string[]
+  /**
+   * 要拍的那几组 case。**必须显式传入**——引擎不再认「全清单」这种全局概念。
+   *
+   * 谁要拍什么由调用方（脚本 / 无头入口）从 `screenshot-sets.ts` 的编排里解析出来，
+   * 引擎只管把这一组 case 逐个拍掉。这样多一个用途（官网、文档……）不必改引擎。
+   */
+  cases: readonly ScreenshotCase[]
   onProgress?: (progress: ScreenshotExportProgress) => void
 }
 
-const SHOTS = [
-  { fileName: '01-logical-models', route: '/logical-models' },
-  { fileName: '02-smart-routing', route: '/router' },
-  { fileName: '03-request-logs', route: '/request-logs' },
-  { fileName: '04-analytics', route: '/overview?range=7d' },
-  { fileName: '05-request-rewrite', route: '/request-rewrite-rules' },
-  { fileName: '06-client-config', route: '/client-config' },
-] as const
+/** 默认 set 名（不传 `--set` 时用它）。 */
+export { DEFAULT_SCREENSHOT_SET, SCREENSHOT_SETS } from './screenshot-sets'
+export { buildScreenshotUrl }
 
-const LOCALES: ScreenshotLocale[] = ['en', 'zh-CN']
-const THEMES: ScreenshotTheme[] = ['light', 'dark']
+/** `resolveScreenshotCases` 的入参：选哪份 set、在其中收窄或补拍哪几页。 */
+export interface ResolveScreenshotCasesOptions {
+  setName?: string
+  only?: readonly string[]
+  with?: readonly string[]
+}
 
-export const SCREENSHOT_EXPORT_CASES: ScreenshotExportCase[] = LOCALES.flatMap(locale =>
-  THEMES.flatMap(theme =>
-    SHOTS.map(shot => ({
-      fileName: shot.fileName,
-      route: shot.route,
-      locale,
-      theme,
-    })),
-  ),
-)
+/**
+ * 解析一次导出要拍哪些 case。
+ *
+ * 三层叠加，与脚本侧的语义一一对应：
+ *   1. 选一份 set（`setName`，缺省用 `DEFAULT_SCREENSHOT_SET`）；
+ *   2. 若给了 `only`，在该 set 内只保留这些 `fileName`——名字必须都在 set 里，
+ *      写错一个就抛；否则过滤出空数组、一张都不拍还报「成功导出 0 张」，比直接失败更难查。
+ *   3. 若给了 `with`，按名字把**任意 set** 里的某张追加进来（`only` 是「收窄」，
+ *      `with` 是「追加补拍一张」），用于临时补一张 set 之外的页面。
+ *
+ * 返回的 case 已按 set 的语言/主题展开，调用方直接循环即可。
+ */
+export function resolveScreenshotCases(options: ResolveScreenshotCasesOptions): ScreenshotCase[] {
+  const setName = options.setName ?? SCREENSHOT_SETS[0].name
+  const set = findScreenshotSet(setName)
+  if (!set) {
+    const known = SCREENSHOT_SETS.map(candidate => candidate.name).join(', ')
+    throw new Error(`unknown screenshot set "${setName}"; known sets: ${known}`)
+  }
 
-export function screenshotUrl(baseUrl: string, captureCase: ScreenshotExportCase): string {
-  const url = new URL(baseUrl)
-  const search = new URLSearchParams({
-    lang: captureCase.locale,
-    theme: captureCase.theme,
-  })
-  url.hash = `${captureCase.route}?${search.toString()}`
-  return url.toString()
+  let cases = expandScreenshotSet(set)
+
+  if (options.only && options.only.length > 0) {
+    const known = new Set(cases.map(captureCase => captureCase.fileName))
+    const unknown = options.only.filter(fileName => !known.has(fileName))
+    if (unknown.length > 0) {
+      throw new Error(
+        `unknown --only value(s) in set "${set.name}": ${unknown.join(', ')}; known: ${[...known].join(', ')}`,
+      )
+    }
+    cases = cases.filter(captureCase => options.only!.includes(captureCase.fileName))
+  }
+
+  if (options.with && options.with.length > 0) {
+    const locales = set.locales ?? ['en', 'zh-CN']
+    const themes = set.themes ?? ['light', 'dark']
+    const additions: ScreenshotCase[] = []
+    for (const fileName of options.with) {
+      // 同名 shot 优先从当前 set 找，找不到再全表找——这样 `with` 也能指到别的 set 的页。
+      const shot = findScreenshotShot(set, fileName)
+        ?? SCREENSHOT_SETS.flatMap(candidate => candidate.shots).find(candidate => candidate.fileName === fileName)
+      if (!shot) {
+        const known = SCREENSHOT_SETS.flatMap(candidate => candidate.shots).map(candidate => candidate.fileName).join(', ')
+        throw new Error(`unknown --with value "${fileName}"; known: ${known}`)
+      }
+      for (const locale of locales) {
+        for (const theme of themes) {
+          additions.push({ fileName: shot.fileName, route: shot.route, locale, theme, storage: shot.storage })
+        }
+      }
+    }
+    cases = [...cases, ...additions]
+  }
+
+  return cases
 }
 
 export function parseWindowId(sourceId: string): number | null {
@@ -142,21 +180,30 @@ async function captureWindow(target: BrowserWindow, windowId: number, filePath: 
   throw lastError instanceof Error ? lastError : new Error('screencapture failed')
 }
 
-async function initializeExportWindow(target: BrowserWindow, baseUrl: string): Promise<void> {
-  await target.loadURL(screenshotUrl(baseUrl, SCREENSHOT_EXPORT_CASES[0]))
-  await target.webContents.executeJavaScript(`
-    localStorage.setItem('osw-ui', JSON.stringify({
-      state: {
-        themeMode: 'system',
-        onboardingComplete: true,
-      },
-      version: 0,
-    }))
-    localStorage.setItem('osw-language', JSON.stringify({
-      state: { preference: 'en' },
-      version: 0,
-    }))
-  `)
+/**
+ * 写本地存储的辅助脚本。
+ *
+ * 导出窗口每次换页都会 `loadURL`，localStorage 是同一个 `partition`，所以这里只需在
+ * 开拍前把「默认偏置」写好（引导已完成、语言英文），换页不必重写——除非某张 shot 自带
+ * `storage`（例如引导页要反过来把 `onboardingComplete` 压回 `false`），那时在切到它之前
+ * 单独覆盖一次。
+ */
+function storageScript(entries: Record<string, unknown>): string {
+  const pairs = Object.entries(entries)
+    .map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(JSON.stringify(value))})`)
+    .join('\n')
+  return pairs
+}
+
+/** 默认偏置：主窗口已经走过引导、语言英文。主题由 `?theme=` 决定，不在这里写。 */
+const DEFAULT_STORAGE: Record<string, unknown> = {
+  'osw-ui': { state: { themeMode: 'system', onboardingComplete: true }, version: 0 },
+  'osw-language': { state: { preference: 'en' }, version: 0 },
+}
+
+async function initializeExportWindow(target: BrowserWindow, baseUrl: string, firstCase: ScreenshotCase): Promise<void> {
+  await target.loadURL(buildScreenshotUrl(baseUrl, firstCase))
+  await target.webContents.executeJavaScript(storageScript(DEFAULT_STORAGE))
 }
 
 /** 渲染进程主线程被同步 IPC 卡住时的哨兵：探测调用永远不 settle。 */
@@ -309,6 +356,9 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
     throw new Error('Website screenshot export currently requires macOS screencapture.')
   }
 
+  const cases = options.cases
+  if (cases.length === 0) throw new Error('screenshot export received no cases to capture')
+
   await fs.mkdir(options.outputDirectory, { recursive: true })
 
   const target = new BrowserWindow({
@@ -337,24 +387,24 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
   target.setAlwaysOnTop(true, 'floating')
 
   try {
-    await initializeExportWindow(target, options.baseUrl)
+    await initializeExportWindow(target, options.baseUrl, cases[0])
     target.showInactive()
     await delay(300)
 
     const windowId = parseWindowId(target.getMediaSourceId())
     if (windowId === null) throw new Error('unable to resolve the native screenshot window id')
 
-    // `only` 只影响「拍哪些」，进度总数跟着缩小，两条入口（全量导出 / 补拍单页）共用同一段循环。
-    const cases = options.only
-      ? SCREENSHOT_EXPORT_CASES.filter(captureCase => options.only!.includes(captureCase.fileName))
-      : SCREENSHOT_EXPORT_CASES
-
     let completed = 0
     for (const captureCase of cases) {
       const current = `${captureCase.locale}/${captureCase.theme}/${captureCase.fileName}.png`
       options.onProgress?.({ completed, total: cases.length, current })
 
-      await target.loadURL(screenshotUrl(options.baseUrl, captureCase))
+      await target.loadURL(buildScreenshotUrl(options.baseUrl, captureCase))
+      // 这张 shot 自带本地存储状态（如引导页）时，进页后先覆盖默认偏置，再等它真的画出来。
+      if (captureCase.storage) {
+        await target.webContents.executeJavaScript(storageScript(captureCase.storage))
+        await target.loadURL(buildScreenshotUrl(options.baseUrl, captureCase))
+      }
       await waitForCaptureReady(target)
       await target.webContents.executeJavaScript(`
         window.scrollTo(0, 0)

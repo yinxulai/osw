@@ -2,7 +2,7 @@ import { app } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
-import { SCREENSHOT_EXPORT_CASES, exportWebsiteScreenshots } from './screenshot-export'
+import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
   registerOpenDataDirectoryIpc,
@@ -26,22 +26,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 页面照常从已经跑着的管理服务取数据。因此前提是 `pnpm dev`（或至少控制台 dev server）已经在跑。
 //
 // - `VITE_DEV_SERVER_URL`：渲染层地址，默认 `http://localhost:5173`。
-// - `SCREENSHOT_ONLY`：收 `ScreenshotExportCase.fileName`（逗号分隔，如 `06-client-config`）；
-//   不传就拍全清单。补拍一张新页面时只传它，既省事也避免顺带把其它页面重拍成不同取景。
-// - `SCREENSHOT_OUTPUT_DIR`：产物目录。脚本会传仓库根的 `snapshot/`；不传就按
-//   「应用根的上两层」推（开发态即仓库根，与设置页那条路一致）。
+// - `SCREENSHOT_SET`：拍哪一份编排（见 `source/screenshot-sets.ts`，如 `site` / `docs`）；
+//   不传就用默认 set。
+// - `SCREENSHOT_ONLY`：在选定 set 内收窄到这些 `shot.fileName`（逗号分隔，如 `06-client-config`）；
+//   名字必须都在 set 里，写错即失败。
+// - `SCREENSHOT_WITH`：按名字把任意 set 里的某张**追加**进来（补拍 set 之外的一页）。
+// - `SCREENSHOT_OUTPUT_DIR`：产物目录。脚本会传目标目录；不传就按「应用根的上两层」推
+//   （开发态即仓库根）。
 const baseUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173'
-const only = process.env.SCREENSHOT_ONLY?.split(',').map(entry => entry.trim()).filter(Boolean)
+const setName = process.env.SCREENSHOT_SET
+const splitList = (value: string | undefined) => value?.split(',').map(entry => entry.trim()).filter(Boolean)
+const only = splitList(process.env.SCREENSHOT_ONLY)
+const with_ = splitList(process.env.SCREENSHOT_WITH)
 
-// `--only` 写错名字时必须报错：否则 `only` 过滤出空数组、循环一次都不跑，
-// 进程带着退出码 0 报「成功导出 0 张」，比直接失败更难查。
-if (only && only.length > 0) {
-  const known = new Set(SCREENSHOT_EXPORT_CASES.map(captureCase => captureCase.fileName))
-  const unknown = only.filter(fileName => !known.has(fileName))
-  if (unknown.length > 0) {
-    console.error(`[screenshots] unknown --only value(s): ${unknown.join(', ')}; known: ${[...known].join(', ')}`)
-    app.exit(1)
-  }
+// 先解析一遍 case。名字写错（`--set` / `--only` / `--with`）在这里就抛，落一条清楚的
+// 错误再 `app.exit(1)`：否则过滤出空数组、循环一次都不跑，进程带着退出码 0 报「成功导出
+// 0 张」，比直接失败更难查。
+let cases: ReturnType<typeof resolveScreenshotCases>
+try {
+  cases = resolveScreenshotCases({ setName, only, with: with_ })
+} catch (error) {
+  console.error(`[screenshots] ${error instanceof Error ? error.message : String(error)}`)
+  app.exit(1)
+  // `app.exit` 之后不再往下走；给它一个稳定类型。
+  cases = []
 }
 
 /**
@@ -88,7 +96,7 @@ app.whenReady().then(async () => {
       baseUrl,
       outputDirectory,
       preloadPath: path.join(__dirname, 'preload.js'),
-      only,
+      cases,
       onProgress: progress => {
         console.info(`[screenshots] ${progress.completed}/${progress.total} ${progress.current}`)
       },

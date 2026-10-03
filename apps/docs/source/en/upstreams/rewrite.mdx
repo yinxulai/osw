@@ -13,6 +13,8 @@ keywords:
 
 **Request rewriting** adds an orchestratable rewrite layer on the forwarding path: before a request is sent and before a response returns, it changes request headers, request bodies, or response content by rules.
 
+![OSW Request rewriting page: a rule is a match condition plus actions, with templates and script actions.](/screenshots/en/light/request-rewrite.png)
+
 <Callout title="Only non-streaming JSON" type="warning">
 Rewriting applies only to **non-streaming JSON** requests. Streaming (SSE) and non-JSON content do not participate in rewriting.
 </Callout>

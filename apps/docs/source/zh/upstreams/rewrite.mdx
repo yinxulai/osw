@@ -13,6 +13,8 @@ keywords:
 
 **请求重写**在转发路线上加一层可编排的改写：请求发出前、响应回来前，按规则改请求头、请求体或响应内容。
 
+![OSW「请求重写」页：一条规则由「匹配条件 + 操作」组成，可选模板与脚本动作。](/screenshots/zh-CN/light/request-rewrite.png)
+
 <Callout title="只处理非流式 JSON" type="warning">
 重写只作用于**非流式 JSON**请求。流式（SSE）与非 JSON 内容不参与重写。
 </Callout>

@@ -22,7 +22,7 @@ import { AutoLaunchManager } from './auto-launch'
 import { UpdaterManager, type UpdateState } from './updater'
 import { nativeTranslator, startNativeLanguageSync } from './i18n'
 import { installWindowShortcuts } from './window-actions'
-import { exportWebsiteScreenshots, type ScreenshotExportProgress } from './screenshot-export'
+import { exportWebsiteScreenshots, resolveScreenshotCases, type ScreenshotExportProgress } from './screenshot-export'
 import {
   WINDOW_BACKGROUND,
   WINDOW_TITLEBAR_HEIGHT,
@@ -146,6 +146,9 @@ function registerScreenshotExportIpc(): void {
       baseUrl: process.env.VITE_DEV_SERVER_URL!,
       outputDirectory,
       preloadPath: path.join(__dirname, 'preload.js'),
+      // 设置页那条路固定拍官网站点那套图，不暴露 set 选择：它是「一键重拍现有站点
+      // 截图」这个具体动作，不是通用导出器。要拍别的用途走 `pnpm screenshots --set=`。
+      cases: resolveScreenshotCases({}),
       onProgress: sendProgress,
     }).finally(() => {
       screenshotExportPromise = null

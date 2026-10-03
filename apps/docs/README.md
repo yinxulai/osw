@@ -40,6 +40,14 @@ pnpm --filter @osw/docs build    # 构建静态产物到 output/
 pnpm --filter @osw/docs preview  # 预览构建产物
 ```
 
+### 截图
+
+正文里的界面截图放在 [`public/screenshots/<locale>/light/<name>.png`](./public/screenshots/)：`public/` 会被原样拷进 `output/`，所以站点里按 `/screenshots/<locale>/light/<name>.png` 引用。语言目录与正文的 `source/<locale>/` 对齐（`zh-CN` / `en`），当前只出浅色一版。
+
+这批图**不是手工截的**，由 `apps/app/scripts/screenshots.mjs --set=docs` 编排生成（见该脚本与 `apps/app/source/screenshot-sets.ts` 里的 `docs` 套件）：它按套件声明的路由 × 语言跑一遍真实界面，产物直接落回这里的目录。改版后重新跑一次即可刷新，不用逐页重截。
+
+写正文时用 **markdown 图片语法** `![alt](/screenshots/zh-CN/light/<name>.png)`。Clarify 会把它渲染成居中的 `figure`（圆角 + 边框 + 限宽）；**不要**写成手写 `<img>` 标签——那样编译成原生元素，拿不到这层样式。
+
 ## 多语言
 
 **中文是主要维护语言**（`locales.default = 'zh'`）：它占据根路径（`/getting-started/installation`），是内容的权威版本；英文挂在 `/en` 前缀下（`/en/getting-started/installation`）。两种语言都同时可按语言前缀访问（`/zh/getting-started/installation` 亦有效），因此带前缀的链接永远稳定。
