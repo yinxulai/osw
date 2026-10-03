@@ -9,6 +9,7 @@ import {
   findScreenshotShot,
   SCREENSHOT_SETS,
   type ScreenshotCase,
+  type ScreenshotClip,
 } from './screenshot-sets'
 
 const SCREENSHOT_WIDTH = 1200
@@ -107,7 +108,7 @@ export function resolveScreenshotCases(options: ResolveScreenshotCasesOptions): 
       }
       for (const locale of locales) {
         for (const theme of themes) {
-          additions.push({ fileName: shot.fileName, route: shot.route, locale, theme, storage: shot.storage })
+          additions.push({ fileName: shot.fileName, route: shot.route, locale, theme, storage: shot.storage, clip: shot.clip })
         }
       }
     }
@@ -323,6 +324,106 @@ async function waitForCaptureReady(target: BrowserWindow): Promise<void> {
   await delay(CAPTURE_SETTLE_MILLISECONDS)
 }
 
+/**
+ * 局部取景的裁剪区域，单位是整窗截图的**像素**坐标（主进程侧，已乘过 DPR）。
+ */
+export interface CaptureClipRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** 裁剪区域太小就当成没找到目标：不足以构成一张可读的图。 */
+const MIN_CAPTURE_CLIP_EDGE = 24
+
+/**
+ * 把「元素选择器」量成整窗像素坐标。
+ *
+ * 在渲染进程里 `getBoundingClientRect()` 拿到 CSS 像素，再乘 `devicePixelRatio`
+ * 换成截图那层 `nativeImage` 的像素。乘 DPR 这一步不能省：截图是整窗（1200×800
+ * CSS @2x → 2400×1600 px），不换算就会裁到左上角一块不相干的地方。
+ *
+ * 与 `measureCaptureReadiness` 一样用 `Promise.race` 限时：主线程被卡住时
+ * `executeJavaScript` 永不 settle，不设上限会变成另一种「卡住」。
+ */
+async function measureClipRect(target: BrowserWindow, clip: ScreenshotClip): Promise<CaptureClipRect> {
+  const unresponsive = delay(RENDER_PROBE_TIMEOUT_MILLISECONDS).then(
+    (): typeof RENDERER_UNRESPONSIVE => RENDERER_UNRESPONSIVE,
+  )
+
+  const measured = await Promise.race([
+    target.webContents.executeJavaScript(`
+      (async () => {
+        const nodes = Array.from(document.querySelectorAll(${JSON.stringify(clip.selector)}))
+        const element = nodes[${clip.index ?? 0}]
+        if (!element) return null
+        const before = element.getBoundingClientRect()
+        // Taller than the viewport: align to top (centering would push the top out of view).
+        // Otherwise center it. "instant" avoids CSS smooth scrolling - framing wants an
+        // immediate, deterministic position.
+        element.scrollIntoView({
+          block: before.height > window.innerHeight - 120 ? 'start' : 'center',
+          inline: 'nearest',
+          behavior: 'instant',
+        })
+        // Wait two frames for the scroll and the reflow it triggers to settle before
+        // measuring; otherwise we read a coordinate mid-scroll.
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        const rect = element.getBoundingClientRect()
+        const ratio = window.devicePixelRatio || 1
+        const padding = ${clip.padding ?? 0}
+        const maxHeight = ${clip.maxHeight ?? 'null'}
+        const width = rect.width + padding * 2
+        const height = Math.min(rect.height + padding * 2, maxHeight ?? Infinity)
+        return {
+          x: Math.round((rect.left - padding) * ratio),
+          y: Math.round((rect.top - padding) * ratio),
+          width: Math.round(width * ratio),
+          height: Math.round(height * ratio),
+        }
+      })()
+    `) as Promise<CaptureClipRect | null>,
+    unresponsive,
+  ])
+
+  if (measured === RENDERER_UNRESPONSIVE) {
+    throw new Error('screenshot page is unresponsive while measuring the clip target')
+  }
+  if (!measured) {
+    throw new Error(`clip selector not found: ${clip.selector}`)
+  }
+  return measured
+}
+
+/**
+ * 把整窗截图按区域裁下来，并归一化到导出尺寸。
+ *
+ * 裁剪在**已有整窗截图**上做，而不是让 `screencapture` 直接拍那块矩形：要求目标元素
+ * 在窗口里的坐标绝对准确，而且一旦算偏就当期失败；先整窗、再按同一坐标裁，坐标只错在
+ * 裁剪这一步（同样是 `getBoundingClientRect` 量出来的），调试时也能先看整窗对不对。
+ *
+ * 坐标先夹进图像范围内：元素贴着窗口边缘时 `padding` 会把矩形推出去，不夹的话
+ * `crop` 会直接抛。
+ */
+async function cropCapture(filePath: string, rect: CaptureClipRect): Promise<void> {
+  const image = nativeImage.createFromPath(filePath)
+  if (image.isEmpty()) throw new Error(`captured image is empty: ${filePath}`)
+
+  const { width, height } = image.getSize()
+  const x = Math.max(0, Math.min(rect.x, width - 1))
+  const y = Math.max(0, Math.min(rect.y, height - 1))
+  const cropWidth = Math.max(1, Math.min(rect.width, width - x))
+  const cropHeight = Math.max(1, Math.min(rect.height, height - y))
+
+  if (cropWidth < MIN_CAPTURE_CLIP_EDGE || cropHeight < MIN_CAPTURE_CLIP_EDGE) {
+    throw new Error(`clip region too small (${cropWidth}×${cropHeight}) — did the target render off-screen?`)
+  }
+
+  const cropped = image.crop({ x, y, width: cropWidth, height: cropHeight })
+  await fs.writeFile(filePath, cropped.toPNG())
+}
+
 async function clearPointerState(target: BrowserWindow): Promise<void> {
   target.webContents.sendInputEvent({ type: 'mouseMove', x: -1, y: -1 })
   await target.webContents.executeJavaScript(`
@@ -406,18 +507,29 @@ export async function exportWebsiteScreenshots(options: ScreenshotExportOptions)
         await target.loadURL(buildScreenshotUrl(options.baseUrl, captureCase))
       }
       await waitForCaptureReady(target)
-      await target.webContents.executeJavaScript(`
-        window.scrollTo(0, 0)
-        for (const element of document.querySelectorAll('*')) {
-          if (element.scrollTop > 0) element.scrollTop = 0
-        }
-      `)
+      // 局部取景：先等页面画完，再量目标元素的位置（量之前会把元素滚到视野中），
+      // 拿到裁剪框；整窗取景时为 `null`。
+      const clipRect = captureCase.clip ? await measureClipRect(target, captureCase.clip) : null
+      // 整窗取景要回到顶部，取景才稳定可复现；局部取景相反——裁剪框是「元素被滚到视野
+      // 中」之后量出来的，这里再滚回顶部就会让截出来的整窗图与裁剪框对不上（裁到别的
+      // 卡片）。所以只对整窗图复位滚动。
+      if (!clipRect) {
+        await target.webContents.executeJavaScript(`
+          window.scrollTo(0, 0)
+          for (const element of document.querySelectorAll('*')) {
+            if (element.scrollTop > 0) element.scrollTop = 0
+          }
+        `)
+      }
       await clearPointerState(target)
 
       const outputPath = path.join(options.outputDirectory, captureCase.locale, captureCase.theme, `${captureCase.fileName}.png`)
       await fs.mkdir(path.dirname(outputPath), { recursive: true })
       await captureWindow(target, windowId, outputPath)
-      await normalizeCapture(outputPath)
+      // 局部取景的裁剪框已经按 DPR 换算成图像像素，尺寸就是最终尺寸；只有整窗图才需要
+      // 归一化——`normalizeCapture` 会把任意尺寸拉回 2400×1600，对裁剪图等于硬撑变形。
+      if (clipRect) await cropCapture(outputPath, clipRect)
+      else await normalizeCapture(outputPath)
 
       completed += 1
       options.onProgress?.({ completed, total: cases.length, current })

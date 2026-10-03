@@ -28,7 +28,7 @@ function toDateInput(timestamp: number | null, endDate = false) {
 export function RequestLogsFilters(props: RequestLogsFiltersProps) {
   const t = useTranslation()
   return (
-    <FilterBar>
+    <FilterBar dataScreenshot="request-logs-filters">
       <Select value={props.filter.providerId} onValueChange={value => props.applyFilter({ providerId: value })}>
         <SelectTrigger aria-label={t('requestLogs.filters.channel')} className="w-40"><SelectValue placeholder={t('requestLogs.filters.allChannels')} /></SelectTrigger>
         <SelectContent>

@@ -17,7 +17,7 @@ interface LogsToolbarProps {
 
 export function LogsToolbar(props: LogsToolbarProps) {
   const t = useTranslation()
-  return <FilterBar>
+  return <FilterBar dataScreenshot="logs-toolbar">
     <div className="relative"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden /><Input value={props.searchText} onChange={event => props.onSearchChange(event.target.value)} placeholder={t('logs.toolbar.searchPlaceholder')} className="w-72 pl-9" aria-label={t('logs.toolbar.searchAria')} /></div>
     <Select value={props.levelFilter} onValueChange={value => props.onLevelChange(value as LevelFilter)}><SelectTrigger aria-label={t('logs.toolbar.levelAria')} className="w-32"><SelectValue placeholder={t('logs.toolbar.levelAll')} /></SelectTrigger><SelectContent><SelectItem value="all">{t('logs.toolbar.levelAll')}</SelectItem><SelectItem value="error">ERROR</SelectItem><SelectItem value="warn">WARN</SelectItem><SelectItem value="info">INFO</SelectItem><SelectItem value="log">LOG</SelectItem><SelectItem value="debug">DEBUG</SelectItem></SelectContent></Select>
     <span className="system-xs-regular text-text-tertiary">{t('logs.toolbar.totalCount', { count: props.total })}</span>

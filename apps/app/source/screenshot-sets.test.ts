@@ -40,6 +40,12 @@ describe('expandScreenshotSet', () => {
     const cases = expandScreenshotSet({ ...set, shots: [{ fileName: 'a', route: '/a', storage }], themes: ['light'], locales: ['en'] })
     expect(cases).toEqual([expect.objectContaining({ storage })])
   })
+
+  it('carries per-shot clip through to every expanded case', () => {
+    const clip = { selector: '[data-screenshot="route-mode"]', padding: 12 }
+    const cases = expandScreenshotSet({ ...set, shots: [{ fileName: 'a', route: '/a', clip }], themes: ['light'], locales: ['en'] })
+    expect(cases).toEqual([expect.objectContaining({ clip })])
+  })
 })
 
 describe('buildScreenshotUrl', () => {

@@ -39,7 +39,7 @@ export function UsageDistribution(props: UsageDistributionProps) {
   const heatmap = mode === 'heatmap'
 
   return (
-    <Card className="min-w-0 w-full">
+    <Card data-screenshot="overview-usage" className="min-w-0 w-full">
       <CardSectionHeader
         title={t('overview.heat.title')}
         description={formatIntervalDescription(t, heatmap ? heatIntervalMs : trendIntervalMs)}

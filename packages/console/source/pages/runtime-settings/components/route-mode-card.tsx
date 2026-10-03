@@ -25,7 +25,7 @@ export function RouteModeCard() {
   const Icon = option.icon
 
   return (
-    <Card>
+    <Card data-screenshot="route-mode">
       <SettingsCardHeader
         icon={<Route />}
         title={t('settings.routeMode.title')}

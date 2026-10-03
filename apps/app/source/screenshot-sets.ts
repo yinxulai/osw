@@ -20,6 +20,28 @@ export type ScreenshotLocale = 'en' | 'zh-CN'
 /** 出图的主题目录名。 */
 export type ScreenshotTheme = 'light' | 'dark'
 
+/**
+ * 局部取景：只拍页面上某一个元素（外加一圈留白），而不是整窗。
+ *
+ * 文档里解释一个**局部**功能（某张设置卡、某个筛选栏、某行模型）时，整窗截图会把
+ * 无关内容一起塞进正文，读者还得自己找重点。给一个 `selector` 就能只框住那块，
+ * 效果是「正文讲到哪、图就指到哪」。
+ */
+export interface ScreenshotClip {
+  /**
+   * CSS 选择器，指向要截取的元素。优先用产品里刻意留的稳定锚点
+   * （`data-screenshot="..."`，见 `packages/console` 的卡片），别依赖会随样式调整
+   * 而变的结构选择器（`.space-y-3 > div:nth-child(2)` 这类）。
+   */
+  selector: string
+  /** 命中多个元素时取第几个（从 0 起），默认第一个。 */
+  index?: number
+  /** 元素四周额外保留的像素（按 CSS 像素计，会被 DPR 放大），默认 0。 */
+  padding?: number
+  /** 元素较高时只取顶部这么多 CSS 像素（例如整页设置只截某段）。 */
+  maxHeight?: number
+}
+
 /** 一张截图在控制台里的落点。`route` 是 `#` 后的那段（含查询串）。 */
 export interface ScreenshotShot {
   /** 文件名（不含扩展名）。同一 set 内唯一，也是 `--only` 过滤与 `--with=<name>` 追加的键。 */
@@ -31,6 +53,8 @@ export interface ScreenshotShot {
    * 键是 `localStorage` 的键名，值会被 `JSON.stringify` 后写入。
    */
   storage?: Record<string, unknown>
+  /** 只拍页面上某个元素。不写就是整窗。 */
+  clip?: ScreenshotClip
 }
 
 /** 关键字集扩展：`--with=<shot>` 引用任意 set 里的某张时，仍按它原来的存储状态拍。 */
@@ -81,6 +105,9 @@ const siteSet: ScreenshotSet = {
  *
  * 引导页需要预先写入 `osw-ui.onboardingComplete = false` 才能进去（默认落点是路由
  * 页），所以它单独带 `storage`；`screenshot-export` 在每张图之前会应用这段状态。
+ *
+ * 多数张是整窗取景；讲到某个**局部**功能时改用 `clip`（见 `ScreenshotClip`）——
+ * 只框住那张卡片 / 那条工具栏，读者一眼就能把正文和图对上。
  */
 const docsSet: ScreenshotSet = {
   name: 'docs',
@@ -100,6 +127,28 @@ const docsSet: ScreenshotSet = {
     { fileName: 'analytics', route: '/overview?range=7d' },
     { fileName: 'request-rewrite', route: '/request-rewrite-rules' },
     { fileName: 'client-config', route: '/client-config' },
+
+    // ── 局部取景（clip）──────────────────────────────────────────────
+    // 下列各张只框住正文讲到的那一块：路由模式的切换、故障转移参数、缓存亲和、
+    // 上游代理、日志保留、云同步、运行日志统计。锚点 `data-screenshot` 写在各卡片根元素上。
+    { fileName: 'settings-route-mode', route: '/runtime-settings', clip: { selector: '[data-screenshot="route-mode"]', padding: 12 } },
+    { fileName: 'settings-failover', route: '/runtime-settings', clip: { selector: '[data-screenshot="failover"]', padding: 12 } },
+    { fileName: 'settings-cache-affinity', route: '/runtime-settings', clip: { selector: '[data-screenshot="cache-affinity"]', padding: 12 } },
+    { fileName: 'settings-outbound-proxy', route: '/runtime-settings', clip: { selector: '[data-screenshot="outbound-proxy"]', padding: 12 } },
+    { fileName: 'settings-log-retention', route: '/runtime-settings', clip: { selector: '[data-screenshot="log-retention"]', padding: 12 } },
+    { fileName: 'settings-cloud-sync', route: '/runtime-settings', clip: { selector: '[data-screenshot="cloud-sync"]', padding: 12 } },
+    // 设置页整页（只取顶部一段，避免上百件事挤成一根）。
+    { fileName: 'settings-overview', route: '/runtime-settings', clip: { selector: '[data-screenshot="settings-content"]', padding: 16, maxHeight: 720 } },
+
+    // 统计分析：指标概览与用量分布（两张局部，分别服务「看什么数」与「怎么看」）。
+    { fileName: 'analytics-stats', route: '/overview?range=7d', clip: { selector: '[data-screenshot="overview-stats"]', padding: 16 } },
+    { fileName: 'analytics-usage', route: '/overview?range=7d', clip: { selector: '[data-screenshot="overview-usage"]', padding: 16, maxHeight: 560 } },
+
+    // 请求记录：筛选栏（一张局部，说明怎么缩范围）。
+    { fileName: 'request-logs-filters', route: '/request-logs', clip: { selector: '[data-screenshot="request-logs-filters"]', padding: 12 } },
+
+    // 运行日志：工具栏（实时开关、级别筛选、导出、清空）。
+    { fileName: 'runtime-logs', route: '/logs', clip: { selector: '[data-screenshot="logs-toolbar"]', padding: 12 } },
   ],
 }
 
@@ -125,6 +174,7 @@ export interface ScreenshotCase {
   locale: ScreenshotLocale
   theme: ScreenshotTheme
   storage?: Record<string, unknown>
+  clip?: ScreenshotClip
 }
 
 /**
@@ -145,6 +195,7 @@ export function expandScreenshotSet(set: ScreenshotSet): ScreenshotCase[] {
         locale,
         theme,
         storage: shot.storage,
+        clip: shot.clip,
       })),
     ),
   )

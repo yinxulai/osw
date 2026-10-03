@@ -37,7 +37,7 @@ export function OutboundProxyCard(props: OutboundProxyCardProps) {
   }
 
   return (
-    <Card>
+    <Card data-screenshot="outbound-proxy">
       <SettingsCardHeader
         icon={<Network />}
         title={t('settings.outboundProxy.title')}

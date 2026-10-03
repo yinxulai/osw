@@ -108,7 +108,7 @@ export function LogRetentionCard(props: LogRetentionCardProps) {
   }
 
   return (
-    <Card>
+    <Card data-screenshot="log-retention">
       <SettingsCardHeader
         icon={<Database />}
         title={t('settings.logs.title')}

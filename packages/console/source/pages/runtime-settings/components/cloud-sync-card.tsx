@@ -79,7 +79,7 @@ export function CloudSyncCard() {
   }
 
   return (
-    <Card>
+    <Card data-screenshot="cloud-sync">
       <SettingsCardHeader
         icon={<Cloud />}
         title={t('settings.cloudSync.title')}

@@ -28,6 +28,8 @@ interface PageHeaderProps {
 interface PageContentProps {
   children: ReactNode
   className?: string
+  /** 截图锚点，用于局部取景（见 `apps/app/source/screenshot-sets.ts`）。 */
+  dataScreenshot?: string
 }
 
 interface AppLayoutProps {
@@ -100,5 +102,5 @@ export function PageHeader(props: PageHeaderProps) {
 
 export function PageContent(props: PageContentProps) {
   const { children, className } = props
-  return <section className={cn('grid gap-4', className)}>{children}</section>
+  return <section data-screenshot={props.dataScreenshot} className={cn('grid gap-4', className)}>{children}</section>
 }

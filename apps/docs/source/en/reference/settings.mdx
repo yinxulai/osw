@@ -11,6 +11,8 @@ keywords:
 
 The **Settings** page manages app behavior, network connections, failover, and local data, organized into six sections: **App / Network / Routing / Reliability / Data / Cloud sync**. Changes take effect on save, and the bottom shows the sync and save status.
 
+![OSW Settings page top: the App section's appearance & startup, live metric, version updates, and re-run onboarding.](/screenshots/en/light/settings-overview.png)
+
 ## App
 
 ### Appearance & startup
@@ -75,6 +77,8 @@ In custom mode you can fill in a **proxy URL** (credentials are stored locally; 
 
 Decides which routing definition the proxy executes (workflow orchestration / routing rules). **The switch takes effect immediately and needs no save.** See [Request routing](/upstreams/routing).
 
+![OSW Settings → Routing → Routing mode card: switch between workflow orchestration and routing rules.](/screenshots/en/light/settings-route-mode.png)
+
 ## Reliability
 
 ### Failover
@@ -105,6 +109,8 @@ Shows the directory holding config, databases, and credentials, and can **open i
 
 ### Request logs
 
+![OSW Settings → Data → Request logs card: the record switch, request log retention, body retention, the record-bodies switch, and clearing historical logs.](/screenshots/en/light/settings-log-retention.png)
+
 | Setting | Default | Description |
 | --- | --- | --- |
 | Record request logs | On | Request identity, and the usage and metrics of each attempt. After turning it off, requests are still forwarded but not persisted. |
@@ -121,6 +127,8 @@ The retention duration for runtime logs, a **separate setting** from request log
 ## Cloud sync
 
 Choose a sync method, connect credentials, bind a remote location, and manually **back up to cloud** or **restore from cloud**. A restore overwrites this machine's providers, models, and bindings wholesale with the remote snapshot, and cannot be undone; logical models absent from the snapshot are left untouched. See [Config cloud sync](/observability/cloud-sync).
+
+![OSW Settings → Cloud sync card: choose the sync method, credentials, and remote binding, plus the two manual actions, back up to cloud / restore from cloud.](/screenshots/en/light/settings-cloud-sync.png)
 
 ---
 

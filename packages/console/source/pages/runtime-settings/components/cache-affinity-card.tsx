@@ -18,7 +18,7 @@ export function CacheAffinityCard(props: CacheAffinityCardProps) {
   const t = useTranslation()
 
   return (
-    <Card>
+    <Card data-screenshot="cache-affinity">
       <SettingsCardHeader
         icon={<Magnet />}
         title={t('settings.cacheAffinity.title')}

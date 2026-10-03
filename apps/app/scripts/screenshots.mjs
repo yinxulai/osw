@@ -10,7 +10,7 @@ import { isManagementApiReachable, waitForConsoleServer } from './lib/console-de
 // 重拍截图。
 //
 //   pnpm screenshots                                 拍默认编排（`site`，6 页 × 2 语言 × 2 主题 = 24 张）
-//   pnpm screenshots -- --set=docs                   拍文档编排（8 页 × 2 语言 × 亮色 = 16 张）
+//   pnpm screenshots -- --set=docs                   拍文档编排（8 张整窗 + 10 张局部 × 2 语言 × 亮色 = 36 张）
 //   pnpm screenshots -- --only=06-client-config      在选定 set 内只补一张（按 `shot.fileName`）
 //   pnpm screenshots -- --set=docs --with=02-smart-routing   把任意 set 里的某张追加进来
 //

@@ -15,7 +15,7 @@ export function FailoverCard(props: FailoverCardProps) {
   const t = useTranslation()
 
   return (
-    <Card>
+    <Card data-screenshot="failover">
       <SettingsCardHeader
         icon={<RefreshCcw />}
         title={t('settings.failover.title')}

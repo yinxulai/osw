@@ -330,7 +330,9 @@ export function OverviewPage() {
     if (!data) return null
     return (
       <>
-        <StatsGrid summary={data.summary} />
+        <div data-screenshot="overview-stats">
+          <StatsGrid summary={data.summary} />
+        </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
           {/* 点击供应商 = 跳到 `/overview/$providerId`，range 原样带过去。 */}
           <ProviderDistribution
