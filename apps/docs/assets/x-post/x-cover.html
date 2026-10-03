@@ -8,14 +8,24 @@
   不要手动 DevTools 截图：手截会带上设备像素比与滚动位置差异，重出的图不再是 1:1。
   画布固定 1600×900（X 时间线按 ~500px 宽显示，所以整张图按「缩到 1/3 还能读」设计）。
 
-  两个必须留意的点：
+  几个必须留意的点：
   1. @font-face 的路径是相对本文件的。本文件在 apps/docs/assets/x-post/ 下，离仓库根 3 层，
      所以是 ../../../../node_modules/... —— 移动文件后必须同步改，写错的后果是
      静默回退到 Segoe UI（渲染出来「很粗糙」，但控制台不报错到脸上）。
      仓库只装了 @fontsource-variable/geist，没有 geist-mono，别给 mono 另写 @font-face。
-  2. 右侧是产品真实完整窗口截图 snapshot/en/dark/01-logical-models.png，等比铺满后向右裁切，
-     只留 border-top + border-left。截图本身要在仓库里，换机器/换目录会裂。
+  2. 右侧是产品真实完整窗口截图，等比铺满后向右裁切，只留 border-top + border-left。
+     英文版取 snapshot/en/dark/01-logical-models.png（逻辑模型列表页）；`?lang=zh-CN` 时
+     换成 snapshot/zh-CN/dark/01-logical-models.png。截图本身要在仓库里，换机器/换目录会裂。
+  3. 中英两版由同一个文件渲染：`?lang=zh-CN` 只切左栏文案与右侧截图，版式完全一致。
+     出图命令见 ../README.md；中文版在地址后多加一个 `?lang=zh-CN`。
 -->
+<script>
+  // 语言在 <html data-lang> 上定死，样式靠属性选择器分派——不靠脚本改 textContent，
+  // 无头截图就不必等脚本执行完 DOM 才开拍。默认英文。
+  const lang = new URLSearchParams(location.search).get('lang') === 'zh-CN' ? 'zh-CN' : 'en'
+  document.documentElement.lang = lang
+  document.documentElement.dataset.lang = lang
+</script>
 <style>
   @font-face {
     font-family: 'Geist Variable';
@@ -42,6 +52,11 @@
   }
 
   * { box-sizing: border-box; }
+
+  /* 中英两版共用一个文件：默认（en）显示 .i18n-en，`?lang=zh-CN` 时反过来。
+     文案与右侧截图都挂这个开关，成对切换，不会出现「中文标题配英文界面」。 */
+  html[data-lang='zh-CN'] .i18n-en { display: none; }
+  html:not([data-lang='zh-CN']) .i18n-zh { display: none; }
 
   html, body { margin: 0; background: var(--void); }
 
@@ -108,6 +123,9 @@
   /* 第二行压暗：「同一句话的后半截」，与参考图一致。 */
   h1 .dim { color: rgb(200 206 218 / 0.5); }
 
+  /* 中文标题：等宽字面比拉丁字母宽，100px 会顶出 660 的栏宽，降到视觉同高。 */
+  html[data-lang='zh-CN'] h1 { font-size: 92px; letter-spacing: -0.01em; }
+
   /* 副标题紧贴在主张下方：参考图里两者基线只隔 71px（不到一行标题）。 */
   .sub {
     margin: 30px 0 0;
@@ -143,9 +161,9 @@
 
   /* ---------- 右栏：应用截图，左+上出血 ---------- */
 
-  /* 可见源区：snapshot/en/dark/01-logical-models.png 的 x ∈ [0, 1525]、y ∈ [0, 1600]。
+  /* 可见源区：snapshot/<locale>/dark/01-logical-models.png 的 x ∈ [0, 1525]、y ∈ [0, 1600]。
      2400 × 1600 的完整窗口图按高度铺满 852px，横向只露出左边约 2/3。
-     这样保留 macOS 标题栏、侧栏和第一张逻辑模型卡，右边与底下都自然落在画布外。
+     这样保留 macOS 标题栏、侧栏和各条逻辑模型队列，右边与底下都自然落在画布外。
      容器 802..1614 × 88..940。 */
   .shot {
     position: absolute;
@@ -201,8 +219,10 @@
       <div class="site">osw.yinxulai.com</div>
     </div>
 
-    <h1>Every model.<br /><span class="dim">One address.</span></h1>
-    <p class="sub">Automatic failover across all your providers.</p>
+    <h1 class="i18n-en">Every model.<br /><span class="dim">One address.</span></h1>
+    <h1 class="i18n-zh">所有模型，<br /><span class="dim">一个地址。</span></h1>
+    <p class="sub i18n-en">Automatic failover across all your providers.</p>
+    <p class="sub i18n-zh">跨供应商自动故障转移。</p>
 
     <div class="providers">
       <span><img src="../../../../packages/console/source/catalog/providers/openai/icon.dark.svg" alt="" /></span>
@@ -219,7 +239,8 @@
   </div>
 
   <div class="shot">
-    <img src="../../../../snapshot/en/dark/01-logical-models.png" alt="OSW logical models view" />
+    <img class="i18n-en" src="../../../../snapshot/en/dark/01-logical-models.png" alt="OSW logical models view" />
+    <img class="i18n-zh" src="../../../../snapshot/zh-CN/dark/01-logical-models.png" alt="OSW 逻辑模型界面" />
   </div>
 
 </div>

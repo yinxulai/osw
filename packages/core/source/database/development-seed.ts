@@ -1,10 +1,12 @@
 import type { SecretStore } from '@common/secret-store'
 import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID, type RequestRewriteRule } from '@common/schemas'
 import { PRESET_CONDITIONAL_SCRIPT_CODE } from '@common/rewrite-script-samples'
+import { generateId } from '@common/utils'
 import { and, eq, inArray } from 'drizzle-orm'
 import { getConfigDb, getDataDb } from './index'
 import { mapLogicalModelIdsToRecordIds } from './logical-model-store'
 import {
+  logicalModels,
   providerEndpoints,
   providerModelEndpoints,
   providerModelRequestRewriteRules,
@@ -116,8 +118,48 @@ const PROVIDER_MODEL_FIXTURES = [
   ['default', 'prov_dev_deleted', 'deleted-demo-model', 'openai-responses', 8],
 ] as const
 
-/** 已软删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。 */
-const SOFT_DELETED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.length - 1
+/**
+ * 已软删除模型 fixture 的下标：端点 / 绑定 / 调度策略与断言都靠它定位，免得再写一遍魔数。
+ *
+ * 按**模型名**找而不是取末位：这份 fixture 允许继续往下追加成员，删掉的那个也就不必永远
+ * 钉在数组末尾（追加会让「取末位」指到别人身上）。
+ */
+const SOFT_DELETED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.findIndex(fixture => fixture[2] === 'deleted-demo-model')
+
+/**
+ * 逻辑模型 fixture：除启动时内建的 `default` 之外，再建两条按用途分的队列，让逻辑模型页
+ * 有多列可看。`default` 是兜底、永远在第一位（见 `docs/specs/route-workbench.md`），
+ * 这里只补 `sortOrder` 比它大的展示顺序。
+ */
+const LOGICAL_MODEL_FIXTURES = [
+  { modelId: 'fast', description: 'Low-latency tier — flash and mini models first.', sortOrder: 1 },
+  { modelId: 'reasoning', description: 'Reasoning tier — long-think models for hard problems.', sortOrder: 2 },
+] as const
+
+/**
+ * 额外交给非默认逻辑模型的供应商模型（`providerModelIndex` 是 `PROVIDER_MODEL_FIXTURES` 的下标）。
+ *
+ * 同一个供应商模型同时挂在多条队列上是正常的：逻辑模型是**队列**，供应商模型是**资源池**，
+ * 一条队列是否包含某个资源与别的队列无关——这正是逻辑模型页能摆出多列的原因。
+ */
+const LOGICAL_MODEL_MEMBERSHIP_FIXTURES = [
+  { logicalModelId: 'fast', providerModelIndex: 5, priority: 1 },
+  { logicalModelId: 'fast', providerModelIndex: 1, priority: 2 },
+  { logicalModelId: 'reasoning', providerModelIndex: 3, priority: 1 },
+  { logicalModelId: 'reasoning', providerModelIndex: 2, priority: 2 },
+] as const
+
+/**
+ * 请求记录落在哪个逻辑模型：带专属队列的供应商模型轮流落在 `default` 与它的队列上，
+ * 其余仍是 `default`。没有这一层，请求记录页永远只有 `default` 一个逻辑模型，
+ * 看不出逻辑模型之间的分流。
+ */
+const REQUEST_LOGICAL_MODEL_QUEUES: Record<number, readonly string[]> = {
+  1: ['default', 'fast'],
+  2: ['default', 'reasoning'],
+  3: ['default', 'reasoning'],
+  5: ['default', 'fast'],
+}
 
 /**
  * 请求重写规则 fixture：让开发库里**真的有规则、也真的被命中过**。
@@ -241,6 +283,16 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
   const existingProviderModelIds = new Set(
     config.select({ id: providerModels.id }).from(providerModels).where(inArray(providerModels.id, fixtureProviderModelIds)).all().map(row => row.id),
   )
+  // 逻辑模型按**模型名**判存在：内建 `default` 由启动逻辑创建，这里只管 fixture 那两条。
+  const existingLogicalModelModelIds = new Set(
+    config.select({ modelId: logicalModels.modelId }).from(logicalModels)
+      .where(inArray(logicalModels.modelId, LOGICAL_MODEL_FIXTURES.map(fixture => fixture.modelId))).all().map(row => row.modelId),
+  )
+  // 调度绑定按主键（逻辑模型，供应商模型）判存在：补种时既不重复插一行，也不把用户解绑过的绑回来。
+  const existingSchedulingPolicyKeys = new Set(
+    config.select({ logicalModelId: schedulingPolicies.logicalModelId, providerModelId: schedulingPolicies.providerModelId })
+      .from(schedulingPolicies).all().map(row => `${row.logicalModelId}\u0000${row.providerModelId}`),
+  )
   const existingRewriteRuleIds = new Set(
     config.select({ id: requestRewriteRules.id }).from(requestRewriteRules).where(inArray(requestRewriteRules.id, REWRITE_RULE_FIXTURES.map(rule => rule.id))).all().map(row => row.id),
   )
@@ -257,11 +309,37 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
   const timestamp = Date.now()
   const batchId = `${timestamp.toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   const providerModelsToInsert = PROVIDER_MODEL_FIXTURES.map((fixture, index) => ({ fixture, index })).filter(({ index }) => !existingProviderModelIds.has(`model_dev_provider_${index + 1}`))
-  // fixture 第一列写的是**模型 id**（人看得懂的那种），而 `scheduling_policies` 的外键指向的是
-  // **数据记录 id**：两边不是同一把钥匙，落库前必须先换一次。
-  const logicalModelRecordIdByModelId = await mapLogicalModelIdsToRecordIds(PROVIDER_MODEL_FIXTURES.map(fixture => fixture[0]))
+  const logicalModelsToInsert = LOGICAL_MODEL_FIXTURES.filter(fixture => !existingLogicalModelModelIds.has(fixture.modelId))
+  // 供应商模型 fixture 第一列写的是**逻辑模型的模型 id**（人看得懂的那种），而
+  // `scheduling_policies` 的外键指向的是逻辑模型的**数据记录 id**：两边不是同一把钥匙，
+  // 落库前必须先换一次。两条待建队列此刻还没有记录 id，先在本机生成、登记进同一张表。
+  const logicalModelRecordIdByModelId = await mapLogicalModelIdsToRecordIds([
+    BUILT_IN_DEFAULT_LOGICAL_MODEL_ID,
+    ...LOGICAL_MODEL_FIXTURES.map(fixture => fixture.modelId),
+  ])
+  for (const fixture of logicalModelsToInsert) logicalModelRecordIdByModelId.set(fixture.modelId, generateId('lm_'))
   const defaultLogicalModelRecordId = logicalModelRecordIdByModelId.get(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
   if (!defaultLogicalModelRecordId) throw new Error('built-in default logical model is missing; cannot seed scheduling policies')
+  // 补种后确定存在的供应商模型：调度绑定只能挂到它们身上，否则外键会指向被用户删掉的行。
+  const providerModelIdsAfterSeed = new Set<string>([
+    ...existingProviderModelIds,
+    ...providerModelsToInsert.map(({ index }) => `model_dev_provider_${index + 1}`),
+  ])
+  // 调度绑定：内建 `default` 兜底收下全部供应商模型（含已软删除的那个），再按用途补上队列成员。
+  const schedulingPolicySeeds = [
+    ...PROVIDER_MODEL_FIXTURES.map((fixture, index) => ({
+      logicalModelId: BUILT_IN_DEFAULT_LOGICAL_MODEL_ID as string,
+      providerModelId: `model_dev_provider_${index + 1}`,
+      priority: fixture[4],
+      softDeleted: index === SOFT_DELETED_PROVIDER_MODEL_INDEX,
+    })),
+    ...LOGICAL_MODEL_MEMBERSHIP_FIXTURES.map(membership => ({
+      logicalModelId: membership.logicalModelId as string,
+      providerModelId: `model_dev_provider_${membership.providerModelIndex + 1}`,
+      priority: membership.priority,
+      softDeleted: false,
+    })),
+  ]
 
   // 两个库、两个事务：SQLite 的事务不能跨文件，配置先写一次、观测数据再写一次。
   config.transaction(transaction => {
@@ -289,6 +367,20 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       { providerId: provider.id, key: 'connection.timeoutMilliseconds', value: '30000', valueType: 'number', updatedTime: timestamp },
     ])).run()
 
+    if (logicalModelsToInsert.length > 0) {
+      // 队列排在 `default` 之后：`sortOrder` 从 1 起，`default`（0）仍是第一列。
+      transaction.insert(logicalModels).values(logicalModelsToInsert.map(fixture => ({
+        id: logicalModelRecordIdByModelId.get(fixture.modelId)!,
+        modelId: fixture.modelId,
+        description: fixture.description,
+        enabled: true,
+        sortOrder: fixture.sortOrder,
+        createdTime: timestamp,
+        updatedTime: timestamp,
+        deletedTime: null,
+      }))).run()
+    }
+
     if (providerModelsToInsert.length > 0) {
       transaction.insert(providerModels).values(providerModelsToInsert.map(({ fixture, index }) => ({
         id: `model_dev_provider_${index + 1}`,
@@ -313,8 +405,28 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
           if (!existingEndpoint) transaction.insert(providerEndpoints).values({ id: endpointId, providerId: fixture[1], protocol, url, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
           transaction.insert(providerModelEndpoints).values({ id: `binding_dev_${index}_${protocol}`, providerModelId: `model_dev_provider_${index + 1}`, providerEndpointId: endpointId, url: null, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
         }
-        transaction.insert(schedulingPolicies).values({ logicalModelId: defaultLogicalModelRecordId, providerModelId: `model_dev_provider_${index + 1}`, priority: fixture[4], weight: 100, enabled: !softDeleted, createdTime: timestamp, updatedTime: timestamp, deletedTime: softDeleted ? timestamp : null }).run()
       }
+    }
+
+    // 调度绑定不跟着 `providerModelsToInsert` 的分支走：队列的成员关系与「供应商模型这次插没插」
+    // 是两件事，模型早就存在（补种）时绑定仍可能缺，得单独补上。
+    const schedulingPoliciesToInsert = schedulingPolicySeeds.filter(seed => {
+      if (!providerModelIdsAfterSeed.has(seed.providerModelId)) return false
+      const logicalModelRecordId = logicalModelRecordIdByModelId.get(seed.logicalModelId)
+      if (!logicalModelRecordId) return false
+      return !existingSchedulingPolicyKeys.has(`${logicalModelRecordId}\u0000${seed.providerModelId}`)
+    })
+    if (schedulingPoliciesToInsert.length > 0) {
+      transaction.insert(schedulingPolicies).values(schedulingPoliciesToInsert.map(seed => ({
+        logicalModelId: logicalModelRecordIdByModelId.get(seed.logicalModelId)!,
+        providerModelId: seed.providerModelId,
+        priority: seed.priority,
+        weight: 100,
+        enabled: !seed.softDeleted,
+        createdTime: timestamp,
+        updatedTime: timestamp,
+        deletedTime: seed.softDeleted ? timestamp : null,
+      }))).run()
     }
 
     // 规则本体独立于供应商模型，因此不跟着 `providerModelsToInsert` 的分支走：模型早就存在
@@ -384,6 +496,9 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       const modelIndex = index % PROVIDER_MODEL_FIXTURES.length
       const providerModelId = `model_dev_provider_${modelIndex + 1}`
       const provider = ALL_PROVIDER_FIXTURES.find(item => item.id === PROVIDER_MODEL_FIXTURES[modelIndex][1])!
+      // 落在哪个逻辑模型：带专属队列的供应商模型轮流落到 `default` 与它的队列上，其余恒为 `default`。
+      const logicalModelQueues = REQUEST_LOGICAL_MODEL_QUEUES[modelIndex]
+      const logicalModelId = logicalModelQueues ? logicalModelQueues[index % logicalModelQueues.length] : BUILT_IN_DEFAULT_LOGICAL_MODEL_ID
       // 那次尝试命中的改写规则。全局规则对所有模型生效，因此恒在；绑定的两条只挂在
       // `model_dev_provider_1` 上，于是只有走到这个模型的请求才带它们。
       const requestRewriteRuleIds = [...GLOBAL_REWRITE_RULE_IDS, ...(BOUND_REWRITE_RULE_IDS_BY_PROVIDER_MODEL[providerModelId] ?? [])]
@@ -392,7 +507,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       const outputTokens = 80 + (index * 29) % 360
       return {
         id: `req_dev_${batchId}_${String(index + 1).padStart(2, '0')}`,
-        logicalModelId: 'default',
+        logicalModelId,
         protocol: index % 3 === 0 ? 'openai-completions' : index % 3 === 1 ? 'openai-responses' : 'anthropic-messages',
         status: failed ? 'failed' : 'success',
         totalDurationMilliseconds: duration,

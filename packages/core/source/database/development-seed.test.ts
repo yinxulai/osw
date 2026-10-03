@@ -39,7 +39,10 @@ describe('development seed', () => {
     expect(await listProviders()).toHaveLength(4)
     expect((await listProviders()).map(provider => provider.name)).toEqual(expect.arrayContaining(['OpenAI', 'Anthropic', 'Volcengine Ark', 'DeepSeek']))
     expect((await listProviders()).every(provider => !provider.name.includes('开发示例'))).toBe(true)
-    expect(await listLogicalModels()).toHaveLength(1)
+    // 除启动时内建的 `default` 外，种子再补两条按用途分的队列，逻辑模型页才有复数可摆。
+    const logicalModels = await listLogicalModels()
+    expect(logicalModels).toHaveLength(3)
+    expect(logicalModels.map(model => model.modelId).sort()).toEqual(['default', 'fast', 'reasoning'])
     // 已删除的供应商 / 模型不进活跃列表，但行确实在表里（`deletedTime` 非空即为证据）。
     expect(await listProviders(true)).toHaveLength(5)
     const deletedProviderRows = getConfigDb().select().from(providers).where(eq(providers.id, 'prov_dev_deleted')).all()
@@ -130,6 +133,8 @@ describe('development seed', () => {
     expect(boundModelAttempts.length).toBeGreaterThan(0)
     expect(boundModelAttempts.every(attempt => attempt.requestRewriteRuleIds.length === 3)).toBe(true)
     expect(flatAttempts.filter(attempt => attempt.providerModelId !== 'model_dev_provider_1').every(attempt => attempt.requestRewriteRuleIds.length === 1)).toBe(true)
+    // 逻辑模型之间真的分流了：请求记录里既有 `default`，也落到专属队列上。
+    expect(new Set(firstBatchRequests.map(request => request.logicalModelId))).toEqual(new Set(['default', 'fast', 'reasoning']))
     expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 
@@ -162,7 +167,8 @@ describe('development seed', () => {
     const firstBatchIds = new Set((await listRequestLogs(200)).map(request => request.id))
     expect(await seedDevelopmentData(secretStore, { allowExisting: true })).toBe(true)
     expect(await listProviders()).toHaveLength(5)
-    expect(await listLogicalModels()).toHaveLength(1)
+    // 重复补种不会把逻辑模型堆出第二份：还是在 `default` 之外那两条。
+    expect(await listLogicalModels()).toHaveLength(3)
     expect(getConfigDb().select({ id: providerModels.id }).from(providerModels).all()).toHaveLength(8)
     // 补种会带上规则，但重复补种不会堆出第二份规则或第二份绑定。
     expect(await listRequestRewriteRules()).toHaveLength(3)
