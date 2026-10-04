@@ -74,14 +74,39 @@ required = ["APTABASE_APP_KEY"]
 
 # ---------------------------------------------------------------- 路由
 #
-# **只有一条**，写在 `source/index.ts` 里，这里只是让部署的人知道域名上有哪些地址在服务：
+# 两条路由，都写在 `source/index.ts` 的入口里（这里只是让部署的人知道域名上服务什么）：
 #
-#   POST /v1/track  客户端契约，路径永久。限流规则盯的是它。
+#   POST /v1/track   客户端契约，路径永久。限流规则盯的是它。
+#   POST /v1/rules/* 共享重写规则目录（list / get / publish / use）。
 #
 # 其余路径一律 404（`/` 也是），所以域名上不会出现「不知道为什么有回应」的地址。
 #
-# 刻意**没有**健康检查接口：域名上「只有一条路径」本身就是最强的信号，而部署后要确认的只有
+# 刻意**没有**健康检查接口：域名上「只有几条路径」本身就是最强的信号，而部署后要确认的只有
 # 「路由注册上了没有」——`GET /v1/track` 的 405 就回答了它。
+
+# ---------------------------------------------------------------- 共享规则目录
+#
+# 目录的数据落在自己的 D1 上（表结构见 `apps/apis/schema.sql`）。绑定拆成两件需要手动做的事，
+# 都只能由有权限的人执行，本地部署命令如下：
+#
+#   # 1) 建库（只做一次）。它回一个 database_id，填进下面的占位符。
+#   pnpm --filter @osw/api exec wrangler d1 create osw-shared-rules
+#
+#   # 2) 建表（幂等，可反复跑；schema 变更时也跑它）。
+#   pnpm --filter @osw/api exec wrangler d1 execute osw-shared-rules \
+#     --remote --file apps/apis/schema.sql
+#
+# 没绑上这个库时目录端点回 500 `not_configured`，**不会**退化成空目录——理由是「看起来正常、
+# 却永远空」的目录会让客户端以为「还没人发布过」，那与「根本没接库」是两件不同的事
+# （见 `source/registry/handler.ts`）。
+#
+# 这里刻意**不放进 `[secrets] required`**：D1 不是密钥，而且遥测端点在缺它时仍应正常工作——
+# 两者各自独立降级。真正的护栏是那句 `not_configured`。
+[[d1_databases]]
+binding = "SHARED_RULES_DB"
+database_name = "osw-shared-rules"
+# ⚠️ 由上面第 1 步回填：`wrangler d1 create` 会打印 database_id。
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 # ---------------------------------------------------------------- 地理位置
 #

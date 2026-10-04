@@ -21,6 +21,7 @@ import {
   requestRewriteRuleRoutes,
   runtimeControlRoutes,
   settingsRoutes,
+  sharedRewriteRuleRoutes,
   storageRoutes,
   telemetryRoutes,
 } from './routes'
@@ -48,6 +49,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(routerRunRoutes)
   .mount(relationRoutes)
   .mount(requestRewriteRuleRoutes)
+  .mount(sharedRewriteRuleRoutes)
   .mount(developmentRoutes)
   .mount(storageRoutes)
   .mount(clientConfigRoutes)

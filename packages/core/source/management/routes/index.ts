@@ -3,4 +3,4 @@ export { settingsRoutes, runtimeControlRoutes, telemetryRoutes, developmentRoute
 export { logRoutes, requestLogRoutes, analyticsRoutes } from './observability'
 export { modelTestRoutes, outboundProxyTestRoutes, providerModelFetchRoutes } from './diagnostics'
 export { routerGraphRoutes, routerRuleRoutes, routerRunRoutes } from './router'
-export { relationRoutes, requestRewriteRuleRoutes } from './relations'
+export { relationRoutes, requestRewriteRuleRoutes, sharedRewriteRuleRoutes } from './relations'

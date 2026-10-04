@@ -15,6 +15,10 @@
  * 而部署后真正要确认的只有「路由注册上了没有」——对 `GET /v1/track` 期待 405 就回答了它，
  * 那是一个只可能来自本 Worker 的答案。
  *
+ * 这个 Worker 还挂着第二个端点：共享重写规则目录（`/v1/rules/*`，见 `source/registry/`，
+ * 入口处按前缀分发）。两者共用同一个域名与同一个 Worker，但各自是完整的一条链路——遥测这套
+ * 校验/转发逻辑对目录一无所知，反之亦然。上面「唯一一条路径」指的是**这个文件的**职责范围。
+ *
  * 为什么必须有这一层，而不是让客户端直接打下游：下游的凭证只应该存在于这里。桌面应用里嵌的
  * 任何凭证都能被解出来，所以「客户端不持有下游凭证」不是可选的组织方式，是唯一的正确形态。
  * 也因此这里**不做客户端鉴权**——它只能提供虚假的安全感（§7）。
@@ -62,7 +66,9 @@ import {
   TELEMETRY_REQUEST_PATH,
   type TelemetryEvent,
 } from '@common/telemetry'
+import { SHARED_REWRITE_RULES_PATH } from '@common/shared-rewrite-rules'
 import { logOutcome } from './log'
+import { createRegistryHandler, type SharedRulesEnv } from './registry/handler'
 import type { Fetcher, TelemetrySink } from './sink'
 import { createAptabaseSink } from './sinks/aptabase'
 
@@ -82,6 +88,18 @@ import { createAptabaseSink } from './sinks/aptabase'
 export interface TelemetryEnv {
   APTABASE_APP_KEY?: string
 }
+
+/**
+ * Worker 的绑定：两个端点各一份。
+ *
+ * 两个字段后面都是可选的，但「可选」在两处含义不同，这是刻意的：
+ *
+ * - `APTABASE_APP_KEY` 缺失 → 遥测端点 500 `not_configured`（老行为）；
+ * - `SHARED_RULES_DB` 缺失 → 目录端点 500 `not_configured`（见 `registry/handler.ts`）。
+ *
+ * 各自独立降级：只配了遥测、还没给目录建库的部署，不该因此把遥测也一起拖垮，反之亦然。
+ */
+export type WorkerEnv = TelemetryEnv & SharedRulesEnv
 
 export type TelemetryHandler = (request: Request, env: TelemetryEnv, now?: number) => Promise<Response>
 
@@ -302,6 +320,7 @@ function methodNotAllowed(allow: string): Response {
 
 // 部署形态：handler 里没有状态，模块作用域上建一次就够，请求之间可以共用。
 const handleRequest = createTelemetryHandler()
+const handleRegistry = createRegistryHandler()
 
 /**
  * Worker 的入口。
@@ -309,8 +328,16 @@ const handleRequest = createTelemetryHandler()
  * 单独写成一个有名的函数而不是直接内联进 `export default`：入口是部署之后最先要去的一行，
  * 它应该能被搜到、能被打断点。运行时还会传第三个参数 `ExecutionContext`，这里用不到，
  * 不声明即可。
+ *
+ * 这里是**两条路由唯一汇合的地方**：`/v1/rules` 前缀交给目录，其余（`/v1/track` 以及所有未知
+ * 路径）交给遥测 handler——unknown 的 404 由它统一给出，所以未知路径的日志格式不会在这里被
+ * 复制一份。前缀比较带上分隔符（`/v1/rules` 或 `/v1/rules/...`），避免把 `/v1/rulesx` 也放进来。
  */
-export function workerFetch(request: Request, env: TelemetryEnv): Promise<Response> {
+export function workerFetch(request: Request, env: WorkerEnv): Promise<Response> {
+  const path = new URL(request.url).pathname
+  if (path === SHARED_REWRITE_RULES_PATH || path.startsWith(`${SHARED_REWRITE_RULES_PATH}/`)) {
+    return handleRegistry(request, path, env)
+  }
   return handleRequest(request, env)
 }
 

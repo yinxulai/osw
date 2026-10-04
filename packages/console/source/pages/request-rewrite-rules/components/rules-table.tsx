@@ -1,4 +1,4 @@
-import { Copy, Globe2, Link2, Pencil, Search, SearchX, Trash2 } from 'lucide-react'
+import { Copy, Globe2, Link2, Pencil, Search, SearchX, Share2, Trash2 } from 'lucide-react'
 import { tableHeaderClass, tableRowClass } from '@/components/table-primitives'
 import { TableStateRow } from '@/components/table-state'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ interface RulesTableProps {
   onStatusFilterChange: (value: RuleStatusFilter) => void
   onEdit: (rule: RequestRewriteRule) => void
   onDuplicate: (rule: RequestRewriteRule) => void
+  onShare: (rule: RequestRewriteRule) => void
   onDelete: (rule: RequestRewriteRule) => void
   onToggle: (rule: RequestRewriteRule, enabled: boolean) => void
 }
@@ -119,6 +120,7 @@ export function RulesTable(props: RulesTableProps) {
                     <div className="flex justify-end gap-0.5">
                       <Button variant="ghost" size="icon-sm" onClick={() => props.onEdit(rule)} title={t('rules.table.edit')}><Pencil /></Button>
                       <Button variant="ghost" size="icon-sm" onClick={() => props.onDuplicate(rule)} title={t('rules.table.duplicate')}><Copy /></Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => props.onShare(rule)} title={t('rules.share')}><Share2 /></Button>
                       <Button variant="ghost" size="icon-sm" onClick={() => props.onDelete(rule)} title={t('rules.table.delete')} className="text-text-tertiary hover:text-text-destructive"><Trash2 /></Button>
                     </div>
                   </TableCell>
