@@ -12,6 +12,7 @@ import { RulePresetMenu } from './components/rule-preset-menu'
 import { RuleStats } from './components/rule-stats'
 import { RulesTable } from './components/rules-table'
 import { createBlankRule, createRuleFromPreset, type RulePreset } from './rule-presets'
+import { shareRequestRewriteRule } from '@/pages/shared-rules/page'
 import { toApiRuleAction, toUiRuleAction, type RequestRewriteRule, type RuleStatusFilter } from './types'
 import type { RequestRewriteRule as ApiRequestRewriteRule, Protocol } from '@common/schemas'
 
@@ -137,6 +138,20 @@ export function RequestRewriteRulesPage() {
     })()
   }
 
+  /**
+   * 分享到社区目录。目录侧不接受响应阶段的动作，所以失败的提示直接用服务端返回的文案。
+   */
+  const shareRule = (rule: RequestRewriteRule) => {
+    void (async () => {
+      const result = await shareRequestRewriteRule(rule.id)
+      if (!result.ok) {
+        toast.error(result.message || t('sharedRules.shareFailed'))
+        return
+      }
+      toast.success(t('sharedRules.shared', { name: result.rule.name }))
+    })()
+  }
+
   return (
     <PageLayout>
       <PageHeader
@@ -170,6 +185,7 @@ export function RequestRewriteRulesPage() {
           onStatusFilterChange={setStatusFilter}
           onEdit={editRule}
           onDuplicate={duplicateRule}
+          onShare={shareRule}
           onDelete={setDeleteTarget}
           onToggle={toggleRule}
         />

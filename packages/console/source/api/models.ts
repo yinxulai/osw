@@ -1,4 +1,5 @@
 import type { LogicalModel, LogicalModelProviderModel, Protocol, ProviderModel, ProviderModelRequestRewriteRule, ProviderModelRouteEndpoint, RequestRewriteRuleTestCase, RequestRewriteRule, SchedulingPolicy } from '@common/schemas'
+import type { SharedRewriteRule, SharedRewriteRuleListInput, SharedRewriteRuleListResult } from '@common/shared-rewrite-rules'
 import { request } from './client'
 
 type CreateLogicalModelInput = { modelId: string; description?: string; enabled?: boolean }
@@ -27,6 +28,19 @@ export const requestRewriteRuleApi = {
   update: (id: string, updates: Partial<RequestRewriteRule>) => request<RequestRewriteRule>('/request-rewrite-rule/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string; affectedProviderModelCount: number }>('/request-rewrite-rule/delete', { id }),
   test: (rule: RequestRewriteRule, testCase: RequestRewriteRuleTestCase) => request<RequestRewriteTestResult>('/request-rewrite-rule/test', { rule, testCase }),
+}
+
+/**
+ * 共享规则目录（`apps/apis` 上的社区目录）。
+ *
+ * `publish` 收的是**本机规则 id**：分享这个动作的对象是「我库里的这条规则」，不是一份临时载荷。
+ * `use` 返回的是**新建好的本机规则**——保存即用，目录这一步之后它就与原生的规则别无二致。
+ */
+export const sharedRewriteRuleApi = {
+  list: (input: SharedRewriteRuleListInput) => request<SharedRewriteRuleListResult>('/shared-rewrite-rule/list', input),
+  get: (id: string) => request<SharedRewriteRule>('/shared-rewrite-rule/get', { id }),
+  publish: (id: string) => request<SharedRewriteRule>('/shared-rewrite-rule/publish', { id }),
+  use: (id: string) => request<RequestRewriteRule>('/shared-rewrite-rule/use', { id }),
 }
 
 export const logicalModelApi = {

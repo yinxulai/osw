@@ -17,6 +17,7 @@ import { RuntimeSettingsPage } from '@/pages/runtime-settings/page'
 import { LogsPage } from '@/pages/logs/page'
 import { RequestLogsPage } from '@/pages/request-logs/page'
 import { RequestRewriteRulesPage } from '@/pages/request-rewrite-rules/page'
+import { SharedRulesPage } from '@/pages/shared-rules/page'
 import { ClientConfigPage } from '@/pages/client-config/page'
 import { ClientConfigDetailPage } from '@/pages/client-config/detail'
 import { RouterPage } from '@/pages/router/page'
@@ -101,6 +102,12 @@ const requestRewriteRulesRoute = createRoute({
   component: RequestRewriteRulesPage,
   staticData: navigationBreadcrumb(routePaths.requestRewriteRules),
 })
+const sharedRulesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.sharedRules,
+  component: SharedRulesPage,
+  staticData: navigationBreadcrumb(routePaths.sharedRules),
+})
 const routerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routePaths.router,
@@ -169,6 +176,7 @@ const routeTree = rootRoute.addChildren([
   modelManagementRoute,
   clientConfigRoute.addChildren([clientConfigIndexRoute, clientConfigDetailRoute]),
   requestRewriteRulesRoute,
+  sharedRulesRoute,
   routerRoute,
   overviewRoute.addChildren([overviewIndexRoute, overviewProviderRoute]),
   requestLogsRoute,

@@ -44,6 +44,7 @@
 | 代理引擎内部结构 | [proxy-engine.md](./proxy-engine.md) | 分层职责、协议无关透传内核、观察/修改扩展接口、协议 × 传输双轴 |
 | 协议兼容转换器 | [protocol-conversion.md](./protocol-conversion.md) | 转换开关、转换矩阵、候选过滤、流式转换、失败语义 |
 | 请求重写规则 | [request-rewrite-rules.md](./request-rewrite-rules.md) | 规则链执行语义、作用位置、排序与失败语义 |
+| 共享重写规则目录 | [shared-rewrite-rules.md](./shared-rewrite-rules.md) | 匿名发布、按使用量排名、保存即用的社区目录：契约、Worker 存储、内核转发、控制台与部署 |
 | 上游出站代理 | [outbound-proxy.md](./outbound-proxy.md) | 三种代理模式、绕过规则、连接测试、错误语义 |
 
 ### 路由
