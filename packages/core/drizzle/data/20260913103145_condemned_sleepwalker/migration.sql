@@ -100,6 +100,7 @@ CREATE TABLE `request_logs` (
 	`status` text NOT NULL,
 	`clientProtocol` text,
 	`transport` text DEFAULT 'http' NOT NULL,
+	`apiKeyId` text,
 	`logicalModelId` text,
 	`totalDurationMilliseconds` integer DEFAULT 0 NOT NULL,
 	`createdTime` integer NOT NULL,
@@ -140,6 +141,7 @@ CREATE INDEX `idx_request_logs_created_time` ON `request_logs` (`createdTime`);-
 CREATE INDEX `idx_request_logs_status_created_time` ON `request_logs` (`status`,`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_logical_model` ON `request_logs` (`logicalModelId`);--> statement-breakpoint
 CREATE INDEX `idx_request_logs_client_protocol` ON `request_logs` (`clientProtocol`);--> statement-breakpoint
+CREATE INDEX `idx_request_logs_api_key_time` ON `request_logs` (`apiKeyId`,`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_request_usages_created_time` ON `request_usages` (`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_runtime_logs_timestamp` ON `runtime_logs` (`timestamp`);--> statement-breakpoint
 CREATE INDEX `idx_runtime_logs_level_timestamp` ON `runtime_logs` (`level`,`timestamp`);
