@@ -6,6 +6,7 @@ import { executeProxyRequest } from '../execution/attempt-executor'
 import { formatTarget } from '../execution/attempt-outcome'
 import { NodeProxyResponse, PROXY_ERROR_HEADERS, proxyErrorBody } from '../response/proxy-response'
 import { createRequestContext } from './request-context'
+import { resolveApiKeyIdentity } from './api-key-auth'
 import { proxyTargetPlanner } from '../planners/target-planner'
 import { matchProtocolEndpoint } from '../protocols/registry'
 import { NO_LANDING_DETAIL, planLandingTargets } from '../routing/landing-planner'
@@ -32,6 +33,12 @@ interface ExchangeIdentity {
 
 /** 入口阶段已解析出的事实；尚未解析到时为 `null`。 */
 interface ExchangeResolution {
+  /**
+   * 服务这次请求的客户端 API Key 记录 id（`ak_*`）；`null` 表示无身份。
+   *
+   * 校验关闭时恒为 `null`（所有请求都算匿名）；校验打开时，只有带对了 Key 才有值。
+   */
+  apiKeyId: string | null
   /**
    * 这次请求路由到的逻辑模型；还没跑到路由求解时为 `null`。
    *
@@ -118,6 +125,8 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   const session = await createProxyRequestSession({
     requestId,
     logicalModelId: null,
+    // 身份在这之后才解析（见下面的闸门），建会话时还不知道，先记「无身份」。
+    apiKeyId: null,
     clientProtocol: null,
     method,
     path,
@@ -140,11 +149,23 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     return recordAbortedExchange({ ...identity, ...resolution }, session)
   }
 
+  // 身份闸门放在**认路径之前**：一个带着错 Key 打错地址的客户端，也该被记成「未授权」
+  // 而不是「路径不认识」——前者是它在攻击/配置错了，后者只是我们没这个接口。
+  // 校验是否生效由这次请求固定的设置快照决定（`apiKeyAuthEnabled`），入口不另读一遍设置。
+  const identityResult = await resolveApiKeyIdentity(req.headers, session.settings.apiKeyAuthEnabled)
+  if (!identityResult.authorized) {
+    console.warn(`[proxy] unauthorized request requestId=${requestId} method=${method} path=${path}`)
+    await reject({ statusCode: 401, errorCode: 'UNAUTHORIZED', errorMessage: 'A valid API key is required' }, { apiKeyId: null, logicalModelId: null, clientProtocol: null, requestBody: NO_REQUEST_BODY, transport: 'http' })
+    return
+  }
+  // 校验关闭时恒为 `null`；校验打开且通过时是那把 Key 的记录 id。此后每个拒绝/中断分支都带上它。
+  const apiKeyId = identityResult.apiKeyId
+
   // 入口匹配一次，同时定下协议、接口与封装描述；后面的模型读写与流式判定都问这个结果。
   const endpoint = matchProtocolEndpoint(method, path)
   if (!endpoint) {
     console.warn(`[proxy] unknown API path method=${method} path=${path} requestId=${requestId}`)
-    await reject({ statusCode: 404, errorCode: 'UNKNOWN_API_PATH', errorMessage: 'Unrecognized API path' }, { logicalModelId: null, clientProtocol: null, requestBody: NO_REQUEST_BODY, transport: 'http' })
+    await reject({ statusCode: 404, errorCode: 'UNKNOWN_API_PATH', errorMessage: 'Unrecognized API path' }, { apiKeyId, logicalModelId: null, clientProtocol: null, requestBody: NO_REQUEST_BODY, transport: 'http' })
     return
   }
   const protocol = endpoint.protocol
@@ -157,18 +178,18 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     // 客户端在正文读完前断开：请求确实到达了代理，但我们既拿不到完整正文，
     // 也没有任何响应能写回客户端，只能记成「已取消」——但不能因此不记。
     console.debug(`[proxy] client request aborted requestId=${requestId} phase=read-body bodyBytes=${requestBody.length}`)
-    await abort({ logicalModelId: null, clientProtocol: protocol, requestBody, transport: endpoint.envelope.resolveTransport(readEnvelope(requestBody)) })
+    await abort({ apiKeyId, logicalModelId: null, clientProtocol: protocol, requestBody, transport: endpoint.envelope.resolveTransport(readEnvelope(requestBody)) })
     return
   }
   const clientRequestId = extractClientRequestId(req.headers)
   console.debug(`[proxy] request accepted requestId=${requestId} clientRequestId=${clientRequestId ?? 'none'} method=${req.method ?? 'POST'} path=${req.url ?? '/'} protocol=${protocol} bodyBytes=${requestBody.length}`)
   const envelopeInput = readEnvelope(requestBody)
   const transport = endpoint.envelope.resolveTransport(envelopeInput)
-  await session.logger.updateRequest({ logicalModelId: null, clientProtocol: protocol, method, path, headers: req.headers, requestBody, transport })
+  await session.logger.updateRequest({ apiKeyId, logicalModelId: null, clientProtocol: protocol, method, path, headers: req.headers, requestBody, transport })
   const modelResult = endpoint.envelope.readModel(envelopeInput)
   if (!modelResult.ok) {
     console.warn(`[proxy] invalid model request requestId=${requestId} protocol=${protocol} reason=${modelResult.reason}`)
-    await reject({ statusCode: 400, errorCode: 'INVALID_MODEL', errorMessage: modelResult.reason }, { logicalModelId: null, clientProtocol: protocol, requestBody, transport })
+    await reject({ statusCode: 400, errorCode: 'INVALID_MODEL', errorMessage: modelResult.reason }, { apiKeyId, logicalModelId: null, clientProtocol: protocol, requestBody, transport })
     return
   }
 
@@ -188,12 +209,12 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     traceId: requestId,
   })
   if (controller.signal.aborted) {
-    await abort({ logicalModelId: route.logicalModelIds[0] ?? null, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    await abort({ apiKeyId, logicalModelId: route.logicalModelIds[0] ?? null, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
   if (route.logicalModelIds.length === 0) {
     console.error(`[proxy] no landing logical model requestId=${requestId} clientModel=${modelResult.model.trim()} mode=${route.mode} definitionVersion=${route.definitionVersion} stopReason=${route.stopReason}`)
-    await reject({ statusCode: 503, errorCode: 'NO_MODEL_CONFIGURED', errorMessage: NO_LANDING_DETAIL }, { logicalModelId: null, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    await reject({ statusCode: 503, errorCode: 'NO_MODEL_CONFIGURED', errorMessage: NO_LANDING_DETAIL }, { apiKeyId, logicalModelId: null, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
   console.debug(`[proxy] route resolved requestId=${requestId} clientModel=${modelResult.model.trim()} mode=${route.mode} definitionVersion=${route.definitionVersion} stopReason=${route.stopReason} landingModels=${route.logicalModelIds.join(',')}`)
@@ -209,15 +230,15 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     const landing = route.logicalModelIds[0]
     if (plan.reason === 'manual-model-unavailable') {
       console.warn(`[proxy] manual provider model unavailable requestId=${requestId} protocol=${route.protocol} detail=${plan.detail}`)
-      await reject({ statusCode: 409, errorCode: 'MANUAL_MODEL_UNAVAILABLE', errorMessage: plan.detail }, { logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
+      await reject({ statusCode: 409, errorCode: 'MANUAL_MODEL_UNAVAILABLE', errorMessage: plan.detail }, { apiKeyId, logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
       return
     }
     console.warn(`[proxy] no available upstream provider: ${method} ${path} (protocol=${route.protocol}, landingModels=${route.logicalModelIds.join(',')}, mode=${route.mode}, definitionVersion=${route.definitionVersion}, requestId=${requestId}, reason=${plan.reason}, detail=${plan.detail})`)
-    await reject({ statusCode: 503, errorCode: 'NO_AVAILABLE_PROVIDER', errorMessage: `No available upstream provider: ${plan.detail}` }, { logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    await reject({ statusCode: 503, errorCode: 'NO_AVAILABLE_PROVIDER', errorMessage: `No available upstream provider: ${plan.detail}` }, { apiKeyId, logicalModelId: landing, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
   if (controller.signal.aborted) {
-    await abort({ logicalModelId: plan.logicalModelId, clientProtocol: route.protocol, requestBody, transport: route.transport })
+    await abort({ apiKeyId, logicalModelId: plan.logicalModelId, clientProtocol: route.protocol, requestBody, transport: route.transport })
     return
   }
 
@@ -226,13 +247,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
   // 到这里落点才定下来，必须补写这一次。成功路径的收尾（`finalizeRequestLog`）只改状态与耗时、
   // 不回填上下文，所以缺了这一次补写，**只有成功请求**的 `logicalModelId` 会永远停在 `null`——
   // 按逻辑模型过滤的统计（成功率、耗时、TPS）随即一条都查不到。
-  await session.logger.updateRequest({ logicalModelId, clientProtocol: route.protocol, method, path, headers: req.headers, requestBody, transport: route.transport })
+  await session.logger.updateRequest({ apiKeyId, logicalModelId, clientProtocol: route.protocol, method, path, headers: req.headers, requestBody, transport: route.transport })
   // 路由结论落进台账：这一步之后界面才谈得上「实时看见路由到了谁、按什么顺序试」。
   live.resolveRoute({ logicalModelId, clientProtocol: route.protocol, transport: route.transport, candidates: plan.targets })
   live.setPhase('connecting')
   const context = createRequestContext({
     requestId,
     logicalModelId,
+    apiKeyId,
     clientProtocol: route.protocol,
     // 客户端跳的形态就是入口解析出来的那一个：换层不换词。
     transport: route.transport,

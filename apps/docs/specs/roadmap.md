@@ -82,7 +82,7 @@
 
 - [x] 服务默认只监听 `127.0.0.1`
 - [x] 网络可达性由监听地址与操作系统防火墙负责：`listenHost` 可由用户改为 `0.0.0.0` / `::` 以暴露给局域网 / WSL / 容器，**不做 Host 头白名单校验**（原「拒绝不允许的 Host」条目已按此决策撤销，见 [security-privacy.md](./security-privacy.md)）
-- [ ] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
+- [x] 本地 API Key（**代理入口向下签发的调用方凭证**）：**已实现**，默认关闭。设置里打开 `apiKeyAuthEnabled` 后 `/v1/*` 校验调用方身份，未带 / 错误 / 停用 / 过期的 Key 一律 `401`；支持多个具名 Key、启用开关与可选过期时间，明文只存宿主密钥存储（与 Provider Key 同一套设施），DB 只留引用且**明文只在创建 / 轮换时回一次**；提供创建 / 轮换 / 删除 / 启停与「按 Key 拆分用量」。见 [security-privacy.md](./security-privacy.md) §「客户端 API Key」，动机见 [#27](https://github.com/yinxulai/osw/issues/27)
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
 - [x] 关闭应用后代理端口释放

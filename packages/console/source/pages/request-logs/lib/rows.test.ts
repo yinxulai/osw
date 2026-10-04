@@ -25,6 +25,7 @@ function live(overrides: Partial<LiveRequest> = {}): LiveRequest {
 function log(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
   return {
     id: 'req_x',
+    apiKeyId: null,
     logicalModelId: 'model_default',
     clientProtocol: 'openai-responses',
     transport: 'http-stream',

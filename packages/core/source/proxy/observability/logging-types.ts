@@ -6,6 +6,12 @@ import type { ClientDelivery, TransportKind, UpstreamTarget } from '@server/prox
 export interface RequestLogContext {
   /** 解析出的逻辑模型；`null` 表示尚未（或未能）解析出逻辑模型。 */
   logicalModelId: string | null
+  /**
+   * 解析出的客户端 API Key 记录 id（`ak_*`）；`null` 表示无身份。
+   *
+   * 与 `logicalModelId` 同节奏：请求建立那一刻通常还是 `null`，等入口校验完 Key 再补齐。
+   */
+  apiKeyId: string | null
   /** 客户端请求协议；`null` 表示连 API 路径都无法识别。 */
   clientProtocol: Protocol | null
   method: string

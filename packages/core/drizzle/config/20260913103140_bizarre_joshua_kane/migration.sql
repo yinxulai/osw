@@ -1,3 +1,14 @@
+CREATE TABLE `api_keys` (
+	`id` text PRIMARY KEY,
+	`name` text NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
+	`keyReference` text NOT NULL,
+	`expiresTime` integer,
+	`createdTime` integer NOT NULL,
+	`updatedTime` integer NOT NULL,
+	`deletedTime` integer
+);
+--> statement-breakpoint
 CREATE TABLE `client_config_versions` (
 	`id` text PRIMARY KEY,
 	`clientKey` text NOT NULL,
@@ -162,6 +173,8 @@ CREATE TABLE `workflows` (
 	`deletedTime` integer
 );
 --> statement-breakpoint
+CREATE INDEX `idx_api_keys_enabled` ON `api_keys` (`enabled`);--> statement-breakpoint
+CREATE INDEX `idx_api_keys_deleted_time` ON `api_keys` (`deletedTime`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_client_config_versions_hash` ON `client_config_versions` (`clientKey`,`filePath`,`contentHash`);--> statement-breakpoint
 CREATE INDEX `idx_client_config_versions_file` ON `client_config_versions` (`clientKey`,`filePath`,`createdTime`);--> statement-breakpoint
 CREATE INDEX `idx_logical_models_enabled` ON `logical_models` (`enabled`);--> statement-breakpoint

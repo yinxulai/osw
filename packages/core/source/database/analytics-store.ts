@@ -2,7 +2,7 @@ import { and, eq, gte, sql, type SQL } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { DAY_MILLISECONDS, formatLatencyBinLabel, formatTrendBucketLabel, resolveHeatBuckets, resolveLatencyBinEdges, resolveTrendBuckets, type AnalyticsBuckets } from '@common/analytics-buckets'
 import { cacheHitRate } from '@common/metrics'
-import type { FailureReasonCategory, RequestSourceStat, RequestStatus, UsageTrendPoint } from '@common/schemas'
+import type { ApiKeyStat, FailureReasonCategory, RequestSourceStat, RequestStatus, UsageTrendPoint } from '@common/schemas'
 import { getDataDb } from './index'
 import { attemptUsages, requestAttempts, requestAttributes, requestLogs, requestUsages } from './data-schema'
 
@@ -281,6 +281,47 @@ export async function getRequestSourceStats(sinceMs: number, limit = 20): Promis
     .limit(limit)
     .all()
   return rows.map(row => ({ source: row.source, category: row.category, requests: row.requests ?? 0, success: row.success ?? 0, failed: row.failed ?? 0, totalTokens: row.totalTokens ?? 0, avgLatencyMs: row.avgLatency ?? 0 }))
+}
+
+/**
+ * 按客户端 API Key 拆分用量。
+ *
+ * 与 {@link getRequestSourceStats} 的差别只在分组键：这里是 `request_logs.apiKeyId` 这一**列**
+ * （不是属性表），所以不必再折一次属性透视；用量仍要走 `request_usages` 的按请求聚合。
+ *
+ * `apiKeyId` 为 `null` 的那一组是匿名请求——功能关着时全部请求都在这里，界面据此显示「未署名」。
+ * `limit` 只管有名有姓的那些：匿名那一组始终保留（它回答「有多少流量没署名」，不该被截掉）。
+ */
+export async function getApiKeyStats(sinceMs: number, limit = 50): Promise<ApiKeyStat[]> {
+  const usages = getDataDb().select({
+    requestId: requestUsages.requestId,
+    tokens: sql<number>`sum(${TOTAL_REQUEST_TOKENS})`.as('tokens'),
+  }).from(requestUsages).where(gte(requestUsages.createdTime, sinceMs)).groupBy(requestUsages.requestId).as('request_usage_pivot')
+  const rows = getDataDb().select({
+    apiKeyId: requestLogs.apiKeyId,
+    requests: sql<number>`count(*)`.as('requests'),
+    success: sql<number>`sum(case when ${requestLogs.status} = 'success' then 1 else 0 end)`.as('success'),
+    failed: sql<number>`sum(case when ${requestLogs.status} = 'failed' then 1 else 0 end)`.as('failed'),
+    totalTokens: sql<number>`coalesce(sum(${usages.tokens}), 0)`.as('totalTokens'),
+    // 进行中的请求还没有结果，不参与平均（与来源统计同一口径）。
+    avgLatency: sql<number>`coalesce(avg(case when ${requestLogs.status} <> 'pending' then ${requestLogs.totalDurationMilliseconds} end), 0)`.as('avgLatency'),
+  }).from(requestLogs)
+    .leftJoin(usages, eq(usages.requestId, requestLogs.id))
+    .where(gte(requestLogs.createdTime, sinceMs))
+    .groupBy(requestLogs.apiKeyId)
+    .orderBy(sql`requests desc`)
+    .all()
+  // 匿名组无条件留下，其余取前 `limit` 个：分组已在 SQL 里按请求数排好，这里只做切分。
+  const anonymous = rows.filter(row => row.apiKeyId === null)
+  const identified = rows.filter(row => row.apiKeyId !== null).slice(0, limit)
+  return [...identified, ...anonymous].map(row => ({
+    apiKeyId: row.apiKeyId,
+    requests: row.requests ?? 0,
+    success: row.success ?? 0,
+    failed: row.failed ?? 0,
+    totalTokens: row.totalTokens ?? 0,
+    avgLatencyMs: row.avgLatency ?? 0,
+  }))
 }
 
 // 提供方统计的时间窗一律用「尝试表自己的 `createdTime`」。

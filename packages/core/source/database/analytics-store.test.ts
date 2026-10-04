@@ -8,7 +8,7 @@ import { createRequestAttempt, createRequestLog, recordAttemptUsage } from './re
 import { requestAttempts, requestLogs } from './data-schema'
 import { createProvider, deleteProvider, listProviders } from './provider-store'
 import { createProviderModelRoute, deleteProviderModelRoute, listProviderModelRoutes } from './model-store'
-import { getLatencyDistribution, getModelStats, getProviderStat, getProviderStats } from './analytics-store'
+import { getApiKeyStats, getLatencyDistribution, getModelStats, getProviderStat, getProviderStats } from './analytics-store'
 
 const EMPTY_USAGE = { inputTokens: null, outputTokens: null, cachedInputTokens: null, cacheCreationInputTokens: null, reasoningTokens: null, rawUsage: null }
 
@@ -409,5 +409,66 @@ describe('analytics is unaffected by deleted configuration', () => {
       providerModelId: fixture.providerModelId,
       providerModelName: fixture.providerModelName,
     }))
+  })
+})
+
+describe('getApiKeyStats', () => {
+  /** 建一条带 apiKeyId 身份的请求，并记下它的用量，供按 Key 拆分统计。 */
+  async function createKeyedRequest(input: { apiKeyId: string | null; status: 'success' | 'failed'; totalDurationMilliseconds: number; inputTokens: number; outputTokens: number }): Promise<void> {
+    const log = await createRequestLog({
+      logicalModelId: 'model_default',
+      clientProtocol: 'openai-responses',
+      transport: 'http',
+      status: input.status,
+      totalDurationMilliseconds: input.totalDurationMilliseconds,
+      apiKeyId: input.apiKeyId,
+    })
+    const attempt = await createRequestAttempt({
+      requestId: log.id,
+      providerId: 'prov_key',
+      providerModelId: 'model_default',
+      providerName: 'key-provider',
+      providerModelName: 'model_default',
+      upstreamProtocol: 'openai-responses',
+      upstreamRequestId: null,
+      url: 'https://example.com/v1/responses',
+      status: 'success',
+      httpStatus: 200,
+      retryable: false,
+      upstreamTransport: 'http',
+      attemptIndex: 0,
+      durationMilliseconds: input.totalDurationMilliseconds,
+      ttftMilliseconds: null,
+    })
+    if (!attempt) throw new Error('expected attempt to be created')
+    await recordAttemptUsage({ attemptId: attempt.id, servesRequest: true, ...EMPTY_USAGE, inputTokens: input.inputTokens, outputTokens: input.outputTokens })
+  }
+
+  it('splits usage per key and always keeps the anonymous group', async () => {
+    await createKeyedRequest({ apiKeyId: 'ak_alpha', status: 'success', totalDurationMilliseconds: 100, inputTokens: 10, outputTokens: 5 })
+    await createKeyedRequest({ apiKeyId: 'ak_alpha', status: 'failed', totalDurationMilliseconds: 300, inputTokens: 20, outputTokens: null })
+    await createKeyedRequest({ apiKeyId: 'ak_beta', status: 'success', totalDurationMilliseconds: 200, inputTokens: 7, outputTokens: 3 })
+    await createKeyedRequest({ apiKeyId: null, status: 'success', totalDurationMilliseconds: 400, inputTokens: 1, outputTokens: 1 })
+
+    const stats = await getApiKeyStats(0)
+    const alpha = stats.find(stat => stat.apiKeyId === 'ak_alpha')
+    const beta = stats.find(stat => stat.apiKeyId === 'ak_beta')
+    const anonymous = stats.find(stat => stat.apiKeyId === null)
+
+    expect(alpha).toMatchObject({ requests: 2, success: 1, failed: 1, totalTokens: 35 })
+    // 平均延迟只算有结果的尝试，但这里都是终态，所以是 (100 + 300) / 2。
+    expect(alpha?.avgLatencyMs).toBe(200)
+    expect(beta).toMatchObject({ requests: 1, success: 1, failed: 0, totalTokens: 10 })
+    // 匿名那一组永远在，回答「有多少流量没署名」。
+    expect(anonymous).toMatchObject({ requests: 1, totalTokens: 2 })
+  })
+
+  it('orders identified keys by request count while keeping the anonymous group last', async () => {
+    await createKeyedRequest({ apiKeyId: 'ak_rare', status: 'success', totalDurationMilliseconds: 10, inputTokens: 1, outputTokens: 1 })
+    await createKeyedRequest({ apiKeyId: 'ak_busy', status: 'success', totalDurationMilliseconds: 10, inputTokens: 1, outputTokens: 1 })
+    await createKeyedRequest({ apiKeyId: 'ak_busy', status: 'success', totalDurationMilliseconds: 10, inputTokens: 1, outputTokens: 1 })
+    await createKeyedRequest({ apiKeyId: null, status: 'success', totalDurationMilliseconds: 10, inputTokens: 1, outputTokens: 1 })
+
+    expect((await getApiKeyStats(0)).map(stat => stat.apiKeyId)).toEqual(['ak_busy', 'ak_rare', null])
   })
 })
