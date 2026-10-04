@@ -7,6 +7,7 @@ import {
   ListOrdered,
   ScrollText,
   SlidersHorizontal,
+  Store,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -27,6 +28,7 @@ export const appNavigationItems: AppNavigationItem[] = [
   { to: routePaths.overview, labelKey: 'nav.page.overview', icon: ChartColumnIncreasing, sectionKey: 'nav.section.data' },
   { to: routePaths.requestLogs, labelKey: 'nav.page.requests', icon: ClipboardList, sectionKey: 'nav.section.data' },
   { to: routePaths.requestRewriteRules, labelKey: 'nav.page.rules', icon: SlidersHorizontal, sectionKey: 'nav.section.advanced' },
+  { to: routePaths.sharedRules, labelKey: 'nav.page.sharedRules', icon: Store, sectionKey: 'nav.section.advanced' },
   { to: routePaths.clientConfig, labelKey: 'nav.page.clientConfig', icon: Wrench, sectionKey: 'nav.section.system' },
   { to: routePaths.logs, labelKey: 'nav.page.logs', icon: ScrollText, sectionKey: 'nav.section.system' },
   { to: routePaths.runtimeSettings, labelKey: 'nav.page.settings', icon: Cog, sectionKey: 'nav.section.system' },
