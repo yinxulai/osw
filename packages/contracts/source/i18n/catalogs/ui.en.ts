@@ -1746,6 +1746,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.section.reliability': 'Reliability',
   'settings.section.data': 'Data',
   'settings.section.sync': 'Cloud sync',
+  'settings.section.developer': 'Developer',
   'settings.footer.allSaved': 'All settings saved',
   'settings.footer.dirty': 'You have unsaved changes',
   'settings.footer.synced': 'Settings are in sync',
@@ -1991,6 +1992,21 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.development.screenshotsProgress': 'Exporting {completed}/{total}',
   'settings.development.screenshotsDone': 'Exported {count} screenshots to {path}',
   'settings.development.screenshotsFailed': 'Screenshot export failed: {message}',
+
+  // 开发者
+  'settings.developer.title': 'Developer',
+  'settings.developer.description': 'Source code, community and the people behind OSW',
+  'settings.developer.repository': 'GitHub repository',
+  'settings.developer.repositoryDescription': 'Star it, read the source, or report an issue',
+  'settings.developer.repositoryAction': 'Open repository',
+  'settings.developer.community': 'Discord community',
+  'settings.developer.communityDescription': 'Ask questions and chat with other users',
+  'settings.developer.communityAction': 'Join Discord',
+  'settings.developer.contributors': 'Contributors',
+  'settings.developer.contributorsDescription': 'Everyone who has contributed code to OSW',
+  'settings.developer.contributorsAction': 'View all',
+  'settings.developer.contributorsLoading': 'Loading contributors…',
+  'settings.developer.contributorsEmpty': 'Contributor avatars are unavailable right now; open GitHub to see them.',
 
   // 服务端只发机器码的枚举值（见 `FAILURE_REASON_CATEGORIES`）
   'failureReason.TIMEOUT': 'Timeout',

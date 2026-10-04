@@ -194,6 +194,7 @@ export const en = {
   },
   footer: 'Source-available under PolyForm Noncommercial · macOS · Windows · Linux',
   footerRepo: 'View the source on GitHub',
+  footerDiscord: 'Join the Discord community',
   footerDocs: 'Documentation',
 }
 

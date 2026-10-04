@@ -186,6 +186,7 @@ export default defineConfig({
     ],
     socials: {
       GitHub: 'https://github.com/yinxulai/osw',
+      Discord: 'https://discord.gg/7TcyC2Bmy',
     },
   },
 })

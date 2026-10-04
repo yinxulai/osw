@@ -16,6 +16,7 @@ import { LogRetentionCard } from './components/log-retention-card'
 import { RouteModeCard } from './components/route-mode-card'
 import { GeneralCard } from './components/general-card'
 import { DevelopmentCard } from './components/development-card'
+import { DeveloperCard } from './components/developer-card'
 import { LiveMetricCard } from './components/live-metric-card'
 import { UpdateCard } from './components/update-card'
 import { useAppearance } from '@/hooks/use-appearance'
@@ -167,6 +168,10 @@ export function RuntimeSettingsPage() {
 
             <SettingsSection title={t('settings.section.sync')}>
               <CloudSyncCard />
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.section.developer')}>
+              <DeveloperCard />
             </SettingsSection>
           </>
         )}

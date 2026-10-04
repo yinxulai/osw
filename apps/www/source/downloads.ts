@@ -16,3 +16,6 @@ export const REPO_URL = 'https://github.com/yinxulai/osw'
 
 /** 使用手册站（Clarify 静态站，见 `apps/docs`），部署在独立子域上。 */
 export const DOCS_URL = 'https://docs.osw.yinxulai.com'
+
+/** 社区入口：Discord 邀请链接，页脚常驻，是用户提问与交流的主场。 */
+export const DISCORD_URL = 'https://discord.gg/7TcyC2Bmy'

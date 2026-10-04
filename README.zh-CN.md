@@ -291,6 +291,8 @@ pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 
 有问题或想法欢迎开 [Issue](https://github.com/yinxulai/osw/issues)。附上版本号、操作系统、请求协议和脱敏后的运行日志会好定位很多 —— 但请**不要**贴 API Key、完整提示词或其他敏感内容。
 
+日常提问、想法交流欢迎加入我们的 [Discord 社区](https://discord.gg/7TcyC2Bmy)。
+
 ---
 
 ## 贡献者

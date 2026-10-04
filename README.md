@@ -291,6 +291,8 @@ Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tie
 
 Issues and ideas are welcome in [Issues](https://github.com/yinxulai/osw/issues). The version number, operating system, protocol and a redacted runtime log go a long way — but please **do not** paste API keys, full prompts or other sensitive content.
 
+For questions, ideas and day-to-day chat, join the community on [Discord](https://discord.gg/7TcyC2Bmy).
+
 ---
 
 ## Contributors

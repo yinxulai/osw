@@ -9,6 +9,7 @@ import { FormRow } from '@/components/form-kit'
 import { useToast } from '@/components/ui/toast'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatBytes } from '@/lib/format-bytes'
+import { REPOSITORY_RELEASES_URL } from '@/lib/external-links'
 import { getPlatformCapabilities } from '@/platform/capabilities'
 
 type StatusBadgeProps = {
@@ -288,7 +289,7 @@ export function UpdateCard() {
   const capabilities = getPlatformCapabilities()
   const handleOpenReleases = async () => {
     if (!updater) {
-      capabilities.openExternal('https://github.com/yinxulai/osw/releases/latest')
+      capabilities.openExternal(REPOSITORY_RELEASES_URL)
       return
     }
     await updater.openReleases()
