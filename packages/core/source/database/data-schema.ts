@@ -85,6 +85,18 @@ export const requestLogs = sqliteTable(
      */
     transport: text('transport').notNull().default('http'),
     /**
+     * 本次请求解析出的客户端 API Key。
+     *
+     * `null` 有两种含义，且都指「没有身份」：这次请求根本没带 Key（功能闸门关着时全部如此），
+     * 或者带了但没通过校验——两种情况都不该编一个身份出来。
+     *
+     * 指向配置库 `api_keys`，**无外键**（跨库）。删掉一把 Key 不改写历史日志：这里留着悬空 id，
+     * 与 `logicalModelId` 的处理一致。Key 本身的名字在配置库里，界面靠一次 `listApiKeys()`
+     * 把 id 映回名字，历史的 Key 名因此始终是「现在」的名字，而不是写入当时的快照
+     * （改名是用户能做的事，而请求日志回答的是「哪把 Key 用了多少」这件事本身）。
+     */
+    apiKeyId: text('apiKeyId'),
+    /**
      * 本次请求解析出的逻辑模型。为 `null` 表示请求在解析出逻辑模型之前
      * 就已经失败（模型非法 / 没有启用的逻辑模型），此时该请求不会产生任何
      * 上游尝试。
@@ -105,6 +117,9 @@ export const requestLogs = sqliteTable(
     index('idx_request_logs_status_created_time').on(table.status, table.createdTime),
     index('idx_request_logs_logical_model').on(table.logicalModelId),
     index('idx_request_logs_client_protocol').on(table.clientProtocol),
+    // 按 API Key 拆账（用量统计）是「一段时间内某把 Key 的全部请求」：
+    // (apiKeyId, createdTime) 一次就把范围收窄到窗口内的行。
+    index('idx_request_logs_api_key_time').on(table.apiKeyId, table.createdTime),
     check('chk_request_logs_status', sql`${table.status} in (${sql.raw(REQUEST_STATUS_VALUES)})`),
   ],
 )

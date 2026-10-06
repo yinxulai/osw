@@ -58,6 +58,7 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
   try {
     await createRequestLog({
       id: input.requestId,
+      apiKeyId: input.apiKeyId,
       logicalModelId: input.logicalModelId,
       clientProtocol: input.clientProtocol,
       // 传输形态是客户端声明的预期，原样落库；上游跳是否同形是尝试行的事。
@@ -90,6 +91,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
 
   const updateRequest = async (context: RequestLogContext) => {
     input.logicalModelId = context.logicalModelId
+    input.apiKeyId = context.apiKeyId
     input.clientProtocol = context.clientProtocol
     input.transport = context.transport
     input.method = context.method
@@ -98,6 +100,7 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
     input.requestBody = context.requestBody
     try {
       await updateRequestLogContext(input.requestId, {
+        apiKeyId: context.apiKeyId,
         logicalModelId: context.logicalModelId,
         clientProtocol: context.clientProtocol,
         transport: context.transport,

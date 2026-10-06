@@ -205,6 +205,21 @@ export function duplicateProviderEndpointError(protocol: string): AppError {
 }
 
 /**
+ * 「已经有一把同名的活跃 API Key 了」。
+ *
+ * 与端点/逻辑模型同一条思路：名字的唯一性由应用层守（见 `api-key-store.ts`）。
+ * `name` 作为 `errorParams` 出去，界面按 `errors.DUPLICATE_RESOURCE` 拼文案。
+ */
+export function duplicateApiKeyNameError(name: string): AppError {
+  return new AppError(
+    'DUPLICATE_RESOURCE',
+    409,
+    `An API key named "${name}" already exists`,
+    { details: { name } },
+  )
+}
+
+/**
  * 「同一个身份已经有一条活跃行了」。
  *
  * 给那些不再由数据库唯一索引把关、改由 store 预检的绑定类关系（模型↔端点的绑定、

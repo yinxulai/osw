@@ -143,6 +143,61 @@ export const ProviderSchema = z.object({
 })
 export type Provider = z.infer<typeof ProviderSchema>
 
+// ========== Client API Key ==========
+
+/**
+ * 一把签发给自己客户端用的 API Key 的**元数据**。
+ *
+ * 这里**没有明文**：明文只在创建那一刻由服务端返回一次，之后落在宿主的密钥存储里
+ * （`@common/secret-store`），库里只有 `keyReference`。因此这个 schema 描述的是
+ * 「这把 Key 是谁、还活着吗」，而不是「这把 Key 是什么」。
+ *
+ * 与 `enabled` 正交的 `expiresTime`：前者是用户主动关，后者是时间到了自动失效。
+ * 客户端的可用性是二者与「未被软删除」的交集。
+ */
+export const ApiKeySchema = z.object({
+  id: z.string().startsWith('ak_'),
+  name: z.string().min(1).max(100),
+  enabled: z.boolean().default(true),
+  /** 密钥存储引用（`key_*`）。不是明文，也不能拿来当密钥用。 */
+  keyReference: z.string(),
+  /** 过期时间（毫秒时间戳）。`null` 表示永不过期。 */
+  expiresTime: z.number().int().nullable(),
+  createdTime: z.number().int(),
+  updatedTime: z.number().int(),
+  deletedTime: z.number().int().nullable(),
+})
+export type ApiKey = z.infer<typeof ApiKeySchema>
+
+/**
+ * 新建 API Key 的返回：元数据 + **一次性明文**。
+ *
+ * 明文只在这一个响应里出现。用户没抄走就得重新签发一把——服务端不再持有它
+ * （密钥存储里那份取不出来回显，见 `security-privacy.md` §本地 API Key）。
+ */
+export const CreatedApiKeySchema = ApiKeySchema.extend({ secret: z.string() })
+export type CreatedApiKey = z.infer<typeof CreatedApiKeySchema>
+
+/**
+ * 按 API Key 的用量统计。
+ *
+ * `apiKeyId` 为 `null` 的那一行是**匿名请求**：没带 Key、或带了但没对上任何一把
+ * （功能关闭时的全部请求都属于这一类）。界面把它显示成「未署名」，让「谁在花我的额度」
+ * 这件事即使没开校验也能看见。
+ *
+ * 字段口径与 {@link RequestSourceStat} 一致：`requests` 是请求数（不是尝试数），
+ * `totalTokens` 是输入 + 输出。
+ */
+export const ApiKeyStatSchema = z.object({
+  apiKeyId: z.string().nullable(),
+  requests: z.number().int().nonnegative(),
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  avgLatencyMs: z.number().nonnegative(),
+})
+export type ApiKeyStat = z.infer<typeof ApiKeyStatSchema>
+
 export const ProviderSettingSchema = z.object({
   providerId: z.string().startsWith('prov_'),
   key: z.string().min(1),
@@ -413,6 +468,18 @@ export const SettingsSchema = z.object({
    */
   cacheAffinityEnabled: z.boolean().default(false),
   /**
+   * 是否校验客户端 API Key。**默认关闭**。
+   *
+   * 关闭时 `/v1/*` 不检查调用方身份——与这个代理一直以来「零配置即可用」的形态一致，
+   * 装在回环上、只有自己能连的机器不受影响。开启后，任何没有携带一把有效 Key 的请求
+   * 都会被拒绝（`UNAUTHORIZED`），这是把代理暴露到 `0.0.0.0` 或对局域网开放时应有的状态
+   * （见 issue #27 与 `apps/docs/specs/security-privacy.md` §本地 API Key）。
+   *
+   * 它是**运行时开关**而不是编译期功能闸门：签发 Key、按 Key 统计用量这两件事永远可用，
+   * 「要不要拦」才是一个用户自己该拿主意的选择。
+   */
+  apiKeyAuthEnabled: z.boolean().default(false),
+  /**
    * 缓存亲和绑定的保持时长。
    *
    * 会话空闲超过这个时长后绑定作废、按新会话处理：provider 侧 prompt cache 的
@@ -522,6 +589,13 @@ export type RawUsage = z.infer<typeof RawUsageSchema>
 
 export const RequestLogSchema = z.object({
   id: z.string().startsWith('req_'),
+  /**
+   * 服务这次请求的客户端 API Key；`null` 表示没有身份（没带 Key，或校验功能关着）。
+   *
+   * 存的是**记录 id**（`ak_*`）而非明文；名字由界面按 id 去 `listApiKeys()` 里查。
+   * Key 被删掉后历史请求仍指向它（悬空 id 允许），与 `logicalModelId` 同理。
+   */
+  apiKeyId: z.string().nullable(),
   /** 为 `null` 表示请求在解析出逻辑模型之前就已经失败。 */
   logicalModelId: z.string().nullable(),
   /** 为 `null` 表示请求连 API 路径都无法识别，不存在「客户端协议」这个事实。 */
@@ -999,6 +1073,13 @@ export type RequestLogEntryAttempt = z.infer<typeof RequestLogEntryAttemptSchema
 
 export const RequestLogEntrySchema = z.object({
   id: z.string().startsWith('req_'),
+  /**
+   * 本次请求解析出的 API Key；`null` 表示没有身份（没带 Key，或功能关着）。
+   *
+   * 身份是**记录 id**（`ak_*`），不是明文——明文从不落库；界面靠一次 `listApiKeys()`
+   * 把 id 映回名字。悬空 id 是允许的：Key 被删掉后历史请求仍指向它，与 `logicalModelId` 同理。
+   */
+  apiKeyId: z.string().nullable(),
   /** 为 `null` 表示请求在解析出逻辑模型之前就已经失败。 */
   logicalModelId: z.string().nullable(),
   /** 为 `null` 表示请求连 API 路径都无法识别。 */
@@ -1254,5 +1335,13 @@ export const AnalyticsSummarySchema = z.object({
   latencyDistribution: z.array(LatencyBucketSchema),
   failureReasons: z.array(FailureReasonStatSchema),
   sourceStats: z.array(RequestSourceStatSchema),
+  /**
+   * 按客户端 API Key 的用量拆分。
+   *
+   * 与 `sourceStats`（按 UA 识别的客户端）是两个不同的问题：那个回答「谁在调」，
+   * 这个回答「哪把 Key 花了多少额度」。功能关着时也会有一行 `apiKeyId: null` 的匿名汇总，
+   * 让「未署名流量占多少」可见。
+   */
+  apiKeyStats: z.array(ApiKeyStatSchema),
 })
 export type AnalyticsSummary = z.infer<typeof AnalyticsSummarySchema>

@@ -11,6 +11,7 @@ import { OutboundProxyCard } from './components/outbound-proxy-card'
 import { CloudSyncCard } from './components/cloud-sync-card'
 import { FailoverCard } from './components/failover-card'
 import { CacheAffinityCard } from './components/cache-affinity-card'
+import { ApiKeyAuthCard } from './components/api-key-auth-card'
 import { DataDirectoryCard } from './components/data-directory-card'
 import { LogRetentionCard } from './components/log-retention-card'
 import { RouteModeCard } from './components/route-mode-card'
@@ -132,6 +133,7 @@ export function RuntimeSettingsPage() {
                 onProxyUrlChange={value => service.updateField('outboundProxyUrl', value)}
                 onBypassChange={value => service.updateField('outboundProxyBypass', value)}
               />
+              <ApiKeyAuthCard settings={service.settings} onUpdate={service.updateField} />
             </SettingsSection>
 
             <SettingsSection title={t('settings.section.routing')}>

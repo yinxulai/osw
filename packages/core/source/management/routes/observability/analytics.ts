@@ -16,6 +16,7 @@ import {
   getLatencyDistribution,
   getFailureReasons,
   getRequestSourceStats,
+  getApiKeyStats,
   type ModelStat as DatabaseModelStat,
 } from '@server/database/analytics-store'
 import { HttpRouter } from '@server/http-router'
@@ -40,7 +41,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
   const buckets = resolveAnalyticsBuckets(range)
   const { sinceMs } = buckets
 
-  const [trend, heat, summary, providerStats, modelStats, latencyDistribution, failureReasons, sourceStats] = await Promise.all([
+  const [trend, heat, summary, providerStats, modelStats, latencyDistribution, failureReasons, sourceStats, apiKeyStats] = await Promise.all([
     getUsageTrend(buckets),
     getUsageHeat(buckets),
     getStatsSummary(sinceMs),
@@ -52,6 +53,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     getLatencyDistribution(sinceMs, buckets.latencyTargetBins),
     getFailureReasons(sinceMs),
     getRequestSourceStats(sinceMs),
+    getApiKeyStats(sinceMs),
   ])
 
   const totalProviderAttempts = providerStats.reduce((total, provider) => total + provider.attempts, 0)
@@ -88,6 +90,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     latencyDistribution: latencyWithPercent,
     failureReasons: failureWithPercent,
     sourceStats,
+    apiKeyStats,
   }
 
   sendSuccess(res, response)

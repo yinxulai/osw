@@ -30,6 +30,8 @@ export const routePaths = {
   requestLogs: '/request-logs',
   /** 请求重写 */
   requestRewriteRules: '/request-rewrite-rules',
+  /** API Key（客户端访问凭据） */
+  apiKeys: '/api-keys',
   /** 客户端配置 */
   clientConfig: '/client-config',
   /** 客户端配置 · 单客户端详情编辑（带 `$clientKey` 路径参数） */

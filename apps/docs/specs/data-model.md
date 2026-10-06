@@ -78,7 +78,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 
 ### 2.2 表清单
 
-**配置库 `config-<v>.db`（12 张，全部是配置实体，用户资产）**：
+**配置库 `config-<v>.db`（15 张，全部是配置实体，用户资产）**：
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -91,9 +91,12 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `protocol_converters` | ProviderModel 端点允许的客户端协议转换器 | 配置实体 |
 | `logical_models` | 对外暴露的逻辑模型 | 配置实体 |
 | `scheduling_policies` | 逻辑模型的调度策略 | 配置实体 |
+| `api_keys` | 客户端 API Key 元数据（明文在密钥存储） | 配置实体 |
 | `request_rewrite_rules` | 可复用的请求/响应改写规则 | 配置实体 |
 | `provider_model_request_rewrite_rules` | ProviderModel 与改写规则的启用关系 | 配置实体 |
-| `workflows` | 路由定义（工作流图与规则表） | 配置实体 |
+| `workflows` | 路由定义（工作流图） | 配置实体 |
+| `route_rule_sets` | 路由定义（规则表，与图各自独立版本化） | 配置实体 |
+| `client_config_versions` | 客户端配置版本内容哈希 | 配置实体 |
 
 这个库里的外键全部指向自己。
 
@@ -139,6 +142,7 @@ erDiagram
   provider_models ||--o{ provider_model_request_rewrite_rules : enables
   request_rewrite_rules ||--o{ provider_model_request_rewrite_rules : applied_by
   request_logs ||--o{ request_attributes : annotates
+  api_keys ||..o{ request_logs : attributes
 
   settings {
     text key PK
@@ -250,6 +254,7 @@ erDiagram
 
   request_logs {
     text id PK
+    text apiKeyId
     text logicalModelId
     text clientProtocol
     text transport
@@ -372,6 +377,17 @@ erDiagram
     integer version
     text name
     text definition
+    integer createdTime
+    integer updatedTime
+    integer deletedTime
+  }
+
+  api_keys {
+    text id PK
+    text name
+    text keyReference
+    boolean enabled
+    integer expiresTime
     integer createdTime
     integer updatedTime
     integer deletedTime
@@ -668,11 +684,12 @@ CREATE TABLE provider_model_health (
 
 ### 3.9 `request_logs`
 
-请求日志只保存请求身份、客户端协议、客户端声明的传输形态、状态、逻辑模型和总耗时。Token、缓存等可聚合数值不放入 `request_logs`，分别存入 `request_usages` 和 `attempt_usages`，避免持续修改日志主表。
+请求日志只保存请求身份（含客户端 API Key）、客户端协议、客户端声明的传输形态、状态、逻辑模型和总耗时。Token、缓存等可聚合数值不放入 `request_logs`，分别存入 `request_usages` 和 `attempt_usages`，避免持续修改日志主表。
 
 ```sql
 CREATE TABLE request_logs (
   id TEXT PRIMARY KEY,
+  apiKeyId TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'success', 'failed', 'cancelled')),
   clientProtocol TEXT,
   transport TEXT NOT NULL DEFAULT 'http',
@@ -695,9 +712,15 @@ CREATE INDEX idx_request_logs_logical_model
 
 CREATE INDEX idx_request_logs_client_protocol
   ON request_logs(clientProtocol);
+
+-- 按 Key 拆分用量是这个索引唯一的用途：分组键在前、时间窗在后。
+CREATE INDEX idx_request_logs_api_key_time
+  ON request_logs(apiKeyId, createdTime);
 ```
 
 `clientProtocol` 与 `logicalModelId` 均可为空：请求可能在协议识别或模型解析之前就被拒掉，但它同样是用户真实发出的请求，必须留下记录。为空表达的是「还没走到那一步」，不是「没有这一列」。
+
+`apiKeyId` 是**解析出的客户端 API Key 记录 id**（`ak_*`，见 [security-privacy.md](./security-privacy.md) §「客户端 API Key」），指向配置库 `api_keys` 表——但**不建跨库外键**（两个库不同文件，见 §2.1），也不建库内外键。为空是常态：校验关着时全部请求都是匿名；校验开着但请求在身份解析之前就被拒（协议识别失败等）也留空。`null` 因此是有意义的值（「未署名」），按它筛选不能当真值判断吞掉。键的历史引用不回填键的名字——名字是活的、可能被改，展示时按 id 现查当前名字，查不到就显示「已删除的 Key」。
 
 `transport` 是**请求进入代理时就已经定下的预期**（客户端要流式还是非流式，见 [proxy-engine.md](./proxy-engine.md) §1.1）——它是客户端跳的形态，取自入口对请求体的解析，因此属于请求级事实；上游跳实际是什么形态是**上游视角的事实**，写在 `request_attempts.upstreamTransport` 上。两者不相等不是「上游不配合」这种可容错的小事，而是「本次传输无法按声明兑现」——代理不自己攒出一份整包来弥合（见 [proxy-engine.md](./proxy-engine.md) §1.2）。`totalDurationMilliseconds` 是从收到请求到写完响应的总耗时，它无法由尝试耗时稳定推导（尝试之间还有调度与等待），因此落在日志主表。
 
@@ -1026,7 +1049,7 @@ CREATE INDEX idx_request_attempts_created_time
 - `errorCode`；
 - `createdTime`。
 
-### 3.13 `request_attributes`、`runtime_logs`、`request_rewrite_rules`、`provider_model_request_rewrite_rules` 与 `workflows`
+### 3.13 `request_attributes`、`runtime_logs`、`request_rewrite_rules`、`provider_model_request_rewrite_rules`、`workflows` 与 `api_keys`
 
 ```sql
 CREATE TABLE request_attributes (
@@ -1155,6 +1178,25 @@ CREATE INDEX idx_route_rule_sets_version
 
 CREATE INDEX idx_route_rule_sets_updated_time
   ON route_rule_sets(updatedTime);
+
+-- 客户端 API Key 元数据。明文不在这里：落在宿主密钥存储里，
+-- 本表只保存指向它的 keyReference，见 security-privacy.md §「客户端 API Key」。
+CREATE TABLE api_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  keyReference TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  expiresTime INTEGER,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER
+);
+
+CREATE INDEX idx_api_keys_enabled
+  ON api_keys(enabled);
+
+CREATE INDEX idx_api_keys_deleted_time
+  ON api_keys(deletedTime);
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
@@ -1162,6 +1204,7 @@ CREATE INDEX idx_route_rule_sets_updated_time
 - `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
 - `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
 - `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
+- `api_keys` 保存**客户端 API Key 的元数据**（名称、启用开关、可选过期时间），明文存在宿主密钥存储里、只在本表留一个 `keyReference`。名称唯一性由应用层把关（不做成索引），删除是软删、行保留供请求日志的 `apiKeyId` 历史引用解析。校验方向是「拿客户端递来的明文反查属于哪把 Key」而非「从库里取明文比对」，因此库里没有明文可读。完整语义见 [security-privacy.md](./security-privacy.md) §「客户端 API Key」。
 
 ## 4. JSON 文档版本
 

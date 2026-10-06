@@ -27,6 +27,7 @@ interface LogOverrides {
 function logOf(overrides: LogOverrides = {}): RequestLogEntry {
   return {
     id: 'req_test',
+    apiKeyId: null,
     logicalModelId: 'default',
     clientProtocol: 'openai-responses',
     transport: 'http-stream',

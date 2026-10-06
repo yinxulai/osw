@@ -48,6 +48,7 @@ function requestLoggingInput() {
   return {
     requestId: CLIENT_REQUEST_ID,
     logicalModelId: 'default',
+    apiKeyId: null,
     clientProtocol: 'openai-completions' as const,
     method: 'POST',
     path: '/v1/chat/completions',

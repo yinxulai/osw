@@ -21,7 +21,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
  *      `foreign_keys`）。跨库那两条已经删掉了，见数据库的说明。
  *   4. **「不许重名」这类规则只写在应用层，不写成唯一索引。** 这些表的每一行都有一个
  *      服务端生成的记录 id（`prov_` / `model_` / `end_` / `pme_` / `conv_` / `lm_` / `rule_` /
- *      `workflow_`），身份是它，不是用户起的名字；名字只在「当前可用（未删除）的行之间」
+ *      `workflow_` / `ak_`），身份是它，不是用户起的名字；名字只在「当前可用（未删除）的行之间」
  *      不许重复，而这句话的主语是活着的那些行。写成 DB 约束就变成「这个值不许第二次出现」，
  *      删除路径为了满足它就不得不打标让位、改名腾位，用户看得见的「删掉再建一个同名的」
  *      就成了一次莫名其妙的冲突。所以：**删掉的行让出名字、规则由 store 回答，
@@ -392,6 +392,52 @@ export const schedulingPolicies = sqliteTable(
   ],
 )
 
+/**
+ * 客户端 API Key。
+ *
+ * 代理默认不校验调用方身份：谁能连上 `/v1/*`，就花谁的上游额度（见 issue #27）。
+ * 这张表存放用户为「调用本机代理的客户端」签发的一组 Key——可以给不同客户端、不同团队
+ * 各发一把，便于按 Key 统计用量、单独吊销。是否真的启用校验由**功能闸门**
+ * `API_KEY_AUTH_ENABLED` 决定（见 `@common/features`）；闸门关着时这张表可以配、
+ * 但这列 `enabled` 与它都不参与请求路径。
+ *
+ * 两处刻意的取舍：
+ *
+ * 1. **明文不落库**。库里只有 `keyReference`，真正的密钥在宿主的密钥存储里
+ *    （App 是 `safeStorage`，CLI 是加密文件，见 `@common/secret-store`）。这与上游供应商
+ *    凭据走的是同一条路：数据库可以被备份、被同步、被随手打开，密钥不能跟着走。
+ * 2. **`lastUsedTime` 不在这里**。它每用一个请求就要写一次，而这属于配置库——
+ *    「不许在这里放每次请求都写的东西」是本文件头的第 2 条不变量。最近使用时间从
+ *    `request_logs.apiKeyId` 现算（见分析库），不在此冗余。
+ */
+export const apiKeys = sqliteTable(
+  'api_keys',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /**
+     * 密钥存储里的引用（`key_*`）。取回明文时用它换，库本身永远看不到明文。
+     */
+    keyReference: text('keyReference').notNull(),
+    /**
+     * 过期时间（毫秒时间戳）。`null` 表示永不过期。
+     *
+     * 与 `enabled` 正交：`enabled` 是用户主动开关，过期是时间到了自动失效。
+     * 两者都判「这把 Key 还能不能用」，但语义不同，因此各占一列。
+     */
+    expiresTime: integer('expiresTime'),
+    createdTime: integer('createdTime').notNull(),
+    updatedTime: integer('updatedTime').notNull(),
+    deletedTime: integer('deletedTime'),
+  },
+  table => [
+    index('idx_api_keys_enabled').on(table.enabled),
+    index('idx_api_keys_deleted_time').on(table.deletedTime),
+  ],
+)
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect
 export type ProviderRow = typeof providers.$inferSelect
 export type ProviderSettingRow = typeof providerSettings.$inferSelect
 export type ProviderEndpointRow = typeof providerEndpoints.$inferSelect
