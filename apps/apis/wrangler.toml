@@ -10,7 +10,7 @@
 #   Deploy  `npx wrangler deploy`
 #   Version `npx wrangler versions upload`
 
-name = "osw-telemetry"
+name = "osw-apis"
 main = "source/index.ts"
 
 # 固定兼容日期，不跟最新：Worker 的运行期行为以它为界，改它等于悄悄换一次运行时语义。
@@ -35,7 +35,7 @@ routes = [
 #   [apis] status=500 error=not_configured missing=APTABASE_APP_KEY
 #
 # 2xx 不打：成功行会按「安装数 × 频率」增长，而它回答不了任何问题。
-# 要查历史日志：Cloudflare 后台 → Workers & Pages → osw-telemetry → Logs；
+# 要查历史日志：Cloudflare 后台 → Workers & Pages → osw-apis → Logs；
 # 要看实时的：在 `apps/apis` 里跑 `pnpm exec wrangler tail`。
 enabled = true
 
