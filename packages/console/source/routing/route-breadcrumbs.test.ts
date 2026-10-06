@@ -38,12 +38,28 @@ describe('navigationBreadcrumb', () => {
     expect(data.breadcrumb?.to).toBe(routePaths.requestLogs)
   })
 
-  it('侧栏里没有这一页时直接抛错（不允许出现没有父级的面包屑）', () => {
-    expect(() => navigationBreadcrumb('/not-a-page' as never)).toThrow(/Missing navigation item/)
+  /*
+   * 下面两条守的是同一件事的两个面：**侧栏表是面包屑的唯一来源**。
+   *
+   * `navigationBreadcrumb` 的参数类型是 `AppNavPath`——只有侧栏一级导航那几个页面。
+   * 「侧栏里没有的页面不能做面包屑」因此在类型层面就已经成立，运行时的 `throw`（找不到
+   * 表项时抛出）只是它的兜底。所以这两条用例都把「参数类型上通不过」写成 `@ts-expect-error`：
+   * 它才是真正的判据，而 `expect(…).toThrow()` 断言的是兜底那一层。
+   */
+  it('侧栏里没有的路径不能做面包屑（类型上就传不进来，运行时再兜一层）', () => {
+    // `@ts-expect-error` 而非 `as never`：这句调用本来就该编译不过，
+    // 把它显式写出来，将来参数类型被放宽时会立刻报「多余的抑制指令」而不是静默通过。
+    // @ts-expect-error 任意字符串都不是 `AppNavPath`
+    expect(() => navigationBreadcrumb('/not-a-page')).toThrow(/Missing navigation item/)
   })
 
   it('下钻页没有侧栏入口，所以不能拿它做面包屑', () => {
+    // 下钻页（`/overview/$providerId`）在 `AppNavPath` 的定义里被显式排除，
+    // 因此这句调用同样是编译期错误。运行时的兜底同样会抛。
+    // @ts-expect-error 下钻页在 `AppNavPath` 的排除列表里
     expect(() => navigationBreadcrumb(routePaths.overviewProvider)).toThrow()
+    // 再钉一遍事实本身：侧栏表里确实没有它。
+    expect(appNavigationItems.map(item => item.to)).not.toContain(routePaths.overviewProvider)
   })
 })
 

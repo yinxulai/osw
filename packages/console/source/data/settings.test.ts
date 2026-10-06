@@ -88,7 +88,7 @@ describe('useSettingsActions', () => {
   it('refresh 重取设置', async () => {
     state.value = settings()
     const { client, wrapper } = createQueryFixture()
-    const view = renderHook(() => useSettings(), { wrapper })
+    renderHook(() => useSettings(), { wrapper })
     await waitFor(() => expect(state.requests).toBe(1))
 
     const actions = renderHook(() => useSettingsActions(), { wrapper })

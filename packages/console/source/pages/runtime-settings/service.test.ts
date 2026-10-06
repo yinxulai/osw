@@ -30,6 +30,7 @@ const hooks = vi.hoisted(() => ({
   pruneLogs: vi.fn(),
   seedDevelopmentData: vi.fn(),
   exportScreenshots: vi.fn(),
+  developmentSeedArgs: new Array<() => Promise<void>>(),
 }))
 
 vi.mock('./hooks/use-settings-form', () => ({ useSettingsForm: () => hooks.form }))
@@ -46,8 +47,6 @@ vi.mock('./hooks/use-screenshot-export', () => ({
   useScreenshotExport: () => ({ exportScreenshots: hooks.exportScreenshots, exporting: true, progress: { current: 2, total: 5 } }),
 }))
 vi.mock('./hooks/use-storage-usage', () => ({ useStorageUsage: () => 1024 }))
-
-hooks.developmentSeedArgs = [] as Array<() => Promise<void>>
 
 describe('useRuntimeSettingsService', () => {
   it('把表单状态按页面现有契约摊平（字段名就是页面用的名字）', () => {

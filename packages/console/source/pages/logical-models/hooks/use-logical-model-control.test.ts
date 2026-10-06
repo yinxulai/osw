@@ -230,7 +230,7 @@ describe('健康与指标透传', () => {
 
     const { result } = setup()
 
-    expect(result.current.proxyStatus.running).toBe(true)
+    expect(result.current.proxyStatus?.running).toBe(true)
     expect(result.current.proxyBaseUrl).toBe('http://127.0.0.1:19300/v1')
     expect(result.current.manualModelId).toBe('pm_b')
     expect(result.current.mode).toBe('manual')

@@ -2,6 +2,7 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProviderModelRoute } from '@common/schemas'
 import { createQueryFixture, provider, providerHealth, providerModelHealth } from '@/test-support'
 import { useModelManagementUiStore } from '../store'
 import { modelKeys, useModelData } from './use-model-data'
@@ -200,7 +201,7 @@ describe('就地改写', () => {
     await waitFor(() => expect(result.current.models).toHaveLength(1))
 
     act(() => {
-      result.current.setModels([{ ...(client.getQueryData(modelKeys.all) as never[])[0], modelName: 'renamed' }])
+      result.current.setModels([{ ...(client.getQueryData<ProviderModelRoute[]>(modelKeys.all) ?? [])[0], modelName: 'renamed' }])
     })
 
     expect((client.getQueryData<{ modelName: string }[]>(modelKeys.all) ?? [])[0].modelName).toBe('renamed')

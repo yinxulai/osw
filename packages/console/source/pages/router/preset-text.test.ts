@@ -189,7 +189,6 @@ describe('画布节点类型注册表', () => {
 describe('面板字段候选口径', () => {
   const field = (path: string, valueType: SchemaFieldDescriptor['valueType']): SchemaFieldDescriptor => ({
     path,
-    title: path,
     valueType,
     sourceNodeId: 'input',
     sourcePort: 'out',

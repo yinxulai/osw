@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useIsMobile } from './use-mobile'
 
 /*
@@ -10,37 +10,66 @@ import { useIsMobile } from './use-mobile'
  *
  * 全局 setup 里的 `matchMedia` shim 只是「永远不匹配」的静态替身，收不到事件；
  * 这里换一个能派发 `change` 的替身，才走得到真实的订阅回调。
+ *
+ * 替身直接实现 `MediaQueryList`（而不是只摆出用得到的几个字段再强转）：它多出来的
+ * `listeners` / `emit` 是给用例观察和派发用的，剩下七个成员一律照 DOM 的真实签名写，
+ * 于是 `window.matchMedia` 拿到的就是一个货真价实的 `MediaQueryList`。
  */
 
-interface FakeMediaQueryList {
-  matches: boolean
-  media: string
-  listeners: Set<() => void>
-  emit: () => void
+/** 真实 `addEventListener('change', …)` 回调的形状；生产代码传的零参函数也属于它。 */
+type ChangeListener = (event: Event) => void
+
+interface FakeMediaQueryList extends MediaQueryList {
+  readonly listeners: Set<ChangeListener>
+  readonly emit: () => void
 }
 
-const media = vi.hoisted(() => ({ current: null as FakeMediaQueryList | null }))
+/** `media.current` 指向当前这次 `matchMedia()` 造出来的替身。 */
+let media: { current: FakeMediaQueryList | null } = { current: null }
 
 function setWidth(width: number) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
 }
 
+function createMediaQueryList(query: string): FakeMediaQueryList {
+  const listeners = new Set<ChangeListener>()
+  const emit = (): void => {
+    // 真实事件会带一个 `MediaQueryListEvent`；用例只关心「回调被叫到了」。
+    for (const listener of listeners) listener(new Event('change'))
+  }
+  return {
+    matches: false,
+    media: query,
+    onchange: null,
+    // 两个老接口已被 DOM 标成废弃，但仍是 `MediaQueryList` 的成员，摆上空实现即可。
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: (type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+      if (!listener) return
+      listeners.add(typeof listener === 'function' ? listener : event => listener.handleEvent(event))
+      void type
+      void options
+    },
+    removeEventListener: (type: string, listener: EventListenerOrEventListenerObject | null): void => {
+      if (typeof listener === 'function') listeners.delete(listener)
+      void type
+    },
+    dispatchEvent: (): boolean => {
+      emit()
+      return true
+    },
+    listeners,
+    emit,
+  }
+}
+
 beforeEach(() => {
   setWidth(1024)
-  window.matchMedia = ((query: string) => {
-    const listeners = new Set<() => void>()
-    const list: FakeMediaQueryList = {
-      matches: false,
-      media: query,
-      listeners,
-      emit: () => listeners.forEach(listener => listener()),
-    }
-    const target = list as unknown as MediaQueryList & { addEventListener: (event: string, listener: () => void) => void; removeEventListener: (event: string, listener: () => void) => void }
-    target.addEventListener = (_event, listener) => void listeners.add(listener)
-    target.removeEventListener = (_event, listener) => void listeners.delete(listener)
+  window.matchMedia = (query: string) => {
+    const list = createMediaQueryList(query)
     media.current = list
-    return target
-  }) as typeof window.matchMedia
+    return list
+  }
 })
 
 afterEach(() => {

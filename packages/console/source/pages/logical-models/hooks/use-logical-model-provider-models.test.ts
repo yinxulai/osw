@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { useQuery } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LogicalModelProviderModel } from '@common/schemas'
 import { createQueryFixture } from '@/test-support'

@@ -30,7 +30,7 @@ function Wrapper(props: WrapperProps) {
 }
 
 function log(overrides: Partial<LogEntry> = {}): LogEntry {
-  return { id: 'log_1', level: 'info', message: 'hello', timestamp: 1_700_000_000_000, ...overrides }
+  return { id: 1, level: 'info', message: 'hello', timestamp: 1_700_000_000_000, ...overrides }
 }
 
 beforeEach(() => {
@@ -121,8 +121,8 @@ describe('日志表格', () => {
   it('每条日志画成一行：级别写成大写标签、消息原样、时间不空', () => {
     renderTable({
       logs: [
-        log({ id: 'a', level: 'warn', message: '慢请求', timestamp: 1_700_000_000_000 }),
-        log({ id: 'b', level: 'debug', message: '细节' }),
+        log({ id: 101, level: 'warn', message: '慢请求', timestamp: 1_700_000_000_000 }),
+        log({ id: 102, level: 'debug', message: '细节' }),
       ],
     })
 

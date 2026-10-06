@@ -24,10 +24,7 @@ const state = vi.hoisted(() => ({
 let measuredHeight = 0
 
 class FakeResizeObserver {
-  private readonly callback: () => void
-
   constructor(callback: () => void) {
-    this.callback = callback
     state.observers.push(callback)
   }
 

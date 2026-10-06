@@ -60,7 +60,12 @@ async function runCli(args: string[]): Promise<number> {
     if (Date.now() > deadline) throw new Error('the entry point never settled an exit code')
     await new Promise(resolve => setTimeout(resolve, 5))
   }
-  return process.exitCode
+  // `process.exitCode` 的类型允许字符串（`node --eval` 一类用法注入的），而入口只用数字：
+  // 这里按类型收窄，而不是把它 `Number()` 转一遍——转出来会把「入口写了字符串」
+  // 这种真实的错当成合法值放过去。
+  const code = process.exitCode
+  if (typeof code !== 'number') throw new Error(`the entry point set a non-numeric exit code: ${String(code)}`)
+  return code
 }
 
 beforeEach(() => {

@@ -64,7 +64,7 @@ function rule(overrides: Partial<RequestRewriteRule> = {}): RequestRewriteRule {
     scope: 'model',
     schemaVersion: 1,
     source: 'user',
-    match: {},
+    match: { clientProtocols: [], upstreamProtocols: [] },
     actions: [{ type: 'header-set', stage: 'request', name: 'x-a', value: '1' }],
     testCases: [],
     createdTime: 1,
@@ -281,7 +281,7 @@ describe('添加规则', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '添加规则' }))
     const dialog = await screen.findByRole('dialog')
-    const confirm = within(dialog).getByRole('button', { name: '添加所选规则' })
+    const confirm = within(dialog).getByRole<HTMLButtonElement>('button', { name: '添加所选规则' })
     expect(within(dialog).getByText('已选择 0 条')).toBeTruthy()
     expect(confirm.disabled).toBe(true)
 

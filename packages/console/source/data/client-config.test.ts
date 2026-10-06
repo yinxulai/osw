@@ -317,7 +317,7 @@ describe('useClientConfigOverview', () => {
 describe('useClientConfigFill', () => {
   it('不带 clientKey 就是全部客户端，并让概览重新取一次', async () => {
     const { wrapper } = createQueryFixture()
-    const overview = renderHook(() => useClientConfigOverview(), { wrapper })
+    renderHook(() => useClientConfigOverview(), { wrapper })
     await waitFor(() => expect(state.overviewCalls).toBe(1))
 
     const fill = renderHook(() => useClientConfigFill(), { wrapper })

@@ -98,8 +98,8 @@ describe('供应商接口', () => {
   })
 
   it('导入导出：导出带选项，导入把整个包原样塞进 bundle 字段', async () => {
-    await providerTransferApi.export({ providerIds: ['prov_1'], includeApiKey: true })
-    expect(lastCall()).toEqual({ path: '/provider/export', body: { providerIds: ['prov_1'], includeApiKey: true } })
+    await providerTransferApi.export({ providerIds: ['prov_1'], includeApiKeys: true })
+    expect(lastCall()).toEqual({ path: '/provider/export', body: { providerIds: ['prov_1'], includeApiKeys: true } })
 
     await providerTransferApi.import({ version: 1, providers: [] })
     expect(lastCall()).toEqual({ path: '/provider/import', body: { bundle: { version: 1, providers: [] } } })
@@ -289,11 +289,11 @@ describe('运行时与设置接口', () => {
   })
 
   it('出站代理试连带上完整四元组', async () => {
-    await outboundProxyApi.test({ mode: 'manual', proxyUrl: 'http://127.0.0.1:7890', bypass: 'localhost', targetUrl: 'https://api.example.com' })
+    await outboundProxyApi.test({ mode: 'custom', proxyUrl: 'http://127.0.0.1:7890', bypass: 'localhost', targetUrl: 'https://api.example.com' })
 
     expect(lastCall()).toEqual({
       path: '/outbound-proxy/test',
-      body: { mode: 'manual', proxyUrl: 'http://127.0.0.1:7890', bypass: 'localhost', targetUrl: 'https://api.example.com' },
+      body: { mode: 'custom', proxyUrl: 'http://127.0.0.1:7890', bypass: 'localhost', targetUrl: 'https://api.example.com' },
     })
   })
 
@@ -306,11 +306,11 @@ describe('运行时与设置接口', () => {
   })
 
   it('模型测试把协议、模式与筛选条件一起下发', async () => {
-    await modelTestApi.run('openai-responses', 'chat', { providerIds: ['prov_1'], modelIds: ['pm_1'] })
+    await modelTestApi.run('openai-responses', 'connectivity', { providerIds: ['prov_1'], modelIds: ['pm_1'] })
 
     expect(lastCall()).toEqual({
       path: '/model-test/run',
-      body: { protocol: 'openai-responses', mode: 'chat', providerIds: ['prov_1'], modelIds: ['pm_1'] },
+      body: { protocol: 'openai-responses', mode: 'connectivity', providerIds: ['prov_1'], modelIds: ['pm_1'] },
     })
   })
 })

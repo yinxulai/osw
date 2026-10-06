@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { SecretStore } from '@common/secret-store'
 import { closeDatabases, initDatabases } from '../database'
 import { listProviders } from '../database/provider-store'
@@ -73,6 +73,6 @@ describe('development seed route', () => {
     const detail = await getRequestLog(logs[0].id)
     expect(detail).toMatchObject({ id: logs[0].id })
     const usage = await getRequestUsage(logs[0].id)
-    expect(usage.inputTokens + usage.outputTokens).toBeGreaterThan(0)
+    expect((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)).toBeGreaterThan(0)
   })
 })

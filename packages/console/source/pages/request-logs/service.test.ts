@@ -138,7 +138,7 @@ describe('行的合成', () => {
 
   it('已经落定的行换回落库那一份（台账里的残影不能盖住最终事实）', async () => {
     list.mockResolvedValue(ok({ logs: [logEntry({ id: 'log_1', status: 'success' })], total: 1 }))
-    live.requests = [liveRequest({ id: 'log_1', status: 'completed' })]
+    live.requests = [liveRequest({ id: 'log_1', status: 'success' })]
     const { result } = mount()
 
     await waitFor(() => expect(result.current.rows).toHaveLength(1))

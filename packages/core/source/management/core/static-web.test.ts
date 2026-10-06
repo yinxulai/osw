@@ -4,7 +4,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createStaticWebHost, type StaticWebHost } from './static-web'
-import { mockResponse } from '../test-support'
 
 // 真起一个 HTTP 服务而不是构造 `ServerResponse` 替身：这条链路里真正容易错的
 // 地方是流式发送与 URL 归一化（`sendFile` 用 `createReadStream().pipe(res)`，
@@ -95,13 +94,19 @@ describe('createStaticWebHost', () => {
   })
 
   it('returns false so the api layer keeps ownership of /api paths', async () => {
+    // 用真实的 socket：宿主说「不归我管」时，外面那层会把请求当成 API 处理（这里就是 200 'api'）。
     for (const pathname of ['/api', '/api/proxy/status']) {
-      expect(await host.handle({ method: 'GET', url: pathname } as never, { end: () => undefined } as never)).toBe(false)
+      const response = await fetch(`${baseUrl}${pathname}`)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('api')
     }
   })
 
   it('returns false for non GET and HEAD methods', async () => {
-    expect(await host.handle({ method: 'POST', url: '/' } as never, { end: () => undefined } as never)).toBe(false)
+    const response = await fetch(`${baseUrl}/`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('api')
   })
 
   it('confines path traversal attempts to the web root', async () => {
@@ -139,13 +144,14 @@ describe('createStaticWebHost', () => {
   it('turns down a path it cannot even decode instead of guessing', async () => {
     // `%E0%A4%A` 是一段断在中间的 UTF-8 序列。真去猜它的意图，要么抛未捕获异常、
     // 要么把后半截当成文件名去磁盘上找——两种都不是「没有这个文件」这个事实。
-    const response = mockResponse()
+    //
+    // 走真实 HTTP 而不是 `mockResponse()`：`fetch` 与 Node 的解析器都会原样保留这段
+    // 坏编码（`URL` 本身也不会替我们解码），于是「解不开的路径」确实是在宿主的
+    // `decodeURIComponent` 那里被拦下的，而不是被请求构造过程先吃掉了。
+    const response = await fetch(`${baseUrl}/assets/%E0%A4%A`)
 
-    const handled = await host.handle({ method: 'GET', url: '/assets/%E0%A4%A' } as never, response as never)
-
-    expect(handled).toBe(true)
-    expect(response.statusCode).toBe(400)
-    expect(JSON.parse(String(response.end.mock.calls[0][0]))).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ success: false, errorCode: 'VALIDATION_ERROR' })
   })
 
   it('ignores the query string when locating a file', async () => {

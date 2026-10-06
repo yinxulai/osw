@@ -103,31 +103,76 @@ const DATA_DIRECTORY = path.join(os.tmpdir(), 'osw-cli-start')
 
 let stdout: string[]
 let stderr: string[]
-let baseline: Record<string, unknown[]>
 
-const TRACKED = ['SIGINT', 'SIGTERM', 'uncaughtException', 'unhandledRejection'] as const
+/** 信号事件的一等名称：`process.listeners()` 只对它们有一个带监听器类型的重载。 */
+const SIGNALS = ['SIGINT', 'SIGTERM'] as const
+type SignalName = (typeof SIGNALS)[number]
 
 /**
  * `start` 会往进程级注册信号与崩溃钩子。用例之间必须清干净：不然后一个用例触发的
  * 信号会把前一个用例已经「结束」的实例再收尾一次，而且监听器累积到 10 个之后
  * Node 会打警告，把真正的问题淹掉。
+ *
+ * 表是按事件逐个写出来的，不用 `Object.fromEntries` 拼：`process.listeners()` 的重载
+ * 只认字面量事件名，逐条写下才能让每种监听器各自带上自己的类型
+ * （`SignalsListener` / `UncaughtExceptionListener` / `UnhandledRejectionListener`），
+ * 取用处也就不必再对返回值下断言。
  */
-function trackListeners(): Record<string, unknown[]> {
-  return Object.fromEntries(TRACKED.map(name => [name, process.listeners(name)]))
+interface TrackedListeners {
+  SIGINT: NodeJS.SignalsListener[]
+  SIGTERM: NodeJS.SignalsListener[]
+  uncaughtException: NodeJS.UncaughtExceptionListener[]
+  unhandledRejection: NodeJS.UnhandledRejectionListener[]
 }
 
-function restoreListeners(snapshot: Record<string, unknown[]>): void {
-  for (const name of TRACKED) {
-    const before = snapshot[name] ?? []
-    for (const listener of process.listeners(name)) {
-      if (!before.includes(listener)) process.off(name, listener)
-    }
+type TrackedListener = TrackedListeners[keyof TrackedListeners][number]
+
+let baseline: TrackedListeners
+
+function trackListeners(): TrackedListeners {
+  return {
+    SIGINT: process.listeners('SIGINT'),
+    SIGTERM: process.listeners('SIGTERM'),
+    uncaughtException: process.listeners('uncaughtException'),
+    unhandledRejection: process.listeners('unhandledRejection'),
   }
 }
 
-function addedListeners(name: string): ((argument: unknown) => void)[] {
-  const before = baseline[name] ?? []
-  return process.listeners(name).filter(listener => !before.includes(listener)) as never
+/** 摘掉 `current` 里多出来的监听器；`event` 只用来告诉 `process.off` 从哪张表里摘。 */
+function removeAdded(event: string, before: readonly TrackedListener[], current: readonly TrackedListener[]): void {
+  for (const listener of current) {
+    if (!before.includes(listener)) process.off(event, listener)
+  }
+}
+
+function restoreListeners(snapshot: TrackedListeners): void {
+  removeAdded('SIGINT', snapshot.SIGINT, process.listeners('SIGINT'))
+  removeAdded('SIGTERM', snapshot.SIGTERM, process.listeners('SIGTERM'))
+  removeAdded('uncaughtException', snapshot.uncaughtException, process.listeners('uncaughtException'))
+  removeAdded('unhandledRejection', snapshot.unhandledRejection, process.listeners('unhandledRejection'))
+}
+
+function addedFrom<Listener extends TrackedListener>(current: readonly Listener[], before: readonly Listener[]): Listener[] {
+  return current.filter(listener => !before.includes(listener))
+}
+
+/**
+ * 取本次用例新挂上的监听器。
+ *
+ * 三个重载分别对应三类事件，返回的就是它们各自的监听器类型：调用处拿到的已经是一个
+ * 参数正确的函数，直接按真实签名调用即可（信号收 `Signals`、崩溃收 `Error` + 来源）。
+ * 实现签名用联合的入参、返回公共基底，只有重载在对外说话。
+ */
+function addedListeners(event: SignalName): NodeJS.SignalsListener[]
+function addedListeners(event: 'uncaughtException'): NodeJS.UncaughtExceptionListener[]
+function addedListeners(event: 'unhandledRejection'): NodeJS.UnhandledRejectionListener[]
+function addedListeners(event: keyof TrackedListeners): readonly TrackedListener[] {
+  switch (event) {
+    case 'SIGINT': return addedFrom(process.listeners('SIGINT'), baseline.SIGINT)
+    case 'SIGTERM': return addedFrom(process.listeners('SIGTERM'), baseline.SIGTERM)
+    case 'uncaughtException': return addedFrom(process.listeners('uncaughtException'), baseline.uncaughtException)
+    case 'unhandledRejection': return addedFrom(process.listeners('unhandledRejection'), baseline.unhandledRejection)
+  }
 }
 
 function cliArguments(overrides: Partial<CliArguments> = {}): CliArguments {
@@ -197,7 +242,7 @@ async function stopAndWait(run: Promise<RunningInstance> | RunningInstance, alre
 }
 
 /** 信号路径：收尾由信号处理器发起，用例只等结果。 */
-async function stopViaSignal(run: Promise<RunningInstance> | RunningInstance, signal: string): Promise<number> {
+async function stopViaSignal(run: Promise<RunningInstance> | RunningInstance, signal: SignalName): Promise<number> {
   const instance = await run
   addedListeners(signal).at(-1)!(signal)
   return stopAndWait(instance, true)
@@ -546,7 +591,9 @@ describe('crash fallback', () => {
     // 真等 5 秒兜底定时器不划算；这里只关心「清理先做、然后退」这个顺序。
     vi.useFakeTimers()
     try {
-      fatal(new Error('boom'))
+      // 两个参数都按 Node 真实的调用方式给全：`uncaughtException` 的处理器除了错误，
+      // 还会收到来源（这里就是「未捕获异常」本身）。
+      fatal(new Error('boom'), 'uncaughtException')
       await vi.advanceTimersByTimeAsync(5_000)
     } finally {
       vi.useRealTimers()

@@ -29,7 +29,7 @@ function converted(protocol: string): string {
 function endpoint(overrides: Partial<ProviderModelRouteEndpoint> = {}): ProviderModelRouteEndpoint {
   return {
     protocol: 'openai-completions',
-    baseUrl: 'https://api.example.com',
+    endpointUrl: 'https://api.example.com',
     protocolConversionEnabled: false,
     ...overrides,
   } as ProviderModelRouteEndpoint
@@ -97,8 +97,8 @@ describe('协议转换图标', () => {
 
   it('原生已经画过的协议不重复补——同一个协议在同一行出现两次会让人以为配了两个端点', () => {
     renderIcons([
-      endpoint({ protocol: 'openai-completions', protocolConversionEnabled: true, baseUrl: 'https://a.example.com' }),
-      endpoint({ protocol: 'anthropic-messages', baseUrl: 'https://b.example.com' }),
+      endpoint({ protocol: 'openai-completions', protocolConversionEnabled: true, endpointUrl: 'https://a.example.com' }),
+      endpoint({ protocol: 'anthropic-messages', endpointUrl: 'https://b.example.com' }),
     ])
 
     const labels = iconLabels()
@@ -143,7 +143,7 @@ describe('协议转换图标', () => {
   it('两个端点都补出转换图标时，图标不会互相覆盖', () => {
     renderIcons([
       endpoint({ protocol: 'anthropic-messages', protocolConversionEnabled: true }),
-      endpoint({ protocol: 'openai-completions', protocolConversionEnabled: true, baseUrl: 'https://b.example.com' }),
+      endpoint({ protocol: 'openai-completions', protocolConversionEnabled: true, endpointUrl: 'https://b.example.com' }),
     ])
 
     // 这个组合里 openai-completions 是 native，所以两边各去掉一个后：

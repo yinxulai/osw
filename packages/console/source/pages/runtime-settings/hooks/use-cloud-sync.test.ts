@@ -42,13 +42,14 @@ vi.mock('@/data/cloud-sync', () => ({
 }))
 
 function descriptor(kind: CloudBackupKind): CloudBackupDescriptor {
-  return { kind, label: kind, credentialLabel: '', targetLabel: '' } as CloudBackupDescriptor
+  const field = { labelKey: '', hintKey: '', placeholderKey: '' }
+  return { kind, labelKey: '', createsTarget: true, credential: field, target: field }
 }
 
 function status(overrides: Partial<CloudSyncStatus> = {}): CloudSyncStatus {
   return {
     provider: 'github-gist',
-    providers: [descriptor('github-gist'), descriptor('webdav')],
+    providers: [descriptor('github-gist')],
     credentialConfigured: false,
     accountLabel: '',
     target: '',
@@ -76,11 +77,11 @@ function setup() {
 
 describe('承载方式', () => {
   it('状态里的 provider 决定当前用哪个后端描述', () => {
-    state.status = status({ provider: 'webdav' })
+    state.status = status({ provider: 'github-gist' })
 
     const { result } = setup()
 
-    expect(result.current.descriptor?.kind).toBe('webdav')
+    expect(result.current.descriptor?.kind).toBe('github-gist')
   })
 
   it('状态还没到时没有描述，也不会崩', () => {
@@ -92,7 +93,10 @@ describe('承载方式', () => {
   })
 
   it('后端列表里没有当前 kind 时说明这是版本不匹配，返回 null 而不是随便挑一个', () => {
-    state.status = status({ provider: 's3' as CloudBackupKind })
+    // 真实场景是「设置里记着一个这一版还不认识的后端」（降级回来时会这样），
+    // 而那种 kind 在本版的 `CloudBackupKind` 里写不出来。这里用「注册表快照里没有当前
+    // provider」来触发同一条分支：`find` 落空即说明两边对不上，行为与版本不匹配一致。
+    state.status = status({ providers: [] })
 
     const { result } = setup()
 
@@ -103,10 +107,10 @@ describe('承载方式', () => {
     const { result } = setup()
 
     await act(async () => {
-      await result.current.selectProvider('webdav')
+      await result.current.selectProvider('github-gist')
     })
 
-    expect(state.configure).toHaveBeenCalledWith({ provider: 'webdav' })
+    expect(state.configure).toHaveBeenCalledWith({ provider: 'github-gist' })
   })
 })
 

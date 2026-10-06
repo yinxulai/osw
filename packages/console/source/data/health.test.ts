@@ -83,7 +83,7 @@ describe('useHealthActions', () => {
   it('refresh 重取同一份快照', async () => {
     state.snapshot = { providers: [], providerModels: [] }
     const { client, wrapper } = createQueryFixture()
-    const health = renderHook(() => useHealth(), { wrapper })
+    renderHook(() => useHealth(), { wrapper })
     await waitFor(() => expect(state.requests).toBe(1))
 
     const actions = renderHook(() => useHealthActions(), { wrapper })

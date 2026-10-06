@@ -107,7 +107,7 @@ describe('字段网格', () => {
   })
 
   it('空网格也必须保留容器（空状态要靠它占位）', () => {
-    const { container } = render(<FormGrid />)
+    const { container } = render(<FormGrid>{null}</FormGrid>)
     expect(container.firstElementChild).toBeTruthy()
   })
 })

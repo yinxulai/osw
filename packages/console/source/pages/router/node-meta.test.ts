@@ -13,7 +13,6 @@ import { WORKFLOW_NODE_KINDS } from '@common/router/types'
 import type {
   AppendableKind,
   IterationCollectMode,
-  NoteNode,
   WorkflowNodeKind,
   WorkflowNodeModel,
 } from '@common/router/types'

@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import type { QueryClient } from '@tanstack/react-query'
 import { PAGE_SIZE, fetchRequestLogBodies, useRequestLogBodiesQuery, useRequestLogDetailQuery, useRequestLogsQuery } from '@/pages/request-logs/queries'
 import { createQueryFixture } from '@/test-support'
 import type { RequestLogEntry } from '@common/schemas'
@@ -56,11 +57,21 @@ function logEntry(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
   } as RequestLogEntry
 }
 
-/** 读回某个查询实际生效的「要不要轮询」，而不是只看数据长什么样。 */
-function pollingInterval(client: ReturnType<typeof createQueryFixture>['client'], keyPart: string): unknown {
+/**
+ * 读回某个查询实际生效的「要不要轮询」，而不是只看数据长什么样。
+ *
+ * 从**观察者**的 options 上读，而不是 `query.options`：`Query` 的 options 用的是它自己的
+ * 泛型参数，而 `getQueryCache().getAll()` 拿回来的条目已经把这些参数擦成了默认值，
+ * `refetchInterval` 在那份类型里根本不存在。观察者的 options 是完整的那一份，`refetchInterval`
+ * 就在上面，且它接受一个读 `query.state` 的函数——所以先看是不是函数，是就按真实签名调用。
+ */
+function pollingInterval(client: QueryClient, keyPart: string): unknown {
   const query = client.getQueryCache().getAll().find(entry => JSON.stringify(entry.queryKey).includes(keyPart))
-  const option = query?.options.refetchInterval
-  return typeof option === 'function' ? (option as (q: typeof query) => unknown)(query) : option
+  if (!query) throw new Error(`no query registered for ${keyPart}`)
+
+  const interval = query.observers[0]?.options.refetchInterval
+  if (typeof interval !== 'function') return interval
+  return interval(query)
 }
 
 describe('请求记录列表查询', () => {

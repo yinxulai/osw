@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { RouteRule, RouteRuleSet } from './route-rules'
+import type { RouteRule, RouteRuleCondition, RouteRuleSet } from './route-rules'
 import { renameLogicalModelIdInGraph, renameLogicalModelIdInRuleSet } from './rename-logical-model-id'
-import type { ConditionNode, ConditionRule, ModelSelectNode, ScriptNode, WorkflowGraph, WorkflowNodeModel } from './types'
+import type { ConditionNode, ModelSelectNode, ScriptNode, WorkflowGraph, WorkflowNodeModel } from './types'
 
 /**
  * 逻辑模型改名的连带改写。
@@ -37,12 +37,18 @@ function modelSelect(overrides: Partial<ModelSelectNode> = {}): ModelSelectNode 
   } as ModelSelectNode
 }
 
-function conditionRule(overrides: Partial<ConditionRule> = {}): ConditionRule {
+/*
+ * 条件规则用**表里落地的那份**（`RouteRuleCondition`）而不是手写的那张宽松脸：
+ * 这份 fixture 同时要往工作流图（`ConditionRule`，两个字段可缺省）与规则表里塞，
+ * 落到规则表时 `valueSource` / `valueFieldPath` 是必填的。直接给足值，两边都成立。
+ */
+function conditionRule(overrides: Partial<RouteRuleCondition> = {}): RouteRuleCondition {
   return {
     fieldPath: 'request.body.model',
     valueType: 'string',
-    operator: 'eq',
+    operator: 'equals',
     valueSource: 'literal',
+    valueFieldPath: '',
     value: 'lm_old',
     ...overrides,
   }

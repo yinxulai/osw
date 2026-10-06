@@ -42,7 +42,7 @@ describe('复制按钮', () => {
     const onCopy = vi.fn()
     const { container } = render(<CopyButton itemKey="baseUrl" value="" copiedKey={null} onCopy={onCopy} label="复制地址" />)
 
-    const button = screen.getByLabelText('复制地址')
+    const button = screen.getByLabelText<HTMLButtonElement>('复制地址')
     expect(button.disabled).toBe(true)
     // 按钮还在 DOM 里。
     expect(container.querySelectorAll('button')).toHaveLength(1)
