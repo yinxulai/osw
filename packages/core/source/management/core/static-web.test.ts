@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createStaticWebHost, type StaticWebHost } from './static-web'
+import { mockResponse } from '../test-support'
 
 // 真起一个 HTTP 服务而不是构造 `ServerResponse` 替身：这条链路里真正容易错的
 // 地方是流式发送与 URL 归一化（`sendFile` 用 `createReadStream().pipe(res)`，
@@ -133,5 +134,25 @@ describe('createStaticWebHost', () => {
 
     expect(response.status).toBe(404)
     expect(await response.json()).toMatchObject({ success: false, errorCode: 'RESOURCE_NOT_FOUND' })
+  })
+
+  it('turns down a path it cannot even decode instead of guessing', async () => {
+    // `%E0%A4%A` 是一段断在中间的 UTF-8 序列。真去猜它的意图，要么抛未捕获异常、
+    // 要么把后半截当成文件名去磁盘上找——两种都不是「没有这个文件」这个事实。
+    const response = mockResponse()
+
+    const handled = await host.handle({ method: 'GET', url: '/assets/%E0%A4%A' } as never, response as never)
+
+    expect(handled).toBe(true)
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(String(response.end.mock.calls[0][0]))).toMatchObject({ errorCode: 'VALIDATION_ERROR' })
+  })
+
+  it('ignores the query string when locating a file', async () => {
+    // 开发期带 `?v=...` 破缓存、带锚点跳转都很常见；查询串不是文件名的一部分。
+    const response = await fetch(`${baseUrl}/notes.txt?cache-bust=1`)
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('hello')
   })
 })

@@ -93,14 +93,26 @@ function readFile(declaredPath: string): string {
 }
 
 /**
+ * 把绝对路径翻回用例用的 `~/` 声明式写法。
+ *
+ * 分隔符必须从 `path.relative` 的结果里归一，不能假设是正斜杠——生产拼出来的是**真实文件系统
+ * 路径**（Windows 上是 `\`），而 `fullPath()` 只认 `~/` 开头。写死正斜杠会让 Windows 上
+ * `replace` 落空，得到一个原封不动的绝对路径，再被 `fullPath()` 拼一次主目录。
+ */
+function declaredPath(absolute: string): string {
+  return `~/${path.relative(mocks.home, absolute).split(path.sep).join('/')}`
+}
+
+/**
  * `load` 文件的启动文件落点：候选里的第一个（`resolveShellProfilePath` 在候选都不存在时的兜底）。
  *
- * 候选顺序跟着 `$SHELL` 走——CI 的 ubuntu runner 用 bash，第一候选是 `.bash_profile` 而不是 `.zshrc`。
- * 从 `defaultShellProfileCandidates()` 现取，保证与生产代码选中的是同一个文件，而不是把 `.zshrc` 写死。
+ * 候选顺序跟着平台与 `$SHELL` 走——macOS/Linux 默认 `.zshrc` 或 bash 的启动文件，Windows 是
+ * PowerShell 的 profile。从 `defaultShellProfileCandidates()` 现取，保证与生产代码选中的是
+ * 同一个文件，而不是把 `.zshrc` 写死。
  */
 function firstShellProfilePath(): string {
   const [first] = defaultShellProfileCandidates()
-  return first!.replace(`${mocks.home}/`, '~/')
+  return declaredPath(first!)
 }
 
 /** 同步入口抛错时，把 `AppError` 的 code 取出来；这条路径本身不该走到返回值。 */
@@ -286,20 +298,21 @@ describe('saveClientConfigContent', () => {
   })
 
   it('reports a write the filesystem refused instead of pretending it worked', async () => {
-    // 备份已经登记、临时文件却写不下去（目录只读）：这个错误必须抛出来。
+    // 备份已经登记、临时文件却写不下去：这个错误必须抛出来。
     // 吞掉它会让界面显示「已保存」而磁盘上什么也没变。
-    const directory = path.dirname(fullPath(CLAUDE_FILE))
-    fs.mkdirSync(directory, { recursive: true })
-    fs.chmodSync(directory, 0o500)
-    try {
-      await expect(saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')).rejects.toMatchObject({
-        code: 'CLIENT_CONFIG_WRITE_FAILED',
-        statusCode: 500,
-      })
-      expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
-    } finally {
-      fs.chmodSync(directory, 0o700)
-    }
+    //
+    // 制造失败的手法必须两端一致：旧写法 `chmod 0o500` 只对 POSIX 生效，Windows 上目录只读**不拦**
+    // 写入，于是这条用例会静默变成「写入成功」——看着是绿的，其实什么也没验证。
+    // 改成让临时路径先被一个**目录**占住：`writeFile` 在两端都会拒绝（EISDIR / EPERM）。
+    // 若哪天生产改了临时文件命名，占位失效、断言从 rejects 变成 resolve，用例会立刻报红而不是假绿。
+    const target = fullPath(CLAUDE_FILE)
+    fs.mkdirSync(path.join(path.dirname(target), `.${path.basename(target)}.osw-tmp`), { recursive: true })
+
+    await expect(saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')).rejects.toMatchObject({
+      code: 'CLIENT_CONFIG_WRITE_FAILED',
+      statusCode: 500,
+    })
+    expect(fs.existsSync(target)).toBe(false)
   })
 })
 
@@ -560,15 +573,19 @@ describe('applyClientConfigOverrides', () => {
   })
 
   it('prefers an existing shell profile over creating a new one', async () => {
-    // 用户实际在用的是 `.bash_profile`：就改它，别另外造一个 `.zshrc`。
-    writeFile('~/.bash_profile', 'export PATH="$HOME/bin:$PATH"\n')
+    // 用户实际在用的启动文件（候选里的第二个）就改它，别另外造一个第一候选。
+    // 不写死 `.bash_profile`：这台机器上候选跟着平台走（Windows 是 PowerShell profile），
+    // 写死的名字根本不在候选里，用例会去断言「第一候选被写入」而实际它一个都没被选中。
+    const [first, second] = defaultShellProfileCandidates()
+    writeFile(declaredPath(second!), 'export PATH="$HOME/bin:$PATH"\n')
 
     await applyClientConfigDefaults(COPILOT)
 
-    const profile = readFile('~/.bash_profile')
+    const profile = readFile(declaredPath(second!))
     expect(profile).toContain('export PATH="$HOME/bin:$PATH"')
     expect(profile).toContain('>>> osw managed env >>>')
-    expect(fs.existsSync(fullPath('~/.zshrc'))).toBe(false)
+    // 第一候选没有被凭空创建：既然用户在用的是第二个，就不该再落一个新文件。
+    expect(fs.existsSync(first!)).toBe(false)
   })
 
   it('refuses to overwrite a file it cannot parse', async () => {

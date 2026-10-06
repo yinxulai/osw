@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
+import { getSettings } from '@server/database/settings-store'
 import { settingsRoutes } from './routes/operations/settings'
 import { mockResponse } from './test-support'
 
@@ -36,6 +37,38 @@ afterEach(async () => {
 async function update(updates: Record<string, unknown>): Promise<void> {
   await settingsRoutes.invoke('/api/settings/update', mockResponse(), updates)
 }
+
+describe('settings read-back', () => {
+  it('returns exactly what was written, so the form and the file agree', async () => {
+    await update({ telemetryEnabled: false, listenPort: 9411 })
+
+    const response = await settingsRoutes.request('/api/settings/get', {})
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json<{ success: boolean; data: { telemetryEnabled: boolean; listenPort: number } }>().data).toMatchObject({
+      telemetryEnabled: false,
+      listenPort: 9411,
+    })
+  })
+
+  it('rejects a custom proxy url that is not a url', async () => {
+    // 空地址与非法协议都在 `validateOutboundProxyModeAndUrl` 里挡：写进库之后，
+    // 下一次出站请求才会以「连不上」的形式暴露，那时离用户的操作已经很远了。
+    await expect(settingsRoutes.request('/api/settings/update', { outboundProxyMode: 'custom', outboundProxyUrl: 'ftp://proxy.local' })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    })
+  })
+
+  it('clears the stored url when the mode goes back to direct', async () => {
+    await update({ outboundProxyMode: 'custom', outboundProxyUrl: 'http://127.0.0.1:7890' })
+
+    await update({ outboundProxyMode: 'direct', outboundProxyUrl: '' })
+
+    const settings = await getSettings()
+    expect(settings.outboundProxyMode).toBe('direct')
+    expect(settings.outboundProxyUrl).toBe('')
+  })
+})
 
 describe('route_mode_changed reporting', () => {
   it('reports the new mode when it really changes', async () => {

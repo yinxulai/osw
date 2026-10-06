@@ -58,17 +58,19 @@ interface ScanResult {
 function collectReferencedKeys(): ScanResult {
   const referenced = new Set<string>()
   const files = SOURCE_DIRECTORIES.flatMap(directory => collectSourceFiles(path.join(REPO_ROOT, directory)))
+  // 键表与「前缀 → 键」映射只算一次。放进文件循环里意味着每个文件都重新 `Object.keys`
+  // 一遍、并对每个键跑一次 `startsWith`——上千文件 × 上千键，满负载跑全量时会顶到默认超时。
+  const keys = Object.keys(uiEn)
+  const keysByPrefix = DYNAMIC_KEY_PREFIXES.map(prefix => [prefix, keys.filter(key => key.startsWith(prefix))] as const)
   for (const file of files) {
     if (file.includes(path.join('i18n', 'catalogs'))) continue
     const content = readFileSync(file, 'utf8')
-    for (const key of Object.keys(uiEn)) {
+    for (const key of keys) {
       if (content.includes(key)) referenced.add(key)
     }
-    for (const prefix of DYNAMIC_KEY_PREFIXES) {
+    for (const [prefix, prefixedKeys] of keysByPrefix) {
       if (content.includes(`${prefix}\${`)) {
-        for (const key of Object.keys(uiEn)) {
-          if (key.startsWith(prefix)) referenced.add(key)
-        }
+        for (const key of prefixedKeys) referenced.add(key)
       }
     }
   }
@@ -113,7 +115,10 @@ describe('i18n 目录', () => {
     expect(fileCount, '扫描到的源码文件太少，检查 collectSourceFiles').toBeGreaterThan(200)
     const unused = Object.keys(uiEn).filter(key => !referenced.has(key))
     expect(unused, '这些 key 在源码里没有任何引用').toEqual([])
-  })
+    // 这条用例要读上千个源文件，耗时随仓库规模线性增长：满负载跑全量、且叠加 v8 覆盖率插桩时
+    // 会超过 vitest 默认的 5s。它是**真的在扫盘**，不是卡死，所以显式放宽而不是压缩扫描范围
+    //（少扫一个目录，「死 key」结论就会变成漏扫的假象）。
+  }, 30_000)
 
   it('每个 API 错误码都有本地化文案，且没有多余的错误码 key', () => {
     const codeKeys = Object.keys(uiEn).filter(key => key.startsWith('errors.'))

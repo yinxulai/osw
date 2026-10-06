@@ -33,6 +33,9 @@ describe('management request guards', () => {
     // 少了它，浏览器连真实请求都不发（Request header field content-type is not allowed ...）。
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'Content-Type')
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    // `Vary: Origin` 不能省：响应头跟着来源变，中间缓存（开发期的代理）不区分来源就会
+    // 把一个来源的 CORS 头喂给另一个来源。
+    expect(response.setHeader).toHaveBeenCalledWith('Vary', 'Origin')
     expect(response.end).toHaveBeenCalledOnce()
   })
 
@@ -79,5 +82,23 @@ describe('management request guards', () => {
 
     expect(accepted).toBe(true)
     expect(response.setHeader).not.toHaveBeenCalled()
+  })
+
+  it('turns down origins that are not on http(s)', async () => {
+    // 扩展页面的 origin 也是本地的，但**不是**我们的控制台。白名单放的是「本机页面」
+    // 这个具体集合，不是「任何本机进程」这个抽象。
+    const response = mockResponse()
+
+    await applyManagementRequestGuards(mockRequest({ origin: 'chrome-extension://abcdefghijklmnop' }), response)
+
+    expect(response.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything())
+  })
+
+  it('turns down an origin that cannot even be parsed', async () => {
+    const response = mockResponse()
+
+    await applyManagementRequestGuards(mockRequest({ origin: 'not a url' }), response)
+
+    expect(response.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything())
   })
 })

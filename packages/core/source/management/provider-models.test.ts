@@ -3,10 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BUILT_IN_DEFAULT_LOGICAL_MODEL_ID } from '@common/schemas'
 import type { TelemetryEventInput } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { createProvider } from '@server/database/provider-store'
-import { createLogicalModel } from '@server/database/logical-model-store'
+import { createLogicalModel, getDefaultLogicalModelRecordId } from '@server/database/logical-model-store'
 import { providerModelRoutes } from './routes/catalog/provider-models'
 import { mockResponse } from './test-support'
 
@@ -105,6 +106,69 @@ describe('provider model routes', () => {
     await providerModelRoutes.invoke('/api/provider-model/update', mockResponse(), { id: model.id, modelName: 'renamed-model' })
 
     expect(reported).toEqual([])
+  })
+
+  /*
+   * 下面三条守着同一个缺陷的两种长相。
+   *
+   * 界面曾经在新增模型时硬编码 `logicalModelId: 'default'` —— 那是**模型名**，不是数据记录 id。
+   * 路由先提交模型、再写调度绑定，绑定撞 `scheduling_policies` 的外键：接口报错，模型却已经
+   * 建出来了（孤儿）。现在路由在**任何写入之前**就把落点翻成记录 id 并确认它存在，
+   * 坏落点就一个字节都不落库。
+   */
+  it('binds a model to the built-in default logical model when no logicalModelId is given', async () => {
+    const provider = await createProvider({ name: 'Default Target Provider', apiKeyReference: 'key_default_target', timeoutMilliseconds: 15_000, enabled: true })
+    const defaultRecordId = await getDefaultLogicalModelRecordId()
+
+    const createRes = mockResponse()
+    await providerModelRoutes.invoke('/api/provider-model/create', createRes, {
+      providerId: provider.id,
+      modelName: 'unanchored-model',
+      endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions' }],
+    })
+    const created = responseData(createRes).data as { id: string }
+
+    // 内建默认逻辑模型的记录 id 是本机生成的（`lm_*`），不是那个常量模型名。
+    expect(defaultRecordId).toMatch(/^lm_/)
+    expect(defaultRecordId).not.toBe(BUILT_IN_DEFAULT_LOGICAL_MODEL_ID)
+
+    const policies = mockResponse()
+    await providerModelRoutes.invoke('/api/scheduling-policy/list', policies, { logicalModelId: defaultRecordId })
+    expect(responseData(policies).data).toEqual([
+      expect.objectContaining({ providerModelId: created.id, logicalModelId: defaultRecordId }),
+    ])
+  })
+
+  it('rejects a model name masquerading as a logical model record id and leaves no orphan', async () => {
+    const provider = await createProvider({ name: 'Rejected Target Provider', apiKeyReference: 'key_rejected_target', timeoutMilliseconds: 15_000, enabled: true })
+
+    // `'default'` 是内建默认逻辑模型的**模型名**。它以前被当成外键写进去，于是先建后炸、留下孤儿。
+    await expect(providerModelRoutes.invoke('/api/provider-model/create', mockResponse(), {
+      providerId: provider.id,
+      modelName: 'orphan-candidate',
+      logicalModelId: BUILT_IN_DEFAULT_LOGICAL_MODEL_ID,
+      endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions' }],
+    })).rejects.toThrow(/Logical model default not found/)
+
+    // 关键：接口报错时**没有**任何模型被建出来。用户看到的错跟数据状态是一致的。
+    const list = mockResponse()
+    await providerModelRoutes.invoke('/api/provider-model/list', list, {})
+    expect(responseData(list).data).toEqual([])
+  })
+
+  it('rejects an unknown logical model record id and leaves no orphan', async () => {
+    const provider = await createProvider({ name: 'Unknown Target Provider', apiKeyReference: 'key_unknown_target', timeoutMilliseconds: 15_000, enabled: true })
+
+    await expect(providerModelRoutes.invoke('/api/provider-model/create', mockResponse(), {
+      providerId: provider.id,
+      modelName: 'orphan-candidate-2',
+      logicalModelId: 'lm_missing',
+      endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions' }],
+    })).rejects.toThrow(/Logical model lm_missing not found/)
+
+    const list = mockResponse()
+    await providerModelRoutes.invoke('/api/provider-model/list', list, {})
+    expect(responseData(list).data).toEqual([])
   })
 })
 

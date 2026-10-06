@@ -87,6 +87,34 @@ describe('client config routes', () => {
     expect(body.data.changes.length).toBeGreaterThan(0)
   })
 
+  it('previews the same content that apply would write, without touching the disk', async () => {
+    await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"unchanged":true}' })
+    const absolutePath = path.join(temporaryDirectory, '.claude/settings.json')
+
+    const preview = await clientConfigRoutes.request('/api/client-config/preview', {
+      ...fileBody(),
+      model: 'osw-model',
+    })
+    const previewed = preview.json<SuccessBody<{ content: string; changes: unknown[] }>>().data
+
+    // 预览的关键承诺就是「什么都没写」：磁盘上还是刚才那段。
+    expect(fs.readFileSync(absolutePath, 'utf8')).toBe('{"unchanged":true}')
+    expect(previewed.changes.length).toBeGreaterThan(0)
+
+    // 而「保存会变成什么」必须与预览逐字相同——两份实现迟早会各说各话。
+    const applied = await clientConfigRoutes.request('/api/client-config/apply', { ...fileBody(), model: 'osw-model' })
+    expect(fs.readFileSync(absolutePath, 'utf8')).toBe(previewed.content)
+    expect(applied.json<SuccessBody<{ changes: unknown[] }>>().data.changes).toEqual(previewed.changes)
+  })
+
+  it('reports an already-filled file as having nothing left to change', async () => {
+    await clientConfigRoutes.request('/api/client-config/apply', { ...fileBody(), model: 'osw-model' })
+
+    const preview = await clientConfigRoutes.request('/api/client-config/preview', { ...fileBody(), model: 'osw-model' })
+
+    expect(preview.json<SuccessBody<{ changes: unknown[] }>>().data.changes).toEqual([])
+  })
+
   it('lists versions and returns a missing one as null', async () => {
     await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"a":1}' })
     await clientConfigRoutes.request('/api/client-config/save', { ...fileBody(), content: '{"a":2}' })

@@ -55,6 +55,9 @@ export default defineConfig({
         'apps/cli/source/**/*.ts',
         'packages/core/source/**/*.ts',
         'packages/contracts/source/**/*.ts',
+        // 控制台（React）也在统计范围内：只算服务端会给出一个偏高的总数，
+        // 而界面恰恰是「点一下就出错」的那一半——漏在统计外等于没人看得见它还差多少。
+        'packages/console/source/**/*.{ts,tsx}',
       ],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/types.ts', '**/schemas.ts', '**/test-support.ts'],
     },

@@ -99,3 +99,49 @@ describe('脚本沙箱', () => {
     expect(result.error).toContain('炸了')
   })
 })
+
+describe('脚本沙箱回传的日志', () => {
+  // 三级日志各有各的前缀，跑测试时才能一眼分出「脚本自己喊的话」和「真的报错了」。
+  it('log / warn / error 都回传，并标出级别', () => {
+    const result = probe('console.log("a"); console.warn("b"); console.error("c"); return 1', 200)
+    expect(result.logs).toEqual(['[log] a', '[warn] b', '[error] c'])
+  })
+
+  // 日志是给人看的一行文本，所以各种取值都得拼出点东西来；
+  // 循环引用是脚本里最容易手滑造出来的东西（`const a = {}; a.self = a`），它不能把执行打断。
+  it('日志参数按可读文本拼接，循环引用也不会炸', () => {
+    const result = probe(
+      [
+        'console.log(undefined)',
+        'console.log({ a: 1 })',
+        'console.log([1, "x"])',
+        'const loop = { name: "loop" }; loop.self = loop; console.log(loop)',
+        'return 1',
+      ].join('\n'),
+      200,
+    )
+    expect(result.success).toBe(true)
+    expect(result.logs).toEqual(['[log] undefined', '[log] {"a":1}', '[log] [1,"x"]', '[log] [object Object]'])
+  })
+
+  // 刷屏的 console.log 能把 trace 撑爆，所以有硬上限；
+  // 超出的被丢掉而不是截断，读到的每一条都是完整的。
+  it('日志条数有上限，多出来的直接丢掉', () => {
+    const result = probe('for (let i = 0; i < 120; i++) { console.log(i) } return 1', 500)
+    expect(result.logs).toHaveLength(50)
+    expect(result.logs[0]).toBe('[log] 0')
+    expect(result.logs[49]).toBe('[log] 49')
+  })
+
+  // 返回值必须是可序列化的：沙箱活在主进程里，交回宿主对象等于把隔离打开一个口子。
+  it('返回值不可序列化时交回 undefined', () => {
+    const result = probe('const loop = {}; loop.self = loop; return loop', 200)
+    expect(result.success).toBe(true)
+    expect(result.value).toBeUndefined()
+  })
+
+  it('返回 undefined 就是 undefined，不是「没交回值」', () => {
+    const result = probe('return undefined', 200)
+    expect(result).toMatchObject({ success: true, value: undefined })
+  })
+})

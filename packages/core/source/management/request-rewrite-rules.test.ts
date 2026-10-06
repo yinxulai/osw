@@ -295,5 +295,51 @@ describe('request rewrite rule routes', () => {
       })
       expect(responseData(res)).toMatchObject({ success: false, errorCode: 'RESPONSE_REWRITE_DISABLED' })
     })
+
+    it('rejects a response-stage test case even when the rule itself only touches the request', async () => {
+      // 试跑的阶段是「这一次试跑」的属性，与规则里存了什么无关：用户可以在一条纯请求阶段的
+      // 规则上把试跑切到响应阶段。只看规则的动作就会漏掉这条入口。
+      const res = mockResponse()
+      await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', res, {
+        rule: {
+          id: 'rule_request_only', name: 'x', description: '', enabled: true, global: true, source: 'user',
+          match: { clientProtocols: [], upstreamProtocols: [] }, schemaVersion: 1,
+          actions: [{ type: 'header-set', stage: 'request', name: 'x-a', value: 'a' }],
+          testCases: [], createdTime: 0, updatedTime: 0, deletedTime: null,
+        },
+        testCase: { stage: 'response', body: '{"text":"original"}', headers: '{}', clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', transport: 'http' },
+      })
+      expect(responseData(res)).toMatchObject({ success: false, errorCode: 'RESPONSE_REWRITE_DISABLED' })
+    })
+  })
+
+  it('reports a missing rule as 404 instead of an empty success', async () => {
+    const res = mockResponse()
+
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/get', res, { id: 'rule_nope' })
+
+    expect(responseData(res)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
+    expect(res.statusCode).toBe(404)
+  })
+
+  /**
+   * WebSocket 是双向多轮：正文既不是一整份、也不是向下分帧，改写引擎没有可以下手的形态。
+   * 真实入口对同一个请求回 501，所以试跑必须**一致地**失败——`bodyDeliveryShape('websocket')`
+   * 其实能给一个形态，放着往下走就会一本正经地报「改造成功了 N 条」，让用户以为 WS 上生效了。
+   */
+  it('refuses to dry-run a websocket test case', async () => {
+    const res = mockResponse()
+    await requestRewriteRuleRoutes.invoke('/api/request-rewrite-rule/test', res, {
+      rule: {
+        id: 'rule_ws', name: 'x', description: '', enabled: true, global: true, source: 'user',
+        match: { clientProtocols: [], upstreamProtocols: [] }, schemaVersion: 1,
+        actions: [{ type: 'header-set', stage: 'request', name: 'x-a', value: 'a' }],
+        testCases: [], createdTime: 0, updatedTime: 0, deletedTime: null,
+      },
+      testCase: { stage: 'request', body: '{"a":1}', headers: '{}', clientProtocol: 'openai-completions', upstreamProtocol: 'openai-completions', transport: 'websocket' },
+    })
+
+    expect(responseData(res)).toMatchObject({ success: false, errorCode: 'TRANSPORT_NOT_IMPLEMENTED' })
+    expect(res.statusCode).toBe(400)
   })
 })

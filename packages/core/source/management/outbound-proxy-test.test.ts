@@ -1,4 +1,5 @@
-import type { ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError } from '../errors'
 import { createCoreNetworkClient } from '../infrastructure/network/core-network'
@@ -68,8 +69,17 @@ const validBody = {
   targetUrl: 'https://example.com/health',
 }
 
-function invoke(body: Record<string, unknown>, response: ServerResponse = mockResponse()): Promise<void> {
-  return outboundProxyTestRoutes.invoke('/api/outbound-proxy/test', response, body)
+function invoke(body: Record<string, unknown>, response: ServerResponse = mockResponse(), request: IncomingMessage = createTestRequest()): Promise<void> {
+  return outboundProxyTestRoutes.invoke('/api/outbound-proxy/test', response, body, request)
+}
+
+/** 路由只用到 `once('aborted')`，一个事件发射器就是完整替身。 */
+function createTestRequest(): IncomingMessage {
+  const request = new EventEmitter() as EventEmitter & IncomingMessage
+  request.method = 'POST'
+  request.url = '/api/outbound-proxy/test'
+  request.headers = { host: 'localhost', 'content-type': 'application/json' } as never
+  return request
 }
 
 describe('outbound proxy test route', () => {
@@ -145,5 +155,22 @@ describe('outbound proxy test route', () => {
 
     expect(destroyedErrors).toHaveLength(1)
     expect(destroyedErrors[0].message).toContain('timed out')
+  })
+
+  it('界面关掉之后中断探针，而不是让它把 15 秒走完', async () => {
+    // 探针最长可跑 15 秒。用户点了「测试」又立刻关掉面板时，那条连接还挂在别人的代理上，
+    // 而我们手里已经没有任何接收方。中断把它按 499 结算，供上一层直接丢掉。
+    const request = new EventEmitter() as EventEmitter & { method: string; url: string; headers: Record<string, string> }
+    request.method = 'POST'
+    request.url = '/api/outbound-proxy/test'
+    request.headers = { host: 'localhost', 'content-type': 'application/json' }
+
+    const pending = invoke(validBody, mockResponse(), request as never)
+    await nextHooks()
+    request.emit('aborted')
+
+    await expect(pending).rejects.toMatchObject({ code: 'CLIENT_REQUEST_ABORTED', statusCode: 499 })
+    expect(destroyedErrors).toHaveLength(1)
+    expect(connector.destroy).toHaveBeenCalled()
   })
 })
