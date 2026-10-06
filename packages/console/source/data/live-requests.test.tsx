@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LiveRequest } from '@common/schemas'
+import { expectRenderThrow } from '@/test-support'
 import { LiveRequestsProvider, useLiveRequests } from './live-requests'
 
 /*
@@ -98,10 +99,7 @@ afterEach(() => {
 
 describe('LiveRequestsProvider', () => {
   it('在 Provider 外使用会立刻报错，并点名该用哪个 Provider', () => {
-    // React 会把这条渲染错误再往控制台吐一份，这里只关心它确实抛了。
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-
-    expect(() => renderHook(() => useLiveRequests())).toThrow('useLiveRequests must be used inside LiveRequestsProvider')
+    expectRenderThrow(() => renderHook(() => useLiveRequests()), 'useLiveRequests must be used inside LiveRequestsProvider')
   })
 
   it('enabled 为真时挂上流，一开始还没有数据', () => {

@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LiveMetrics } from '@common/live-metrics'
+import { expectRenderThrow } from '@/test-support'
 import { LiveMetricsProvider, useLiveMetrics } from './live-metrics'
 
 /*
@@ -77,9 +78,7 @@ afterEach(() => {
 
 describe('LiveMetricsProvider', () => {
   it('在 Provider 外使用会立刻报错，并点名该用哪个 Provider', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-
-    expect(() => renderHook(() => useLiveMetrics())).toThrow('useLiveMetrics must be used inside LiveMetricsProvider')
+    expectRenderThrow(() => renderHook(() => useLiveMetrics()), 'useLiveMetrics must be used inside LiveMetricsProvider')
   })
 
   it('只挂指标那条流，不顺手把请求流也挂上', () => {

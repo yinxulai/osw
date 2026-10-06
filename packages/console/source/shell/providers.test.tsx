@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShellProviders, mountShell } from './providers'
 import { useTranslation } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
+import { withSilencedWindowErrors } from '@/test-support'
 
 /*
  * 渲染外壳的两个职责：
@@ -88,13 +89,13 @@ describe('ShellProviders', () => {
   })
 
   it('子树渲染期抛错时换成兜底界面，而不是白屏', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-
-    render(
-      <ShellProviders>
-        <Boom />
-      </ShellProviders>,
-    )
+    withSilencedWindowErrors(() => {
+      render(
+        <ShellProviders>
+          <Boom />
+        </ShellProviders>,
+      )
+    })
 
     // 兜底界面用的是基础标签，不依赖可能同样崩掉的布局组件。
     //

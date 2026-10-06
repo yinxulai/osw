@@ -11,6 +11,7 @@
 
 import { createElement, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { expect } from 'vitest'
 import type { LogicalModel, Provider, ProviderHealth, ProviderModelHealth } from '@common/schemas'
 
 /**
@@ -56,6 +57,34 @@ export function createGate<Value>() {
     fail = reject
   })
   return { promise, open, fail }
+}
+
+/**
+ * 跑一段「注定要抛」的渲染，并把这声噪声按下去。
+ *
+ * 有些用例要断言的是「上下文缺失时立刻抛错」——但 React 在开发模式下，除了把错误抛给
+ * 调用方，还会顺手往全局报一份；jsdom 拿到之后走的是「未处理异常」，用它在**环境初始化
+ * 那一刻**绑定的原始 `console` 转出来（`packages/console/scripts/vitest.setup.ts` 里注册
+ * 的 setup 比环境晚，`vi.spyOn(console, 'error')` 也只换掉后来读到的引用）。所以这类
+ * 用例的堆栈会直接漏进测试输出，把真正的失败淹没。
+ *
+ * 这里在 window 上挂一个 `error` 监听并 `preventDefault()`：jsdom 据此认定事件已被处理
+ * （见其 `reportAnError` 的 `event.defaultPrevented`），噪声不再落地。断言的仍是「抛了」，
+ * 只是把那声本该被预期掉的日志一并消掉。
+ */
+export function withSilencedWindowErrors(run: () => void): void {
+  const silence = (event: ErrorEvent) => event.preventDefault()
+  window.addEventListener('error', silence)
+  try {
+    run()
+  } finally {
+    window.removeEventListener('error', silence)
+  }
+}
+
+/** {@link withSilencedWindowErrors} 的断言版：渲染应当抛错，且只留这一句断言。 */
+export function expectRenderThrow(run: () => void, message: string | RegExp): void {
+  withSilencedWindowErrors(() => expect(run).toThrow(message))
 }
 
 /**

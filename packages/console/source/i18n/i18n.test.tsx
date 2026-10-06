@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTranslator, tryTranslate } from '@/i18n/active'
 import { getSystemLocale, useLanguageStore } from '@/i18n/store'
+import { expectRenderThrow } from '@/test-support'
 
 /*
  * 界面语言的三个小部件。
@@ -97,7 +98,7 @@ describe('语言偏好存储', () => {
 describe('I18nProvider 的取值', () => {
   it('上下文缺失时 useTranslation 抛错（而不是回退成 key 直出）', async () => {
     const { useTranslation } = await import('@/i18n/provider')
-    expect(() => render(<Probe />)).toThrow(/useI18n must be used inside I18nProvider/)
+    expectRenderThrow(() => render(<Probe />), /useI18n must be used inside I18nProvider/)
 
     function Probe() {
       useTranslation()
