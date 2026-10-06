@@ -109,6 +109,24 @@ export async function getDefaultLogicalModelRecordId(): Promise<string> {
 }
 
 /**
+ * 按**数据记录 id** 取一个活跃逻辑模型，取不到就抛 404。
+ *
+ * 给「写入前先确认落点存在」用：调度绑定的外键指着记录 id，拿一个不存在的 id 去写，
+ * SQLite 会抛 `FOREIGN KEY constraint failed` —— 而这句话对用户毫无意义，且如果写入分两步
+ * （先建模型、再建绑定），第一步已经落库了，第二步才失败就成了**孤儿模型**。
+ *
+ * 这里故意按记录 id 查、不做「模型名 → 记录 id」的兜底：接口口径就是记录 id，
+ * 传模型名（例如 `'default'`）属于调用方拿错了钥匙，就该在查不到这一步停下，
+ * 而不是猜它想表达哪个落点。模型名到记录 id 的翻译由 `getDefaultLogicalModelRecordId`
+ * 与 `mapLogicalModelIdsToRecordIds` 两处显式完成。
+ */
+export async function getLogicalModelRecordIdOrThrow(id: string): Promise<string> {
+  const model = await getLogicalModel(id)
+  if (!model || model.deletedTime !== null) throw logicalModelNotFoundError(id)
+  return model.id
+}
+
+/**
  * 确认一个**模型 id** 当前没有被活跃的逻辑模型占用，否则抛 409。
  *
  * 收成一处，是因为三个入口问的是同一个问题（新建、改名、从快照导入），而答案必须一致：

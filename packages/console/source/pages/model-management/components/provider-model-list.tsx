@@ -1,14 +1,3 @@
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
-import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useEffect, useMemo, useState } from 'react'
 import { Ban, Plus, Server, Trash2 } from 'lucide-react'
 import { InlineEmptyState } from '@/components/inline-empty-state'
@@ -27,16 +16,11 @@ interface ProviderModelListProps {
   onRemoveModel: (model: ProviderModelRoute) => void
   onRemoveModels: (models: ProviderModelRoute[]) => Promise<boolean>
   onDisableModels: (models: ProviderModelRoute[]) => Promise<boolean>
-  onDragEnd: (event: DragEndEvent) => void
 }
 
 export function ProviderModelList(props: ProviderModelListProps) {
-  const { models, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onRemoveModels, onDisableModels, onDragEnd } = props
+  const { models, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onRemoveModels, onDisableModels } = props
   const t = useTranslation()
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([])
   const [modelSearch, setModelSearch] = useState('')
 
@@ -103,35 +87,28 @@ export function ProviderModelList(props: ProviderModelListProps) {
         </div>
       </div>
       {models.length ? (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-          onDragEnd={event => void onDragEnd(event)}
-        >
-          <SortableContext items={visibleModels.map(model => model.id)} strategy={verticalListSortingStrategy}>
-            <div className="overflow-hidden rounded-lg border border-module-border bg-workflow-block-parma-bg divide-y divide-border/50">
-              {visibleModels.map(model => (
-                <ProviderModelRow
-                  key={model.id}
-                  model={model}
-                  selected={selectedSet.has(model.id)}
-                  onSelectedChange={checked => {
-                    setSelectedModelIds(current => checked
-                      ? current.includes(model.id) ? current : [...current, model.id]
-                      : current.filter(id => id !== model.id))
-                  }}
-                  onEditModel={onEditModel}
-                  onToggleModelEnabled={onToggleModelEnabled}
-                  onRemoveModel={onRemoveModel}
-                />
-              ))}
-              {visibleModels.length === 0 && (
-                <InlineEmptyState title={t('models.picker.empty')} className="px-3 py-6" />
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
+        // 模型不分先后：顺序由逻辑模型页的调度绑定（`scheduling_policies.priority`）决定，
+        // `provider_models` 表没有排序列。这里不摆拖拽，避免一个拖了就报错、又不落地的入口。
+        <div className="overflow-hidden rounded-lg border border-module-border bg-workflow-block-parma-bg divide-y divide-border/50">
+          {visibleModels.map(model => (
+            <ProviderModelRow
+              key={model.id}
+              model={model}
+              selected={selectedSet.has(model.id)}
+              onSelectedChange={checked => {
+                setSelectedModelIds(current => checked
+                  ? current.includes(model.id) ? current : [...current, model.id]
+                  : current.filter(id => id !== model.id))
+              }}
+              onEditModel={onEditModel}
+              onToggleModelEnabled={onToggleModelEnabled}
+              onRemoveModel={onRemoveModel}
+            />
+          ))}
+          {visibleModels.length === 0 && (
+            <InlineEmptyState title={t('models.picker.empty')} className="px-3 py-6" />
+          )}
+        </div>
       ) : (
         <InlineEmptyState
           icon={Server}

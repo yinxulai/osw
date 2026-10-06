@@ -105,7 +105,6 @@ export function ModelManagementPage() {
           onRemoveModel={service.removeModel}
           onRemoveModels={service.removeModels}
           onDisableModels={service.disableModels}
-          onDragEnd={service.handleDragEnd}
         />
       )
     }

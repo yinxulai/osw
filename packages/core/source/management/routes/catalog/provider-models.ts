@@ -12,6 +12,7 @@ import {
 import {
   deleteSchedulingPolicy,
   getDefaultLogicalModelRecordId,
+  getLogicalModelRecordIdOrThrow,
   listSchedulingPolicies,
   upsertSchedulingPolicy,
 } from '@server/database/logical-model-store'
@@ -50,14 +51,20 @@ async function handleListProviderModelsByLogicalModel(_req: IncomingMessage, res
 }
 
 /**
- * 没指名落点时，新绑定挂在**内建默认逻辑模型**上。
+ * 把接口传上来的落点翻成**确实存在的数据记录 id**。
  *
- * 让服务端自己去找，是因为它的数据记录 id 是本机生成的：界面拿不到、也不该关心。
- * 模型管理页新增一个模型时想表达的就是「先接到默认模型上」，这里替它把话说完了。
+ * 没指名落点时，新绑定挂在**内建默认逻辑模型**上：它的数据记录 id 是本机生成的，
+ * 界面拿不到、也不该关心，所以由服务端自己去找。
+ *
+ * 指名了落点就先确认它存在。这一步不只为了回一个好听的 404：绑定的外键指着记录 id，
+ * 拿一个不存在的记录 id（典型是把**模型名** `'default'` 当成记录 id 传上来）去写，
+ * SQLite 会抛一句对用户毫无意义的 `FOREIGN KEY constraint failed`；而且一旦写入分两步
+ * （先建模型、再建绑定），第一步已经提交了，第二步才失败就是一个**孤儿模型**。
+ * 提前在这里停下，两个问题一起消失。
  */
 async function resolveSchedulingTarget(logicalModelId: string | undefined): Promise<string> {
-  if (logicalModelId !== undefined) return logicalModelId
-  return getDefaultLogicalModelRecordId()
+  if (logicalModelId === undefined) return getDefaultLogicalModelRecordId()
+  return getLogicalModelRecordIdOrThrow(logicalModelId)
 }
 
 const GetProviderModelSchema = z.object({ id: z.string().min(1) })
@@ -85,6 +92,9 @@ const CreateProviderModelSchema = z.object({
 })
 async function handleCreateProviderModel(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const input = CreateProviderModelSchema.parse(body)
+  // **先定落点再建模型**：落点不存在（模型名当记录 id、或那个逻辑模型已被删）时一个字节都不落库。
+  // 反过来（先建模型、再写绑定）一旦绑定失败，模型已经提交，就成了「接口报错了、模型却已存在」的孤儿。
+  const logicalModelRecordId = await resolveSchedulingTarget(input.logicalModelId)
   const model = await createProviderModelRoute({
     providerId: input.providerId,
     modelName: input.modelName,
@@ -94,7 +104,7 @@ async function handleCreateProviderModel(_req: IncomingMessage, res: ServerRespo
   })
   // 新模型的第一条绑定跟着模型本体走：模型建出来就是停用的，绑定不能默认打开
   // （`upsertSchedulingPolicy` 会拒绝为停用模型打开绑定）。
-  await upsertSchedulingPolicy({ logicalModelId: await resolveSchedulingTarget(input.logicalModelId), providerModelId: model.id, priority: input.priority, enabled: model.enabled })
+  await upsertSchedulingPolicy({ logicalModelId: logicalModelRecordId, providerModelId: model.id, priority: input.priority, enabled: model.enabled })
   // 一个模型可以同时绑多个协议的端点，每个端点都是一次「这项协议能力被接进来」：
   // 逐个发，不发「第一个」——挑一个发等于把「这个模型支持哪几种协议」答成残缺的。
   // （一个协议在模型上只会有一条绑定，是存储层按供应商端点唯一的约束保证的，见 `model-store.ts`。）
@@ -125,7 +135,7 @@ async function handleUpdateProviderModel(_req: IncomingMessage, res: ServerRespo
     ...(input.endpoints !== undefined ? { endpoints: input.endpoints } : {}),
   })
   if (input.logicalModelId && input.priority !== undefined) {
-    await upsertSchedulingPolicy({ logicalModelId: input.logicalModelId, providerModelId: input.id, priority: input.priority })
+    await upsertSchedulingPolicy({ logicalModelId: await getLogicalModelRecordIdOrThrow(input.logicalModelId), providerModelId: input.id, priority: input.priority })
   }
   const view = await getProviderModel(updated.id)
   sendSuccess(res, view ?? updated)

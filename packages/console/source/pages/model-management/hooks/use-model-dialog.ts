@@ -123,7 +123,9 @@ export function useModelDialog(options: UseModelDialogOptions) {
     const endpoints = enabledEntries.map(entry => ({ protocol: entry.protocol, endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '', customAuthHeader: null, protocolConversionEnabled: entry.protocolConversionEnabled }))
     if (editingModel) {
       if (!modelId.trim()) throw new Error(t('models.error.modelRequired'))
-      await unwrap(providerModelApi.update(editingModel.id, { logicalModelId: 'default', modelName: modelId.trim(), endpoints }))
+      // 不传 `logicalModelId`：改模型名与端点跟调度绑定无关，绑定落点由服务端按默认记录 id 解析。
+      // 传 `'default'` 会把**模型名**当成外键写进 `scheduling_policies.logicalModelId` 而撞 FK。
+      await unwrap(providerModelApi.update(editingModel.id, { modelName: modelId.trim(), endpoints }))
       return { createdCount: 0, skippedCount: 0, updated: true }
     }
 
@@ -143,7 +145,9 @@ export function useModelDialog(options: UseModelDialogOptions) {
         skippedCount += 1
         continue
       }
-      await unwrap(providerModelApi.create({ providerId: dialogProvider.id, modelName: target, endpoints, logicalModelId: 'default', priority: nextPriority }))
+      // 不传 `logicalModelId`：服务端把新绑定挂到内建默认逻辑模型上，它的数据记录 id 是本机生成的，
+      // 界面拿不到也不该关心。传 `'default'`（那是模型名）会撞 `scheduling_policies` 的外键。
+      await unwrap(providerModelApi.create({ providerId: dialogProvider.id, modelName: target, endpoints, priority: nextPriority }))
       existingNames.add(target)
       nextPriority += 1
       createdCount += 1

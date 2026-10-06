@@ -690,7 +690,6 @@ export const uiEn = {
   'models.list.disable': 'Disable',
   'models.list.emptyTitle': 'No provider models yet',
   'models.list.emptyDescription': 'Add one to call it through the local proxy',
-  'models.row.dragAria': 'Drag {name}',
   'models.row.consecutiveFailures': 'Failed {count} times in a row',
   'models.row.lastSuccess': 'Last success',
   'models.row.noRequests': 'No requests yet',
@@ -740,7 +739,6 @@ export const uiEn = {
   'models.delete.bulkTitle': 'Delete {count} selected models?',
   'models.delete.bulkDescription': 'All protocol endpoints linked to these models will be removed. This cannot be undone.',
   'models.delete.bulkConfirmLabel': 'Delete {count} models',
-  'models.reorder.failed': 'Could not save the model order; server data restored: {message}',
 
   // ========== 页面 · 请求重写 ==========
   'rules.title': 'Request Rewrite',

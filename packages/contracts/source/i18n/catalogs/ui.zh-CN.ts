@@ -693,7 +693,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'models.list.disable': '禁用',
   'models.list.emptyTitle': '还没有供应商模型',
   'models.list.emptyDescription': '添加后即可通过本地代理调用',
-  'models.row.dragAria': '拖动 {name}',
   'models.row.consecutiveFailures': '连续失败 {count} 次',
   'models.row.lastSuccess': '最近成功',
   'models.row.noRequests': '暂无请求',
@@ -743,7 +742,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'models.delete.bulkTitle': '删除选中的 {count} 个模型？',
   'models.delete.bulkDescription': '这些模型关联的所有协议接口都会被移除，此操作无法撤销。',
   'models.delete.bulkConfirmLabel': '删除 {count} 个模型',
-  'models.reorder.failed': '模型顺序保存失败，已恢复服务端数据：{message}',
 
   // ========== 页面 · 请求重写 ==========
   'rules.title': '请求重写',
