@@ -1,7 +1,8 @@
 # 匿名使用统计的上报端点。
 #
 # 部署：`pnpm --filter @osw/api deploy`（云端由 Workers Builds 关联仓库自动跑，本地手动部署
-# 就这一条命令）。密钥不在这里，用 `wrangler secret put` 配一次。
+# 就这一条命令）。**没有密钥要配**——存储是同一个账号里的一个 Analytics Engine 数据集，
+# 它靠下面那段绑定拿到，不经 `wrangler secret put`。
 #
 # Workers Builds 三条命令（Root directory = `apps/apis`）：
 #   Build   `pnpm run build` → `deploy:dry-run`。Worker 没有单独的编译阶段，「打包」就是构建，
@@ -32,25 +33,35 @@ routes = [
 #
 # 每一个非 2xx 出口都会留一行，形状统一（`source/log.ts`）：
 #
-#   [apis] status=500 error=not_configured missing=APTABASE_APP_KEY
+#   [apis] status=500 error=not_configured missing=TELEMETRY
 #
 # 2xx 不打：成功行会按「安装数 × 频率」增长，而它回答不了任何问题。
 # 要查历史日志：Cloudflare 后台 → Workers & Pages → osw-apis → Logs；
 # 要看实时的：在 `apps/apis` 里跑 `pnpm exec wrangler tail`。
 enabled = true
 
-[secrets]
-# 声明「少了下游密钥就不算一份完整的部署」。声明之后，`wrangler deploy` / `wrangler versions upload`
-# 会在**部署时**核对它到底配上了没有，缺了直接报错退出——而不是把代码推上去、让每个请求在线上
-# 回 500（见下面「密钥」一节与 `source/index.ts`）。
+# ---------------------------------------------------------------- 存储
+
+[[analytics_engine_datasets]]
+# 写入数据集。它有两个名字，各自只有一个读者：
 #
-# 这就是这条链路想要的失败方式：把「少配了一个 secret」从「上线后有人看见」挪到「发布日志里
-# 直接写着」。没有它时，唯一能发现的方式是有人去戳端点或在日志里翻到那一行。
+#   binding  = "TELEMETRY"      代码里的 `env.TELEMETRY`，**改它就要改 `source/index.ts`**；
+#   dataset  = "osw_telemetry"  存储侧的表名，**改它就要改读侧的 SQL**（也改
+#                               `source/sinks/analytics-engine.ts` 里的 `ANALYTICS_ENGINE_DATASET`）。
 #
-# ⚠️ 配上它之后，缺密钥的发布**会失败**，这是刻意的。所以先去把密钥配好，再发下一次。
+# 用下划线不用连字符：它在 SQL 里是个标识符（`FROM osw_telemetry`）。
 #
-# 顺带：它也是 `wrangler types` 的类型来源（`apps/apis/worker-configuration.d.ts`，已被忽略）。
-required = ["APTABASE_APP_KEY"]
+# **数据集不用在后台建**——第一次写入时自动创建。所以这一段的生效条件很简单：把它写完、部署。
+#
+# ⚠️ 与上一版（`APTABASE_APP_KEY`）最大的区别：这里**没有秘密**。没有密钥、没有区域地址、
+# 没有第三方账号，因此也就没有「部署时忘了 `wrangler secret put`」这类事故，以及它带来的
+# 那一档 500。仍然会有一档 500，但它现在只意味着「这一段没写、或写到了别的 Worker」：
+#
+#   [apis] status=500 error=not_configured missing=TELEMETRY
+#
+# 它的价值没有变：数据宁可明确丢掉一个请求，也不静默丢一整天。
+binding = "TELEMETRY"
+dataset = "osw_telemetry"
 
 # ---------------------------------------------------------------- 自定义域名
 #
@@ -95,25 +106,12 @@ required = ["APTABASE_APP_KEY"]
 
 # ---------------------------------------------------------------- 密钥
 #
-#   wrangler secret put APTABASE_APP_KEY     # A-EU-…（Aptabase 应用的 App Key）
+# **这一版没有密钥，一个都没有。** 上一版这里是一段 `wrangler secret put APTABASE_APP_KEY`，
+# 及相关的一大堆注意事项（后台必须选 Secret 而不是 Variable、区域要与入口地址对得上、
+# 漏配了会在线上回 500……）。换成 Analytics Engine 之后整段消失了：数据落在本账号的一个数据集
+# 里，写入靠上面那段**绑定**，而绑定不是秘密——它不能被拿去别处用，也不会因为泄露而被人灌数据。
 #
-# ⚠️ 在后台「Variables and Secrets → Add」里加时，类型必须选 **Secret**。
-# 选成 Variable（明文）的那种会在**下一次 `wrangler deploy` 时被清掉**：`wrangler.toml` 是这份
-# 配置的唯一真相，后台的**变量**每次部署都会被它覆盖；而 **Secret 不会**（除非显式跑
-# `wrangler secret delete`）。「后台配了、发布一次就没了」说的就是前者。
-# 想让后台变量活下来要写 `keep_vars = true`，这里刻意不写：那等于让仓库之外还藏着半份配置。
-#
-# 只有一个：它是这条链路上唯一的秘密，也是唯一可能泄出去的东西。它会进**转发请求的请求头**
-# （`App-Key`），所以它一旦泄露，任何人都能往这个应用里灌数据。不进仓库、不进本文件、不进客户端。
-#
-# **区域要跟着 `source/sinks/aptabase.ts` 里的 `APTABASE_EVENTS_URL` 走**：App Key 中间那一段就是
-# 它所属的数据中心（`A-EU-…` / `A-US-…`），而区域是签在密钥上的。地址与它对不上时下游回 404
-# （它在自己那张表里找不到这个密钥），表现为 502 `upstream_rejected` 加一行 `upstream_status=404`
-# 的日志——不是静默丢数据。
-#
-# 少了它，端点会对所有请求回 500 `not_configured`（全 Worker 唯一一个 500），并在日志里留下：
-#
-#   [apis] status=500 error=not_configured missing=APTABASE_APP_KEY
-#
-# 它宁可明确失败，也不会静默把数据丢掉。**看到这一行就说明是这里没配**——
-# 注意这里说的是密钥本身没有被这个 Worker 读到，而不是密钥不对（那是 404，走上面那条）。
+# 这一节留着，是为了让下一个找密钥的人看到「不是忘了写，是这里确实一件都没有」。下一次如果要接
+# 一个有密钥的后端，要记住的事仍然成立（它在 git 历史里）：这份文件是配置的唯一真相，**密钥走
+# `wrangler secret put`、不进仓库**；而后台手填的变量与配置里的 `[vars]` 是同一处东西，下一次
+# deploy 会以后者为准（不想被覆盖得显式开 `keep_vars`），Secret 则不在这个覆盖范围内。

@@ -8,32 +8,34 @@
  * 3. **交给下游**：具体去哪个后端由 `source/sinks/` 决定，这里不知道也不需要知道。
  *
  * 第 3 条被单独拎出来，是因为**它可替换**：换分析后端只写一个新 sink 文件并改 `createSink`
- * 一处，收报文、校验这些与下游无关的事一行都不动（见 `source/sink.ts`）。
+ * 一处，收报文、校验这些与下游无关的事一行都不动（见 `source/sink.ts`）。现在的下游是
+ * **本账号内的一个 Analytics Engine 数据集**（`source/sinks/analytics-engine.ts`），写入是一次
+ * 本地调用：没有地址、没有凭证、没有转发超时。
  *
  * 请求路径只有 `/v1/track` 一条（`TELEMETRY_REQUEST_PATH`），其余一律 404，根路径也不例外。
  * 刻意不为部署流水线另加一个健康检查接口：域名上「唯一一条路径」本身就是最强的信号，
  * 而部署后真正要确认的只有「路由注册上了没有」——对 `GET /v1/track` 期待 405 就回答了它，
  * 那是一个只可能来自本 Worker 的答案。
  *
- * 为什么必须有这一层，而不是让客户端直接打下游：下游的凭证只应该存在于这里。桌面应用里嵌的
- * 任何凭证都能被解出来，所以「客户端不持有下游凭证」不是可选的组织方式，是唯一的正确形态。
- * 也因此这里**不做客户端鉴权**——它只能提供虚假的安全感（§7）。
+ * 为什么必须有这一层，而不是让客户端直接打下游：下游的接入方式（上一版是一个密钥，这一版是
+ * 一段绑定）只应该存在于这里。桌面应用里嵌的任何凭证都能被解出来，所以「客户端不持有下游
+ * 凭证」不是可选的组织方式，是唯一的正确形态。也因此这里**不做客户端鉴权**——它只能提供虚
+ * 假的安全感（§7）。
  *
  * 端点地址是客户端里唯一写死的地址，**发布出去就是永久地址**：换下游、换存储、换数据驻留
  * 区域都只动这个 Worker。所以这里对客户端承诺的是**请求格式**（`/v1/track`），不是数据去向。
  *
  * ## 关于地理位置
  *
- * 转发请求是从 **Cloudflare 机房**发出的，所以下游按请求来源 IP 做地理归属只会得到
- * 「所有用户都在机房所在地」这个假答案。因此这里把**来源国家**（`CF-IPCountry`，由 Cloudflare
- * 在边缘按真实客户端 IP 判好，客户端伪造不了）当作一项服务端事实交给 sink。
+ * 这一层会把**来源国家**（`CF-IPCountry`，由 Cloudflare 在边缘按真实客户端 IP 判好，客户端
+ * 伪造不了）当作一项服务端事实交给 sink。
  *
  * **给的是结论，不是原料**：`CF-IPCountry` 是一枚两字母的代码，比一个能定位到人的地址粗得多，
  * 而这一步 Cloudflare 已经算完了——把 IP 再往下递换不到任何更准的答案，只是让链路上多留一份
- * 原始用户信息。于是**客户端的地址从头到尾没有被读过**：离开这个 Worker 的只有契约里的枚举值
+ * 原始用户信息。于是**客户端的地址从头到尾没有被读过**：进存储的只有契约里的枚举值
  * 与这一枚国家代码。
  *
- * 拿不到国家时 sink 不带地区，**绝不退回请求自身的来源地址**：那只会得到「所有人都来自
+ * 拿不到国家时 sink 把这一列写成空串，**绝不退回请求自身的来源地址**：那只会得到「所有人都来自
  * 机房」这个假答案。
  *
  * ## 关于限流：这里不做
@@ -52,9 +54,9 @@
  * **每一个非 2xx 出口都留一行**，形状统一、由 `source/log.ts` 收口；2xx 不打（理由见那个
  * 文件）。这曾经是一处真实缺口：唯一那个 500（`not_configured`）当时**没有任何日志**，于是
  * 现场只剩下客户端那句 `telemetry endpoint responded with 500`——状态码有了，原因要人去翻
- * 代码才知道。而它恰恰是部署期最容易犯的错（`wrangler secret put` 那一步漏了），也恰好是
- * 唯一一个「看到就能直接修」的失败。最容易犯的错必须是日志里最响的一条，不能是最静的一条。
- */
+ * 代码才知道。而它恰恰是部署期最容易犯的错（绑定那一段写漏了），也恰好是唯一一个「看到就能
+ * 直接修」的失败。最容易犯的错必须是日志里最响的一条，不能是最静的一条。
+ * */
 
 import {
   TelemetryBatchSchema,
@@ -63,24 +65,26 @@ import {
   type TelemetryEvent,
 } from '@common/telemetry'
 import { logOutcome } from './log'
-import type { Fetcher, TelemetrySink } from './sink'
-import { createAptabaseSink } from './sinks/aptabase'
+import type { TelemetrySink } from './sink'
+import { createAnalyticsEngineSink, type AnalyticsEngineDatasetBinding } from './sinks/analytics-engine'
 
 /**
  * Worker 的绑定。
  *
- * 只有一项：下游的应用密钥。它是 secret（`wrangler secret put`），不进仓库、不进
- * `wrangler.toml`、不进客户端。它一旦泄露，任何人都能往这个项目里灌数据。
+ * 只有一项：写入数据集（`wrangler.toml` 里的 `[[analytics_engine_datasets]]`）。它是一个**绑定**
+ * 而不是 secret——没有密钥、没有区域地址，也不能被别人拿到别处去。于是这一层曾经的「部署时
+ * 忘了 `wrangler secret put`」那一类部署事故**结构上不存在了**。
  *
- * 名字跟着下游走（现在是 Aptabase），而不是起一个中性的 `TELEMETRY_TOKEN`：不同后端的凭证
- * 本来就不是同一样东西，把它藏在一个通用名字后面只会让「现在配的到底是哪家的密钥」
- * 变成一件要靠人记的事。换后端时这里会跟着变，那正是应该发生的。
+ * 名字跟的是**角色**（`TELEMETRY`）而不是下游是谁。上一版它叫 `APTABASE_APP_KEY`，理由是
+ * 「不同后端的凭证本来就不是同一样东西」；这个理由在绑定上是反过来的:绑定本来就是一种通用
+ * 形态（任何后端都能包成一个绑定对象），而 `env.TELEMETRY` 这种名字让「代码引用的是谁」与
+ * 「下游是谁」彻底解耦——换后端时这个文件只剩导入与 `createSink` 两行要改。
  *
- * 值的形状是 `A-<区域>-<随机段>`（区域那一段决定它属于哪个数据中心），但**这里不看它**
- * ——为什么，见 `createSink`。
+ * 宣告成可选是因为「没绑上」是一种必须能表达的运行状态：`wrangler.toml` 少了一段就会这样，
+ * 而那时应该回 500 并点名它（见下面那段）。
  */
 export interface TelemetryEnv {
-  APTABASE_APP_KEY?: string
+  TELEMETRY?: AnalyticsEngineDatasetBinding
 }
 
 export type TelemetryHandler = (request: Request, env: TelemetryEnv, now?: number) => Promise<Response>
@@ -88,10 +92,11 @@ export type TelemetryHandler = (request: Request, env: TelemetryEnv, now?: numbe
 /**
  * 造一个 handler。
  *
- * 之所以是工厂而不是一个模块级的函数，是为了让 `fetcher` 能被换掉：测试要替换的正是「那一次
- * HTTP」，而不是把整条链路搭起来。部署时用文件末尾那个默认实例。
+ * 刻意**没有任何可注入项**。上一版收一个 `fetcher` 参数，因为那时「那次 HTTP」是唯一的对外
+ * 依赖、也是测试最想替换的东西。这一版的下游是一次本地调用，而它已经藏在 sink 后面了
+ * （测试直接造一个 sink 就行，不必经过 handler），所以这里不再需要那个接缝。
  */
-export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandler {
+export function createTelemetryHandler(): TelemetryHandler {
   return async function handle(request, env, now = Date.now()) {
     // ---- 1. 路由：只有一条路径，只有一种方法 ----
 
@@ -124,12 +129,13 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
     // ---- 2. 下游：缺配置就说清楚，不能静默丢数据 ----
 
     // `createSink` 是**全 Worker 唯一知道选的是哪个后端的地方**。换后端时只改它。
-    const sink = createSink(env, fetcher)
+    const sink = createSink(env)
     if (sink === null) {
-      // ⚠️ 全 Worker 唯一一个 500，而原因只有一个：密钥没配上（`wrangler secret put` 没执行，
-      // 或配到了别的 Worker / 别的环境）。所以这一行**必须点名缺的是哪一项**——「少了一个
-      // secret」与「少的是 `APTABASE_APP_KEY`」之间，差的正好是拿去修的那一步。
-      logOutcome(500, 'not_configured', { missing: 'APTABASE_APP_KEY' })
+      // ⚠️ 全 Worker 唯一一个 500，而原因只有一个：数据集没绑上（`wrangler.toml` 里那段
+      // `[[analytics_engine_datasets]]` 没写、写到了别的 Worker / 别的环境）。所以这一行
+      // **必须点名缺的是哪一项**——「少了一个绑定」与「少的是 `TELEMETRY`」之间，差的正好
+      // 是拿去修的那一步。
+      logOutcome(500, 'not_configured', { missing: 'TELEMETRY' })
       return json(500, { ok: false, error: 'not_configured' })
     }
 
@@ -176,28 +182,21 @@ export function createTelemetryHandler(fetcher: Fetcher = fetch): TelemetryHandl
     const outcome = await sink.forward(events, { receivedAt: now, countryCode: countryOf(request) })
     if (outcome.ok) return new Response(null, { status: 204 })
 
-    // 从这里往下都只有一行日志，都说「下游答不答」，不说「谁在发」：没有安装标识、没有来源
-    // 地址、没有报文正文。`wrangler.toml` 把 `[observability]` 打开，等的就是它们。带上
-    // `sink` 名是为了将来同时挂两个下游时这些行还能分开；`reason` 与 `detail` 是下游能给、
-    // 而只有它才能给出的两项（见 `sink.ts`）。
-    if (outcome.failure === 'unreachable') {
-      logOutcome(502, 'upstream_unreachable', {
-        sink: sink.name,
-        reason: outcome.reason,
-        events: events.length,
-      })
-      return json(502, { ok: false, error: 'upstream_unreachable' })
-    }
-    // ⚠️ 2xx 只说明下游收下了请求，**不代表事件入库**：缺标识、缺事件名、超出它的时间窗
-    // 都会被静默丢弃（telemetry.md §9）。所以这个返回值不能当验收标准用，验收要看下游
-    // 自己的报表。
-    logOutcome(502, 'upstream_rejected', {
+    // 从这里往下只有一行日志，不说「谁在发」：没有安装标识、没有来源地址、没有报文正文。
+    // `wrangler.toml` 把 `[observability]` 打开，等的就是它们。带上 `sink` 名是为了将来同时挂
+    // 两个下游时这些行还能分开。
+    //
+    // 上一版这里有两个分支（`unreachable` / `rejected`），各带一项下游才给得出的补充
+    // （`reason` / `upstream_status`）。这一版只有一种失败，也就不再有可补充的东西（见
+    // `sink.ts` 里那张表）。
+    //
+    // ⚠️ 反过来，204 **不代表事件入库**：绑定不接受无效的数据点，它只是静默地把它丢掉。
+    // 验收得看数据集里的查询结果（telemetry.md §10）。
+    logOutcome(502, 'not_delivered', {
       sink: sink.name,
-      upstream_status: outcome.status,
       events: events.length,
-      detail: outcome.detail,
     })
-    return json(502, { ok: false, error: 'upstream_rejected', status: outcome.status })
+    return json(502, { ok: false, error: 'not_delivered' })
   }
 }
 
@@ -261,21 +260,14 @@ function isJsonContentType(contentType: string | null): boolean {
  * 拆成独立的函数而不是写在 handler 里，是为了让「换后端要改哪里」有一个能被搜到的答案。
  * 返回 `null` 表示配置不齐——调用方据此回 500，而不是静默地把数据丢掉。
  *
- * 只判断「密钥存不存在」：**不去猜它的格式**（前缀、区域段、长度都不看）。密钥的合法性只有
- * 下游知道，猜错的后果是「部署时看着没问题，上线后一条都收不到」。让第一个真实请求去回答它。
- *
- * ⚠️ 有一处**格式之外**的一致性靠人是守的：密钥里那一段区域要与 sink 里的入口地址对得上
- * （见 `sinks/aptabase.ts`）。对不上时下游会回 404，所以它会在日志里立刻显形，而不是静默
- * 丢数据——这也正是这里敢不去校验它的原因。
+ * 上一版这里还要「不猜密钥格式」一段自歉，因为密钥是手拼给 `wrangler secret put` 的，且它里面
+ * 还藏着区域、可能跟入口地址矛盾。绑定把这些全题都消掉了：`TELEMETRY` 是或不存，没有格式
+ * 可猜，也不存在「区域写错了」这种部署形态。于是这个函数只剩「存不存在」一件判断。
  */
-function createSink(env: TelemetryEnv, fetcher: Fetcher): TelemetrySink | null {
-  const appKey = env.APTABASE_APP_KEY
-  if (!isNonEmpty(appKey)) return null
-  return createAptabaseSink({ appKey, fetcher })
-}
-
-function isNonEmpty(value: string | undefined): value is string {
-  return value !== undefined && value !== ''
+function createSink(env: TelemetryEnv): TelemetrySink | null {
+  const dataset = env.TELEMETRY
+  if (dataset === undefined) return null
+  return createAnalyticsEngineSink({ dataset })
 }
 
 /**
