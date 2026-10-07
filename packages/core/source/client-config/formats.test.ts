@@ -868,3 +868,94 @@ describe('yaml editor', () => {
     expect(editor.get('<id>.baseURL')).toBeNull()
   })
 })
+
+/**
+ * 「什么都没有」的 YAML 文档序列化出来**必须是空容器，不能是字面量 `null`**。
+ *
+ * `yaml` 对空文件/只有空白/只有注释的文档，根节点是 `null`，而它会把 `null` 老老实实写成
+ * `null`——一份只有 `null` 的配置不是任何一种格式的合法内容，工具读它会直接报错。这四个
+ * 入口都会落到同一个出口：
+ *   - 一键生效：规划完直接拿文本落盘（`planClientConfigChanges` → `commitClientConfig`），
+ *     本次没有键要写的文件（dsh 的 `~/.dsh/config.yaml`）走的正是这条；
+ *   - 界面上「手动编辑」后保存：同样从预览拿文本；
+ *   - 预览：内容直接显示在界面里；
+ *   - 落盘：写的就是它。
+ *
+ * 这些用例都用 `createConfigEditor` 而不是直接调序列化，是为了连「形状」一起钉住：
+ * 补什么容器由存储形状决定，写错了就是把用户的补丁列表改成映射。
+ */
+describe('yaml editor with an empty document', () => {
+  const patchList = { kind: 'patchList' } as const
+
+  it('never serializes a literal null, whatever the input was made of', () => {
+    // 空文件、只有空白、只有换行、只有注释——它们都「没有内容」，谁都不许变成 `null`。
+    for (const shape of [undefined, patchList]) {
+      for (const text of ['', '   ', '\n', ' \n \n', '# 我还没写\n', '# a\n# b\n\n']) {
+        expect(createConfigEditor('yaml', text, shape).serialize()).not.toMatch(/^\s*null\s*$/m)
+      }
+    }
+  })
+
+  it('gives an empty mapping for a plain nested mapping, an empty list for a patch list', () => {
+    // 补出来的容器口径与 `container()` 一致：`patchList` 的根是条目列表，其余都是映射。
+    expect(createConfigEditor('yaml', '').serialize()).toBe('{}\n')
+    expect(createConfigEditor('yaml', '').serialize()).toBe('{}\n')
+    expect(createConfigEditor('yaml', '\n', patchList).serialize()).toBe('[]\n')
+    expect(createConfigEditor('yaml', '   ', patchList).serialize()).toBe('[]\n')
+    // 空映射进得去也出得来：序列化是要被反复调用的，结果必须是自己的不动点。
+    expect(createConfigEditor('yaml', '{}\n').serialize()).toBe('{}\n')
+    expect(createConfigEditor('yaml', '[]\n', patchList).serialize()).toBe('[]\n')
+  })
+
+  it('keeps the comment a file was made of', () => {
+    // 只有注释的文件是用户特意留下的说明，补容器不许把它丢了。
+    expect(createConfigEditor('yaml', '# 我还没写\n').serialize()).toBe('# 我还没写\n\n{}\n')
+    expect(createConfigEditor('yaml', '# 我还没写\n', patchList).serialize()).toBe('# 我还没写\n\n[]\n')
+  })
+
+  it('replaces a null root the bug already wrote to disk', () => {
+    // 字面量 `null` 的根解析回来也算「没有内容」，下一次保存就把它换成空容器——
+    // 坏文件不会因为「已经坏了」而被原样写回去。
+    expect(createConfigEditor('yaml', 'null\n').serialize()).toBe('{}\n')
+    expect(createConfigEditor('yaml', '~').serialize()).toBe('{}\n')
+    expect(createConfigEditor('yaml', 'null\n', patchList).serialize()).toBe('[]\n')
+    // 坏文件上的注释同样留着，且位置落在文档级尾注（贴着容器写会让文本每存一次都变一次）。
+    expect(createConfigEditor('yaml', '# head\nnull # tail\n').serialize()).toBe('# head\n\n{}\n\n# tail\n')
+  })
+
+  it('stays byte-identical when the serialized text is parsed again', () => {
+    // 写入是算两遍的（预览 + 落盘）。序列化结果若不是不动点，第二次就会觉得「还得再改」，
+    // 于是每点一下按钮就多出一份内容不同的版本。
+    for (const text of ['', '   ', '# 我还没写\n', 'null\n', '# head\nnull # tail\n']) {
+      for (const shape of [undefined, patchList]) {
+        const once = createConfigEditor('yaml', text, shape).serialize()
+        const twice = createConfigEditor('yaml', once, shape).serialize()
+        expect(twice).toBe(once)
+      }
+    }
+  })
+
+  it('still reads nothing out of an empty document', () => {
+    // 补容器只影响写出去的文本：读不到键就还是读不到，界面不会凭空多出一个「已填」的值。
+    const empty = createConfigEditor('yaml', '', patchList)
+    empty.serialize()
+    expect(empty.get('llm-deepseek.apiKey')).toBeNull()
+
+    const commented = createConfigEditor('yaml', '# 我还没写\n')
+    commented.serialize()
+    expect(commented.get('model')).toBeNull()
+  })
+
+  it('writes the first key on top of the container it just filled in', () => {
+    // 补出来的容器也是接下来写入的底板：空文件里第一次写就要落在补好的结构里。
+    const patch = createConfigEditor('yaml', '', patchList)
+    expect(patch.serialize()).toBe('[]\n')
+    patch.set('llm-deepseek.apiKey', 'sk-osw')
+    expect(patch.serialize()).toBe('- id: llm-deepseek\n  config:\n    apiKey: sk-osw\n')
+
+    const plain = createConfigEditor('yaml', 'null\n')
+    expect(plain.serialize()).toBe('{}\n')
+    plain.set('model', 'gpt-5')
+    expect(plain.serialize()).toBe('model: gpt-5\n')
+  })
+})

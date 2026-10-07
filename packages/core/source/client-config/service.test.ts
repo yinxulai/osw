@@ -49,6 +49,7 @@ const PI_SETTINGS_FILE = '~/.pi/agent/settings.json'
 const PI_MODELS_FILE = '~/.pi/agent/models.json'
 const DSH_FILE = 'deepseek-harness'
 const DSH_SETTINGS_FILE = '~/.dsh/settings.yaml'
+const DSH_CONFIG_FILE = '~/.dsh/config.yaml'
 const COPILOT = 'copilot-cli'
 const COPILOT_ENV_FILE = '~/.copilot/osw.env'
 const VSCODE = 'vscode'
@@ -636,6 +637,33 @@ describe('previewClientConfigOverrides', () => {
 
     // 列表页的「已生效」就是这个空数组。
     expect(preview.changes).toEqual([])
+  })
+
+  it('plans a file with no changes as an empty container, never as null', async () => {
+    // dsh 的 `~/.dsh/config.yaml` 是一份空文件，而注册表里没有任何字段声明落在它上面：
+    // 「改 0 处」但内容仍会被写下去。原来 `yaml` 会把这份空文档序列化成字面量 `null`，
+    // 于是「一键生效」把一份空文件写成了一份坏文件。空内容就该是空内容。
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.changes).toEqual([])
+    expect(preview.content).toBe('[]\n')
+  })
+
+  it('replaces the null root this bug already wrote to disk', async () => {
+    // 已经被写坏的文件：下一次保存把它换成空容器。用户不需要自己知道该填什么。
+    writeFile(DSH_CONFIG_FILE, 'null\n')
+
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.content).toBe('[]\n')
+  })
+
+  it('keeps a comment-only file a comment, not a null', async () => {
+    writeFile(DSH_CONFIG_FILE, '# 我还没写\n')
+
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.content).toBe('# 我还没写\n\n[]\n')
   })
 })
 

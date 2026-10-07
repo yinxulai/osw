@@ -1209,6 +1209,24 @@ class YamlConfigEditor implements ConfigEditor {
   }
 
   serialize(): string {
+    // 「没有内容的文档」在这里统一收口。空文件、只有空白、只有注释，`yaml` 解析出来的根都是
+    // `null`，而 `null` 会被**老老实实写成字面量 `null`**——一个只有 `null` 的文件不是任何一种
+    // 格式的合法内容，落到用户磁盘上就是一份坏配置。与 JSON 那两个编辑器同一套兜底：按存储形状
+    // 补一份最小的空容器（口径与 `container()` 一致：`patchList` 的根是条目列表，其余都是映射）。
+    //
+    // 为什么要挡在序列化这一层，而不只在 `sequence()` / `rootMap()` 里兜：保存是拿规划好的文本
+    // 直接落盘的（见 `planClientConfigChanges`），而**本次没有键要写**的文件根本不会经过写路径。
+    // dsh 的 `~/.dsh/config.yaml`（patchList）眼下就没有任何字段落在它上面——它正是最常被踩到
+    // 的那一处：一键生效会把一份空文件写成只有 `null` 的文件。`serialize()` 是唯一出口
+    // （预览与落盘都从它取文本），挡在这里就不会有哪个入口漏掉。
+    //
+    // 只往外给文本，读的行为不变：`get()` 照样读不到键、仍返回 `null`。
+    //
+    // 这同时治好已经写坏的文件：字面量 `null` 的根解析回来同样算「空」，于是下一次保存把它换成
+    // 空容器，而不是把这份坏内容原样写回去。
+    if (isEmptyRoot(this.doc.contents)) {
+      this.replaceRoot(this.doc.contents, this.shape.kind === 'patchList' ? new YAMLSeq() : new YAMLMap())
+    }
     return this.doc.toString()
   }
 
@@ -1265,10 +1283,10 @@ class YamlConfigEditor implements ConfigEditor {
   /** 文档根节点当作一条条目列表；不是列表时，读返回 `null`、写直接拒绝（不覆盖别人的结构）。 */
   private sequence(create: boolean): YAMLSeq | null {
     const root = this.doc.contents
-    if (root === null) {
+    if (isEmptyRoot(root)) {
       if (!create) return null
       const seq = new YAMLSeq()
-      this.doc.contents = seq
+      this.replaceRoot(root, seq)
       return seq
     }
     if (isSeq(root)) return root
@@ -1279,15 +1297,28 @@ class YamlConfigEditor implements ConfigEditor {
   /** 文档根节点当作一棵映射；不是映射时，读返回 `null`、写直接拒绝。 */
   private rootMap(create: boolean): YAMLMap | null {
     const root = this.doc.contents
-    if (root === null) {
+    if (isEmptyRoot(root)) {
       if (!create) return null
       const map = new YAMLMap()
-      this.doc.contents = map
+      this.replaceRoot(root, map)
       return map
     }
     if (isMap(root)) return root
     if (create) throw new ConfigParseError('expected a mapping')
     return null
+  }
+
+  /**
+   * 用 `next` 替掉根节点，并把原根节点上的注释搬过去——注释是用户自己写的内容，换个容器也得留着。
+   *
+   * 尾注（`null # 说明` 这种）必须挂在文档上：贴着新节点写，会被排版成「容器一行、注释一行」，
+   * 而这段文本每次保存都要原样重算一遍，一旦不是不动点，每存一次就多出一份内容不同的版本。
+   */
+  private replaceRoot(previous: Node | null, next: YAMLMap | YAMLSeq): void {
+    this.doc.contents = next
+    if (previous === null || !isScalar(previous)) return
+    if (previous.commentBefore) this.doc.commentBefore = previous.commentBefore
+    if (previous.comment) this.doc.comment = previous.comment
   }
 }
 
@@ -1323,6 +1354,17 @@ function ensurePayload(entry: YAMLMap, field: string): YAMLMap {
   const map = new YAMLMap()
   entry.set(field, map)
   return map
+}
+
+/**
+ * 这个根节点算不算「没有内容」。
+ *
+ * 空文件、只有空白、只有注释，`yaml` 解析出来的根都是 `null`；而**已经被写成字面量 `null` 的
+ * 文件**解析回来同样是一个值为 `null` 的标量。两者在「用户其实什么都没填」这件事上是一回事，
+ * 所以用同一个判断收掉，写路径与序列化不会再出现「这里能建、那里说不是映射」的分叉。
+ */
+function isEmptyRoot(node: Node | null): boolean {
+  return node === null || (isScalar(node) && node.value === null)
 }
 
 /** AST 节点上的标量文本；不是标量、或值是 `null` 时返回 `null`。 */
