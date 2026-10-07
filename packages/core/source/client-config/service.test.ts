@@ -820,14 +820,29 @@ describe('applyClientConfigDefaults', () => {
 
     const settings = parse(readFile(DSH_SETTINGS_FILE)) as {
       'agent-default-model'?: { provider?: string; model?: string }
-      'llm-pi-ai'?: { providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string }> }> }
+      'llm-pi-ai'?: {
+        providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string; reasoningEfforts?: unknown }> }>
+      }
     }
 
     // 新会话的默认路由指向本机服务提供方（表项键 = provider id）。
     expect(settings['agent-default-model']).toMatchObject({ provider: LOCAL_PROVIDER_ID })
     // 手工声明的 provider 路由带上本机地址与 /v1，以及数组形态的模型清单。
     expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.baseURL).toContain('127.0.0.1:9300/v1')
-    expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.models?.[0]).toMatchObject({ id: 'default' })
+    const [model] = settings['llm-pi-ai']!.providers![LOCAL_PROVIDER_ID]!.models!
+    expect(model).toMatchObject({ id: 'default' })
+    // 手工声明的模型默认**一个推理档位都不声明**，于是 harness 打开会话选的档位会被拒为
+    // UNSUPPORTED_REASONING_EFFORT——所以这份配方必须把档位连到线上拼写上；`off` 空值表示这一档
+    // 支持但请求里什么都不发。
+    expect(model.reasoningEfforts).toEqual({
+      off: null,
+      minimal: 'minimal',
+      low: 'low',
+      medium: 'medium',
+      high: 'high',
+      xhigh: 'xhigh',
+      max: 'max',
+    })
   })
 
   it('is idempotent for the harness too: a second run has nothing to write', async () => {
