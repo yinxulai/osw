@@ -1,5 +1,6 @@
 import { resolveProtocolAuthHeaders } from '@common/protocols'
 import type { RequestRewriteRule } from '@common/schemas'
+import { getProviderSetting } from '@server/database/provider-store'
 import { listRulesForProviderModel } from '@server/database/request-rewrite-rule-store'
 import type {
   AttemptView,
@@ -33,6 +34,10 @@ import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { reportTelemetryEvent } from '@server/telemetry'
 import { pipeBuffered } from '@server/proxy/kernel/buffered-pipe'
 import { resolveTransportImplementation } from '@server/proxy/transports/registry'
+import { PLUGIN_PROVIDER_SETTING_KEY, readPluginInputs } from '@server/plugins/state'
+import { loadPlugin } from '@server/plugins/manifest'
+import { getPluginDirectory } from '@server/plugins/registry'
+import { pluginRunner } from '@server/plugins/runner'
 
 export interface PrepareAttemptInput {
   readonly context: RequestContext
@@ -88,7 +93,9 @@ export interface PreparedAttempt {
 export async function prepareAttempt(input: PrepareAttemptInput): Promise<PreparedAttempt> {
   const { context, response, target, attemptIndex, attemptStartedAt, origin, live, liveAttempt, session, controller, delivery } = input
   const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
-  const endpointProtocol = target.protocol
+  const runtime = await resolveRuntimePluginTarget({ context, target, requestBody })
+  const runtimeTarget = runtime.target
+  const endpointProtocol = runtimeTarget.protocol
   const requestContext = createRequestContext({
     requestId,
     logicalModelId,
@@ -106,8 +113,8 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   }
 
   const [apiKey, rules] = await Promise.all([
-    getSecretStore().get(target.apiKeyReference),
-    listRulesForProviderModel(target.providerModelId),
+    Promise.resolve(runtime.apiKey ?? getSecretStore().get(runtimeTarget.apiKeyReference)),
+    listRulesForProviderModel(runtimeTarget.providerModelId),
   ])
   const toolNames = new ToolNameRegistry()
   const attempt: AttemptView = { index: attemptIndex, endpointId: target.endpointId, endpointProtocol }
@@ -164,8 +171,8 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   const requestModifiers = createRequestModifiers({
     adapter,
     requestContext,
-    providerModelName: target.providerModelName,
-    auth: resolveProtocolAuthHeaders(endpointProtocol, apiKey, target.customAuthHeader),
+    providerModelName: runtimeTarget.providerModelName,
+    auth: resolveProtocolAuthHeaders(endpointProtocol, apiKey, runtimeTarget.customAuthHeader),
     rules,
     toolNames,
     onRewriteEvaluated: result => { Object.assign(requestEvaluation, result) },
@@ -183,7 +190,7 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     modifiers: requestModifiers,
   })
   if (!requestPipe.payload) {
-    throw new Error(`The request was dropped by a request modifier before forwarding: ${target.providerModelName}`)
+    throw new Error(`The request was dropped by a request modifier before forwarding: ${runtimeTarget.providerModelName}`)
   }
   const preparedRequest = requestPipe.payload
   liveAttempt?.patch({
@@ -200,27 +207,27 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     })
   }
 
-  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${target.timeoutMilliseconds}ms`)
-  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
+  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(runtimeTarget)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${runtimeTarget.timeoutMilliseconds}ms`)
+  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(runtimeTarget)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
 
   const attemptLogger = createAttemptLogger({
     requestId,
     attemptIndex,
     startedAt: attemptStartedAt,
-    target,
+    target: runtimeTarget,
     upstreamRequestHeaders: preparedRequest.headers,
     upstreamRequestBody: preparedRequest.body,
     requestRewriteRuleIds: requestEvaluation.appliedRuleIds,
-    customAuthHeader: target.customAuthHeader,
+    customAuthHeader: runtimeTarget.customAuthHeader,
     captureRequestContent: session.settings.captureRequestContent,
   })
   const transport = resolveTransportImplementation({
-    transport: resolveUpstreamTransport(target.url, context.transport),
+    transport: resolveUpstreamTransport(runtimeTarget.url, context.transport),
     resolveIdleTimeoutMilliseconds: () => session.settings.idleTimeoutMilliseconds,
   })
   return {
     context,
-    target,
+    target: runtimeTarget,
     attemptIndex,
     attemptStartedAt,
     origin,
@@ -240,6 +247,43 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     responseModifiers,
     responseEvaluation,
     transport,
+  }
+}
+
+async function resolveRuntimePluginTarget({ context, target, requestBody }: { context: RequestContext; target: UpstreamTarget; requestBody: Buffer }): Promise<{ target: UpstreamTarget; apiKey: string | null }> {
+  const providerSetting = await getProviderSetting(target.providerId, PLUGIN_PROVIDER_SETTING_KEY)
+  if (!providerSetting || !providerSetting.value) return { target, apiKey: null }
+  const plugin = await loadPlugin(getPluginDirectory(), providerSetting.value)
+  if (!plugin.entryPath) return { target, apiKey: null }
+
+  const result = await pluginRunner.runResolveRequest({
+    plugin,
+    hook: 'resolveRequest',
+    inputs: await readPluginInputs(target.providerId),
+    providerId: target.providerId,
+    request: {
+      logicalModelId: context.logicalModelId,
+      providerModelId: target.providerModelId,
+      providerModelName: target.providerModelName,
+      protocol: target.protocol,
+      method: context.method,
+      path: context.path,
+      headers: Object.fromEntries(Object.entries(context.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(', ') : String(value ?? '')])),
+      body: requestBody.toString('utf8'),
+      url: target.url,
+    },
+  })
+  if (!result.ok || result.missing || !result.value) return { target, apiKey: null }
+  const nextUrl = result.value.url ?? target.url
+  const nextCustomAuthHeader = result.value.customAuthHeader ?? target.customAuthHeader
+  const nextApiKey = result.value.apiKey ?? null
+  return {
+    target: {
+      ...target,
+      url: nextUrl,
+      customAuthHeader: nextCustomAuthHeader,
+    },
+    apiKey: nextApiKey,
   }
 }
 

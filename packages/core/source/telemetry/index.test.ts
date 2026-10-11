@@ -57,6 +57,7 @@ function createConfig(dataDir: string, environment: RuntimeConfig['environment']
     proxyPort: 19_300,
     managementHost: '127.0.0.1',
     managementPort: 19_301,
+    pluginsDirectory: `${dataDir}/plugins`,
     serveWeb: false,
     webRoot: null,
   }
