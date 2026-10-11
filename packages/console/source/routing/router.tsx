@@ -19,6 +19,7 @@ import { RequestLogsPage } from '@/pages/request-logs/page'
 import { RequestRewriteRulesPage } from '@/pages/request-rewrite-rules/page'
 import { ClientConfigPage } from '@/pages/client-config/page'
 import { ClientConfigDetailPage } from '@/pages/client-config/detail'
+import { PluginsPage } from '@/pages/plugins/page'
 import { RouterPage } from '@/pages/router/page'
 
 /**
@@ -95,6 +96,12 @@ const modelManagementRoute = createRoute({
   component: ModelManagementPage,
   staticData: navigationBreadcrumb(routePaths.modelManagement),
 })
+const pluginsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routePaths.plugins,
+  component: PluginsPage,
+  staticData: navigationBreadcrumb(routePaths.plugins),
+})
 const requestRewriteRulesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routePaths.requestRewriteRules,
@@ -167,6 +174,7 @@ const routeTree = rootRoute.addChildren([
   onboardingRoute,
   logicalModelsRoute,
   modelManagementRoute,
+  pluginsRoute,
   clientConfigRoute.addChildren([clientConfigIndexRoute, clientConfigDetailRoute]),
   requestRewriteRulesRoute,
   routerRoute,

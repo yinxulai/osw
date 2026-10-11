@@ -239,6 +239,69 @@ export function duplicateRequestRewriteRuleBindingError(kind: 'rule' | 'priority
   )
 }
 
+// ========== 插件（见 `apps/docs/specs/plugins.md`） ==========
+
+/**
+ * 「没有这个插件」。
+ *
+ * 插件的身份是磁盘上的目录（`<pluginsDir>/<key>`），没有数据库行可以查。这个错误既在
+ * 「界面上还留着上一次的列表、目录已经被删掉」时出现，也在用户手填了一个不存在的 key 时出现，
+ * 因此把 key 作为 `errorParams` 带出去，界面能说清楚是哪一个。
+ */
+export function pluginNotFoundError(key: string): AppError {
+  return new AppError('PLUGIN_NOT_FOUND', 404, `Plugin ${key} was not found`, { details: { key } })
+}
+
+/**
+ * 「清单不合法」。`message` 是 zod 收敛后的那句诊断（哪一行、哪个字段错），直接拼进文案里——
+ * 这是本地开发模式的核心反馈：用户改坏 `plugin.json` 之后要一眼看出错在哪，而不是只收到
+ * 一句「清单不合法」。
+ */
+export function pluginManifestInvalidError(key: string, message: string): AppError {
+  return new AppError('PLUGIN_MANIFEST_INVALID', 400, `Plugin ${key} has an invalid manifest: ${message}`, {
+    details: { key, message },
+  })
+}
+
+/**
+ * 「清单声明了入口，但文件不在」。
+ *
+ * 与「没有 `entry.js`（声明式插件）」是两件事：后者是合法的 L0 形态。只有清单里显式写了
+ * `entry` 却找不到那个文件时才报错——否则一个拼错文件名的可执行插件会静默退化成声明式，
+ * 用户只会看到「钩子没跑」，找不到原因。
+ */
+export function pluginEntryMissingError(key: string, entry: string): AppError {
+  return new AppError('PLUGIN_ENTRY_MISSING', 400, `Plugin ${key} declares the entry ${entry}, but that file does not exist`, {
+    details: { key, entry },
+  })
+}
+
+/** 「这个安装来源还不支持」。参数是来源类型的展示名（`storage/source`），界面本地化。 */
+export function pluginSourceUnsupportedError(source: string): AppError {
+  return new AppError('PLUGIN_SOURCE_UNSUPPORTED', 400, `Installing from ${source} is not supported yet`, {
+    details: { source },
+  })
+}
+
+/** 「钩子执行失败」。`message` 是插件自己抛出的异常文本（沙箱里已转成字符串）。 */
+export function pluginRunFailedError(key: string, hook: string, message: string): AppError {
+  return new AppError('PLUGIN_RUN_FAILED', 502, `Plugin ${key} failed while running ${hook}: ${message}`, {
+    details: { key, hook, message },
+  })
+}
+
+/**
+ * 「钩子超时，已被中止」。
+ *
+ * 单独立一个码而不是并进 `PLUGIN_RUN_FAILED`：超时是可恢复的（重试往往就好），而失败通常
+ * 要改代码。界面对这两种情况的引导完全不同，混在一起就没法区分。
+ */
+export function pluginTimeoutError(key: string, hook: string, timeoutMilliseconds: number): AppError {
+  return new AppError('PLUGIN_TIMEOUT', 504, `Plugin ${key} did not finish ${hook} within ${timeoutMilliseconds} ms`, {
+    details: { key, hook, timeoutMilliseconds },
+  })
+}
+
 /** `node:sqlite` 的约束冲突错误码：`errstr` 是 `SQLITE_CONSTRAINT_UNIQUE` / `SQLITE_CONSTRAINT`。 */
 const SQLITE_UNIQUE_VIOLATION = 2067
 

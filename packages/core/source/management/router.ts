@@ -10,6 +10,7 @@ import {
   modelRoutes,
   modelTestRoutes,
   outboundProxyTestRoutes,
+  pluginRoutes,
   providerModelFetchRoutes,
   routerGraphRoutes,
   routerRuleRoutes,
@@ -52,6 +53,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(storageRoutes)
   .mount(clientConfigRoutes)
   .mount(cloudSyncRoutes)
+  .mount(pluginRoutes)
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')

@@ -55,6 +55,18 @@ export interface RuntimeConfig {
   serveWeb: boolean
   /** 控制台静态产物根目录；`serveWeb` 为真时必须给出。 */
   webRoot: string | null
+  /**
+   * 用户插件的落点：一个目录，其下每个子目录就是一个插件（见
+   * `apps/docs/specs/plugins.md`）。
+   *
+   * **它是数据目录的一部分，不是源码目录**：默认 `<dataDir>/plugins`。仓库内置的厂商
+   * 「插件」不落这里——那些走 `packages/console/source/catalog/providers/`。这个目录只装
+   * 用户自己放进去或从别处安装的插件，因此它天然是「用户数据」，跟着数据目录一起迁移/清理。
+   *
+   * 默认值用**字符串拼接**而不是 `node:path.join`：契约层不许 import Node 内置模块
+   * （见文件顶部）。宿主若在别的平台遇到反斜杠差异，也可以显式传入自己算好的路径。
+   */
+  pluginsDirectory: string
 }
 
 export interface CreateRuntimeConfigInput {
@@ -66,6 +78,8 @@ export interface CreateRuntimeConfigInput {
   dataDir: string
   serveWeb?: boolean
   webRoot?: string | null
+  /** 用户插件目录；缺省 `<dataDir>/plugins`，见 {@link RuntimeConfig.pluginsDirectory}。 */
+  pluginsDirectory?: string
   proxyHost?: string
   proxyPort?: number
   managementHost?: string
@@ -91,5 +105,8 @@ export function createRuntimeConfig(input: CreateRuntimeConfigInput): RuntimeCon
     managementPort: input.managementPort ?? profile.managementPort,
     serveWeb: input.serveWeb ?? false,
     webRoot: input.webRoot ?? null,
+    // 契约层不引 `node:path`，用 `/` 拼接：Node 在 Windows 上也接受 `/`，得到的路径与
+    // `path.join` 等价（见 {@link RuntimeConfig.pluginsDirectory}）。
+    pluginsDirectory: input.pluginsDirectory ?? `${input.dataDir.replace(/[\\/]+$/, '')}/plugins`,
   }
 }

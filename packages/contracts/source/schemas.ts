@@ -964,6 +964,13 @@ export const ApiErrorCodeSchema = z.enum([
   'CLOUD_SYNC_UNREACHABLE',
   'CLOUD_SYNC_REMOTE_FILE_MISSING',
   'CLOUD_SYNC_REMOTE_FILE_INVALID',
+  // 插件（自定义供应商，见 `apps/docs/specs/plugins.md`）
+  'PLUGIN_NOT_FOUND',
+  'PLUGIN_MANIFEST_INVALID',
+  'PLUGIN_ENTRY_MISSING',
+  'PLUGIN_SOURCE_UNSUPPORTED',
+  'PLUGIN_RUN_FAILED',
+  'PLUGIN_TIMEOUT',
 ])
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 
