@@ -122,8 +122,9 @@ export async function clearPluginSettings(providerId: string): Promise<void> {
 /**
  * 用户填的关注点与清单声明的输入项的对照：返回**还缺哪些必填项**。
  *
- * 界面拿它做「启用」按钮的可用性判断，与宿主侧的校验共用一份规则——两处各写一遍的话，
- * 界面放行的组合会被宿主拒掉，用户看到的是一个点了没反应的按钮。
+ * 界面拿它做「启用」按钮的可用性判断。同步入口**不做**这道前置校验：缺项会落进
+ * `credentialFromManifest` 变成 `input-required` 中间态（而不是同步失败），所以这里
+ * 只有界面一个调用方——但规则仍只能有一份，界面放行的组合不该被宿主拒掉。
  */
 export function missingRequiredInputs(fields: PluginInputField[], values: Record<string, string>, hasSecret: (key: string) => boolean): string[] {
   return fields
