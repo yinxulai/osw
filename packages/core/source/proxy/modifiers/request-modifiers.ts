@@ -34,6 +34,13 @@ export interface RequestModifierOptions {
    * 拆开是必要的：`replace` 覆盖客户端带来的同名头，`fill` 只在客户端没带时补上。
    */
   auth: ProtocolAuthHeaders
+  /**
+   * 插件在 `resolveRequest` 里返回的附加请求头（租户 ID、组织标识等）。
+   *
+   * 它走 `createUpstreamRequestHeaders` 的 `extraHeaders` 参数，因此**不能**覆盖鉴权头、
+   * 逐跳头与位置类头（见 `response/headers.ts`）：换密钥落点是 `customAuthHeader` 的职责。
+   */
+  pluginHeaders?: Readonly<Record<string, string>>
   rules: readonly RequestRewriteRule[]
   /**
    * 本次尝试的请求上下文，与响应侧共享同一个实例：请求体转换在里面登记
@@ -73,7 +80,7 @@ function createUpstreamHeadersModifier(options: RequestModifierOptions): Modifie
     applyBuffered(context: ModifierContext, payload) {
       return {
         body: payload.body,
-        headers: createUpstreamRequestHeaders(context.exchange.headers, options.auth, payload.body.length),
+        headers: createUpstreamRequestHeaders(context.exchange.headers, options.auth, payload.body.length, options.pluginHeaders),
       }
     },
   }

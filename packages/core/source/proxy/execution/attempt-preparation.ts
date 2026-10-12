@@ -173,6 +173,7 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     requestContext,
     providerModelName: runtimeTarget.providerModelName,
     auth: resolveProtocolAuthHeaders(endpointProtocol, apiKey, runtimeTarget.customAuthHeader),
+    pluginHeaders: runtime.headers ?? undefined,
     rules,
     toolNames,
     onRewriteEvaluated: result => { Object.assign(requestEvaluation, result) },
@@ -250,11 +251,30 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   }
 }
 
-async function resolveRuntimePluginTarget({ context, target, requestBody }: { context: RequestContext; target: UpstreamTarget; requestBody: Buffer }): Promise<{ target: UpstreamTarget; apiKey: string | null }> {
+interface ResolveRuntimePluginTargetParams {
+  context: RequestContext
+  target: UpstreamTarget
+  requestBody: Buffer
+}
+
+/**
+ * 插件返回的运行时覆写。
+ *
+ * `null` 一律表示「插件没提出意见」，调用方照用原来的值；至于插件提出的值能不能真的上去，
+ * 头由 `createUpstreamRequestHeaders` 裁决，地址与密钥落点由端点本身决定。
+ */
+interface RuntimePluginTarget {
+  target: UpstreamTarget
+  apiKey: string | null
+  headers: Record<string, string> | null
+}
+
+async function resolveRuntimePluginTarget(params: ResolveRuntimePluginTargetParams): Promise<RuntimePluginTarget> {
+  const { context, target, requestBody } = params
   const providerSetting = await getProviderSetting(target.providerId, PLUGIN_PROVIDER_SETTING_KEY)
-  if (!providerSetting || !providerSetting.value) return { target, apiKey: null }
+  if (!providerSetting || !providerSetting.value) return { target, apiKey: null, headers: null }
   const plugin = await loadPlugin(getPluginDirectory(), providerSetting.value)
-  if (!plugin.entryPath) return { target, apiKey: null }
+  if (!plugin.entryPath) return { target, apiKey: null, headers: null }
 
   const result = await pluginRunner.runResolveRequest({
     plugin,
@@ -273,7 +293,7 @@ async function resolveRuntimePluginTarget({ context, target, requestBody }: { co
       url: target.url,
     },
   })
-  if (!result.ok || result.missing || !result.value) return { target, apiKey: null }
+  if (!result.ok || result.missing || !result.value) return { target, apiKey: null, headers: null }
   const nextUrl = result.value.url ?? target.url
   const nextCustomAuthHeader = result.value.customAuthHeader ?? target.customAuthHeader
   const nextApiKey = result.value.apiKey ?? null
@@ -284,7 +304,24 @@ async function resolveRuntimePluginTarget({ context, target, requestBody }: { co
       customAuthHeader: nextCustomAuthHeader,
     },
     apiKey: nextApiKey,
+    headers: normalizePluginHeaders(result.value.headers),
   }
+}
+
+/**
+ * 把插件返回的附加头归一化：丢掉空值与非字符串，其余原样带走。
+ *
+ * 这里只做形状清洗，不在这里过滤鉴权/逐跳头——那件事由 `createUpstreamRequestHeaders` 统一负责
+ * （见 `packages/core/source/proxy/response/headers.ts`）：插件的头只是一份候选，
+ * 最终哪些能上去取决于与客户端头、鉴权头的合并规则，规则只有一处。
+ */
+function normalizePluginHeaders(headers: Record<string, string> | undefined): Record<string, string> | null {
+  if (!headers) return null
+  const normalized: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) {
+    if (typeof value === 'string' && name.trim().length > 0) normalized[name] = value
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null
 }
 
 function ruleNamesOf(rules: readonly RequestRewriteRule[], ids: readonly string[]): string[] {

@@ -136,4 +136,58 @@ describe('proxy headers', () => {
       'X-Custom-Key': 'provider-key',
     })
   })
+
+  it('merges plugin headers after the provider credential', () => {
+    // 插件（`resolveRequest`）附加的租户/组织标识要与凭据并存：它加的是「另外一个头」，
+    // 不是「换个地方放密钥」。
+    const result = createUpstreamRequestHeaders(
+      { 'content-type': 'application/json' },
+      { replace: { authorization: 'Bearer provider-key' }, fill: {} },
+      0,
+      { 'x-tenant-id': 'tenant-1', 'openai-organization': 'org-1' },
+    )
+
+    expect(result).toEqual({
+      'content-type': 'application/json',
+      authorization: 'Bearer provider-key',
+      'x-tenant-id': 'tenant-1',
+      'openai-organization': 'org-1',
+    })
+  })
+
+  it('never lets plugin headers override authentication or position headers', () => {
+    // 让插件改鉴权头等于把「密钥只由一个字段决定」这条规则废掉；位置类与逐跳头由链路自己算。
+    const result = createUpstreamRequestHeaders(
+      { accept: 'application/json', connection: 'keep-alive, x-remove-me', 'x-remove-me': 'private' },
+      { replace: { authorization: 'Bearer provider-key' }, fill: {} },
+      7,
+      {
+        authorization: 'Bearer sneaky',
+        'content-length': '999',
+        host: 'evil.example',
+        'x-remove-me': 'still-private',
+        'x-tenant-id': 'tenant-1',
+      },
+    )
+
+    expect(result).toEqual({
+      accept: 'application/json',
+      authorization: 'Bearer provider-key',
+      'x-tenant-id': 'tenant-1',
+      'content-length': '7',
+    })
+  })
+
+  it('keeps the client value when the plugin adds a header the client already sent', () => {
+    // 额外头走 `Object.assign` 落在最后：插件说的比客户端更具体（它知道这个请求要发给谁），
+    // 因此同名时以插件为准——但它仍然碰不到上面那三类头。
+    const result = createUpstreamRequestHeaders(
+      { 'x-tenant-id': 'from-client' },
+      { replace: {}, fill: {} },
+      0,
+      { 'x-tenant-id': 'from-plugin' },
+    )
+
+    expect(result).toEqual({ 'x-tenant-id': 'from-plugin' })
+  })
 })
