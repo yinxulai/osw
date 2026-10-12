@@ -86,6 +86,7 @@ L0 的 `endpoints` / `models` 在 L1 里可以完全由 hook 覆盖。
 return {
   async obtainCredential(ctx) { /* ... */ },
   async listModels(ctx) { /* ... */ },
+  async resolveRequest(ctx) { /* ... */ },
 }
 ```
 
@@ -94,11 +95,12 @@ return {
 ```ts
 interface PluginContext {
   inputs: Record<string, string>              // 用户在设置页填的非密钥项
-  secrets: {                                  // 命名空间限本插件，引用形如 plugin::<key>::<name>
-    get(name: string): Promise<string | null>
+  secrets: {                                  // 命名空间限本插件，引用形如 plugin::<key>::hook::<name>
+    get(name: string): Promise<string | null> // 先找 hook 自己写的，再回退到同名 secret 输入项
     set(name: string, value: string): Promise<void>
+    delete(name: string): Promise<void>
   }
-  storage: {                                  // 插件私有持久化（token 缓存等）
+  storage: {                                  // 插件私有持久化，在 SecretStore 里（引用 plugin::<key>::storage::<name>）
     get(name: string): Promise<string | null>
     set(name: string, value: string): Promise<void>
   }
@@ -111,12 +113,29 @@ interface PluginContext {
 }
 ```
 
-两个 hook（都可选，但至少要有一个能与声明式回退配合）：
+三个 hook（都可选，但至少要有一个能与声明式回退配合）：
 
 ```ts
 obtainCredential?(ctx): Promise<CredentialResult>
 listModels?(ctx): Promise<{ models: Array<{ id: string; name?: string }> }>
+resolveRequest?(ctx): Promise<PluginRequestResolutionResult>
 ```
+
+`PluginRequestResolutionResult` 是**每次真实请求**都会问一次的那一份答案（同步阶段根本不会调用它）：
+
+```ts
+type PluginRequestResolutionResult = {
+  url?: string                            // 最终真上游地址，缺省用同步阶段定下的端点
+  apiKey?: string                         // 当前订阅账户对应的临时凭据
+  customAuthHeader?: string               // 换密钥落在哪个头（如从 authorization 换成 x-api-key）
+  headers?: Record<string, string>        // 附带的其他头（组织标识、租户 ID 等）
+}
+```
+
+`resolveRequest` 的 `ctx.request` 是这次请求的投影（`plugin.ts` 的 `PluginRequestContextSchema`）：
+`logicalModelId` / `providerModelId` / `providerModelName` / `protocol` / `method` / `path` / `headers` /
+`body` / `url`（同步阶段定下的那个端点）。没有 `resolveRequest`（或它回了空对象）时，请求按同步
+阶段写下的端点与密钥发出。
 
 `CredentialResult` 是四态联合，把「代码要 Key」变成可交互流程：
 
@@ -157,12 +176,17 @@ type CredentialResult =
 | --- | --- |
 | `plugin.key` | 插件 key（这一行的存在 = 这个插件已启用并托管了一个 Provider） |
 | `plugin.inputs` | JSON：非密钥输入项的值 |
-| `plugin.state` | JSON：`{ credentialStatus, credentialMessage, actionUrl, lastSyncTime, lastSyncError, modelCount, hookSecretKeys[] }` |
+| `plugin.state` | JSON：`PluginSyncState` —— `{ credentialStatus, credentialMessage, actionUrl, credentialFields, lastSyncTime, lastSyncError, modelCount, secretReferences }` |
 
 密钥：
 - Provider 的 API Key → `provider.apiKeyReference`（现有机制）。
 - 插件声明的 `secret: true` 输入项 → SecretStore 引用 `plugin::<key>::input::<inputKey>`。
 - hook 通过 `ctx.secrets.set(name, value)` 写的 → SecretStore 引用 `plugin::<key>::hook::<name>`。
+- `ctx.storage.set(name, value)` 写的（插件私有持久化，不是密钥但同样按引用取）→
+  SecretStore 引用 `plugin::<key>::storage::<name>`。
+
+`plugin.state.secretReferences` 记的是上面这些引用的**全称**：`SecretStore` 只能按引用取值、
+没有「列出这个插件写过什么」的接口，不记全称就等于留下永远删不掉的密钥；卸载时逐个 `delete`。
 
 **不新增数据库表**：这份设计刻意不引入 `plugins` 表——插件的身份是磁盘上的目录，
 它的运行时状态本来就依附于它托管的 Provider。禁用插件 = 删除 Provider（级联清理）。
@@ -178,13 +202,20 @@ type CredentialResult =
 4. 每次真实请求到达时，`resolveRequest` 依据 `ctx.request`，动态返回：
    - `url`：最终真上游地址；
    - `apiKey`：当前订阅账户对应的临时凭证；
-   - `customAuthHeader`：自定义鉴权头；
-   - `headers`：如需要附加 `Authorization`、组织标识、租户 ID 等。
-5. 运行时链路在 [packages/core/source/proxy/execution/attempt-preparation.ts](../../packages/core/source/proxy/execution/attempt-preparation.ts) 里取最终 `target` 与 `apiKey`，因此插件不需要参与路由选择、调度排序，也不需要改现有 proxy 代码。
+   - `customAuthHeader`：自定义鉴权头（**换密钥落在哪个头**，例如从 `authorization` 换成 `x-api-key`）；
+   - `headers`：随请求附带的其它头（组织标识、租户 ID 等）。
+
+   `headers` 与 `customAuthHeader` 分工不同：前者是「多加一个头」，后者是「换个地方放密钥」。
+   因此 `headers` **不能**覆盖鉴权头（`authorization` / `x-api-key` / `x-goog-api-key`，以及 `customAuthHeader`
+   的落点）、逐跳头与 `host` / `content-length`——这些由链路统一决定。这条规则只写在
+   [packages/core/source/proxy/response/headers.ts](../../packages/core/source/proxy/response/headers.ts)
+   一处，`attempt-preparation.ts` 只负责把 `ctx.request` 解析出来的头原样递过去。
+5. 运行时链路在 [packages/core/source/proxy/execution/attempt-preparation.ts](../../packages/core/source/proxy/execution/attempt-preparation.ts) 里取最终 `target`、`apiKey`
+   与附加 `headers`，因此插件不需要参与路由选择、调度排序，也不需要改现有 proxy 代码。
 
 换句话说，插件的“生产物”仍然是一个标准 Provider，而真正的 plan 级动态鉴权发生在请求时，正好契合“按请求动态提供 URL + API Key”的要求。
 
-## 8. 同步引擎
+## 9. 同步引擎
 
 ```
 enablePlugin(key, inputs)     写 inputs（secret → SecretStore）→ ensureManagedProvider → syncPlugin
@@ -212,7 +243,7 @@ setPluginInputs(key, values)  更新 inputs → 重新 syncPlugin
 打开插件页时按需刷新）。定时轮换与「距上次同步超过 N 小时自动同步」留待 P1，并要复用
 [provider-model.md](./provider-model.md) 的设置项模式。
 
-## 9. 管理接口
+## 10. 管理接口
 
 一组新路由（全 POST，`packages/core/source/management/routes/operations/plugins.ts`）：
 
@@ -220,27 +251,35 @@ setPluginInputs(key, values)  更新 inputs → 重新 syncPlugin
 POST /api/plugin/list                     → PluginView[]
 POST /api/plugin/get          { key }
 POST /api/plugin/install      { source }   # P0 只支持 { type: 'directory', path }
-POST /api/plugin/uninstall    { key }      # 只删插件目录，不删已建 Provider（先 disable）
+POST /api/plugin/uninstall    { key }      # 先 disable（删 Provider + 清密钥），再删插件目录
 POST /api/plugin/enable       { key, inputs? }
 POST /api/plugin/disable      { key }
 POST /api/plugin/sync         { key }
 POST /api/plugin/set-inputs   { key, inputs }
 POST /api/plugin/reload       { key }      # 重读清单并重新同步；本地开发热重载用
+POST /api/plugin/icon         { key }      # 可选 icon.svg 的原文；读不到回 null（不是错误）
 ```
 
-`PluginView`（界面直接消费的聚合视图）：
+`PluginView`（界面直接消费的聚合视图，事实源是 `packages/contracts/source/plugin.ts`
+的 `PluginViewSchema`）：
 
 ```ts
 interface PluginView {
-  key: string; name: string; description: string; homepage?: string
+  key: string; name: string; description: string
+  homepage: string | null
   providerName: string; capabilities: PluginCapability[]
-  installed: boolean
+  /** 这个目录装不上（plugin.json 缺失/不合法/目录名对不上）：有值时其余字段是占位值。 */
+  error: string | null
+  executable: boolean                      // 清单带 entry.js
+  dev: boolean
   enabled: boolean
   credentialStatus: 'none' | 'ok' | 'input-required' | 'action-required' | 'error'
-  credentialMessage?: string; actionUrl?: string
+  credentialMessage: string | null
+  actionUrl: string | null
+  /** 清单声明的字段 + hook 在 input-required 时动态要求的字段（清单在前）。 */
   inputs: PluginInputField[]
   inputValues: Record<string, string>      // 密钥项回占位符，不回明文
-  hasSecrets: boolean
+  hasSecrets: string[]                     // 已设置过值的密钥项 key（不是布尔）
   providerId: string | null
   modelCount: number
   lastSyncTime: number | null
@@ -248,11 +287,30 @@ interface PluginView {
 }
 ```
 
+两个容易看错的点：
+
+- **没有 `installed`**：磁盘上的目录就是「已安装」，列表里出现即已安装。
+- **`hasSecrets` 是 key 数组**而不是布尔：界面据此知道「哪几个密钥项已经设过了」，
+  只回一个布尔就分不出是哪一个。
+
+**必填项缺失的两种落法**（刻意分开，别把它们合成一句「同步失败」）：
+
+- **`apiKeyInput` 指向的密钥项没填** → `credentialFromManifest` 回 `input-required`，是**中间态**：
+  界面据此给出「去填一下」的入口（复用 `PluginSyncState.credentialFields` 那一套动态表单），
+  而不是一句无从下手的错误。
+- **端点模板里还有没插上的 `{{...}}`** → 该条端点被**剔除**（`resolveEndpoints`），不原样落库：
+  原样写会撞上 `ProviderEndpointSchema.url` 的 `z.string().url()`，用户看到的是一条通用校验错误，
+  而真正该做的是回去填输入项。
+
+判定规则收在 `state.ts` 的 `missingRequiredInputs` 一处（`required` 且非空判定：密钥项看「密钥库里
+是否已有值」，其余看去空白后是否非空），**目前只有界面用它**做「启用」按钮的可用性；同步入口不做这道
+前置校验（缺项最终表现为上面那两种落法）。
+
 **错误码**（进 `ApiErrorCodeSchema`，文案英文，界面本地化）：
 `PLUGIN_NOT_FOUND` / `PLUGIN_MANIFEST_INVALID` / `PLUGIN_ENTRY_MISSING` /
 `PLUGIN_SOURCE_UNSUPPORTED` / `PLUGIN_RUN_FAILED` / `PLUGIN_TIMEOUT`。
 
-## 10. 本地开发模式
+## 11. 本地开发模式
 
 目标：改一行 `entry.js`，点一下就能重跑，不用重启服务。
 
@@ -273,7 +331,7 @@ P1（已设计未实现）：从 GitHub 仓库安装——`{ type: 'github', rep
 复用同一套 `installPlugin` 落盘与校验。P0 对该类型明确回 `PLUGIN_SOURCE_UNSUPPORTED`，
 **不做半个实现**。
 
-## 11. 包边界
+## 12. 包边界
 
 | 落点 | 内容 |
 | --- | --- |
@@ -283,7 +341,7 @@ P1（已设计未实现）：从 GitHub 仓库安装——`{ type: 'github', rep
 | `packages/console/source/pages/plugins/` + `api/plugins.ts` + `data/plugins.ts` | 界面（**禁 `node:` / electron**） |
 | `apps/app` & `apps/cli` | `RuntimeConfig.pluginsDirectory` |
 
-## 12. 安全边界复核
+## 13. 安全边界复核
 
 - 插件代码**不注入任何宿主对象**：只有数据与三个 RPC 之后的能力函数。
 - 插件**看不到**其他插件、其他 Provider 的密钥；`secrets` 命名空间限定为 `plugin::<key>::*`。
@@ -293,7 +351,7 @@ P1（已设计未实现）：从 GitHub 仓库安装——`{ type: 'github', rep
 - 卸载/禁用必须删除密钥引用（`secretStore.delete`）与调度策略（`deleteProvider` 不清理
   `scheduling_policies`，会留孤儿行）。
 
-## 13. 与其它文档的关系
+## 14. 与其它文档的关系
 
 - Provider / 端点 / 逻辑模型 / 调度绑定的实体语义：见 [provider-model.md](./provider-model.md)。
 - 脚本沙箱的通用边界（路由脚本那份）：见 [security-privacy.md](./security-privacy.md)。

@@ -340,8 +340,9 @@ async function readSecretInput(plugin: ScannedPlugin, name: string): Promise<str
 /**
  * 没有 hook（L0）时怎么拿凭据：拿清单声明的 `apiKeyInput` 里用户填的值。
  *
- * 它不返回 `input-required`——缺哪个输入项由管理接口在**调用同步之前**就报出来了
- * （见 `missingRequiredInputs`）。这里只负责把值搬进 Provider 的密钥引用。
+ * 没填就回 `input-required`（**不是** `failed`）：这是中间态，界面据此给出「去填一下」的入口，
+ * 而不是一句无从下手的错误。判断规则与界面同源（见 `state.ts` 的 `missingRequiredInputs`），
+ * 但落到这里的是「密钥项」那一档——其余必填项交给端点的模板剔除规则处理（见 `resolveEndpoints`）。
  */
 async function credentialFromManifest(plugin: ScannedPlugin, apiKeyReference: string): Promise<PluginCredentialResult> {
   const key = plugin.manifest.apiKeyInput
@@ -368,8 +369,8 @@ async function credentialFromManifest(plugin: ScannedPlugin, apiKeyReference: st
  *
  * 缺插值的项被**剔除**而不是原样写入：`{{serverUrl}}` 变成一个非法 URL 会让
  * `replaceProviderEndpoints` 撞上 `ProviderEndpointSchema` 的 `z.string().url()`，
- * 用户看到一条通用的校验错误，而真正的错因是「哪个输入没填」——那件事该在调用同步之前
- * 就报清楚（`hasUnresolvedTemplate` 是给管理接口做这个前置判断用的）。
+ * 用户看到一条通用的校验错误，而真正的错因是「哪个输入没填」——这一点由
+ * `hasUnresolvedTemplate`（供需要前置判断的调用方使用）与同步内回 `input-required` 共同兜住。
  */
 async function resolveEndpoints(plugin: ScannedPlugin, inputs: Record<string, string>, overrides?: Partial<Record<Protocol, string>>): Promise<Partial<Record<Protocol, string>>> {
   const values = await templateValues(plugin, inputs)
