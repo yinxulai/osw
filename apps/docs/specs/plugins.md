@@ -3,10 +3,16 @@
 > **本文负责插件产品语义与实现契约。** 插件是「Provider 的供给层」：它只负责**产出**一条
 > Provider 记录（端点、密钥、模型清单），产出之后代理、调度、协议转换、日志、健康全部复用
 > 现有机制，**一行不改**。首次落地的能力只有一种：**自定义供应商**（`capabilities: ['provider']`）。
+>
+> **当前实现是 P0（供给层）**：§1–§13 描述的就是它，代码已经跑通。
+> **P1（插件即上游一跳）已设计未实现**，见 §14：那时插件不再只是供给层，而是**上游那一跳的实现者**——
+> 但只在它自己注册的供应商上生效。
 
 ## 1. 定位与不变量
 
 - 插件**不是**代理内核的扩展点。它不参与候选过滤、不参与协议转换、不参与调度排序。
+  （**P1 只放开一处**：见 §14，插件可以顶替这一跳的**传输实现**，但候选过滤、协议转换与调度排序
+  仍然不参与。）
 - 对于「plan 订阅型供应商」这类场景，插件的职责是把订阅登录、计划授权和目标服务商接口统一成一个可用的 Provider。它在 `obtainCredential` 中拿登录态，在 `listModels` 中拿真实模型清单，在 `resolveRequest` 中在请求真正发生前才决定最终上游 `url` 和 `Authorization`，而不是在同步阶段把所有值写死。
 - 插件只做两件事：**拿到一把可用的 API Key**，**拿到一份模型清单**。其余交给现有 CRUD
   （`createProvider` / `replaceProviderEndpoints` / `createProviderModelRoute` / `upsertSchedulingPolicy`）。
@@ -351,7 +357,153 @@ P1（已设计未实现）：从 GitHub 仓库安装——`{ type: 'github', rep
 - 卸载/禁用必须删除密钥引用（`secretStore.delete`）与调度策略（`deleteProvider` 不清理
   `scheduling_policies`，会留孤儿行）。
 
-## 14. 与其它文档的关系
+## 14. P1：插件即上游一跳
+
+**状态：已设计未实现。** §1–§13 描述的是已落地的 P0；本节描述 P1 要放开的能力，以及随之而来的约束。
+
+### 14.1 P0 的能力上限
+
+P0 里插件只能产出「地址 + 密钥 + 几个头」，报文形状仍由核心决定。这对非标准接入商不够——问题不在换个地址，而在报文根本不同：
+
+- 请求体不是三种协议之一 → `modifiers/request-modifiers.ts` 的 `body-prepare` 一定会先调
+  `adapter.prepareRequest` 把 body 重排一遍；
+- 响应体不是三种协议之一 → 没有 `Modifier` 能解析它；
+- 流式与否由 `adapters/http-response-sink.ts` 的 `isEventStreamResponse` 读
+  `content-type: text/event-stream` 判定；
+- `protocolAdapters.resolve()` 是 3×3 的闭集，未知组合直接抛；
+- 鉴权只能表达成「值 + 落在哪个头」。
+
+补丁式的补法（开放 `Modifier`、加一个 `translate` hook、声明 `streamWhen`）每一条都要在内核再开一个口子，
+而每开一个口子，「转发路径可判定」这条不变量就薄一层（理由见
+[proxy-engine.md](./proxy-engine.md) 的「忠诚转发，不自适应」）。
+
+### 14.2 结论：插件是 `Transport` 的第二个实现
+
+`packages/core/source/proxy/contracts/transport.ts` 的 `Transport` 只有一个方法、一个返回值：
+
+```ts
+interface Transport {
+  readonly transports: readonly TransportKind[]
+  connect(target: UpstreamTarget, exchange: ExchangeView, attempt: AttemptView): Promise<UpstreamConnection>
+}
+interface UpstreamConnection {
+  readonly frames: AsyncIterable<Frame>
+  readonly outbound?: FrameSink          // 双向传输用（`websocket`），当前无实现
+  abort(reason?: Error): void
+}
+```
+
+`transports/http.ts` 的 `createHttpTransport` 是它的一个实现；**插件是第二个**。插件接收这次任务，
+在**自己的 worker 里**发真实请求，把结果规范成标准 `Frame`（`head` / `data` / `end` / `error`）交回宿主，
+之后照走核心那条搬运链路。
+
+| 14.1 里列的缺口 | 换成插件即 `Transport` 之后 |
+| --- | --- |
+| 请求体被迫过 `adapter.prepareRequest` | 消失——请求不再经过 `body-prepare` |
+| 响应体必须落进三种协议之一 | 消失——插件交的是 `Frame` |
+| 流式靠 `content-type` 猜 | 消失——读什么由插件自己决定 |
+| `resolve()` 的 3×3 闭集 | 消失——`resolve()` 不再被调用 |
+| 鉴权只能「值 + 头名」 | 消失——凭据由插件自己放 |
+| 逐 chunk 走 worker RPC 会毁掉流式 | 消失——每次交换只跨一次 worker 边界 |
+| 慢的非流式上游要退化成「16KB/分钟 TPS」+ 空闲超时故障转移 | 消失 |
+
+**代价必须一起接受**：出站代理 / 直连规则、连接复用（keep-alive）、空闲超时与 `abort`、
+客户端断开时立刻拆上游——这四件事现在是 `http.ts` 的职责，交出去之后要么补回来，要么变成每个插件的义务。
+补的办法见 §14.4。
+
+### 14.3 边界：插件拥有什么、不拥有什么
+
+| | 归属 |
+| --- | --- |
+| 上游这一跳的连接、报文形状、读法、翻帧 | 插件 |
+| 下游分帧与 `content-length` | 核心（`http-response-sink.ts` 按 `mode` 决定整体缓冲还是增量转发） |
+| 请求头合并顺序 | 核心（`proxy/response/headers.ts`） |
+| 「这次交付还是丢弃」的判定时机 | 核心（`frame-pipe.ts` → `attempt-executor.ts`） |
+| 候选过滤、协议转换、调度排序 | 核心（P1 也不动） |
+
+三条必须说清楚的：
+
+**（一）下游分帧不是插件的。** 出口不允许读上游响应头重新回答「是否边收边发」；下发给客户端的形态
+由客户端跳的 `TransportKind` 在入口就定下（见 [proxy-engine.md](./proxy-engine.md) §1）。
+
+**（二）头合并顺序只有一处。** `createUpstreamRequestHeaders` 的顺序是「客户端头 → 协议固定头（只补缺）
+→ 凭据落点（覆盖客户端同名头）→ 额外头 → 重算 `content-length`」，`host` / `content-length` / 逐跳头
+由链路统一决定。插件在 P0 里只能往「额外头」那一格加东西，`headers` 覆盖不了鉴权头、逐跳头与
+`host` / `content-length`（§8 第 4 条）。
+
+**（三）插件必须自己交出与下游预期一致的 `head`。** `kernel/frame-pipe.ts` 在跑修改器**之前**就调 `onHead`，
+`execution/attempt-executor.ts` 在那一个回调里写下 `delivery.decision`（`discard` 还是 `deliver`），
+所以状态码与分帧形态的判定发生在任何字节落地之前。P1 不需要给这里打补丁——**责任落在「谁拥有这条上游」**：
+插件交出的 `head` 必须与它实际要给的 `body` 对得上。
+
+### 14.4 出站：`ctx.http` 是握手口，不是转发口
+
+`ctx.http` 现在落到 `runner.ts` 的 `performHttp` → `coreNetworkClient.requestHttpBuffered`，是**整份收发**的，
+承载不了流式，因此插件转发**不能**复用它。宿主必须另外给一条**受管出站路径**：一个面向流的能力
+（底层接 `coreNetworkClient.requestHttp`，因此仍然继承出站代理设置、目标校验与 `abort`），
+插件在这条路径上开这次上游连接。
+
+红线：**受管的 `ctx.transport.*` 允许，裸 `fetch` 禁止。** 两条理由：绕过出站代理与绕过规则
+（与 [telemetry.md](./telemetry.md) 里「本地服务是唯一允许直连的例外」同一类信任问题）；
+绕过 `abort()`（宿主只剩 `terminate()` 一条路，上游连接会被泄漏）。
+
+这条红线的实现面是**默认成立**的：worker 沙箱的上下文由 `worker-source.ts` 用一个字面量对象建出来，
+里面没有 `fetch`、没有 `Buffer`、也没有 `TextDecoder`。写在这里是为了拦住将来「顺手给沙箱补个 `fetch`」。
+同一原因，worker 与宿主之间只走 JSON 文本，**二进制响应体不进插件的处理范围**。
+
+### 14.5 门：能力只能在自己注册的供应商上生效
+
+台账是 §7 的那三行 `provider_settings`（`plugin.key` 存在 = 这个插件托管了这个 Provider）。
+要把「只在自己注册的供应商上生效」做成事实而非校验，得先堵三个洞：
+
+**（一）`plugin.*` 现在会被供应商包带出去。** `export-provider-bundle.ts` 的
+`MANAGED_PROVIDER_SETTING_KEYS` 只有 `security.secretReference` 与 `connection.timeoutMilliseconds`，
+`buildProviderEntry` 会导出其余全部键，所以插件痕迹会随备份到另一台机器；而 `plugins.ts` 的 `buildView`
+对任意 `providerId` 都能 `readPluginSyncState`。P0 无害（插件只给地址和密钥），P1 致命（插件要拥有连接）。
+结构修法：给 `provider_settings` 加一列 `owner`（`user` | `plugin:<key>`），哨兵行与导出过滤读**同一列**
+——与 `POSITION_HEADERS`、`bodyDeliveryShape` 一样，「靠结构，不靠自觉」。需要一次建表迁移，
+按仓库既有迁移模式做。
+
+**（二）`providerId` 是执行期的门，不是绑定期的门。** 今天能用，只因为 `resolveRuntimePluginTarget`
+恰好是拿 `target.providerId` 去查 `plugin.key`。破坏它的三件事：故障转移换目标（门必须**逐 target** 判，
+不能提到循环外）、复制 Provider 会连带复制 `plugin.key`、导入供应商包会连带带进 key（扩展还没启用）。
+修法：收成**一个具名函数**（暂名 `pluginOwnerOf(providerId)`），并要求**每一个**从 `target.providerId`
+派生的运行值——插件、密钥引用、inputs、传输实现——都经它取。派生值一律不许自己再查一次台账。
+
+**（三）`Transport` 在执行期门不了。** `transports/registry.ts` 的
+`resolveTransportImplementation(resolution: TransportResolution)` **拿不到 `target`**，而 `connect(target, …)`
+又太晚（连上之后才知道该不该连）。
+**结论：门开在规划期。** 插件传输做成**每 Provider 一个实例**（`createPluginTransport(ctx)`），
+由 `TargetPlanner` 在规划期挂到 `UpstreamTarget` 上——别的 Provider 根本不会拿到插件 target。
+这一条把「只能在自己注册的供应商上生效」从校验变成了结构事实，顺带解决「规划器要给插件 target 填
+`apiKeyReference` / `customAuthHeader` 这类核心字段的假值」的别扭。
+
+两条具名规则：
+
+> **R1**：任何以插件身份取得的运行时权力，都必须从「被托管的 Provider」这一条台账反查而来；
+> 反查失败即无权力，回退到核心实现。
+>
+> **R2**：插件的上游连接由 planner 从被托管 Provider 造出，插件不参与「给定任意目标选实现」；
+> `ctx.http` 是握手口，不是转发口。
+
+R1 的两条执行期硬约束：
+
+- **门只读台账，不顺手校验插件目录是否存在。** 否则「禁用」就得先删 Provider，「卸载」就没有东西可删。
+  目录存在性该由 `loadPlugin` 在真正加载那一刻拒绝。
+- **`resolveRuntimePluginTarget` 每次尝试跑一次，不许在那里加 IO。** `getProviderSetting` 读的是进程内
+  sqlite（不是每次尝试的 IPC），但门必须**复用同一次读**，不能另开一次。
+
+### 14.6 待定（本节不替你决定）
+
+- **一个插件管几个 Provider。** 今天两种读法同时存在：`state.ts` 的 `findManagedProviderId` 取第一个匹配，
+  而 `readManagedProviderIds` 让后来的覆盖先前的，`markManagedProvider` 也不强制 1:1。这决定 R1 的签名是
+  `pluginOwnerOf(providerId)` 还是 `pluginsForProvider(providerId)`，也决定 `plugin.key` 要不要索引。
+- **`host` / `content-length` 归谁。** 完全交给插件最省事，但等于允许插件伪造 `Host`；另一条路是把合并
+  规则转发给插件（客户端头与目标地址它都拿得到），由它按同一规则自己算一遍。
+- **`resolveRequest` 的去留。** 它现在是 P0 的轻量形态。P1 落地后，它是被 `connect` 完全取代，还是保留成
+  「声明式插件不想写连接代码」的快捷方式。
+
+## 15. 与其它文档的关系
 
 - Provider / 端点 / 逻辑模型 / 调度绑定的实体语义：见 [provider-model.md](./provider-model.md)。
 - 脚本沙箱的通用边界（路由脚本那份）：见 [security-privacy.md](./security-privacy.md)。

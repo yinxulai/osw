@@ -10,7 +10,7 @@ import { PLUGIN_MANIFEST_FILENAME, pluginDirectory, readPluginManifest, loadPlug
  * **P0 只支持本地目录**，而且以**符号链接**接入而不是拷贝：
  *
  * - 拷贝意味着「安装」之后就有一份副本，本地开发时改源码不生效——必须重新安装，
- *   而这恰好是插件机制最需要顺手的场景（见 `apps/docs/specs/plugins.md` §10）。
+ *   而这恰好是插件机制最需要顺手的场景（见 `apps/docs/specs/plugins.md` §11）。
  * - 符号链接让「插件目录即源码目录」，改一行 `entry.js` 点一下「重新同步」就是新代码。
  *
  * P1 的 GitHub 安装（`{ type: 'github', … }`）明确回 `PLUGIN_SOURCE_UNSUPPORTED`：

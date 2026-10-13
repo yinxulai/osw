@@ -130,7 +130,7 @@ export async function scanPlugins(pluginsDirectory: string): Promise<ScannedPlug
   const plugins: ScannedPlugin[] = []
   for (const entry of entries) {
     // 只认目录与指到目录的符号链接：本地开发就是用符号链接把源码目录接进来的
-    // （见 `apps/docs/specs/plugins.md` §10），因此 `isDirectory()` 为假的软链要再看一次。
+    // （见 `apps/docs/specs/plugins.md` §11），因此 `isDirectory()` 为假的软链要再看一次。
     if (!entry.isDirectory() && !(entry.isSymbolicLink() && await isDirectory(join(pluginsDirectory, entry.name)))) continue
     // 点开头的目录一律跳过：`node_modules`、`.git` 这类不该被当成插件，也不该因为
     // 少一个 `plugin.json` 就在界面上报一次错（扫描是「有就用」而不是「必须全对」）。
