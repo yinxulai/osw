@@ -21,7 +21,7 @@ import type { ManagementHandler } from '../../core/response'
 import { sendSuccess } from '../../core/response'
 
 /**
- * 插件管理接口（全 POST，见 `apps/docs/specs/plugins.md` §9）。
+ * 插件管理接口（全 POST，见 `apps/docs/specs/plugins.md` §10）。
  *
  * 界面只消费聚合后的 `PluginView`：把清单、运行状态、托管 Provider 拼一次的活留在这里，
  * 而不是让前端自己去 join 三份数据——那种 join 一旦有一处漏了，界面就会显示一个
