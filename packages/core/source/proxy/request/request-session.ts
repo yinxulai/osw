@@ -6,7 +6,7 @@ import type { RequestLoggingInput, RequestLogger } from '@server/proxy/observabi
 /** 一次代理请求在生命周期内固定使用的设置快照。 */
 export type ProxyRequestSettings = Pick<
   Settings,
-  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds'
+  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds' | 'apiKeyAuthEnabled'
 >
 
 /**
@@ -40,6 +40,7 @@ export async function createProxyRequestSession(input: CreateProxyRequestSession
       captureRequestLogs: settings.captureRequestLogs,
       captureRequestContent: settings.captureRequestContent,
       idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
+      apiKeyAuthEnabled: settings.apiKeyAuthEnabled,
     },
     logger,
   }

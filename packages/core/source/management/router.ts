@@ -16,6 +16,7 @@ import {
   routerRunRoutes,
   providerModelRoutes,
   providerRoutes,
+  apiKeyRoutes,
   relationRoutes,
   requestLogRoutes,
   requestRewriteRuleRoutes,
@@ -34,6 +35,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(providerRoutes)
   .mount(modelRoutes)
   .mount(providerModelRoutes)
+  .mount(apiKeyRoutes)
   .mount(settingsRoutes)
   .mount(runtimeControlRoutes)
   .mount(telemetryRoutes)

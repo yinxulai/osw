@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "398eef1a-b0de-4d7f-ac11-0a5941fb3a90",
+  "id": "0c32454d-7824-42fb-ac9b-71862e35f2d2",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -732,6 +732,16 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "apiKeyId",
+      "entityType": "columns",
+      "table": "request_logs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "logicalModelId",
       "entityType": "columns",
       "table": "request_logs"
@@ -1256,6 +1266,24 @@
       "where": null,
       "origin": "manual",
       "name": "idx_request_logs_client_protocol",
+      "entityType": "indexes",
+      "table": "request_logs"
+    },
+    {
+      "columns": [
+        {
+          "value": "apiKeyId",
+          "isExpression": false
+        },
+        {
+          "value": "createdTime",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_request_logs_api_key_time",
       "entityType": "indexes",
       "table": "request_logs"
     },

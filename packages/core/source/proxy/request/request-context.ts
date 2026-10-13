@@ -4,6 +4,14 @@ import type { Protocol, RequestAttribute, TransportKind } from '@common/schemas'
 export interface RequestContext {
   readonly requestId: string
   readonly logicalModelId: string
+  /**
+   * 调用方身份：命中某个客户端 API Key 时为它的 id，匿名请求为 `null`。
+   *
+   * 它是**入口闸门**判定的事实（见 `request-entry`）：未命中任何 Key 且强制校验开启时，
+   * 请求不会走到这里；校验关闭时匿名请求照样进来，身份就是 `null`。整条请求链原样携带它，
+   * 观测侧落库为 request_logs.apiKeyId。
+   */
+  readonly apiKeyId: string | null
   readonly clientProtocol: Protocol
   /**
    * **客户端跳**的传输形态。**事实**：入口按接口封装描述解析出来，一个请求只解析一次。
@@ -32,11 +40,13 @@ export interface RequestContext {
   readonly signal: AbortSignal
 }
 
-export type RequestContextInput = Omit<RequestContext, 'signal' | 'headers' | 'attributes' | 'transport' | 'sessionKey'> & {
+export type RequestContextInput = Omit<RequestContext, 'signal' | 'headers' | 'attributes' | 'transport' | 'sessionKey' | 'apiKeyId'> & {
   headers?: IncomingHttpHeaders
   attributes?: Array<Omit<RequestAttribute, 'requestId' | 'createdTime'>>
   signal?: AbortSignal
   sessionKey?: string | null
+  /** 省略即匿名：入口闸门命中 API Key 时才显式传入。 */
+  apiKeyId?: string | null
   /** 省略即 `http`：不以形态为卖点的调用方（模型连通性探测、能力自检）都是一问一答形状的。 */
   transport?: TransportKind
 }
@@ -48,6 +58,7 @@ export function createRequestContext(input: RequestContextInput): RequestContext
     attributes: input.attributes ?? [],
     transport: input.transport ?? 'http',
     sessionKey: input.sessionKey ?? null,
+    apiKeyId: input.apiKeyId ?? null,
     signal: input.signal ?? new AbortController().signal,
   }
 }
