@@ -22,6 +22,8 @@ export const routePaths = {
   logicalModels: '/logical-models',
   /** 模型管理 */
   modelManagement: '/model-management',
+  /** 插件管理 */
+  plugins: '/plugins',
   /** 统计分析 */
   overview: '/overview',
   /** 统计分析 · 单供应商下钻（带 `$providerId` 路径参数） */

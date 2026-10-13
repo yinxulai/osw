@@ -1,5 +1,6 @@
 import { resolveProtocolAuthHeaders } from '@common/protocols'
 import type { RequestRewriteRule } from '@common/schemas'
+import { getProviderSetting } from '@server/database/provider-store'
 import { listRulesForProviderModel } from '@server/database/request-rewrite-rule-store'
 import type {
   AttemptView,
@@ -33,6 +34,10 @@ import { getSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { reportTelemetryEvent } from '@server/telemetry'
 import { pipeBuffered } from '@server/proxy/kernel/buffered-pipe'
 import { resolveTransportImplementation } from '@server/proxy/transports/registry'
+import { PLUGIN_PROVIDER_SETTING_KEY, readPluginInputs } from '@server/plugins/state'
+import { loadPlugin } from '@server/plugins/manifest'
+import { getPluginDirectory } from '@server/plugins/registry'
+import { pluginRunner } from '@server/plugins/runner'
 
 export interface PrepareAttemptInput {
   readonly context: RequestContext
@@ -88,7 +93,9 @@ export interface PreparedAttempt {
 export async function prepareAttempt(input: PrepareAttemptInput): Promise<PreparedAttempt> {
   const { context, response, target, attemptIndex, attemptStartedAt, origin, live, liveAttempt, session, controller, delivery } = input
   const { requestId, logicalModelId, clientProtocol: protocol, requestBody } = context
-  const endpointProtocol = target.protocol
+  const runtime = await resolveRuntimePluginTarget({ context, target, requestBody })
+  const runtimeTarget = runtime.target
+  const endpointProtocol = runtimeTarget.protocol
   const requestContext = createRequestContext({
     requestId,
     logicalModelId,
@@ -106,8 +113,8 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   }
 
   const [apiKey, rules] = await Promise.all([
-    getSecretStore().get(target.apiKeyReference),
-    listRulesForProviderModel(target.providerModelId),
+    Promise.resolve(runtime.apiKey ?? getSecretStore().get(runtimeTarget.apiKeyReference)),
+    listRulesForProviderModel(runtimeTarget.providerModelId),
   ])
   const toolNames = new ToolNameRegistry()
   const attempt: AttemptView = { index: attemptIndex, endpointId: target.endpointId, endpointProtocol }
@@ -164,8 +171,9 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   const requestModifiers = createRequestModifiers({
     adapter,
     requestContext,
-    providerModelName: target.providerModelName,
-    auth: resolveProtocolAuthHeaders(endpointProtocol, apiKey, target.customAuthHeader),
+    providerModelName: runtimeTarget.providerModelName,
+    auth: resolveProtocolAuthHeaders(endpointProtocol, apiKey, runtimeTarget.customAuthHeader),
+    pluginHeaders: runtime.headers ?? undefined,
     rules,
     toolNames,
     onRewriteEvaluated: result => { Object.assign(requestEvaluation, result) },
@@ -183,7 +191,7 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     modifiers: requestModifiers,
   })
   if (!requestPipe.payload) {
-    throw new Error(`The request was dropped by a request modifier before forwarding: ${target.providerModelName}`)
+    throw new Error(`The request was dropped by a request modifier before forwarding: ${runtimeTarget.providerModelName}`)
   }
   const preparedRequest = requestPipe.payload
   liveAttempt?.patch({
@@ -200,27 +208,27 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     })
   }
 
-  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${target.timeoutMilliseconds}ms`)
-  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
+  console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(runtimeTarget)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${runtimeTarget.timeoutMilliseconds}ms`)
+  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(runtimeTarget)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
 
   const attemptLogger = createAttemptLogger({
     requestId,
     attemptIndex,
     startedAt: attemptStartedAt,
-    target,
+    target: runtimeTarget,
     upstreamRequestHeaders: preparedRequest.headers,
     upstreamRequestBody: preparedRequest.body,
     requestRewriteRuleIds: requestEvaluation.appliedRuleIds,
-    customAuthHeader: target.customAuthHeader,
+    customAuthHeader: runtimeTarget.customAuthHeader,
     captureRequestContent: session.settings.captureRequestContent,
   })
   const transport = resolveTransportImplementation({
-    transport: resolveUpstreamTransport(target.url, context.transport),
+    transport: resolveUpstreamTransport(runtimeTarget.url, context.transport),
     resolveIdleTimeoutMilliseconds: () => session.settings.idleTimeoutMilliseconds,
   })
   return {
     context,
-    target,
+    target: runtimeTarget,
     attemptIndex,
     attemptStartedAt,
     origin,
@@ -241,6 +249,79 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
     responseEvaluation,
     transport,
   }
+}
+
+interface ResolveRuntimePluginTargetParams {
+  context: RequestContext
+  target: UpstreamTarget
+  requestBody: Buffer
+}
+
+/**
+ * 插件返回的运行时覆写。
+ *
+ * `null` 一律表示「插件没提出意见」，调用方照用原来的值；至于插件提出的值能不能真的上去，
+ * 头由 `createUpstreamRequestHeaders` 裁决，地址与密钥落点由端点本身决定。
+ */
+interface RuntimePluginTarget {
+  target: UpstreamTarget
+  apiKey: string | null
+  headers: Record<string, string> | null
+}
+
+async function resolveRuntimePluginTarget(params: ResolveRuntimePluginTargetParams): Promise<RuntimePluginTarget> {
+  const { context, target, requestBody } = params
+  const providerSetting = await getProviderSetting(target.providerId, PLUGIN_PROVIDER_SETTING_KEY)
+  if (!providerSetting || !providerSetting.value) return { target, apiKey: null, headers: null }
+  const plugin = await loadPlugin(getPluginDirectory(), providerSetting.value)
+  if (!plugin.entryPath) return { target, apiKey: null, headers: null }
+
+  const result = await pluginRunner.runResolveRequest({
+    plugin,
+    hook: 'resolveRequest',
+    inputs: await readPluginInputs(target.providerId),
+    providerId: target.providerId,
+    request: {
+      logicalModelId: context.logicalModelId,
+      providerModelId: target.providerModelId,
+      providerModelName: target.providerModelName,
+      protocol: target.protocol,
+      method: context.method,
+      path: context.path,
+      headers: Object.fromEntries(Object.entries(context.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(', ') : String(value ?? '')])),
+      body: requestBody.toString('utf8'),
+      url: target.url,
+    },
+  })
+  if (!result.ok || result.missing || !result.value) return { target, apiKey: null, headers: null }
+  const nextUrl = result.value.url ?? target.url
+  const nextCustomAuthHeader = result.value.customAuthHeader ?? target.customAuthHeader
+  const nextApiKey = result.value.apiKey ?? null
+  return {
+    target: {
+      ...target,
+      url: nextUrl,
+      customAuthHeader: nextCustomAuthHeader,
+    },
+    apiKey: nextApiKey,
+    headers: normalizePluginHeaders(result.value.headers),
+  }
+}
+
+/**
+ * 把插件返回的附加头归一化：丢掉空值与非字符串，其余原样带走。
+ *
+ * 这里只做形状清洗，不在这里过滤鉴权/逐跳头——那件事由 `createUpstreamRequestHeaders` 统一负责
+ * （见 `packages/core/source/proxy/response/headers.ts`）：插件的头只是一份候选，
+ * 最终哪些能上去取决于与客户端头、鉴权头的合并规则，规则只有一处。
+ */
+function normalizePluginHeaders(headers: Record<string, string> | undefined): Record<string, string> | null {
+  if (!headers) return null
+  const normalized: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) {
+    if (typeof value === 'string' && name.trim().length > 0) normalized[name] = value
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null
 }
 
 function ruleNamesOf(rules: readonly RequestRewriteRule[], ids: readonly string[]): string[] {

@@ -92,7 +92,7 @@ export function serializeCapturedHeaders(headers: IncomingHttpHeaders | Outgoing
  * `auth.fill`（协议形态要求的头）**只补缺**：客户端已经带了同名头就用客户端的值，
  * 我们只是那个「没带时的兜底」。
  */
-export function createUpstreamRequestHeaders(source: IncomingHttpHeaders, auth: ProtocolAuthHeaders, contentLength: number): Record<string, string | string[]> {
+export function createUpstreamRequestHeaders(source: IncomingHttpHeaders, auth: ProtocolAuthHeaders, contentLength: number, extraHeaders?: Readonly<Record<string, string>>): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {}
   const connectionHeaders = parseConnectionHeaders(source.connection)
   const replacedHeaders = new Set(Object.keys(auth.replace).map(name => name.toLowerCase()))
@@ -115,6 +115,18 @@ export function createUpstreamRequestHeaders(source: IncomingHttpHeaders, auth: 
   }
 
   Object.assign(headers, auth.replace)
+  // 插件（`resolveRequest`）附加的头排在鉴权之后：它是「再加一个头」，不是「换个密钥落在哪」
+  // （换密钥落点走 `customAuthHeader`）。但位置类、逐跳类与鉴权头一律不让它碰——
+  // 前两类由链路自己算，后一类是凭据，让插件绕过它等于把「密钥只由一个字段决定」这条规则废掉。
+  if (extraHeaders) {
+    for (const [name, value] of Object.entries(extraHeaders)) {
+      const normalizedName = name.toLowerCase()
+      if (POSITION_HEADERS.has(normalizedName)) continue
+      if (HOP_BY_HOP_HEADERS.has(normalizedName) || connectionHeaders.has(normalizedName)) continue
+      if (replacedHeaders.has(normalizedName)) continue
+      headers[name] = value
+    }
+  }
   if (contentLength > 0) headers['content-length'] = String(contentLength)
   return headers
 }
