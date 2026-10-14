@@ -30,10 +30,8 @@ export class AutoLaunchManager {
     try {
       app.setLoginItemSettings({
         openAtLogin: enabled,
-        // macOS 用它表达「登录后静默启动」，主进程读 `app.wasOpenedAsHidden`。
-        openAsHidden: true,
-        // Windows 不认 `openAsHidden`，只能靠启动参数；主进程读 `--hidden`
-        //（见 `index.ts` 里的 `startHidden`）。Linux 的登录项由打包产物生成，同样按参数传。
+        // Windows / Linux 通过启动参数控制静默启动；新版本 Electron 的类型里不再声明
+        // `openAsHidden`，而主进程读取 `--hidden` 仍然是正确的实现方式。
         args: ['--hidden'],
       })
       this.currentValue = enabled

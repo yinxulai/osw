@@ -34,11 +34,11 @@ const SettingIdSchema = ProviderSettingSchema.pick({ providerId: true, key: true
 const ProviderModelIdSchema = z.object({ providerModelId: z.string().min(1) })
 const ProviderModelEndpointIdSchema = z.object({ providerModelEndpointId: z.string().min(1) })
 
-function list<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, query: (input: T) => Promise<unknown>): ManagementHandler {
+function list<T>(schema: z.ZodType<T>, query: (input: T) => Promise<unknown>): ManagementHandler {
   return async (_req, res, body) => sendSuccess(res, await query(schema.parse(body)))
 }
 
-function get<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, query: (input: T) => Promise<unknown>, label: string): ManagementHandler {
+function get<T>(schema: z.ZodType<T>, query: (input: T) => Promise<unknown>, label: string): ManagementHandler {
   return async (_req, res, body) => {
     const result = await query(schema.parse(body))
     if (result === undefined) return sendError(res, 'NOT_FOUND', `${label} not found`, 404, { resource: label })
@@ -46,7 +46,7 @@ function get<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, query: (input: T) =
   }
 }
 
-function mutate<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, action: (input: T) => Promise<unknown>): ManagementHandler {
+function mutate<T>(schema: z.ZodType<T>, action: (input: T) => Promise<unknown>): ManagementHandler {
   return async (_req: IncomingMessage, res: ServerResponse, body: unknown) => sendSuccess(res, await action(schema.parse(body)))
 }
 

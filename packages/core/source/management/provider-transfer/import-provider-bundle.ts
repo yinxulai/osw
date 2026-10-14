@@ -94,7 +94,7 @@ function parseImportRequest(body: unknown): ProviderBundleImportRequest {
   const parsed = ProviderBundleImportRequestSchema.safeParse(body)
   if (parsed.success) return parsed.data
 
-  const issues = parsed.error.errors.map(issue => `${issue.path.join('.') || 'bundle'} ${issue.message}`).join('；')
+  const issues = parsed.error.issues.map(issue => `${issue.path.join('.') || 'bundle'} ${issue.message}`).join('；')
   throw new AppError('VALIDATION_ERROR', 400, `Not a recognizable provider export file: ${issues}`)
 }
 

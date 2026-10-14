@@ -17,7 +17,7 @@
   "dependencies": {
     "@osw/contracts": "workspace:*",
     "html-to-image": "^1.11.13",
-    "motion": "^13.4.0",
+    "motion": "^14.2.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

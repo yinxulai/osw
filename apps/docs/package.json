@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@clarify-labs/cli": "^0.11.21",
-    "style-to-js": "^1.1.21",
-    "wrangler": "^4.42.0"
+    "style-to-js": "^2.0.2",
+    "wrangler": "^4.150.0"
   }
 }

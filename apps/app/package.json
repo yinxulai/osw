@@ -22,8 +22,8 @@
     "@osw/core": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^37.0.0",
-    "electron-builder": "^24.13.3",
-    "sharp": "^0.35.4"
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "sharp": "^0.35.5"
   }
 }

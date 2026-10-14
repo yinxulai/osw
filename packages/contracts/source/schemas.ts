@@ -72,7 +72,7 @@ export const REWRITE_SCRIPT_CODE_LIMIT = 20_000
 export const REWRITE_SCRIPT_TIMEOUT_DEFAULT = 1_000
 /** 脚本动作超时上限。 */
 export const REWRITE_SCRIPT_TIMEOUT_LIMIT = 5_000
-const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
+const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(z.string(), JsonValueSchema)]))
 export const RequestRewriteRuleMatchSchema = z.object({
   clientProtocols: z.array(ProtocolSchema).max(3).default([]),
   upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
@@ -111,7 +111,7 @@ export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
 export type RequestRewriteRuleAction = z.infer<typeof RequestRewriteRuleActionSchema>
 export const RequestRewriteRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
-  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default({}),
+  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default(() => ({ clientProtocols: [], upstreamProtocols: [] })),
   actions: z.array(RequestRewriteRuleActionSchema).min(1).max(50),
   testCases: z.array(RequestRewriteRuleTestCaseSchema).max(50).default([]),
   createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
@@ -517,7 +517,7 @@ export type Settings = z.infer<typeof SettingsSchema>
 
 // ========== Request Log ==========
 
-export const RawUsageSchema = z.record(z.unknown())
+export const RawUsageSchema = z.record(z.string(), z.unknown())
 export type RawUsage = z.infer<typeof RawUsageSchema>
 
 export const RequestLogSchema = z.object({

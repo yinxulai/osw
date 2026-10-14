@@ -73,7 +73,7 @@ export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapsh
 function parseConfigSnapshot(input: unknown): ConfigSnapshot {
   const parsed = ConfigSnapshotSchema.safeParse(input)
   if (parsed.success) return parsed.data
-  const detail = parsed.error.errors.slice(0, 3).map(issue => `${issue.path.join('.') || 'root'} ${issue.message}`).join('; ')
+  const detail = parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join('.') || 'root'} ${issue.message}`).join('; ')
   throw new AppError('VALIDATION_ERROR', 400, `Not a recognizable config snapshot (expected ${CONFIG_SNAPSHOT_FILE_NAME}): ${detail}`, {
     cause: parsed.error,
   })

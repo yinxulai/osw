@@ -4,6 +4,7 @@ packages:
 
 allowBuilds:
   electron: true
+  electron-winstaller: true
   esbuild: true
   # wrangler 的本地运行时。只在 `wrangler dev` / `deploy --dry-run` 时用到，
   # 但装不上它时 wrangler 的报错很绕（指向 approve-builds），不如直接放行。

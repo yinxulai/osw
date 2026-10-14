@@ -131,10 +131,10 @@ let baseline: TrackedListeners
 
 function trackListeners(): TrackedListeners {
   return {
-    SIGINT: process.listeners('SIGINT'),
-    SIGTERM: process.listeners('SIGTERM'),
-    uncaughtException: process.listeners('uncaughtException'),
-    unhandledRejection: process.listeners('unhandledRejection'),
+    SIGINT: process.listeners('SIGINT') as NodeJS.SignalsListener[],
+    SIGTERM: process.listeners('SIGTERM') as NodeJS.SignalsListener[],
+    uncaughtException: process.listeners('uncaughtException') as NodeJS.UncaughtExceptionListener[],
+    unhandledRejection: process.listeners('unhandledRejection') as NodeJS.UnhandledRejectionListener[],
   }
 }
 
@@ -146,10 +146,10 @@ function removeAdded(event: string, before: readonly TrackedListener[], current:
 }
 
 function restoreListeners(snapshot: TrackedListeners): void {
-  removeAdded('SIGINT', snapshot.SIGINT, process.listeners('SIGINT'))
-  removeAdded('SIGTERM', snapshot.SIGTERM, process.listeners('SIGTERM'))
-  removeAdded('uncaughtException', snapshot.uncaughtException, process.listeners('uncaughtException'))
-  removeAdded('unhandledRejection', snapshot.unhandledRejection, process.listeners('unhandledRejection'))
+  removeAdded('SIGINT', snapshot.SIGINT, process.listeners('SIGINT') as unknown as readonly TrackedListener[])
+  removeAdded('SIGTERM', snapshot.SIGTERM, process.listeners('SIGTERM') as unknown as readonly TrackedListener[])
+  removeAdded('uncaughtException', snapshot.uncaughtException, process.listeners('uncaughtException') as unknown as readonly TrackedListener[])
+  removeAdded('unhandledRejection', snapshot.unhandledRejection, process.listeners('unhandledRejection') as unknown as readonly TrackedListener[])
 }
 
 function addedFrom<Listener extends TrackedListener>(current: readonly Listener[], before: readonly Listener[]): Listener[] {
@@ -168,10 +168,10 @@ function addedListeners(event: 'uncaughtException'): NodeJS.UncaughtExceptionLis
 function addedListeners(event: 'unhandledRejection'): NodeJS.UnhandledRejectionListener[]
 function addedListeners(event: keyof TrackedListeners): readonly TrackedListener[] {
   switch (event) {
-    case 'SIGINT': return addedFrom(process.listeners('SIGINT'), baseline.SIGINT)
-    case 'SIGTERM': return addedFrom(process.listeners('SIGTERM'), baseline.SIGTERM)
-    case 'uncaughtException': return addedFrom(process.listeners('uncaughtException'), baseline.uncaughtException)
-    case 'unhandledRejection': return addedFrom(process.listeners('unhandledRejection'), baseline.unhandledRejection)
+    case 'SIGINT': return addedFrom(process.listeners('SIGINT') as unknown as readonly NodeJS.SignalsListener[], baseline.SIGINT)
+    case 'SIGTERM': return addedFrom(process.listeners('SIGTERM') as unknown as readonly NodeJS.SignalsListener[], baseline.SIGTERM)
+    case 'uncaughtException': return addedFrom(process.listeners('uncaughtException') as unknown as readonly NodeJS.UncaughtExceptionListener[], baseline.uncaughtException)
+    case 'unhandledRejection': return addedFrom(process.listeners('unhandledRejection') as unknown as readonly NodeJS.UnhandledRejectionListener[], baseline.unhandledRejection)
   }
 }
 
