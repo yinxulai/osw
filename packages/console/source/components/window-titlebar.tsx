@@ -39,13 +39,13 @@ export function WindowTitlebar(props: WindowTitlebarProps) {
       <span className="system-xs-semibold text-text-secondary">{t('app.windowTitle')}</span>
       <ChevronRight className="size-3 shrink-0 text-text-quaternary" aria-hidden="true" />
       <BreadcrumbTrail items={trail} className="min-w-0 flex-1 system-xs-medium" />
-      <span className="ml-auto flex shrink-0 items-center gap-2.5">
+      <span className="ml-auto flex shrink-0 items-baseline gap-2.5">
         <WindowLiveMetric />
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-baseline gap-1.5">
           <span
             aria-hidden="true"
             className={cn(
-              'size-1.5 rounded-full',
+              'size-1.5 self-center rounded-full',
               props.proxyRunning ? 'bg-success' : 'bg-text-quaternary',
             )}
           />
