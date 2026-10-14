@@ -76,6 +76,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'common.confirm.cancelLabel': '取消',
   'common.toast.copied': '已复制到剪贴板',
   'common.listSeparator': '、',
+  'common.dateRange.placeholder': '选择日期范围',
+  'common.dateRange.today': '今天',
+  'common.dateRange.last7Days': '近 7 天',
+  'common.dateRange.last30Days': '近 30 天',
 
   // ========== 代理服务开关 ==========
   'proxy.toggle.pause': '暂停服务',
@@ -289,8 +293,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.filters.allProtocols': '全部协议',
   'requestLogs.filters.status': '按状态筛选',
   'requestLogs.filters.allStatuses': '全部状态',
-  'requestLogs.filters.startDate': '开始日期',
-  'requestLogs.filters.endDate': '结束日期',
+  'requestLogs.filters.dateRange': '按时间范围筛选',
   'requestLogs.filters.totalCount': '共 {count} 条',
   'requestLogs.status.pending': '进行中',
   'requestLogs.status.success': '成功',

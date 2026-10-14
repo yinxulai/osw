@@ -76,6 +76,10 @@ export const uiEn = {
   'common.confirm.cancelLabel': 'Cancel',
   'common.toast.copied': 'Copied to clipboard',
   'common.listSeparator': ', ',
+  'common.dateRange.placeholder': 'Select date range',
+  'common.dateRange.today': 'Today',
+  'common.dateRange.last7Days': 'Last 7 days',
+  'common.dateRange.last30Days': 'Last 30 days',
 
   // ========== 代理服务开关 ==========
   'proxy.toggle.pause': 'Pause service',
@@ -286,8 +290,7 @@ export const uiEn = {
   'requestLogs.filters.allProtocols': 'All protocols',
   'requestLogs.filters.status': 'Filter by status',
   'requestLogs.filters.allStatuses': 'All statuses',
-  'requestLogs.filters.startDate': 'Start date',
-  'requestLogs.filters.endDate': 'End date',
+  'requestLogs.filters.dateRange': 'Filter by date range',
   'requestLogs.filters.totalCount': '{count} records',
   'requestLogs.status.pending': 'In progress',
   'requestLogs.status.success': 'Success',

@@ -1,6 +1,5 @@
-import { CalendarRange } from 'lucide-react'
+import { DateRangePicker } from '@/components/date-range-picker'
 import { FilterBar } from '@/components/filter-bar'
-import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTranslation } from '@/i18n/provider'
 import type { RequestLogFilter } from '../service'
@@ -18,12 +17,8 @@ interface RequestLogsFiltersProps {
 
 const protocolOptions = ['openai-responses', 'openai-completions', 'anthropic-messages']
 
-function toDateInput(timestamp: number | null, endDate = false) {
-  if (timestamp === null) return ''
-  const date = new Date(endDate ? timestamp - 1 : timestamp)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
-}
+/** 结束日按「含当天」折算成时间戳：选到 2026-01-15 就要包含这一整天，取次日零点。 */
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export function RequestLogsFilters(props: RequestLogsFiltersProps) {
   const t = useTranslation()
@@ -60,20 +55,15 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
           <SelectItem value="cancelled">{t('requestLogs.status.cancelled')}</SelectItem>
         </SelectContent>
       </Select>
-      <label className="relative flex items-center" title={t('requestLogs.filters.startDate')}>
-        <CalendarRange className="pointer-events-none absolute left-3 size-3.5 text-text-tertiary" aria-hidden />
-        <Input aria-label={t('requestLogs.filters.startDate')} type="date" value={toDateInput(props.filter.createdTimeFrom)} onChange={event => {
-          const value = event.target.value
-          props.applyFilter({ createdTimeFrom: value ? new Date(`${value}T00:00:00`).getTime() : null })
-        }} className="w-40 pl-9" />
-      </label>
-      <label className="relative flex items-center" title={t('requestLogs.filters.endDate')}>
-        <CalendarRange className="pointer-events-none absolute left-3 size-3.5 text-text-tertiary" aria-hidden />
-        <Input aria-label={t('requestLogs.filters.endDate')} type="date" value={toDateInput(props.filter.createdTimeTo, true)} onChange={event => {
-          const value = event.target.value
-          props.applyFilter({ createdTimeTo: value ? new Date(`${value}T00:00:00`).getTime() + 24 * 60 * 60 * 1000 : null })
-        }} className="w-40 pl-9" />
-      </label>
+      <DateRangePicker
+        label={t('requestLogs.filters.dateRange')}
+        className="w-64"
+        value={{ from: props.filter.createdTimeFrom, to: props.filter.createdTimeTo === null ? null : props.filter.createdTimeTo - DAY_MS }}
+        onChange={value => props.applyFilter({
+          createdTimeFrom: value.from,
+          createdTimeTo: value.to === null ? null : value.to + DAY_MS,
+        })}
+      />
       <span className="system-xs-regular text-text-tertiary">{t('requestLogs.filters.totalCount', { count: props.total })}</span>
     </FilterBar>
   )
