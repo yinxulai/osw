@@ -90,7 +90,12 @@ export function RuntimeSettingsPage() {
           </div>
         ) : undefined}
       />
-      <PageContent dataScreenshot="settings-content" className="pb-5">
+      {/*
+        这里**不要**再补 `pb-5`（历史上曾经加过）。
+        页面底部的留白由 `AppLayout` 滚动容器内层统一的 `py-5` 负责；页面自己再加一层，
+        滚到底时就变成 20 + 20 = 40px，这一页的尾巴比别的页厚一倍。
+      */}
+      <PageContent dataScreenshot="settings-content">
         {service.loading || !service.settings ? (
           <div className="space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
