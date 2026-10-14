@@ -2037,7 +2037,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'tray.panel.subtitle': '本地代理',
   'tray.panel.openApp': '打开主界面',
   'tray.panel.quit': '退出',
-  'tray.panel.footnote': '状态与逻辑模型会自动保持同步',
   'tray.panel.startProxy': '启动代理',
   'tray.panel.stopProxy': '停止代理',
   'tray.panel.actionFailed': '操作失败，请稍后重试',

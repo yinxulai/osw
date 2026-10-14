@@ -178,8 +178,6 @@ export function TrayPanelPage() {
               <X size={15} />
             </Button>
           </div>
-
-          <p className="mt-2.5 text-center system-2xs-regular text-text-quaternary">{t('tray.panel.footnote')}</p>
         </div>
       </div>
     </div>

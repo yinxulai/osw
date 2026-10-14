@@ -2041,7 +2041,6 @@ Score request size in a sandbox script, then route by score band to different lo
   'tray.panel.subtitle': 'Local proxy',
   'tray.panel.openApp': 'Open the main window',
   'tray.panel.quit': 'Quit',
-  'tray.panel.footnote': 'Status and logical models stay in sync',
   'tray.panel.startProxy': 'Start proxy',
   'tray.panel.stopProxy': 'Stop proxy',
   'tray.panel.actionFailed': 'The action failed. Try again shortly',
