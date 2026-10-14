@@ -1,5 +1,6 @@
 import { DateRangePicker } from '@/components/date-range-picker'
 import { FilterBar } from '@/components/filter-bar'
+import { SearchableSelect } from '@/components/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTranslation } from '@/i18n/provider'
 import type { RequestLogFilter } from '../service'
@@ -9,7 +10,7 @@ export type RequestLogsFilter = RequestLogFilter
 
 interface RequestLogsFiltersProps {
   filter: RequestLogsFilter
-  providerOptions: Array<{ id: string; name: string }>
+  /** 只保留「供应商模型」这一维筛选：供应商自身那一维与它是父子关系，一起给用户只是重复。 */
   providerModelOptions: Array<{ id: string; name: string }>
   total: number
   applyFilter: (next: Partial<RequestLogsFilter>) => void
@@ -24,20 +25,16 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
   const t = useTranslation()
   return (
     <FilterBar dataScreenshot="request-logs-filters">
-      <Select value={props.filter.providerId} onValueChange={value => props.applyFilter({ providerId: value })}>
-        <SelectTrigger aria-label={t('requestLogs.filters.channel')} className="w-40"><SelectValue placeholder={t('requestLogs.filters.allChannels')} /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t('requestLogs.filters.allChannels')}</SelectItem>
-          {props.providerOptions.map(provider => <SelectItem key={provider.id} value={provider.id}>{provider.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Select value={props.filter.providerModelId} onValueChange={value => props.applyFilter({ providerModelId: value })}>
-        <SelectTrigger aria-label={t('requestLogs.filters.providerModel')} className="w-48"><SelectValue placeholder={t('requestLogs.filters.allProviderModels')} /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t('requestLogs.filters.allProviderModels')}</SelectItem>
-          {props.providerModelOptions.map(model => <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <SearchableSelect
+        value={props.filter.providerModelId}
+        onValueChange={value => props.applyFilter({ providerModelId: value })}
+        options={props.providerModelOptions.map(model => ({ value: model.id, label: model.name }))}
+        allOption={{ value: 'all', label: t('requestLogs.filters.allProviderModels') }}
+        label={t('requestLogs.filters.providerModel')}
+        searchPlaceholder={t('requestLogs.filters.providerModelSearch')}
+        emptyLabel={t('requestLogs.filters.providerModelEmpty')}
+        className="w-56"
+      />
       <Select value={props.filter.clientProtocol} onValueChange={value => props.applyFilter({ clientProtocol: value })}>
         <SelectTrigger aria-label={t('requestLogs.filters.protocol')} className="w-36"><SelectValue placeholder={t('requestLogs.filters.allProtocols')} /></SelectTrigger>
         <SelectContent>

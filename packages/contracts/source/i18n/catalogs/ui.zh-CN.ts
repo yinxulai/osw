@@ -293,10 +293,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // ========== 页面 · 请求记录 ==========
   'requestLogs.title': '请求记录',
   'requestLogs.description': '最近的代理请求，以及每次请求实际使用的供应商模型与失败切换情况',
-  'requestLogs.filters.channel': '按渠道筛选',
-  'requestLogs.filters.allChannels': '全部渠道',
   'requestLogs.filters.providerModel': '按供应商模型筛选',
   'requestLogs.filters.allProviderModels': '全部供应商模型',
+  'requestLogs.filters.providerModelSearch': '搜索供应商模型',
+  'requestLogs.filters.providerModelEmpty': '没有匹配的供应商模型',
   'requestLogs.filters.protocol': '按客户端协议筛选',
   'requestLogs.filters.allProtocols': '全部协议',
   'requestLogs.filters.status': '按状态筛选',

@@ -210,7 +210,6 @@ describe('下拉选项', () => {
     const { result } = mount()
 
     await waitFor(() => expect(result.current.providerModelOptions).toHaveLength(2))
-    expect(result.current.providerOptions.map(option => option.name)).toEqual(['Alpha', 'Beta'])
     expect(result.current.providerModelOptions).toEqual([
       { id: 'pm_2', name: 'Alpha / aaa' },
       { id: 'pm_1', name: 'Beta / zzz' },

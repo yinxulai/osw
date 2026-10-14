@@ -84,7 +84,9 @@ export function DateRangePicker(props: DateRangePickerProps) {
       from: range?.from ? startOfDay(range.from.getTime()) : null,
       to: range?.to ? startOfDay(range.to.getTime()) : null,
     })
-    // 区间选满即收起：留着只会挡住背后的内容，再改就重新点开（那本来也是一次完整选择）。
+    // 只在**真的选满两端**时收起。`min={1}` 让单击只给出「有起点、没终点」的半区间，
+    // 所以这里不会像以前那样点一下就关闭（react-day-picker 的 `min` 默认为 0，
+    // 会把单击当成一个「首尾同一天」的完整区间）。
     if (range?.from && range?.to) setOpen(false)
   }
 
@@ -137,6 +139,9 @@ export function DateRangePicker(props: DateRangePickerProps) {
           </div>
           <Calendar
             mode="range"
+            // `min={1}`：起点与终点必须是**两天**。这既是 UI 上的语义要求（这是一个区间），
+            // 也是「点一下别关窗」的根据——单击只会得到一个还没有终点的半区间。
+            min={1}
             selected={selected}
             onSelect={handleSelect}
             numberOfMonths={2}

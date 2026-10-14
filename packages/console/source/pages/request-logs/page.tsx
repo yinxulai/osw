@@ -11,7 +11,7 @@ import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
   const t = useTranslation()
-  const { rows, total, providerOptions, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, isModelDeleted, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
+  const { rows, total, providerModelOptions, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, isModelDeleted, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -40,7 +40,6 @@ export function RequestLogsPage() {
         {/* 进行中的请求就在下面这张表里：同一张表先说「现在」，再说「过去」。 */}
         <RequestLogsFilters
           filter={filter}
-          providerOptions={providerOptions}
           providerModelOptions={providerModelOptions}
           total={total}
           applyFilter={setFilter}

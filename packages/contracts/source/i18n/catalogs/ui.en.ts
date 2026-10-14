@@ -290,10 +290,10 @@ export const uiEn = {
   // ========== 页面 · 请求记录 ==========
   'requestLogs.title': 'Request logs',
   'requestLogs.description': 'Recent proxy requests, and the channel model plus failover actually used by each request',
-  'requestLogs.filters.channel': 'Filter by channel',
-  'requestLogs.filters.allChannels': 'All channels',
   'requestLogs.filters.providerModel': 'Filter by channel model',
   'requestLogs.filters.allProviderModels': 'All channel models',
+  'requestLogs.filters.providerModelSearch': 'Search channel models',
+  'requestLogs.filters.providerModelEmpty': 'No matching channel models',
   'requestLogs.filters.protocol': 'Filter by client protocol',
   'requestLogs.filters.allProtocols': 'All protocols',
   'requestLogs.filters.status': 'Filter by status',
