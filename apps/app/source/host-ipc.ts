@@ -28,6 +28,18 @@ export const WINDOW_BACKGROUND = {
 } as const
 
 /**
+ * 窗口控件（最小化 / 最大化 / 关闭）符号色。
+ *
+ * overlay 底色是透明的（见 `applyWindowChrome`），控件底下就是渲染层那条标题栏，
+ * 所以符号色要跟着标题栏所在层的明暗走。透明 overlay **必须**显式给 `symbolColor`，
+ * 否则 Windows 会退回系统默认色，亮色下白、暗色下黑，与背景撞在一起看不见。
+ */
+export const WINDOW_CONTROLS_SYMBOL = {
+  light: '#171717',
+  dark: '#f5f5f5',
+} as const
+
+/**
  * 非 macOS 用 `setTitleBarOverlay` 画标题栏，高度要与渲染层的 `WindowTitlebar`（`h-9`）一致。
  *
  * 与上一项同理导出：`applyWindowChrome` 在这里用它重建自己的窗口，`index.ts` 在构造
@@ -127,8 +139,12 @@ export function applyWindowChrome(target: BrowserWindow): void {
   target.setBackgroundColor(background)
   if (process.platform !== 'darwin') {
     target.setTitleBarOverlay({
-      color: background,
-      symbolColor: dark ? '#f5f5f5' : '#171717',
+      // 底色**全透明**：那块系统保留区下面是渲染层那条铺满整宽的标题栏
+      // （`WindowTitlebar` 的 `bg-sidebar`，WCO 规范里标题栏容器就是刻意「流到 overlay
+      // 底下」以取得无缝观感的）。于是控件区和标题栏同色，且亮暗只由渲染层一处驱动——
+      // 不再是主进程这条独立通道，主题切换时右上角也就不会再「单独切一次」。
+      color: '#00000000',
+      symbolColor: dark ? WINDOW_CONTROLS_SYMBOL.dark : WINDOW_CONTROLS_SYMBOL.light,
       height: WINDOW_TITLEBAR_HEIGHT,
     })
   }

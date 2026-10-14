@@ -25,6 +25,7 @@ import { installWindowShortcuts } from './window-actions'
 import { exportWebsiteScreenshots, resolveScreenshotCases, type ScreenshotExportProgress } from './screenshot-export'
 import {
   WINDOW_BACKGROUND,
+  WINDOW_CONTROLS_SYMBOL,
   WINDOW_TITLEBAR_HEIGHT,
   applyWindowTheme,
   registerExternalLinkIpc,
@@ -373,11 +374,13 @@ function createWindow() {
         }
       : {
           titleBarStyle: 'hidden' as const,
+          // 与 `applyWindowChrome` 同一份取色理由（见该函数注释）：底色透明，让渲染层
+          // 铺满整宽的标题栏透出来，控件随应用主题而非主进程独立通道切换。
           titleBarOverlay: {
-            color: nativeTheme.shouldUseDarkColors
-              ? WINDOW_BACKGROUND.dark
-              : WINDOW_BACKGROUND.light,
-            symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
+            color: '#00000000',
+            symbolColor: nativeTheme.shouldUseDarkColors
+              ? WINDOW_CONTROLS_SYMBOL.dark
+              : WINDOW_CONTROLS_SYMBOL.light,
             height: WINDOW_TITLEBAR_HEIGHT,
           },
         }),

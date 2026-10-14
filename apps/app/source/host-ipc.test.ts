@@ -245,8 +245,16 @@ describe('applyWindowChrome', () => {
       // macOS 的标题栏由系统绘制，没有 overlay 可设。
       expect(target.setTitleBarOverlay).not.toHaveBeenCalled()
     } else {
-      // 高度必须与渲染层的 `WindowTitlebar`（`h-9`）一致。
-      expect(target.setTitleBarOverlay).toHaveBeenCalledWith(expect.objectContaining({ height: 36 }))
+      // 高度必须与渲染层的 `WindowTitlebar`（`h-9`）一致；底色必须透明，
+      // 否则右上角控件会走主进程这条独立通道、与渲染层标题栏各切各的。
+      expect(target.setTitleBarOverlay).toHaveBeenCalledWith(
+        expect.objectContaining({
+          color: '#00000000',
+          height: 36,
+          // 透明 overlay 必须显式给符号色，否则 Windows 退回系统默认色会与背景撞色。
+          symbolColor: mocks.nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
+        }),
+      )
     }
   })
 })
