@@ -30,23 +30,27 @@ function Wrapper(props: WrapperProps) {
 }
 
 function log(overrides: Partial<LogEntry> = {}): LogEntry {
-  return { id: 1, level: 'info', message: 'hello', timestamp: 1_700_000_000_000, ...overrides }
+  return { id: 1, level: 'info', scope: 'proxy', message: 'hello', timestamp: 1_700_000_000_000, ...overrides }
 }
 
 beforeEach(() => {
   useLanguageStore.setState({ preference: 'zh-CN' })
-  useLogsUiStore.setState({ live: true, levelFilter: 'all', searchText: '', page: 1 })
+  useLogsUiStore.setState({ live: true, levelFilter: 'all', scopeFilter: 'proxy', searchText: '', page: 1 })
 })
 
 describe('运行日志页的界面状态', () => {
-  it('默认跟随实时、全部级别、第一页', () => {
-    expect(useLogsUiStore.getState()).toMatchObject({ live: true, levelFilter: 'all', searchText: '', page: 1 })
+  it('默认跟随实时、全部级别、代理模块、第一页', () => {
+    expect(useLogsUiStore.getState()).toMatchObject({ live: true, levelFilter: 'all', scopeFilter: 'proxy', searchText: '', page: 1 })
   })
 
-  it('改级别 / 搜索词都会退回第一页（旧页码在新结果里没有意义）', () => {
+  it('改级别 / 模块 / 搜索词都会退回第一页（旧页码在新结果里没有意义）', () => {
     useLogsUiStore.getState().setPage(7)
     useLogsUiStore.getState().setLevelFilter('error')
     expect(useLogsUiStore.getState()).toMatchObject({ levelFilter: 'error', page: 1 })
+
+    useLogsUiStore.getState().setPage(5)
+    useLogsUiStore.getState().setScopeFilter('database')
+    expect(useLogsUiStore.getState()).toMatchObject({ scopeFilter: 'database', page: 1 })
 
     useLogsUiStore.getState().setPage(3)
     useLogsUiStore.getState().setSearchText('boom')
@@ -159,6 +163,7 @@ describe('日志工具栏', () => {
       onClear: vi.fn(),
       onDialogChange: vi.fn(),
       onLevelChange: vi.fn(),
+      onScopeChange: vi.fn(),
       onSearchChange: vi.fn(),
     }
     render(
@@ -167,6 +172,7 @@ describe('日志工具栏', () => {
         live
         refreshing={false}
         levelFilter="all"
+        scopeFilter="proxy"
         searchText=""
         clearDialogOpen={false}
         {...handlers}
@@ -181,6 +187,15 @@ describe('日志工具栏', () => {
     const handlers = renderToolbar()
     fireEvent.change(screen.getByLabelText('搜索日志内容'), { target: { value: 'timeout' } })
     expect(handlers.onSearchChange).toHaveBeenCalledWith('timeout')
+  })
+
+  it('模块选择器列出各模块并能切换', async () => {
+    const handlers = renderToolbar({ scopeFilter: 'proxy' })
+    expect(screen.getByLabelText('按模块筛选')).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText('按模块筛选'))
+    fireEvent.click(await screen.findByRole('option', { name: '数据库' }))
+    expect(handlers.onScopeChange).toHaveBeenCalledWith('database')
   })
 
   it('显示总条数', () => {

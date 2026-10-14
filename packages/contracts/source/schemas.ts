@@ -1036,9 +1036,32 @@ export type RequestLogDetail = z.infer<typeof RequestLogDetailSchema>
 
 // ========== 运行日志条目 ==========
 
+/**
+ * 运行日志所属的**模块**。
+ *
+ * 写日志的地方按 `[module] 正文` 的约定给每行带一个前缀，"模块"就是把这个前缀收敛到
+ * 一颗产品能讲的树上：一个前缀对应哪个模块由写入侧解析（见
+ * `@server/management/infrastructure/log-scope`），这里只声明取值与展示顺序。
+ *
+ * - `proxy`：代理引擎（含 `proxy-lifecycle`）——请求经过时产生的绝大多数日志；
+ * - `management`：管理服务（含 `management-lifecycle`）；
+ * - `runtime`：服务运行时与宿主桥（`runtime` / `service-host` / `osw` / `rpc`）；
+ * - `database`：数据库（`database` / `store`）；
+ * - `desktop`：桌面宿主进程（`tray` / `updater` / `secrets` / `auto-launch` / `screenshots` / `cli`）；
+ * - `other`：没有归属或前缀没登记的日志。
+ *
+ * 词表放在 `@common` 的理由与其它枚举相同：管理端、落库、界面必须共用同一套。
+ */
+export const LogScopeSchema = z.enum(['proxy', 'management', 'runtime', 'database', 'desktop', 'other'])
+export type LogScope = z.infer<typeof LogScopeSchema>
+
+/** 界面要按固定顺序列出这些模块；列表与枚举同源，避免两处各写一份顺序。 */
+export const ALL_LOG_SCOPES: LogScope[] = [...LogScopeSchema.options]
+
 export const LogEntrySchema = z.object({
   id: z.number().int().positive(),
   level: z.enum(['log', 'warn', 'error', 'info', 'debug']),
+  scope: LogScopeSchema,
   message: z.string(),
   timestamp: z.number().int(),
 })

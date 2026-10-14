@@ -9,16 +9,22 @@ import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 
 type LevelFilter = 'all' | LogEntry['level']
+type ScopeFilter = 'all' | LogEntry['scope']
+
+/** 模块筛选项顺序，与下拉呈现顺序一致；`all` 置顶便于一键回到全部模块。 */
+const SCOPE_OPTIONS: ScopeFilter[] = ['all', 'proxy', 'management', 'runtime', 'database', 'desktop', 'other']
+
 interface LogsToolbarProps {
-  total: number; live: boolean; refreshing: boolean; levelFilter: LevelFilter; searchText: string; clearDialogOpen: boolean
+  total: number; live: boolean; refreshing: boolean; levelFilter: LevelFilter; scopeFilter: ScopeFilter; searchText: string; clearDialogOpen: boolean
   onLiveChange: () => void; onRefresh: () => void; onExport: () => void; onClear: () => void; onDialogChange: (open: boolean) => void
-  onLevelChange: (value: LevelFilter) => void; onSearchChange: (value: string) => void
+  onLevelChange: (value: LevelFilter) => void; onScopeChange: (value: ScopeFilter) => void; onSearchChange: (value: string) => void
 }
 
 export function LogsToolbar(props: LogsToolbarProps) {
   const t = useTranslation()
   return <FilterBar dataScreenshot="logs-toolbar">
     <div className="relative"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden /><Input value={props.searchText} onChange={event => props.onSearchChange(event.target.value)} placeholder={t('logs.toolbar.searchPlaceholder')} className="w-72 pl-9" aria-label={t('logs.toolbar.searchAria')} /></div>
+    <Select value={props.scopeFilter} onValueChange={value => props.onScopeChange(value as ScopeFilter)}><SelectTrigger aria-label={t('logs.toolbar.scopeAria')} className="w-36"><SelectValue placeholder={t('logs.toolbar.scopeAll')} /></SelectTrigger><SelectContent>{SCOPE_OPTIONS.map(scope => <SelectItem key={scope} value={scope}>{scope === 'all' ? t('logs.toolbar.scopeAll') : t(`logs.scope.${scope}`)}</SelectItem>)}</SelectContent></Select>
     <Select value={props.levelFilter} onValueChange={value => props.onLevelChange(value as LevelFilter)}><SelectTrigger aria-label={t('logs.toolbar.levelAria')} className="w-32"><SelectValue placeholder={t('logs.toolbar.levelAll')} /></SelectTrigger><SelectContent><SelectItem value="all">{t('logs.toolbar.levelAll')}</SelectItem><SelectItem value="error">ERROR</SelectItem><SelectItem value="warn">WARN</SelectItem><SelectItem value="info">INFO</SelectItem><SelectItem value="log">LOG</SelectItem><SelectItem value="debug">DEBUG</SelectItem></SelectContent></Select>
     <span className="system-xs-regular text-text-tertiary">{t('logs.toolbar.totalCount', { count: props.total })}</span>
     <span className={cn('ml-auto flex items-center gap-1.5 system-xs-regular', props.live ? 'text-text-success' : 'text-text-tertiary')}><span className="relative flex size-2 shrink-0 items-center justify-center">{props.live && <span className="absolute size-2 rounded-full bg-success/50 motion-safe:animate-ping" />}<span className={cn('relative size-1.5 rounded-full', props.live ? 'bg-success' : 'bg-text-quaternary')} /></span>{props.live ? t('logs.toolbar.live') : t('logs.toolbar.paused')}</span>

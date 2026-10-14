@@ -13,13 +13,27 @@ keywords:
 
 ## Toolbar
 
-![OSW Runtime logs page toolbar: search, level filter, live-update toggle, pause, export, and clear.](/screenshots/en/light/runtime-logs.png)
+![OSW Runtime logs page toolbar: module filter, search, level filter, live-update toggle, pause, export, and clear.](/screenshots/en/light/runtime-logs.png)
 
+- **Module**: show only one module's logs (defaults to `proxy`). The service's own output is split by module — proxy forwarding, management API, runtime/host, database, and desktop (tray, updater, secrets, and so on). Pick "All modules" to see everything.
 - **Search**: filter log bodies by keyword.
 - **Level**: show only one level (e.g. warn / error).
 - **Live update**: new logs scroll in automatically, and can be **paused** at any time to avoid flooding.
 - **Export**: export the current view to a file to hand to a collaborator.
 - **Clear**: drop existing logs.
+
+## Modules
+
+Every log line carries a bracketed prefix (e.g. `[proxy] ...`). OSW resolves it to a module at **write time**, so filtering is an indexed column lookup rather than a fresh body scan on every read:
+
+| Module | Covers |
+| --- | --- |
+| Proxy | Request forwarding, upstream calls, route execution |
+| Management | Management API, static assets |
+| Runtime | Service lifecycle, host communication, RPC, telemetry |
+| Database | Database creation, migrations, storage layer |
+| Desktop | Tray, auto-update, secrets, auto-launch, screenshots, i18n — host capabilities |
+| Other | Fallback bucket for unregistered prefixes |
 
 ## Difference from request logs
 

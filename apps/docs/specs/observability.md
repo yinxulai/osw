@@ -15,6 +15,22 @@
 
 日志必须包含足以关联问题的模块、阶段、错误码、请求 ID、目标标识或耗时；不得输出 API Key、Authorization、Cookie、完整代理凭据、请求/响应正文或原始设置值。高频轮询错误仅记录首次失败及恢复，避免重复刷屏。一次故障只在最具上下文的边界记录为 `error`，中间可恢复步骤不得提前升级为 `error`。
 
+### 模块归属
+
+运行日志除级别外再带一个**模块**维度（`LogScope`）：`proxy`、`management`、`runtime`、`database`、`desktop`、`other`。写入方一律按 `console.<level>('[前缀] 正文')` 的约定带一个方括号前缀，服务在**写入那一刻**把行首前缀解析成模块存进 `runtime_logs.scope`（`log-scope.ts` 的 `resolveLogScope`）——前缀是会在重构里改的自由字符串，账要记在写日志的时候，而不是每次读取时现算。
+
+只认**行首**的方括号前缀，正文里出现的 `[xxx]`（例如 `value=[1,2]`）不算模块；前缀未登记或压根没有前缀，一律归 `other`。前缀用**精确匹配**而非 `startsWith`：`proxy` 与 `proxy-lifecycle`、`management` 与 `management-lifecycle` 必须各归各的。
+
+| 前缀 | 模块 |
+| --- | --- |
+| `proxy`、`proxy-lifecycle` | `proxy` |
+| `management`、`management-lifecycle`、`static-web` | `management` |
+| `runtime`、`service-host`、`osw`、`rpc`、`telemetry` | `runtime` |
+| `database`、`store` | `database` |
+| `tray`、`updater`、`secrets`、`auto-launch`、`screenshots`、`i18n`、`cli` | `desktop` |
+
+模块划分按「它属于哪块产品能力」，不按代码目录——`tray` / `updater` 这些文件夹不在服务进程里，但它们都长在桌面宿主上，界面上归一类才有意义。运行日志页默认只看 `proxy` 模块，用户可切换到其它模块或「全部模块」。
+
 ### 主进程落盘日志
 
 运行日志的主体落在数据目录的 `data-<n>.db`（`runtime_logs`），写入者是**服务进程**。但主进程的 `console` 要先送过一条 RPC（`logs.write`）才能到服务：启动最早几毫秒、服务崩溃后的重启间隙、正在收尾退出——这些时刻 RPC 没有落点，输出只能攒在内存里（上限 500 行，满了丢最早的）。而「应用整个消失」这类闪退恰恰发生在这条通道最不牢靠的时刻，于是事后在运行日志里什么也看不到。

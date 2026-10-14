@@ -15,19 +15,19 @@ const state = vi.hoisted(() => ({
   persistFails: false,
   clearFails: false,
   listFails: false,
-  created: [] as Array<{ level: string; message: string; timestamp: number }>,
+  created: [] as Array<{ level: string; scope: string; message: string; timestamp: number }>,
   cleared: 0,
   pruned: [] as number[],
-  dbLogs: [] as Array<{ id: number; level: string; message: string; timestamp: number }>,
-  dbAllLogs: [] as Array<{ id: number; level: string; message: string; timestamp: number }>,
-  dbPaged: { logs: [] as Array<{ id: number; level: string; message: string; timestamp: number }>, total: 0 },
+  dbLogs: [] as Array<{ id: number; level: string; scope: string; message: string; timestamp: number }>,
+  dbAllLogs: [] as Array<{ id: number; level: string; scope: string; message: string; timestamp: number }>,
+  dbPaged: { logs: [] as Array<{ id: number; level: string; scope: string; message: string; timestamp: number }>, total: 0 },
 }))
 
 vi.mock('@server/database/runtime-log-store', () => ({
-  createRuntimeLog: (level: string, message: string, timestamp: number) => {
+  createRuntimeLog: (level: string, scope: string, message: string, timestamp: number) => {
     if (state.persistFails) throw new Error('database is down')
-    state.created.push({ level, message, timestamp })
-    return { id: state.created.length, level, message, timestamp }
+    state.created.push({ level, scope, message, timestamp })
+    return { id: state.created.length, level, scope, message, timestamp }
   },
   listRuntimeLogs: () => {
     if (state.listFails) throw new Error('database is down')
@@ -88,10 +88,19 @@ describe('log-buffer 的写入', () => {
   it('写进来的一条同时进内存与数据库，时间戳默认取当下', () => {
     buffer.writeRuntimeLog('warn', 'upstream timed out')
 
-    expect(state.created).toEqual([{ level: 'warn', message: 'upstream timed out', timestamp: 1_700_000_000_000 }])
+    expect(state.created).toEqual([{ level: 'warn', scope: 'other', message: 'upstream timed out', timestamp: 1_700_000_000_000 }])
     // 内存那一份要绕开数据库才看得见：库在的时候读取走库（下面有单独的用例）。
     state.listFails = true
     expect(buffer.listLogs()).toHaveLength(1)
+  })
+
+  // 模块靠日志正文的 `[prefix]` 前缀认，不需要调用方额外声明。
+  it('按消息前缀解析模块，同一模块的前缀归为一类', () => {
+    buffer.writeRuntimeLog('info', '[proxy] request served')
+    buffer.writeRuntimeLog('info', '[database] vacuum done')
+    buffer.writeRuntimeLog('info', 'plain message with no prefix')
+
+    expect(state.created.map(entry => entry.scope)).toEqual(['proxy', 'database', 'other'])
   })
 
   // 时间戳可以显式给：主进程写下的日志发生在服务起来之前，等它送到时 `Date.now()` 已经晚了。
@@ -165,7 +174,7 @@ describe('log-buffer 的写入', () => {
 
 describe('log-buffer 的读取', () => {
   it('数据库可用时直接用它给的结果', () => {
-    state.dbLogs = [{ id: 7, level: 'warn', message: 'from db', timestamp: 1 }]
+    state.dbLogs = [{ id: 7, level: 'warn', scope: 'proxy', message: 'from db', timestamp: 1 }]
     state.listFails = false
 
     expect(buffer.listLogs()).toBe(state.dbLogs)
@@ -196,27 +205,31 @@ describe('log-buffer 的读取', () => {
   })
 
   it('分页查询走数据库', () => {
-    state.dbPaged = { logs: [{ id: 3, level: 'error', message: 'boom', timestamp: 1 }], total: 1 }
+    state.dbPaged = { logs: [{ id: 3, level: 'error', scope: 'proxy', message: 'boom', timestamp: 1 }], total: 1 }
 
     expect(buffer.listLogsPaged(20, 0)).toBe(state.dbPaged)
   })
 
-  it('分页回退按级别与关键字过滤，关键字不区分大小写', () => {
-    buffer.writeRuntimeLog('info', 'Upstream OK')
-    buffer.writeRuntimeLog('error', 'Upstream Failed')
-    buffer.writeRuntimeLog('warn', 'client gone')
+  it('分页回退按级别、模块与关键字过滤，关键字不区分大小写', () => {
+    buffer.writeRuntimeLog('info', '[proxy] Upstream OK')
+    buffer.writeRuntimeLog('error', '[proxy] Upstream Failed')
+    buffer.writeRuntimeLog('warn', '[database] client gone')
     state.listFails = true
 
     const byLevel = buffer.listLogsPaged(50, 0, { level: 'error' })
-    expect(byLevel.logs.map(entry => entry.message)).toEqual(['Upstream Failed'])
+    expect(byLevel.logs.map(entry => entry.message)).toEqual(['[proxy] Upstream Failed'])
     expect(byLevel.total).toBe(1)
 
+    const byScope = buffer.listLogsPaged(50, 0, { scope: 'database' })
+    expect(byScope.logs.map(entry => entry.message)).toEqual(['[database] client gone'])
+    expect(byScope.total).toBe(1)
+
     const byQuery = buffer.listLogsPaged(50, 0, { query: 'upstream' })
-    expect(byQuery.logs.map(entry => entry.message)).toEqual(['Upstream Failed', 'Upstream OK'])
+    expect(byQuery.logs.map(entry => entry.message)).toEqual(['[proxy] Upstream Failed', '[proxy] Upstream OK'])
     expect(byQuery.total).toBe(2)
 
-    const both = buffer.listLogsPaged(50, 0, { level: 'info', query: 'upstream' })
-    expect(both.logs.map(entry => entry.message)).toEqual(['Upstream OK'])
+    const both = buffer.listLogsPaged(50, 0, { scope: 'proxy', level: 'info', query: 'upstream' })
+    expect(both.logs.map(entry => entry.message)).toEqual(['[proxy] Upstream OK'])
   })
 
   // 分页的两段口径必须一致：limit/offset 切的是过滤后的那一份，total 也是过滤后的总数，
@@ -248,23 +261,23 @@ describe('log-buffer 的清理与导出', () => {
   })
 
   it('导出优先用数据库里的全量，数据库不可用才用内存', () => {
-    buffer.writeRuntimeLog('info', 'in memory', 1_700_000_000_000)
-    state.dbAllLogs = [{ id: 1, level: 'error', message: 'from db', timestamp: 0 }]
+    buffer.writeRuntimeLog('info', '[proxy] in memory', 1_700_000_000_000)
+    state.dbAllLogs = [{ id: 1, level: 'error', scope: 'management', message: 'from db', timestamp: 0 }]
 
-    expect(buffer.exportLogs()).toBe('[1970-01-01T00:00:00.000Z] [ERROR] from db')
+    expect(buffer.exportLogs()).toBe('[1970-01-01T00:00:00.000Z] [ERROR] [management] from db')
 
     state.listFails = true
-    expect(buffer.exportLogs()).toBe('[2023-11-14T22:13:20.000Z] [INFO] in memory')
+    expect(buffer.exportLogs()).toBe('[2023-11-14T22:13:20.000Z] [INFO] [proxy] [proxy] in memory')
   })
 
-  it('导出的每一行是「时间 + 级别 + 正文」，按写入顺序', () => {
-    buffer.writeRuntimeLog('warn', 'first line', 1_700_000_000_000)
-    buffer.writeRuntimeLog('debug', 'second line', 1_700_000_001_000)
+  it('导出的每一行是「时间 + 级别 + 模块 + 正文」，按写入顺序', () => {
+    buffer.writeRuntimeLog('warn', '[proxy] first line', 1_700_000_000_000)
+    buffer.writeRuntimeLog('debug', '[database] second line', 1_700_000_001_000)
     state.listFails = true
 
     expect(buffer.exportLogs().split('\n')).toEqual([
-      '[2023-11-14T22:13:20.000Z] [WARN] first line',
-      '[2023-11-14T22:13:21.000Z] [DEBUG] second line',
+      '[2023-11-14T22:13:20.000Z] [WARN] [proxy] [proxy] first line',
+      '[2023-11-14T22:13:21.000Z] [DEBUG] [database] [database] second line',
     ])
   })
 
@@ -323,7 +336,7 @@ describe('installLogCapture 的拦截', () => {
     fresh.installLogCapture()
     console.log('once')
 
-    expect(state.created).toEqual([{ level: 'info', message: 'once', timestamp: 1_700_000_000_000 }])
+    expect(state.created).toEqual([{ level: 'info', scope: 'other', message: 'once', timestamp: 1_700_000_000_000 }])
   })
 
   it('参数按空格拼成人能读的一行：字符串原样、对象转 JSON', async () => {

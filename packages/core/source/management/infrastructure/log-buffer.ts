@@ -7,6 +7,7 @@
 import type { LogEntry } from '@common/schemas'
 import type { RuntimeLogFilter } from '@server/database/runtime-log-store'
 import { clearRuntimeLogs, createRuntimeLog, listAllRuntimeLogs, listRuntimeLogs, listRuntimeLogsPaged, pruneRuntimeLogsBefore } from '@server/database/runtime-log-store'
+import { resolveLogScope } from './log-scope'
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 
@@ -44,7 +45,7 @@ function shouldPrune(nowTime: number): boolean {
 function persistRuntimeLog(entry: Omit<LogEntry, 'id'>): boolean {
   try {
     drainPendingEntries()
-    createRuntimeLog(entry.level, entry.message, entry.timestamp)
+    createRuntimeLog(entry.level, entry.scope, entry.message, entry.timestamp)
     const currentTime = Date.now()
     if (shouldPrune(currentTime)) {
       pruneRuntimeLogsBefore(MAX_RETENTION_DAYS)
@@ -60,7 +61,7 @@ function drainPendingEntries(): void {
   while (pendingEntries.length > 0) {
     const first = pendingEntries[0]
     try {
-      createRuntimeLog(first.level, first.message, first.timestamp)
+      createRuntimeLog(first.level, first.scope, first.message, first.timestamp)
       pendingEntries.shift()
     } catch {
       return
@@ -79,7 +80,7 @@ function drainPendingEntries(): void {
  * 用 `Date.now()` 会把横幅的时间记得比实际晚。
  */
 export function writeRuntimeLog(level: LogLevel, message: string, timestamp = Date.now()): void {
-  const entry: Omit<LogEntry, 'id'> = { level, timestamp, message }
+  const entry: Omit<LogEntry, 'id'> = { level, scope: resolveLogScope(message), timestamp, message }
 
   entries.push({ id: nextId++, ...entry })
   if (entries.length > MAX_ENTRIES) {
@@ -158,6 +159,7 @@ export function listLogsPaged(limit: number, offset: number, filter?: RuntimeLog
     const sorted = [...entries].reverse()
     const filtered = sorted.filter(entry =>
       (filter?.level === undefined || entry.level === filter.level) &&
+      (filter?.scope === undefined || entry.scope === filter.scope) &&
       (filter?.query === undefined || entry.message.toLowerCase().includes(filter.query.toLowerCase())))
     return { logs: filtered.slice(offset, offset + limit), total: filtered.length }
   }
@@ -183,6 +185,6 @@ export function exportLogs(): string {
   }
 
   return source
-    .map(entry => `[${new Date(entry.timestamp).toISOString()}] [${entry.level.toUpperCase()}] ${entry.message}`)
+    .map(entry => `[${new Date(entry.timestamp).toISOString()}] [${entry.level.toUpperCase()}] [${entry.scope}] ${entry.message}`)
     .join('\n')
 }

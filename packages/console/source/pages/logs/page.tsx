@@ -24,7 +24,7 @@ export function LogsPage() {
         description={t('logs.description')}
       />
       <PageContent className="flex min-h-0 flex-1 flex-col">
-        <LogsToolbar total={model.total} live={model.live} refreshing={model.refreshing} levelFilter={model.levelFilter} searchText={model.searchText} clearDialogOpen={model.clearDialogOpen} onLiveChange={() => model.setLive(value => !value)} onRefresh={() => void model.refresh()} onExport={() => void model.exportLogs()} onClear={() => void model.clearLogs()} onDialogChange={model.setClearDialogOpen} onLevelChange={model.setLevelFilter} onSearchChange={model.setSearchText} />
+        <LogsToolbar total={model.total} live={model.live} refreshing={model.refreshing} levelFilter={model.levelFilter} scopeFilter={model.scopeFilter} searchText={model.searchText} clearDialogOpen={model.clearDialogOpen} onLiveChange={() => model.setLive(value => !value)} onRefresh={() => void model.refresh()} onExport={() => void model.exportLogs()} onClear={() => void model.clearLogs()} onDialogChange={model.setClearDialogOpen} onLevelChange={model.setLevelFilter} onScopeChange={model.setScopeFilter} onSearchChange={model.setSearchText} />
         <LogsTable logs={model.logs} loading={model.loading} error={model.error} filtered={model.filtered} onRetry={() => void model.refresh()} />
         {showPager && <TablePager page={model.page} totalPages={totalPages} onPageChange={model.goToPage} />}
       </PageContent>

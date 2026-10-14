@@ -8,6 +8,9 @@ import { useLogsUiStore } from '../store'
 
 export const LOGS_PAGE_SIZE = 100
 
+/** 默认只看代理模块；与 `useLogsUiStore` 的初值一致，作为「filtered 是不是被用户动过」的基准。 */
+export const DEFAULT_LOG_SCOPE = 'proxy' as const
+
 export function useLogsModel(initialSearchText?: string) {
   const toast = useToast()
   const t = useTranslation()
@@ -16,6 +19,8 @@ export function useLogsModel(initialSearchText?: string) {
   const setLive = useLogsUiStore(state => state.setLive)
   const levelFilter = useLogsUiStore(state => state.levelFilter)
   const setLevelFilter = useLogsUiStore(state => state.setLevelFilter)
+  const scopeFilter = useLogsUiStore(state => state.scopeFilter)
+  const setScopeFilter = useLogsUiStore(state => state.setScopeFilter)
   const searchText = useLogsUiStore(state => state.searchText)
   const setSearchText = useLogsUiStore(state => state.setSearchText)
   const page = useLogsUiStore(state => state.page)
@@ -29,6 +34,7 @@ export function useLogsModel(initialSearchText?: string) {
   const params = {
     limit: LOGS_PAGE_SIZE,
     offset: (page - 1) * LOGS_PAGE_SIZE,
+    ...(scopeFilter !== 'all' ? { scope: scopeFilter } : {}),
     ...(levelFilter !== 'all' ? { level: levelFilter } : {}),
     ...(searchText.trim() ? { query: searchText.trim() } : {}),
   }
@@ -51,7 +57,7 @@ export function useLogsModel(initialSearchText?: string) {
   const logs = query.data?.logs ?? []
   const total = query.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / LOGS_PAGE_SIZE))
-  const filtered = levelFilter !== 'all' || searchText.trim() !== ''
+  const filtered = levelFilter !== 'all' || searchText.trim() !== '' || scopeFilter !== DEFAULT_LOG_SCOPE
   const error = query.error === null ? null : query.error instanceof Error ? query.error.message : String(query.error)
   const refresh = useCallback(() => query.refetch(), [query])
   const goToPage = useCallback((targetPage: number) => {
@@ -66,5 +72,5 @@ export function useLogsModel(initialSearchText?: string) {
     } catch (error) { toast.error(error instanceof Error ? error.message : t('logs.toast.exportFailed')) }
   }, [exportMutation, toast, t])
   const clearLogs = useCallback(async () => { try { await clearMutation.mutateAsync() } catch (error) { toast.error(error instanceof Error ? error.message : t('logs.toast.clearFailed')) } }, [clearMutation, toast, t])
-  return { logs, total, totalPages, page, goToPage, pageSize: LOGS_PAGE_SIZE, loading: query.isPending, refreshing: query.isFetching && !query.isPending, error, filtered, live, setLive, levelFilter, setLevelFilter, searchText, setSearchText, clearDialogOpen, setClearDialogOpen, refresh, exportLogs, clearLogs }
+  return { logs, total, totalPages, page, goToPage, pageSize: LOGS_PAGE_SIZE, loading: query.isPending, refreshing: query.isFetching && !query.isPending, error, filtered, live, setLive, levelFilter, setLevelFilter, scopeFilter, setScopeFilter, searchText, setSearchText, clearDialogOpen, setClearDialogOpen, refresh, exportLogs, clearLogs }
 }

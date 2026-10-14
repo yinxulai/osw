@@ -51,13 +51,13 @@ import { LOGS_PAGE_SIZE, useLogsModel } from './use-logs-model'
 
 function entry(overrides: Partial<LogEntry> = {}): LogEntry {
   return {
-    id: 'log_1',
-    time: 1_700_000_000_000,
+    id: 1,
     level: 'info',
     scope: 'proxy',
     message: 'hello',
+    timestamp: 1_700_000_000_000,
     ...overrides,
-  } as LogEntry
+  }
 }
 
 function page(logs: LogEntry[], total: number) {
@@ -76,7 +76,7 @@ beforeEach(() => {
   state.revokeObjectURL.mockReset()
   state.createObjectURL.mockClear()
   state.click.mockReset()
-  useLogsUiStore.setState({ live: true, levelFilter: 'all', searchText: '', page: 1 })
+  useLogsUiStore.setState({ live: true, levelFilter: 'all', scopeFilter: 'proxy', searchText: '', page: 1 })
 
   // jsdom 里 `URL.createObjectURL` 与 `<a>.click()` 都不实现真实行为，替换掉以免触发导航。
   vi.stubGlobal('URL', Object.assign(Object.create(URL), {
@@ -94,11 +94,11 @@ function setup(initialSearchText?: string) {
 }
 
 describe('取数参数', () => {
-  it('第一页从 offset 0 开始，每页固定条数', async () => {
+  it('第一页从 offset 0 开始，每页固定条数，默认只看代理模块', async () => {
     setup()
 
     await waitFor(() => expect(state.list).toHaveBeenCalled())
-    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0 })
+    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, scope: 'proxy' })
   })
 
   it('翻到第 3 页时 offset 按页大小推进', async () => {
@@ -106,7 +106,23 @@ describe('取数参数', () => {
     setup()
 
     await waitFor(() => expect(state.list).toHaveBeenCalled())
-    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 2 * LOGS_PAGE_SIZE })
+    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 2 * LOGS_PAGE_SIZE, scope: 'proxy' })
+  })
+
+  it('选了「全部模块」时不带 scope 参数', async () => {
+    useLogsUiStore.setState({ scopeFilter: 'all' })
+    setup()
+
+    await waitFor(() => expect(state.list).toHaveBeenCalled())
+    expect(state.list.mock.calls[0][0]).not.toHaveProperty('scope')
+  })
+
+  it('选了具体模块时带上 scope', async () => {
+    useLogsUiStore.setState({ scopeFilter: 'database' })
+    setup()
+
+    await waitFor(() => expect(state.list).toHaveBeenCalled())
+    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, scope: 'database' })
   })
 
   it('筛选「全部」时不带 level 参数（少一个参数就少一份缓存分叉）', async () => {
@@ -122,7 +138,7 @@ describe('取数参数', () => {
     setup()
 
     await waitFor(() => expect(state.list).toHaveBeenCalled())
-    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, level: 'error' })
+    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, scope: 'proxy', level: 'error' })
   })
 
   it('搜索词前后空白要削掉，纯空白等于没搜', async () => {
@@ -130,7 +146,7 @@ describe('取数参数', () => {
     setup()
 
     await waitFor(() => expect(state.list).toHaveBeenCalled())
-    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, query: 'timeout' })
+    expect(state.list).toHaveBeenCalledWith({ limit: LOGS_PAGE_SIZE, offset: 0, scope: 'proxy', query: 'timeout' })
   })
 
   it('纯空白的搜索词不带 query', async () => {
@@ -226,6 +242,22 @@ describe('筛选标记', () => {
 
     await waitFor(() => expect(result.current.total).toBe(1))
     expect(result.current.filtered).toBe(false)
+  })
+
+  it('默认的代理模块不算「筛过」（它是这一页的默认视图）', async () => {
+    const { result } = setup()
+
+    await waitFor(() => expect(result.current.total).toBe(1))
+    expect(result.current.scopeFilter).toBe('proxy')
+    expect(result.current.filtered).toBe(false)
+  })
+
+  it('切到别的模块就算筛过', async () => {
+    useLogsUiStore.setState({ scopeFilter: 'database' })
+    const { result } = setup()
+
+    await waitFor(() => expect(state.list).toHaveBeenCalled())
+    expect(result.current.filtered).toBe(true)
   })
 
   it('选了级别就算筛过', async () => {

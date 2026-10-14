@@ -1,7 +1,7 @@
-import type { AnalyticsRange, AnalyticsSummary, LogEntry, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import type { AnalyticsRange, AnalyticsSummary, LogEntry, LogScope, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
-export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; query?: string }
+export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; scope?: LogScope; query?: string }
 export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; providerModelId?: string; logicalModelId?: string; protocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
 
 export type PruneRequestLogsParams = { requestLogRetentionDays?: number; contentRetentionDays?: number }

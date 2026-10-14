@@ -336,6 +336,7 @@ erDiagram
   runtime_logs {
     integer id PK
     text level
+    text scope
     text message
     integer timestamp
   }
@@ -1048,6 +1049,7 @@ CREATE INDEX idx_request_attributes_created_time
 CREATE TABLE runtime_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   level TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'other',
   message TEXT NOT NULL,
   timestamp INTEGER NOT NULL
 );
@@ -1057,6 +1059,9 @@ CREATE INDEX idx_runtime_logs_timestamp
 
 CREATE INDEX idx_runtime_logs_level_timestamp
   ON runtime_logs(level, timestamp);
+
+CREATE INDEX idx_runtime_logs_scope_timestamp
+  ON runtime_logs(scope, timestamp);
 
 CREATE TABLE request_rewrite_rules (
   id TEXT PRIMARY KEY,
@@ -1158,7 +1163,7 @@ CREATE INDEX idx_route_rule_sets_updated_time
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
-- `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；日志级别与保留策略见 [observability.md](./observability.md)。
+- `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；`scope` 是写入时按行首 `[前缀]` 解析出的模块归属（见 [observability.md](./observability.md)「模块归属」），运行日志页按它筛选。日志级别与保留策略见同文。
 - `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
 - `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
 - `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
