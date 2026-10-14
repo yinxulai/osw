@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import type { ModelStat } from '@common/schemas'
@@ -55,6 +55,11 @@ function rows(container: HTMLElement): string[][] {
 
 function headers(container: HTMLElement): string[] {
   return [...container.querySelectorAll('thead th')].map(cell => (cell.textContent ?? '').trim())
+}
+
+/** 点某一列的表头（按列名找按钮）。 */
+function clickHeader(container: HTMLElement, label: string): void {
+  fireEvent.click(container.querySelector(`thead button[aria-label="按 ${label} 排序"]`) as HTMLButtonElement)
 }
 
 beforeEach(() => {
@@ -207,5 +212,90 @@ describe('ModelRanking 的「已删除」标记', () => {
     const { container } = render(<ModelRanking stats={[modelStat({ providerModelId: 'pm_a' })]} />, { wrapper })
 
     expect(container.textContent).not.toContain('已删除')
+  })
+})
+
+describe('ModelRanking 的表头点击排序', () => {
+  /** 排行榜的默认次序：请求数倒序。 */
+  function ranking(): ModelStat[] {
+    return [
+      modelStat({ providerModelId: 'pm_busy', providerModelName: 'busy', attempts: 300, avgTtftMs: 120 }),
+      modelStat({ providerModelId: 'pm_mid', providerModelName: 'mid', attempts: 200, avgTtftMs: 900 }),
+      modelStat({ providerModelId: 'pm_slow', providerModelName: 'slow', attempts: 100, avgTtftMs: 4_000 }),
+    ]
+  }
+
+  it('默认按请求数倒序——服务端也是这么给的，第一次点之前不该看到另一种顺序', () => {
+    const { container } = render(<ModelRanking stats={ranking()} />, { wrapper })
+
+    expect(rows(container).map(cells => cells[1])).toEqual(['busy', 'mid', 'slow'])
+    expect(container.querySelector('thead button[aria-label="按 请求数 排序"]')?.closest('th')?.getAttribute('aria-sort')).toBe('descending')
+  })
+
+  it('点当前列翻成升序，名次跟着重排（名次是「榜上的名次」）', () => {
+    const { container } = render(<ModelRanking stats={ranking()} />, { wrapper })
+
+    clickHeader(container, '请求数')
+
+    expect(rows(container).map(cells => cells[1])).toEqual(['slow', 'mid', 'busy'])
+    expect(rows(container).map(cells => cells[0])).toEqual(['1', '2', '3'])
+    expect(container.querySelector('thead button[aria-label="按 请求数 排序"]')?.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+  })
+
+  it('换一列时按那一列自己的方向排：数值列先看最大的，枚举方向由列决定', () => {
+    const { container } = render(<ModelRanking stats={ranking()} />, { wrapper })
+
+    clickHeader(container, '平均 TTFT')
+
+    // 数值列的初始方向是降序，最慢的排最前。
+    expect(rows(container).map(cells => cells[1])).toEqual(['slow', 'mid', 'busy'])
+    expect(container.querySelector('thead button[aria-label="按 平均 TTFT 排序"]')?.closest('th')?.getAttribute('aria-sort')).toBe('descending')
+    // 之前的排序列退回未排序状态。
+    expect(container.querySelector('thead button[aria-label="按 请求数 排序"]')?.closest('th')?.getAttribute('aria-sort')).toBe('none')
+  })
+
+  it('模型名从 A 排到 Z——名字列先给字母序，反向字母序没有意义', () => {
+    const { container } = render(<ModelRanking stats={ranking()} />, { wrapper })
+
+    clickHeader(container, '模型')
+
+    expect(rows(container).map(cells => cells[1])).toEqual(['busy', 'mid', 'slow'])
+    expect(container.querySelector('thead button[aria-label="按 模型 排序"]')?.closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+  })
+
+  it('没有样本的模型排在最后，升序降序都如此（空值不该因为降序跑到榜首）', () => {
+    const stats = [
+      modelStat({ providerModelId: 'pm_null', providerModelName: 'null', attempts: 1, avgTtftMs: null }),
+      modelStat({ providerModelId: 'pm_fast', providerModelName: 'fast', attempts: 1, avgTtftMs: 50 }),
+    ]
+    const { container } = render(<ModelRanking stats={stats} />, { wrapper })
+
+    clickHeader(container, '平均 TTFT')
+    expect(rows(container).map(cells => cells[1])).toEqual(['fast', 'null'])
+
+    clickHeader(container, '平均 TTFT')
+    expect(rows(container).map(cells => cells[1])).toEqual(['fast', 'null'])
+  })
+
+  it('先排序再截断：按平均 TTFT 点一下要能翻出所有候选里最慢的那个，哪怕它请求量排不进前十', () => {
+    // 请求量前十都是「快而忙」的模型，最慢的那个请求量垫底。
+    const stats = [
+      ...Array.from({ length: 10 }, (_, index) => modelStat({
+        providerModelId: `pm_busy_${index}`,
+        providerModelName: `busy-${index}`,
+        attempts: 1_000 - index,
+        avgTtftMs: 100,
+      })),
+      modelStat({ providerModelId: 'pm_slowest', providerModelName: 'slowest', attempts: 1, avgTtftMs: 9_000 }),
+    ]
+    const { container } = render(<ModelRanking stats={stats} />, { wrapper })
+
+    // 默认榜单里看不到它。
+    expect(rows(container).map(cells => cells[1])).not.toContain('slowest')
+
+    clickHeader(container, '平均 TTFT')
+
+    expect(rows(container)[0][1]).toBe('slowest')
+    expect(rows(container)).toHaveLength(10)
   })
 })

@@ -1,5 +1,5 @@
 import type { ModelStat } from '@common/schemas'
-import { tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
+import { SortableHeader, tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { DeletedTag } from '@/components/deleted-tag'
@@ -9,7 +9,9 @@ import { CardSectionHeader } from '@/components/card-section-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { formatCount, formatPercent } from '../lib/format'
+import { MODEL_SORT_ACCESSOR, MODEL_SORT_DEFAULT, MODEL_SORT_DIRECTIONS } from '../lib/model-sort'
 
 interface ModelRankingProps {
   stats: ModelStat[]
@@ -27,7 +29,10 @@ export function ModelRanking(props: ModelRankingProps) {
   const { stats } = props
   const t = useTranslation()
   const locale = useLocale()
-  const rows = stats.slice(0, MODEL_RANKING_LIMIT)
+  // 先排序再截断：按「平均 TTFT」点一下要能翻出**所有**候选里最慢的那几个，
+  // 只在榜单的十行里倒腾等于把最慢的模型挡在门外——它通常正好因为慢而排不进前 10。
+  const { sortedRows, sort, toggleSort } = useTableSort(stats, MODEL_SORT_DEFAULT, MODEL_SORT_ACCESSOR, MODEL_SORT_DIRECTIONS)
+  const rows = sortedRows.slice(0, MODEL_RANKING_LIMIT)
   // 统计里的供应商名/模型名是写入当时的快照，删掉配置行不会让它们从榜上消失——只补「已删除」标签。
   const deletedProviderIds = useDeletedProviderIds()
   const deletedProviderModelIds = useDeletedProviderModelIds()
@@ -41,14 +46,14 @@ export function ModelRanking(props: ModelRankingProps) {
             <thead className={tableHeaderClass}>
               <tr>
                 <th className={cn(tableHeaderCellClass, 'w-8 px-4')}>{t('overview.models.column.rank')}</th>
-                <th className={tableHeaderCellClass}>{t('overview.models.column.model')}</th>
-                <th className={tableHeaderCellClass}>{t('overview.models.column.provider')}</th>
-                <th className={cn(tableHeaderCellClass, 'text-right')}>{t('overview.models.column.requests')}</th>
-                <th className={cn(tableHeaderCellClass, 'text-right')}>{t('overview.models.column.avgTtft')}</th>
-                <th className={cn(tableHeaderCellClass, 'text-right')}>{t('overview.models.column.avgTps')}</th>
-                <th className={cn(tableHeaderCellClass, 'text-right')}>{t('overview.models.column.avgOutput')}</th>
-                <th className={cn(tableHeaderCellClass, 'text-right')}>{t('overview.models.column.cacheHitRate')}</th>
-                <th className={cn(tableHeaderCellClass, 'px-4 text-right')}>{t('overview.models.column.successRate')}</th>
+                <SortableHeader label={t('overview.models.column.model')} active={sort.key === 'providerModelName'} direction={sort.direction} onSort={() => toggleSort('providerModelName')} />
+                <SortableHeader label={t('overview.models.column.provider')} active={sort.key === 'providerName'} direction={sort.direction} onSort={() => toggleSort('providerName')} />
+                <SortableHeader label={t('overview.models.column.requests')} active={sort.key === 'attempts'} direction={sort.direction} onSort={() => toggleSort('attempts')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.models.column.avgTtft')} active={sort.key === 'avgTtftMs'} direction={sort.direction} onSort={() => toggleSort('avgTtftMs')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.models.column.avgTps')} active={sort.key === 'avgTps'} direction={sort.direction} onSort={() => toggleSort('avgTps')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.models.column.avgOutput')} active={sort.key === 'avgOutputTokens'} direction={sort.direction} onSort={() => toggleSort('avgOutputTokens')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.models.column.cacheHitRate')} active={sort.key === 'cacheHitRate'} direction={sort.direction} onSort={() => toggleSort('cacheHitRate')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.models.column.successRate')} active={sort.key === 'successRate'} direction={sort.direction} onSort={() => toggleSort('successRate')} className="text-right" contentClassName="px-4" align="end" />
               </tr>
             </thead>
             <tbody>

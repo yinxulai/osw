@@ -63,6 +63,8 @@ export const uiEn = {
   'common.pagination.page': 'Page {page} / {totalPages}',
   'common.pagination.previous': 'Previous page',
   'common.pagination.next': 'Next page',
+  'common.table.sort.hint': 'Select the header to sort by this column',
+  'common.table.sort.aria': 'Sort by {column}',
   'common.error.pageTitle': 'This page crashed',
   'common.error.pageDescription': 'A component on this page threw while rendering. It has been contained, so the rest of the app keeps working.',
   'common.error.rootTitle': 'The interface crashed',
@@ -212,7 +214,7 @@ export const uiEn = {
   'overview.heat.legend.less': 'Less',
   'overview.heat.legend.more': 'More',
   'overview.models.title': 'Model ranking',
-  'overview.models.description': 'Sorted by request volume',
+  'overview.models.description': 'Sorted by request volume by default · select a column header to change',
   'overview.models.empty': 'No model request data yet',
   'overview.models.column.rank': '#',
   'overview.models.column.model': 'Model',
@@ -240,7 +242,7 @@ export const uiEn = {
   'overview.providerDetail.cacheHitRateHint': 'Cached input tokens ÷ total input tokens over this provider\u2019s successful attempts. Shows — with no input: not measured is not a zero hit rate.',
   'overview.providerDetail.usage': 'Usage',
   'overview.providerDetail.models.title': 'Model performance',
-  'overview.providerDetail.models.description': 'Sorted by call volume · spot quality and cache differences per model',
+  'overview.providerDetail.models.description': 'Sorted by call volume by default · select a column header to sort, spot quality and cache differences per model',
   'overview.providerDetail.models.empty': 'No model data yet',
 
   // ========== 页面 · 运行日志 ==========

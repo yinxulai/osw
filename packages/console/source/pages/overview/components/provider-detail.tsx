@@ -3,12 +3,15 @@ import type { ProviderAnalyticsDetail } from '@common/schemas'
 import { Card, CardContent } from '@/components/ui/card'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { MetricGrid } from '@/components/metric-grid'
+import { SortableHeader } from '@/components/table-primitives'
 import { Badge } from '@/components/ui/badge'
 import { DeletedTag } from '@/components/deleted-tag'
 import { useDeletedProviderModelIds } from '@/data/provider-models'
 import { formatAverageOutput, formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
+import { useTableSort } from '@/hooks/use-table-sort'
 import { formatCount, formatPercent, formatTokens } from '../lib/format'
+import { MODEL_SORT_ACCESSOR, MODEL_SORT_DEFAULT, MODEL_SORT_DIRECTIONS } from '../lib/model-sort'
 import { FailureReasons } from './failure-reasons'
 import { LatencyDistribution } from './latency-distribution'
 import { TrendChart } from './trend-chart'
@@ -17,11 +20,23 @@ interface ProviderDetailProps {
   detail: ProviderAnalyticsDetail
 }
 
+/*
+ * 明细表头与排行榜共用一套排序定义，但内边距与对齐照这张表自己的排版。
+ * 内边距分两层：`HEAD_*` 只管对齐与字体（`<th>` 上），`SORT_BUTTON_*` 才是真正画出缩进的地方——
+ * 可排序的表头里按钮在流内铺满整格，内边距放在 `<th>` 上会与按钮的叠成两倍。
+ * 按钮默认的 `px-3` 正好对上表体中间几列的 `px-3`，首末列才需要额外补一份。
+ */
+const HEAD_LEAD_CLASS = 'text-left system-2xs-medium'
+const HEAD_CLASS = 'text-right system-2xs-medium'
+const SORT_BUTTON_EDGE_CLASS = 'px-4'
+
 export function ProviderDetail(props: ProviderDetailProps) {
   const { summary, models: providerModels } = props.detail
   const { cacheHitRate } = summary
   const t = useTranslation()
   const locale = useLocale()
+  // 明细表没有行数上限，排的是接口返回的全部行；截断只发生在总览页的排行榜上。
+  const { sortedRows, sort, toggleSort } = useTableSort(providerModels, MODEL_SORT_DEFAULT, MODEL_SORT_ACCESSOR, MODEL_SORT_DIRECTIONS)
   // 统计里的模型名是写入当时的快照，删掉配置行不会让它们从榜上消失——只补一枚「已删除」标签。
   const deletedProviderModelIds = useDeletedProviderModelIds()
 
@@ -44,8 +59,18 @@ export function ProviderDetail(props: ProviderDetailProps) {
             <table className="w-full min-w-180 system-xs-regular">
               {/* 列集合与总览页的「模型使用排行」保持一致：同一批指标在两处展示不该换名字、换顺序。
                   平均延迟不在这里出现——速度与首字已经覆盖了「快不快」，而「产出多少」由平均输出回答。 */}
-              <thead className="bg-inset text-text-tertiary"><tr><th className="px-4 py-2 text-left system-2xs-medium">{t('overview.models.column.model')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.providerDetail.attempts')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgTtft')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgTps')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.avgOutput')}</th><th className="px-3 py-2 text-right system-2xs-medium">{t('overview.models.column.cacheHitRate')}</th><th className="px-4 py-2 text-right system-2xs-medium">{t('overview.models.column.successRate')}</th></tr></thead>
-              <tbody>{providerModels.length === 0 ? <tr><td colSpan={7} className="py-8 text-center text-text-tertiary">{t('overview.providerDetail.models.empty')}</td></tr> : providerModels.map(model => (
+              <thead className="bg-inset text-text-tertiary">
+                <tr>
+                  <SortableHeader label={t('overview.models.column.model')} active={sort.key === 'providerModelName'} direction={sort.direction} onSort={() => toggleSort('providerModelName')} className={HEAD_LEAD_CLASS} contentClassName={SORT_BUTTON_EDGE_CLASS} />
+                  <SortableHeader label={t('overview.providerDetail.attempts')} active={sort.key === 'attempts'} direction={sort.direction} onSort={() => toggleSort('attempts')} className={HEAD_CLASS} align="end" />
+                  <SortableHeader label={t('overview.models.column.avgTtft')} active={sort.key === 'avgTtftMs'} direction={sort.direction} onSort={() => toggleSort('avgTtftMs')} className={HEAD_CLASS} align="end" />
+                  <SortableHeader label={t('overview.models.column.avgTps')} active={sort.key === 'avgTps'} direction={sort.direction} onSort={() => toggleSort('avgTps')} className={HEAD_CLASS} align="end" />
+                  <SortableHeader label={t('overview.models.column.avgOutput')} active={sort.key === 'avgOutputTokens'} direction={sort.direction} onSort={() => toggleSort('avgOutputTokens')} className={HEAD_CLASS} align="end" />
+                  <SortableHeader label={t('overview.models.column.cacheHitRate')} active={sort.key === 'cacheHitRate'} direction={sort.direction} onSort={() => toggleSort('cacheHitRate')} className={HEAD_CLASS} align="end" />
+                  <SortableHeader label={t('overview.models.column.successRate')} active={sort.key === 'successRate'} direction={sort.direction} onSort={() => toggleSort('successRate')} className={HEAD_CLASS} contentClassName={SORT_BUTTON_EDGE_CLASS} align="end" />
+                </tr>
+              </thead>
+              <tbody>{sortedRows.length === 0 ? <tr><td colSpan={7} className="py-8 text-center text-text-tertiary">{t('overview.providerDetail.models.empty')}</td></tr> : sortedRows.map(model => (
                 <tr key={model.providerModelId} className="border-t border-border/40 transition-colors hover:bg-state-base-hover">
                   <td className="max-w-52 px-4 py-2.5 system-xs-medium text-text-primary">
                     <span className="flex min-w-0 items-center gap-2">

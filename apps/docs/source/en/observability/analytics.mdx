@@ -26,6 +26,14 @@ The four cards at the top are the **overall verdict** for the period: total requ
 
 ![OSW Analytics usage distribution card: an hourly heatmap with a low-to-high legend at the bottom right.](/screenshots/en/light/analytics-usage.png)
 
+## Sorting the model tables
+
+In both **Model usage ranking** and the per-provider model table, **the column headers are clickable**: click once to sort by that column, click again to reverse it.
+
+- The first click's direction depends on the column: the numeric ones (requests, average TTFT / TPS / output, cache hit rate, success rate) **show the largest first**; model and provider names go A to Z.
+- **Models with no samples always sink to the bottom**, in both directions — a blank average TTFT does not mean "fastest".
+- Ranks renumber with the current sort: sorting average TTFT descending puts the slowest model first. The ranking lists only the top 10, but **sorting runs over every candidate**, so one click on average TTFT can surface a slow model whose request volume never made the top ten.
+
 ## What to look at
 
 | Dimension | Use |

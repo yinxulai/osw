@@ -63,6 +63,8 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'common.pagination.page': '第 {page} / {totalPages} 页',
   'common.pagination.previous': '上一页',
   'common.pagination.next': '下一页',
+  'common.table.sort.hint': '点击此列表头排序',
+  'common.table.sort.aria': '按 {column} 排序',
   'common.error.pageTitle': '页面出错了',
   'common.error.pageDescription': '当前页面的组件抛出了异常，已经被拦截下来，其它页面不受影响。',
   'common.error.rootTitle': '界面出错了',
@@ -215,7 +217,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'overview.heat.legend.less': '少',
   'overview.heat.legend.more': '多',
   'overview.models.title': '模型使用排行',
-  'overview.models.description': '按请求量排序',
+  'overview.models.description': '默认按请求量排序 · 点击表头可切换排序',
   'overview.models.empty': '暂无模型请求数据',
   'overview.models.column.rank': '#',
   'overview.models.column.model': '模型',
@@ -243,7 +245,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'overview.providerDetail.cacheHitRateHint': '该供应商成功尝试的缓存读取 Token ÷ 输入 Token 总量。没有输入时写 —：没测到不是命中率为零。',
   'overview.providerDetail.usage': '用量',
   'overview.providerDetail.models.title': '模型表现',
-  'overview.providerDetail.models.description': '按调用量排序 · 用于定位具体模型的质量与缓存差异',
+  'overview.providerDetail.models.description': '默认按调用量排序 · 点击表头可切换排序，用于定位具体模型的质量与缓存差异',
   'overview.providerDetail.models.empty': '暂无模型数据',
 
   // ========== 页面 · 运行日志 ==========

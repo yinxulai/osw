@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { TableFrame, TableHeaderSurface, TablePager, TableViewport } from '@/components/table-primitives'
+import { SortableHeader, TableFrame, TableHeaderSurface, TablePager, TableViewport } from '@/components/table-primitives'
 import { TableStateRow } from '@/components/table-state'
 import { FilterBar } from '@/components/filter-bar'
 import { MetricGrid } from '@/components/metric-grid'
@@ -251,5 +251,62 @@ describe('指标格', () => {
     const grid = container.firstElementChild
     expect(grid?.className).toContain('grid-cols-2')
     expect(grid?.className).toContain('sm:grid-cols-4')
+  })
+})
+
+describe('可排序的表头', () => {
+  /*
+   * 可排序表头把整格做成按钮：图标只有 12px，让人瞄着点不现实。
+   * 这里守的是三件屏幕上看不出来的事——无障碍状态（`aria-sort`）、列的语义（`scope`）、
+   * 以及点击确实把事件交回给了调用方。
+   */
+  function renderHeader(props: Partial<React.ComponentProps<typeof SortableHeader>> = {}) {
+    return wrap(
+      <table>
+        <thead>
+          <tr>
+            <SortableHeader label="平均 TTFT" active={false} direction="descending" onSort={vi.fn()} {...props} />
+          </tr>
+        </thead>
+      </table>,
+    )
+  }
+
+  it('用 button 铺满单元格，点击整格都算', () => {
+    const onSort = vi.fn()
+    const { container } = renderHeader({ onSort })
+
+    const button = container.querySelector('th button')
+    expect(button).toBeTruthy()
+    expect(button?.className).toContain('w-full')
+
+    fireEvent.click(button as HTMLButtonElement)
+    expect(onSort).toHaveBeenCalledTimes(1)
+  })
+
+  it('当前排序列写明方向，其余列报 none', () => {
+    const { container } = renderHeader({ active: true, direction: 'ascending' })
+    expect(container.querySelector('th')?.getAttribute('aria-sort')).toBe('ascending')
+
+    const { container: inactive } = renderHeader()
+    expect(inactive.querySelector('th')?.getAttribute('aria-sort')).toBe('none')
+  })
+
+  it('表头是列头单元格，可访问名带上列名', () => {
+    const { container } = renderHeader()
+
+    const th = container.querySelector('th')
+    expect(th?.getAttribute('scope')).toBe('col')
+    expect(screen.getByLabelText('按 平均 TTFT 排序')).toBeTruthy()
+  })
+
+  it('单元格文本只有列名，指示图标不混进文本（图标不该被读出来）', () => {
+    const { container } = renderHeader({ active: true })
+    expect(container.querySelector('th')?.textContent).toBe('平均 TTFT')
+  })
+
+  it('未排序的列也占着图标的位置，点击时表头宽度不会跳', () => {
+    const { container } = renderHeader()
+    expect(container.querySelector('th svg')).toBeTruthy()
   })
 })
