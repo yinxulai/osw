@@ -25,7 +25,7 @@ export function RequestLogsPage() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={t('requestLogs.title')}
         description={t('requestLogs.description')}
@@ -36,7 +36,7 @@ export function RequestLogsPage() {
           </Button>
         }
       />
-      <PageContent>
+      <PageContent className="flex min-h-0 flex-1 flex-col">
         {/* 进行中的请求就在下面这张表里：同一张表先说「现在」，再说「过去」。 */}
         <RequestLogsFilters
           filter={filter}

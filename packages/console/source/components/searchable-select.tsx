@@ -65,7 +65,12 @@ export function SearchableSelect(props: SearchableSelectProps) {
           aria-expanded={open}
           aria-label={props.label}
           title={props.label}
-          className={cn('justify-between gap-1.5 px-3 font-normal', props.className)}
+          className={cn(
+            // 筛选栏里这一排控件（可搜索下拉 / 协议 / 状态）统一用 `components-input-bg-normal`，
+            // 时间选择器也走同一底色，四者一致；`outline` 变体默认的白底会在这里显得突兀。
+            'justify-between gap-1.5 bg-components-input-bg-normal px-3 font-normal hover:bg-components-input-bg-hover aria-expanded:bg-components-input-bg-hover',
+            props.className,
+          )}
         >
           <span className="truncate">{selectedLabel}</span>
           <ChevronsUpDown className="size-3.5 shrink-0 text-text-quaternary" aria-hidden />

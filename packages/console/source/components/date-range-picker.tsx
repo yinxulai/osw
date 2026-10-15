@@ -112,7 +112,8 @@ export function DateRangePicker(props: DateRangePickerProps) {
           aria-label={props.label}
           title={props.label}
           className={cn(
-            'justify-start gap-2 px-3 font-normal',
+            // 与同一排的其他筛选项（可搜索下拉 / 协议 / 状态选择器）统一底色。
+            'justify-start gap-2 bg-components-input-bg-normal px-3 font-normal hover:bg-components-input-bg-hover aria-expanded:bg-components-input-bg-hover',
             props.className,
             empty ? 'text-components-input-text-placeholder' : 'text-components-input-text-filled',
           )}
