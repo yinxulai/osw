@@ -67,7 +67,16 @@ async function handleListProviderEndpoints(_req: IncomingMessage, res: ServerRes
   sendSuccess(res, await listProviderEndpoints(id))
 }
 
-const ProviderEndpointsSchema = z.record(ProtocolSchema, z.string().url())
+/**
+ * 「协议 → 默认地址」的**部分**映射：请求只说它在改哪些协议。
+ *
+ * 这里必须是 `partialRecord` 而不是 `record`。zod v4 给 `record` 加了一条 v3 没有的
+ * 约束：键集必须**穷举**——三个协议少写一个就报「地址是 undefined」，而「只改
+ * anthropic-messages 这一条」恰恰是这个接口最正常的用法。`partialRecord` 是 v4 为
+ * 这种语义新开的构造，输出类型正好是 `replaceProviderEndpoints` 收的
+ * `Partial<Record<Protocol, string>>`。
+ */
+const ProviderEndpointsSchema = z.partialRecord(ProtocolSchema, z.string().url())
 
 const CreateProviderSchema = ProviderSchema.pick({
   name: true,

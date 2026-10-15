@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema, TransportKindSchema } from '@common/schemas'
+import { RequestRewriteRuleSchema, ProviderModelRequestRewriteRuleSchema, TransportKindSchema, withoutDefaults } from '@common/schemas'
 import { RESPONSE_REWRITE_ENABLED } from '@common/features'
 import { createRequestRewriteRule, deleteRequestRewriteRule, getRequestRewriteRule, listProviderModelRequestRewriteRules, listRequestRewriteRules, replaceProviderModelRequestRewriteRuleBindings, updateRequestRewriteRule } from '@server/database/request-rewrite-rule-store'
 import { applyRequestRewriteRules } from '@server/proxy/request-rewrite/request-rewrite-engine'
@@ -32,7 +32,15 @@ function disabledResponseStageReason(input: DisabledResponseStageInput): string 
 const IdSchema = z.object({ id: z.string().min(1) })
 const ModelSchema = z.object({ providerModelId: z.string().min(1) })
 const RuleInput = RequestRewriteRuleSchema.omit({ id: true, createdTime: true, updatedTime: true, deletedTime: true })
-const UpdateSchema = RequestRewriteRuleSchema.partial().required({ id: true })
+/**
+ * 补丁 schema：更新接口「只改提到的字段」这一语义就靠它。
+ *
+ * `withoutDefaults` 不能省，理由与 `relations.ts` 里那六张一样，而这个实体更刺眼：
+ * `RequestRewriteRuleSchema` 给 `enabled`、`schemaVersion`、`source`、`match`、`testCases`
+ * 都带了 `.default()`，没过这一道，改一条规则的名字就会把它的匹配条件清成空、用例全删、
+ * 版本号重置。详见 `withoutDefaults` 的注释。
+ */
+const UpdateSchema = withoutDefaults(RequestRewriteRuleSchema).partial().required({ id: true })
 const BindingsSchema = z.object({ providerModelId: z.string().min(1), bindings: z.array(ProviderModelRequestRewriteRuleSchema.pick({ ruleId: true, priority: true, enabled: true })).max(50) })
 const TestSchema = z.object({ rule: RequestRewriteRuleSchema, testCase: z.object({ stage: z.enum(['request', 'response']), body: z.string(), headers: z.string(), clientProtocol: z.string(), upstreamProtocol: z.string(), transport: TransportKindSchema }) })
 export const requestRewriteRuleRoutes = new HttpRouter<ManagementHandler>()

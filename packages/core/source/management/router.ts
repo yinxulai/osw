@@ -7,6 +7,7 @@ import {
   cloudSyncRoutes,
   developmentRoutes,
   logRoutes,
+  modelConnectivityRoutes,
   modelRoutes,
   modelTestRoutes,
   outboundProxyTestRoutes,
@@ -41,6 +42,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(requestLogRoutes)
   .mount(analyticsRoutes)
   .mount(modelTestRoutes)
+  .mount(modelConnectivityRoutes)
   .mount(outboundProxyTestRoutes)
   .mount(providerModelFetchRoutes)
   .mount(routerGraphRoutes)

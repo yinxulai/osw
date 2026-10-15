@@ -16,6 +16,11 @@ interface Row {
   attempts: number
 }
 
+/** renderHook 的入参：多参数函数的包装只在这一处出现，给个名字免得每处重复写匿名对象类型。 */
+interface RowsProps {
+  rows: Row[]
+}
+
 const accessor: TableSortAccessor<Row, 'attempts'> = {
   value: row => row.attempts,
   tiebreak: (a, b) => a.id.localeCompare(b.id),
@@ -23,7 +28,12 @@ const accessor: TableSortAccessor<Row, 'attempts'> = {
 
 const directions = { attempts: 'descending' } as const
 
-function wrapper(props: { children: ReactNode }) {
+/** `renderHook` 的 `wrapper`：对象参数只在这一个函数上，给个名字即可。 */
+interface WrapperProps {
+  children: ReactNode
+}
+
+function wrapper(props: WrapperProps): ReactNode {
   return <I18nProvider>{props.children}</I18nProvider>
 }
 
@@ -60,7 +70,7 @@ describe('useTableSort', () => {
 
   it('数据换了（轮询到新一批）时用新的数据重排，不保留旧副本', () => {
     const { result, rerender } = renderHook(
-      (props: { rows: Row[] }) => useTableSort(props.rows, { key: 'attempts', direction: 'descending' }, accessor, directions),
+      (props: RowsProps) => useTableSort(props.rows, { key: 'attempts', direction: 'descending' }, accessor, directions),
       { wrapper, initialProps: { rows } },
     )
 

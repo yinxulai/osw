@@ -7,6 +7,8 @@ import {
   formatAverageOutput,
   formatMilliseconds,
   formatOutputSpeed,
+  formatTokenCount,
+  formatTokenCountParts,
   magnitudeDecimalPlaces,
   millisecondsDisplayParts,
   outputSpeedDecimalPlaces,
@@ -203,6 +205,37 @@ describe('output speed display', () => {
   it('exposes the decimal rule so animated numbers match the text', () => {
     expect(outputSpeedDecimalPlaces(9.6)).toBe(1)
     expect(outputSpeedDecimalPlaces(10)).toBe(0)
+  })
+})
+
+describe('token count display', () => {
+  it('leaves four-digit counts alone and compacts from five digits up', () => {
+    expect(formatTokenCount(0)).toBe('0')
+    expect(formatTokenCount(1)).toBe('1')
+    expect(formatTokenCount(999)).toBe('999')
+    // 阈值取 10000：`9.7k` 与 `9700` 一样长，但前者多一次心算。
+    expect(formatTokenCount(9_700)).toBe('9700')
+    expect(formatTokenCount(9_999)).toBe('9999')
+    expect(formatTokenCount(10_000)).toBe('10.0k')
+    expect(formatTokenCount(12_345)).toBe('12.3k')
+  })
+
+  it('counts in thousands, not in binary units', () => {
+    // Token 是数的，不是存储量：这里没有 `formatBytes` 的 1024 换算。
+    expect(formatTokenCount(1024)).toBe('1024')
+    expect(formatTokenCount(102_400)).toBe('102.4k')
+  })
+
+  it('splits value from suffix so the suffix can be styled apart', () => {
+    expect(formatTokenCountParts(9700)).toEqual({ value: '9700', suffix: '' })
+    expect(formatTokenCountParts(12_345)).toEqual({ value: '12.3', suffix: 'k' })
+  })
+
+  it('writes a dash, not a zero, when the upstream reported no usage', () => {
+    expect(formatTokenCount(null)).toBe('—')
+    expect(formatTokenCount(undefined)).toBe('—')
+    expect(formatTokenCount(Number.NaN)).toBe('—')
+    expect(formatTokenCountParts(null)).toBeNull()
   })
 })
 
