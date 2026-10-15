@@ -101,6 +101,8 @@ export const uiEn = {
   'modelTest.selection.description': 'Pick channels first, then narrow down to the target protocols',
   'modelTest.selection.searchPlaceholder': 'Search channels or models',
   'modelTest.selection.modelCount': '{count} models',
+  'modelTest.selection.protocolCount': '{selected}/{total} protocols',
+  'modelTest.selection.modelAria': 'Select every testable protocol of model {name}',
   'modelTest.selection.clear': 'Clear',
   'modelTest.selection.empty': 'No matching channel or model',
   'modelTest.progress.running': 'Verifying channels concurrently',
@@ -138,9 +140,10 @@ export const uiEn = {
   'modelTest.mode.speedHint': 'Measures TTFT and TPS; the prompt is longer.',
   'modelTest.costWarning': 'Each target receives one real request (speed diagnostics use a longer prompt and cost more). This is recorded in the request log.',
   'modelTest.table.target': 'Channel / Model',
-  'modelTest.table.protocol': 'Target protocol',
+  // Protocol no longer has its own column: it is the gutter on the Channel / Model cell.
   'modelTest.table.status': 'Status',
-  'modelTest.table.response': 'Response',
+  // "Output tokens" rather than "Output": this column is the upstream-reported count, not the response body.
+  'modelTest.table.tokens': 'Output tokens',
   'modelTest.table.duration': 'Duration',
   'modelTest.table.ttft': 'TTFT',
   'modelTest.table.speed': 'TPS',
@@ -485,12 +488,6 @@ export const uiEn = {
   'access.field.baseUrl.label': 'Endpoint',
   'access.interface.title': 'Paths this service accepts',
   'access.interface.description': 'Forwarded to the upstream models; the equivalent paths without /v1 work too',
-  'access.interface.entry.chatCompletions': 'Chat completions',
-  'access.interface.entry.responses': 'Responses',
-  'access.interface.entry.messages': 'Messages',
-  // 保留：`INTERFACE_DESCRIPTION_KEYS` 是 `Record<ProxyInterfaceId, …>`，`models` 仍是契约里的一个 id。
-  // 该条目已不在界面表格里渲染（本地应答、不转发上游），这里的说明只用于满足类型完整性。
-  'access.interface.entry.models': 'Model list (fallback only)',
 
   // ========== 页面 · 逻辑模型 ==========
   'logicalModels.title': 'Logical models',
@@ -684,6 +681,10 @@ export const uiEn = {
   'models.dialog.endpointsTitle': 'Protocol endpoints',
   'models.dialog.endpointsDescription': 'Enable at least one protocol. Provider-level URLs are used by default and can be overridden per model.',
   'models.dialog.save': 'Save changes',
+  'models.dialog.test': 'Test connection',
+  'models.dialog.testing': 'Testing',
+  'models.dialog.testTimeout': 'The test timed out before returning; check that the upstream url is reachable',
+  'models.dialog.testSuccess': 'Connected, HTTP {status}, {duration} ms',
   'models.dialog.submitBulk': 'Add {count} models',
   'models.dialog.submit': 'Add model',
   'models.endpoint.enabled': 'Enabled',

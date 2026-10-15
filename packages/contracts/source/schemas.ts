@@ -3,6 +3,51 @@ import { z } from 'zod'
 import { DEFAULT_CLOUD_BACKUP_KIND, CloudBackupKindSchema } from './cloud-backup'
 import { LANGUAGE_PREFERENCES } from './i18n'
 
+// ========== schema 组合 ==========
+
+/**
+ * 取字段的**不带默认值**形态：剥掉会「凭空造值」的包装（`ZodDefault`、`ZodCatch`），
+ * 包着它们的 `ZodOptional` 一并剥掉再包回来。
+ *
+ * 用 `unwrap()` 而不是读 `def.innerType`：它是这一族包装器**声明的**取值方式，返回的
+ * `T` 正是里面那层 schema 的类型；`def.innerType` 在类型上是 `$ZodType`，取出来就把
+ * 后续判断的类型信息全丢了。
+ *
+ * 参数类型只能是 `z.core.$ZodType`（core 里的那层）而不是 `z.ZodType`：`unwrap()` 的
+ * 上界、以及 `ZodObject.shape` 每一项的声明类型都是 core 的 `SomeType`，用 classic 的
+ * `ZodType` 会在 `unwrap()` 处报「缺 def / _output 等 44 个属性」。
+ */
+function undefaulted(field: z.core.$ZodType): z.core.$ZodType {
+  if (field instanceof z.ZodOptional) return z.optional(undefaulted(field.unwrap()))
+  if (field instanceof z.ZodDefault || field instanceof z.ZodCatch) return undefaulted(field.unwrap())
+  return field
+}
+
+/**
+ * 把对象 schema 的字段换成不带默认值的版本，**专供构造补丁 schema**（更新接口的入参）。
+ *
+ * ## 为什么补丁 schema 必须先过这一道
+ *
+ * zod v4 收紧了 `.partial()` 的语义：它只把字段变**可缺省**，缺省时照旧套用字段自己的
+ * `.default()` / `.catch()`。对「整份对象」这是对的——少了字段就补默认值；但对**补丁**
+ * 就反了：补丁的语义是「只改提到的字段」，而 `.partial()` 会让没提到的字段被悄悄写回默认值。
+ * 后果是**一次只改一个开关的保存会把整份对象按默认值重写一遍**，且不报错、不留痕。
+ * v3 的 `.partial()` 不套默认值，所以这是一处迁移时不会报错的语义变化：类型没变、测试没变，
+ * 只有运行期行为变了。
+ *
+ * ## 用法
+ *
+ * 固定是 `withoutDefaults(X).partial()`（`pick` / `required` 可前后自由组合）。返回类型
+ * 故意保持 `T`，调用方拿到的类型因此与改动前**完全一致**——这一处的修正只落在运行期语义上，
+ * 不需要读侧再加一轮 `??` 兜底。反过来说：**不要**拿它的返回值去解析一份完整对象，
+ * 它不再补齐缺省字段。
+ */
+export function withoutDefaults<T extends z.ZodObject>(schema: T): T {
+  return schema.extend(Object.fromEntries(
+    Object.entries(schema.shape).map(([key, field]) => [key, undefaulted(field)]),
+  )) as unknown as T
+}
+
 // ========== 枚举 ==========
 
 export const ProtocolSchema = z.enum([

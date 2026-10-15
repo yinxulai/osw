@@ -8,6 +8,7 @@ import { useTranslation } from '@/i18n/provider'
 import type { FetchedProviderModel } from '@/api/providers'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
+import { useModelConnectivityTest } from './use-model-connectivity-test'
 import type { ProtocolEndpointEntry } from './types'
 
 interface UseModelDialogOptions {
@@ -26,11 +27,13 @@ export function useModelDialog(options: UseModelDialogOptions) {
   // 对话框自己记着「这次给哪个供应商加模型」，而不是看侧栏选中的那一个：
   // 从某个供应商行上直接点「添加模型」时，目标就是那一行，跟当前选中谁无关。
   const [dialogProviderId, setDialogProviderId] = useState('')
-  const [modelId, setModelId] = useState('')
+  const [modelId, setModelIdState] = useState('')
   const [protocolEntries, setProtocolEntries] = useState<ProtocolEndpointEntry[]>([])
   const [fetchedModels, setFetchedModels] = useState<FetchedProviderModel[]>([])
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
+  const connectivityTest = useModelConnectivityTest()
+  const { run: runTest, reset: resetTest } = connectivityTest
 
   const dialogProvider = useMemo(() => providers.find(provider => provider.id === dialogProviderId), [providers, dialogProviderId])
   const dialogModels = useMemo(() => models.filter(model => model.providerId === dialogProviderId).sort((a, b) => a.priority - b.priority), [models, dialogProviderId])
@@ -38,8 +41,9 @@ export function useModelDialog(options: UseModelDialogOptions) {
 
   const openModelDialog = useCallback((model?: ProviderModelRoute, providerId?: string) => {
     setEditingModel(model ?? null)
+    resetTest()
     setDialogProviderId(model?.providerId ?? providerId ?? selectedProvider?.id ?? '')
-    setModelId(model?.modelName ?? '')
+    setModelIdState(model?.modelName ?? '')
     setFetchedModels([])
     setSelectedModelIds([])
     setProtocolEntries(PROTOCOL_OPTIONS.map(option => {
@@ -49,9 +53,21 @@ export function useModelDialog(options: UseModelDialogOptions) {
         : { protocol: option.value, enabled: false, overrideUrl: false, endpointUrl: '', protocolConversionEnabled: false }
     }))
     setModelDialogOpen(true)
-  }, [selectedProvider])
+  }, [selectedProvider, resetTest])
 
-  const closeModelDialog = useCallback(() => setModelDialogOpen(false), [])
+  // 关掉对话框顺手把探测结果丢掉：下一次打开多半是另一个供应商、另一个模型，
+  // 留着上一轮那几行只会让人以为刚才是这一次的结果。
+  const closeModelDialog = useCallback(() => {
+    resetTest()
+    setModelDialogOpen(false)
+  }, [resetTest])
+
+  // 探测结果记的是「当时那份表单值通不通」。模型名或端点一变，那份值就没了，
+  // 继续摆着旧结果等于在回答一个已经没人问的问题。
+  const setModelId = useCallback((value: string) => {
+    resetTest()
+    setModelIdState(value)
+  }, [resetTest])
 
   const fetchModels = useCallback(async () => {
     if (!dialogProvider) return
@@ -83,8 +99,9 @@ export function useModelDialog(options: UseModelDialogOptions) {
   }, [protocolEntries, dialogProvider, toast, t])
 
   const updateProtocolEntry = useCallback((index: number, patch: Partial<ProtocolEndpointEntry>) => {
+    resetTest()
     setProtocolEntries(current => current.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
-  }, [])
+  }, [resetTest])
 
   const toggleModelSelection = useCallback((id: string, checked: boolean) => {
     setSelectedModelIds(current => {
@@ -156,6 +173,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
     if (createdCount === 0) throw new Error(t('models.error.duplicate'))
     return { createdCount, skippedCount, updated: false }
   }, onSuccess: async result => {
+    resetTest()
     setModelDialogOpen(false)
     if (result.updated) {
       toast.success(t('models.toast.updated'))
@@ -167,5 +185,18 @@ export function useModelDialog(options: UseModelDialogOptions) {
     await reload()
   }, onError: error => toast.error(error.message) })
   const saveModel = useCallback(async () => { await saveMutation.mutateAsync().catch(() => undefined) }, [saveMutation])
-  return { modelDialogOpen, setModelDialogOpen, editingModel, dialogProvider, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, selectAllFetchedModels, invertFetchedModels, clearSelectedModels, updateProtocolEntry, openModelDialog, selectDialogProvider, closeModelDialog, saveModel, savingModel: saveMutation.isPending }
+
+  // 测什么由表单当前的样子决定，不由上一次点击决定：勾了没勾、覆盖地址写了什么，
+  // 都在 `protocolEntries` 里，直接从中挑出启用的那几行去测。
+  const testConnectivity = useCallback(async () => {
+    if (!dialogProvider) return
+    const enabledEntries = protocolEntries.filter(entry => entry.enabled)
+    if (enabledEntries.length === 0) return
+    await runTest(dialogProvider.id, modelId.trim(), enabledEntries.map(entry => ({
+      protocol: entry.protocol,
+      endpointUrl: entry.overrideUrl ? entry.endpointUrl.trim() : '',
+    })))
+  }, [dialogProvider, protocolEntries, modelId, runTest])
+
+  return { modelDialogOpen, setModelDialogOpen, editingModel, dialogProvider, modelId, protocolEntries, fetchedModels, selectedModelIds, fetchingModels, fetchModels, setModelId, toggleModelSelection, selectAllFetchedModels, invertFetchedModels, clearSelectedModels, updateProtocolEntry, openModelDialog, selectDialogProvider, closeModelDialog, saveModel, savingModel: saveMutation.isPending, connectivityTest, testConnectivity }
 }

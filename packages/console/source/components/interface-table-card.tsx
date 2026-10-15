@@ -1,6 +1,5 @@
 import { ListTree } from 'lucide-react'
 import { PROTOCOL_DISPLAY_NAMES, PROXY_INTERFACE_ENTRIES } from '@common/protocols'
-import { INTERFACE_DESCRIPTION_KEYS } from './interface-entries'
 import { Card, CardContent } from './ui/card'
 import { SettingsCardHeader } from './settings-card-header'
 import { useTranslation } from '@/i18n/provider'
@@ -24,10 +23,16 @@ import { useTranslation } from '@/i18n/provider'
  *
  * - `GET /v1/models`（`protocol` 为 `null` 的那条）由本地直接应答、不转发上游，也不是
  *   「接上没接上」的证据，摆在这里只会被误读成「接口就这几个」。用 `protocol !== null`
- *   过滤掉它，`INTERFACE_DESCRIPTION_KEYS` 里对应的说明也就不再需要。
+ *   过滤掉它。
  * - 每条接口的**等价写法**（不带 `/v1`）不铺第二列：服务端两种写法都受理，这件事写在卡头
  *   那句说明里；逐行列出来读起来像是要用户去挑一条，反倒把唯一的正解淹了。所以只取
  *   `entry.paths[0]`（带 `/v1` 的主写法）。
+ *
+ * 一行只有三个事实：方法、路径、协议正式名。**曾经还有第四格「中文说明」**（`对话补全` /
+ * `响应接口` / `消息接口`，英文那份写的就是 `Responses` / `Messages`）——它就是协议名的另一种
+ * 写法，和右边那格说的是同一件事。同一行里同一个概念出现两种写法，读者先要拿它们对一遍
+ * 才敢确认是一回事；英文下更糟：`Responses` 和 `OpenAI Responses` 并排，看起来像两个东西。
+ * 路径已经说明了接口的形状，协议名已经说明了它的名字，中间那句是多余的。
  */
 export function InterfaceTableCard() {
   const t = useTranslation()
@@ -47,13 +52,8 @@ export function InterfaceTableCard() {
                 {entry.method}
               </span>
               <span className="font-mono system-sm-medium text-text-primary">{entry.paths[0]}</span>
-              <span className="ml-auto flex flex-wrap items-baseline gap-x-2">
-                <span className="system-xs-regular text-text-tertiary">
-                  {t(INTERFACE_DESCRIPTION_KEYS[entry.id])}
-                </span>
-                <span className="system-2xs-regular text-text-quaternary">
-                  {entry.protocol ? PROTOCOL_DISPLAY_NAMES[entry.protocol] : null}
-                </span>
+              <span className="ml-auto system-2xs-regular text-text-quaternary">
+                {entry.protocol ? PROTOCOL_DISPLAY_NAMES[entry.protocol] : null}
               </span>
             </li>
           ))}

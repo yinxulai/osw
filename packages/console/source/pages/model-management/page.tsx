@@ -191,6 +191,8 @@ export function ModelManagementPage() {
         invertFetchedModels={service.invertFetchedModels}
         clearSelectedModels={service.clearSelectedModels}
         updateProtocolEntry={service.updateProtocolEntry}
+        onTestConnectivity={() => void service.testConnectivity()}
+        connectivityTest={service.connectivityTest}
         onCancel={service.closeModelDialog}
         onSave={service.saveModel}
       />

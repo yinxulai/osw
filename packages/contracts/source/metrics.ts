@@ -153,6 +153,45 @@ export function formatMilliseconds(value: number | null | undefined): string {
 }
 
 /**
+ * Token 计数的展示分解：数值与进位后缀。
+ *
+ * 拆成两半是给「后缀要单独改小一号」的界面用的——请求日志的 `1.2K` 里那个 `K`
+ * 比数字淡一档，需要自己拼装。数值与后缀的分界只此一处，各处不再各自 `toFixed`。
+ */
+export interface TokenCountParts {
+  /** 数值部分，不含后缀。 */
+  value: string
+  /** 进位后缀；未进位时是空串，「1.2k」与「9700」因此共用同一条拼装规则。 */
+  suffix: string
+}
+
+/**
+ * Token 计数的展示值：一万及以上折成 `1.2k`，以下原样。
+ *
+ * 与输出速度的 {@link formatOutputSpeed} 分开，因为两者回答的不是同一类问题：
+ * 速度是**比率**，量级决定小数位（10 以下留一位，10 以上取整）；这里是**计数**，
+ * 一位小数只在进位之后才有意义——「1.2k 个 Token」里那个 0.2 是量级信息，
+ * 而 1234 写成 `1234.0` 只多占了两个字符。
+ *
+ * 阈值取 10 000 而不是 1 000：四位以内的数写成 `9.7k` 比 `9700` 更难读，
+ * 而 9700 在列里也只占四个字符。进位用 1000 而不是 1024：Token 是**数的**，
+ * 不是存储量换算（对比 `formatBytes` 的 1024）。
+ *
+ * `null` 写 `—`、0 写 `0`：没有样本与测得为零是两件事，这个区别在整份界面里保持一致。
+ */
+export function formatTokenCount(value: number | null | undefined): string {
+  const parts = formatTokenCountParts(value)
+  return parts === null ? '—' : `${parts.value}${parts.suffix}`
+}
+
+/** {@link formatTokenCount} 的分解形态；没有样本时返回 `null` 而不是 `{ value: '—' }`。 */
+export function formatTokenCountParts(value: number | null | undefined): TokenCountParts | null {
+  if (value == null || !Number.isFinite(value)) return null
+  if (Math.abs(value) < 10_000) return { value: String(value), suffix: '' }
+  return { value: (value / 1000).toFixed(1), suffix: 'k' }
+}
+
+/**
  * 量级决定的小数位：10 及以上取整，10 以下保留一位小数。
  *
  * 10 以下的差别是有信息的（3.3 与 4.7 是两种速度），10 以上再带小数只剩噪声。

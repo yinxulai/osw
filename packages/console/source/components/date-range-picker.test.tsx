@@ -16,8 +16,15 @@ import { useLanguageStore } from '@/i18n/store'
 
 vi.mock('@/data/settings', () => ({ useSettings: () => null }))
 
+/** 受控包装的入参：内联的对象字面量类型不只是风格问题，规则也会拦，所以必须具名。 */
+interface ControlledProps {
+  initial: DateRangeValue
+  onChange: (next: DateRangeValue) => void
+}
+
 /** 受控包装：把 `onChange` 的回写接到本地 state，模拟真实调用方的行为。 */
-function Controlled({ initial, onChange }: { initial: DateRangeValue; onChange: (next: DateRangeValue) => void }) {
+function Controlled(props: ControlledProps) {
+  const { initial, onChange } = props
   const [value, setValue] = React.useState(initial)
   return (
     <I18nProvider>

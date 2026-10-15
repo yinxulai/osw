@@ -1,3 +1,5 @@
+import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
+import type { Protocol } from '@common/schemas'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { FilterBar } from '@/components/filter-bar'
 import { SearchableSelect } from '@/components/searchable-select'
@@ -16,7 +18,7 @@ interface RequestLogsFiltersProps {
   applyFilter: (next: Partial<RequestLogsFilter>) => void
 }
 
-const protocolOptions = ['openai-responses', 'openai-completions', 'anthropic-messages']
+const protocolOptions: readonly Protocol[] = ['openai-responses', 'openai-completions', 'anthropic-messages']
 
 /** 结束日按「含当天」折算成时间戳：选到 2026-01-15 就要包含这一整天，取次日零点。 */
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -39,7 +41,7 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
         <SelectTrigger aria-label={t('requestLogs.filters.protocol')} className="w-36"><SelectValue placeholder={t('requestLogs.filters.allProtocols')} /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">{t('requestLogs.filters.allProtocols')}</SelectItem>
-          {protocolOptions.map(protocol => <SelectItem key={protocol} value={protocol}>{protocol}</SelectItem>)}
+          {protocolOptions.map(protocol => <SelectItem key={protocol} value={protocol}>{PROTOCOL_DISPLAY_NAMES[protocol]}</SelectItem>)}
         </SelectContent>
       </Select>
       <Select value={props.filter.status} onValueChange={value => props.applyFilter({ status: value as StatusFilter })}>
