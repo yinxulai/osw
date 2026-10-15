@@ -113,24 +113,39 @@ function syntheticEvent(name: TelemetryEventName): TelemetryEvent {
   return event as unknown as TelemetryEvent
 }
 
-/** 从 zod 字段里读它的类型名。这里只看两种：枚举（`ZodEnum`）与布尔（`ZodBoolean`）。 */
-function typeNameOf(field: unknown): string {
-  return (field as { _def?: { typeName?: string } })._def?.typeName ?? ''
+/**
+ * 一个字段在 zod **v4** 里的判别式：`'boolean'` / `'enum'` / `'string'` / …
+ *
+ * v4 把 v3 的 `_def.typeName`（`'ZodBoolean'` 这种**类名**）换成了 `def.type`（`'boolean'`
+ * 这种小写**判别式**，见 `zod/v4/core/schemas.d.ts` 的 `_zod.def`）。原来的取法在 v4 下
+ * 恒等于空串，于是 `isBooleanField` 永远为假、`longestValueOf` 对每个属性都走「按上限顶格」
+ * 那一支——下面两条用例因此看见一串 `'x'` 而不是 `true` / 枚举值。改的是**读契约的方式**，
+ * 断言表达的意思一字未动。
+ *
+ * 用判别式而不是 `instanceof z.ZodBoolean`：schema 来自 `@osw/contracts`，两个包各有一份
+ * zod 实例时会 `instanceof` 失败；判别式是字段自己带的字符串，不受它影响。
+ */
+function typeOf(field: unknown): string {
+  return (field as { def?: { type?: string } }).def?.type ?? ''
 }
 
 function isBooleanField(field: unknown): boolean {
-  return typeNameOf(field) === 'ZodBoolean'
+  return typeOf(field) === 'boolean'
 }
 
 /** 一个字段允许的最长取值：枚举取它最长的一项，其余按契约的属性值上限顶格。 */
 function longestValueOf(field: unknown): string {
-  const def = (field as { _def?: { typeName?: string; values?: string[]; checks?: { kind: string; value: number }[] } })._def
-  if (def?.typeName === 'ZodEnum') {
-    return [...(def.values ?? [])].sort((a, b) => b.length - a.length)[0] ?? ''
+  if (typeOf(field) === 'enum') {
+    // `.options` 是 v4 里读枚举成员的正规入口（`telemetry.ts` 也这么读）。
+    const options = (field as { options?: readonly string[] }).options ?? []
+    return [...options].sort((a, b) => b.length - a.length)[0] ?? ''
   }
   // 唯一的另一个上限来源是 `max(TELEMETRY_MAX_PROPERTY_VALUE_LENGTH)`；没有 checks 的按上限算。
-  const max = def?.checks?.find(check => check.kind === 'max')?.value ?? TELEMETRY_MAX_PROPERTY_VALUE_LENGTH
-  return 'x'.repeat(max)
+  // 上限写在 check 的 `_zod.def` 上：v4 没有把它作为公开字段暴露出来，而这条用例读的是
+  // 「契约里怎么限制的」，只能读到这儿。
+  const checks = (field as { def?: { checks?: { _zod?: { def?: { check?: string; maximum?: number } } }[] } }).def?.checks ?? []
+  const maximum = checks.find(check => check._zod?.def?.check === 'max_length')?._zod?.def?.maximum
+  return 'x'.repeat(maximum ?? TELEMETRY_MAX_PROPERTY_VALUE_LENGTH)
 }
 
 describe('Analytics Engine 下游', () => {

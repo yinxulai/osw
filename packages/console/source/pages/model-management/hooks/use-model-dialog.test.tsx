@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   // 拉取结果按协议分派；没配就返回空模型列表。
   fetchResults: new Map<string, Array<{ id: string }>>(),
   toasts: [] as Array<{ level: 'success' | 'error'; message: string; params?: unknown }>,
+  connectivityPayloads: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@/api/models', () => ({
@@ -69,6 +70,21 @@ vi.mock('@/components/ui/toast', () => ({
 
 // 文案不是被测对象，回落到 key 本身。
 vi.mock('@/i18n/provider', () => ({ useTranslation: () => (key: string) => key }))
+
+// 连接测试的客户端编排另有专测（`use-model-connectivity-test.test.tsx`）。
+// 这里只需要能记下「点了测试之后发出去的是什么」：测的到底是哪几行草稿端点。
+vi.mock('@/api/tools', () => ({
+  modelConnectivityApi: {
+    test: async (payload: Record<string, unknown>) => {
+      state.connectivityPayloads.push(payload)
+      return { success: true, data: { results: [] } }
+    },
+  },
+}))
+
+vi.mock('@/api/errors', () => ({
+  localizeErrorCode: (errorCode: string, diagnosticMessage: string) => errorCode || diagnosticMessage,
+}))
 
 // 真实 `useMutation` 需要 `QueryClientProvider`；压成「立刻执行」的壳，好走到 `onSuccess`。
 interface MutationOptions<R> {
@@ -122,6 +138,7 @@ beforeEach(() => {
   state.fetchPayloads.length = 0
   state.fetchResults.clear()
   state.toasts.length = 0
+  state.connectivityPayloads.length = 0
 })
 
 /** 协议下拉的真实顺序（与 `ProtocolSchema` 同序）。 */
@@ -530,5 +547,68 @@ describe('useModelDialog payload', () => {
     expect(state.updatePayloads[0]).toMatchObject({ id: 'pm_1', modelName: 'gpt-4o-mini' })
     // 改模型名跟调度绑定无关；带 `logicalModelId` 过来只会把服务端的落点校验拖进来。
     expect(state.updatePayloads[0]).not.toHaveProperty('logicalModelId')
+  })
+})
+
+describe('useModelDialog 的连接测试', () => {
+  it('只测启用的协议，且带的是草稿地址与草稿模型名', async () => {
+    const view = setup([MODEL])
+    act(() => { view.result.current.openModelDialog(MODEL) })
+    act(() => { view.result.current.setModelId('gpt-4o-renamed') })
+    act(() => { view.result.current.updateProtocolEntry(PROTOCOLS.indexOf('anthropic-messages'), { enabled: true, overrideUrl: true, endpointUrl: 'https://mirror.example.com/v1/messages' }) })
+
+    await act(async () => { await view.result.current.testConnectivity() })
+
+    expect(state.connectivityPayloads).toEqual([{
+      providerId: 'prov_1',
+      // 原样把输入框里的名字送出去：用户要确认的正是上游认不认这个名字。
+      modelName: 'gpt-4o-renamed',
+      endpoints: [
+        { protocol: 'openai-completions', endpointUrl: '' },
+        { protocol: 'anthropic-messages', endpointUrl: 'https://mirror.example.com/v1/messages' },
+      ],
+    }])
+  })
+
+  it('没开关的协议不送上去', async () => {
+    const view = setup([MODEL])
+    act(() => { view.result.current.openModelDialog(MODEL) })
+    act(() => { view.result.current.updateProtocolEntry(PROTOCOLS.indexOf('openai-completions'), { enabled: false }) })
+
+    await act(async () => { await view.result.current.testConnectivity() })
+
+    // 一个都没启用就没得测，请求不该发出去。
+    expect(state.connectivityPayloads).toEqual([])
+  })
+
+  it('改了模型名就把上一次的结果丢掉', async () => {
+    const view = setup([MODEL])
+    act(() => { view.result.current.openModelDialog(MODEL) })
+    await act(async () => { await view.result.current.testConnectivity() })
+
+    act(() => { view.result.current.setModelId('another-name') })
+
+    // 旧结果记的是「那份表单值通不通」；值都换了，继续摆着等于在回答一个没人问的问题。
+    expect(view.result.current.connectivityTest.status).toBe('idle')
+  })
+
+  it('改了端点就把上一次的结果丢掉', async () => {
+    const view = setup([MODEL])
+    act(() => { view.result.current.openModelDialog(MODEL) })
+    await act(async () => { await view.result.current.testConnectivity() })
+
+    act(() => { view.result.current.updateProtocolEntry(PROTOCOLS.indexOf('openai-completions'), { endpointUrl: 'https://elsewhere.example.com/v1' }) })
+
+    expect(view.result.current.connectivityTest.status).toBe('idle')
+  })
+
+  it('重新打开对话框时清空上一次的结果', async () => {
+    const view = setup([MODEL])
+    act(() => { view.result.current.openModelDialog(MODEL) })
+    await act(async () => { await view.result.current.testConnectivity() })
+    act(() => { view.result.current.closeModelDialog() })
+    act(() => { view.result.current.openModelDialog(MODEL) })
+
+    expect(view.result.current.connectivityTest.status).toBe('idle')
   })
 })

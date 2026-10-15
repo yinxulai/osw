@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { ProtocolConverterSchema, ProviderEndpointSchema, ProviderModelEndpointSchema, ProviderSettingSchema } from '@common/schemas'
+import { ProtocolConverterSchema, ProviderEndpointSchema, ProviderModelEndpointSchema, ProviderSettingSchema, withoutDefaults } from '@common/schemas'
 import {
   createProviderEndpoint,
   deleteProviderEndpoint,
@@ -50,12 +50,25 @@ function mutate<T>(schema: z.ZodType<T>, action: (input: T) => Promise<unknown>)
   return async (_req: IncomingMessage, res: ServerResponse, body: unknown) => sendSuccess(res, await action(schema.parse(body)))
 }
 
-const CreateEndpointSchema = ProviderEndpointSchema.pick({ providerId: true, protocol: true, url: true, enabled: true }).partial({ enabled: true })
-const UpdateEndpointSchema = ProviderEndpointSchema.pick({ id: true, protocol: true, url: true, enabled: true }).partial().required({ id: true })
-const CreateModelEndpointSchema = ProviderModelEndpointSchema.pick({ providerModelId: true, providerEndpointId: true, url: true, enabled: true }).partial({ url: true, enabled: true })
-const UpdateModelEndpointSchema = ProviderModelEndpointSchema.pick({ id: true, providerEndpointId: true, url: true, enabled: true }).partial().required({ id: true })
-const CreateConverterSchema = ProtocolConverterSchema.pick({ providerModelEndpointId: true, clientProtocol: true, enabled: true }).partial({ enabled: true })
-const UpdateConverterSchema = ProtocolConverterSchema.pick({ id: true, clientProtocol: true, enabled: true }).partial().required({ id: true })
+/**
+ * 六张补丁 schema：更新接口「只改提到的字段」这一语义就靠它们。
+ *
+ * 三张源 schema 都先过了 `withoutDefaults` —— 这三个实体里 `enabled` 都带 `.default()`，
+ * 而 zod v4 的 `.partial()` 会在字段缺省时**照旧套上默认值**。没过这一道，`PUT` 一个只有
+ * `clientProtocol` 的补丁就会把 `enabled` 一起写成 `false`：`ProtocolConverterSchema`
+ * 的默认值是 `false`（只有它，见契约里的注释），落到库里就是「建了一条转换器但它没生效」。
+ * 详见 `withoutDefaults` 的注释。
+ */
+const ProviderEndpointPatchSchema = withoutDefaults(ProviderEndpointSchema)
+const ProviderModelEndpointPatchSchema = withoutDefaults(ProviderModelEndpointSchema)
+const ProtocolConverterPatchSchema = withoutDefaults(ProtocolConverterSchema)
+
+const CreateEndpointSchema = ProviderEndpointPatchSchema.pick({ providerId: true, protocol: true, url: true, enabled: true }).partial({ enabled: true })
+const UpdateEndpointSchema = ProviderEndpointPatchSchema.pick({ id: true, protocol: true, url: true, enabled: true }).partial().required({ id: true })
+const CreateModelEndpointSchema = ProviderModelEndpointPatchSchema.pick({ providerModelId: true, providerEndpointId: true, url: true, enabled: true }).partial({ url: true, enabled: true })
+const UpdateModelEndpointSchema = ProviderModelEndpointPatchSchema.pick({ id: true, providerEndpointId: true, url: true, enabled: true }).partial().required({ id: true })
+const CreateConverterSchema = ProtocolConverterPatchSchema.pick({ providerModelEndpointId: true, clientProtocol: true, enabled: true }).partial({ enabled: true })
+const UpdateConverterSchema = ProtocolConverterPatchSchema.pick({ id: true, clientProtocol: true, enabled: true }).partial().required({ id: true })
 
 export const relationRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/relation/provider-setting/list', list(ProviderIdSchema, input => listProviderSettings(input.providerId)))

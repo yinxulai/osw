@@ -17,11 +17,7 @@ export interface TableSortState<K extends string> {
  * 同一列再点就翻转。不设「第三次点击取消排序」——回到默认顺序得靠用户自己再点回来，
  * 而每一列的初始方向本来就是它最有用的那一头。
  */
-export function nextTableSort<K extends string>(
-  current: TableSortState<K>,
-  key: K,
-  initialDirection: TableSortDirection,
-): TableSortState<K> {
+export function nextTableSort<K extends string>(current: TableSortState<K>, key: K, initialDirection: TableSortDirection): TableSortState<K> {
   if (current.key !== key) return { key, direction: initialDirection }
   return { key, direction: current.direction === 'ascending' ? 'descending' : 'ascending' }
 }
@@ -35,12 +31,7 @@ export type TableSortValue = number | string | null
  * `null`（没测到）**无论升序降序都垫底**：把「没有样本」排到榜首，等于让最不可信的模型占着
  * 最显眼的位置。名字按当前语言比较，中文不会退化成码点序。
  */
-export function compareTableSortValues(
-  a: TableSortValue,
-  b: TableSortValue,
-  direction: TableSortDirection,
-  locale: string,
-): number {
+export function compareTableSortValues(a: TableSortValue, b: TableSortValue, direction: TableSortDirection, locale: string): number {
   if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1
   const result = typeof a === 'number' && typeof b === 'number'
     ? a - b
@@ -56,12 +47,7 @@ export interface TableSortAccessor<T, K extends string> {
   tiebreak: (a: T, b: T) => number
 }
 
-export function applyTableSort<T, K extends string>(
-  rows: readonly T[],
-  sort: TableSortState<K>,
-  accessor: TableSortAccessor<T, K>,
-  locale: string,
-): T[] {
+export function applyTableSort<T, K extends string>(rows: readonly T[], sort: TableSortState<K>, accessor: TableSortAccessor<T, K>, locale: string): T[] {
   return [...rows].sort((a, b) =>
     compareTableSortValues(accessor.value(a, sort.key), accessor.value(b, sort.key), sort.direction, locale)
     || accessor.tiebreak(a, b),

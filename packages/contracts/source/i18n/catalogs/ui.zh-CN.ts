@@ -101,6 +101,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.selection.description': '选择渠道后可细化到目标协议',
   'modelTest.selection.searchPlaceholder': '搜索渠道或模型',
   'modelTest.selection.modelCount': '{count} 模型',
+  // 必须带「协议」二字：裸 `2/3` 排在模型名右边，会被读成「三个模型里选了两个」。
+  'modelTest.selection.protocolCount': '{selected}/{total} 协议',
+  'modelTest.selection.modelAria': '选择模型 {name} 的全部可测协议',
   'modelTest.selection.clear': '清空',
   'modelTest.selection.empty': '没有匹配的渠道或模型',
   'modelTest.progress.running': '正在并发验证渠道',
@@ -138,9 +141,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.mode.speedHint': '量 TTFT 与 TPS，提示词更长、耗时更久。',
   'modelTest.costWarning': '将向每个目标发送一次真实请求（速度诊断的提示词更长、费用更高），并记录到请求日志。',
   'modelTest.table.target': '渠道 / 模型',
-  'modelTest.table.protocol': '目标协议',
+  // 协议不再占一列：它是渠道 / 模型格左侧那条色条，满名走悬浮提示（所以这里没有「目标协议」表头）。
   'modelTest.table.status': '状态',
-  'modelTest.table.response': '响应',
+  // 表头写「输出 Token」而不是「输出」：这一列是上游报出来的计数，不是「响应体」。
+  'modelTest.table.tokens': '输出 Token',
   'modelTest.table.duration': '耗时',
   'modelTest.table.ttft': 'TTFT',
   'modelTest.table.speed': 'TPS',
@@ -488,12 +492,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'access.field.baseUrl.label': '接口地址',
   'access.interface.title': '本服务接受的接口',
   'access.interface.description': '会被转发给上游模型；不带 /v1 的等价写法同样受理',
-  'access.interface.entry.chatCompletions': '对话补全',
-  'access.interface.entry.responses': '响应接口',
-  'access.interface.entry.messages': '消息接口',
-  // 保留：`INTERFACE_DESCRIPTION_KEYS` 是 `Record<ProxyInterfaceId, …>`，`models` 仍是契约里的一个 id。
-  // 该条目已不在界面表格里渲染（本地应答、不转发上游），这里的说明只用于满足类型完整性。
-  'access.interface.entry.models': '模型清单（只列兜底模型）',
 
   // ========== 页面 · 逻辑模型 ==========
   'logicalModels.title': '逻辑模型',
@@ -687,6 +685,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'models.dialog.endpointsTitle': '协议端点',
   'models.dialog.endpointsDescription': '至少启用一个协议；默认使用供应商级别的接口地址，也可以单独覆盖。',
   'models.dialog.save': '保存修改',
+  'models.dialog.test': '测试连接',
+  'models.dialog.testing': '测试中',
+  'models.dialog.testTimeout': '测试超时未返回，请确认上游地址可达',
+  'models.dialog.testSuccess': '连接成功，HTTP {status}，耗时 {duration} ms',
   'models.dialog.submitBulk': '批量添加 {count} 个模型',
   'models.dialog.submit': '添加模型',
   'models.endpoint.enabled': '已启用',

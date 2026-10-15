@@ -110,7 +110,8 @@
     "react-dom": "^19.3.0",
     "shadcn": "^4.21.4",
     "turbo": "^2.11.7",
-    "typescript": "^7.0.2",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.4"
   }

@@ -1,7 +1,7 @@
 import type { Protocol } from './schemas'
 
 /**
- * 协议的展示名。
+ * 协议的展示名，也是**全系统唯一的协议写法**。
  *
  * `OpenAI Completions` / `OpenAI Responses` / `Anthropic Messages` 是这三个接口的正式叫法，
  * 也是上游厂商的产品名——两种界面语言下写法相同，因此不进翻译目录。
@@ -9,6 +9,13 @@ import type { Protocol } from './schemas'
  * 放在契约层是因为服务端也要用它：端点缺地址时抛出的错误只携带「哪个协议」这个事实，
  * 展示名作为错误参数交给界面插值（见 `packages/core/source/errors.ts` 的
  * `endpointUrlMissingError`）。界面与服务端各写一份名字，两边迟早会不一致。
+ *
+ * **不设短名。** 曾经有过一份 `Completions` / `Responses` / `Messages` 的缩写表，用于
+ * 分段控件与结果表这些「省字」的地方，理由是满名里的厂商名重复三遍太啰嗦。实测下来
+ * 得不偿失：同一个协议在一屏里出现两种写法（旁边是 `OpenAI Responses`，这里是
+ * `Responses`），读者会当成两个不同的东西；省掉的那截厂商名也不是冗余——`Responses`
+ * 与 OpenAI 之外还有谁这么叫，是读者自己去补的，而补错就得回头核对。省字的地方改用
+ * **换行**解决，不用减字。
  */
 export const PROTOCOL_DISPLAY_NAMES: Readonly<Record<Protocol, string>> = {
   'openai-completions': 'OpenAI Completions',

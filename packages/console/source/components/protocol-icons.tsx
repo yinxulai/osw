@@ -4,8 +4,13 @@ import { CONVERTIBLE_PROTOCOLS, PROTOCOL_DISPLAY_NAMES } from '@common/protocols
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
 
-/** 图标只负责形状，名字统一取自契约层的 `PROTOCOL_DISPLAY_NAMES`。 */
-const PROTOCOL_ICONS: Record<Protocol, typeof MessageSquareCode> = {
+/**
+ * 图标只负责形状，名字统一取自契约层的 `PROTOCOL_DISPLAY_NAMES`。
+ *
+ * 导出是因为**同一个协议在哪儿都得长得一样**：模型详情的协议徽章、模型对话框的
+ * 协议选择、诊断结果表的协议色条，三处各画一套迟早会出现「这里是 ○ 那里是 □」。
+ */
+export const PROTOCOL_ICONS: Record<Protocol, typeof MessageSquareCode> = {
   'openai-completions': MessageSquareCode,
   'openai-responses': Sparkles,
   'anthropic-messages': BotMessageSquare,

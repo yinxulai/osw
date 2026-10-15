@@ -21,12 +21,7 @@ export interface UseTableSortResult<T, K extends string> {
  * 只持有「按哪一列、朝哪边」，数据本身仍由调用方持有——页面每 15s 轮询一次，新数据进来时
  * 排序必须跟着新数据走，所以这里存的是行而不是副本。
  */
-export function useTableSort<T, K extends string>(
-  rows: readonly T[],
-  defaultSort: TableSortState<K>,
-  accessor: TableSortAccessor<T, K>,
-  initialDirections: Record<K, TableSortDirection>,
-): UseTableSortResult<T, K> {
+export function useTableSort<T, K extends string>(rows: readonly T[], defaultSort: TableSortState<K>, accessor: TableSortAccessor<T, K>, initialDirections: Record<K, TableSortDirection>): UseTableSortResult<T, K> {
   const locale = useLocale()
   const [sort, setSort] = useState<TableSortState<K>>(defaultSort)
 
