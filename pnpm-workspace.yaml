@@ -2,6 +2,16 @@ packages:
   - packages/*
   - apps/*
 
+# `app-builder-lib@26.15.3` 声明 `@electron/get: ^3.0.0`，代码却调用
+# `ElectronDownloadCacheMode`（`ReadWrite`/`WriteOnly`）——该 enum 与 `cacheMode`
+# 选项是 `@electron/get@3.1.0`（2024-07）才引入的。3.0.0（2023-10）没有它，
+# 于是任何一次下载都会 `TypeError: Cannot read properties of undefined (reading 'ReadWrite')`。
+# pnpm 不会把一个已满足 `^3.0.0` 的传递依赖从 3.0.0 提升到 3.1.0，所以锁文件里
+# 一直钉着坏的 3.0.0（`electron@44.7.0` 自己带的 5.1.0 只服务于别处）。
+# 这里把 3.x 提到 3.1.0：它是同一大版本，且是引入该 API 的最小版本。
+overrides:
+  '@electron/get@3': 3.1.0
+
 allowBuilds:
   electron: true
   electron-winstaller: true
