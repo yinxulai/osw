@@ -1,11 +1,5 @@
 import type { PromptInvocation } from '@common/router/types'
-
-function blockText(block: unknown): string {
-  if (Array.isArray(block)) return block.map(blockText).filter(Boolean).join('')
-  if (block && typeof block === 'object') return String((block as Record<string, unknown>).text ?? '')
-  if (block === undefined || block === null) return ''
-  return String(block)
-}
+import { blockText } from '../shared/prompt-body'
 
 export function buildPromptBody(invocation: PromptInvocation): string {
   const messages = invocation.prompt ? [{ role: 'user', content: invocation.prompt }] : []
