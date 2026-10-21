@@ -12,7 +12,7 @@ export function readUsage(body: string): DiagnosticUsage {
   try {
     const usage = (JSON.parse(body) as { usage?: Record<string, unknown> }).usage
     if (!usage) return empty
-    // 与 `observers/usage.ts` 同一口径：有些网关在同一个 usage 里既给 Chat 风格字段
+    // 与 `observers/usage/` 同一口径：有些网关在同一个 usage 里既给 Chat 风格字段
     // （占位 0）又给 Responses 风格字段（真实值），按顺序取「第一个数字」会先撞上占位 0。
     // 因此优先取正数，一个都没有时才回落到 0。
     const pick = (...keys: string[]): number | null => {

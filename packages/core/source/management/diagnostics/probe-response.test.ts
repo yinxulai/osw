@@ -15,7 +15,7 @@ describe('diagnostic usage parsing', () => {
   })
 
   it('同一个 usage 里混着占位 0 与真实值时要取真实值', () => {
-    // 与 observers/usage.ts 同口径：Chat 风格字段是占位 0 时不能盖住 Responses 风格的真实值。
+    // 与 observers/usage/ 同口径：Chat 风格字段是占位 0 时不能盖住 Responses 风格的真实值。
     const body = '{"usage":{"prompt_tokens":0,"completion_tokens":0,"input_tokens":38829,"output_tokens":477}}'
     expect(readUsage(body)).toEqual({ inputTokens: 38829, outputTokens: 477, cachedInputTokens: null })
   })
