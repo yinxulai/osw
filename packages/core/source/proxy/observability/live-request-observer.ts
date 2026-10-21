@@ -1,6 +1,6 @@
 import type { AttemptView, ExchangeView, Observer } from '@server/proxy/contracts'
 import type { LiveAttemptHandle } from './live-request-store'
-import { createUsageTracker } from '@server/proxy/observers/usage'
+import { createUsageTracker } from '@server/proxy/protocols/shared/usage'
 
 export interface LiveAttemptObserverOptions {
   /** 这次尝试在台账里的写口；台账里没有这个请求（内部执行）时为 `null`，观察者整体空转。 */

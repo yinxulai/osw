@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createUsageTracker } from './usage'
+import { createUsageTracker } from '../protocols/shared/usage'
 
 /**
  * 重构前的行为快照（characterization）。

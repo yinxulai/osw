@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createUsageTracker, emptyUsage, extractTokenUsage, hasOutput } from './usage'
+import { createUsageTracker, emptyUsage, extractTokenUsage, hasOutput } from '../protocols/shared/usage'
 
 describe('usage tracker', () => {
   it('starts empty so that "not reported" is never mistaken for zero', () => {

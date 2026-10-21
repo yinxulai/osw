@@ -1,6 +1,6 @@
 import type { AttemptView, ExchangeView, HeadFrame, HeaderMap, Observer } from '@server/proxy/contracts'
 import { serializeChunkSnapshot } from '@server/proxy/adapters/http-response-sink'
-import { createUsageTracker, type ExtractedUsage } from './usage'
+import { createUsageTracker, type ExtractedUsage } from '../protocols/shared/usage'
 
 export interface AttemptObserverOptions {
   exchange: ExchangeView

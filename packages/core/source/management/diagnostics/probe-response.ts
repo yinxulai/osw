@@ -1,4 +1,4 @@
-import { createUsageTracker } from '../../proxy/observers/usage'
+import { createUsageTracker } from '../../proxy/protocols/shared/usage'
 import { BufferedProxyResponse } from '../../proxy/response/proxy-response'
 
 /**
