@@ -7,6 +7,9 @@ import type {
   ScriptInvocation,
   WorkflowProtocol,
 } from '@common/router/types'
+import { buildPromptBody as buildAnthropicPromptBody, extractReplyText as extractAnthropicReplyText } from '../../proxy/protocols/anthropic-messages/prompt'
+import { buildPromptBody as buildOpenAiCompletionsPromptBody, extractReplyText as extractOpenAiCompletionsReplyText } from '../../proxy/protocols/openai-completions/prompt'
+import { buildPromptBody as buildOpenAiResponsesPromptBody, extractReplyText as extractOpenAiResponsesReplyText } from '../../proxy/protocols/openai-responses/prompt'
 import { executeProxyRequest } from '../execution/attempt-executor'
 import { proxyTargetPlanner } from '../planners/target-planner'
 import { createRequestContext } from '../request/request-context'
@@ -31,81 +34,26 @@ export function promptProtocol(protocol: WorkflowProtocol): Protocol {
 }
 
 export function buildPromptBody(protocol: Protocol, invocation: PromptInvocation): string {
-  const messages = invocation.prompt ? [{ role: 'user', content: invocation.prompt }] : []
-  const system = invocation.systemPrompt.trim()
-
-  // `model` 只是占位：真实调用的上游模型名由协议适配器改写（`writeJsonModel`，经封装描述的 `writeModel`）。
-  if (protocol === 'openai-responses') {
-    return JSON.stringify({
-      model: invocation.logicalModelId,
-      instructions: system || undefined,
-      input: messages,
-      temperature: invocation.temperature,
-      max_output_tokens: invocation.maxTokens,
-    })
+  switch (protocol) {
+    case 'openai-responses':
+      return buildOpenAiResponsesPromptBody(invocation)
+    case 'anthropic-messages':
+      return buildAnthropicPromptBody(invocation)
+    default:
+      return buildOpenAiCompletionsPromptBody(invocation)
   }
-
-  if (protocol === 'anthropic-messages') {
-    return JSON.stringify({
-      model: invocation.logicalModelId,
-      system: system || undefined,
-      messages,
-      temperature: invocation.temperature,
-      max_tokens: invocation.maxTokens,
-    })
-  }
-
-  return JSON.stringify({
-    model: invocation.logicalModelId,
-    messages: system ? [{ role: 'system', content: system }, ...messages] : messages,
-    temperature: invocation.temperature,
-    max_tokens: invocation.maxTokens,
-  })
-}
-
-/** 取内容块文本：数组递归拼接，对象块读 `text`，标量直接转字符串。 */
-function blockText(block: unknown): string {
-  if (Array.isArray(block)) return block.map(blockText).filter(Boolean).join('')
-  if (block && typeof block === 'object') return String((block as Record<string, unknown>).text ?? '')
-  if (block === undefined || block === null) return ''
-  return String(block)
-}
-
-function extractAnthropicReply(payload: Record<string, unknown>): string {
-  const blocks = Array.isArray(payload.content) ? payload.content : []
-  return blocks.map(blockText).filter(Boolean).join('')
-}
-
-function extractResponsesReply(payload: Record<string, unknown>): string {
-  if (typeof payload.output_text === 'string') return payload.output_text
-  const output = Array.isArray(payload.output) ? payload.output : []
-  const texts: string[] = []
-  for (const item of output) {
-    if (!item || typeof item !== 'object') continue
-    const content = (item as Record<string, unknown>).content
-    if (!Array.isArray(content)) continue
-    for (const part of content) texts.push(blockText(part))
-  }
-  return texts.filter(Boolean).join('')
-}
-
-function extractCompletionsReply(payload: Record<string, unknown>): string {
-  const choices = Array.isArray(payload.choices) ? payload.choices : []
-  const first = choices[0]
-  if (!first || typeof first !== 'object') return ''
-  const record = first as Record<string, unknown>
-  const message = record.message
-  // chat completions 的正文在 `choices[0].message.content`（可能是字符串，也可能是 content parts 数组）。
-  if (message && typeof message === 'object') return blockText((message as Record<string, unknown>).content)
-  // 没有 `message` 时只剩旧版 completions 接口的 `choices[0].text` 一种可能。
-  return blockText(record)
 }
 
 /** 从各协议的回复体里取出正文：openai 取 `message.content`，anthropic 拼接 `content[].text`。 */
 export function extractReplyText(protocol: Protocol, payload: Record<string, unknown>): string {
-  if (protocol === 'anthropic-messages') return extractAnthropicReply(payload)
-  if (protocol === 'openai-responses') return extractResponsesReply(payload)
-  return extractCompletionsReply(payload)
+  switch (protocol) {
+    case 'anthropic-messages':
+      return extractAnthropicReplyText(payload)
+    case 'openai-responses':
+      return extractOpenAiResponsesReplyText(payload)
+    default:
+      return extractOpenAiCompletionsReplyText(payload)
+  }
 }
 
 /** 把上游回复体文本解析成对象。名字里不带 `Json`：协议层的 `parseJsonObject(body: Buffer)` 解的是**请求体**，两件事不共用一个名字。 */

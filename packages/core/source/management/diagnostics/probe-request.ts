@@ -1,4 +1,7 @@
 import type { ModelTestMode, Protocol } from '@common/schemas'
+import { buildDiagnosticBody as buildAnthropicDiagnosticBody } from '../../proxy/protocols/anthropic-messages/diagnostic-body'
+import { buildDiagnosticBody as buildOpenAiCompletionsDiagnosticBody } from '../../proxy/protocols/openai-completions/diagnostic-body'
+import { buildDiagnosticBody as buildOpenAiResponsesDiagnosticBody } from '../../proxy/protocols/openai-responses/diagnostic-body'
 
 /**
  * 诊断请求体怎么拼：**三种协议各一种写法，一处写完**。
@@ -95,32 +98,12 @@ export function padPrompt(prompt: string, inputLength: number): string {
  * 上游也只认这个字段（Anthropic 同样是给 `stream` 才回 SSE）。
  */
 export function buildDiagnosticBody(protocol: Protocol, modelId: string, converted: boolean, mode: ModelTestMode = 'streaming', options: DiagnosticBodyOptions = {}): string {
-  const basePrompt = options.prompt?.trim() || DEFAULT_PROMPTS[mode]
-  const prompt = padPrompt(basePrompt, options.inputLength ?? 0)
-  const stream = options.stream ?? true
   switch (protocol) {
     case 'openai-completions':
-      return JSON.stringify({
-        model: modelId,
-        ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
-        messages: [{ role: 'user', content: prompt }],
-      })
+      return buildOpenAiCompletionsDiagnosticBody(modelId, options, mode)
     case 'openai-responses':
-      return JSON.stringify({
-        model: modelId,
-        // Responses 的 `stream_options` 官方只有 `include_obfuscation`，但 OpenAI 兼容网关
-        // （以及本仓的转换层）一律按 Chat 风格认 `include_usage`。真实请求经过协议适配器时
-        // 不会自动补这个字段（`OpenAiResponsesNativeAdapter` 刻意原样保留），所以只能在这里写。
-        // 不认这个字段的上游会忽略它，不会因此报错。
-        ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
-        input: [{ role: 'user', content: prompt }],
-      })
+      return buildOpenAiResponsesDiagnosticBody(modelId, options)
     case 'anthropic-messages':
-      return JSON.stringify({
-        model: modelId,
-        ...(converted ? {} : { max_tokens: mode === 'speed' ? SPEED_MAX_TOKENS : DEFAULT_MAX_TOKENS }),
-        ...(stream ? { stream: true } : {}),
-        messages: [{ role: 'user', content: prompt }],
-      })
+      return buildAnthropicDiagnosticBody(modelId, converted, mode, options)
   }
 }

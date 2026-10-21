@@ -65,8 +65,10 @@ export interface JsonEnvelopeOptions {
  * 新协议写自己的 `ProtocolEnvelope` 即可，内核与执行器不需要任何改动。
  */
 export function createJsonEnvelope(options: JsonEnvelopeOptions): ProtocolEnvelope {
+  const deliveryModeFields = options.streamingField === null ? [] : [options.streamingField]
   return {
     body: 'json',
+    deliveryModeFields,
     readModel(input: EnvelopeInput): ProtocolModelReadResult {
       return readJsonModel(input.body)
     },
