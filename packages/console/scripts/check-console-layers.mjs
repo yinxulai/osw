@@ -103,7 +103,9 @@ const RULES = [
  */
 function readImports(source) {
   const imports = []
-  for (const line of source.split('\n')) {
+  // 按 `\r?\n` 切：Windows 签出的工作区是 CRLF，残留的 `\r` 会让下面 `(.*)$` 匹配失败
+  // （`.` 不匹配行终止符 `\r`），`import type` 就会被误判成运行时导入。
+  for (const line of source.split(/\r?\n/)) {
     const dynamic = /(?:^|[^.\w])(?:import|require)\(\s*'([^']+)'\s*\)/.exec(line)
     if (dynamic) {
       imports.push({ specifier: dynamic[1], typeOnly: false, statement: line.trim() })
