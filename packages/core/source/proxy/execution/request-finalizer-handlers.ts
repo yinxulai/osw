@@ -7,6 +7,7 @@ import type { LiveRequestHandle } from '@server/proxy/observability/live-request
 import type { RequestLogger } from '@server/proxy/observability/logging-types'
 import type { RequestContext } from '@server/proxy/request/request-context'
 import { RequestRewriteError } from '@server/proxy/request-rewrite/request-rewrite-engine'
+import { terminalWholeBodyConversion } from '@server/proxy/protocols/shared/conversion-error'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
 import { isClientAttributableStatus, type HealthFailureScope } from '@server/proxy/response/response'
 import { markProviderModelSuccess, markProviderSuccess } from '@server/proxy/upstream/health'
@@ -228,9 +229,14 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
       return false
     }
 
+    const recordedOutcome = error instanceof RecordedAttemptError ? error.outcome : null
+    const conversionFailure = terminalWholeBodyConversion(
+      error instanceof RecordedAttemptError ? error.cause : rootError,
+      recordedOutcome?.statusCode ?? Number.NaN,
+    )
     const nextTarget = targets[attemptIndex + 1]
     console.warn(
-      `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} failover=${!response.headersSent && nextTarget !== undefined} nextTarget=${nextTarget === undefined ? 'none' : formatTarget(nextTarget)} error=${lastError.message}`,
+      `[proxy] upstream attempt failed requestId=${requestId} method=${context.method} path=${context.path} target=${formatTarget(target)} clientProtocol=${protocol} attempt=${attemptIndex} failover=${conversionFailure === null && !response.headersSent && nextTarget !== undefined} nextTarget=${nextTarget === undefined ? 'none' : formatTarget(nextTarget)} error=${lastError.message}`,
     )
     await recordFailedAttempt({
       runtime,
@@ -242,7 +248,6 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
       captureRequestContent,
     })
 
-    const recordedOutcome = error instanceof RecordedAttemptError ? error.outcome : null
     // 上游明确回了「请求不成立」的状态码、随后正文搬运中断时，这条尝试是作为异常
     // （`RecordedAttemptError`）抛出来的，不会经过 `onFailover`。事实不能因此漏收：
     // 漏掉它，客户端就会在这个永远不可能成功的请求上拿到一个「可重试」的 502。
@@ -257,6 +262,26 @@ function createErrorHandler(runtime: FinalizerRuntime): RequestFinalizer['onErro
       console.debug(
         `[proxy] health failure recorded requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} scope=${healthScope} status=${recordedOutcome?.statusCode ?? 'none'}`,
       )
+    }
+    // 整包正文已经从上游回来，转换失败不能再换一家。头还没写出，所以这里直接回 502。
+    if (conversionFailure && !response.headersSent) {
+      console.warn(
+        `[proxy] response conversion failed requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} upstreamStatus=${recordedOutcome?.statusCode ?? 'none'} error=${conversionFailure.message}`,
+      )
+      await requestLogger.finalizeLocalErrorContent(response.fail(
+        502,
+        conversionFailure.code,
+        `Failed to convert the upstream response from ${conversionFailure.from} to ${conversionFailure.to}`,
+      ))
+      await requestLogger.finalizeRequestLog('failed', startedAt)
+      settleLive({
+        live,
+        status: 'failed',
+        kind: 'request.failed',
+        level: 'error',
+        detail: { attempt: attemptIndex + 1, errorCode: conversionFailure.code, httpStatus: 502 },
+      })
+      return false
     }
     if (response.headersSent) {
       if (error instanceof RecordedAttemptError && error.outcome.clientResponse) {

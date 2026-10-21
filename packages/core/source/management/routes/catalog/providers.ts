@@ -125,7 +125,10 @@ const UpdateProviderSchema = ProviderSchema.pick({
 async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id, apiKey, endpoints, ...updates } = UpdateProviderSchema.parse(body)
   const current = await getProvider(id)
-  if (!current) {
+  // `getProvider` 会把软删除的行也读出来（观测侧要标出「这一家已经删了」）。
+  // 更新不能跟着写：设置 upsert 不看 `deletedTime`，带 `endpoints` 时还会把已删端点复活。
+  // 这一步必须排在 `replaceProviderEndpoints` 和写密钥之前。
+  if (!current || current.deletedTime !== null) {
     sendError(res, 'NOT_FOUND', `Provider not found: ${id}`, 404, { providerId: id })
     return
   }

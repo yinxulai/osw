@@ -275,6 +275,49 @@ describe('logical model store', () => {
       .toMatchObject({ enabled: true })
   })
 
+  // 新建行省略 enabled 时抄模型自身的开关。默认 true 会把已停用的模型存成启用绑定。
+  it('copies the provider model enabled flag when a new policy omits enabled', async () => {
+    const provider = await createProvider({
+      name: 'Omitted Enabled Provider',
+      apiKeyReference: 'key_omitted_enabled',
+      timeoutMilliseconds: 15_000,
+      enabled: true,
+    })
+    const disabled = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'already-off',
+      priority: 1,
+      enabled: false,
+      endpoints: [{
+        protocol: 'openai-completions',
+        endpointUrl: 'https://example.com/v1/chat/completions',
+        customAuthHeader: null,
+        protocolConversionEnabled: false,
+      }],
+    })
+    const enabled = await createProviderModelRoute({
+      providerId: provider.id,
+      modelName: 'already-on',
+      priority: 1,
+      enabled: true,
+      endpoints: [{
+        protocol: 'openai-completions',
+        endpointUrl: 'https://example.com/v1/chat/completions',
+        customAuthHeader: null,
+        protocolConversionEnabled: false,
+      }],
+    })
+
+    const logicalModelRecordId = await defaultRecordId()
+    expect(await upsertSchedulingPolicy({ logicalModelId: logicalModelRecordId, providerModelId: disabled.id, priority: 4 }))
+      .toMatchObject({ priority: 4, enabled: false })
+    expect(await listSchedulingPolicies(logicalModelRecordId)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ providerModelId: disabled.id, priority: 4, enabled: false }),
+    ]))
+    expect(await upsertSchedulingPolicy({ logicalModelId: logicalModelRecordId, providerModelId: enabled.id, priority: 2 }))
+      .toMatchObject({ priority: 2, enabled: true })
+  })
+
   it('persists the dragged logical model order across reads', async () => {
     const alpha = await createLogicalModel({ modelId: 'alpha', description: '' })
     const beta = await createLogicalModel({ modelId: 'beta', description: '' })

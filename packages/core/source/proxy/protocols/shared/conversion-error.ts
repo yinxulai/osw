@@ -18,3 +18,15 @@ export class ProtocolConversionError extends Error {
     this.cause = cause
   }
 }
+
+/**
+ * 上游已经以 2xx 交回整包正文，响应转换却失败。
+ *
+ * 这份数据已经产生。调用方要记录失败并回 502，不能再换候选。
+ */
+export function terminalWholeBodyConversion(failure: unknown, statusCode: number): ProtocolConversionError | null {
+  if (!(failure instanceof ProtocolConversionError)) return null
+  if (failure.direction !== 'response' || failure.phase !== 'whole-body') return null
+  if (!(statusCode >= 200 && statusCode < 300)) return null
+  return failure
+}

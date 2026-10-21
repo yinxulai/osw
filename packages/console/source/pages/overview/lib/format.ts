@@ -1,4 +1,4 @@
-import { trendIntervalParts } from '@common/analytics-buckets'
+import { resolveAnalyticsBuckets, trendIntervalParts } from '@common/analytics-buckets'
 import type { AnalyticsRange } from '@common/schemas'
 import type { AppTranslator } from '@/i18n/provider'
 
@@ -48,22 +48,13 @@ function formatBillDateTime(locale: string, value: Date) {
 /**
  * 账单抬头上的数据区间。
  *
- * 区间口径与页面的 range 开关一致：`today` 从当天零点起，`7d` / `30d` 含当天往回数，
- * 终点就是这次的打印时刻。
+ * 起点跟统计查询是同一扇窗（`resolveAnalyticsBuckets`）：`today` 从本地零点起，
+ * `7d` / `30d` 从打印时刻往前推 7 或 30 个 24 小时。用日历日零点会把起点印晚将近一天，
+ * Token 合计却仍按更早的那一窗算。终点就是这次的打印时刻。
  */
 export function formatBillRangeLabel(locale: string, range: AnalyticsRange, endAt: Date): string {
   const end = new Date(endAt)
-  const start = new Date(endAt)
-
-  if (range === 'today') {
-    start.setHours(0, 0, 0, 0)
-  } else if (range === '7d') {
-    start.setDate(start.getDate() - 6)
-    start.setHours(0, 0, 0, 0)
-  } else {
-    start.setDate(start.getDate() - 29)
-    start.setHours(0, 0, 0, 0)
-  }
+  const start = new Date(resolveAnalyticsBuckets(range, endAt.getTime()).sinceMs)
 
   return `${formatBillDateTime(locale, start)} - ${formatBillDateTime(locale, end)}`
 }

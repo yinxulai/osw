@@ -18,7 +18,7 @@ import { createRuntimeConfig } from '@common/runtime-config'
 import { getRuntimeProfile } from '@common/runtime-profile'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
-import { AutoLaunchManager } from './auto-launch'
+import { AutoLaunchManager, shouldStartHidden } from './auto-launch'
 import { UpdaterManager, type UpdateState } from './updater'
 import { nativeTranslator, startNativeLanguageSync } from './i18n'
 import { installWindowShortcuts } from './window-actions'
@@ -87,17 +87,11 @@ let updaterManager: UpdaterManager | null = null
 let fatalErrorShown = false
 
 /**
- * 开机自启时隐藏启动（`auto-launch.ts` 里声明了 `openAsHidden`）。
- *
- * macOS 有 `app.wasOpenedAsHidden`；Windows 通过登录项参数 `--hidden` 表达，Linux 的登录项
- * 由打包产物生成，同样按参数传。两者都没有时按正常启动——用户双击图标就是要看窗口。
+ * 开机自启时不显示主窗口。必须等 `app.ready` 之后再赋值：macOS 的 `wasOpenedAtLogin`
+ * 在 `applicationDidFinishLaunching` 里才写上，模块顶层去读会把登录启动当成普通启动。
+ * 判断本身见 `shouldStartHidden`。
  */
-const startHidden = readWasOpenedAsHidden() || process.argv.includes('--hidden')
-
-/** `app.wasOpenedAsHidden` 只存在于 macOS，且不在当前 Electron 的类型定义里。 */
-function readWasOpenedAsHidden(): boolean {
-  return (app as unknown as { wasOpenedAsHidden?: boolean }).wasOpenedAsHidden === true
-}
+let startHidden = false
 
 // Windows 任务栏图标依赖 AppUserModelID；必须在创建任何窗口前设置，
 // 否则系统会把进程归到默认 Electron 应用，导致显示默认图标。
@@ -456,6 +450,11 @@ function focusExistingInstance(): void {
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
+  startHidden = shouldStartHidden({
+    platform: process.platform,
+    argv: process.argv,
+    wasOpenedAtLogin: app.getLoginItemSettings().wasOpenedAtLogin,
+  })
   app.setAboutPanelOptions({
     applicationName: runtimeProfile.applicationName,
     applicationVersion: app.getVersion(),

@@ -1,5 +1,5 @@
 import type { ModelTestMode } from '@common/schemas'
-import { padPrompt } from '../shared/diagnostic-body'
+import { DEFAULT_MAX_TOKENS, padPrompt, resolveDiagnosticPrompt, SPEED_MAX_TOKENS } from '../shared/diagnostic-body'
 
 export interface DiagnosticBodyOptions {
   prompt?: string
@@ -8,12 +8,11 @@ export interface DiagnosticBodyOptions {
 }
 
 export function buildDiagnosticBody(modelId: string, converted: boolean, mode: ModelTestMode = 'streaming', options: DiagnosticBodyOptions = {}): string {
-  const basePrompt = options.prompt?.trim() || (mode === 'speed' ? 'Count from 1 to 200, separated by single spaces. Output only the numbers.' : 'Hi')
-  const prompt = padPrompt(basePrompt, options.inputLength ?? 0)
+  const prompt = padPrompt(resolveDiagnosticPrompt(mode, options.prompt), options.inputLength ?? 0)
   const stream = options.stream ?? true
   return JSON.stringify({
     model: modelId,
-    ...(converted ? {} : { max_tokens: mode === 'speed' ? 512 : 16 }),
+    ...(converted ? {} : { max_tokens: mode === 'speed' ? SPEED_MAX_TOKENS : DEFAULT_MAX_TOKENS }),
     ...(stream ? { stream: true } : {}),
     messages: [{ role: 'user', content: prompt }],
   })

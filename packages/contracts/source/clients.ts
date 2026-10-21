@@ -106,6 +106,7 @@ export type {
   AgentClientModelSlot,
   AgentClientProtocol,
   AgentClientPlatform,
+  AgentClientPlatformPath,
   AgentClientProviderEntryTemplate,
   AgentClientTemplateContext,
   AgentClientTemplateValue,

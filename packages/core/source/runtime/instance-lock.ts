@@ -142,12 +142,49 @@ export async function acquireInstanceLock(dataDir: string): Promise<AcquireLockR
 }
 
 /**
+ * 已经进了 `refreshHeartbeat`、但还没写完的次数。
+ *
+ * `clearInterval` 只能取消还没开始的那一拍。停在 `writeFile` / `rename` 上的那一次
+ * 仍会在锁被删掉之后把旧 pid 写回去。释放必须等它结束（写成或失败都算结束）再删，
+ * 否则 `stop` 返回后这次 `rename` 还能把文件造出来。
+ */
+let pendingHeartbeats = 0
+const heartbeatWaiters: Array<() => void> = []
+
+function trackHeartbeat(start: () => Promise<void>): Promise<void> {
+  // 先计入，再去读盘。返回前没有 `await`，调用方拿到 promise 时这次写入已经算进行中。
+  pendingHeartbeats += 1
+  const work = start()
+  // 成功和失败都要放行等待者。写失败如果把拒绝留在这条链上，`releaseInstanceLock`
+  // 会一直等，`stop` 就不再往下走；调用方拿到的仍是原来的那个 promise。
+  void work.then(() => undefined, () => undefined).finally(() => {
+    pendingHeartbeats -= 1
+    if (pendingHeartbeats > 0) return
+    const waiters = heartbeatWaiters.splice(0)
+    for (const resolve of waiters) resolve()
+  })
+  return work
+}
+
+function waitForInFlightHeartbeat(): Promise<void> {
+  if (pendingHeartbeats === 0) return Promise.resolve()
+  return new Promise(resolve => {
+    heartbeatWaiters.push(resolve)
+  })
+}
+
+/**
  * 释放锁。
  *
- * 释放前先确认持有者还是自己：别人（或上一个进程）留下的残留被清算之后，可能已经有
- * 新实例抢到了这把锁，那时把别人的锁删掉会直接打开「双实例」的口子。
+ * 先等进行中的心跳结束，再确认持有者还是自己。别人（或上一个进程）留下的残留被清算
+ * 之后，可能已经有新实例抢到了这把锁，那时把别人的锁删掉会直接打开「双实例」的口子。
+ * 心跳落地前不删文件：这次 `rename` 改的仍是自己的锁，等它结束再删，`stop` 返回后
+ * 这个进程不会再碰这份文件。
  */
 export async function releaseInstanceLock(dataDir: string): Promise<void> {
+  // 没有进行中的心跳时保持原来的同步路径，不额外让出一次微任务。
+  if (pendingHeartbeats > 0) await waitForInFlightHeartbeat()
+
   const filePath = lockFilePath(dataDir)
   const existing = await readLockHolder(filePath)
   if (existing !== null && existing.pid !== process.pid) return
@@ -201,8 +238,14 @@ export function startInstanceLockHeartbeat(dataDir: string): () => void {
  *
  * 先写临时文件再 rename：`stop` / `status` 随时可能来读，原地覆写会让它们读到写了一半
  * 的 JSON，而「读不出持有者」在宽限期内会被当成「有人在动」——那会变成一次假拒绝。
+ *
+ * 计数加在本函数返回之前，中间不让出事件循环。调用方拿到 promise 时，这次写入已经算进行中。
  */
-export async function refreshHeartbeat(dataDir: string): Promise<void> {
+export function refreshHeartbeat(dataDir: string): Promise<void> {
+  return trackHeartbeat(() => writeHeartbeat(dataDir))
+}
+
+async function writeHeartbeat(dataDir: string): Promise<void> {
   const filePath = lockFilePath(dataDir)
   const existing = await readLockHolder(filePath)
   if (existing === null || existing.pid !== process.pid) return

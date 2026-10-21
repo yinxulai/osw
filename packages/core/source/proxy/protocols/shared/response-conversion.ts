@@ -108,9 +108,15 @@ export function createSseConverter(clientProtocol: Protocol, endpointProtocol: P
   /** 流结束时的收尾事件，各方向按需实现。 */
   const finishEvents = (): Json[] => events.finish()
 
+  // 目标协议把事件名放在载荷的 `type` 上，也要写到 SSE 的 `event:` 行。
+  // 缺这一行时 Anthropic SDK 会跳过 `event` 为空的帧，转换后的流一个事件都读不到。
+  // Responses 的流式样例同样是 `event:` 加同名 `type`。没有字符串 `type` 的 Chat Completions 分块仍只写 `data:`。
   const serializeEvents = (events: Json[]): string => {
     let out = ''
-    for (const item of events) out += serializeSseEvent({ data: JSON.stringify(item) })
+    for (const item of events) {
+      const event = typeof item.type === 'string' ? item.type : undefined
+      out += serializeSseEvent({ event, data: JSON.stringify(item) })
+    }
     return out
   }
 

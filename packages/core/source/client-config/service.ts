@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { AGENT_CLIENT_DEFINITIONS, agentClientFieldsOfFile, findAgentClient, findAgentClientFile, type AgentClientDefinition, type AgentClientFileDefinition } from '@common/clients'
+import { AGENT_CLIENT_DEFINITIONS, agentClientFieldsOfFile, findAgentClient, findAgentClientFile, resolveAgentClientSlotValue, type AgentClientDefinition, type AgentClientFileDefinition, type AgentClientModelSlot } from '@common/clients'
 import { CLIENT_CONFIG_SAMPLE_API_KEY } from '@common/client-config'
 import type {
   ClientConfigApplyResult,
@@ -30,7 +30,7 @@ import { getSettings } from '../database/settings-store'
 import { ConfigParseError, createConfigEditor, supportsAutoFill, type ConfigEditor } from './formats'
 import { clientSupportsCurrentEnvironment, currentLocalProviderIdentity } from './environment'
 import { resolveClientConfigPath } from './paths'
-import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, stripModelPrefix, type ClientApplyContext, type ClientApplyRule, type ClientFieldRole } from './rules'
+import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, type ClientApplyContext, type ClientApplyRule } from './rules'
 import { currentShellPlatform, defaultShellProfileCandidates, envFileHeader, managedBlock, resolveShellProfilePath, stripEnvFileHeader, upsertManagedBlock, type ShellPlatform } from './shell'
 import { diffClientConfigContent } from './version-diff'
 
@@ -490,8 +490,10 @@ function writableClientConfigFiles(client: AgentClientDefinition, rule: ClientAp
  * 取舍（本地服务不校验模型名，任何非空名字都能透传），我们只负责把「还没填」的补上。
  * 读不出来（格式不支持、语法坏了、字段不在这个文件里）就落回兜底值。
  */
-async function clientConfigFillValues(target: ClientConfigTarget, client: AgentClientDefinition, rule: ClientApplyRule, defaults: ClientConfigDefaults): Promise<ClientApplyValues> {
+async function clientConfigFillValues(target: ClientConfigTarget, client: AgentClientDefinition, defaults: ClientConfigDefaults): Promise<ClientApplyValues> {
   const values: ClientApplyValues = { baseUrl: defaults.origin, apiKey: defaults.apiKey, model: defaults.model }
+  const apply = client.apply
+  if (!apply) return values
 
   /**
    * 回读某个角色当前写着的值，在**该客户端的全部文件**里找。
@@ -500,13 +502,18 @@ async function clientConfigFillValues(target: ClientConfigTarget, client: AgentC
    * settings.json，provider 表项在 models.json），只看本次要写的那个文件时，写 models.json 就
    * 读不到用户选好的模型名，于是会把它悄悄换回兜底值。顺序上先看目标文件（就地的声明优先），
    * 再看其余文件；「内容坏了 / 格式不支持 / 字段不在这个文件里」都算这一类读不到，跳过继续找。
+   *
+   * 同一个角色往往有多个字段（Claude Code 的主模型是顶层 `model`，也是 `env.ANTHROPIC_MODEL`
+   * 和一串别名）。取值与界面回读走同一条路：把这一文件读到的标量交给 `resolveAgentClientSlotValue`，
+   * 按声明顺序取第一个非空值。只读角色的第一个字段时，文件里没有顶层 `model` 就会把已经写在
+   * `ANTHROPIC_MODEL` 上的名字当成没填，整组模型角色都被写成兜底值。
    */
-  const read = async (role: ClientFieldRole): Promise<string | null> => {
+  const read = async (role: AgentClientModelSlot): Promise<string | null> => {
     const ordered = [target.file, ...client.files.filter(file => file.path !== target.filePath)]
     for (const file of ordered) {
       if (!supportsAutoFill(file.format)) continue
-      const field = agentClientFieldsOfFile(client, file.path).find(item => rule.roles[item.key] === role)
-      if (!field) continue
+      const fields = agentClientFieldsOfFile(client, file.path)
+      if (!fields.some(item => apply.roles[item.key] === role)) continue
       const path = resolveClientConfigPath(client.key, file.path)
       if (!path) continue
       const raw = await readRaw(path)
@@ -522,8 +529,14 @@ async function clientConfigFillValues(target: ClientConfigTarget, client: AgentC
         // 语法错误会在规划那一步被报出来。
         continue
       }
-      const value = editor.get(field.path)
-      if (value && value.trim()) return stripModelPrefix(rule, value)
+      // 与 `readClientConfigFile` 同一份回读：标量进 `detected`，槽位再按声明顺序取第一个非空值。
+      const detected: Record<string, string> = {}
+      for (const field of fields) {
+        const value = editor.get(field.path)
+        if (value !== null) detected[field.key] = value
+      }
+      const resolved = resolveAgentClientSlotValue(apply, detected, role, currentLocalProviderIdentity())
+      if (resolved.trim()) return resolved
     }
     return null
   }
@@ -563,7 +576,7 @@ async function readClientConfigCoverage(client: AgentClientDefinition, defaults:
     const raw = await readRaw(target.resolvedPath)
     if (raw.exists) exists = true
     try {
-      const values = await clientConfigFillValues(target, client, rule, defaults)
+      const values = await clientConfigFillValues(target, client, defaults)
       const plan = planClientConfigChanges(target, raw.content, values, rule, client)
       pendingChanges += plan.changes.length
     } catch {
@@ -659,7 +672,7 @@ export async function applyClientConfigDefaults(clientKey?: string): Promise<Cli
     for (const file of files) {
       try {
         const target = resolveClientConfigTarget(client.key, file.path)
-        const values = await clientConfigFillValues(target, client, rule, defaults)
+        const values = await clientConfigFillValues(target, client, defaults)
         const result = await applyClientConfigOverrides(client.key, file.path, values)
         changeCount += result.changes.length
         if (result.backedUp) newVersions += 1

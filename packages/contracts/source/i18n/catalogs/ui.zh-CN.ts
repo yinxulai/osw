@@ -1990,6 +1990,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.update.checking': '检查中…',
   'settings.update.upToDateToast': '已是最新版本',
   'settings.update.availableToast': '发现新版本 v{version}',
+  'settings.update.readyToInstallToast': 'v{version} 已下载，可以立即安装',
   'settings.update.checkFailed': '检查更新失败',
   'settings.update.download': '下载更新',
   'settings.update.downloadedToast': '安装包已下载完成',

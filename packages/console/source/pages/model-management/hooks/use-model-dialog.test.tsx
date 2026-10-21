@@ -27,6 +27,9 @@ const state = vi.hoisted(() => ({
   fetchResults: new Map<string, Array<{ id: string }>>(),
   toasts: [] as Array<{ level: 'success' | 'error'; message: string; params?: unknown }>,
   connectivityPayloads: [] as Array<Record<string, unknown>>,
+  // 默认逻辑模型及其调度绑定。模型列表上的 `priority` 是占位 0，创建时的优先级必须从这里取。
+  logicalModels: [] as Array<{ id: string; modelId: string }>,
+  bindingsByLogicalModelId: {} as Record<string, Array<{ priority: number }>>,
 }))
 
 vi.mock('@/api/models', () => ({
@@ -39,6 +42,13 @@ vi.mock('@/api/models', () => ({
       state.updatePayloads.push({ id, ...payload })
       return { success: true, data: { id } }
     },
+    listByLogicalModel: async (logicalModelId: string) => ({
+      success: true,
+      data: state.bindingsByLogicalModelId[logicalModelId] ?? [],
+    }),
+  },
+  logicalModelApi: {
+    list: async () => ({ success: true, data: state.logicalModels }),
   },
 }))
 
@@ -139,6 +149,8 @@ beforeEach(() => {
   state.fetchResults.clear()
   state.toasts.length = 0
   state.connectivityPayloads.length = 0
+  state.logicalModels = []
+  state.bindingsByLogicalModelId = {}
 })
 
 /** 协议下拉的真实顺序（与 `ProtocolSchema` 同序）。 */
@@ -362,7 +374,10 @@ describe('useModelDialog 保存的编排', () => {
   }
 
   it('批量新增时优先级从现有最大值 +1 起递增', async () => {
-    const existing = [{ ...MODEL, id: 'pm_9', modelName: 'old', priority: 7 }]
+    state.logicalModels = [{ id: 'lm_default', modelId: 'default' }]
+    state.bindingsByLogicalModelId = { lm_default: [{ priority: 2 }, { priority: 7 }] }
+    // 列表上的 priority 是占位 0，不能拿来当最大值。
+    const existing = [{ ...MODEL, id: 'pm_9', modelName: 'old', priority: 0 }]
     const view = renderHook(() => useModelDialog({
       providers: [PROVIDER],
       models: existing,
@@ -377,6 +392,35 @@ describe('useModelDialog 保存的编排', () => {
 
     expect(state.createPayloads.map(payload => payload.modelName)).toEqual(['new-a', 'new-b'])
     expect(state.createPayloads.map(payload => payload.priority)).toEqual([8, 9])
+  })
+
+  it('已排好的默认逻辑模型上，新模型接在最大优先级之后，不用列表里的占位 0', async () => {
+    // 模型管理页投影的 priority 恒为 0。故障转移顺序在默认逻辑模型的绑定上，
+    // 而且可以包含别的供应商；另一个逻辑模型上的优先级与这次落点无关。
+    state.logicalModels = [
+      { id: 'lm_other', modelId: 'claude' },
+      { id: 'lm_default', modelId: 'default' },
+    ]
+    state.bindingsByLogicalModelId = {
+      lm_default: [{ priority: 1 }, { priority: 5 }],
+      lm_other: [{ priority: 99 }],
+    }
+    const existing = [{ ...MODEL, id: 'pm_9', modelName: 'old', priority: 0 }]
+    const view = renderHook(() => useModelDialog({
+      providers: [PROVIDER],
+      models: existing,
+      selectedProvider: { id: 'prov_1' },
+      reload: async () => {},
+    }))
+    act(() => { view.result.current.openModelDialog(undefined, 'prov_1') })
+    act(() => { view.result.current.updateProtocolEntry(0, { enabled: true }) })
+    act(() => { view.result.current.toggleModelSelection('new-a', true) })
+    act(() => { view.result.current.toggleModelSelection('new-b', true) })
+    await act(async () => { await view.result.current.saveModel() })
+
+    expect(state.createPayloads.map(payload => payload.modelName)).toEqual(['new-a', 'new-b'])
+    expect(state.createPayloads.map(payload => payload.priority)).toEqual([6, 7])
+    expect(state.createPayloads.every(payload => !('logicalModelId' in payload))).toBe(true)
   })
 
   it('没有既有模型时优先级从 1 起', async () => {

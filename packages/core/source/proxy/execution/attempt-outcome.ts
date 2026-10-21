@@ -65,14 +65,15 @@ export interface DeliveredAttemptOutcome extends AttemptOutcomeBase {
 }
 
 /**
- * 没有向客户端交付任何字节、可以继续尝试其它候选的结局。
+ * 没有向客户端交付上游正文的结局。
  *
- * `clientResponse` 被显式禁止：放弃的响应可能已经完整读过，但客户端从未收到它，
- * 不能因为上游有正文就让请求级记录看起来像成功返回过。
+ * `failover` 可以继续尝试其它候选。`terminal` 不能：上游已经给出 2xx，
+ * 但整包协议转换失败，数据已经产生，收尾层要回 502 并停在这次尝试。
+ * 两种情况客户端都没收到上游正文，因此这里不带 `clientResponse`。
  */
 export interface DiscardedAttemptOutcome extends AttemptOutcomeBase {
   readonly delivery: 'discarded'
-  readonly disposition: 'failover'
+  readonly disposition: 'failover' | 'terminal'
   readonly clientResponse?: never
 }
 

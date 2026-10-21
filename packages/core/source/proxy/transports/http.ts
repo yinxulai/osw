@@ -17,6 +17,7 @@ export interface HttpTransportOptions {
   /**
    * 上游两个数据块之间允许的最长静默时间（毫秒），<=0 表示不超时。
    * 由调用方注入设置读取，传输本身不认识设置中心。
+   * 消费者背压把上游暂停住的时间不算在内：那不是上游沉默。
    */
   resolveIdleTimeoutMilliseconds(): number | Promise<number>
 }
@@ -28,7 +29,8 @@ export interface HttpTransportOptions {
  * - 传输层不解析任何字节，只把上游响应切成 `head` / `data` / `end` / `error` 帧；
  * - `content-length` 一定与实际待发字节数一致（修改器改完正文后可能忘了同步这个头）；
  * - 消费者提前 `break`（例如客户端断开、failover 提前放弃）时立刻销毁上游连接，不留悬挂请求；
- * - 用暂停上游流代替无界缓冲，让慢客户端自然形成背压。
+ * - 用暂停上游流代替无界缓冲，让慢客户端自然形成背压；
+ * - 背压暂停的时间不算空闲。空闲只衡量上游还能发数据时，两次到达之间的间隔。
  */
 export function createHttpTransport(options: HttpTransportOptions): Transport {
   return {
@@ -59,6 +61,8 @@ function connectHttp(target: UpstreamTarget, exchange: ExchangeView, attempt: At
     let timer: NodeJS.Timeout | null = null
     let idleTimeoutMilliseconds = 0
     let settled = false
+    // 与 FrameQueue 的暂停状态对齐。暂停期间没有新的 `'data'`，计时器要是还在走，到点就会误杀这条流。
+    let upstreamPaused = false
 
     const detachAbort = () => exchange.signal.removeEventListener('abort', onSignalAbort)
     const clearTimer = () => {
@@ -67,9 +71,11 @@ function connectHttp(target: UpstreamTarget, exchange: ExchangeView, attempt: At
     }
     const armTimer = () => {
       clearTimer()
-      if (idleTimeoutMilliseconds <= 0 || queue.closed || !response) return
+      if (idleTimeoutMilliseconds <= 0 || queue.closed || !response || upstreamPaused) return
       timer = setTimeout(() => {
         timer = null
+        // 回调入队之后才被暂停的话，这次触发已经不能代表上游沉默。
+        if (upstreamPaused || queue.closed) return
         response?.destroy(new Error(IDLE_TIMEOUT_MESSAGE))
       }, idleTimeoutMilliseconds)
     }
@@ -103,7 +109,19 @@ function connectHttp(target: UpstreamTarget, exchange: ExchangeView, attempt: At
           return
         }
         response = upstreamResponse
-        queue.bind(upstreamResponse)
+        // 队列在没有消费者等待时暂停上游，取空再恢复。暂停清掉空闲计时，恢复后再从零计算。
+        queue.bind({
+          pause() {
+            upstreamPaused = true
+            upstreamResponse.pause()
+            clearTimer()
+          },
+          resume() {
+            upstreamPaused = false
+            upstreamResponse.resume()
+            armTimer()
+          },
+        })
         settled = true
         resolve({
           frames: queue,

@@ -13,6 +13,12 @@ function parseBody(buffer: Buffer): Record<string, unknown> {
   return JSON.parse(buffer.toString('utf8'))
 }
 
+/** 读出一帧 SSE 的 JSON 载荷。事件名在单独的 `event:` 行上，不能把整帧交给 JSON.parse。 */
+function ssePayload(frame: string) {
+  const data = frame.split('\n').find(line => line.startsWith('data:')) ?? ''
+  return JSON.parse(data.slice(5).trim())
+}
+
 describe('isConvertible', () => {
   it('matches the registered conversion directions', () => {
     expect(isConvertible('openai-completions', 'anthropic-messages')).toBe(true)
@@ -465,7 +471,7 @@ describe('SSE conversion', () => {
       + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":2}}\n\n'
       + 'data: [DONE]\n\n',
     ) + (converter.finish?.() ?? '')
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.map(event => event.type)).toEqual([
       'message_start', 'content_block_start', 'content_block_delta',
       'content_block_stop', 'message_delta', 'message_stop',
@@ -481,7 +487,7 @@ describe('SSE conversion', () => {
       'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
       + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":7,"cache_write_tokens":5}}}\n\n',
     )
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.find(event => event.type === 'message_delta').usage).toEqual({
       input_tokens: 8,
       output_tokens: 2,
@@ -498,7 +504,7 @@ describe('SSE conversion', () => {
       { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '\"x\"}' } }] }, finish_reason: 'tool_calls' }] },
     ]
     const out = chunks.map(chunk => converter.push(`data: ${JSON.stringify(chunk)}\n\n`)).join('') + (converter.finish?.() ?? '')
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.find(event => event.type === 'content_block_start').content_block).toMatchObject({ type: 'tool_use', id: 'call-1', name: 'lookup' })
     expect(events.filter(event => event.type === 'content_block_delta').map(event => event.delta.partial_json)).toEqual(['{\"q\":', '\"x\"}'])
     expect(events.at(-1).type).toBe('message_stop')
@@ -512,7 +518,7 @@ describe('SSE conversion', () => {
       + 'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":"}}\n\n'
       + 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":1,"output_tokens":2}}\n\n',
     )
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events[0].choices[0].delta).toEqual({ role: 'assistant' })
     expect(events[1].choices[0].delta.tool_calls[0]).toMatchObject({ id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '' } })
     expect(events[2].choices[0].delta.tool_calls[0].function.arguments).toBe('{\"q\":')
@@ -524,7 +530,7 @@ describe('SSE conversion', () => {
       'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-cache","model":"claude-test","usage":{"input_tokens":8,"output_tokens":0,"cache_read_input_tokens":7,"cache_creation_input_tokens":5}}}\n\n'
       + 'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}\n\n',
     )
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.at(-1).usage).toEqual({
       prompt_tokens: 20,
       completion_tokens: 4,
@@ -546,7 +552,7 @@ describe('SSE conversion', () => {
     const out = converter.push('tent":"hi"}}]}\n\n')
     const events = out.split('\n\n').filter(Boolean)
     expect(events).toHaveLength(3)
-    expect(JSON.parse(events[2].replace('data: ', ''))).toEqual({
+    expect(ssePayload(events[2])).toEqual({
       type: 'content_block_delta',
       index: 0,
       delta: { type: 'text_delta', text: 'hi' },
@@ -561,7 +567,7 @@ describe('SSE conversion', () => {
   it('flushes a trailing event without a blank line and then closes the message', () => {
     const converter = createSseConverter('anthropic-messages', 'openai-completions')
     converter.push('data: {"choices":[{"delta":{"content":"tail"}}]}\n\n')
-    const flushed = converter.flush().split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const flushed = converter.flush().split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(flushed.map(event => event.type)).toEqual(['content_block_stop', 'message_delta', 'message_stop'])
     expect(converter.finish?.()).toBe('')
 
@@ -569,7 +575,7 @@ describe('SSE conversion', () => {
     partial.push('data: {"choices":[{"delta":{"content":"end"}}]}')
     const tail = partial.flush()
     const tailEvents = tail.split('\n\n').filter(Boolean)
-    expect(JSON.parse(tailEvents[2].replace('data: ', ''))).toEqual({
+    expect(ssePayload(tailEvents[2])).toEqual({
       type: 'content_block_delta',
       index: 0,
       delta: { type: 'text_delta', text: 'end' },
@@ -583,7 +589,7 @@ describe('SSE conversion', () => {
       + 'data: {"choices":[{"delta":{"content":"llo"}}]}\n\n'
       + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}\n\n',
     )
-    const events = out.split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = out.split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.map(event => event.type)).toEqual([
       'response.created',
       'response.in_progress',
@@ -615,13 +621,40 @@ describe('SSE conversion', () => {
   it('does not append a stray DONE marker for Responses clients', () => {
     const converter = createSseConverter('openai-responses', 'openai-completions')
     converter.push('data: {"id":"chat-9","choices":[{"delta":{"content":"x"}}]}\n\n')
-    const events = converter.flush().split('\n\n').filter(Boolean).map(item => JSON.parse(item.replace('data: ', '')))
+    const events = converter.flush().split('\n\n').filter(Boolean).map(item => ssePayload(item))
     expect(events.map(event => event.type)).toEqual([
       'response.output_text.done',
       'response.content_part.done',
       'response.output_item.done',
       'response.completed',
     ])
+  })
+
+  it('writes a string payload type on the SSE event line', () => {
+    const upstream = 'data: {"id":"chat-1","model":"gpt-test","choices":[{"delta":{"content":"hi"}}]}\n\n'
+      + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1}}\n\n'
+
+    const anthropic = createSseConverter('anthropic-messages', 'openai-completions')
+    const anthropicOut = anthropic.push(upstream) + (anthropic.finish?.() ?? '')
+    const [anthropicEvents] = parseSseIncremental(anthropicOut)
+    expect(anthropicEvents.map(event => event.event)).toEqual(anthropicEvents.map(event => JSON.parse(event.data).type))
+    expect(anthropicEvents[0]?.event).toBe('message_start')
+
+    const responses = createSseConverter('openai-responses', 'openai-completions')
+    const responsesOut = responses.push(upstream) + (responses.finish?.() ?? '')
+    const [responsesEvents] = parseSseIncremental(responsesOut)
+    expect(responsesEvents.map(event => event.event)).toEqual(responsesEvents.map(event => JSON.parse(event.data).type))
+    expect(responsesEvents[0]?.event).toBe('response.created')
+
+    const chat = createSseConverter('openai-completions', 'anthropic-messages')
+    const chatOut = chat.push(
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude"}}\n\n'
+      + 'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n',
+    )
+    const [chatEvents] = parseSseIncremental(chatOut)
+    expect(chatEvents.length).toBeGreaterThan(0)
+    expect(chatEvents.every(event => event.event === undefined)).toBe(true)
+    expect(chatOut.startsWith('data: ')).toBe(true)
   })
 })
 

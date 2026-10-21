@@ -1,7 +1,8 @@
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   acquireInstanceLock,
   isProcessAlive,
@@ -153,6 +154,112 @@ describe('refreshHeartbeat', () => {
   it('does nothing when the lock file is gone', async () => {
     await expect(refreshHeartbeat(dataDir)).resolves.toBeUndefined()
     expect(fs.existsSync(lockFilePath(dataDir))).toBe(false)
+  })
+})
+
+describe('heartbeat that overlaps a lock handoff', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** 把锁文件的 `rename` 停在真正改名之前。`finish` 可以改成拒绝，用来模拟写失败。 */
+  function pauseLockRename(): {
+    untilEntered: () => Promise<void>
+    finish: (error?: Error) => void
+    wasMissing: () => boolean
+  } {
+    let entered = false
+    let missing = false
+    let finish: (error?: Error) => void = () => undefined
+    const gate = new Promise<void>((resolve, reject) => {
+      finish = error => {
+        if (error) reject(error)
+        else resolve()
+      }
+    })
+    // 失败路径的 finally 可能在还没人 await 时就拒绝它。先接住，避免这扇门自己变成未处理拒绝。
+    void gate.catch(() => undefined)
+    const realRename = fsp.rename.bind(fsp)
+    vi.spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
+      if (!String(from).endsWith('.tmp')) return realRename(from, to)
+      entered = true
+      await gate
+      missing = !fs.existsSync(String(to))
+      return realRename(from, to)
+    })
+    return {
+      untilEntered: () => vi.waitFor(() => {
+        if (!entered) throw new Error('heartbeat has not reached rename')
+      }),
+      finish,
+      wasMissing: () => missing,
+    }
+  }
+
+  it('release waits for an in-flight heartbeat before deleting the lock', async () => {
+    // clearInterval 取消不了已经进了 rename 的那一次。释放若先删文件，
+    // 这次 rename 会把锁重新写出来，stop 返回之后文件还在。
+    writeLockFile({ pid: process.pid, startedAt: LONG_AGO, heartbeatAt: LONG_AGO })
+    const rename = pauseLockRename()
+    const heartbeat = refreshHeartbeat(dataDir)
+    try {
+      await rename.untilEntered()
+
+      let released = false
+      const releasing = releaseInstanceLock(dataDir).then(() => {
+        released = true
+      })
+      // 不在心跳上等待的释放，读文件再删掉，远快于这一拍。
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const releasedWhileRenameBlocked = released
+      const existedWhileRenameBlocked = fs.existsSync(lockFilePath(dataDir))
+
+      rename.finish()
+      await heartbeat
+      await releasing
+
+      expect(releasedWhileRenameBlocked).toBe(false)
+      expect(existedWhileRenameBlocked).toBe(true)
+      expect(rename.wasMissing()).toBe(false)
+      expect(fs.existsSync(lockFilePath(dataDir))).toBe(false)
+    } finally {
+      rename.finish()
+      await heartbeat
+    }
+  })
+
+  it('still releases when the in-flight heartbeat fails', async () => {
+    // 写失败必须让释放继续走。等待者要是跟着这次拒绝一起挂住，stop 就不再返回。
+    writeLockFile({ pid: process.pid, startedAt: LONG_AGO, heartbeatAt: LONG_AGO })
+    const rename = pauseLockRename()
+    const unhandled: unknown[] = []
+    const onUnhandled = (error: unknown) => {
+      unhandled.push(error)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    const heartbeat = refreshHeartbeat(dataDir)
+    try {
+      await rename.untilEntered()
+
+      let released = false
+      const releasing = releaseInstanceLock(dataDir).then(() => {
+        released = true
+      })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(released).toBe(false)
+
+      rename.finish(new Error('disk full'))
+      await expect(heartbeat).rejects.toThrow('disk full')
+      await releasing
+      await new Promise(resolve => setImmediate(resolve))
+
+      expect(unhandled).toEqual([])
+      expect(fs.existsSync(lockFilePath(dataDir))).toBe(false)
+    } finally {
+      rename.finish(new Error('disk full'))
+      await heartbeat.catch(() => undefined)
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 })
 

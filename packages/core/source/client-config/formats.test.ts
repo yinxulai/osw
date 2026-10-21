@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 import { ConfigParseError, createConfigEditor, supportsAutoFill } from './formats'
 
 /**
@@ -272,6 +273,67 @@ describe('json editor', () => {
     // jsonc 走同一条路：JSON.parse 认不下注释时按「解析失败」处理，而不是去猜注释。
     expect(() => createConfigEditor('jsonc', '{\n  // note\n  "model": "a"\n}')).toThrow(ConfigParseError)
   })
+
+  it('updates only template keys on an existing object and keeps keys the user added', () => {
+    // OpenCode 的 provider 表项会再写一次。用户加在表项上的超时、额外模型不能被模板整段换掉删掉；
+    // 同级的另一个 provider 本来就不在这次写入的区间里。
+    const text = [
+      '{',
+      '  "provider": {',
+      '    "other": { "npm": "keep-me" },',
+      '    "osw": {',
+      '      "npm": "old-package",',
+      '      "options": {',
+      '        "baseURL": "http://old",',
+      '        "timeout": 120000',
+      '      },',
+      '      "models": {',
+      '        "my-model": { "temperature": 0.2 },',
+      '        "extra-model": { "name": "Extra" }',
+      '      }',
+      '    }',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+    const template = {
+      npm: '@ai-sdk/openai-compatible',
+      name: 'OSW',
+      options: { baseURL: 'http://127.0.0.1:9300', apiKey: 'sk-osw' },
+      models: { 'my-model': {} },
+    }
+
+    for (const format of ['json', 'jsonc'] as const) {
+      const editor = createConfigEditor(format, text)
+
+      editor.setObject('provider.osw', template)
+
+      const written = JSON.parse(editor.serialize()) as {
+        provider: {
+          other: { npm: string }
+          osw: {
+            npm: string
+            name: string
+            options: { baseURL: string; apiKey: string; timeout?: number }
+            models: Record<string, { name?: string; temperature?: number }>
+          }
+        }
+      }
+      expect(written.provider.osw.options.timeout, format).toBe(120000)
+      expect(written.provider.osw.options).toMatchObject({ baseURL: 'http://127.0.0.1:9300', apiKey: 'sk-osw' })
+      expect(written.provider.osw.models['extra-model'], format).toEqual({ name: 'Extra' })
+      // 模板给这个模型的是空对象：空对象没有要更新的键，模型上用户自己的字段还在。
+      expect(written.provider.osw.models['my-model'], format).toEqual({ temperature: 0.2 })
+      expect(written.provider.osw.npm, format).toBe('@ai-sdk/openai-compatible')
+      expect(written.provider.osw.name, format).toBe('OSW')
+      expect(written.provider.other, format).toEqual({ npm: 'keep-me' })
+      expect(editor.serialize(), format).toContain('"other": { "npm": "keep-me" }')
+
+      const again = createConfigEditor(format, editor.serialize())
+      again.setObject('provider.osw', template)
+      expect(again.serialize(), format).toBe(editor.serialize())
+    }
+  })
 })
 
 /**
@@ -349,6 +411,14 @@ describe('json entry-list editor', () => {
     editor.setObject('osw', { name: 'osw', vendor: 'customendpoint' })
 
     expect(editor.serialize()).toBe('[{"name":"osw","vendor":"customendpoint"}]')
+  })
+
+  it('keeps keys the user added on an entry when the template object is applied', () => {
+    const editor = createConfigEditor('json', '[{"name":"osw","apiKey":"old","timeout":120000}]', shape)
+
+    editor.setObject('osw', { name: 'osw', apiKey: 'sk-new', vendor: 'customendpoint' })
+
+    expect(JSON.parse(editor.serialize())).toEqual([{ name: 'osw', apiKey: 'sk-new', timeout: 120000, vendor: 'customendpoint' }])
   })
 })
 
@@ -644,6 +714,57 @@ describe('toml editor', () => {
     expect(editor.serialize()).toBe('[model_providers.osw] # 本机服务\nname = "One Switch"\nwire_api = "responses"\n')
   })
 
+  it('strips a trailing comment that sits outside the scalar', () => {
+    const quoted = createConfigEditor('toml', 'model = "gpt-5.4" # work\n')
+    const literal = createConfigEditor('toml', "model = 'gpt-5.4' # work\n")
+    const bare = createConfigEditor('toml', 'model = gpt-5.4 # work\n')
+
+    // 引号外面的 `#` 才是注释。连着引号和注释读进去，写回去就会变成 `model = "\"gpt-5.4\" # work"`。
+    expect(quoted.get('model')).toBe('gpt-5.4')
+    expect(literal.get('model')).toBe('gpt-5.4')
+    expect(bare.get('model')).toBe('gpt-5.4')
+  })
+
+  it('keeps a hash that is inside a quoted scalar', () => {
+    const basic = createConfigEditor('toml', 'model = "gpt-5.4 # work" # real\n')
+    const literal = createConfigEditor('toml', "model = 'raw #1' # note\n")
+    const escaped = createConfigEditor('toml', 'note = "say \\"#\\" there" # real\n')
+    const apostrophe = createConfigEditor('toml', 'model = "it\'s # fine" # real\n')
+
+    expect(basic.get('model')).toBe('gpt-5.4 # work')
+    expect(literal.get('model')).toBe('raw #1')
+    expect(escaped.get('note')).toBe('say "#" there')
+    expect(apostrophe.get('model')).toBe("it's # fine")
+  })
+
+  it('keeps the trailing comment when it rewrites the scalar', () => {
+    const quoted = createConfigEditor('toml', 'model = "gpt-5.4" # work\n')
+    const literal = createConfigEditor('toml', "model = 'gpt-5.4' # work\n")
+    const bare = createConfigEditor('toml', 'model = gpt-5.4  # work\n')
+    const inside = createConfigEditor('toml', 'model = "gpt-5.4 # work" # real\n')
+
+    expect(quoted.get('model')).toBe('gpt-5.4')
+    quoted.set('model', 'gpt-5.4')
+    literal.set('model', 'gpt-5.4')
+    bare.set('model', 'gpt-5.5')
+    inside.set('model', 'gpt-5.4 # next')
+
+    // 表头上的行尾注释留在表头那一行；改值时同样把注释接在新值后面，而不是写进引号里。
+    expect(quoted.serialize()).toBe('model = "gpt-5.4" # work\n')
+    expect(literal.serialize()).toBe('model = "gpt-5.4" # work\n')
+    expect(bare.serialize()).toBe('model = "gpt-5.5"  # work\n')
+    expect(inside.serialize()).toBe('model = "gpt-5.4 # next" # real\n')
+  })
+
+  it('keeps a trailing comment when it rewrites a key inside a table', () => {
+    const editor = createConfigEditor('toml', '[model_providers.osw] # 本机服务\nname = "One Switch" # 显示名\n')
+
+    editor.setObject('model_providers.osw', { name: 'One Switch' })
+
+    // 表头注释本来就留着；表里被改写的那一行也把行尾注释接回去。
+    expect(editor.serialize()).toBe('[model_providers.osw] # 本机服务\nname = "One Switch" # 显示名\n')
+  })
+
   it('does not treat a commented-out header as a table', () => {
     const editor = createConfigEditor('toml', '# [model_providers.osw]\nmodel = "gpt-5"\n')
 
@@ -847,6 +968,75 @@ describe('yaml editor', () => {
     expect(serialized).toContain('    models:\n      gpt-5: {}\n      gpt-4: {}')
     // 表的其它键原样留着。
     expect(serialized).toContain('baseURL: https://api.deepseek.com')
+  })
+
+  it('updates only template keys on an existing mapping and keeps user keys and comments', () => {
+    // DeepSeek Harness 的 provider 路由同样会整段重写。超时、额外键、用户写在那些键上的注释都不是模板的，
+    // 不该被删掉；模板里的数组（models）是这个键的值，整段更新。
+    const text = [
+      '# harness settings',
+      'llm-pi-ai:',
+      '  providers:',
+      '    other:',
+      '      displayName: keep-me # sibling',
+      '    osw:',
+      '      displayName: Old',
+      '      timeout: 120000 # user timeout',
+      '      extra-model: extra',
+      '      baseURL: http://old',
+      '      headers:',
+      '        Authorization: Bearer old',
+      '        X-Team: infra # user header',
+      '      models:',
+      '        - id: old',
+      '',
+    ].join('\n')
+    const template = {
+      displayName: 'OSW',
+      api: 'openai-completions',
+      baseURL: 'http://127.0.0.1:9300/v1',
+      models: [{ id: 'my-model' }],
+      headers: { Authorization: 'Bearer sk-osw' },
+    }
+    const editor = createConfigEditor('yaml', text)
+
+    editor.setObject('llm-pi-ai.providers.osw', template)
+
+    const serialized = editor.serialize()
+    const written = parse(serialized) as {
+      'llm-pi-ai': {
+        providers: {
+          other: { displayName: string }
+          osw: {
+            timeout?: number
+            'extra-model'?: string
+            displayName: string
+            api: string
+            baseURL: string
+            headers: { Authorization: string; 'X-Team'?: string }
+            models: Array<{ id: string }>
+          }
+        }
+      }
+    }
+    const osw = written['llm-pi-ai'].providers.osw
+    expect(osw.timeout).toBe(120000)
+    expect(osw['extra-model']).toBe('extra')
+    expect(osw.headers['X-Team']).toBe('infra')
+    expect(osw.displayName).toBe('OSW')
+    expect(osw.api).toBe('openai-completions')
+    expect(osw.baseURL).toBe('http://127.0.0.1:9300/v1')
+    expect(osw.headers.Authorization).toBe('Bearer sk-osw')
+    expect(osw.models).toEqual([{ id: 'my-model' }])
+    expect(written['llm-pi-ai'].providers.other.displayName).toBe('keep-me')
+    expect(serialized).toContain('# harness settings')
+    expect(serialized).toContain('displayName: keep-me # sibling')
+    expect(serialized).toContain('timeout: 120000 # user timeout')
+    expect(serialized).toContain('X-Team: infra # user header')
+
+    const again = createConfigEditor('yaml', serialized)
+    again.setObject('llm-pi-ai.providers.osw', template)
+    expect(again.serialize()).toBe(serialized)
   })
 
   it('refuses to write into a document that is not a list of entries', () => {

@@ -1,7 +1,8 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { declaredPathForPlatform, expandDeclaredPath, resolveClientConfigPath } from './paths'
+import { AGENT_CLIENT_DEFINITION_BY_KEY } from '@common/clients'
+import { declaredPathForPlatform, envOverrideForPlatform, expandDeclaredPath, resolveClientConfigPath } from './paths'
 
 /**
  * 路径解析——整个功能的**安全边界**。
@@ -142,5 +143,54 @@ describe('declaredPathForPlatform', () => {
 
   it('keeps the canonical path for a file that declares no platform paths', () => {
     expect(declaredPathForPlatform({ path: '~/.claude/settings.json' }, 'linux')).toBe('~/.claude/settings.json')
+  })
+})
+
+describe('VS Code user-data directories', () => {
+  const file = AGENT_CLIENT_DEFINITION_BY_KEY.vscode!.files[0]!
+  const home = resolve('osw-test-home')
+  const configHome = resolve('osw-test-xdg-config')
+  const appData = resolve('osw-test-appdata')
+
+  function expand(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string {
+    return expandDeclaredPath(declaredPathForPlatform(file, platform), envOverrideForPlatform(file, platform), home, env)
+  }
+
+  it('follows XDG_CONFIG_HOME on Linux and APPDATA on Windows', () => {
+    // 两个变量同时存在时各管各的平台：Linux 不读 APPDATA，Windows 不读 XDG_CONFIG_HOME。
+    const env = { XDG_CONFIG_HOME: configHome, APPDATA: appData }
+
+    expect(expand('linux', env)).toBe(join(configHome, 'Code', 'User', 'chatLanguageModels.json'))
+    expect(expand('win32', env)).toBe(join(appData, 'Code', 'User', 'chatLanguageModels.json'))
+  })
+
+  it('keeps the default directory when the variable is missing or blank', () => {
+    expect(expand('linux', {})).toBe(join(home, '.config', 'Code', 'User', 'chatLanguageModels.json'))
+    expect(expand('linux', { XDG_CONFIG_HOME: '   ' })).toBe(join(home, '.config', 'Code', 'User', 'chatLanguageModels.json'))
+    expect(expand('win32', {})).toBe(join(home, 'AppData', 'Roaming', 'Code', 'User', 'chatLanguageModels.json'))
+    expect(expand('win32', { APPDATA: '   ' })).toBe(join(home, 'AppData', 'Roaming', 'Code', 'User', 'chatLanguageModels.json'))
+  })
+
+  it('does not let either variable move the macOS path', () => {
+    expect(expand('darwin', { XDG_CONFIG_HOME: configHome, APPDATA: appData })).toBe(
+      join(home, 'Library', 'Application Support', 'Code', 'User', 'chatLanguageModels.json'),
+    )
+  })
+})
+
+describe('envOverrideForPlatform', () => {
+  it('keeps the file-level override when the platform path is only a string', () => {
+    const file = {
+      path: '~/.config/opencode/opencode.json',
+      envVar: opencodeConfigFile,
+      platformPaths: { linux: '~/.config/opencode/opencode.json' },
+    }
+
+    expect(envOverrideForPlatform(file, 'linux')).toBe(opencodeConfigFile)
+    expect(
+      expandDeclaredPath(declaredPathForPlatform(file, 'linux'), envOverrideForPlatform(file, 'linux'), home, {
+        XDG_CONFIG_HOME: configHome,
+      }),
+    ).toBe(join(configHome, 'opencode', 'opencode.json'))
   })
 })

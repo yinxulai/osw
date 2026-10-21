@@ -63,7 +63,9 @@ const VSCODE_FILE = AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!.path
 const VSCODE_RESOLVED_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!, process.platform)
 
 /**
- * 注册表里声明了「目录可被环境变量改道」的变量名（OpenCode 的 XDG、DeepSeek Harness 的 DSH_HOME）。
+ * 注册表里声明了「目录可被环境变量改道」的变量名。文件级 `envVar`（OpenCode 的 XDG、
+ * DeepSeek Harness 的 `DSH_HOME`）和平台路径自己的 `envVar`（VS Code 的
+ * `XDG_CONFIG_HOME` / `APPDATA`）都算。
  *
  * 这些变量在 CI 上是**预设好的**——GitHub Actions 的 ubuntu runner 就带着 `XDG_CONFIG_HOME`——
  * 于是 `resolveClientConfigPath` 会把文件指到临时主目录之外：写入落到真实用户目录里，
@@ -74,7 +76,16 @@ const VSCODE_RESOLVED_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_
  * 从注册表推导而不是手抄变量名：以后新增带 `envVar` 的客户端会自动被覆盖。
  */
 const ENV_OVERRIDE_NAMES = [
-  ...new Set(AGENT_CLIENT_DEFINITIONS.flatMap(client => client.files.flatMap(file => (file.envVar ? [file.envVar.name] : [])))),
+  ...new Set(
+    AGENT_CLIENT_DEFINITIONS.flatMap(client =>
+      client.files.flatMap(file => [
+        ...(file.envVar ? [file.envVar.name] : []),
+        ...Object.values(file.platformPaths ?? {}).flatMap(entry =>
+          typeof entry !== 'string' && entry.envVar ? [entry.envVar.name] : [],
+        ),
+      ]),
+    ),
+  ),
 ]
 
 let temporaryDirectory: string
@@ -809,6 +820,35 @@ describe('applyClientConfigDefaults', () => {
     const content = readFile(CODEX_FILE)
     expect(content).toContain('model = "gpt-5"')
     expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]`)
+  })
+
+  it('keeps a claude model that is named only on ANTHROPIC_MODEL', async () => {
+    // 顶层 `model` 经常不写，模型名在 `env.ANTHROPIC_MODEL`。一键生效必须沿用这个名字，
+    // 而不是因为角色的第一个字段是空的，就把 model / ANTHROPIC_MODEL / opus 整组写成兜底值 `default`。
+    writeFile(
+      CLAUDE_FILE,
+      `${JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+          ANTHROPIC_MODEL: 'claude-sonnet-4-5',
+          ANTHROPIC_SMALL_FAST_MODEL: 'claude-haiku-4-5',
+        },
+      })}\n`,
+    )
+
+    await applyClientConfigDefaults(CLAUDE)
+
+    const written = JSON.parse(readFile(CLAUDE_FILE)) as { model?: string; env: Record<string, string> }
+    expect(written.model).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_SMALL_FAST_MODEL).toBe('claude-haiku-4-5')
+    expect((await readClientConfigFile(CLAUDE, CLAUDE_FILE)).detected).toMatchObject({
+      model: 'claude-sonnet-4-5',
+      mainModel: 'claude-sonnet-4-5',
+      smallFast: 'claude-haiku-4-5',
+    })
   })
 
   it('fills the harness runtime settings with a route and a default model', async () => {

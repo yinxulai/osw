@@ -1,3 +1,4 @@
+import { StringDecoder } from 'node:string_decoder'
 import type { DeliveryDecisionRef, Frame, HeadFrame, Modifier, ModifierContext } from '@server/proxy/contracts'
 import { bodyDeliveryShape } from '@server/proxy/contracts'
 import type { RequestRewriteRule } from '@common/schemas'
@@ -73,7 +74,10 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
   // 原生直通时没有转换器：整条链路退化成「什么都不做」。
   const adapter = options.adapter.kind === 'conversion' ? options.adapter : null
   let streamConverter: StreamConverter | null = null
-  let wholeBody = ''
+  // 多字节字符会被切在两帧之间。逐帧 toString('utf8') 会把帧尾没写完的字节换成 U+FFFD，
+  // 下一帧对不回去。流式用 StringDecoder 把尾巴留到下一帧，结束时再 flush；整包则先拼字节。
+  const streamDecoder = new StringDecoder('utf8')
+  const wholeBodyChunks: Buffer[] = []
   return {
     id: 'protocol-conversion',
     order: 20,
@@ -94,12 +98,12 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
 
   function accumulateWholeBody(adapter: ProtocolConversionAdapter, frame: Frame): Frame | readonly Frame[] | null {
     if (frame.kind === 'data') {
-      wholeBody += frame.body.toString('utf8')
+      wholeBodyChunks.push(frame.body)
       return null
     }
     if (frame.kind !== 'end') return frame
-    if (!wholeBody) return frame
-    const raw = Buffer.from(wholeBody)
+    const raw = Buffer.concat(wholeBodyChunks)
+    if (raw.length === 0) return frame
     // 整体转换只在拿到完整正文后做一次。失败必须成为一条 error 帧：如果退回上游原文，
     // 客户端会拿到一份协议不匹配的 200，比明确失败更难诊断，也会掩盖上游故障。
     try {
@@ -113,7 +117,9 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
     if (frame.kind === 'head') return frame
     if (frame.kind === 'data') {
       try {
-        const converted = requireConverter(adapter).push(frame.body.toString('utf8'))
+        const text = streamDecoder.write(frame.body)
+        if (!text) return null
+        const converted = requireConverter(adapter).push(text)
         return converted ? [{ kind: 'data', body: Buffer.from(converted) }] : null
       } catch (error) {
         return { kind: 'error', error: new ProtocolConversionError('response', 'stream-chunk', adapter.endpointProtocol, adapter.clientProtocol, error) }
@@ -122,8 +128,11 @@ function createConversionModifier(options: ResponseModifierOptions): Modifier {
     if (frame.kind !== 'end') return frame
     const converter = requireConverter(adapter)
     try {
+      const pending = streamDecoder.end()
+      const pendingOut = pending ? converter.push(pending) : ''
       const tail = adapter.finishStream(converter)
-      return tail ? [{ kind: 'data', body: Buffer.from(tail) }, frame] : frame
+      const combined = `${pendingOut}${tail}`
+      return combined ? [{ kind: 'data', body: Buffer.from(combined) }, frame] : frame
     } catch (error) {
       return { kind: 'error', error: new ProtocolConversionError('response', 'stream-finish', adapter.endpointProtocol, adapter.clientProtocol, error) }
     }

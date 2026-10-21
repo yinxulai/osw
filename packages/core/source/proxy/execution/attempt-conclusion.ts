@@ -5,7 +5,7 @@ import type { AttemptObserver } from '@server/proxy/observers/attempt-observer'
 import type { AttemptLogger, UpstreamContentInput } from '@server/proxy/observability/logging-types'
 import { serializeCapturedHeaders } from '@server/proxy/response/headers'
 import type { UpstreamStatusDisposition } from '@server/proxy/response/response'
-import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
+import { ProtocolConversionError, terminalWholeBodyConversion } from '@server/proxy/protocols/shared/conversion-error'
 import { RecordedAttemptError } from './attempt-errors'
 import { type ClientResponseCapture, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
 import { extractRequestIdFromBody } from './request-id'
@@ -103,10 +103,12 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
     : 'UPSTREAM_STREAM_ERROR'
   const responseConversionFailed = input.failure instanceof ProtocolConversionError
   if (!input.deliveryStarted) {
+    // 整包转换失败时上游已经产出正文：记成不可重试的终态，收尾层回 502，不再切换。
+    const conversionFailure = terminalWholeBodyConversion(input.failure, input.statusCode)
     await input.attemptLogger.finalizeAttempt({
       status: 'failed',
       httpStatus: input.statusCode,
-      retryable: true,
+      retryable: conversionFailure === null,
       upstreamTransport: input.upstreamTransport,
       // 本次尝试已被放弃，客户端未收到任何响应，因此不承担请求级用量。
       servesRequest: false,
@@ -117,7 +119,7 @@ export async function concludeInterruptedAttempt(input: InterruptedAttemptInput)
     })
     throw new RecordedAttemptError(input.failure, {
       delivery: 'discarded',
-      disposition: 'failover',
+      disposition: conversionFailure === null ? 'failover' : 'terminal',
       statusCode: input.statusCode,
       durationMilliseconds: input.durationMilliseconds,
       upstreamRequestId: input.upstreamRequestId,

@@ -175,6 +175,23 @@ export interface AgentClientEnvOverride {
   replaces: string
 }
 
+/**
+ * 同一份文件在某个平台上的落点。
+ *
+ * 字符串只换一条 `~/` 路径，目录覆盖仍用文件级 `envVar`。
+ * 对象可以再带一个只作用于这一条的 `envVar`：文件级 `envVar` 只有一个，
+ * 而不同平台要换掉的前缀不是同一段（VS Code 在 Linux 上是 `XDG_CONFIG_HOME`
+ * 换 `~/.config`，在 Windows 上是 `APPDATA` 换 `~/AppData/Roaming`）。
+ */
+export type AgentClientPlatformPath =
+  | string
+  | {
+      /** 该平台上的 `~/` 相对路径。 */
+      path: string
+      /** 只替换这一条路径声明的前缀。缺省时回落文件级 `envVar`。 */
+      envVar?: AgentClientEnvOverride
+    }
+
 /** 该客户端的一个配置文件。备份/自动管理据此定位与解析。 */
 export interface AgentClientFileDefinition {
   /**
@@ -190,12 +207,13 @@ export interface AgentClientFileDefinition {
    *
    * 只给「同一份配置在不同系统上落在不同目录」的客户端用（VS Code 的 `chatLanguageModels.json`
    * 就在 `Library/Application Support` / `.config` / `AppData/Roaming` 三个位置各住一份）。
-   * 与 `path` 一样必须是 `~/` 相对路径；`envVar` 的覆盖仍然作用于选中的那一条。
+   * 与 `path` 一样必须是 `~/` 相对路径。字符串条目仍用文件级 `envVar`；这一条自己的前缀
+   * 对不上那个变量时，改写成对象并写上自己的 `envVar`（见 `AgentClientPlatformPath`）。
    *
    * `path` 依旧是身份：界面与所有 API 传的、备份与版本挂的都还是 `path`，这个字段只在
    * **把身份展开成真实路径**的那一步（`resolveClientConfigPath`）按当前平台换一份。
    */
-  platformPaths?: Partial<Record<AgentClientPlatform, string>>
+  platformPaths?: Partial<Record<AgentClientPlatform, AgentClientPlatformPath>>
   /** 文件格式。 */
   format: AgentClientConfigFormat
   /**

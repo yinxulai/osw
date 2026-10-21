@@ -1557,7 +1557,7 @@ describe('handleProxyRequest', () => {
     ])
   })
 
-  it('fails over when an entire response cannot be converted, without exposing the upstream payload', async () => {
+  it('returns 502 and does not fail over when a whole-body response cannot be converted', async () => {
     mocks.captureRequestContent = true
     configureSecretStore({
       set: async () => undefined,
@@ -1566,7 +1566,7 @@ describe('handleProxyRequest', () => {
     })
     const invalidHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end('raw-unconverted-upstream-body')
+      res.end('not-json')
     })
     const validHandler = vi.fn((_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -1591,21 +1591,33 @@ describe('handleProxyRequest', () => {
       body: JSON.stringify({ model: 'default', max_tokens: 32, messages: [{ role: 'user', content: 'hi' }] }),
     })
 
-    expect(response.status).toBe(200)
+    // 上游已经以 200 交出整包正文。转换失败只能记日志并回 502，不能改试下一个候选。
+    expect(response.status).toBe(502)
     const text = await response.text()
-    expect(JSON.parse(text).content).toEqual([{ type: 'text', text: 'fallback' }])
-    expect(text).not.toContain('raw-unconverted-upstream-body')
+    expect(JSON.parse(text)).toEqual({
+      success: false,
+      errorCode: 'PROTOCOL_CONVERSION_FAILED',
+      errorMessage: 'Failed to convert the upstream response from openai-completions to anthropic-messages',
+    })
+    expect(text).not.toContain('not-json')
     expect(invalidHandler).toHaveBeenCalledOnce()
-    expect(validHandler).toHaveBeenCalledOnce()
-    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(validHandler).not.toHaveBeenCalled()
+    expect(mocks.createRequestAttempt).toHaveBeenCalledTimes(1)
+    expect(mocks.createRequestAttempt).toHaveBeenCalledWith(expect.objectContaining({
       httpStatus: 200,
       status: 'failed',
-      retryable: true,
+      retryable: false,
       errorCode: 'PROTOCOL_CONVERSION_FAILED',
     }))
-    expect(mocks.createRequestAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      status: 'success',
-      errorCode: null,
+    // 健康度仍记在这个模型上：回了无法转换的 200，不代表模型健康。
+    expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_invalid_conversion')
+    expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_valid_conversion')
+    expect(mocks.markProviderFailure).not.toHaveBeenCalled()
+    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
+    expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
+      captureStatus: 'captured',
+      responseStatus: 502,
+      responseBody: text,
     }))
   })
 
@@ -1757,7 +1769,10 @@ describe('handleProxyRequest', () => {
     expect(requestUpdate).toEqual(expect.objectContaining({ captureStatus: 'captured', responseStatus: 200 }))
     const convertedCapture = JSON.parse(String(requestUpdate?.responseBody)) as { schemaVersion: number; chunks: string[] }
     expect(convertedCapture.schemaVersion).toBe(1)
-    const convertedEvents = convertedCapture.chunks.join('').split('\n\n').filter(Boolean).map(event => JSON.parse(event.replace('data: ', '')))
+    const convertedEvents = convertedCapture.chunks.join('').split('\n\n').filter(Boolean).map(event => {
+      const data = event.split('\n').find(line => line.startsWith('data:')) ?? ''
+      return JSON.parse(data.slice(5).trim())
+    })
     expect(convertedEvents.map(event => event.type)).toEqual([
       'message_start', 'content_block_start', 'content_block_delta',
       'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop',

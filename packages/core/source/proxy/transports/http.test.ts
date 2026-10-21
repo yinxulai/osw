@@ -124,6 +124,41 @@ describe('http transport', () => {
     })
   })
 
+  // 消费者每拿到一帧数据就停 150ms，长于 40ms 的空闲设定；上游每 10ms 仍在写。
+  // 停下来的这段时间上游是被队列暂停的，不是上游没数据。空闲超时不该把这条流掐掉。
+  it('does not idle-timeout an upstream paused for a slow consumer', async () => {
+    await withServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      const timer = setInterval(() => {
+        if (!response.writableEnded && !response.destroyed) response.write('data: tick\n\n')
+      }, 10)
+      response.on('close', () => clearInterval(timer))
+    }, async url => {
+      const connection = await transportWith(40).connect(createTarget(url.toString()), createExchange('payload'), ATTEMPT)
+      const iterator = connection.frames[Symbol.asyncIterator]()
+      const seen: Frame[] = []
+      try {
+        let dataFrames = 0
+        while (dataFrames < 3) {
+          const next = await iterator.next()
+          if (next.done) break
+          seen.push(next.value)
+          if (next.value.kind === 'error' || next.value.kind === 'end') break
+          if (next.value.kind === 'data') {
+            dataFrames += 1
+            await new Promise(resolve => setTimeout(resolve, 150))
+          }
+        }
+        const failure = seen.find((frame): frame is Frame & { kind: 'error' } => frame.kind === 'error')
+        expect(failure?.error.message).toBeUndefined()
+        expect(dataFrames).toBe(3)
+      } finally {
+        connection.abort()
+        await iterator.return?.()
+      }
+    })
+  })
+
   it('ends with an error frame when the upstream drops the connection mid-body', async () => {
     // 上游声明了 `content-length` 却只发一半就掐连接：此时 `end` 与 `error` 都不会来。
     // 不按 `close` 收尾，帧序列就永远等不到终止帧，消费者会一直挂到客户端自己放弃。

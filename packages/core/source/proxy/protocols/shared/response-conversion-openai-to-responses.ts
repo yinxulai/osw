@@ -1,3 +1,4 @@
+import { firstNumber } from './usage'
 import { asArray, asNumber, asObject, asString, type Json } from './conversion-utils'
 import type { ToolNameRegistry } from './tool-name-registry'
 
@@ -27,12 +28,15 @@ type ToolItemKind = 'function' | 'custom'
  * image_tokens, text_tokens }`，Responses 的 `input_tokens_details` 只有
  * `{ cache_write_tokens, cached_tokens }`。两者字段集不同，必须挑字段而不是整体搬运，
  * 否则会输出 Responses 规范里不存在的键。
+ *
+ * 两套明细可能同时出现，并且 Chat 那套是占位 0。每个键单独走 `firstNumber`，
+ * 不能先用 `??` 选中整个对象。
  */
-function openAiInputDetailsToResponses(inputDetails: unknown): Json | undefined {
-  const details = asObject(inputDetails)
-  if (!details) return undefined
-  const cached = asNumber(details.cached_tokens)
-  const created = asNumber(details.cache_write_tokens)
+function openAiInputDetailsToResponses(promptDetails: unknown, inputDetails: unknown): Json | undefined {
+  const prompt = asObject(promptDetails)
+  const input = asObject(inputDetails)
+  const cached = firstNumber(prompt?.cached_tokens, input?.cached_tokens) ?? undefined
+  const created = firstNumber(prompt?.cache_write_tokens, input?.cache_write_tokens) ?? undefined
   if (cached === undefined && created === undefined) return undefined
   return {
     ...(created !== undefined ? { cache_write_tokens: created } : {}),
@@ -42,12 +46,15 @@ function openAiInputDetailsToResponses(inputDetails: unknown): Json | undefined 
 
 function openAiUsageToResponses(usage: Json | null): Json | undefined {
   if (!usage) return undefined
-  const input = asNumber(usage.prompt_tokens) ?? asNumber(usage.input_tokens)
-  const output = asNumber(usage.completion_tokens) ?? asNumber(usage.output_tokens)
+  // 与 Anthropic 方向、用量观察器同一条规则：占位 0 让位给后面的正数，全是 0 才回落到 0。
+  const input = firstNumber(usage.prompt_tokens, usage.input_tokens) ?? undefined
+  const output = firstNumber(usage.completion_tokens, usage.output_tokens) ?? undefined
   if (input === undefined && output === undefined) return undefined
-  const inputDetails = openAiInputDetailsToResponses(usage.prompt_tokens_details ?? usage.input_tokens_details)
-  const completionDetails = asObject(usage.completion_tokens_details) ?? asObject(usage.output_tokens_details)
-  const reasoning = asNumber(completionDetails?.reasoning_tokens)
+  const inputDetails = openAiInputDetailsToResponses(usage.prompt_tokens_details, usage.input_tokens_details)
+  const reasoning = firstNumber(
+    asObject(usage.completion_tokens_details)?.reasoning_tokens,
+    asObject(usage.output_tokens_details)?.reasoning_tokens,
+  ) ?? undefined
   return {
     ...(input !== undefined ? { input_tokens: input } : {}),
     ...(inputDetails ? { input_tokens_details: inputDetails } : {}),
@@ -336,26 +343,32 @@ export function openAiChunkToResponsesEvents(chunk: Json, state: OpenAiToRespons
     closeTextItem(state, events, 'completed')
 
     const openAiIndex = asNumber(call.index) ?? 0
+    const custom = asObject(call.custom)
+    const fn = asObject(call.function)
     let item = state.toolItems.get(openAiIndex)
     if (!item) {
       const outputIndex = state.nextOutputIndex++
       // 流式下 `custom` 调用的名字与载荷都在 `custom` 子对象里，字段与 function 调用平行。
-      const custom = asObject(call.custom)
       item = {
         outputIndex,
         itemId: `${state.id}_fc_${outputIndex}`,
         kind: custom ? 'custom' : 'function',
         callId: asString(call.id) ?? '',
-        name: asString(custom?.name) ?? asString(asObject(call.function)?.name) ?? '',
+        name: asString(custom?.name) ?? asString(fn?.name) ?? '',
         payload: '',
         added: false,
         closed: false,
       }
       state.toolItems.set(openAiIndex, item)
+    } else {
+      // OpenAI 允许把 function.name / custom.name 拆进后续 delta，按片段拼接。
+      // output_item.added 用当时已知的前缀；done 与最终 output 用拼完的全名再还原命名空间。
+      const nameFragment = item.kind === 'custom' ? asString(custom?.name) : asString(fn?.name)
+      if (nameFragment) item.name += nameFragment
     }
     if (!item.added) {
       item.added = true
-      // 流式下名字可能被拆成多个 delta；能查到映射就还原，查不到就先给原始名字，
+      // 能查到映射就还原，查不到就先给原始名字。名字还没到齐时这里只能是前缀，
       // 收尾的 output_item.done 里一定会是还原后的完整寻址。
       events.push({
         type: 'response.output_item.added',
@@ -363,8 +376,7 @@ export function openAiChunkToResponsesEvents(chunk: Json, state: OpenAiToRespons
         item: toolCallItem(item.kind, item.itemId, item.callId, item.name, item.payload, 'in_progress', state.toolNames),
       })
     }
-    const custom = asObject(call.custom)
-    const payloadDelta = custom ? asString(custom.input) : asString(asObject(call.function)?.arguments)
+    const payloadDelta = custom ? asString(custom.input) : asString(fn?.arguments)
     if (payloadDelta) {
       item.payload += payloadDelta
       events.push(custom

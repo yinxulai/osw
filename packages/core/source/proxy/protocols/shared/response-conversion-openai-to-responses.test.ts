@@ -179,6 +179,69 @@ describe('openAiResponseToResponses', () => {
     })
   })
 
+  it('prefers responses-style counts when chat usage fields are placeholder zeros', () => {
+    // 与 Anthropic 方向同一份网关报文：Chat 字段是占位 0，真实值在 Responses 字段里。
+    // Responses 的 input_tokens 是总输入，不扣除 cached_tokens。
+    const result = openAiResponseToResponses({
+      choices: [{ message: { content: 'x' } }],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        prompt_tokens_details: { cached_tokens: 0 },
+        input_tokens: 30,
+        output_tokens: 4,
+        input_tokens_details: { cached_tokens: 12 },
+        completion_tokens_details: { reasoning_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: 7 },
+      },
+    })
+
+    expect(result.usage).toEqual({
+      input_tokens: 30,
+      input_tokens_details: { cached_tokens: 12 },
+      output_tokens: 4,
+      output_tokens_details: { reasoning_tokens: 7 },
+      total_tokens: 34,
+    })
+  })
+
+  it('keeps a reported zero when every usage candidate is zero', () => {
+    const result = openAiResponseToResponses({
+      choices: [{ message: { content: 'x' } }],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        prompt_tokens_details: { cached_tokens: 0 },
+        input_tokens: 0,
+        output_tokens: 0,
+        input_tokens_details: { cached_tokens: 0 },
+        completion_tokens_details: { reasoning_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    })
+
+    expect(result.usage).toEqual({
+      input_tokens: 0,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens: 0,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 0,
+    })
+  })
+
+  it('leaves a positive prompt total unchanged when only Anthropic cache fields are present', () => {
+    const result = openAiResponseToResponses({
+      choices: [{ message: { content: 'x' } }],
+      usage: { prompt_tokens: 30, completion_tokens: 4, cache_read_input_tokens: 12 },
+    })
+
+    expect(result.usage).toEqual({
+      input_tokens: 30,
+      output_tokens: 4,
+      total_tokens: 34,
+    })
+  })
+
   it('keeps only the Responses input token detail keys', () => {
     const result = openAiResponseToResponses({
       choices: [{ message: { content: 'x' } }],
@@ -401,6 +464,76 @@ describe('openAiChunkToResponsesEvents', () => {
       response: {
         output: [{ id: 'chat_2_fc_0', type: 'function_call', status: 'completed', call_id: 'call_1', name: 'lookup', namespace: 'crm' }],
       },
+    })
+  })
+
+  it('concatenates a function name split across deltas and restores the namespace on the full name', () => {
+    const plain = createOpenAiToResponsesState()
+    const plainEvents = [
+      ...openAiChunkToResponsesEvents({
+        id: 'chat_8',
+        choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_' } }] } }],
+      }, plain),
+      ...openAiChunkToResponsesEvents({
+        choices: [{
+          delta: { tool_calls: [{ index: 0, function: { name: 'weather', arguments: '{}' } }] },
+          finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }, plain),
+    ]
+    expect(plainEvents.find(event => event.type === 'response.output_item.done')).toMatchObject({
+      item: { name: 'get_weather', arguments: '{}' },
+    })
+    expect(plainEvents.at(-1)).toMatchObject({
+      response: { output: [{ name: 'get_weather', arguments: '{}' }] },
+    })
+
+    const toolNames = new ToolNameRegistry()
+    toolNames.flatten('crm', 'lookup')
+    const namespaced = createOpenAiToResponsesState(toolNames)
+    const namespacedEvents = [
+      ...openAiChunkToResponsesEvents({
+        id: 'chat_8',
+        choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'crm__' } }] } }],
+      }, namespaced),
+      ...openAiChunkToResponsesEvents({
+        choices: [{
+          delta: { tool_calls: [{ index: 0, function: { name: 'lookup', arguments: '{}' } }] },
+          finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }, namespaced),
+    ]
+    expect(namespacedEvents.find(event => event.type === 'response.output_item.done')).toMatchObject({
+      item: { name: 'lookup', namespace: 'crm', arguments: '{}' },
+    })
+    expect(namespacedEvents.at(-1)).toMatchObject({
+      response: { output: [{ name: 'lookup', namespace: 'crm', arguments: '{}' }] },
+    })
+  })
+
+  it('concatenates a custom tool name split across deltas', () => {
+    const streamState = createOpenAiToResponsesState()
+    const events = [
+      ...openAiChunkToResponsesEvents({
+        id: 'chat_9',
+        choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'custom', custom: { name: 'get_' } }] } }],
+      }, streamState),
+      ...openAiChunkToResponsesEvents({
+        choices: [{
+          delta: { tool_calls: [{ index: 0, custom: { name: 'weather', input: 'free' } }] },
+          finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }, streamState),
+    ]
+
+    expect(events.find(event => event.type === 'response.output_item.done')).toMatchObject({
+      item: { type: 'custom_tool_call', name: 'get_weather', input: 'free' },
+    })
+    expect(events.at(-1)).toMatchObject({
+      response: { output: [{ type: 'custom_tool_call', name: 'get_weather', input: 'free' }] },
     })
   })
 

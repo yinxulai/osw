@@ -1,15 +1,34 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { providerApi } from '@/api/providers'
-import { providerModelApi } from '@/api/models'
+import { logicalModelApi, providerModelApi } from '@/api/models'
 import { unwrap } from '@/api/unwrap'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import type { FetchedProviderModel } from '@/api/providers'
-import type { Provider, ProviderModelRoute } from '@common/schemas'
+import { isBuiltInDefaultLogicalModel, type Provider, type ProviderModelRoute } from '@common/schemas'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
 import { useModelConnectivityTest } from './use-model-connectivity-test'
 import type { ProtocolEndpointEntry } from './types'
+
+/**
+ * 新模型绑到内建默认逻辑模型时，调度优先级接在已有绑定的最大值之后。
+ *
+ * 模型管理页把每条模型的 `priority` 投影成 0：那一页不排调度顺序。用这个占位值取
+ * `max + 1` 得到的永远是 1，新绑定就插进已经排成 1、2、3… 的故障转移顺序里。
+ * 服务端会把没指名落点的新模型绑到默认逻辑模型上，所以这里读的是那一份绑定
+ * （含其他供应商）的真实优先级。没有绑定，或还没有默认逻辑模型时，从 1 起。
+ * 逻辑模型页追加用的是「当前条数 + 1」；拖拽会把优先级重写成从 1 起的连续序号，
+ * 那时两者相同。按最大值计算，删掉中间绑定留下的空档也不会把新模型插回去。
+ */
+async function loadNextBindingPriority(): Promise<number> {
+  const logicalModels = await unwrap(logicalModelApi.list())
+  const fallback = logicalModels.find(isBuiltInDefaultLogicalModel)
+  if (!fallback) return 1
+  const bound = await unwrap(providerModelApi.listByLogicalModel(fallback.id))
+  if (bound.length === 0) return 1
+  return Math.max(...bound.map(model => model.priority)) + 1
+}
 
 interface UseModelDialogOptions {
   providers: Provider[]
@@ -153,7 +172,7 @@ export function useModelDialog(options: UseModelDialogOptions) {
 
     if (targets.length === 0) throw new Error(t('models.error.modelRequired'))
 
-    let nextPriority = dialogModels.length ? Math.max(...dialogModels.map(model => model.priority)) + 1 : 1
+    let nextPriority = await loadNextBindingPriority()
     let createdCount = 0
     let skippedCount = 0
 

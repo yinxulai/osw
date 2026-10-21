@@ -14,6 +14,9 @@ Visual Studio Code。
 `definition.json` 的路径与字段照官方文档整理；macOS 的
 `~/Library/Application Support/Code/User/` 对应 Linux 的 `~/.config/Code/User/`
 与 Windows 的 `~/AppData/Roaming/Code/User/`，写在 `platformPaths` 里。
+Linux 这一条认 `XDG_CONFIG_HOME`（替换 `~/.config`），Windows 这一条认 `APPDATA`
+（替换 `~/AppData/Roaming`）；没设置时仍用上面的默认目录，与 VS Code
+`getDefaultUserDataPath` 一致。
 
 ## 要点
 

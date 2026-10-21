@@ -328,14 +328,14 @@ export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId
 export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput): Promise<SchedulingPolicy> {
   if (input.strategy !== undefined && input.strategy !== 'priority') throw new Error('unsupported scheduling policy strategy')
   if (input.weight !== undefined && (!Number.isInteger(input.weight) || input.weight < 1)) throw new Error('scheduling policy weight must be positive')
-  // 显式要求打开绑定时，先看模型本体还在不在：模型被全局停用后，打开的绑定不会被调度，
-  // 只会让逻辑模型页看起来「可用」。新建行时需要的是同一个判断，所以调用方必须把模型
-  // 本体的开关透传进来（`enabled`），而不是依赖这里的默认值 true。
-  if (input.enabled === true) {
-    const model = getConfigDb().select({ modelName: providerModels.modelName, enabled: providerModels.enabled })
-      .from(providerModels).where(eq(providerModels.id, input.providerModelId)).get()
-    if (model && !model.enabled) throw providerModelDisabledError(model.modelName)
-  }
+  // 模型被全局停用后，打开的绑定不会被调度，只会让逻辑模型页看起来「可用」。
+  // 新建行省略 `enabled` 时抄模型自身的开关，不默认成 true；要存成打开时
+  // （显式传入，或抄到的就是打开）走同一道守卫。模型行不存在时仍默认打开，
+  // 与原先「查不到就不拦」一致。冲突更新只写调用方给出的列，省略不会改已有行。
+  const model = getConfigDb().select({ modelName: providerModels.modelName, enabled: providerModels.enabled })
+    .from(providerModels).where(eq(providerModels.id, input.providerModelId)).get()
+  const enabled = input.enabled ?? model?.enabled ?? true
+  if (enabled === true && model && !model.enabled) throw providerModelDisabledError(model.modelName)
   const time = now()
   const values = {
     logicalModelId: input.logicalModelId,
@@ -343,7 +343,7 @@ export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput)
     strategy: input.strategy ?? 'priority',
     priority: input.priority ?? 0,
     weight: input.weight ?? 100,
-    enabled: input.enabled ?? true,
+    enabled,
     createdTime: time,
     updatedTime: time,
     deletedTime: null,

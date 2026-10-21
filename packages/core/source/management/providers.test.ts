@@ -148,6 +148,39 @@ describe('provider management', () => {
     expect(res.statusCode).toBe(404)
   })
 
+  // 另一个页面还留着旧编辑表单时，删除后再保存不能当成更新成功：
+  // 名字写不进已删除的行，但超时设置会被 upsert，带上 endpoints 还会把已删除的端点复活。
+  it('reports 404 when updating a deleted provider and leaves settings and endpoints untouched', async () => {
+    const created = mockResponse()
+    await providerRoutes.invoke('/api/provider/create', created, {
+      name: 'OpenAI',
+      timeoutMilliseconds: 30_000,
+      endpoints: { 'openai-completions': 'https://api.openai.com/v1/chat/completions' },
+    })
+    const providerId = (responseData(created).data as { id: string }).id
+
+    await providerRoutes.invoke('/api/provider/delete', mockResponse(), { id: providerId })
+
+    const updateRes = mockResponse()
+    await providerRoutes.invoke('/api/provider/update', updateRes, {
+      id: providerId,
+      name: 'Renamed',
+      timeoutMilliseconds: 1000,
+      endpoints: { 'openai-completions': 'https://api.openai.com/v1/chat/completions' },
+    })
+
+    expect(updateRes.statusCode).toBe(404)
+    expect(responseData(updateRes)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
+    expect(await getProvider(providerId)).toMatchObject({
+      name: 'OpenAI',
+      timeoutMilliseconds: 30_000,
+      deletedTime: expect.any(Number),
+    })
+    const endpoints = mockResponse()
+    await providerRoutes.invoke('/api/provider/endpoints', endpoints, { id: providerId })
+    expect(responseData(endpoints).data).toEqual([])
+  })
+
   it('deletes a provider and its secret through the route', async () => {
     const provider = await createProvider({ name: 'Delete Me', apiKeyReference: 'key_delete_me', enabled: true })
 

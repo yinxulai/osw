@@ -254,6 +254,109 @@ describe('检查更新', () => {
 
     await waitFor(() => expect(state.error).toHaveBeenCalledWith('检查更新失败'))
   })
+
+  it('已下载后再检查，按钮转圈直到结束，并提示可以立即安装', async () => {
+    const downloaded = updateState({
+      status: 'downloaded',
+      downloadProgress: 1,
+      info: updateInfo({ latestVersion: '1.2.0' }),
+    })
+    let resolveCheck: (next: UpdateState) => void = () => {}
+    const updater = createUpdater(downloaded)
+    updater.check.mockImplementation(() => new Promise(resolve => {
+      resolveCheck = resolve
+    }))
+    renderCard(updater)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^检查更新$/ }))
+
+    const checking = await screen.findByRole('button', { name: /检查中/ }) as HTMLButtonElement
+    expect(checking.disabled).toBe(true)
+    // 转圈只发生在检查按钮上，安装按钮不能跟着消失。
+    expect(screen.getByRole('button', { name: /立即安装/ })).toBeTruthy()
+    expect(screen.getByText('待安装')).toBeTruthy()
+
+    resolveCheck(downloaded)
+
+    await waitFor(() => expect(state.success).toHaveBeenCalledWith('v1.2.0 已下载，可以立即安装'))
+    const check = screen.getByRole('button', { name: /^检查更新$/ }) as HTMLButtonElement
+    expect(check.disabled).toBe(false)
+    expect(screen.getByRole('button', { name: /立即安装/ })).toBeTruthy()
+    expect(updater.check).toHaveBeenCalledTimes(1)
+  })
+
+  it('已下载后再检查到更新的版本时，转圈停掉并改去下载', async () => {
+    const downloaded = updateState({
+      status: 'downloaded',
+      info: updateInfo({ latestVersion: '1.2.0' }),
+    })
+    const newer = updateState({
+      status: 'update-available',
+      downloadProgress: null,
+      info: updateInfo({ latestVersion: '1.3.0' }),
+    })
+    let resolveCheck: (next: UpdateState) => void = () => {}
+    const updater = createUpdater(downloaded)
+    updater.check.mockImplementation(() => new Promise(resolve => {
+      resolveCheck = resolve
+    }))
+    renderCard(updater)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^检查更新$/ }))
+    expect((await screen.findByRole('button', { name: /检查中/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    resolveCheck(newer)
+
+    await waitFor(() => expect(state.success).toHaveBeenCalledWith('发现新版本 v1.3.0'))
+    expect((screen.getByRole('button', { name: /^检查更新$/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('button', { name: /下载更新/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /立即安装/ })).toBeNull()
+  })
+
+  it('已下载时检查失败，转圈停掉，安装按钮还在，并报失败原因', async () => {
+    const downloaded = updateState({
+      status: 'downloaded',
+      downloadProgress: 1,
+      info: updateInfo({ latestVersion: '1.2.0' }),
+    })
+    const failed = updateState({
+      ...downloaded,
+      errorMessage: 'Cannot check for updates in development: network unavailable',
+    })
+    let resolveCheck: (next: UpdateState) => void = () => {}
+    const updater = createUpdater(downloaded)
+    updater.check.mockImplementation(() => new Promise(resolve => {
+      resolveCheck = resolve
+    }))
+    renderCard(updater)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^检查更新$/ }))
+    expect((await screen.findByRole('button', { name: /检查中/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    resolveCheck(failed)
+
+    await waitFor(() => expect(state.error).toHaveBeenCalledWith('Cannot check for updates in development: network unavailable'))
+    expect(state.success).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: /^检查更新$/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('button', { name: /立即安装/ })).toBeTruthy()
+    expect(screen.getByText('待安装')).toBeTruthy()
+    expect(screen.getByText('Cannot check for updates in development: network unavailable')).toBeTruthy()
+  })
+
+  it('已下载时检查调用被拒绝，转圈会停，安装按钮还在', async () => {
+    const updater = createUpdater(updateState({
+      status: 'downloaded',
+      info: updateInfo({ latestVersion: '1.2.0' }),
+    }))
+    updater.check.mockRejectedValue(new Error('ipc down'))
+    renderCard(updater)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^检查更新$/ }))
+
+    await waitFor(() => expect(state.error).toHaveBeenCalledWith('ipc down'))
+    expect((screen.getByRole('button', { name: /^检查更新$/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('button', { name: /立即安装/ })).toBeTruthy()
+  })
 })
 
 describe('更新通道', () => {

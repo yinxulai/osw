@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveAnalyticsBuckets } from '@common/analytics-buckets'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import {
   formatBillCount,
@@ -16,6 +17,19 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 const t = createAppTranslator('zh-CN')
+
+/** 与 `formatBillDateTime` 同一组选项，用来把统计窗口的起点翻成账单上的那一串。 */
+function formatStamp(value: Date): string {
+  return value.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
 
 describe('formatIntervalDescription', () => {
   it('把服务端算出的桶宽翻成粒度文案', () => {
@@ -84,17 +98,25 @@ describe('语言敏感的格式化', () => {
 describe('formatBillRangeLabel', () => {
   const endAt = new Date(2026, 0, 15, 10, 30, 45) // 2026-01-15 10:30:45 本地时间
 
-  // 区间口径与页面的 range 开关一致：today 从当天零点起，7d/30d 含当天往回数。
+  // 账单印出的区间必须与统计查询同一扇窗：today 是本地零点，7d / 30d 是打印时刻往前
+  // 7 或 30 个 24 小时。日历日零点会把起点印晚将近一天，合计却仍按更早的窗口算。
   it('today 从当天零点起算', () => {
     expect(formatBillRangeLabel('zh-CN', 'today', endAt)).toBe('2026/01/15 00:00:00 - 2026/01/15 10:30:45')
   })
 
-  it('7d 含当天，往回数 6 天', () => {
-    expect(formatBillRangeLabel('zh-CN', '7d', endAt)).toBe('2026/01/09 00:00:00 - 2026/01/15 10:30:45')
+  it('7d 从打印时刻往前 7 个 24 小时起算', () => {
+    expect(formatBillRangeLabel('zh-CN', '7d', endAt)).toBe('2026/01/08 10:30:45 - 2026/01/15 10:30:45')
   })
 
-  it('其余范围按 30 天处理，往回数 29 天', () => {
-    expect(formatBillRangeLabel('zh-CN', '30d', endAt)).toBe('2025/12/17 00:00:00 - 2026/01/15 10:30:45')
+  it('30d 从打印时刻往前 30 个 24 小时起算', () => {
+    expect(formatBillRangeLabel('zh-CN', '30d', endAt)).toBe('2025/12/16 10:30:45 - 2026/01/15 10:30:45')
+  })
+
+  it('起点与统计窗口的 sinceMs 相同', () => {
+    for (const range of ['today', '7d', '30d'] as const) {
+      const sinceMs = resolveAnalyticsBuckets(range, endAt.getTime()).sinceMs
+      expect(formatBillRangeLabel('zh-CN', range, endAt)).toBe(`${formatStamp(new Date(sinceMs))} - ${formatStamp(endAt)}`)
+    }
   })
 
   it('不修改调用方传进来的时间对象', () => {

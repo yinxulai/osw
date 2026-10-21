@@ -1990,6 +1990,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.update.checking': 'Checking…',
   'settings.update.upToDateToast': 'You are on the latest version',
   'settings.update.availableToast': 'Version {version} is available',
+  'settings.update.readyToInstallToast': 'Version {version} is already downloaded and ready to install',
   'settings.update.checkFailed': 'Update check failed',
   'settings.update.download': 'Download update',
   'settings.update.downloadedToast': 'Installer downloaded',

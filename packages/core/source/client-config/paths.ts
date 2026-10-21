@@ -12,13 +12,32 @@ import { findAgentClient, findAgentClientFile, type AgentClientEnvOverride, type
  *
  * 返回的值一定是绝对路径：`~/` 前缀由**主目录**兜底，`envVar` 只替换它声明的那一段。
  * 声明了多个平台路径的文件（见 `AgentClientFileDefinition.platformPaths`）先按当前平台选一条，
- * 再走同一套展开——同一客户端在别的操作系统上就该写到别的目录里。
+ * 再用这一条自己的 `envVar`（没有则用文件级的）走同一套展开——同一客户端在别的操作系统上
+ * 就该写到别的目录里。
  */
 export function resolveClientConfigPath(clientKey: string, filePath: string): string | null {
   const client = findAgentClient(clientKey)
   const file = findAgentClientFile(clientKey, filePath)
   if (!client || !file) return null
-  return expandDeclaredPath(declaredPathForPlatform(file, process.platform), file.envVar, homedir(), process.env)
+  return expandDeclaredPath(
+    declaredPathForPlatform(file, process.platform),
+    envOverrideForPlatform(file, process.platform),
+    homedir(),
+    process.env,
+  )
+}
+
+/**
+ * 选中平台路径之后，用哪一条目录覆盖去展开它。
+ *
+ * 平台条目自己的 `envVar` 优先：同一份文件在不同平台上要换掉的前缀不是同一段，
+ * 文件级 `envVar` 只有一个，盖不住。条目没写、或这一条仍是纯字符串时，回落文件级覆盖。
+ * 只换路径、不换变量的平台，以及根本没写 `platformPaths` 的文件，行为不变。
+ */
+export function envOverrideForPlatform(file: Pick<AgentClientFileDefinition, 'envVar' | 'platformPaths'>, platform: NodeJS.Platform): AgentClientEnvOverride | undefined {
+  const platformPath = file.platformPaths?.[platform as AgentClientPlatform]
+  if (typeof platformPath !== 'string' && platformPath?.envVar) return platformPath.envVar
+  return file.envVar
 }
 
 /**
@@ -32,7 +51,8 @@ export function resolveClientConfigPath(clientKey: string, filePath: string): st
  */
 export function declaredPathForPlatform(file: Pick<AgentClientFileDefinition, 'path' | 'platformPaths'>, platform: NodeJS.Platform): string {
   const platformPath = file.platformPaths?.[platform as AgentClientPlatform]
-  return platformPath ?? file.path
+  if (typeof platformPath === 'string') return platformPath
+  return platformPath?.path ?? file.path
 }
 
 /**

@@ -1,4 +1,4 @@
-import { padPrompt } from '../shared/diagnostic-body'
+import { DEFAULT_PROMPTS, padPrompt } from '../shared/diagnostic-body'
 
 export interface DiagnosticBodyOptions {
   prompt?: string
@@ -7,8 +7,7 @@ export interface DiagnosticBodyOptions {
 }
 
 export function buildDiagnosticBody(modelId: string, options: DiagnosticBodyOptions = {}): string {
-  const basePrompt = options.prompt?.trim() || 'Hi'
-  const prompt = padPrompt(basePrompt, options.inputLength ?? 0)
+  const prompt = padPrompt(options.prompt?.trim() || DEFAULT_PROMPTS.streaming, options.inputLength ?? 0)
   const stream = options.stream ?? true
   return JSON.stringify({
     model: modelId,
