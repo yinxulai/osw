@@ -27,7 +27,16 @@ describe('usage adapter registry', () => {
       const reading = adapter.read({ unrelated: true })
       expect(Object.keys(reading).sort()).toEqual(['cacheCreation', 'cachedInput', 'input', 'output', 'reasoning'])
       // 「字段不在」必须是 undefined，不能是 null/0：注册表靠 firstNumber 把二者区分开。
-      for (const values of Object.values(reading)) {
+      // 逐个字段取，不用 `Object.values`：接口没有索引签名时它会退化成 `any[]`，
+      // 参数随即变成隐式 any（TS7006）。显式列出字段也顺带钉住了「一共就这五组」。
+      const fieldGroups: readonly (readonly unknown[])[] = [
+        reading.input,
+        reading.output,
+        reading.cachedInput,
+        reading.cacheCreation,
+        reading.reasoning,
+      ]
+      for (const values of fieldGroups) {
         expect(values.every(value => value === undefined)).toBe(true)
       }
     }
