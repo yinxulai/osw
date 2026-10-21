@@ -7,6 +7,7 @@ import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { CardSectionHeader } from '@/components/card-section-header'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
 import { formatTokens, formatIntervalDescription } from '../lib/format'
+import { disjointTrendPoint, type TrendBarPoint } from '../lib/trend-bars'
 
 function buildChartConfig(t: AppTranslator): ChartConfig {
   return {
@@ -34,7 +35,7 @@ interface TrendTooltipProps {
   crossesDays: boolean
 }
 
-// Tooltip 按阅读顺序展示；柱状图按从底到顶反向排列，使输入位于最上层。
+// Tooltip 按阅读顺序展示落库总量；柱状图从底到顶排互不相交的段，使未缓存输入位于最上层。
 const USAGE_ITEMS = [
   ['inputTokens', 'overview.trend.input'],
   ['cachedInputTokens', 'overview.trend.cacheRead'],
@@ -43,7 +44,13 @@ const USAGE_ITEMS = [
   ['reasoningTokens', 'overview.trend.reasoning'],
 ] as const satisfies ReadonlyArray<readonly [keyof UsageTrendPoint, UiCatalogKey]>
 
-const STACK_ITEMS = [...USAGE_ITEMS].reverse()
+const STACK_SERIES = [
+  { key: 'reasoningTokens', color: 'reasoningTokens' },
+  { key: 'plainOutputTokens', color: 'outputTokens' },
+  { key: 'cacheCreationInputTokens', color: 'cacheCreationInputTokens' },
+  { key: 'cachedInputTokens', color: 'cachedInputTokens' },
+  { key: 'uncachedInputTokens', color: 'inputTokens' },
+] as const satisfies ReadonlyArray<{ key: keyof TrendBarPoint; color: keyof UsageTrendPoint }>
 
 function TrendTooltip(props: TrendTooltipProps) {
   const { active, label, payload, crossesDays } = props
@@ -94,7 +101,7 @@ export function TrendBars(props: TrendBarsProps) {
 
   return (
     <ChartContainer config={buildChartConfig(t)} className="aspect-auto h-44 w-full">
-      <BarChart data={trend} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barCategoryGap="25%">
+      <BarChart data={trend.map(disjointTrendPoint)} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barCategoryGap="25%">
         <CartesianGrid vertical={false} />
         <XAxis
           dataKey="label"
@@ -115,8 +122,8 @@ export function TrendBars(props: TrendBarsProps) {
           fontSize={11}
         />
         <Tooltip content={<TrendTooltip crossesDays={crossesDays} />} />
-        {STACK_ITEMS.map(([key], index) => (
-          <Bar key={key} dataKey={key} stackId="usage" fill={`var(--color-${key})`} radius={index === STACK_ITEMS.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+        {STACK_SERIES.map(({ key, color }, index) => (
+          <Bar key={key} dataKey={key} stackId="usage" fill={`var(--color-${color})`} radius={index === STACK_SERIES.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
         ))}
       </BarChart>
     </ChartContainer>
