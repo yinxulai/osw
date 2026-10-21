@@ -13,6 +13,7 @@ import { configureShutdownHandshake, type ShutdownHandshake } from '../managemen
 import { startManagementServer, stopManagementServer } from '../management/server'
 import { resetManualModels } from '../proxy/routing/manual-routing'
 import { startProxyServer, stopProxyServer } from '../proxy/runtime/server'
+import { configurePluginDirectory } from '../plugins/registry'
 import { reportTelemetryStartFailure, startTelemetry } from '../telemetry'
 import {
   acquireInstanceLock,
@@ -86,6 +87,10 @@ export class ServerRuntime {
       // 而不是某个宿主的（见 `./instance-lock.ts`）。
       await this.acquireInstanceLock(config.dataDir)
       await initDatabases(config.dataDir)
+      // 插件目录是数据目录的一部分，只有宿主知道它在哪（`RuntimeConfig.pluginsDirectory`）。
+      // 这里注入而不是每次传参：路由、同步引擎、安装器都要用它，多一处传参就多一次
+      // 「某个入口以为插件在别的目录」的机会（见 `../plugins/registry.ts`）。
+      configurePluginDirectory(config.pluginsDirectory)
       const outboundConnector = createOutboundConnector(getSettings, this.options.systemProxyResolver)
       await outboundConnector.initialize()
       configureOutboundConnector(outboundConnector, this.options.systemProxyResolver)
@@ -156,6 +161,7 @@ export class ServerRuntime {
     })
     destroyOutboundConnector()
     resetCoreNetworkConnector()
+    configurePluginDirectory(null)
     configureShutdownHandshake(null)
     await closeDatabases()
     this.managementServer = null
