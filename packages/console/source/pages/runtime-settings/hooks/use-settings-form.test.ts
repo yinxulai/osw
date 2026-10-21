@@ -365,4 +365,23 @@ describe('放弃改动', () => {
     expect(result.current.settings?.listenPort).toBe(19300)
     expect(result.current.isDirty).toBe(false)
   })
+
+  it('resetSettings 交出已保存的语言，而不是正在预览的那个', async () => {
+    const { result } = setup()
+    await act(async () => {
+      await Promise.resolve()
+    })
+    act(() => {
+      result.current.updateField('language', 'en')
+    })
+
+    // 页面要用这个返回值去收回地址栏里的预览。交回草稿里的 `en`，重置就等于没重置。
+    let restored: ReturnType<typeof result.current.resetSettings>
+    act(() => {
+      restored = result.current.resetSettings()
+    })
+    expect(restored).toBe('zh-CN')
+    expect(result.current.settings?.language).toBe('zh-CN')
+    expect(result.current.isDirty).toBe(false)
+  })
 })
