@@ -32,27 +32,28 @@
 
 ## 2. 有状态但不属于 React：普通类 + 订阅
 
-界面之外仍然有「状态」与「随时间演进的过程」，比如：诊断任务队列跑到了第几个、实时流断线后重连到第几次、轮询在哪些页面之间共享。这些**不是** React 状态，它们有自己的生命周期，必须在组件挂载之前就存在、在组件卸载之后还能被读取。
+界面之外仍然有「状态」与「随时间演进的过程」，比如：实时流断线后重连到第几次、地址栏里的语言与主题、轮询在哪些页面之间共享。这些**不是** React 状态，它们有自己的生命周期，必须在组件挂载之前就存在、在组件卸载之后还能被读取。
 
 写法固定为**普通类 + `subscribe`/`getSnapshot`**，不写 `useXxx` 自定义 hook 来承载逻辑：
 
 ```ts
-export class ModelTestRunner {
+export class XxxStore {
   subscribe(listener: () => void): () => void { /* … */ }
-  getSnapshot(): ModelTestRunnerSnapshot { /* 稳定引用：没变就返回同一个对象 */ }
-  run(tasks: TestTask[], options: TestRunOptions): Promise<void> { /* … */ }
+  getSnapshot(): XxxSnapshot { /* 稳定引用：没变就返回同一个对象 */ }
 }
 ```
 
 理由：
 
-- **可测**。`pages/model-management/lib/model-test-runner.test.ts` 直接 `new ModelTestRunner(...)`，让请求挂住、决定它什么时候回、断言并发与取消语义，全程没有 React。
+- **可测**。测试直接 `new XxxStore()`，让外部事件挂住、决定它什么时候回、断言时序，全程没有 React（参考 `routing/url-overrides.ts` 的订阅式读法，以及服务端 `management/tasks/queue.ts` 的用例）。
 - **可被多处使用**。同一个实例可以同时喂给主界面与托盘面板；hook 做不到这件事——每个 `useXxx` 都是一份新的状态。
-- **生命周期不绑在渲染上**。组件卸载不该让正在花钱的诊断任务消失。
+- **生命周期不绑在渲染上**。组件卸载不该让正在花钱的任务消失。
 
 `getSnapshot` 必须返回**稳定引用**：没有变化时返回同一个对象，否则 `useSyncExternalStore` 会无限重渲染。
 
 React 一侧只留一个薄适配（`useSyncExternalStore(runner.subscribe, runner.getSnapshot)`），适配里不写任何判断。
+
+**这条界线也有尽头：跨进程的那一半不要硬塞进控制台。** 渠道诊断的队列原先就是这样一个客户端类（`ModelTestRunner`），而它的生命周期比窗口还长——切页、关面板都不该打断一次真实计费的上游请求。与其在客户端维护一个「卸载时不许停」的队列，不如把它搬到服务端（[task-queue.md](./task-queue.md)），控制台只留订阅与转发（`data/tasks.tsx`）。
 
 ## 3. 三条数值口径
 
@@ -138,11 +139,11 @@ export const useLogsUiStore = scratch.store   // scratch = createPageScratchStor
 
 | 主题 | 位置 |
 | --- | --- |
-| 有状态领域模块的标准写法 | `pages/model-management/lib/model-test-runner.ts` + 同名 `.test.ts` |
+| 有状态领域模块的标准写法 | `routing/url-overrides.ts`（订阅 + 稳定快照）、`data/tasks.tsx`（订阅一条流，不持有状态） |
 | 一个域一个取数入口 | `data/logical-models.ts`、`data/rule-bindings.ts` |
 | 纯规则由页面自理 | `pages/logical-models/lib/logical-model-form.ts`、`provider-model-candidates.ts`、`logical-model-writes.ts` |
 | 乐观草稿与真实取数并存 | `pages/model-management/components/provider-rule-bindings.tsx` |
-| 共享队列 | `lib/task-queue.ts` |
+| 共享队列 | 服务端 `packages/core/source/management/tasks/queue.ts`；控制台侧 `data/tasks.tsx` |
 | 本机偏好的持久化 | `store/persisted-store.ts`（唯一实现）+ `store/app-ui-store.ts`、`i18n/store.ts`、`store/model-test-config.ts` |
 | 页面临时数据 | `store/page-scratch.ts`（`persisted-store` 之上的薄封装）+ `pages/logs/store.ts`、`pages/request-logs/store.ts`、`pages/model-management/store.ts` |
 | 纯逻辑与组件分家 | `lib/model-test/selection.ts`、`results.ts`、`config.ts` + 同名测试（从 `components/model-test-panel.tsx` 搬出） |

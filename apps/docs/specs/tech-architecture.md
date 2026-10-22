@@ -154,6 +154,7 @@ osw/
 | `packages/core/source/runtime` | 进程级组装与生命周期：启动/停止 management 与 proxy，失败回滚 | [server-architecture.md](./server-architecture.md) |
 | `packages/core/source/management` | 配置管理与管理 API（含路由工作台、重写规则、诊断） | [server-architecture.md](./server-architecture.md) |
 | `packages/core/source/management/diagnostics` | 渠道诊断的领域模块：请求构造、流式读取、轮次汇总、目标规划（都不认识 HTTP） | [diagnostics.md](./diagnostics.md) |
+| `packages/core/source/management/tasks` | 进程级通用任务队列：生命周期引擎、kind 注册（渠道诊断是第一个）、推送通道 | [task-queue.md](./task-queue.md) |
 | `packages/core/source/proxy` | 代理请求链路：入口、路由、规划、执行、协议、修饰、观测 | [proxy-engine.md](./proxy-engine.md) |
 | `packages/core/source/database` | SQLite + Drizzle 持久化层与按域拆分的 `*-store.ts` | [data-model.md](./data-model.md) |
 | `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配、Host 校验 | [security-privacy.md](./security-privacy.md) |
