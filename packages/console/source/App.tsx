@@ -11,10 +11,12 @@ import { ONBOARDING_ACTION_BAR_CLEARANCE } from '@/pages/onboarding/page'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { useTranslation } from '@/i18n/provider'
 import { RouteModeDialog } from '@/components/route-mode/route-mode-dialog'
+import { ModelTestPanel } from '@/components/model-test-panel'
 import { WindowTitlebar } from '@/components/window-titlebar'
 import { PageBreadcrumbsProvider } from '@/components/breadcrumbs'
 import { LiveRequestsProvider } from '@/data/live-requests'
 import { LiveMetricsProvider } from '@/data/live-metrics'
+import { TasksProvider } from '@/data/tasks'
 import { useProxyStatus } from '@/data/proxy'
 import { useSettings } from '@/data/settings'
 import { findCurrentNavigationItem } from '@/routing/navigation'
@@ -52,6 +54,7 @@ function App() {
   const matchRoute = useMatchRoute()
   const sidebarPinned = useAppUiStore(state => state.sidebarPinned)
   const setSidebarPinned = useAppUiStore(state => state.setSidebarPinned)
+  const testPanelOpen = useAppUiStore(state => state.testPanelOpen)
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const sidebarExpanded = sidebarPinned || sidebarHovered
   const { effectiveThemeMode, toggleTheme } = useAppearance()
@@ -146,6 +149,19 @@ function App() {
                * 挂在 `AppLayout` 外、`TooltipProvider` 内：它不属于任何一页，但两者都在同一棵树下。
                */}
               <RouteModeDialog />
+
+              {/*
+               * 渠道诊断面板也挂在这里，理由与上面弹窗相同、但更硬：它**不能**归某一页。
+               * 归页面时，导航走了就等于卸载组件，客户端队列一卸载就把在飞的请求全掐掉
+               * （「边看日志边等结果」因此做不到）。队列现在在服务端跑，界面只是读数与
+               * 发令的地方，所以它跟着窗口走。
+               *
+               * `TasksProvider` 只在面板开着时接流：关掉面板就等于没有订阅者，没必要
+               * 空转一条连接（而且关闭本身会取消这一批，没有需要继续看的东西）。
+               */}
+              <TasksProvider enabled={testPanelOpen}>
+                <ModelTestPanel />
+              </TasksProvider>
             </div>
             </LiveMetricsProvider>
           </PageBreadcrumbsProvider>

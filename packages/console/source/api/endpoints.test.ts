@@ -11,7 +11,8 @@ import { providerApi, providerTransferApi } from './providers'
 import { routerRulesApi } from './router-rules'
 import { routerApi } from './router'
 import { healthApi, logicalModelRoutingApi, outboundProxyApi, proxyApi, settingsApi, telemetryApi } from './runtime'
-import { developmentApi, modelTestApi } from './tools'
+import { developmentApi } from './tools'
+import { taskApi } from './tasks'
 
 /**
  * 管理接口的**路径与请求体契约**。
@@ -305,13 +306,25 @@ describe('运行时与设置接口', () => {
     expect(capturedPath()).toBe('/development/seed')
   })
 
-  it('模型测试把协议、模式与筛选条件一起下发', async () => {
-    await modelTestApi.run('openai-responses', 'streaming', { providerIds: ['prov_1'], modelIds: ['pm_1'] })
-
+  it('任务队列按 kind 入队，取消两种粒度都能下发', async () => {
+    await taskApi.enqueue('model-test', [{ modelId: 'pm_1', protocol: 'openai-responses' }])
     expect(lastCall()).toEqual({
-      path: '/model-test/run',
-      body: { protocol: 'openai-responses', mode: 'streaming', providerIds: ['prov_1'], modelIds: ['pm_1'] },
+      path: '/tasks/enqueue',
+      body: { kind: 'model-test', items: [{ modelId: 'pm_1', protocol: 'openai-responses' }] },
     })
+
+    await taskApi.cancel({ taskIds: ['task_1'] })
+    expect(lastCall()).toEqual({ path: '/tasks/cancel', body: { taskIds: ['task_1'] } })
+
+    // 按 kind 取消是「整个面板停掉」，与按 id 取消共用一条路由、同一个字段位。
+    await taskApi.cancel({ kind: 'model-test' })
+    expect(lastCall()).toEqual({ path: '/tasks/cancel', body: { kind: 'model-test' } })
+
+    await taskApi.clear()
+    expect(lastCall()).toEqual({ path: '/tasks/clear', body: {} })
+
+    await taskApi.snapshot()
+    expect(lastCall()).toEqual({ path: '/tasks/snapshot', body: {} })
   })
 })
 

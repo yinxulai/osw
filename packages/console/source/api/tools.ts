@@ -1,9 +1,6 @@
-import type { ModelTestMode, Protocol } from '@common/schemas'
 import type {
   ModelConnectivityRequest,
   ModelConnectivityResponse,
-  ModelTestRunRequest,
-  ModelTestRunResponse,
 } from '@common/diagnostics'
 import { request } from './client'
 
@@ -20,19 +17,11 @@ export type {
   ModelTestRoundResult,
 } from '@common/diagnostics'
 
-/** 目标筛选：留空表示「全部启用中的渠道与模型」。 */
-export type ModelTestFilters = Pick<ModelTestRunRequest, 'providerIds' | 'modelIds'>
-
-/** 诊断参数。轮次与提示词只影响这一次测试，不写入任何配置。 */
-export type ModelTestOptions = Partial<Pick<ModelTestRunRequest, 'rounds' | 'prompt' | 'inputLength'>>
-
-export const modelTestApi = {
-  run: (protocol: Protocol, mode: ModelTestMode, filters: ModelTestFilters = {}, options: ModelTestOptions = {}, signal?: AbortSignal) => request<ModelTestRunResponse>(
-    '/model-test/run',
-    { protocol, mode, ...filters, ...options },
-    { signal },
-  ),
-}
+/*
+ * 这里没有 `modelTestApi`。渠道诊断不再由界面发请求：它现在是服务端队列里的一个 kind，
+ * 界面只通过 `api/tasks.ts` 入队 / 取消 / 读推送（见 `apps/docs/specs/task-queue.md`）。
+ * 留着一条「按目标直连跑一次」的旁路，等于给「状态到底谁说了算」留了第二个答案。
+ */
 
 /** 连接测试的入参就是契约里的草稿请求体，不另立一套字段名。 */
 export type ModelConnectivityInput = ModelConnectivityRequest

@@ -2,7 +2,6 @@ import type { Translator } from '@common/i18n'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { CONVERTIBLE_PROTOCOLS, PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
 import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
-import type { TestTask } from '@/pages/model-management/lib/model-test-runner'
 
 /**
  * 诊断面板的**选择模型**：哪些协议可测、哪些被勾上、这一批要跑哪些任务。
@@ -178,26 +177,6 @@ export function clearAllTasks(models: readonly ProviderModelRoute[]): TestSelect
     providerIds: new Set(),
     modelProtocols: Object.fromEntries(models.map(model => [model.id, new Set<Protocol>()])),
   }
-}
-
-/** 这一批要发给执行器的任务：模型 × 已勾选的协议，id 稳定（`模型 id:协议`）。 */
-export function buildPlannedTasks(models: readonly ProviderModelRoute[], providers: readonly Provider[], providerIds: ReadonlySet<string>, modelProtocols: ModelProtocolSelection): readonly TestTask[] {
-  return models.flatMap(model => {
-    if (!providerIds.has(model.providerId)) return []
-    const provider = providers.find(item => item.id === model.providerId)
-    if (!provider) return []
-    const selectedProtocols = modelProtocols[model.id] ?? new Set(getTestableProtocols(model))
-    return getTestableProtocols(model).filter(protocol => selectedProtocols.has(protocol)).map(protocol => ({
-      id: `${model.id}:${protocol}`,
-      modelId: model.id,
-      modelName: model.modelName,
-      providerId: provider.id,
-      providerName: provider.name,
-      protocol,
-      converted: supportsConvertedProtocol(model, protocol),
-      status: 'queued' as const,
-    }))
-  })
 }
 
 export interface ProtocolOptionView {

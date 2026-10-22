@@ -1,12 +1,11 @@
-import { useState } from 'react'
 import { Download, FlaskConical, Plus, Upload, MousePointerClick } from 'lucide-react'
-import { ModelTestPanel } from '@/components/model-test-panel'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from '@/i18n/provider'
+import { useAppUiStore } from '@/store/app-ui-store'
 import { useModelManagementService } from './service'
 import { ProviderGrid } from './components/provider-grid'
 import { ProviderDetail } from './components/provider-detail'
@@ -18,7 +17,8 @@ import { ProviderImportDialog } from './components/provider-import-dialog'
 export function ModelManagementPage() {
   const service = useModelManagementService()
   const t = useTranslation()
-  const [testPanelOpen, setTestPanelOpen] = useState(false)
+  // 面板是外壳级的（见 `App.tsx`），这里只负责把开关拨过去——不再持有任何面板状态。
+  const openTestPanel = useAppUiStore(state => state.setTestPanelOpen)
 
   const renderHeaderActions = () => (
     <div className="flex items-center gap-2">
@@ -32,7 +32,7 @@ export function ModelManagementPage() {
       >
         <Download size={14} /> {t('providers.action.exportAll')}
       </Button>
-      <Button variant="outline" onClick={() => setTestPanelOpen(true)}>
+      <Button variant="outline" onClick={() => openTestPanel(true)}>
         <FlaskConical size={14} /> {t('providers.action.connectionTest')}
       </Button>
       <Button onClick={() => service.openProviderDialog()}>
@@ -195,13 +195,6 @@ export function ModelManagementPage() {
         connectivityTest={service.connectivityTest}
         onCancel={service.closeModelDialog}
         onSave={service.saveModel}
-      />
-
-      <ModelTestPanel
-        open={testPanelOpen}
-        onOpenChange={setTestPanelOpen}
-        models={service.models}
-        providers={service.providers}
       />
 
       {renderImportFileInput()}
