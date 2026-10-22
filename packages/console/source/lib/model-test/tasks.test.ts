@@ -6,6 +6,7 @@ import type { TaskRecord } from '@common/tasks'
 import {
   MODEL_TEST_TASK_KIND,
   buildPlannedRows,
+  deriveRowStatus,
   getCurrentRoundLabel,
   getVisibleTestRows,
   mergeTestRows,
@@ -166,6 +167,78 @@ describe('toTestRow', () => {
   })
 })
 
+/*
+ * 上游失败**不是**队列的失败。
+ *
+ * `runModelTestTask` 在 401 / 超时 / 没有可测目标时**正常 resolve** 一条 `success: false`
+ * 的结论（口径在 `summarizeRounds`；服务端那一半的断言见
+ * `packages/core/source/management/tasks/kinds/model-test.test.ts` 的「目录里没有可测目标时
+ * 直说」——它断言的正是「不抛错、resolve 一条 success: false」）。于是队列记录上写的是
+ * `success`，而这次诊断其实挂了。
+ *
+ * 这一组守的就是这条缝：**生命周期状态不能直接当业务结论用**。漏掉这层映射时，上游 401 在
+ * 面板上是绿色的「成功」——错误框不出现（错误原文在 `result` 里）、进度条不变红、失败角标
+ * 不出现、「只看失败」永久置灰、「重测失败项」成为死代码、`successCount` 说谎。
+ */
+describe('上游失败 —— 记录是 success，结论是 success: false', () => {
+  /** 服务端真的会产出的那条记录：`status` 是队列的，`result` 是诊断的。 */
+  const upstreamFailure: TaskRecord = task({
+    id: 'task_401',
+    key: keyOf('m1', 'openai-completions'),
+    status: 'success',
+    finishedAt: 2,
+    result: result({
+      success: false,
+      statusCode: 401,
+      errorMessage: 'invalid api key',
+      rounds: [{ round: 1, success: false, statusCode: 401, durationMilliseconds: 300, errorMessage: 'invalid api key' }],
+    }),
+  })
+
+  it('这一行翻出来是 failed，不是 success', () => {
+    expect(toTestRow(upstreamFailure, MODELS, PROVIDERS)!.status).toBe('failed')
+  })
+
+  it('结论说通过时照旧是 success：映射只把「结论否掉」的方向翻过来', () => {
+    expect(toTestRow(task({ status: 'success', result: result() }), MODELS, PROVIDERS)!.status).toBe('success')
+  })
+
+  it('取消是独立结局、排队与进行中还没有结论：它们都不被这条映射碰', () => {
+    expect(deriveRowStatus('cancelled', result({ success: false }))).toBe('cancelled')
+    expect(deriveRowStatus('running', result({ success: false }))).toBe('running')
+    expect(deriveRowStatus('queued', undefined)).toBe('queued')
+    expect(deriveRowStatus('failed', undefined)).toBe('failed')
+  })
+
+  it('错误原文取结论里的那一句（记录上根本没有 errorMessage）', () => {
+    expect(upstreamFailure.errorMessage).toBeUndefined()
+    expect(toTestRow(upstreamFailure, MODELS, PROVIDERS)!.errorMessage).toBe('invalid api key')
+  })
+
+  it('结论没有原文时回退到记录上的 errorMessage（那是「运行时真的抛了」）', () => {
+    const row = toTestRow(task({ status: 'failed', errorMessage: 'provider exploded' }), MODELS, PROVIDERS)!
+    expect(row.status).toBe('failed')
+    expect(row.errorMessage).toBe('provider exploded')
+  })
+
+  it('端到端：这样一条记录流进表里，是一个失败、零个成功', () => {
+    const rows = mergeTestRows(buildPlannedRows(MODELS, PROVIDERS, new Set(['prov_1']), {}), [upstreamFailure], MODELS, PROVIDERS)
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].status).toBe('failed')
+    expect(summarizeTestRows(rows)).toMatchObject({
+      successCount: 0,
+      failureCount: 1,
+      cancelledCount: 0,
+      completedCount: 1,
+      progress: 100,
+    })
+    // 这两条是「面板上看得出来」的全部凭据：失败数非零，「只看失败」才真的生效。
+    expect(getVisibleTestRows(rows, true)).toMatchObject({ failedOnlyActive: true })
+    expect(getVisibleTestRows(rows, true).rows.map(row => row.id)).toEqual([upstreamFailure.key])
+  })
+})
+
 describe('buildPlannedRows — 这一批要跑哪些「模型 × 协议」', () => {
   it('id 是契约层的去重键（含测法参数），重测才能命中同一行', () => {
     const rows = buildPlannedRows(MODELS, PROVIDERS, new Set(['prov_1']), {})
@@ -223,7 +296,12 @@ describe('mergeTestRows — 计划是骨架，服务端是事实', () => {
   })
 
   it('服务端有、计划里没有的任务追加在后面', () => {
-    const rows = mergeTestRows(plan, [task({ key: keyOf('m9', 'openai-responses'), status: 'failed' })], MODELS, PROVIDERS)
+    // 一条真实的失败：队列记录是 `success`（kind 正常返回），结论才是 `success: false`。
+    const rows = mergeTestRows(plan, [task({
+      key: keyOf('m9', 'openai-responses'),
+      status: 'success',
+      result: result({ modelId: 'm9', protocol: 'openai-responses', success: false, errorMessage: 'no upstream url' }),
+    })], MODELS, PROVIDERS)
     expect(rows.map(row => row.id)).toEqual([
       keyOf('m1', 'openai-completions'),
       keyOf('m1', 'anthropic-messages'),

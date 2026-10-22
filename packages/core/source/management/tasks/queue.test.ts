@@ -249,6 +249,28 @@ describe('并发', () => {
     queue.enqueue('thing', [{ id: 'a' }])
     expect(calls).toHaveLength(1)
   })
+
+  it('concurrency 是 NaN 时按 1 处理，而不是整条 kind 永久停摆', async () => {
+    // `NaN` 不会被 `??` 接住（它不是 null / undefined），而 `0 < NaN` 恒为假：
+    // 修复前这里一个任务都发不出去，队列看着「在排队」，其实再也不会动了。
+    const { queue, calls } = scenario({ concurrency: Number.NaN })
+    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].id).toBe('a')
+    // 「按 1 处理」而不是「停摆」：收一条要接着发下一条。
+    calls[0].done.resolve('ok')
+    await settle()
+    expect(calls.map(call => call.id)).toEqual(['a', 'b'])
+  })
+
+  it('concurrency 是 Infinity 时按 1 处理，而不是无上限地全放', () => {
+    const { queue, calls } = scenario({ concurrency: Number.POSITIVE_INFINITY })
+    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+
+    expect(calls).toHaveLength(1)
+    expect(queue.snapshot().filter(record => record.status === 'running')).toHaveLength(1)
+  })
 })
 
 describe('取消', () => {

@@ -184,10 +184,17 @@ function successResult(overrides: Partial<ModelTestTaskResult> = {}): ModelTestT
   }
 }
 
-/** 一批典型的台账：一个协议失败、一个协议在跑第二轮、原生模型成功，剩下一个还排着。 */
+/**
+ * 一批典型的台账：一个协议失败、一个协议在跑第二轮、原生模型成功，剩下一个还排着。
+ *
+ * 失败那条按**服务端真实产出的形状**写：上游 401 时 kind 正常返回一条 `success: false`
+ * 的结论，所以队列记录上是 `success`、错误原文在 `result` 里。这里若写成
+ * `status: 'failed'`，就等于替界面把「结论算不算通过」判好了——那条缝（记录是成功、
+ * 业务是失败）会被测试盖住，正是它曾经漏到界面上的原因。
+ */
 function mixedLedger(): TaskRecord[] {
   return [
-    task({ id: 'task_failed', key: keyOf('m1', 'anthropic-messages'), status: 'failed', errorMessage: 'invalid api key', result: failedResult({ protocol: 'anthropic-messages' }) }),
+    task({ id: 'task_failed', key: keyOf('m1', 'anthropic-messages'), status: 'success', result: failedResult({ protocol: 'anthropic-messages' }) }),
     task({ id: 'task_running', key: keyOf('m1', 'openai-completions'), status: 'running', progress: progress({ round: 2, totalRounds: 3 }) }),
     task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', result: successResult() }),
     task({ id: 'task_queued', key: keyOf('m1', 'openai-responses') }),
@@ -374,6 +381,86 @@ describe('结果表的列划分', () => {
     const row = rowFor(CONVERTING_MODEL)
     expect(within(row).getByText(zh('modelTest.status.queued'))).toBeTruthy()
     expect([...row.querySelectorAll('div')].filter(node => node.textContent === '—')).toHaveLength(4)
+  })
+})
+
+/*
+ * 上游失败在面板上必须是**红的**。
+ *
+ * 服务端真实产出的形状是「记录上 `success` + 结论里 `success: false`」（见
+ * `packages/core/source/management/tasks/kinds/model-test.ts`：401 / 超时都不会让 kind 抛错）。
+ * 面板若直接抄队列状态，这一行就是绿色的「成功」——规格管这叫不该发生的事
+ *（`apps/docs/specs/diagnostics.md` §6：「跑三轮挂一轮仍然要红。否则『稳定通过』和
+ * 『碰巧过一次』在界面上长得一模一样」）。
+ */
+describe('上游失败不能长成绿色的「成功」', () => {
+  /** 服务端真的会产出的那条记录：一串只有在结论里才看得见的失败。 */
+  function upstreamFailure(): TaskRecord[] {
+    return [task({
+      id: 'task_401',
+      key: keyOf('m1', 'anthropic-messages'),
+      status: 'success',
+      finishedAt: 2,
+      result: failedResult({ protocol: 'anthropic-messages' }),
+    })]
+  }
+
+  /** 失败的那一行：m1 有三个协议行，按「模型 + 协议」两个词一起找它自己那一行。 */
+  function failedRow(): HTMLElement {
+    return expandToggles().find(row => row.textContent?.includes(CONVERTING_MODEL) && row.textContent?.includes(PROTOCOL_DISPLAY_NAMES['anthropic-messages']))!
+  }
+
+  it('状态列是红的「失败」，不是「通过」', () => {
+    renderPanel(upstreamFailure())
+    selectProvider()
+
+    const row = failedRow()
+    const status = within(row).getByTitle(`${zh('modelTest.status.failed')} · HTTP 401`)
+    expect(status.textContent).toBe(zh('modelTest.status.failed'))
+    expect(status.className).toContain('text-text-destructive')
+    expect(within(row).queryByText(zh('modelTest.status.success'))).toBeNull()
+  })
+
+  it('错误原文就在行上（它来自结论，记录上没有 errorMessage）', () => {
+    renderPanel(upstreamFailure())
+    selectProvider()
+
+    expect(within(failedRow()).getByText('invalid api key')).toBeTruthy()
+  })
+
+  it('汇总认这一个失败：进度条变红、失败计数非零、重测按钮出现', () => {
+    const { container } = renderPanel(upstreamFailure())
+    selectProvider()
+
+    expect(screen.getByText(zh('modelTest.progress.failure', { count: 1 }))).toBeTruthy()
+    expect(screen.getByText(zh('modelTest.progress.success', { count: 0 }))).toBeTruthy()
+    // 进度条只有在「有失败且不在跑」时才用破坏色。
+    expect(container.querySelector('div.bg-destructive')).toBeTruthy()
+    expect(screen.getByRole('button', { name: zh('modelTest.action.retryFailed') })).toBeTruthy()
+  })
+
+  it('「只看失败」是可用的：失败数恒为 0 时它永远按不动', () => {
+    renderPanel(upstreamFailure())
+    selectProvider()
+
+    const onlyFailed = screen.getByRole('button', { name: `${zh('modelTest.filter.failed')} · 1` })
+    expect(onlyFailed.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(onlyFailed)
+    expect(expandToggles()).toHaveLength(1)
+    expect(expandToggles()[0].textContent).toContain(PROTOCOL_DISPLAY_NAMES['anthropic-messages'])
+  })
+
+  it('「重测失败项」只重发失败的那一行（不是整批，也不是一行都不发）', async () => {
+    renderPanel(upstreamFailure())
+    selectProvider()
+
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.retryFailed') }))
+
+    await waitFor(() => { expect(harness.enqueue).toHaveBeenCalled() })
+    expect(harness.enqueue.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ modelId: 'm1', protocol: 'anthropic-messages' }),
+    ])
   })
 })
 
@@ -570,6 +657,11 @@ describe('开始诊断：把整批行交给服务端队列', () => {
 })
 
 describe('清空结果', () => {
+  /** 一条已经结束的诊断：有它，清空按钮才在（`hasResults`）。 */
+  function settledOnly(): TaskRecord[] {
+    return [task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', result: successResult() })]
+  }
+
   it('有任务在跑时按钮禁用并说明原因（服务端那时整条空操作）', () => {
     renderPanel([task({ id: 'task_running', status: 'running', progress: progress() })])
     selectProvider()
@@ -579,6 +671,51 @@ describe('清空结果', () => {
 
     fireEvent.click(clear)
     expect(harness.clear).not.toHaveBeenCalled()
+  })
+
+  it('别的 kind 在跑时也置灰：服务端 clear 的判据是整本台账，不限诊断', () => {
+    // 诊断这一批已经结束（`busy` 为假），但台账里还有别的 kind 在跑。
+    renderPanel([...settledOnly(), task({ id: 'task_other', kind: 'export', key: 'export:1', status: 'running' })])
+    selectProvider()
+
+    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResultsBusy') })
+    expect(clear.hasAttribute('disabled')).toBe(true)
+
+    fireEvent.click(clear)
+    expect(harness.clear).not.toHaveBeenCalled()
+  })
+
+  it('清掉之后不多说一句', async () => {
+    harness.clear.mockResolvedValueOnce(2)
+    renderPanel(settledOnly())
+    selectProvider()
+
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.clearResults') }))
+
+    await waitFor(() => { expect(harness.clear).toHaveBeenCalled() })
+    expect(toastHarness.warning).not.toHaveBeenCalled()
+    expect(toastHarness.error).not.toHaveBeenCalled()
+  })
+
+  it('服务端说「一条都没清掉」时如实说出来，不假装清过了', async () => {
+    // 竞态：按钮按下的那一刻还没有任务在跑，服务端处理时已经有了，于是整条空操作。
+    harness.clear.mockResolvedValueOnce(0)
+    renderPanel(settledOnly())
+    selectProvider()
+
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.clearResults') }))
+
+    await waitFor(() => { expect(toastHarness.warning).toHaveBeenCalledWith(zh('modelTest.notice.clearSkipped')) })
+  })
+
+  it('清空请求本身失败时给一条错误提示，而不是留一个未处理的 rejection', async () => {
+    harness.clear.mockRejectedValueOnce(new Error('offline'))
+    renderPanel(settledOnly())
+    selectProvider()
+
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.clearResults') }))
+
+    await waitFor(() => { expect(toastHarness.error).toHaveBeenCalledWith('offline') })
   })
 })
 

@@ -6,10 +6,12 @@ import { ModelTestModeSchema, ProtocolSchema, type ModelTestMode, type Protocol 
 /**
  * 渠道诊断的线上契约：**两端共用这一份**，服务端产出、界面消费。
  *
- * 为什么住在契约层而不是服务端路由里：这套形状原先被抄了三份——服务端
- * `routes/diagnostics/model-test.ts` 一份、界面 `api/tools.ts` 一份、连接测试
- * `model-connectivity.ts` 一份，字段名与可空性各写各的。三份里任意两份漂移都不会
- * 有任何构建或测试报警，只会表现为「界面上那一格永远是 —」这种行为级故障。
+ * 为什么住在契约层而不是服务端路由里：这套形状原先被抄了三份——诊断路由一份、界面一份、
+ * 连接测试一份，字段名与可空性各写各的。三份里任意两份漂移都不会有任何构建或测试报警，
+ * 只会表现为「界面上那一格永远是 —」这种行为级故障。
+ *
+ *（那份被抄的服务端路由是 `routes/diagnostics/model-test.ts`，已经随任务队列一起删掉：
+ * 今天诊断由 `tasks/kinds/model-test.ts` 这个 kind 跑，形状仍然只从本文件取。）
  *
  * 词表的归属也在这里划清：**模式词表（{@link ModelTestMode}）留在 `schemas.ts`**，
  * 因为那一层同时被服务端校验、界面渲染与 i18n 目录引用，是比诊断结果更底层的词；

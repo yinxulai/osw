@@ -89,6 +89,22 @@ function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * 把 kind 声明的并发收成一个真的能用的值。
+ *
+ * `?? 1` 是不够的：它只接 `null` / `undefined`，而 `NaN` 与 `Infinity` 不是「没声明」，
+ * 是声明错了。`NaN` 会让 `inFlight < limit` 恒为假——整条 kind 一个任务都发不出去、
+ * 永久停摆（没有任何报错，只是再也不动）；`Infinity` 则是不设上限地全放，
+ * 「同一时刻在飞的数量等于 concurrency」这条承诺直接失效。
+ *
+ * 两者都按 **1** 处理：与文档同一条口径（`apps/docs/specs/diagnostics.md` §5.1
+ * 「并发不合法（非正数、非有限值）时按 1 处理」），也与搬走之前那套客户端队列同一条守卫。
+ */
+function usableConcurrency(declared: number | undefined): number {
+  const value = declared ?? 1
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
+}
+
 interface Entry {
   record: TaskRecord
   kind: TaskKind<unknown, unknown, unknown>
@@ -167,11 +183,14 @@ export class TaskQueue {
   }
 
   /**
-   * 取消一批任务。返回真的落到「取消」上的数量。
+   * 取消一批任务。返回**本次调用新发出的取消信号数**（口径与 `TaskCancelResponse` 同一份）。
    *
-   * 未开跑的：直接标成 `cancelled` 并让它退出调度（它从未发出任何上游请求）。
-   * 在跑的：给它发信号，收尾由那次运行自己完成（引擎在它 settle 时归到 `cancelled`）。
-   * 已经结束的：什么都不做。
+   * 未开跑的：直接标成 `cancelled` 并让它退出调度（它从未发出任何上游请求），算一个。
+   * 在跑的：给它发信号，收尾由那次运行自己完成（引擎在它 settle 时归到 `cancelled`），
+   * 也**算一个**——尽管此刻它还没落到 `cancelled` 上。
+   * 已经结束的、以及已经在取消中的（`signal.aborted` 已为真）：什么都不做，不计数。
+   *
+   * 所以这个数是「这一次命令碰到了几条任务」，不是「快照里有几条 `cancelled`」。
    */
   cancel(taskIds: readonly string[]): number {
     let cancelled = 0
@@ -283,7 +302,7 @@ export class TaskQueue {
   private pump(kind: string): void {
     const definition = this.kinds.get(kind)
     if (!definition) return
-    const limit = Math.max(1, Math.floor(definition.concurrency ?? 1))
+    const limit = usableConcurrency(definition.concurrency)
     while ((this.inFlight.get(kind) ?? 0) < limit) {
       const next = [...this.entries.values()].find(entry => entry.record.kind === kind && entry.record.status === 'queued')
       if (!next) return
@@ -299,8 +318,12 @@ export class TaskQueue {
     const context: TaskRunContext<unknown> = {
       taskId: entry.record.id,
       signal: entry.controller.signal,
-      // 进度只在任务还活着时写入：一个已经被取消的任务忽然又更新一格进度，界面上就是
-      // 「取消了但还在动」。
+      // 进度只写进状态还是 `running` 的记录：未开跑的、已经收尾的都不接受。
+      //
+      // 这条守卫**挡不住**「已经收到取消信号、但还没在步边界收尾」的那一条——它的状态仍是
+      // `running`，进度照样写得进去。那是有意留着的：进度条与状态格读的是同一个状态，
+      // 状态还没变、读数就该继续走；真正会出现「取消了还在动」错觉的情形是**状态变了之后**
+      // 还在涨，而那正是这里挡住的。
       report: progress => {
         if (entry.record.status !== 'running') return
         entry.record.progress = progress

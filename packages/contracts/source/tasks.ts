@@ -106,8 +106,16 @@ export const TaskEnqueueRequestSchema = z.object({
  * 而对上号这件事不靠这个响应——一帧快照里的每个任务都带着自己的 `key`（见
  * {@link TaskRecord}）。
  *
- * `skipped` 包含三种「没收下」：已经在排队 / 运行中的同键任务（去重）、队列已满、
- * 以及这一项不能被该 kind 解析。三者都是**正常的调度结果**，不是请求失败。
+ * `skipped` 包含五种「没收下」，全部是**正常的调度结果**，不是请求失败：
+ *
+ * 1. 这个 `kind` 没有注册（进程里根本没有能跑它的实现）；
+ * 2. 这一项不能被该 kind 解析（`parse` 抛了）；
+ * 3. 这一项算不出键（`keyOf` 抛了）；
+ * 4. 同 kind 同 `key` 已经在排队 / 运行中（去重）；
+ * 5. 队列已满（`MAX_QUEUE_TASKS`）。
+ *
+ * 一次「全选 → 开始」里本来就可能有一半已经在跑，所以界面要如实报出这两个数，
+ * 而不是静默吞掉。
  */
 export interface TaskEnqueueResponse {
   accepted: number
@@ -125,7 +133,19 @@ export const TaskCancelRequestSchema = z
   })
 export type TaskCancelRequest = z.infer<typeof TaskCancelRequestSchema>
 
-/** 取消的结果：真的落到「取消」上的任务数（已经结束的不算）。 */
+/**
+ * 取消的结果：**本次调用新发出的取消信号数**。
+ *
+ * 包含两类：未开跑的（被直接标成 `cancelled`）与在跑的（发信号，由那次运行自己在步边界
+ * 收尾）。后一类此刻还停在 `running` 上——它已经被发了信号，只是还没 settle。
+ * 已经结束的、以及已经在取消中的都不算，所以这个数不会大于本次 `taskIds` 里真实存在的任务数。
+ *
+ * 为什么改的是这句描述而不是口径：这个数在返回的那一刻**只能**是「发出了几个信号」。
+ * 想数「真的落在 `cancelled` 上的任务」，就得等那些在跑的任务自己收尾——那是异步的，
+ * 一次同步返回的响应给不出这个数（要给就只能变成「轮询到全部 settle 为止」，取消按钮会
+ * 挂在那里等上游超时）。今天界面丢弃这个返回值，改口径看不出任何差别，但契约里留着
+ * 一句自相矛盾的描述，下一个用它的人会按它写出错的断言。
+ */
 export interface TaskCancelResponse {
   cancelled: number
 }

@@ -41,6 +41,30 @@ export interface TestRow {
   errorMessage?: string
 }
 
+/**
+ * 一行的状态：**业务结论覆盖生命周期状态**。
+ *
+ * 队列只知道「这次运行有没有把结果交回来」，不知道结果算不算通过。而上游 401 / 超时这类
+ * 失败**不会**让 kind 抛错——`runModelTestTask` 正常 resolve 一条 `success: false` 的结论
+ *（口径在 `summarizeRounds`，见 `packages/core/source/management/tasks/kinds/model-test.ts`），
+ * 于是记录上是 `success`，而这次诊断其实挂了。
+ *
+ * 所以「这一行红不红」必须在这里按业务结论再判一次。旧实现（客户端队列时代的
+ * `model-test-runner.ts`）就是 `result?.success ? 'success' : 'failed'`，搬到队列时漏掉了
+ * 这一层映射——漏掉的后果不是「少一个红字」，而是失败被显示成绿色的「成功」：错误框不出现、
+ * 进度条不红、失败角标不出现、「只看失败」永久置灰、`retryFailedTests` 变成死代码。
+ * 规格对它的要求写在 `apps/docs/specs/diagnostics.md` §6：跑三轮挂一轮仍然要红。
+ *
+ * **这条映射不能放进引擎**：它读的是 `result.success`，即诊断的业务语义。引擎一旦开始
+ * 解释结论，通用队列就变成了诊断专用的队列（见 `queue.ts` 的「它只懂生命周期」）。
+ *
+ * 其余状态原样透传：`cancelled` 是独立结局，`running` / `queued` 还没有结论可说。
+ */
+export function deriveRowStatus(status: TaskStatus, result: ModelTestTaskResult | undefined): TestRowStatus {
+  if (status === 'success' && result?.success === false) return 'failed'
+  return status
+}
+
 /** 把服务端的一条任务翻成一行；不属于诊断 kind、或键认不出来的返回 `null`。 */
 export function toTestRow(task: TaskRecord, models: readonly ProviderModelRoute[], providers: readonly Provider[]): TestRow | null {
   if (task.kind !== MODEL_TEST_TASK_KIND) return null
@@ -59,10 +83,13 @@ export function toTestRow(task: TaskRecord, models: readonly ProviderModelRoute[
     providerName: provider?.name ?? progress?.providerName ?? result?.providerName ?? '',
     protocol,
     converted: model ? supportsConvertedProtocol(model, protocol) : false,
-    status: task.status,
+    status: deriveRowStatus(task.status, result),
     result,
     progress,
-    errorMessage: task.errorMessage,
+    // 错误原文优先取**结论里的那一句**：上游 401 是 kind 正常返回的结论，它写在
+    // `result.errorMessage` 上；记录上的 `errorMessage` 只有「运行时真的抛了」才会有。
+    // 反过来取会让上游失败的行一句解释都没有。
+    errorMessage: result?.errorMessage ?? task.errorMessage,
   }
 }
 

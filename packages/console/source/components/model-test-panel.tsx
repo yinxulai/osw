@@ -803,6 +803,15 @@ export function ModelTestPanel() {
   const summary = useMemo(() => summarizeTestRows(rows), [rows])
   /** 服务端真的还在跑 / 还没跑的诊断任务（本地计划里的「排队」不算）。 */
   const busy = useMemo(() => tasks.some(task => task.kind === MODEL_TEST_TASK_KIND && (task.status === 'running' || task.status === 'queued')), [tasks])
+  /**
+   * 台账里有没有任务在跑——**任何 kind**，不只是诊断。
+   *
+   * 服务端的 `clear()` 是有在跑的就不清（`queue.ts`：那条在跑的行不该凭空消失），而它的
+   * 判断是全台账的。所以「清空结果」的禁用条件必须是这一个，不能只看诊断的 `busy`：
+   * 只看 `busy` 的话，将来加了第二个 kind，另一个 kind 在跑时按钮会亮着，按下去什么也不会
+   * 发生——正是那条注释想防的事。
+   */
+  const anyRunning = useMemo(() => tasks.some(task => task.status === 'running'), [tasks])
 
   const hasResults = hasSettledOrRunning(rows)
   const startDisabled = plannedRows.length === 0
@@ -817,11 +826,29 @@ export function ModelTestPanel() {
     })
   }
 
-  const clearResults = () => {
-    // 有任务在跑时服务端整条空操作，按钮那时也是禁用的——这里只是不让「先点了清空、
-    // 任务紧接着开始」的竞态留下一个按下去没反应的按钮。
-    if (busy) return
-    void clear()
+  /**
+   * 清空结果。
+   *
+   * 服务端有任务在跑时整条空操作，所以按钮那时是禁用的（见 {@link anyRunning}）；这里
+   * 再挡一次是防「先点了清空、任务紧接着开跑」的竞态。
+   *
+   * 返回值**要读**：`cleared` 是服务端真的删掉了几条。它不会是 0 却没告诉我们——那种情况
+   * 说明服务端什么都没清（竞态正好撞上、或台账已被别人清了），这时把本地视图当作「清过了」
+   * 是自欺：结果其实还在，下一帧快照会把它们推回来。所以那种情况说一句实话，不动本地状态。
+   */
+  const clearResults = async () => {
+    if (anyRunning) return
+    let cleared: number
+    try {
+      cleared = await clear()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('modelTest.notice.clearFailed'))
+      return
+    }
+    if (cleared === 0) {
+      toast.warning(t('modelTest.notice.clearSkipped'))
+      return
+    }
     setFailedOnly(false)
     setExpandedRowIds(current => (current.size === 0 ? current : new Set()))
   }
@@ -986,10 +1013,10 @@ export function ModelTestPanel() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        disabled={busy}
-                        title={t(busy ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
-                        aria-label={t(busy ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
-                        onClick={clearResults}
+                        disabled={anyRunning}
+                        title={t(anyRunning ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
+                        aria-label={t(anyRunning ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
+                        onClick={() => void clearResults()}
                       >
                         <Trash2 size={13} />
                       </Button>
