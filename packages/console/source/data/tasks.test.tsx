@@ -176,9 +176,23 @@ describe('命令转发', () => {
       accepted = await result.current.enqueue('model-test', items)
     })
 
-    expect(api.enqueue).toHaveBeenCalledWith('model-test', items)
+    // 没给调度参数：第三个位置是空的，界面不会替用户编一个并发出来。
+    expect(api.enqueue).toHaveBeenCalledWith('model-test', items, undefined)
     // `skipped` 是正常的调度结果（去重 / 队列满 / 载荷不被这个 kind 接受），不是失败。
     expect(accepted).toEqual({ accepted: 2, skipped: 1 })
+  })
+
+  it('给并发时原样转发：它是这一次入队的调度参数，与载荷分开', async () => {
+    const { result } = mount()
+    const items = [{ modelId: 'm1', providerId: 'prov_1', protocol: 'openai-completions' }]
+
+    await act(async () => {
+      await result.current.enqueue('model-test', items, { concurrency: 5 })
+    })
+
+    expect(api.enqueue).toHaveBeenCalledWith('model-test', items, { concurrency: 5 })
+    // 并发不进载荷：`items` 与不给并发时逐字节相同。
+    expect(api.enqueue.mock.calls[0][1]).toEqual(items)
   })
 
   it('取消两种粒度都转发，返回真的被取消的数量', async () => {

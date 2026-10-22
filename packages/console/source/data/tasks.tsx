@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { readTaskStream } from '@/api/live-stream'
-import { taskApi } from '@/api/tasks'
+import { taskApi, type EnqueueTaskOptions } from '@/api/tasks'
 import { unwrap } from '@/api/unwrap'
 import { useResilientStream } from '@/data/use-resilient-stream'
 import type { TaskCancelRequest, TaskRecord } from '@common/tasks'
@@ -8,8 +8,13 @@ import type { TaskCancelRequest, TaskRecord } from '@common/tasks'
 /** 订阅通用任务队列的返回值。与实时流同构：只有 `tasks`，没有失败态也没有重取。 */
 export interface TasksResult {
   tasks: TaskRecord[]
-  /** 入队一批 kind 自己的载荷；返回服务端收下 / 跳过的数量。 */
-  enqueue: (kind: string, items: readonly unknown[]) => Promise<{ accepted: number; skipped: number }>
+  /**
+   * 入队一批 kind 自己的载荷；返回服务端收下 / 跳过的数量。
+   *
+   * `options` 是这次入队的调度参数（并发上限），与载荷分开——载荷说的是「测什么」，
+   * 它说的是「这一批发多快」。
+   */
+  enqueue: (kind: string, items: readonly unknown[], options?: EnqueueTaskOptions) => Promise<{ accepted: number; skipped: number }>
   /** 按 id 或按 kind 取消；两者可以一起给。 */
   cancel: (input: TaskCancelRequest) => Promise<number>
   /** 清掉终态项（有任务在跑时服务端空操作）。 */
@@ -54,7 +59,10 @@ export function TasksProvider(props: TasksProviderProps) {
     if (!enabled) setTasks([])
   }, [enabled])
 
-  const enqueue = useCallback(async (kind: string, items: readonly unknown[]) => unwrap(taskApi.enqueue(kind, items)), [])
+  const enqueue = useCallback(
+    async (kind: string, items: readonly unknown[], options?: EnqueueTaskOptions) => unwrap(taskApi.enqueue(kind, items, options)),
+    [],
+  )
   const cancel = useCallback(async (input: TaskCancelRequest) => (await unwrap(taskApi.cancel(input))).cancelled, [])
   const clear = useCallback(async () => (await unwrap(taskApi.clear())).cleared, [])
 

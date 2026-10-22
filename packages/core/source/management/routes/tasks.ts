@@ -30,10 +30,15 @@ export const taskRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/tasks/cancel', handleCancel)
   .post('/api/tasks/clear', handleClear)
 
-/** 入队：`{ kind, items }` → `{ accepted, skipped }`。载荷逐项由该 kind 校验。 */
+/**
+ * 入队：`{ kind, items, concurrency? }` → `{ accepted, skipped }`。载荷逐项由该 kind 校验。
+ *
+ * `concurrency` 原样透传给引擎，路由层不解释它——它是调度参数（这次入队同时在飞几个），
+ * 校验归契约、归一化归引擎（见 `@common/tasks` 的 `TaskEnqueueRequestSchema`）。
+ */
 function handleEnqueue(_req: IncomingMessage, res: ServerResponse, body: unknown): void {
   const request = TaskEnqueueRequestSchema.parse(body)
-  const result = taskQueue.enqueue(request.kind, request.items)
+  const result = taskQueue.enqueue(request.kind, request.items, { concurrency: request.concurrency })
   sendSuccess(res, { accepted: result.accepted, skipped: result.skipped } satisfies TaskEnqueueResponse)
 }
 

@@ -93,10 +93,24 @@ export type TasksStreamMessage = z.infer<typeof TasksStreamMessageSchema>
  * `items` 是 kind 自己的载荷，队列不解释它——因此这里只能声明它是数组，逐项校验交给
  * 该 kind 注册时的 `parse`。同一个请求里只有一个 `kind`：一批任务的形状由发起它们的
  * 那一件事决定，混着两种 kind 的批次没有意义。
+ *
+ * ## `concurrency` 是**这次入队的调度上限**
+ *
+ * 它说的是「这一批同时在飞几个」，覆盖 kind 注册时声明的那个默认值（`TaskKind.concurrency`）。
+ * 诊断面板的「并发数量」就填在这里：串行是诊断的诚实默认，但用户想更快是用户的选择。
+ *
+ * 它是**调度参数，不是任务属性**：不随载荷走、不进 `keyOf` 的去重键（同一个目标换个
+ * 并发数再点一次仍然是同一条任务，不该因此多出一条），也不写进任何记录。所以改它只
+ * 影响「接下来怎么发牌」，不改变「哪些任务算同一个」。
+ *
+ * 下界是 1（同时在飞 0 个不是一个状态）；**没有上界**——那与诊断那三个参数同一条理由
+ * （见 `apps/docs/specs/operations/diagnostics.md` §5.1）。不合法（非整数、小于 1）的值
+ * 在路由层就被拒，引擎另有一层归一化兜底。
  */
 export const TaskEnqueueRequestSchema = z.object({
   kind: z.string().trim().min(1),
   items: z.array(z.unknown()),
+  concurrency: z.number().int().min(1).optional(),
 })
 
 /**

@@ -244,6 +244,71 @@ describe('并发', () => {
     expect(calls[0].id).toBe('a')
   })
 
+  /**
+   * 入队时给的并发是**这一次的调度上限**，覆盖 kind 注册时声明的那个。
+   *
+   * 诊断就是这条的现实版本：kind 声明 1（串行是诚实默认），用户在面板上填 3 就是「这一批
+   * 同时打三个上游」。断言用的是 `calls`（真的调了几次 `run`），不是引擎自己记的数。
+   */
+  it('入队时给的 concurrency 覆盖 kind 声明的默认值，同时在飞恰好等于它', async () => {
+    const { queue, calls } = scenario({ concurrency: 1 })
+    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], { concurrency: 3 })
+
+    expect(calls.map(call => call.id)).toEqual(['a', 'b', 'c'])
+    expect(queue.snapshot().filter(record => record.status === 'running')).toHaveLength(3)
+    // 上限是 3，不是「全放」：第四个还在排队。
+    expect(queue.snapshot()[3].status).toBe('queued')
+
+    // 补位行为不变：谁先空出来谁取下一个。
+    calls[0].done.resolve('ok')
+    await settle()
+    expect(calls.map(call => call.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(queue.snapshot().filter(record => record.status === 'running')).toHaveLength(3)
+  })
+
+  it('不给 concurrency 时用 kind 声明的那个，而不是硬编码的 1', () => {
+    const { queue, calls } = scenario({ concurrency: 2 })
+    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+
+    expect(calls.map(call => call.id)).toEqual(['a', 'b'])
+  })
+
+  /**
+   * 不合法的那三个都要落到 1，而不是让整条 kind 停摆或全放。
+   *
+   * `NaN` 会让 `inFlight < limit` 恒为假（一个都发不出去，且没有任何报错）；`Infinity`
+   * 会让「同一时刻在飞的数量等于 concurrency」直接失效；`0` / 负数在 `Math.max(1, …)`
+   * 里本来就该抬到 1。三条走的是同一处归一化（`usableConcurrency`），与 kind 声明那一侧
+   * 共用——契约层虽然先用 `.int().min(1)` 挡了一道，引擎也不该假定调用方守规矩。
+   *
+   * 注意 kind 声明的是 5：这里断言的是「非法值把上限改成了 1」，而不是「声明没生效」。
+   */
+  it('入队时给的 concurrency 不合法时落到 1（NaN / Infinity / 0 / 负数）', () => {
+    for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3]) {
+      const { queue, calls } = scenario({ concurrency: 5 })
+      queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }], { concurrency: invalid })
+
+      expect(calls.map(call => call.id), `concurrency=${invalid}`).toEqual(['a'])
+      expect(queue.snapshot().filter(record => record.status === 'running')).toHaveLength(1)
+    }
+  })
+
+  /**
+   * 并发是 **kind 级**的当前上限，所以同 kind 后一次入队会改写它（last write wins）。
+   *
+   * 这是设计里写明的语义，不是副作用：调度参数说的是「接下来怎么发牌」，最近一次说的算。
+   * 今天诊断是唯一注册的 kind，因此不存在「两次入队抢同一个上限」的实际后果。
+   */
+  it('同 kind 后一次入队给的上限覆盖前一次（last write wins）', () => {
+    const { queue, calls } = scenario({ concurrency: 1 })
+    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }, { id: 'c' }], { concurrency: 1 })
+    expect(calls).toHaveLength(1)
+
+    // 同一批还在排队时把它调大：立刻多放两个出去。
+    queue.enqueue('thing', [{ id: 'd' }], { concurrency: 3 })
+    expect(calls.map(call => call.id)).toEqual(['a', 'b', 'c'])
+  })
+
   it('concurrency 是 0 或负数时按 1 处理（配置写错也不该把队列卡死）', () => {
     const { queue, calls } = scenario({ concurrency: 0 })
     queue.enqueue('thing', [{ id: 'a' }])
