@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -156,6 +157,27 @@ async function postJson(port, apiPath, options = {}) {
   return { status: response.status, body }
 }
 
+/**
+ * 发一条 `Host` 由调用方指定的 GET。
+ *
+ * 不能用 `fetch`：`Host` 是 Fetch 规范的 forbidden header，undici 会静默丢掉它、按 URL
+ * 自己生成 `127.0.0.1:port`——那样测到的永远是「回环 Host 拿得到凭证」，断言等于没写。
+ */
+function getWithHost(port, pathname, hostHeader) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { hostname: '127.0.0.1', port, path: pathname, method: 'GET', headers: { host: hostHeader } },
+      response => {
+        const chunks = []
+        response.on('data', chunk => chunks.push(chunk))
+        response.on('end', () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }))
+      },
+    )
+    request.on('error', reject)
+    request.end()
+  })
+}
+
 async function readStatusJson(dataDir) {
   const result = await runOnce(['status', '--json', '--data-dir', dataDir])
   assertExitCode(result, 0)
@@ -244,6 +266,12 @@ async function main() {
   // 无任何浏览器痕迹 = 本机进程。`stop` / `status` 全靠这条活着，所以它必须是 200。
   const localStatus = await postJson(managementPort, '/api/proxy/status')
   assert.equal(localStatus.status, 200, 'a local non-browser client must not need the token')
+  // `Host` 不是访问控制：带着攻击者域名的请求照样拿得到页面（前端产物本来就是公开的）。
+  // 但它必须拿**不到**凭证——DNS rebinding 的全部杀伤力就在那行注入的 HTML 上。
+  const rebound = await getWithHost(managementPort, '/', 'evil.example.com')
+  assert.equal(rebound.status, 200, 'a non-loopback Host must still get the console')
+  assert.ok(!rebound.body.includes('window.__OSW__'), 'a non-loopback Host must not receive the management token')
+  assert.ok(consoleHtml.includes('window.__OSW__'), 'a loopback Host must receive the management token')
   assert.equal(fs.existsSync(runtimeFilePathOf(dataDir)), true, 'the runtime file must exist while running')
   log.info('management API and console answered')
 

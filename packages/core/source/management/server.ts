@@ -1,6 +1,6 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
-import { applyManagementRequestGuards, checkManagementHost } from './core/request-guards'
+import { applyManagementRequestGuards } from './core/request-guards'
 import { createStaticWebHost, type StaticWebHost } from './core/static-web'
 import { isDevelopmentTokenRequest } from './core/development-token'
 import { normalizeError } from '@server/errors'
@@ -69,12 +69,8 @@ async function handleManagementRequest(req: http.IncomingMessage, res: http.Serv
   const startedAt = Date.now()
   console.debug(`[management] request begin method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
   try {
-    // Host 必须先验，且必须早于静态托管。DNS rebinding 的请求带的是攻击者的域名，
-    // 一旦让它先拿到页面，那个页面就会以「同源」的身份替攻击者发 API 请求。
-    if (!checkManagementHost(req, res)) {
-      console.warn(`[management] request rejected by host guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} duration=${Date.now() - startedAt}ms`)
-      return
-    }
+    // 这里不再有 Host 门。API 的门是凭证，静态托管的 Host 判断收在它自己那边
+    // （只有回环请求才拿得到注入凭证的入口 HTML，见 core/static-web.ts）。
     // 静态托管优先接管非 /api 的 GET：它的 SPA 回退必须拿到「未被改写过的」请求。
     if (webHost && await webHost.handle(req, res)) {
       const duration = Date.now() - startedAt

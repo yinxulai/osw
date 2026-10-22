@@ -246,7 +246,7 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 - App：保持 `loadFile`，不启用静态托管（避免多开一个可被局域网访问的入口）。
 - 静态根目录由宿主传入（App 用 asar 内路径，CLI 用包内 `output/web`），core 不硬编码路径。
 
-守卫必须保持：静态托管只挂在管理服务上，默认只监听 `127.0.0.1`。`Host` 头必须是回环地址，且校验发生在**静态托管之前**——先发文件就等于先把「被 rebinding 的域名加载了这个页面」这件事做完了。这条检查只对管理服务生效，代理入口不受影响（它的边界是 `listenHost` 与操作系统防火墙）。理由与攻击链路见 [security-privacy.md](./security-privacy.md)。
+守卫必须保持：静态托管只挂在管理服务上，默认只监听 `127.0.0.1`。**凭证只注入给 `Host` 指向回环的请求**——页面本身照发不误（前端产物本来就是公开的），但被 rebinding 的域名读不到入口 HTML 里那行 `window.__OSW__`，它的 API 调用就全是 `401`。管理 API 自己不看 `Host`，也不看来源名单。这条判断只对管理服务生效，代理入口不受影响（它的边界是 `listenHost` 与操作系统防火墙）。理由与攻击链路见 [security-privacy.md](./security-privacy.md)。
 
 ### 5.3 前端运行时注入
 
@@ -300,7 +300,7 @@ interface RuntimeConfig {
 - 宿主负责构造：App 用 `app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))`（必须在 `app.whenReady()` 之前设，之后 `app.getPath('userData')` 与 `os.homedir()` 才是同一个答案），`shutdown` 传 `null`（它有自己的退出路径）；CLI 用参数 + `defaultDataDirectory()`，并传入一个退出握手对象（见 §6 的 `stop`）。
 - **两边都不算数据库文件名**：两个库各自带 schema 版本常量，文件名由 `@common/database-file` 从版本号推导。宿主少算一次文件名，就少一个两种形态可能算出不同结果的地方。
 - CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
-- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务不带鉴权，固定监听回环，要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
+- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务固定监听回环（凭证只卡浏览器，不限制本机进程），要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
 - `--host` 与 `proxyHost` 的关系要注意：`RuntimeConfig.proxyHost` 只是**默认值**，真正生效的监听地址是设置里的 `listenHost`（用户在界面上改过就以设置为准）。因此「命令行传了 `--host` 却没生效」在已有数据目录上是正常行为，而不是配置没被读到。
 
 数据目录的规则只有一条：**`<用户主目录>/<预设数据目录名>`**，两种形态共用这一条，三个平台也是同一条——不再有「先按平台算 appData 目录、再拼目录名」这一步。App 侧是 `app.setPath('userData', path.join(os.homedir(), profile.dataDirectoryName))`；CLI 侧是 `apps/cli/source/host.ts` 里的 `defaultDataDirectory()`（纯函数，`path.dirname()` 的结果就是 `os.homedir()`，能单测）：
@@ -482,7 +482,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 
 进度与验收状态以 [roadmap.md](./roadmap.md) 的「工程演进」为准；本节只写阶段划分与**还没做完的部分**。
 
-- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源白名单），#76 之后又以「每次应用启动随机生成的凭证 + `Host` 回环校验」重新加回，理由与形态见 [security-privacy.md](./security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](./roadmap.md)。
+- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](./security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](./roadmap.md)。
 - **S1「core 可独立运行」跳过**：CLI 在构建期用 Vite 别名直接打包 `core` / `contracts` 的**源码**，不消费它们的独立产物，因此没有驱动这一阶段的需求。代价是 `apps/cli/vite.config.ts` 必须自带一份完整的 `rolldownOptions`（外部化、`platform`、`define`，见 §5.8），不能复用 `vite.shared.ts`——那份外部化了 `electron`。等真有第三方单独消费 `core` 时再做。
 - **S3 App 回归（未开始）**：`apps/app/source` 按 §4.1 目标态拆出 `main/` 与 `preload/`，并复核构建产物映射（`electron-builder` 配置与打包脚本均归 `apps/app/`）。托盘、自动更新、开机自启、原生对话框保持。验收：桌面安装包端到端可用；升级路径（检查更新 → 下载 → 安装）不回归。
 - **S4 分发与文档（未开始）**：CLI 发布形态（npm 全局 bin）+ `engines` 声明 + 使用说明。**CLI 当前明确不发布**，所以 `apps/cli/package.json` 里 `bin` 已就位但 `private: true` 未摘。开工前要先办三件：定 `files`（至少含 `output/` 与 `packages/core/drizzle`，见 §5.7）、确定启动时如何提示 `node:sqlite` 不可用，以及确认 `bin` 入口的 shebang 与执行位在三个平台都成立。

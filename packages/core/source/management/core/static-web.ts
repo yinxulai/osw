@@ -12,11 +12,22 @@
  * API 同源，但同源并不意味着能读到响应——管理 API 仍然要凭证（见 `../token.ts`），所以
  * 入口文件在被送出之前会被注入一行 `window.__OSW__`，把这次的凭证交给页面。
  * 桌面形态不走这里（它 `loadFile` 加载产物，凭证由 preload 注入），所以注入是可选参数。
+ *
+ * ## 注入有条件：`Host` 必须是回环
+ *
+ * 这是整条链路上**唯一**还看 `Host` 的地方，理由很具体：DNS rebinding 的页面（攻击者的
+ * 域名解析到 `127.0.0.1`）在浏览器眼里与本服务同源，于是它读得到本服务发回的任意响应体
+ * ——包括这段注入了凭证的 HTML。`Host` 是页面上唯一改不动的东西，那种请求带的是攻击者
+ * 的域名。
+ *
+ * 非回环 `Host` 仍然拿得到页面（它本来就是公开的前端产物），只是**不带**凭证：后续每条
+ * API 调用都会 `401`。换句话说，这里不拒绝请求，只是不把秘密交给它。
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { createReadStream } from 'node:fs'
+import { hasLoopbackHost } from './loopback-host'
 import { sendError } from './response'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -73,9 +84,13 @@ export function createStaticWebHost(webRoot: string, token: string | null = null
       }
       if (pathname === '/api' || pathname.startsWith('/api/')) return false
 
+      // 凭证只交给「奔着回环来的」请求，理由见文件头注释。判断在**每次请求**上做，
+      // 不能放到 `createStaticWebHost` 里——那样就把一个 per-request 的事实冻成了启动配置。
+      const tokenForRequest = hasLoopbackHost(req) ? token : null
+
       const file = locateFile(root, pathname)
       if (file) {
-        await sendFile(res, file, method === 'HEAD', token)
+        await sendFile(res, file, method === 'HEAD', tokenForRequest)
         return true
       }
 
@@ -86,7 +101,7 @@ export function createStaticWebHost(webRoot: string, token: string | null = null
       }
 
       // 前端路由（`/runtime-settings` 这类）由前端自己处理，交给 index.html。
-      await sendFile(res, indexFile, method === 'HEAD', token)
+      await sendFile(res, indexFile, method === 'HEAD', tokenForRequest)
       return true
     },
   }

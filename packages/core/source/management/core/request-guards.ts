@@ -1,18 +1,24 @@
 /**
- * 管理 API 的入口守卫：Host、路径、方法与凭证。
+ * 管理 API 的入口守卫：路径、方法与凭证。
  *
  * 管理 API 只监听回环，但「只监听回环」不是访问控制：本机浏览器里任意一个网页都能向
- * `127.0.0.1` 发请求，同源策略只挡「读响应」、不挡「发请求」。所以这里叠了三层，各自
- * 挡一种具体的攻击，缺一层都会留出可用的口子（见 apps/docs/specs/security-privacy.md）：
+ * `127.0.0.1` 发请求，同源策略只挡「读响应」、不挡「发请求」。所以这里只有**一道**门：
+ * **本次启动的凭证**（`x-osw-token`）。它只存在于本次启动的自家进程内存里
+ * （见 `../token.ts`），页面猜不到，也就发不出被接受的请求。
  *
- *   - **Host 白名单**：挡 DNS rebinding。攻击者把自己的域名解析到 127.0.0.1，浏览器就
- *     认为请求与目标同源，CORS 直接失效；那种请求的 `Host` 是攻击者的域名，不是回环地址。
- *   - **本次启动的凭证**（`x-osw-token`）：挡「本机网页直接发请求」。凭证只存在于本次启动
- *     的自家进程内存里（见 `../token.ts`），页面猜不到，也就发不出被接受的请求。
- *   - **路由收口 + CORS 白名单**：只接 `/api/*` 的 `POST`，且只对回环来源回显 CORS 头。
+ * ## 为什么只剩这一道
  *
- * 顺序是有原因的：Host 必须最靠前。DNS rebinding 的请求在浏览器眼里是「同源」的，
- * 不会为它发预检，也就轮不到 CORS 说话；先验 Host 才能在它造成任何影响之前拦住。
+ * 曾经这里还叠着 `Host` 白名单与 CORS 来源白名单。凭证到位之后它们的防御价值归零：
+ *
+ *   - **`Host` 白名单**挡的是 DNS rebinding。但 rebinding 的杀伤力取决于「攻击者的页面
+ *     能不能读到响应」，而凭证在请求头里，页面拿不到就发不出请求；反过来，凭证一旦
+ *     泄漏，收紧 `Host` 也补不回来。所以它现在只留在**唯一会发出凭证的地方**——
+ *     静态托管的入口 HTML 注入（`./static-web.ts`），那里才是真正的泄漏面。
+ *   - **CORS 来源白名单**从来不是防线（它只决定浏览器允不允许页面读响应），只是让正常
+ *     形态能跨源到达自己的进程。凭证到位之后，它唯一的作用是制造「开发期换个端口就
+ *     连不上」的故障，所以改成回显任何来源。
+ *
+ * 结论：头里凡是「挡不住凭证持有者、又挡不住凭证泄漏」的检查，都是故障源，不留在链路上。
  *
  * ## 凭证为什么只卡浏览器
  *
@@ -37,42 +43,14 @@ import { MANAGEMENT_TOKEN_HEADER } from '../token'
 import { sendError } from './response'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-/**
- * 凭证必须列进 `Access-Control-Allow-Headers`，否则每一条带凭证的跨源请求都会卡在预检上：
- * 浏览器连真实请求都不发，直接报 `x-osw-token is not allowed by Access-Control-Allow-Headers`。
- */
-const ALLOWED_REQUEST_HEADERS = 'Content-Type, X-OSW-Token'
-
-/**
- * 校验 `Host` 头是否指向回环地址。
- *
- * 导出是因为调用方必须在**静态托管之前**先跑它：静态文件与 API 挂在同一个端口上，先发
- * 文件就等于先把「被 rebinding 的域名加载了这个页面」这件事做完了，再拦 API 也补不回来。
- *
- * 返回 `true` 表示放行；返回 `false` 时已经写出了错误响应。
- */
-export function checkManagementHost(req: IncomingMessage, res: ServerResponse): boolean {
-  const host = req.headers.host
-  if (typeof host !== 'string' || host.length === 0) {
-    sendError(res, 'VALIDATION_ERROR', 'Missing Host header', 400)
-    return false
-  }
-  if (!isLoopbackHost(host)) {
-    // 不把收到的 Host 回显给调用方：这条响应可能正落在攻击者页面的视野里。
-    console.warn(`[management] rejected request with unexpected host=${host}`)
-    sendError(res, 'FORBIDDEN', 'Host is not allowed', 403)
-    return false
-  }
-  return true
-}
+/** `/api/*` 全部是 `POST`；预检是浏览器自己发的，一起列进来。 */
+const ALLOWED_METHODS = 'POST, OPTIONS'
 
 export async function applyManagementRequestGuards(req: IncomingMessage, res: ServerResponse, token: string | null = null): Promise<boolean> {
   const method = req.method
   const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
 
   setCorsHeaders(req, res)
-
-  if (!checkManagementHost(req, res)) return false
 
   // 预检必须在凭证之前短路：预检请求是浏览器自己发的，它既不可能带自定义头，
   // 也不该被要求带。
@@ -121,21 +99,6 @@ function isBrowserRequest(req: IncomingMessage): boolean {
 }
 
 /**
- * `Host` 去掉端口后必须是回环地址。
- *
- * 用 `URL` 解析而不是自己按 `:` 切——IPv6 的写法（`[::1]:19301`）里冒号不止一个，手工切
- * 必然出错。解析失败（畸形 Host）一律当不合法。
- */
-function isLoopbackHost(host: string): boolean {
-  try {
-    const { hostname } = new URL(`http://${host}`)
-    return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]' || hostname === '::1'
-  } catch {
-    return false
-  }
-}
-
-/**
  * 定长比较。
  *
  * `timingSafeEqual` 在长度不同时会抛错，所以先比长度。这里泄露的「长度对不对」无所谓：
@@ -153,34 +116,32 @@ function hasValidToken(req: IncomingMessage, expected: string | null): boolean {
 }
 
 /**
- * 只对「本机页面」回显 CORS 头。
+ * CORS 头：来源一律回显。
  *
- * `Origin: null` 是渲染进程从 `file://` 加载时浏览器发的东西（页面是 opaque origin，
- * 只能这么表达自己），生产形态就靠它拿到读响应的许可。除此之外只放行 loopback——
- * 开发期控制台跑在 Vite server 上，是货真价实的跨源请求。
+ * 这不是防线，只决定浏览器允不允许页面读响应——真正的门是凭证。收窄来源名单换不来任何
+ * 安全性（拿不到凭证的页面照样读不到东西），却会让「开发期换了个端口」「用局域网 IP
+ * 打开」这类正常场景直接连不上。
  *
- * `Content-Type` 与 `X-OSW-Token` 都必须列进 `Access-Control-Allow-Headers`：两者都不属于
- * CORS 的「简单值」，控制台每一条写请求都要先过预检，漏掉任何一个预检都永远过不去。
+ * `Access-Control-Allow-Headers` 回显预检里问的那一份：调用方将来多加一个头（比如调试用
+ * 的追踪头）不必回来改这个文件。没问过就给 `*`。
  *
- * 不认识来源时**不回任何 CORS 头**：浏览器会挡住响应。记住了，这挡的是「读」不是「发」。
+ * `Vary: Origin` 必须留：响应头跟着来源变，中间缓存不区分来源就会把一个来源的头喂给另一个。
  */
 function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
   const origin = req.headers.origin
-  if (typeof origin !== 'string' || !isLocalOrigin(origin)) return
-
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Headers', ALLOWED_REQUEST_HEADERS)
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  if (typeof origin === 'string' && origin.length > 0) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+  }
+  res.setHeader('Access-Control-Allow-Headers', requestedHeaders(req))
+  res.setHeader('Access-Control-Allow-Methods', ALLOWED_METHODS)
 }
 
-function isLocalOrigin(origin: string): boolean {
-  if (origin === 'null') return true
-  try {
-    const { protocol, hostname } = new URL(origin)
-    if (protocol !== 'http:' && protocol !== 'https:') return false
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1'
-  } catch {
-    return false
-  }
+function requestedHeaders(req: IncomingMessage): string {
+  const requested = req.headers['access-control-request-headers']
+  const value = Array.isArray(requested) ? requested.join(', ') : requested
+  if (typeof value !== 'string' || value.trim().length === 0) return '*'
+  return value
 }

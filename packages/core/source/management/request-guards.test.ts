@@ -7,30 +7,32 @@ interface MockRequestOptions {
   method?: string
   url?: string
   origin?: string
-  host?: string | null
+  host?: string
   token?: string
   secFetchSite?: string
   secFetchMode?: string
+  allowHeaders?: string
 }
 
 /** 本次启动的凭证。固定值，因为这里测的是「对不对得上」而不是「猜不猜得到」。 */
 const TOKEN = 'test-management-token'
 
 /**
- * 守卫管四件事：Host 白名单、凭证、路径/方法与 CORS。这里逐个断言。
+ * 守卫管四件事：路径、方法、凭证与 CORS。这里逐个断言。
  *
- * `host` 默认给回环地址：真实请求一定带 Host，不带上就等于在测一个不存在的形态。
- * 传 `null` 表示「这条请求没有 Host 头」。
+ * 它**不**管 `Host`：凭证到位之后 `Host` 挡不住任何东西，只留下「用局域网 IP 打开就
+ * 上不去」这类故障。唯一的回环判据在静态托管的凭证注入那里（`core/static-web.ts`）。
  *
  * 默认**不带** `Origin` / `Sec-Fetch-*`，也就是模拟命令行、脚本、测试这类非浏览器客户端。
  */
 function mockRequest(options: MockRequestOptions): IncomingMessage {
   const headers: Record<string, string> = {}
   if (options.origin !== undefined) headers.origin = options.origin
-  if (options.host !== null) headers.host = options.host ?? '127.0.0.1:19301'
+  headers.host = options.host ?? '127.0.0.1:19301'
   if (options.token !== undefined) headers['x-osw-token'] = options.token
   if (options.secFetchSite !== undefined) headers['sec-fetch-site'] = options.secFetchSite
   if (options.secFetchMode !== undefined) headers['sec-fetch-mode'] = options.secFetchMode
+  if (options.allowHeaders !== undefined) headers['access-control-request-headers'] = options.allowHeaders
   return { method: options.method ?? 'POST', url: options.url ?? '/api/provider/list', headers } as unknown as IncomingMessage
 }
 
@@ -38,15 +40,13 @@ describe('management request guards', () => {
   it('handles CORS preflight without requiring a credential', async () => {
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(mockRequest({ method: 'OPTIONS', origin: 'http://localhost:5173' }), response, TOKEN)
+    const accepted = await applyManagementRequestGuards(mockRequest({ method: 'OPTIONS', origin: 'http://localhost:5173', allowHeaders: 'content-type,x-osw-token' }), response, TOKEN)
 
     expect(accepted).toBe(false)
     expect(response.statusCode).toBe(204)
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://localhost:5173')
-    // `application/json` 与 `x-osw-token` 都不属于 CORS 的「简单值」，控制台每条写请求
-    // 都要过预检；允许头里少了任何一个，浏览器连真实请求都不发
-    // （Request header field ... is not allowed by Access-Control-Allow-Headers）。
-    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'Content-Type, X-OSW-Token')
+    // 允许头直接回显预检里问的那一份：调用方将来多加一个头不必回来改服务端。
+    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'content-type,x-osw-token')
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Methods', 'POST, OPTIONS')
     // `Vary: Origin` 不能省：响应头跟着来源变，中间缓存（开发期的代理）不区分来源就会
     // 把一个来源的 CORS 头喂给另一个来源。
@@ -54,12 +54,22 @@ describe('management request guards', () => {
     expect(response.end).toHaveBeenCalledOnce()
   })
 
-  it('omits CORS headers for origins that are not the local console', async () => {
+  it('answers a preflight that asks for no headers with a wildcard', async () => {
     const response = mockResponse()
 
-    await applyManagementRequestGuards(mockRequest({ origin: 'https://example.com' }), response, TOKEN)
+    await applyManagementRequestGuards(mockRequest({ method: 'OPTIONS', origin: 'http://localhost:5173' }), response, TOKEN)
 
-    expect(response.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything())
+    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', '*')
+  })
+
+  it('echoes any origin instead of keeping a local whitelist', async () => {
+    // 来源名单从来不是防线（它只决定浏览器允不允许读响应），真正的门是凭证。
+    // 收窄它换不来安全性，只会让「开发期换了个端口」「用局域网 IP 打开」直接连不上。
+    const response = mockResponse()
+
+    await applyManagementRequestGuards(mockRequest({ origin: 'https://example.com', token: TOKEN }), response, TOKEN)
+
+    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'https://example.com')
   })
 
   it('echoes the opaque origin sent by the file:// renderer', async () => {
@@ -69,7 +79,16 @@ describe('management request guards', () => {
     await applyManagementRequestGuards(mockRequest({ origin: 'null', token: TOKEN }), response, TOKEN)
 
     expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'null')
-    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'Content-Type, X-OSW-Token')
+  })
+
+  it('answers with a wildcard when the client sends no origin at all', async () => {
+    // 命令行与脚本不发 `Origin`。这里回 `*` 而不是留空，是为了让「没有来源」与
+    // 「来源不认得」不再有区别——后者那个分支已经删掉了。
+    const response = mockResponse()
+
+    await applyManagementRequestGuards(mockRequest({ token: TOKEN }), response, TOKEN)
+
+    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', '*')
   })
 
   it('rejects non-API paths', async () => {
@@ -166,24 +185,14 @@ describe('management request guards', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a request whose Host is not a loopback address', async () => {
-    // DNS rebinding：攻击者的域名解析到 127.0.0.1，请求在浏览器眼里就是同源的，
-    // 于是 CORS 完全不参与，只有 Host 能把它认出来。凭证是对的也必须拒。
+  it('does not refuse a request just because its Host is not loopback', async () => {
+    // 以前这里会被 403。凭证成为唯一的门之后 `Host` 不再是访问控制：挡住它挡不住任何
+    // 拿到凭证的调用方，也救不回任何泄漏的凭证。真正的回环判据在静态托管的注入那儿。
     const response = mockResponse()
 
     const accepted = await applyManagementRequestGuards(mockRequest({ host: 'evil.example.com', token: TOKEN }), response, TOKEN)
 
-    expect(accepted).toBe(false)
-    expect(response.statusCode).toBe(403)
-  })
-
-  it('rejects a request without a Host header', async () => {
-    const response = mockResponse()
-
-    const accepted = await applyManagementRequestGuards(mockRequest({ host: null, token: TOKEN }), response, TOKEN)
-
-    expect(accepted).toBe(false)
-    expect(response.statusCode).toBe(400)
+    expect(accepted).toBe(true)
   })
 
   it('accepts the IPv6 loopback Host', async () => {
@@ -193,23 +202,5 @@ describe('management request guards', () => {
     const accepted = await applyManagementRequestGuards(mockRequest({ host: '[::1]:19301', token: TOKEN }), response, TOKEN)
 
     expect(accepted).toBe(true)
-  })
-
-  it('turns down origins that are not on http(s)', async () => {
-    // 扩展页面的 origin 也是本地的，但**不是**我们的控制台。白名单放的是「本机页面」
-    // 这个具体集合，不是「任何本机进程」这个抽象。
-    const response = mockResponse()
-
-    await applyManagementRequestGuards(mockRequest({ origin: 'chrome-extension://abcdefghijklmnop', token: TOKEN }), response, TOKEN)
-
-    expect(response.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything())
-  })
-
-  it('turns down an origin that cannot even be parsed', async () => {
-    const response = mockResponse()
-
-    await applyManagementRequestGuards(mockRequest({ origin: 'not a url', token: TOKEN }), response, TOKEN)
-
-    expect(response.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything())
   })
 })

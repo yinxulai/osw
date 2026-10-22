@@ -16,15 +16,11 @@ import { startManagementServer, stopManagementServer, type ManagementServerOptio
 const mocks = vi.hoisted(() => ({
   createStaticWebHost: vi.fn(),
   applyManagementRequestGuards: vi.fn(),
-  checkManagementHost: vi.fn(),
   handleApiRequest: vi.fn(),
 }))
 
 vi.mock('./core/static-web', () => ({ createStaticWebHost: mocks.createStaticWebHost }))
-vi.mock('./core/request-guards', () => ({
-  applyManagementRequestGuards: mocks.applyManagementRequestGuards,
-  checkManagementHost: mocks.checkManagementHost,
-}))
+vi.mock('./core/request-guards', () => ({ applyManagementRequestGuards: mocks.applyManagementRequestGuards }))
 vi.mock('./router', () => ({ handleApiRequest: mocks.handleApiRequest }))
 
 /** 本次启动的凭证。它只是被原样往下传，所以固定值就够。 */
@@ -40,8 +36,6 @@ beforeEach(() => {
   mocks.createStaticWebHost.mockReturnValue({ root: 'C:/console', handle: webHandle })
   mocks.applyManagementRequestGuards.mockReset()
   mocks.applyManagementRequestGuards.mockResolvedValue(true)
-  mocks.checkManagementHost.mockReset()
-  mocks.checkManagementHost.mockReturnValue(true)
   mocks.handleApiRequest.mockReset()
   mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.statusCode = 200
@@ -58,6 +52,28 @@ async function start(options: ManagementServerOptions = {}): Promise<{ server: h
   const server = await startManagementServer({ host: '127.0.0.1', port: 0, ...options })
   const address = server.address() as AddressInfo
   return { server, origin: `http://127.0.0.1:${address.port}` }
+}
+
+/**
+ * 发一条 `Host` 由我们指定的 GET。
+ *
+ * 不能用 `fetch`：`Host` 是 Fetch 规范的 forbidden header，undici 会静默丢掉它并按 URL
+ * 自己生成——那样请求的永远是 `127.0.0.1`，用例会「看起来通过了」但什么都没测到。
+ */
+async function getWithHost(baseUrl: string, pathname: string, hostHeader: string): Promise<{ status: number; body: string }> {
+  const url = new URL(pathname, baseUrl)
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { hostname: url.hostname, port: url.port, path: url.pathname, method: 'GET', headers: { host: hostHeader } },
+      response => {
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer) => chunks.push(chunk))
+        response.on('end', () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }))
+      },
+    )
+    request.on('error', reject)
+    request.end()
+  })
 }
 
 describe('startManagementServer', () => {
@@ -106,28 +122,26 @@ describe('request boundary', () => {
 
     expect(await response.text()).toBe('index.html')
     // 静态托管的 SPA 回退必须拿到未被改写过的请求，所以它在守卫与路由之前。
-    // 但 Host 必须在它之前：被 rebinding 的域名不能先把页面拿到手。
-    expect(mocks.checkManagementHost).toHaveBeenCalled()
+    // 凭证注入那一侧的 Host 判断归 `static-web.ts` 自己管，不在这条链路上。
     expect(mocks.applyManagementRequestGuards).not.toHaveBeenCalled()
     expect(mocks.handleApiRequest).not.toHaveBeenCalled()
   })
 
-  it('rejects the request before the static host when the Host is not allowed', async () => {
-    // DNS rebinding 的完整链路：让静态托管先发页面，那个页面就以「同源」身份替攻击者
-    // 发 API 请求，此时 CORS 已经不参与，只有这项检查能拦。
-    mocks.checkManagementHost.mockImplementation((_req, res: http.ServerResponse) => {
-      res.statusCode = 403
-      res.end('forbidden')
-      return false
+  it('serves the console to a request whose Host is not loopback', async () => {
+    // 以前这里会被 403 掉。凭证成为唯一的门之后，`Host` 不再是访问控制：前端产物
+    // 本来就是公开的，挡住它只会让「用局域网 IP 打开」这种正常用法失效。真正会泄漏的
+    // 是注入进入口 HTML 的凭证，那道判断收在 `static-web.ts` 里（见它的测试）。
+    webHandle.mockImplementation(async (_req, res: http.ServerResponse) => {
+      res.statusCode = 200
+      res.end('index.html')
+      return true
     })
     const { origin } = await start({ webRoot: 'C:/console', environment: 'production' })
 
-    const response = await fetch(`${origin}/runtime-settings`)
+    const response = await getWithHost(origin, '/runtime-settings', 'evil.example.com')
 
-    expect(response.status).toBe(403)
-    expect(webHandle).not.toHaveBeenCalled()
-    expect(mocks.applyManagementRequestGuards).not.toHaveBeenCalled()
-    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    expect(response.body).toBe('index.html')
   })
 
   it('does not create a static host when no web root is given', async () => {

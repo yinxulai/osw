@@ -53,6 +53,28 @@ async function startWithToken(token: string): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
+/**
+ * 发一条 `Host` 由我们指定的 GET。
+ *
+ * 不能用 `fetch`：`Host` 是 Fetch 规范的 forbidden header，undici 会静默丢掉它并按 URL
+ * 自己生成——那样测的永远是 `127.0.0.1`，用例会「看起来通过了」但其实没测到东西。
+ */
+async function getWithHost(baseUrlValue: string, pathname: string, hostHeader: string): Promise<string> {
+  const url = new URL(pathname, baseUrlValue)
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { hostname: url.hostname, port: url.port, path: url.pathname, method: 'GET', headers: { host: hostHeader } },
+      response => {
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer) => chunks.push(chunk))
+        response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+      },
+    )
+    request.on('error', reject)
+    request.end()
+  })
+}
+
 afterEach(async () => {
   await Promise.all(
     [server, ...extraServers.splice(0)].map(next => new Promise<void>(resolve => next.close(() => resolve()))),
@@ -229,5 +251,36 @@ describe('runtime config injection', () => {
     const response = await fetch(`${baseUrl}/`)
 
     expect(await response.text()).not.toContain('window.__OSW__')
+  })
+
+  it('withholds the token from a request whose Host is not loopback', async () => {
+    // DNS rebinding：攻击者的域名解析到 127.0.0.1，浏览器就认为那个页面与本服务同源，
+    // 于是它读得到入口 HTML——包括里面那行凭证。`Host` 是页面上唯一改不动的东西。
+    // 这里不拒绝请求（前端产物本来就是公开的），只是不把凭证交给它。
+    const tokenized = await startWithToken(TOKEN)
+
+    const html = await getWithHost(tokenized, '/', 'evil.example.com')
+
+    expect(html).not.toContain('window.__OSW__')
+    expect(html).toContain('<title>console</title>')
+  })
+
+  it('withholds the token from the SPA fallback when the Host is not loopback', async () => {
+    // 前端路由回退发的也是入口文件，漏掉这条就等于把凭证从后门递出去。
+    const tokenized = await startWithToken(TOKEN)
+
+    const html = await getWithHost(tokenized, '/runtime-settings', 'evil.example.com')
+
+    expect(html).not.toContain('window.__OSW__')
+    expect(html).toContain('<title>console</title>')
+  })
+
+  it('still hands the token to the IPv6 loopback Host', async () => {
+    // `[::1]:19301` 是最容易在手写解析里出错的一种回环写法；它必须拿到凭证。
+    const tokenized = await startWithToken(TOKEN)
+
+    const html = await getWithHost(tokenized, '/', '[::1]:19301')
+
+    expect(html).toContain(`window.__OSW__={apiToken:"${TOKEN}"}`)
   })
 })
