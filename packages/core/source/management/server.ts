@@ -1,6 +1,6 @@
 import http from 'node:http'
 import { handleApiRequest } from './router'
-import { applyManagementRequestGuards } from './core/request-guards'
+import { applyManagementRequestGuards, checkManagementHost } from './core/request-guards'
 import { createStaticWebHost, type StaticWebHost } from './core/static-web'
 import { normalizeError } from '@server/errors'
 import { sendManagementError } from './core/response'
@@ -16,6 +16,11 @@ export interface ManagementServerOptions {
    * 路径由宿主决定，core 不猜（见 `apps/docs/specs/packaging.md` §5.2）。
    */
   webRoot?: string | null
+  /**
+   * 本次启动的管理 API 凭证。给了就强制校验，并注入进托管的入口页面。
+   * 测试与「只想验证路由」的场景可以不传，那时等价于过去的无凭证形态。
+   */
+  token?: string | null
 }
 
 let managementServer: Server | null = null
@@ -29,10 +34,11 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 9301
   const environment = options.environment ?? 'production'
-  const webHost = options.webRoot ? createStaticWebHost(options.webRoot) : null
+  const token = options.token ?? null
+  const webHost = options.webRoot ? createStaticWebHost(options.webRoot, token) : null
   if (webHost) console.log(`[management-lifecycle] serving console static root=${webHost.root}`)
   const candidate = http.createServer((req, res) => {
-    void handleManagementRequest(req, res, environment, webHost)
+    void handleManagementRequest(req, res, environment, webHost, token)
   })
 
   managementServer = candidate
@@ -58,17 +64,23 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   return startupPromise
 }
 
-async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, environment: RuntimeEnvironment, webHost: StaticWebHost | null): Promise<void> {
+async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, environment: RuntimeEnvironment, webHost: StaticWebHost | null, token: string | null): Promise<void> {
   const startedAt = Date.now()
   console.debug(`[management] request begin method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
   try {
+    // Host 必须先验，且必须早于静态托管。DNS rebinding 的请求带的是攻击者的域名，
+    // 一旦让它先拿到页面，那个页面就会以「同源」的身份替攻击者发 API 请求。
+    if (!checkManagementHost(req, res)) {
+      console.warn(`[management] request rejected by host guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} duration=${Date.now() - startedAt}ms`)
+      return
+    }
     // 静态托管优先接管非 /api 的 GET：它的 SPA 回退必须拿到「未被改写过的」请求。
     if (webHost && await webHost.handle(req, res)) {
       const duration = Date.now() - startedAt
       console.debug(`[management] static request completed path=${req.url ?? '/'} status=${res.statusCode} duration=${duration}ms`)
       return
     }
-    if (!await applyManagementRequestGuards(req, res)) {
+    if (!await applyManagementRequestGuards(req, res, token)) {
       const message = `[management] request handled by guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${Date.now() - startedAt}ms`
       if (req.method === 'OPTIONS') console.debug(message)
       else console.warn(message)

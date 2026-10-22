@@ -16,12 +16,19 @@ import { startManagementServer, stopManagementServer, type ManagementServerOptio
 const mocks = vi.hoisted(() => ({
   createStaticWebHost: vi.fn(),
   applyManagementRequestGuards: vi.fn(),
+  checkManagementHost: vi.fn(),
   handleApiRequest: vi.fn(),
 }))
 
 vi.mock('./core/static-web', () => ({ createStaticWebHost: mocks.createStaticWebHost }))
-vi.mock('./core/request-guards', () => ({ applyManagementRequestGuards: mocks.applyManagementRequestGuards }))
+vi.mock('./core/request-guards', () => ({
+  applyManagementRequestGuards: mocks.applyManagementRequestGuards,
+  checkManagementHost: mocks.checkManagementHost,
+}))
 vi.mock('./router', () => ({ handleApiRequest: mocks.handleApiRequest }))
+
+/** 本次启动的凭证。它只是被原样往下传，所以固定值就够。 */
+const TOKEN = 'test-management-token'
 
 /** 被替身的静态托管：`handle` 的结果决定这条请求是否已经在它那里结束。 */
 let webHandle: ReturnType<typeof vi.fn>
@@ -33,6 +40,8 @@ beforeEach(() => {
   mocks.createStaticWebHost.mockReturnValue({ root: 'C:/console', handle: webHandle })
   mocks.applyManagementRequestGuards.mockReset()
   mocks.applyManagementRequestGuards.mockResolvedValue(true)
+  mocks.checkManagementHost.mockReset()
+  mocks.checkManagementHost.mockReturnValue(true)
   mocks.handleApiRequest.mockReset()
   mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.statusCode = 200
@@ -97,6 +106,26 @@ describe('request boundary', () => {
 
     expect(await response.text()).toBe('index.html')
     // 静态托管的 SPA 回退必须拿到未被改写过的请求，所以它在守卫与路由之前。
+    // 但 Host 必须在它之前：被 rebinding 的域名不能先把页面拿到手。
+    expect(mocks.checkManagementHost).toHaveBeenCalled()
+    expect(mocks.applyManagementRequestGuards).not.toHaveBeenCalled()
+    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects the request before the static host when the Host is not allowed', async () => {
+    // DNS rebinding 的完整链路：让静态托管先发页面，那个页面就以「同源」身份替攻击者
+    // 发 API 请求，此时 CORS 已经不参与，只有这项检查能拦。
+    mocks.checkManagementHost.mockImplementation((_req, res: http.ServerResponse) => {
+      res.statusCode = 403
+      res.end('forbidden')
+      return false
+    })
+    const { origin } = await start({ webRoot: 'C:/console', environment: 'production' })
+
+    const response = await fetch(`${origin}/runtime-settings`)
+
+    expect(response.status).toBe(403)
+    expect(webHandle).not.toHaveBeenCalled()
     expect(mocks.applyManagementRequestGuards).not.toHaveBeenCalled()
     expect(mocks.handleApiRequest).not.toHaveBeenCalled()
   })
@@ -150,6 +179,16 @@ describe('request boundary', () => {
     await fetch(`${origin}/api/settings/get`, { method: 'POST' })
 
     expect(mocks.handleApiRequest).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'development')
+  })
+
+  it('hands the token to both the guard and the static host', async () => {
+    const { origin } = await start({ webRoot: 'C:/console', token: TOKEN })
+
+    // 静态托管要用它把凭证注入进 HTML，守卫要用它验每一个 API 请求：同一份值，两处都拿得到。
+    expect(mocks.createStaticWebHost).toHaveBeenCalledWith('C:/console', TOKEN)
+
+    await fetch(`${origin}/api/settings/get`, { method: 'POST' })
+    expect(mocks.applyManagementRequestGuards).toHaveBeenCalledWith(expect.anything(), expect.anything(), TOKEN)
   })
 
   it('marks a 5xx as an error and a 4xx as a warning', async () => {

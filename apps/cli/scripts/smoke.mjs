@@ -134,16 +134,30 @@ function isPortOpen(port) {
 
 /**
  * 管理 API 全部是 POST，`GET` 一律 405（见 core 的 `management/core/request-guards.ts`）。
- * 本版本没有凭证，所以这里也不带任何身份头——测的就是「宿主与 CLI 之间只有这份快照」。
+ *
+ * 凭证每次启动都会随机生成，落在数据目录里，所以这里现读——**不**能写死，也不经过
+ * `runtime.json`（那份快照只描述「谁在跑」）。读不到就不带头：这时预期是 401，
+ * 断言自己会把这件事说清楚。
  */
-async function postJson(port, apiPath) {
+async function postJson(port, apiPath, token = null) {
+  const headers = { 'content-type': 'application/json' }
+  if (token) headers['x-osw-token'] = token
   const response = await fetch(`http://127.0.0.1:${port}${apiPath}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: '{}',
   })
   const body = await response.json().catch(() => null)
   return { status: response.status, body }
+}
+
+/** 读本次启动的管理凭证；没有就返回 `null`（调用方自己决定怎么报）。 */
+function readManagementToken(dataDir) {
+  try {
+    return fs.readFileSync(path.join(dataDir, 'management.token'), 'utf8').trim() || null
+  } catch {
+    return null
+  }
 }
 
 async function readStatusJson(dataDir) {
@@ -205,12 +219,20 @@ async function main() {
   log.info(`banner ok, pid ${main1.child.pid}`)
 
   log.step(2, TOTAL_STEPS, 'management API and console')
-  const proxyStatus = await postJson(managementPort, '/api/proxy/status')
+  const token = readManagementToken(dataDir)
+  assert.ok(token, 'the management token file must exist while the instance runs')
+  // 一个错误的凭证必须被拒——这才能证明上一步的 200 是因为带了正确凭证，而不是因为不校验。
+  assert.equal((await postJson(managementPort, '/api/proxy/status')).status, 401, 'a request without the token must be refused')
+  const proxyStatus = await postJson(managementPort, '/api/proxy/status', token)
   assert.equal(proxyStatus.status, 200, `POST /api/proxy/status → ${proxyStatus.status}`)
   assert.equal(proxyStatus.body?.success, true, 'the management API must answer with success: true')
   const consoleResponse = await fetch(`http://127.0.0.1:${managementPort}/`)
   assert.equal(consoleResponse.status, 200, 'the console index must be served')
   assert.match(consoleResponse.headers.get('content-type') ?? '', /text\/html/, 'the console index must be text/html')
+  // 命令行形态下页面是管理服务自己发的，凭证只能随入口 HTML 下发。这条断的是整条链路的最后一环。
+  const consoleHtml = await consoleResponse.text()
+  assert.match(consoleHtml, /window\.__OSW__=\{apiToken:"/, 'the served console must receive the management token')
+  assert.ok(consoleHtml.includes(token), 'the injected token must be this launch\u2019s token')
   assert.equal(fs.existsSync(runtimeFilePathOf(dataDir)), true, 'the runtime file must exist while running')
   log.info('management API and console answered')
 
@@ -241,6 +263,12 @@ async function main() {
   const stopped = await runOnce(['stop', '--data-dir', dataDir])
   assertExitCode(stopped, 0)
   await waitUntil(() => !fs.existsSync(runtimeFilePathOf(dataDir)), 5_000, () => 'the runtime file was not removed')
+  // 凭证只对这一次启动有效，退出时一并删掉，否则数据目录里会留一份过期的秘密。
+  await waitUntil(
+    () => !fs.existsSync(path.join(dataDir, 'management.token')),
+    5_000,
+    () => 'the management token was not removed on shutdown',
+  )
   assert.equal((await main1.exited).code, 0, 'SIGINT-less graceful shutdown must still exit 0')
   await waitUntil(async () => !(await isPortOpen(managementPort)) && !(await isPortOpen(proxyPort)), 5_000, () => 'the ports were not released')
   log.info('stopped, ports released, runtime file removed')
@@ -300,7 +328,7 @@ async function main() {
   )
   const noWebIndex = await fetch(`http://127.0.0.1:${managementPort}/`)
   assert.equal(noWebIndex.status, 404, '--no-web must not serve the console')
-  const stillAlive = await postJson(managementPort, '/api/proxy/status')
+  const stillAlive = await postJson(managementPort, '/api/proxy/status', readManagementToken(dataDir))
   assert.equal(stillAlive.body?.success, true, '--no-web must still expose the management API')
   assertExitCode(await runOnce(['stop', '--data-dir', dataDir]), 0)
 

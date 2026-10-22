@@ -24,16 +24,26 @@ export interface ManagementCallOptions {
   path: string
   body?: unknown
   timeoutMilliseconds?: number
+  /**
+   * 本次启动的管理 API 凭证（`<dataDir>/management.token`）。
+   *
+   * 不传就是「没有凭证可用」（比如用户手动删了这个文件），管理服务会回 401，
+   * 那在调用方看来就是 `rejected`——但 `host` 本身是通的，两种情况的下一步不一样。
+   */
+  token?: string | null
 }
 
 const DEFAULT_TIMEOUT_MILLISECONDS = 5_000
 
 export async function callManagementApi(options: ManagementCallOptions): Promise<ManagementCallResult> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (options.token) headers['x-osw-token'] = options.token
+
   let response: Response
   try {
     response = await fetch(formatUrl(options.host, options.port) + options.path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(options.body ?? {}),
       // 管理服务只监听回环，但端口被防火墙/代理占着时连接会挂很久。超时按「连不上」处理：
       // `stop` 卡住不返回，比报一句「没实例响应」难用得多。

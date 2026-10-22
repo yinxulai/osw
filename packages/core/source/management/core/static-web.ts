@@ -7,6 +7,11 @@
  *
  * SPA 回退规则：带扩展名的路径（`/assets/x.js`）找不到就是 404，不回退。回退成
  * `index.html` 会让浏览器把 HTML 当 JS 解析，报出来的错完全对不上真实原因。
+ *
+ * 托管是**唯一**一种「页面从管理服务自己的端口加载」的形态（命令行 `--web`）。这时页面与
+ * API 同源，但同源并不意味着能读到响应——管理 API 仍然要凭证（见 `../token.ts`），所以
+ * 入口文件在被送出之前会被注入一行 `window.__OSW__`，把这次的凭证交给页面。
+ * 桌面形态不走这里（它 `loadFile` 加载产物，凭证由 preload 注入），所以注入是可选参数。
  */
 
 import fs from 'node:fs'
@@ -51,7 +56,7 @@ export interface StaticWebHost {
   handle(req: IncomingMessage, res: ServerResponse): Promise<boolean>
 }
 
-export function createStaticWebHost(webRoot: string): StaticWebHost {
+export function createStaticWebHost(webRoot: string, token: string | null = null): StaticWebHost {
   const root = path.resolve(webRoot)
   const indexFile = path.join(root, 'index.html')
 
@@ -70,7 +75,7 @@ export function createStaticWebHost(webRoot: string): StaticWebHost {
 
       const file = locateFile(root, pathname)
       if (file) {
-        await sendFile(res, file, method === 'HEAD')
+        await sendFile(res, file, method === 'HEAD', token)
         return true
       }
 
@@ -81,7 +86,7 @@ export function createStaticWebHost(webRoot: string): StaticWebHost {
       }
 
       // 前端路由（`/runtime-settings` 这类）由前端自己处理，交给 index.html。
-      await sendFile(res, indexFile, method === 'HEAD')
+      await sendFile(res, indexFile, method === 'HEAD', token)
       return true
     },
   }
@@ -124,7 +129,7 @@ function statOrNull(target: string): fs.Stats | null {
   }
 }
 
-async function sendFile(res: ServerResponse, file: string, headOnly: boolean): Promise<void> {
+async function sendFile(res: ServerResponse, file: string, headOnly: boolean, token: string | null = null): Promise<void> {
   const stat = statOrNull(file)
   if (!stat?.isFile()) {
     console.error(`[static-web] index file is missing file=${file}`)
@@ -132,15 +137,24 @@ async function sendFile(res: ServerResponse, file: string, headOnly: boolean): P
     return
   }
 
+  const isEntry = path.extname(file).toLowerCase() === '.html' && path.basename(file) === 'index.html'
+  const injected = isEntry && token ? await injectRuntimeConfig(file, token) : null
+
   res.statusCode = 200
   res.setHeader('Content-Type', CONTENT_TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream')
-  res.setHeader('Content-Length', String(stat.size))
+  res.setHeader('Content-Length', String(injected === null ? stat.size : Buffer.byteLength(injected)))
   res.setHeader('X-Content-Type-Options', 'nosniff')
   // 产物带内容哈希，可以长缓存；入口文件必须每次回源，否则升级后浏览器仍在跑旧版本。
   res.setHeader('Cache-Control', isHashedAsset(file) ? 'public, max-age=31536000, immutable' : 'no-cache')
 
   if (headOnly) {
     res.end()
+    return
+  }
+
+  // 注入了凭证就不能再流式转发（长度和内容都变了），整份读出来再写。
+  if (injected !== null) {
+    res.end(injected)
     return
   }
 
@@ -155,6 +169,30 @@ async function sendFile(res: ServerResponse, file: string, headOnly: boolean): P
     stream.on('end', resolve)
     stream.pipe(res)
   })
+}
+
+/**
+ * 在入口 HTML 里补一行 `window.__OSW__`。
+ *
+ * 插在 `</head>` 之前而不是开头：`public/boot.js`（决定首帧主题与语言）是 `<head>` 里的
+ * 同步脚本，让它先跑，注入的配置只是给应用用的，不参与首帧。
+ *
+ * 值用 `JSON.stringify` 序列化——凭证是 base64url，理论上不需要转义，但这里不依赖
+ * 「凭证恰好是安全的字符」这个巧合。
+ */
+async function injectRuntimeConfig(file: string, token: string): Promise<string | null> {
+  try {
+    const html = await fs.promises.readFile(file, 'utf8')
+    const snippet = `<script>window.__OSW__={apiToken:${JSON.stringify(token)}}</script>`
+    const headEnd = html.lastIndexOf('</head>')
+    if (headEnd === -1) return `${snippet}\n${html}`
+    return `${html.slice(0, headEnd)}${snippet}\n${html.slice(headEnd)}`
+  } catch (error) {
+    // 读不出来就退回原始流式响应：页面照常打开，只是 API 调用会 401，
+    // 这比「首页打不开」更容易被用户看懂，也不掩盖真正的问题。
+    console.error(`[static-web] inject failed file=${file}`, error)
+    return null
+  }
 }
 
 function isHashedAsset(file: string): boolean {

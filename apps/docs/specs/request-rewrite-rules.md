@@ -498,7 +498,7 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 
 规则能力位于本地管理服务和代理核心之间，仍必须遵循现有安全边界：
 
-- 管理服务不校验身份，边界只有回环监听与来源白名单（它固定监听回环，见 [security-privacy.md](./security-privacy.md) 的「访问控制」）；
+- 管理服务要求本次启动的凭证（`x-osw-token`）与回环 `Host`，边界见 [security-privacy.md](./security-privacy.md) 的「访问控制」；
 - 不允许规则访问网络、文件系统、环境变量或密钥环（脚本动作在 `node:vm` 沙箱内执行，关闭 `eval` / `new Function` / WASM 编译，不提供 `require` / `process` / 定时器）；
 - 不允许规则覆盖 Provider 认证信息；
 - Header 和 Body 修改结果遵循现有脱敏策略；

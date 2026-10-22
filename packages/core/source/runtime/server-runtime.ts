@@ -11,6 +11,7 @@ import { configureOutboundConnector, createOutboundConnector, destroyOutboundCon
 import { installLogCapture } from '../management/infrastructure/log-buffer'
 import { configureShutdownHandshake, type ShutdownHandshake } from '../management/core/shutdown-handshake'
 import { startManagementServer, stopManagementServer } from '../management/server'
+import { removeManagementToken, writeManagementToken } from '../management/token'
 import { resetManualModels } from '../proxy/routing/manual-routing'
 import { startProxyServer, stopProxyServer } from '../proxy/runtime/server'
 import { reportTelemetryStartFailure, startTelemetry } from '../telemetry'
@@ -92,12 +93,18 @@ export class ServerRuntime {
       configureCoreNetworkConnector(outboundConnector)
       const settings = await getSettings()
       console.debug(`[runtime] proxy endpoint resolved host=${settings.listenHost} port=${settings.listenPort}`)
+      // 凭证由宿主在**应用启动**时生成一次并随配置传进来，这里只负责落盘给另外两个自家
+      // 进程用（命令行 `stop` / `status`、无头截图），以及交给管理服务去强制校验。
+      // 它不进日志：日志会被用户粘到 issue 里。
+      const { managementToken } = config
+      await writeManagementToken(config.dataDir, managementToken)
       console.info(`[runtime] starting management server host=${config.managementHost} port=${config.managementPort}`)
       this.managementServer = await startManagementServer({
         host: config.managementHost,
         port: config.managementPort,
         environment: config.environment,
         webRoot,
+        token: managementToken,
       })
       console.info(`[runtime] management server started listening=${this.managementServer.listening}`)
       console.info(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)
@@ -160,6 +167,13 @@ export class ServerRuntime {
     await closeDatabases()
     this.managementServer = null
     this.endpoints = null
+    // 进程停了就不该再留着一张「能进管理 API」的票据。下次启动会重新生成一张，
+    // 所以这里删失败也不影响后续启动——只记录，不要把它变成退出路径上的新故障点。
+    try {
+      await removeManagementToken(this.options.runtimeConfig.dataDir)
+    } catch (error) {
+      console.error('[runtime] failed to remove the management token', error)
+    }
     await this.releaseInstanceLock()
 
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')

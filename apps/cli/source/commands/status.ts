@@ -16,6 +16,7 @@ import { cliTranslator } from '../native-i18n'
 import { formatEndpoint, resolveDataDirectory } from '../host'
 import { callManagementApi, isPortListening } from '../management-client'
 import { isProcessAlive, readRuntimeState, runtimeFilePath } from '../runtime-state'
+import { readManagementToken } from '@server/management/token'
 import { renderStatusJson, renderStatusLines, type InstanceReport } from './status-report'
 import type { CliArguments } from '../options'
 
@@ -62,6 +63,7 @@ export async function runStatus(values: CliArguments): Promise<number> {
       host: state.managementHost,
       port: state.managementPort,
       path: '/api/proxy/status',
+      token: await readManagementToken(dataDir),
     })
 
     if (probe.ok) {

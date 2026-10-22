@@ -1,7 +1,9 @@
 import { app } from 'electron'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
+import { readManagementToken } from '@server/management/token'
 import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
@@ -79,7 +81,23 @@ app.on('window-all-closed', () => {
 //   - 应用级的东西（单实例锁、托盘、服务进程、数据目录）——本进程一概不碰。
 //     `app.setPath('userData', ...)` 尤其不能设：与正在跑的应用共用同一个数据目录会让
 //     Chromium 的 userData 单例锁撞在一起，两个 Electron 进程互相干扰。
-registerRuntimeConfigIpc(getRuntimeProfile('development').managementApiUrl)
+//
+// 凭证从**磁盘**读：本进程没有自己的服务进程，页面连的是「已经跑着的那个开发实例」，
+// 所以只能用它落盘的那份（`<dataDir>/management.token`）。读不到就照旧给 `null`，
+// 页面会 401——比让截图脚本在第一步就死掉更容易看懂。
+const developmentProfile = getRuntimeProfile('development')
+const developmentTokenPromise = readManagementToken(
+  path.join(os.homedir(), developmentProfile.dataDirectoryName),
+)
+// `sendSync` 的处理器是同步的，读文件是异步的，所以这里先开读、注册时给一个
+// 「读到之前一律 null」的 getter：窗口创建远晚于这次读盘完成。
+let developmentToken: string | null = null
+void developmentTokenPromise.then(token => {
+  developmentToken = token
+  if (token === null) console.warn('[screenshots] development management token not found; API calls may return 401')
+})
+
+registerRuntimeConfigIpc(developmentProfile.managementApiUrl, () => developmentToken)
 registerExternalLinkIpc()
 registerOpenDataDirectoryIpc()
 registerWindowThemeIpc()

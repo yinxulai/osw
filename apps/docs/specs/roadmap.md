@@ -81,7 +81,7 @@
 #### 7. 安全与隐私验证
 
 - [x] 服务默认只监听 `127.0.0.1`
-- [x] 网络可达性由监听地址与操作系统防火墙负责：`listenHost` 可由用户改为 `0.0.0.0` / `::` 以暴露给局域网 / WSL / 容器，**不做 Host 头白名单校验**（原「拒绝不允许的 Host」条目已按此决策撤销，见 [security-privacy.md](./security-privacy.md)）
+- [x] 管理接口叠加独立的访问控制：`Host` 必须是回环地址（挡 DNS rebinding，且在静态托管之前校验）+ 每次应用启动随机生成的凭证 `x-osw-token`（挡本机网页直接发请求）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只落盘到 `<dataDir>/management.token`（`0600`）、退出时删除；服务进程崩溃重启不会换新，也和代理是否启动无关。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
 - [ ] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
@@ -219,7 +219,7 @@
 - [x] S2.2 两种形态的一致性：同一套服务、同一份数据，差别只在「怎么把它起来」。数据目录名唯一取自 `runtimeProfile.dataDirectoryName`；两个形态的密钥文件分开命名（密文算法不同，同名会让后写的把前一份全部作废）；「一致 / 能力差异 / 形态差异」三类逐项列清（[packaging.md](./packaging.md) §6）。
 - [x] S2.3 数据落用户主目录 + 两库拆分：数据目录改为 `<用户主目录>/.osw`（开发档 `~/.osw-development`）；原先的单一数据库拆成 `config-<n>.db` / `data-<n>.db`，两份 schema、两条 Drizzle 链，跨库外键全部移除（健康行惰性创建 + 启动时清理孤儿行），文件名版本号改用各库自己的 schema 版本常量，新增库边界守卫 `check-database-boundaries.mjs`。**不考虑兼容与历史**：拆分当时不做数据搬迁，换代（换文件名）只用于大版本发布，日常结构变化就地重画基线。
 - [x] S2.4 宿主与实例身份收口：把只在某一个宿主/某一条路径上成立的保证收进 core——实例互斥移到 `packages/core/source/runtime/instance-lock.ts` 并由 `startServer` 在绑定端口前取锁（存活判定为「pid 活着且心跳新鲜」）；代理侧修失败归因（双向形态不符、流中途截断）、观察者隔离、下游背压、`accept-encoding` 协商与协议固定头丢失，并把请求头改成**默认转发**（只动鉴权头、逐跳头、与位置绑定的 `host`/`content-length` 和 `accept-encoding`，协议固定头分「该覆盖」与「只补缺」两半）；控制台修查询键撞车、监听器泄漏与加载失败静默。
-- [x] S2.5 管理接口去鉴权 + 拆掉专门加的校验：管理接口撤掉实例 Token（`runtime-identity.ts` 删除），边界只剩回环监听与来源白名单；`node:sqlite` 的产物级断言删除，`external` 固定为 `[...builtinModules, /^node:/]`；`typecheck.mjs` 的 `include` 前置检查删除。保留三个 `check-*` 边界守卫与 `version.mjs --check`（声明式规则表，验的是架构约束而非某次构建的输出）。
+- [x] S2.5 管理接口去鉴权 + 拆掉专门加的校验：管理接口撤掉实例 Token（`runtime-identity.ts` 删除），边界只剩回环监听与来源白名单；`node:sqlite` 的产物级断言删除，`external` 固定为 `[...builtinModules, /^node:/]`；`typecheck.mjs` 的 `include` 前置检查删除。保留三个 `check-*` 边界守卫与 `version.mjs --check`（声明式规则表，验的是架构约束而非某次构建的输出）。**后续修正**：撤掉鉴权的前提是「回环 + CORS 就是访问控制」，而这两个都挡不住本机网页（简单请求不过预检、`Origin: null` 还在白名单里）。[#76](https://github.com/yinxulai/osw/issues/76) 之后以「每次启动随机生成的 `x-osw-token` + `Host` 回环校验」重新加回，见 [security-privacy.md](./security-privacy.md) 的「访问控制」。
 - [ ] S3 App 回归：`apps/app/source` 按 §4.1 拆出 `main/` 与 `preload/` 并复核构建产物映射（`electron-builder` 配置与打包脚本已归 `apps/app/`）；托盘 / 自动更新 / 开机自启 / 原生对话框保持。验收：桌面安装包端到端可用且升级路径不回归。
 - [ ] S4 分发与文档：CLI 以 npm 全局 bin 分发并声明 `engines`。**当前明确不发布**，`bin` 已就位但 `private: true` 未摘。
 

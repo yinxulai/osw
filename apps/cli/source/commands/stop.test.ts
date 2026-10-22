@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   removeError: null as unknown,
   apiResult: { ok: true, data: {} } as unknown,
   apiCalls: [] as unknown[],
+  token: null as string | null,
   logged: [] as string[],
   errors: [] as string[],
 }))
@@ -51,6 +52,12 @@ vi.mock('../management-client', () => ({
     mocks.apiCalls.push(options)
     return mocks.apiResult
   },
+}))
+
+// 凭证与否不影响 `stop` 的判定（它只看进程是否真的消失），但真去读磁盘就会读到
+// 开发机上那份真实的数据目录，用例之间互相影响。
+vi.mock('@server/management/token', () => ({
+  readManagementToken: async () => mocks.token,
 }))
 
 // 真实的 `waitFor` 按毫秒轮询，超时用例要真等 10 秒。这里把「等」这件事本身抽掉，
@@ -99,6 +106,7 @@ beforeEach(() => {
   mocks.removeError = null
   mocks.apiResult = { ok: true, data: {} }
   mocks.apiCalls = []
+  mocks.token = null
   mocks.logged = []
   mocks.errors = []
   vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { mocks.logged.push(args.join(' ')) })
@@ -144,8 +152,21 @@ describe('stop when an instance is running', () => {
     mocks.aliveSequence = [true, true, false]
 
     expect(await runStop(values)).toBe(0)
-    expect(mocks.apiCalls).toEqual([{ host: '127.0.0.1', port: 9330, path: '/api/runtime/shutdown' }])
+    expect(mocks.apiCalls).toEqual([{ host: '127.0.0.1', port: 9330, path: '/api/runtime/shutdown', token: null }])
     expect(mocks.logged.join('\n')).toContain('OSW stopped.')
+  })
+
+  it('reads the token file next to the runtime file and sends it with the request', async () => {
+    // 凭证每次启动都会重新生成，所以只能从数据目录现读，不能存在 `runtime.json` 里——
+    // 那份快照是「谁在跑」的描述，别的进程（包括 `status`）也会读它。
+    mocks.state = stateOf(4242)
+    mocks.token = 'runtime-management-token'
+    mocks.aliveSequence = [true, true, false]
+
+    expect(await runStop(values)).toBe(0)
+    expect(mocks.apiCalls).toEqual([
+      { host: '127.0.0.1', port: 9330, path: '/api/runtime/shutdown', token: 'runtime-management-token' },
+    ])
   })
 
   it('trusts the process disappearing over the HTTP response, so a rejected response is not fatal on its own', async () => {

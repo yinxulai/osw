@@ -12,6 +12,8 @@ let temporaryDirectory: string
 let server: http.Server
 let host: StaticWebHost
 let baseUrl: string
+/** 带凭证的那些用例各起一个服务；`afterEach` 要一并关掉。 */
+const extraServers: http.Server[] = []
 
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-static-web-'))
@@ -24,21 +26,37 @@ beforeEach(async () => {
   fs.writeFileSync(path.join(temporaryDirectory, 'docs', 'index.html'), '<!doctype html><title>docs</title>')
 
   host = createStaticWebHost(temporaryDirectory)
-  server = http.createServer(async (req, res) => {
-    const handled = await host.handle(req, res)
-    if (!handled) {
-      res.statusCode = 200
-      res.end('api')
-    }
-  })
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  server = await listenWith(host)
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
   baseUrl = `http://127.0.0.1:${address.port}`
 })
 
+/** 一个真实的 HTTP 服务：宿主说「不归我管」时，外面这层把请求当成 API 处理（200 'api'）。 */
+async function listenWith(webHost: StaticWebHost): Promise<http.Server> {
+  const next = http.createServer(async (req, res) => {
+    const handled = await webHost.handle(req, res)
+    if (!handled) {
+      res.statusCode = 200
+      res.end('api')
+    }
+  })
+  await new Promise<void>(resolve => next.listen(0, '127.0.0.1', resolve))
+  return next
+}
+
+async function startWithToken(token: string): Promise<string> {
+  const next = await listenWith(createStaticWebHost(temporaryDirectory, token))
+  extraServers.push(next)
+  const address = next.address()
+  if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
+  return `http://127.0.0.1:${address.port}`
+}
+
 afterEach(async () => {
-  await new Promise<void>(resolve => server.close(() => resolve()))
+  await Promise.all(
+    [server, ...extraServers.splice(0)].map(next => new Promise<void>(resolve => next.close(() => resolve()))),
+  )
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
 })
 
@@ -160,5 +178,56 @@ describe('createStaticWebHost', () => {
 
     expect(response.status).toBe(200)
     expect(await response.text()).toBe('hello')
+  })
+})
+
+describe('runtime config injection', () => {
+  // 管理 API 要凭证，而 `--web` 形态下页面是从这个端口拿到的，没有别的渠道能把它交给页面。
+  // 所以凭证随入口 HTML 一起下发：同源的页面才拿得到，带 `no-cache` 就不会被缓存下来。
+  const TOKEN = 'injected-management-token'
+
+  it('injects the token into the entry file only', async () => {
+    const tokenized = await startWithToken(TOKEN)
+
+    const entry = await fetch(`${tokenized}/`)
+    const html = await entry.text()
+    expect(html).toContain(`window.__OSW__={apiToken:"${TOKEN}"}`)
+    // 插在 `</head>` 之前：`boot.js` 这种首帧脚本要先跑，注入的配置不参与首帧。
+    expect(html.indexOf('window.__OSW__')).toBeLessThan(html.indexOf('</head>'))
+    expect(html).toContain('<title>console</title>')
+    // 内容变了，长度也必须跟着变，否则浏览器会按旧长度截断或挂住。
+    expect(entry.headers.get('content-length')).toBe(String(Buffer.byteLength(html)))
+
+    // 静态资源原样发出：它们不需要凭证，也不该被改写（否则内容哈希就失效了）。
+    const asset = await fetch(`${tokenized}/assets/app-abc123.js`)
+    expect(await asset.text()).toBe('console.log(1)')
+  })
+
+  it('injects into the SPA fallback and directory indexes too', async () => {
+    const tokenized = await startWithToken(TOKEN)
+
+    // 前端路由回退的也是入口文件；目录 index 同样是别的入口，都要带上凭证。
+    for (const pathname of ['/runtime-settings', '/docs']) {
+      const html = await (await fetch(`${tokenized}${pathname}`)).text()
+      expect(html).toContain(`window.__OSW__={apiToken:"${TOKEN}"}`)
+    }
+  })
+
+  it('mentions the token in HEAD headers without sending a body', async () => {
+    const tokenized = await startWithToken(TOKEN)
+
+    const response = await fetch(`${tokenized}/`, { method: 'HEAD' })
+
+    // HEAD 不带正文，但 `Content-Length` 必须是注入后的长度：浏览器会拿它当 GET 的预期。
+    const get = await fetch(`${tokenized}/`)
+    expect(response.headers.get('content-length')).toBe(get.headers.get('content-length'))
+    expect(await response.text()).toBe('')
+  })
+
+  it('leaves the entry file untouched when no token is configured', async () => {
+    // 桌面形态用 `loadFile` 加载产物，凭证由 preload 注入，静态托管的 `token` 就是 null。
+    const response = await fetch(`${baseUrl}/`)
+
+    expect(await response.text()).not.toContain('window.__OSW__')
   })
 })
