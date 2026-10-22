@@ -187,7 +187,7 @@ describe('readLiveRequestStream', () => {
 
     await readLiveRequestStream({ signal: controller.signal, onMessage: () => undefined })
 
-    expect(openStream).toHaveBeenCalledWith('/request-log/live/stream', { signal: controller.signal })
+    expect(openStream).toHaveBeenCalledWith('/request-log/live/stream', {}, { signal: controller.signal })
   })
 
   it('末尾那截没等来换行的半行直接丢掉', async () => {

@@ -77,12 +77,27 @@ afterEach(async () => {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
 })
 
-function payload(response: ServerResponse): Record<string, unknown> {
-  return JSON.parse(String(vi.mocked(response.end).mock.calls[0][0])) as Record<string, unknown>
+/**
+ * 响应体是一行一帧的 NDJSON（形状见 `@common/model-test-stream`），所以按帧读。
+ * `progress` 是逐轮进度，`summary` 才是这一批的结论（旧版一次性 JSON 的 `data.results`）——
+ * 下面的断言照旧只看结论，逐轮进度由第二条 describe 里的用例单独钉住。
+ */
+function frames(response: ServerResponse): Record<string, unknown>[] {
+  return vi.mocked(response.write).mock.calls
+    .map(call => String(call[0]))
+    .flatMap(chunk => chunk.split('\n'))
+    .filter(line => line.length > 0)
+    .map(line => JSON.parse(line) as Record<string, unknown>)
+}
+
+function summary(response: ServerResponse): Record<string, unknown> {
+  const frame = frames(response).find(item => item.type === 'summary')
+  expect(frame, '这一批必须以一条 summary 收尾').toBeDefined()
+  return frame!
 }
 
 function results(response: ServerResponse): Record<string, unknown>[] {
-  return (payload(response).data as { results: Record<string, unknown>[] }).results
+  return summary(response).results as Record<string, unknown>[]
 }
 
 interface TestRequest extends IncomingMessage {
@@ -339,6 +354,8 @@ describe('model test run route', () => {
 
     expect(results(response)).toEqual([])
     expect(request.removeListener).toHaveBeenCalledWith('aborted', expect.any(Function))
+    // 现在这个信号也挂在响应上（真实连接上只有它会发，见路由里的注释），同样要摘干净。
+    expect(response.removeListener).toHaveBeenCalledWith('close', expect.any(Function))
     // 取消掉的测试不上报：既没有结果，也不该被算成一次「用户试过了」。
     expect(reported).toEqual([])
   })
@@ -471,5 +488,45 @@ describe('model test run route — 诊断模式', () => {
     const response = mockResponse()
     await expect(run({ protocol: 'openai-completions', mode: 'turbo' }, response)).rejects.toThrow()
     expect(response.end).not.toHaveBeenCalled()
+  })
+})
+
+describe('model test run route — 逐轮进度', () => {
+  it('每一轮跑完就写出一条 progress，最后一条是 summary', async () => {
+    await seedModel('progressive', 'openai-completions', 'https://api.example.com/v1/chat/completions')
+    // 慢上游是这条用例的重点：帧要在下一轮开始之前就已经写出去，而不是攒到收尾。
+    mockUpstreamHandler = async response => {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      sseBody(SSE_CONTENT, SSE_USAGE)(response)
+    }
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', rounds: 2 }, response)
+
+    const list = frames(response)
+    expect(list.map(frame => frame.type)).toEqual(['progress', 'progress', 'summary'])
+    expect(list[0]).toMatchObject({ protocolVersion: 1, type: 'progress', round: 1, totalRounds: 2 })
+    expect(list[1]).toMatchObject({ type: 'progress', round: 2, totalRounds: 2 })
+    // 进度帧是「到此为止」的汇总：第一帧里只有第一轮的明细。
+    expect((list[0].result as { rounds: unknown[] }).rounds).toHaveLength(1)
+    expect((list[1].result as { rounds: unknown[] }).rounds).toHaveLength(2)
+    // 汇总帧与最后一帧进度算的是同一份结论：界面据它刷新那一行，不该有两个口径。
+    expect(list[1].result).toEqual((list[2].results as unknown[])[0])
+  })
+
+  it('没配上游地址时只回一轮：进度帧说「第 1/1 轮」，不是用户填的 N', async () => {
+    await seedModel('no-url', 'openai-completions', '')
+
+    const response = mockResponse()
+    await run({ protocol: 'openai-completions', rounds: 3 }, response)
+
+    const list = frames(response)
+    expect(list.map(frame => frame.type)).toEqual(['progress', 'summary'])
+    expect(list[0]).toMatchObject({
+      type: 'progress',
+      round: 1,
+      totalRounds: 1,
+      result: { success: false, errorMessage: 'No upstream url is configured for protocol openai-completions' },
+    })
   })
 })

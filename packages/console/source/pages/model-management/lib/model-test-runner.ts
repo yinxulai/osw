@@ -22,6 +22,18 @@ import { runTaskQueue } from '@/lib/task-queue'
 
 export type TestTaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
 
+/**
+ * 正在跑的那个目标的轮次进度。
+ *
+ * `round` 是刚跑完的那一轮，`totalRounds` 是这个目标这一批要跑几轮（没配上游地址时是 1 ——
+ * 那一轮就是全部）。界面的「第 N/M 轮」读的就是它，不自己拿 `config.rounds` 与「收了几帧」
+ * 相减——服务端才知道它真的打算跑几轮。
+ */
+export interface TestRoundProgress {
+  round: number
+  totalRounds: number
+}
+
 export interface TestTask {
   /** `模型 id:协议`。同一行在重测时必须命中同一格，所以 id 是稳定的。 */
   id: string
@@ -34,6 +46,13 @@ export interface TestTask {
   status: TestTaskStatus
   result?: ModelTestResult
   errorMessage?: string
+  /**
+   * 只在 `running` 时有值：每跑完一轮由服务端的进度帧刷新一次，收尾时清掉。
+   *
+   * `result` 会**同时**被刷新成「到目前为止」的汇总结论，所以这一行在跑的过程中就能显示
+   * 首字 / 耗时 / Token / 速度——不再只在整批结束后才从 `—` 变成数字。
+   */
+  roundProgress?: TestRoundProgress
 }
 
 /** 一批诊断要用的参数。只影响这一批，不改任何保存的配置。 */
@@ -114,6 +133,7 @@ export class ModelTestRunner {
       status: 'queued',
       result: undefined,
       errorMessage: undefined,
+      roundProgress: undefined,
     }))
     const byId = new Map(pending.map(task => [task.id, task]))
     this.tasks = this.tasks.length === 0 ? pending : this.tasks.map(task => byId.get(task.id) ?? task)
@@ -131,20 +151,38 @@ export class ModelTestRunner {
           // 空提示词不发：不发与服务端会回退到该模式的默认提示词，两边口径一致。
           prompt: options.prompt.trim() || undefined,
           inputLength: options.inputLength,
-        }, signal),
+        }, {
+          signal,
+          /*
+           * 每跑完一轮就把这一行刷新一次。
+           *
+           * `result` 一并写进去（而不是等收尾）：这一行显示的首字 / 耗时 / Token / 速度都从
+           * `result` 读，只更新「第几轮」的话，慢上游下还是要等整批结束才看得到读数——
+           * 而「边跑边出」要的正是这些读数。
+           */
+          onProgress: progress => {
+            this.updateTask(task.id, {
+              roundProgress: { round: progress.round, totalRounds: progress.totalRounds },
+              result: progress.result,
+            })
+          },
+        }),
         onStart: task => {
           this.updateTask(task.id, { status: 'running' })
         },
         onSettled: (task, outcome) => {
           if (outcome.status === 'cancelled') {
             // 取消不是失败：错误也要清掉，否则上一轮的红字会挂在一条「已取消」的行上。
-            this.updateTask(task.id, { status: 'cancelled', errorMessage: undefined })
+            // `result` 留着——已经跑完的那几轮是真金白银换来的，不该因为取消就消失；
+            // 轮次进度则收掉：这一行已经没有「正在跑第几轮」这回事了。
+            this.updateTask(task.id, { status: 'cancelled', errorMessage: undefined, roundProgress: undefined })
             return
           }
           if (outcome.status === 'failed') {
             this.updateTask(task.id, {
               status: 'failed',
               errorMessage: outcome.error instanceof Error ? outcome.error.message : options.translate('modelTest.error.requestFailed'),
+              roundProgress: undefined,
             })
             return
           }
@@ -154,6 +192,7 @@ export class ModelTestRunner {
           this.updateTask(task.id, {
             status: result?.success ? 'success' : 'failed',
             result,
+            roundProgress: undefined,
             errorMessage: response.success
               ? result ? result.errorMessage : options.translate('modelTest.error.missingEndpoint')
               : response.errorMessage,

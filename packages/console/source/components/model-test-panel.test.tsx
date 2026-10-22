@@ -391,7 +391,7 @@ describe('展开逐轮明细', () => {
     expect(within(nativeRow).getByText(zh('modelTest.detail.round', { round: 1 }))).toBeTruthy()
   })
 
-  it('服务端给了逐轮记录就逐轮列出来，成功率按轮次算', async () => {
+  it('服务端给了逐轮记录就逐轮列出来，成功率按轮次算（见下方）', async () => {
     vi.mocked(modelTestApi.run).mockImplementation(async () => ({
       success: true,
       data: {
@@ -425,6 +425,51 @@ describe('展开逐轮明细', () => {
     expect(within(row).getByText(zh('modelTest.detail.round', { round: 1 }))).toBeTruthy()
     expect(within(row).getByText(zh('modelTest.detail.round', { round: 2 }))).toBeTruthy()
     expect(within(row).getByText('rate limited')).toBeTruthy()
+  })
+
+  it('第一轮回来的那一刻：正在跑的行报「第 N/M 轮」，并带上该轮的读数', async () => {
+    /*
+     * issue #119 的界面侧验收：慢上游下，第一轮一完成就该在界面上看得见——而不是一整行
+     * 干等。这里让服务端挂住不回，然后手动推一帧进度，断言的就是那个中间状态。
+     */
+    const held: ((value: unknown) => void)[] = []
+    vi.mocked(modelTestApi.run).mockImplementation((_protocol, _mode, filters, _options, handlers) => {
+      const modelId = filters?.modelIds?.[0] ?? 'm1'
+      handlers?.onProgress?.({
+        protocolVersion: 1,
+        type: 'progress',
+        modelId,
+        providerId: 'prov_1',
+        round: 1,
+        totalRounds: 2,
+        result: {
+          modelId,
+          modelName: CONVERTING_MODEL,
+          providerId: 'prov_1',
+          providerName: PROVIDER_NAME,
+          mode: 'streaming',
+          success: true,
+          statusCode: 200,
+          durationMilliseconds: 1500,
+          outputTokens: 12345,
+          rounds: [{ round: 1, success: true, statusCode: 200, durationMilliseconds: 1500, outputTokens: 12345 }],
+        },
+      })
+      return new Promise<never>(resolve => { held.push(resolve as (value: unknown) => void) })
+    })
+    // 轮次填 2：M 不是界面自己数出来的，它来自服务端那一帧。
+    useModelTestConfigStore.setState({ config: { ...DEFAULT_TEST_CONFIG, rounds: 2 } })
+    renderPanel()
+    selectProvider()
+    startTest()
+
+    const runningLabel = zh('modelTest.status.runningRound', { round: 1, total: 2 })
+    await waitFor(() => { expect(screen.getAllByText(runningLabel).length).toBeGreaterThan(0) })
+    // 读数同时到位：耗时那一格已经是这次尝试的耗时，而不是 `—`。
+    expect(screen.getAllByText('1.5s').length).toBeGreaterThan(0)
+
+    // 收尾：让挂住的请求回来，不留下永不落定的 Promise。
+    for (const resolve of held) resolve({ success: true, data: { results: [] } })
   })
 })
 

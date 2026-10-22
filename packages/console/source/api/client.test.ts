@@ -255,8 +255,19 @@ describe('openStream', () => {
     const { openStream } = await loadClient()
     const controller = new AbortController()
 
-    await openStream('/live-request/stream', { signal: controller.signal })
+    await openStream('/live-request/stream', {}, { signal: controller.signal })
 
     expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+  })
+
+  // 诊断那条流要靠请求体说「测哪个协议、哪几轮」，通用流骨架因此多了一个 body 入参。
+  it('把请求体交给 fetch，而不是恒发一个空对象', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>(), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { openStream } = await loadClient()
+
+    await openStream('/model-test/run', { protocol: 'openai-completions', rounds: 3 })
+
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ protocol: 'openai-completions', rounds: 3 }))
   })
 })

@@ -554,7 +554,16 @@ function TaskDetail(props: TestTaskDetailProps) {
 function TestTaskRow(props: TestTaskRowProps) {
   const { task } = props
   const t = useTranslation()
-  const statusLabel = t(TASK_STATUS_LABEL_KEYS[task.status])
+  /*
+   * 在跑的行报「第 N/M 轮」，而不是一句一直不变的「请求中」。
+   *
+   * 多轮诊断下这一行会亮很久（一轮 = 一次真实的上游请求），而轮次进度是服务端逐轮推回来的
+   * ——用户因此看得到「它在动」。没有 `roundProgress` 时照旧用状态词：那是「已经跑完但还没
+   * 到过任何一轮」的窗口，编一个轮号出来只会是在讲没发生过的事。
+   */
+  const statusLabel = task.roundProgress
+    ? t('modelTest.status.runningRound', { round: task.roundProgress.round, total: task.roundProgress.totalRounds })
+    : t(TASK_STATUS_LABEL_KEYS[task.status])
   const expanded = props.expanded
   const ProtocolIcon = PROTOCOL_ICONS[task.protocol]
   return (

@@ -115,6 +115,8 @@ export const uiEn = {
   'modelTest.progress.cancelledCount': 'Cancelled {count}',
   'modelTest.status.queued': 'Queued',
   'modelTest.status.running': 'Requesting',
+  // 正在跑的那一行报轮次进度：一轮就是一次真实的上游请求，慢上游下这一行会亮很久。
+  'modelTest.status.runningRound': 'Round {round}/{total}',
   'modelTest.status.success': 'Passed',
   'modelTest.status.failed': 'Failed',
   'modelTest.status.cancelled': 'Cancelled',

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ModelTestResult } from '@common/diagnostics'
+import type { ModelTestProgressMessage } from '@common/model-test-stream'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import { ModelTestRunner, type TestTask, type TestRunOptions } from './model-test-runner'
 
@@ -26,6 +28,8 @@ const runMock = vi.mocked(modelTestApi.run)
 interface InFlight {
   modelId: string
   signal: AbortSignal | undefined
+  /** 服务端逐轮推回来的进度：测试自己决定它什么时候推、推几条。 */
+  onProgress: ((progress: ModelTestProgressMessage) => void) | undefined
   resolve: (value: unknown) => void
   reject: (error: unknown) => void
 }
@@ -34,15 +38,41 @@ let inFlight: InFlight[] = []
 
 /** 让 `modelTestApi.run` 挂住，把控制器交给测试。 */
 function holdRequests() {
-  const held: typeof modelTestApi.run = (_protocol, _mode, filters, _options, signal) => new Promise((resolve, reject) => {
+  const held: typeof modelTestApi.run = (_protocol, _mode, filters, _options, handlers = {}) => new Promise((resolve, reject) => {
     inFlight.push({
       modelId: filters?.modelIds?.[0] ?? '',
-      signal,
+      signal: handlers.signal,
+      onProgress: handlers.onProgress,
       resolve: resolve as (value: unknown) => void,
       reject,
     })
   })
   runMock.mockImplementation(held)
+}
+
+/** 一帧「第 N/M 轮」的进度。`result` 是服务端算的「到此为止」的汇总结论。 */
+function progress(round: number, totalRounds: number, overrides: Partial<ModelTestResult> = {}): ModelTestProgressMessage {
+  return {
+    protocolVersion: 1,
+    type: 'progress',
+    modelId: 'm1',
+    providerId: 'prov_1',
+    round,
+    totalRounds,
+    result: {
+      modelId: 'm1',
+      modelName: 'm1',
+      providerId: 'prov_1',
+      providerName: '示例渠道',
+      mode: 'streaming',
+      success: true,
+      statusCode: 200,
+      durationMilliseconds: 120 * round,
+      outputTokens: 10 * round,
+      rounds: [{ round, success: true, statusCode: 200, durationMilliseconds: 120 * round }],
+      ...overrides,
+    },
+  }
 }
 
 function success(modelId: string, overrides: Record<string, unknown> = {}) {
@@ -395,5 +425,67 @@ describe('参数透传', () => {
 
     expect(runMock.mock.calls[0][1]).toBe('speed')
     expect(runMock.mock.calls[0][3]).toMatchObject({ prompt: '只输出数字' })
+  })
+})
+
+describe('逐轮进度', () => {
+  /*
+   * 这一组盯的是 issue #119 的验收第一条：**每一轮一完成就出现在界面上**。
+   * 旧版每一行只在一批请求收尾时才有 `result`，慢上游下这一行会亮几十秒却一直显示 `—`；
+   * 现在服务端逐轮推回「到此为止的汇总结论」，执行器就把它写进那一行。
+   */
+  it('每跑完一轮就把轮次与当下的读数写进那一行，不必等整批结束', async () => {
+    holdRequests()
+    const runner = new ModelTestRunner()
+
+    void runner.run([task()], { ...OPTIONS, rounds: 2 })
+    expect(runner.getSnapshot().tasks[0].roundProgress).toBeUndefined()
+
+    inFlight[0].onProgress!(progress(1, 2))
+
+    // 还在请求中，但已经有「第 1/2 轮」与第一轮的读数了——这一行不再是死的。
+    expect(runner.getSnapshot().tasks[0]).toMatchObject({
+      status: 'running',
+      roundProgress: { round: 1, totalRounds: 2 },
+      result: { statusCode: 200, durationMilliseconds: 120, outputTokens: 10 },
+    })
+
+    inFlight[0].onProgress!(progress(2, 2, { rounds: [{ round: 1, success: true, durationMilliseconds: 120 }, { round: 2, success: true, durationMilliseconds: 240 }] }))
+    expect(runner.getSnapshot().tasks[0]).toMatchObject({ roundProgress: { round: 2, totalRounds: 2 } })
+
+    inFlight[0].resolve(success('m1'))
+    await tick()
+    // 收尾时轮次进度收掉：这一行已经没有「正在跑第几轮」这回事了。
+    expect(runner.getSnapshot().tasks[0].roundProgress).toBeUndefined()
+    expect(runner.getSnapshot().tasks[0].status).toBe('success')
+  })
+
+  it('取消保留已经跑完的轮次：那是真金白银换来的，不该跟着取消一起没', async () => {
+    holdRequests()
+    const runner = new ModelTestRunner()
+
+    void runner.run([task()], { ...OPTIONS, rounds: 3 })
+    inFlight[0].onProgress!(progress(1, 3))
+    runner.cancel()
+    inFlight[0].resolve(success('m1'))
+    await tick()
+
+    expect(runner.getSnapshot().tasks[0]).toMatchObject({ status: 'cancelled', errorMessage: undefined })
+    expect(runner.getSnapshot().tasks[0].roundProgress).toBeUndefined()
+    // 第一轮的结论还在（界面据此展开逐轮明细），只是这一行不再算「成功」。
+    expect(runner.getSnapshot().tasks[0].result?.outputTokens).toBe(10)
+  })
+
+  it('重测一行时先把上一回的轮次进度清掉', async () => {
+    holdRequests()
+    const runner = new ModelTestRunner()
+    void runner.run([task()], { ...OPTIONS, rounds: 2 })
+    inFlight[0].onProgress!(progress(2, 2))
+    inFlight[0].resolve({ success: false, errorCode: 'NETWORK_ERROR', errorMessage: '连接被重置' })
+    await tick()
+
+    void runner.run(runner.getSnapshot().tasks, { ...OPTIONS, rounds: 2 })
+    expect(runner.getSnapshot().tasks[0].roundProgress).toBeUndefined()
+    expect(runner.getSnapshot().tasks[0].result).toBeUndefined()
   })
 })

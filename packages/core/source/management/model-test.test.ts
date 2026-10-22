@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { MODEL_TEST_STREAM_PROTOCOL_VERSION } from '@common/model-test-stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabases, initDatabases } from '../database'
 import { modelTestRoutes } from './routes/diagnostics/model-test'
@@ -11,7 +12,8 @@ import { mockResponse } from './test-support'
  * 路由层的边界：入参校验与空集。
  *
  * 请求体怎么拼、流怎么读、多轮怎么汇总，各自的断言在 `diagnostics/` 下同名的
- * `*.test.ts` 里；跑通与失败的完整场景在 `model-test-route.test.ts`。这里只留
+ * `*.test.ts` 里；跑通与失败的完整场景在 `model-test-route.test.ts`；响应是流这件事
+ * （分帧、逐轮到达、客户端断开）在 `model-test-stream-http.test.ts`。这里只留
  * 「HTTP 那一层没做多余的事」。
  */
 
@@ -27,8 +29,8 @@ afterEach(async () => {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true })
 })
 
-function responsePayload(response: ServerResponse): Record<string, unknown> {
-  return JSON.parse(String(vi.mocked(response.end).mock.calls[0][0])) as Record<string, unknown>
+function writtenFrames(response: ServerResponse): Record<string, unknown>[] {
+  return vi.mocked(response.write).mock.calls.map(call => JSON.parse(String(call[0])) as Record<string, unknown>)
 }
 
 function mockRequest(): IncomingMessage {
@@ -42,7 +44,11 @@ describe('model test management route', () => {
 
     await modelTestRoutes.invoke('/api/model-test/run', response, { protocol: 'openai-completions' }, request)
 
-    expect(responsePayload(response)).toEqual({ success: true, data: { results: [] } })
+    // 一条目标都没有时只发汇总：没什么可逐轮报的，但汇总照发——界面据此把「筛选没命中」
+    // 与「请求本身失败了」分开。
+    expect(writtenFrames(response)).toEqual([
+      { protocolVersion: MODEL_TEST_STREAM_PROTOCOL_VERSION, type: 'summary', results: [] },
+    ])
   })
 
   it('rejects an invalid protocol before querying models', async () => {
@@ -50,6 +56,6 @@ describe('model test management route', () => {
     const request = mockRequest()
 
     await expect(modelTestRoutes.invoke('/api/model-test/run', response, { protocol: 'unknown' }, request)).rejects.toThrow()
-    expect(response.end).not.toHaveBeenCalled()
+    expect(response.write).not.toHaveBeenCalled()
   })
 })

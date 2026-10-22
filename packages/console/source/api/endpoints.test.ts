@@ -40,6 +40,23 @@ function lastCall(): CapturedCall {
   return { path: capturedPath(), body: captureBody() }
 }
 
+/**
+ * 一条 NDJSON 响应：一帧一行。
+ *
+ * 推送流与诊断的运行流都用这个形状，而 `new Response(JSON.stringify(...))` 那种替身
+ * 会在真实现里被逐行读——每一行都是半截 JSON，于是全部被当成畸形帧丢掉。
+ */
+function ndjsonResponse(frames: unknown[], status = 200): Response {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`))
+      controller.close()
+    },
+  })
+  return new Response(body, { status, headers: { 'content-type': 'application/x-ndjson; charset=utf-8' } })
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation(() =>
     Promise.resolve(new Response(JSON.stringify({ success: true, data: null }), { status: 200, headers: { 'content-type': 'application/json' } })),
@@ -305,13 +322,39 @@ describe('运行时与设置接口', () => {
     expect(capturedPath()).toBe('/development/seed')
   })
 
-  it('模型测试把协议、模式与筛选条件一起下发', async () => {
-    await modelTestApi.run('openai-responses', 'streaming', { providerIds: ['prov_1'], modelIds: ['pm_1'] })
+  it('模型测试把协议、模式与筛选条件一起下发，并逐轮读回进度', async () => {
+    /*
+     * 响应是一条 NDJSON 流（形状见 `@common/model-test-stream`），不是一个立刻成形的响应体：
+     * 接口每跑完一轮写一帧 `progress`，最后写一帧 `summary`。这条用例钉住两件事——请求体与旧版
+     * 逐字相同，以及进度帧真的会被交给调用方。
+     */
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(ndjsonResponse([
+      { protocolVersion: 1, type: 'progress', modelId: 'pm_1', providerId: 'prov_1', round: 1, totalRounds: 2, result: { modelId: 'pm_1' } },
+      { protocolVersion: 1, type: 'summary', results: [{ modelId: 'pm_1' }] },
+    ])))
+    const rounds: number[] = []
+
+    const response = await modelTestApi.run('openai-responses', 'streaming', { providerIds: ['prov_1'], modelIds: ['pm_1'] }, {}, {
+      onProgress: message => rounds.push(message.round),
+    })
 
     expect(lastCall()).toEqual({
       path: '/model-test/run',
       body: { protocol: 'openai-responses', mode: 'streaming', providerIds: ['prov_1'], modelIds: ['pm_1'] },
     })
+    expect(rounds).toEqual([1])
+    expect(response).toEqual({ success: true, data: { results: [{ modelId: 'pm_1' }] } })
+  })
+
+  it('流没给出汇总帧时算失败：请求没跑完不等于「一个目标都没测」', async () => {
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(ndjsonResponse([
+      { protocolVersion: 1, type: 'progress', modelId: 'pm_1', providerId: 'prov_1', round: 1, totalRounds: 2, result: { modelId: 'pm_1' } },
+    ])))
+
+    const response = await modelTestApi.run('openai-responses', 'streaming', { providerIds: ['prov_1'], modelIds: ['pm_1'] })
+
+    expect(response.success).toBe(false)
+    if (!response.success) expect(response.errorMessage).toBe('the diagnostic stream ended without a summary')
   })
 })
 

@@ -116,6 +116,8 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.progress.cancelledCount': '取消 {count}',
   'modelTest.status.queued': '等待',
   'modelTest.status.running': '请求中',
+  // 正在跑的那一行报轮次进度：一轮就是一次真实的上游请求，慢上游下这一行会亮很久。
+  'modelTest.status.runningRound': '第 {round}/{total} 轮',
   'modelTest.status.success': '通过',
   'modelTest.status.failed': '失败',
   'modelTest.status.cancelled': '已取消',
