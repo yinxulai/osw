@@ -3,7 +3,7 @@ import type { ModelTestRoundResult } from '@common/diagnostics'
 import { summarizeRounds } from './round-summary'
 
 /**
- * 汇总口径见 `apps/docs/specs/diagnostics.md` §6。这里逐条钉住它：
+ * 汇总口径见 `apps/docs/specs/operations/diagnostics.md` §6。这里逐条钉住它：
  * 每一行断言都对应「界面上那一格为什么是这个数」。
  */
 

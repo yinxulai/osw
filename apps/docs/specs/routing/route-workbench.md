@@ -1,6 +1,6 @@
 # 路由工作台
 
-> 工作台的**交互设计**与**画布侧组件结构**在本文件维护，覆盖的是**工作流图模式**的画布；规则模式的模式切换、规则表与试跑语义见 [route-design.md](./route-design.md) §2.11。节点语义与节点目录见 [route-design.md](./route-design.md) §4，图模型与执行模型见 [workflow-engine.md](./workflow-engine.md)，页面在控制台中的位置见 [desktop.md](./desktop.md)。画布与节点的实际实现以 `packages/console/source/pages/router/` 为准。
+> 工作台的**交互设计**与**画布侧组件结构**在本文件维护，覆盖的是**工作流图模式**的画布；规则模式的模式切换、规则表与试跑语义见 [route-design.md](./route-design.md) §2.11。节点语义与节点目录见 [route-design.md](./route-design.md) §4，图模型与执行模型见 [workflow-engine.md](./workflow-engine.md)，页面在控制台中的位置见 [desktop.md](../platform/desktop.md)。画布与节点的实际实现以 `packages/console/source/pages/router/` 为准。
 
 ## 1. 设计目标
 
@@ -76,8 +76,8 @@ packages/console/source/pages/router/
 │   ├── edge-linear-gradient.tsx
 │   ├── block-icon.tsx / workflow-button.tsx
 │   └── policy-menu.tsx / version-menu.tsx
-├── nodes/                        # 十种节点，清单见 route-design.md §4
-├── rules/                        # 规则表模式（见 route-design.md §2.11）：与画布不共用组件，也不共用字段候选（那张表从规则表自己的来源表拼），只共用条件判定的契约
+├── nodes/                        # 十种节点，清单见 ./route-design.md §4
+├── rules/                        # 规则表模式（见 ./route-design.md §2.11）：与画布不共用组件，也不共用字段候选（那张表从规则表自己的来源表拼），只共用条件判定的契约
 └── panel/                        # 与节点一一对应的配置面板
 
 packages/contracts/source/router/       # 图数据与执行，console 与 core 共用
@@ -106,7 +106,7 @@ packages/contracts/source/router/       # 图数据与执行，console 与 core 
   - 选择器只列可追加的节点类型。
 - `note-node.tsx`
   - 备注便签：正文按 Markdown 只读渲染，是唯一一个带右下角缩放手柄的节点；
-  - 尺寸写进 `model.size`，由页面放到 React Flow 的节点样式上（语义见 route-design.md §4.7）。
+  - 尺寸写进 `model.size`，由页面放到 React Flow 的节点样式上（语义见 ./route-design.md §4.7）。
 - `workflow-edge.tsx`
   - 自定义边的曲线、hover、状态与中间入口。
 

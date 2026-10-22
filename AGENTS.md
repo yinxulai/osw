@@ -15,4 +15,4 @@ The format is `type(scope): summary` with an imperative, single-line summary. **
 
 Chinese stays in the explanatory documents written for people: `apps/docs/specs/`, the READMEs and code comments. Commit messages are not one of those — they are a record that gets parsed by a script and compared line by line in diffs.
 
-The authoritative wording lives in `apps/docs/specs/tech-architecture.md` under 「提交信息」, which also lists the allowed types and how to rewrite history safely.
+The authoritative wording lives in `apps/docs/specs/overview/tech-architecture.md` under 「提交信息」, which also lists the allowed types and how to rewrite history safely.

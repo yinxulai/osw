@@ -40,7 +40,7 @@ import type { TaskRecord, TaskStatus } from '@common/tasks'
  */
 export interface TaskKind<P, R, G> {
   kind: string
-  /** 同 kind 同时在飞的上限，默认 **1（串行）**。理由见 `apps/docs/specs/task-queue.md`。 */
+  /** 同 kind 同时在飞的上限，默认 **1（串行）**。理由见 `apps/docs/specs/overview/task-queue.md`。 */
   concurrency?: number
   /**
    * 把线上来的原始载荷解析成 `P`。解析不过就抛——那一项会被算作 `skipped`。
@@ -97,7 +97,7 @@ function errorMessageOf(error: unknown): string {
  * 永久停摆（没有任何报错，只是再也不动）；`Infinity` 则是不设上限地全放，
  * 「同一时刻在飞的数量等于 concurrency」这条承诺直接失效。
  *
- * 两者都按 **1** 处理：与文档同一条口径（`apps/docs/specs/diagnostics.md` §5.1
+ * 两者都按 **1** 处理：与文档同一条口径（`apps/docs/specs/operations/diagnostics.md` §5.1
  * 「并发不合法（非正数、非有限值）时按 1 处理」），也与搬走之前那套客户端队列同一条守卫。
  */
 function usableConcurrency(declared: number | undefined): number {

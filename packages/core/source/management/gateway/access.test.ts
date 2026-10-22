@@ -229,4 +229,22 @@ describe('credential', () => {
     expect(checkApiAccess(mockRequest({ origin: 'http://localhost:5173' }), browser, null)).toEqual({ accepted: false, reason: 'credential' })
     expect(checkApiAccess(mockRequest({}), local, null)).toEqual({ accepted: false, reason: 'credential' })
   })
+
+  it('skips the credential when the caller asks for it (development only)', () => {
+    // 只有开发形态会传 `requireCredential: false`（见 `../gateway.ts`）。凭证缺失、
+    // 或者干脆没有配置，都不再挡路；其余判据一概不变。
+    const withoutToken = mockResponse()
+    const withWrongToken = mockResponse()
+
+    expect(checkApiAccess(mockRequest({}), withoutToken, null, { requireCredential: false })).toEqual({ accepted: true })
+    expect(checkApiAccess(mockRequest({ token: 'anything' }), withWrongToken, TOKEN, { requireCredential: false })).toEqual({ accepted: true })
+  })
+
+  it('keeps the default strict when no option is given', () => {
+    // 缺省必须是严的那个：忘了传选项不该顺手把门打开。
+    const response = mockResponse()
+
+    expect(checkApiAccess(mockRequest({}), response, TOKEN, {})).toEqual({ accepted: false, reason: 'credential' })
+    expect(response.statusCode).toBe(401)
+  })
 })

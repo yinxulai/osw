@@ -8,7 +8,7 @@ import { DEFAULT_TEST_CONFIG, useModelTestConfigStore } from './model-test-confi
  *
  * 它们既不是服务端配置，也不是「这一次」的临时值：关掉面板再打开，上一回填的轮次
  * 应该还在——每次诊断都要从 1 轮重新填一遍没有意义。但换一台机器不该带走，
- * 所以落点是 `localStorage` 而不是服务端设置（见 `apps/docs/specs/diagnostics.md` §5）。
+ * 所以落点是 `localStorage` 而不是服务端设置（见 `apps/docs/specs/operations/diagnostics.md` §5）。
  *
  * **并发不在这一份里**：它现在由服务端 kind（`tasks/kinds/model-test.ts`）声明，
  * 测量的是「同时打几个上游」，属于调度而不是这台机器的偏好。

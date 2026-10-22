@@ -16,15 +16,15 @@
 - **`upstream/` 讲「上游到底怎么定义的」**，是厂商公开 API 文档的逐字快照，只服务协议转换的字段映射。
 - **`assets/` 收设计与物料**，品牌标志的单一矢量源、导出规则、社交封面等。
 
-目录名刻意取短、取中性：`specs/` / `upstream/` / `assets/` 各自本身就是一句名词定义，出现在路径里（`apps/docs/specs/proxy.md`）时不用再解释它属于哪一类。
+目录名刻意取短、取中性：`specs/` / `upstream/` / `assets/` 各自本身就是一句名词定义，出现在路径里（`apps/docs/specs/proxy/proxy.md`）时不用再解释它属于哪一类。
 
 ## 布局原则
 
 1. **按去向分类，不按主题分类。** 一个主题（比如「故障转移」）可以在 `source/` 和使用者对话、在 `specs/` 定义行为契约、在 `upstream/` 找到上游字段依据——三处说的是同一件事的不同侧面，但**它们属于不同的发布去向**，所以放在不同目录，而不是按主题摊在一起。判断一份内容的归属，先问「它给谁看、会不会被发布」，而不是「它讲什么」。
 2. **一个主题只有一处权威。** 跨类提到同一主题时只写一句结论加链接，不展开复述。`specs/` 内部同样如此——[`specs/README.md`](./specs/README.md) 的文档地图是各主题权威文档的唯一索引。发现两处描述不一致时，以权威文档和代码为准。
 3. **开放文档只服务使用者。** 内部实现取舍、未定稿的设计、维护者才关心的边界，一律不进 `source/`；使用者不需要的细节留在 `specs/`。
-4. **每个子树自带索引。** 具体约定（`specs/` 的文档地图、`upstream/` 的检索约定、`assets/` 的资产清单）写在各自的 `README.md` 里，本文件只负责「有哪些类、各自去哪」，不重复各子树的内部结构。
-5. **文件与 URL 同名。** 开放文档的文件名就是站点路径（`source/zh/upstreams/routing.mdx` → `/upstreams/routing`），产品文档用相同的英文 slug（`specs/provider-model.md`），这样「文档名 ↔ 站点页 ↔ 代码注释里的引用」三处一致，检索时不必记忆别名。带语言前缀的 URL 与文件名同构（`source/en/upstreams/routing.mdx` → `/en/upstreams/routing`），两种语言的同名页共享段 slug。
+4. **每个子树自带索引。** 具体约定（`specs/` 的文档地图、`upstream/` 的检索约定、`assets/` 的资产清单）写在各自的 `README.md` 里，本文件只负责「有哪些类、各自去哪」，不重复各子树的内部结构。`specs/` **内部再按主题分子目录**（`overview/` `proxy/` `routing/` `data/` `design/` `platform/` `operations/`，每簇自带一份 `README.md`），`README.md` 与 `roadmap.md` 留在该层根上作为全局索引与进度；这只发生在「同一个去向」内部，与上一条的跨去向分类不冲突。
+5. **文件与 URL 同名。** 开放文档的文件名就是站点路径（`source/zh/upstreams/routing.mdx` → `/upstreams/routing`），产品文档用相同的英文 slug（`specs/data/provider-model.md`），这样「文档名 ↔ 站点页 ↔ 代码注释里的引用」三处一致，检索时不必记忆别名。带语言前缀的 URL 与文件名同构（`source/en/upstreams/routing.mdx` → `/en/upstreams/routing`），两种语言的同名页共享段 slug。
 
 > **为什么不把三类内部内容都塞进一个目录？** 它们看起来都是「非站点文档」，但生命周期不同：`specs/` 随产品演进反复改写，`upstream/` 是逐字快照、只增不改，`assets/` 是二进制与画布物料、由脚本重写。混在一个目录里，就得靠文件名前缀来区分这几种完全不同的维护规则；分成三个目录，规则各自成文，也不用为「这份 md 该不该进打包」逐个判断。
 

@@ -16,7 +16,7 @@ interface RequestOptions {
  * 3. 其余（Electron 的 `file://`、Vite dev server）——退回构建期预设端口。
  *
  * 顺序里有个坑：Vite dev server 也是 `http:`，但它不是管理服务，同源拼接会指到 5173
- * 上去。所以开发期的判断必须放在同源判断**之前**（见 `apps/docs/specs/packaging.md` §5.3）。
+ * 上去。所以开发期的判断必须放在同源判断**之前**（见 `apps/docs/specs/platform/packaging.md` §5.3）。
  */
 let resolvedApiBase: string | null = null
 
@@ -46,8 +46,8 @@ function resolveApiBaseFromEnvironment(fallback: string): string {
  * 管理 API 的请求头。
  *
  * 凭证来自宿主注入的 `window.__OSW__.apiToken`（桌面走 preload，命令行 web 形态走入口
- * HTML 注入，见 `apps/docs/specs/security-privacy.md`）。没有注入时不带这个头——那只发生在
- * 浏览器里直接开 Vite dev server 的开发预览，那种形态本来就拿不到凭证，服务会回 401。
+ * HTML 注入，见 `apps/docs/specs/operations/security-privacy.md`）。没有注入时不带这个头——那发生在
+ * 浏览器里直接开 Vite dev server 的开发预览；开发形态的管理服务不校验凭证，所以照样能调通。
  *
  * 这里不缓存、不落 localStorage：凭证的寿命就是这次进程启动，存起来只会多一份会过期的副本。
  */
@@ -91,7 +91,7 @@ export async function request<T>(path: string, body: unknown = {}, options: Requ
     })
     const contentType = response.headers.get('content-type') ?? ''
     if (!contentType.includes('application/json')) {
-      // 诊断消息固定英文；界面按 `errorCode` 本地化（见 `apps/docs/specs/i18n.md` §5）。
+      // 诊断消息固定英文；界面按 `errorCode` 本地化（见 `apps/docs/specs/data/i18n.md` §5）。
       return { success: false, errorCode: 'INVALID_RESPONSE', errorMessage: `management service returned a non-JSON response (HTTP ${response.status})` }
     }
     const result = (await response.json()) as ApiResponse<T>

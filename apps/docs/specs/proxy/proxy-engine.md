@@ -61,7 +61,7 @@
 2. **上游格式** → `isEventStreamResponse(headers)`，只读响应头；
 3. **两者是否一致** → `attempt-executor.ts` 里那一次比较（`context.transport === 'http-stream' && upstreamTransport !== 'http-stream'`），用完即弃。
 
-**落库字段与轴同名**，不做投影、不留兼容别名（见 [data-model.md](./data-model.md)）：
+**落库字段与轴同名**，不做投影、不留兼容别名（见 [data-model.md](../data/data-model.md)）：
 
 - `request_logs.transport`：客户端跳的形态，即**预期**，原值落库（不是布尔）；
 - `request_attempts.upstreamTransport`：上游这一跳实际是什么形态，即**事实**，没拿到响应时为 `null`——因此「上游没回」与「上游回了非流式」在库里是两件事。
@@ -476,7 +476,7 @@ export interface PlanResult {
 
 - 今天的 `resolveProxyTargets`（优先级排序 + 手动切换 + 健康过滤）成为 `planners/target-planner.ts`。
 - 健康冷却由 `upstream/health` 写、`routing/router` 读，规划器只消费 `getAvailableModels` 的结果：它自己不查冷却状态。
-- [route-design.md](./route-design.md) / [workflow-engine.md](./workflow-engine.md) 的路由工作台成为 `planners/workflow-planner.ts`，**不 fork 引擎**。
+- [route-design.md](../routing/route-design.md) / [workflow-engine.md](../routing/workflow-engine.md) 的路由工作台成为 `planners/workflow-planner.ts`，**不 fork 引擎**。
 
 **实际形态比上面的草案更窄**（草案里的 `exchange` / `acceptedProtocols` 收窄成了单个字段）：
 
@@ -578,7 +578,7 @@ flowchart TD
 
 协议转换失败是数据面失败，不是「转换器内部小错误」：`ProtocolConversionError` 会变成 `kind: 'error'` 帧，禁止把未转换的上游原文当作 200 透传。整包转换、流式分块与流式收尾三个阶段都遵守同一条规则。
 
-与落库那条线**并排**还有一条内存线，专供界面看「此刻」：请求入口登记一份台账记录，执行器每次尝试产出进度（字节、分片、首字、输出 Token），收尾器在落库的同时把它移出台账。两个观察者挂在同一个 `observers` 数组上、互不依赖——其中一个抛错只丢自己那条记录。台账不参与搬运，也不参与交付判定（状态码与上游形态由执行器写，因为「要不要交付」的判断也在那里，事实与判断必须落在同一处）。细节见[可观测性 · 进行中的请求](observability.md#进行中的请求内存态)。
+与落库那条线**并排**还有一条内存线，专供界面看「此刻」：请求入口登记一份台账记录，执行器每次尝试产出进度（字节、分片、首字、输出 Token），收尾器在落库的同时把它移出台账。两个观察者挂在同一个 `observers` 数组上、互不依赖——其中一个抛错只丢自己那条记录。台账不参与搬运，也不参与交付判定（状态码与上游形态由执行器写，因为「要不要交付」的判断也在那里，事实与判断必须落在同一处）。细节见[可观测性 · 进行中的请求](../operations/observability.md#进行中的请求内存态)。
 
 双向传输的能力仍预留在内核里，但**没有实现，也不在当前计划内**：
 

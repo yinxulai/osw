@@ -390,7 +390,7 @@ describe('结果表的列划分', () => {
  * 服务端真实产出的形状是「记录上 `success` + 结论里 `success: false`」（见
  * `packages/core/source/management/tasks/kinds/model-test.ts`：401 / 超时都不会让 kind 抛错）。
  * 面板若直接抄队列状态，这一行就是绿色的「成功」——规格管这叫不该发生的事
- *（`apps/docs/specs/diagnostics.md` §6：「跑三轮挂一轮仍然要红。否则『稳定通过』和
+ *（`apps/docs/specs/operations/diagnostics.md` §6：「跑三轮挂一轮仍然要红。否则『稳定通过』和
  * 『碰巧过一次』在界面上长得一模一样」）。
  */
 describe('上游失败不能长成绿色的「成功」', () => {

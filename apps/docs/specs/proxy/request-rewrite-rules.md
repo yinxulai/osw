@@ -336,7 +336,7 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 
 ## 7. 数据模型
 
-两张表的字段、主键与索引定义在 [data-model.md](./data-model.md) §3.13，这里只写字段之外必须知道的约定。
+两张表的字段、主键与索引定义在 [data-model.md](../data/data-model.md) §3.13，这里只写字段之外必须知道的约定。
 
 - `match`、`actions` 和 `testCases` 是真正适合 JSON 的内容，由 Zod 校验；名称、启用状态、阶段、时间等查询字段一律不放入 JSON。`scope` 取 `global` 或 `model`，决定是否自动应用以及模型窗口是否可编辑。`source` 取 `user`、`builtin` 或 `imported`。
 - 绑定表主键为 `(providerModelId, requestRewriteRuleId)`：一条绑定要么在，要么不在；**取消绑定再加回来是在同一行上复活**（主键冲突更新并把 `deletedTime` 清回 `null`），不会新增、也不撞历史行。同一 ProviderModel 下同一个 `priority` 只能有一条生效绑定，这条由应用层把关（不做成部分唯一索引：违反它的是用户在一个请求体里填了两个相同的优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名）。绑定表不保存规则副本——请求执行时读取规则快照，历史 attempt 只记录规则 ID 列表。
@@ -498,7 +498,7 @@ end 帧 → flush 残余 carry（通常为空；非空则原样透传，不臆�
 
 规则能力位于本地管理服务和代理核心之间，仍必须遵循现有安全边界：
 
-- 管理服务要求本次启动的凭证（`x-osw-token`），边界见 [security-privacy.md](./security-privacy.md) 的「访问控制」；
+- 管理服务要求本次启动的凭证（`x-osw-token`），边界见 [security-privacy.md](../operations/security-privacy.md) 的「访问控制」；
 - 不允许规则访问网络、文件系统、环境变量或密钥环（脚本动作在 `node:vm` 沙箱内执行，关闭 `eval` / `new Function` / WASM 编译，不提供 `require` / `process` / 定时器）；
 - 不允许规则覆盖 Provider 认证信息；
 - Header 和 Body 修改结果遵循现有脱敏策略；

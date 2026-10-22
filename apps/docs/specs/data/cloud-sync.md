@@ -28,7 +28,7 @@ OSW 的配置（供应商、上游模型、逻辑模型与它们的排队顺序�
 | 凭据（credential） | 向后端证明「我是我」的那串东西。Gist 上是用户自建、只勾了 `gist` 权限的细粒度 PAT |
 | 远端句柄（target） | 快照具体放在哪。Gist 上是那个 Gist 的 id；未绑定时首次上传可自动新建 |
 
-流量方向是**本机直连所选后端**：`packages/core` 经共享出站连接器访问它的 API（Gist 是 `api.github.com`），因此受用户的[上游出站代理](./outbound-proxy.md)设置约束。我们不参与、不中转、也不知道用户同步了什么。
+流量方向是**本机直连所选后端**：`packages/core` 经共享出站连接器访问它的 API（Gist 是 `api.github.com`），因此受用户的[上游出站代理](../proxy/outbound-proxy.md)设置约束。我们不参与、不中转、也不知道用户同步了什么。
 
 ### 首版范围
 
@@ -202,7 +202,7 @@ interface ConfigSnapshot {
 
 **已知限制：删除一个逻辑模型不会传播。** 因为「快照没提到」与「对面刚删了」是同一件事，无法区分，只能选择不动。要真正删掉它，需要在目标机器上手动删除。
 
-**应用不是事务。** 中途失败会留下半拉架子（比如供应商已经导入、绑定还没重写）；再拉一次即可收敛到同一状态。这与供应商导入的取舍一致，理由见 [import-config-snapshot.ts](../../../packages/core/source/management/cloud-sync/import-config-snapshot.ts) 的函数头注释。
+**应用不是事务。** 中途失败会留下半拉架子（比如供应商已经导入、绑定还没重写）；再拉一次即可收敛到同一状态。这与供应商导入的取舍一致，理由见 [import-config-snapshot.ts](../../../../packages/core/source/management/cloud-sync/import-config-snapshot.ts) 的函数头注释。
 
 ## 配置契约
 
@@ -218,7 +218,7 @@ cloudSyncLastPulledTime: number      // 默认 0
 
 `cloudSyncProvider` 带着 `catch` 兜底：旧版本读到一个它不认识的方式时退回默认值，而不是整个设置对象校验失败。
 
-**凭据不进设置表**，只存进宿主密钥库（见 [security-privacy.md](./security-privacy.md) §密钥存储）。引用是**按后端固定**的（`cloud_backup_credential.<kind>`）：换后端不丢旧凭据；而用一个每次启动都变的随机引用会把它彻底弄丢。
+**凭据不进设置表**，只存进宿主密钥库（见 [security-privacy.md](../operations/security-privacy.md) §密钥存储）。引用是**按后端固定**的（`cloud_backup_credential.<kind>`）：换后端不丢旧凭据；而用一个每次启动都变的随机引用会把它彻底弄丢。
 
 ## 管理 API
 
@@ -258,7 +258,7 @@ cloudSyncLastPulledTime: number      // 默认 0
 - 凭据不写入 SQLite、不写入日志、不进入任何导出文件；数据库里只有当前方式、账号名、远端句柄与两个时间戳；
 - 快照整份只做 base64 编码（`packages/core/source/management/cloud-sync/snapshot-codec.ts`），**这是编码不是加密**：它能挡住“一眼看出内容”和针对密钥的扫描器，但挡不住任何一个能读到那个文件的人；
 - **快照里带着各供应商的 API Key**，这是「换台机器拉一次就能用」的前提，也意味着上传就是把密钥交到后端手里。Gist 新建时一律私密，但**私密 Gist 不是加密存储**——GitHub 及其运维方在技术上能读到内容。因此这条通路的适用面是「用户自己信任的容器」，不是「安全的密钥仓库」；
-- 界面不摆常驻告知，但文档必须写明这一点：本文件与 [security-privacy.md](./security-privacy.md) 同步写明；
+- 界面不摆常驻告知，但文档必须写明这一点：本文件与 [security-privacy.md](../operations/security-privacy.md) 同步写明；
 - 出站请求走共享出站连接器，因此受用户的上游代理与绕过规则约束，日志脱敏规则同样适用。
 
 ## 验收依据

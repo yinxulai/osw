@@ -748,6 +748,13 @@ export function ModelTestPanel() {
   const [failedOnly, setFailedOnly] = useState(false)
   /** 浮窗主体的两个视图：结果与配置。 */
   const [view, setView] = useState<'results' | 'config'>('results')
+  /**
+   * 测试参数。存在本机（`store/model-test-config`），不是 `useState`。
+   *
+   * 关掉浮窗再打开，上一回填的轮次还在——「这次怎么测」填到第三遍还从 1 开始，
+   * 每次都要重填一遍才叫莫名其妙。但它依然不进服务端配置：这是本机习惯，
+   * 换台机器重新来一遍是对的（`apps/docs/specs/operations/diagnostics.md` §5）。
+   */
   const config = useModelTestConfigStore(state => state.config)
   const setConfig = useModelTestConfigStore(state => state.setConfig)
   const resetConfig = useModelTestConfigStore(state => state.resetConfig)

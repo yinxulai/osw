@@ -9,7 +9,7 @@ import { TaskQueue } from './queue'
  * 路由与推送通道都 import 这个模块，谁先加载都一样。
  *
  * 目前只有一个 kind（渠道诊断），但这不是它的定义：任何「一批要真跑、有进度、能取消、
- * 结果要能边跑边看」的任务都往这里注册一个 kind（见 `apps/docs/specs/task-queue.md`）。
+ * 结果要能边跑边看」的任务都往这里注册一个 kind（见 `apps/docs/specs/overview/task-queue.md`）。
  */
 export const taskQueue = new TaskQueue()
 taskQueue.register(modelTestTaskKind)

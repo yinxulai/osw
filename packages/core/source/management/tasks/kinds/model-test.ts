@@ -29,7 +29,7 @@ export const modelTestTaskKind: TaskKind<ModelTestTaskItem, ModelTestTaskResult,
    * 诊断量的是**延迟与首字**，同时打多个上游会互相污染读数（连接复用、出口带宽、
    * 上游侧排队）。串行是**诚实的默认**：一个数只有一次请求在飞时才说得清是谁的。
    * 需要更快就由界面把它显式调大，并接受读数被稀释的代价——见
-   * `apps/docs/specs/task-queue.md`。
+   * `apps/docs/specs/overview/task-queue.md`。
    */
   concurrency: 1,
   parse: input => ModelTestTaskItemSchema.parse(input),
@@ -66,7 +66,7 @@ async function runModelTestTask(item: ModelTestTaskItem, context: TaskRunContext
 
   const result: ModelTestTaskResult = { ...identity, ...summarizeRounds(roundResults) }
   // 被取消的那次不发事件：它没有结论，记成失败会把「用户点了取消」算进失败率里
-  // （口径见 `apps/docs/specs/telemetry.md` §3）。
+  // （口径见 `apps/docs/specs/operations/telemetry.md` §3）。
   if (!context.signal.aborted && roundResults.length > 0) {
     reportTelemetryEvent({ name: 'provider_tested', result: result.success ? 'success' : 'failed' })
   }

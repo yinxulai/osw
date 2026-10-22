@@ -19,7 +19,7 @@ export type {
 
 /*
  * 这里没有 `modelTestApi`。渠道诊断不再由界面发请求：它现在是服务端队列里的一个 kind，
- * 界面只通过 `api/tasks.ts` 入队 / 取消 / 读推送（见 `apps/docs/specs/task-queue.md`）。
+ * 界面只通过 `api/tasks.ts` 入队 / 取消 / 读推送（见 `apps/docs/specs/overview/task-queue.md`）。
  * 留着一条「按目标直连跑一次」的旁路，等于给「状态到底谁说了算」留了第二个答案。
  */
 

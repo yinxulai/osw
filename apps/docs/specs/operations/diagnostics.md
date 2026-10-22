@@ -6,11 +6,11 @@
 
 已实现：服务端队列里的 `model-test` kind（`packages/core/source/management/tasks/kinds/model-test.ts`）、草稿连接测试 `POST /api/model/connectivity-test`、控制台外壳上的非模态诊断浮窗、`packages/core/source/management/diagnostics/` 下的领域模块。
 
-**交付机制不在本文。** 渠道诊断是一次「一批要真跑、有进度、能取消、结果要能边跑边看」的任务，它挂在通用任务队列上：入队、并发、去重、取消、推送的契约见 [task-queue.md](./task-queue.md)。本文只说**诊断本身**——请求怎么写、可测目标怎么规划、结论怎么汇总。
+**交付机制不在本文。** 渠道诊断是一次「一批要真跑、有进度、能取消、结果要能边跑边看」的任务，它挂在通用任务队列上：入队、并发、去重、取消、推送的契约见 [task-queue.md](../overview/task-queue.md)。本文只说**诊断本身**——请求怎么写、可测目标怎么规划、结论怎么汇总。
 
 **诊断不是代理请求。** 它借道代理执行链打一次真实上游请求（走同样的地址解析、同样的鉴权头、同样的出站代理），但它的目的只是拿一个结论回来给人看，不服务任何客户端。这个区别决定了本文后面所有的口径。
 
-本文不覆盖：出站代理本身的配置与连通性（见 [outbound-proxy.md](./outbound-proxy.md)）；上游失败如何影响健康冷却（见 [observability.md](./observability.md)）；遥测事件的白名单与命名规则（见 [telemetry.md](./telemetry.md)）。
+本文不覆盖：出站代理本身的配置与连通性（见 [outbound-proxy.md](../proxy/outbound-proxy.md)）；上游失败如何影响健康冷却（见 [observability.md](./observability.md)）；遥测事件的白名单与命名规则（见 [telemetry.md](./telemetry.md)）。
 
 ## 2. 两个入口
 
@@ -116,7 +116,7 @@
 | 输入长度 | 载荷 | 这一次任务的正文 |
 | 并发 | **kind 的注册信息** | 同一个 kind 同时在飞几个请求 |
 
-前四个随入队一起下发，不写任何配置。**并发不逐次下发**：它决定的是「上游读数会不会被稀释」，那是调度属性，属于 kind（诊断声明为 1，见 [task-queue.md](./task-queue.md) §4.1），不该由界面每次替它拍板。
+前四个随入队一起下发，不写任何配置。**并发不逐次下发**：它决定的是「上游读数会不会被稀释」，那是调度属性，属于 kind（诊断声明为 1，见 [task-queue.md](../overview/task-queue.md) §4.1），不该由界面每次替它拍板。
 
 **但「不进服务端配置」不等于「不记」。** 轮次 / 输入长度 / 提示词作为**草稿**存在界面的 `localStorage` 里（`store/model-test-config`，键名 `osw-model-test-config`），关掉面板再打开还在，否则每回诊断都要从 1 轮重新填一遍。存本地而不是存 `settings` 是有意的：这是「这台机器上这个人习惯怎么测」，换台机器重新来一遍是对的，跟着云同步走反而多出一份谁也没答应的状态。服务端仍是每批载荷说什么就测什么，它不读这份草稿。
 
@@ -206,13 +206,13 @@
 
 ### 8.1 交付：交给服务端队列
 
-界面不再持有队列。选中项与参数拼成一批 `ModelTestTaskItem`，一次 `POST /api/tasks/enqueue` 交出去；之后界面只订阅 `/api/tasks/stream`，把任务按 `key` 叠到本地计划表上。键由契约层的 `modelTestTaskKeyOf` **唯一构造与解析**（`@common/diagnostics`），内容是 `模型 id + 协议 + mode + rounds + inputLength`：服务端写键与界面读键共用同一份实现，格式漂移会变成编译期错误。状态、并发、去重、取消的细节在 [task-queue.md](./task-queue.md)。
+界面不再持有队列。选中项与参数拼成一批 `ModelTestTaskItem`，一次 `POST /api/tasks/enqueue` 交出去；之后界面只订阅 `/api/tasks/stream`，把任务按 `key` 叠到本地计划表上。键由契约层的 `modelTestTaskKeyOf` **唯一构造与解析**（`@common/diagnostics`），内容是 `模型 id + 协议 + mode + rounds + inputLength`：服务端写键与界面读键共用同一份实现，格式漂移会变成编译期错误。状态、并发、去重、取消的细节在 [task-queue.md](../overview/task-queue.md)。
 
 这样分的理由是那四件事本来就不属于某一个组件：并发与收尾是队列语义，和渲染周期无关；每个任务都是一次真实的上游请求、真金白银，它需要能在**没有 React 环境**下被测；面板关掉再打开、切页再回来，队列本身不该跟着重建。**面板卸载不再掐掉在飞的任务**——用户离开的只是那块界面，不是他自己点下去的那一批。
 
 ### 8.2 并发
 
-kind 声明为 **1（串行）**：诊断量的是延迟与首字，同时打多个上游会互相污染读数。引擎保证「任何时刻在飞数恰好等于上限」，见 [task-queue.md](./task-queue.md) §4.1。
+kind 声明为 **1（串行）**：诊断量的是延迟与首字，同时打多个上游会互相污染读数。引擎保证「任何时刻在飞数恰好等于上限」，见 [task-queue.md](../overview/task-queue.md) §4.1。
 
 ### 8.3 取消
 
@@ -244,7 +244,7 @@ kind 声明为 **1（串行）**：诊断量的是延迟与首字，同时打多
 | `lib/model-test/tasks.test.ts` | 服务端任务 → 表格行：对号入座、别的 kind 不认、汇总与筛选口径 |
 | `model-test-panel.test.tsx` | 面板的交互与渲染（列、展开、最小化角标、关闭确认），入队与取消一律断言命令，不渲染队列 |
 
-队列本身的用例在 [task-queue.md](./task-queue.md) §9：那是服务端的契约，与诊断请求怎么写无关。
+队列本身的用例在 [task-queue.md](../overview/task-queue.md) §9：那是服务端的契约，与诊断请求怎么写无关。
 
 ## 10. 验收
 

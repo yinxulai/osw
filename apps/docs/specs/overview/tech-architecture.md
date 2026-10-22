@@ -1,6 +1,6 @@
 # 技术架构与框架选型
 
-> **状态说明：本文描述 v0.3 当前实现与明确的后续边界。** 数据库、关系模型、核心路由、请求观测、管理 API、协议适配器和渲染层分域已经落地；请求链路字段严格区分 `client*`、`upstream*` 与配置实体的 `provider*`。OpenAPI 文档与代码生成尚未接入，不作为当前实现依赖；发布包端到端验证以 `roadmap.md` 的剩余发布验收项为准。
+> **状态说明：本文描述 v0.3 当前实现与明确的后续边界。** 数据库、关系模型、核心路由、请求观测、管理 API、协议适配器和渲染层分域已经落地；请求链路字段严格区分 `client*`、`upstream*` 与配置实体的 `provider*`。OpenAPI 文档与代码生成尚未接入，不作为当前实现依赖；发布包端到端验证以 [`../roadmap.md`](../roadmap.md) 的剩余发布验收项为准。
 
 ## 整体技术栈
 
@@ -29,7 +29,7 @@
 - 代理透传层需要完全掌控请求/响应流，框架反而增加抽象成本
 - 两个监听器共享应用级数据库和密钥存储，但生命周期独立；停止或重启代理不会中断管理 API
 - 减少依赖，降低打包体积和安全面
-- 代理服务是纯 Node 模块，Electron 只是宿主，未来可抽 CLI / 无头模式（规划见 [packaging.md](./packaging.md)）
+- 代理服务是纯 Node 模块，Electron 只是宿主，未来可抽 CLI / 无头模式（规划见 [packaging.md](../platform/packaging.md)）
 ### 为什么用 Zod 做 Schema
 
 - **单一真相源**：配置模型、API 请求/响应、数据库行都用 Zod schema 定义，TypeScript 类型从中推导
@@ -77,7 +77,7 @@ osw/
 │   │       ├── protocols.ts
 │   │       ├── keychain.ts
 │   │       ├── runtime-profile.ts
-│   │       ├── i18n/                    # i18n 核心与语言目录，见 i18n.md
+│   │       ├── i18n/                    # i18n 核心与语言目录，见 ../data/i18n.md
 │   │       └── router/                  # 路由契约类型、预设与规则表引擎
 │   │
 │   ├── core/                            # 核心主体：runtime + management + proxy + database
@@ -88,7 +88,7 @@ osw/
 │   │       ├── index.ts                 # 外部生命周期入口
 │   │       ├── runtime/server-runtime.ts # ServerRuntime 启动/停止编排
 │   │       ├── management/              # 管理 HTTP 服务，routes/ 下按域分组注册
-│   │       ├── proxy/                   # 分层代理链路，见 proxy-engine.md
+│   │       ├── proxy/                   # 分层代理链路，见 ../proxy/proxy-engine.md
 │   │       ├── database/                # SQLite + Drizzle 持久化层及按领域拆分的 *-store.ts
 │   │       ├── infrastructure/secrets/  # 系统密钥环适配
 │   │       └── security/                # Host validation
@@ -143,7 +143,7 @@ osw/
 └── release/                             # 打包产物
 ```
 
-包边界、每包构建产物、目录归属与阶段划分见 [packaging.md](./packaging.md)。目录名统一用 `source/`；根目录只留工作区级配置；脚本按业务归入各包 `scripts/`（跨包的收在 `packages/toolkit/scripts/`）；turbo 接管任务编排；三份 Vite 配置各自构建一个目标（控制台 / 主进程 / preload）；导入别名沿用旧名（`@common` / `@server` / `@`）但重指向新位置。
+包边界、每包构建产物、目录归属与阶段划分见 [packaging.md](../platform/packaging.md)。目录名统一用 `source/`；根目录只留工作区级配置；脚本按业务归入各包 `scripts/`（跨包的收在 `packages/toolkit/scripts/`）；turbo 接管任务编排；三份 Vite 配置各自构建一个目标（控制台 / 主进程 / preload）；导入别名沿用旧名（`@common` / `@server` / `@`）但重指向新位置。
 
 ## 模块地图
 
@@ -153,13 +153,13 @@ osw/
 | --- | --- | --- |
 | `packages/core/source/runtime` | 进程级组装与生命周期：启动/停止 management 与 proxy，失败回滚 | [server-architecture.md](./server-architecture.md) |
 | `packages/core/source/management` | 配置管理与管理 API（含路由工作台、重写规则、诊断） | [server-architecture.md](./server-architecture.md) |
-| `packages/core/source/management/diagnostics` | 渠道诊断的领域模块：请求构造、流式读取、轮次汇总、目标规划（都不认识 HTTP） | [diagnostics.md](./diagnostics.md) |
+| `packages/core/source/management/diagnostics` | 渠道诊断的领域模块：请求构造、流式读取、轮次汇总、目标规划（都不认识 HTTP） | [diagnostics.md](../operations/diagnostics.md) |
 | `packages/core/source/management/tasks` | 进程级通用任务队列：生命周期引擎、kind 注册（渠道诊断是第一个）、推送通道 | [task-queue.md](./task-queue.md) |
-| `packages/core/source/proxy` | 代理请求链路：入口、路由、规划、执行、协议、修饰、观测 | [proxy-engine.md](./proxy-engine.md) |
-| `packages/core/source/database` | SQLite + Drizzle 持久化层与按域拆分的 `*-store.ts` | [data-model.md](./data-model.md) |
-| `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配 | [security-privacy.md](./security-privacy.md) |
-| `packages/contracts/source` | 全形态共享契约（Zod schema、协议表、路由类型、i18n 核心与语言目录） | 各自主题文档、[i18n.md](./i18n.md) |
-| `apps/app/source` | Electron 主进程：窗口、托盘、开机自启、自动更新、密钥存储 | [desktop.md](./desktop.md) |
+| `packages/core/source/proxy` | 代理请求链路：入口、路由、规划、执行、协议、修饰、观测 | [proxy-engine.md](../proxy/proxy-engine.md) |
+| `packages/core/source/database` | SQLite + Drizzle 持久化层与按域拆分的 `*-store.ts` | [data-model.md](../data/data-model.md) |
+| `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配 | [security-privacy.md](../operations/security-privacy.md) |
+| `packages/contracts/source` | 全形态共享契约（Zod schema、协议表、路由类型、i18n 核心与语言目录） | 各自主题文档、[i18n.md](../data/i18n.md) |
+| `apps/app/source` | Electron 主进程：窗口、托盘、开机自启、自动更新、密钥存储 | [desktop.md](../platform/desktop.md) |
 | `packages/console/source` | React 控制台：五层分层（组装 / 视图 / 绑定 / 领域 / 传输），业务逻辑不依赖 React | [console-architecture.md](./console-architecture.md) |
 
 代理服务与管理服务是两个独立监听器：代理可单独停止、重启而不影响管理服务，两者都由 `ServerRuntime` 持有。协议范围以 `packages/contracts/source/protocols.ts` 为准，当前不支持 Gemini 或 Custom 协议。
@@ -197,14 +197,14 @@ osw/
 
 ### 数据存储
 
-SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字段定义见 [data-model.md](./data-model.md)。**两个数据库文件互不相干**：
+SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字段定义见 [data-model.md](../data/data-model.md)。**两个数据库文件互不相干**：
 
 | 文件 | 角色 | Drizzle 定义 | 迁移链 |
 | --- | --- | --- | --- |
 | `config-<n>.db` | 用户配置（12 张表） | `packages/core/source/database/config-schema.ts` | `packages/core/drizzle/config/` |
 | `data-<n>.db` | 系统观测数据（10 张表） | `packages/core/source/database/data-schema.ts` | `packages/core/drizzle/data/` |
 
-拆分的理由与两条边界见 [data-model.md](./data-model.md) §2.1；文件名里的版本号是两个**独立的 schema 版本**常量，不住在应用版本号上。
+拆分的理由与两条边界见 [data-model.md](../data/data-model.md) §2.1；文件名里的版本号是两个**独立的 schema 版本**常量，不住在应用版本号上。
 
 - 首发基线：两条链各自只保留一份由 schema 直接生成的首发基线迁移与快照，`pnpm db:generate` 按角色各生成一次（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）
 - 基线随 `@osw/core` 包分发：开发期从模块目录逐级上溯找到 `packages/core/drizzle`，再按角色下钻一层；打包后则命中与入口同层的那份映射（`app.asar/output/command/` 上溯两层就是 asar 根），不存在第二套深度
@@ -222,17 +222,17 @@ SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字�
 | 开发 | `~/.osw-development` | 19300 / 19301 |
 | 正式 | `~/.osw` | 9300 / 9301 |
 
-数据库文件、密钥文件与监听端口三者完整隔离。命令行形态也走同一份 profile：数据目录名一律取自 `dataDirectoryName`，命令行恒定跑正式档（见 [packaging.md](./packaging.md) §5.5）。
+数据库文件、密钥文件与监听端口三者完整隔离。命令行形态也走同一份 profile：数据目录名一律取自 `dataDirectoryName`，命令行恒定跑正式档（见 [packaging.md](../platform/packaging.md) §5.5）。
 
 ### 渲染进程
 
 React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，React 只是渲染层**：`api/` 是传输层，`data/` 是取数与写入的绑定层，`lib/`、`catalog/`、`platform/`、`pages/*/lib/` 是纯领域层，`components/` 只负责画。分层的完整说明、依赖方向与护栏见 [console-architecture.md](./console-architecture.md)。
 
-侧边栏分组与页面清单以 `packages/console/source/components/app-sidebar.tsx` 为准，各页面职责见 [desktop.md](./desktop.md) 的控制台页面表。
+侧边栏分组与页面清单以 `packages/console/source/components/app-sidebar.tsx` 为准，各页面职责见 [desktop.md](../platform/desktop.md) 的控制台页面表。
 
 ## 构建与打包
 
-包拆分后的交付形态与每包构建产物见 [packaging.md](./packaging.md)「交付形态」「构建与测试编排」。渲染进程与宿主是两套独立构建：控制台由 `packages/console/vite.config.ts` 构建为静态产物，Electron 主进程、preload 与服务进程由 `apps/app/` 下的三份配置分别构建；宿主不再内联渲染层构建。
+包拆分后的交付形态与每包构建产物见 [packaging.md](../platform/packaging.md)「交付形态」「构建与测试编排」。渲染进程与宿主是两套独立构建：控制台由 `packages/console/vite.config.ts` 构建为静态产物，Electron 主进程、preload 与服务进程由 `apps/app/` 下的三份配置分别构建；宿主不再内联渲染层构建。
 
 ### Vite
 
@@ -247,7 +247,7 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 ### electron-builder
 
 - 打包成 macOS `.dmg` / `.app`、Windows `.exe`、Linux `.AppImage` / `.deb`
-- 所有东西都在 `app.asar` 一个文件里：`output/command/` 的 `index.js`、`preload.js`、`service-main.mjs` 与全部 chunk，`output/render/`，以及迁移基线 `packages/core/drizzle`。`node_modules` 被 `files` 里的 `!node_modules` 排除（里面只有 `@osw/*` 的 TS 源码与测试，运行时无人引用），细节与坑见 [packaging.md](./packaging.md) §5.7
+- 所有东西都在 `app.asar` 一个文件里：`output/command/` 的 `index.js`、`preload.js`、`service-main.mjs` 与全部 chunk，`output/render/`，以及迁移基线 `packages/core/drizzle`。`node_modules` 被 `files` 里的 `!node_modules` 排除（里面只有 `@osw/*` 的 TS 源码与测试，运行时无人引用），细节与坑见 [packaging.md](../platform/packaging.md) §5.7
 - macOS 无付费证书阶段使用显式 ad-hoc 签名；`afterPack` 必须对完整 `.app` 执行严格签名校验
 - ad-hoc 签名只保证应用包内部完整性，不提供开发者身份信任，也不能提交 Apple 公证
 - GitHub Release 必须附带 DMG 的 SHA-256 文件和“隐私与安全 > 仍要打开”的首次安装说明
@@ -273,7 +273,7 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 
 ### 提交信息
 
-格式是 `type(scope): summary`，summary 用**祈使句**、不带句号、不超过一行；破坏性变更在 type 后加 `!`，并在正文里写 `BREAKING CHANGE:`。type 取自 `feat` / `fix` / `perf` / `refactor` / `polish` / `style` / `docs` / `chore` / `ci` / `build` / `test` / `revert`——这张表同时是 `apps/app/scripts/release-notes.mjs` 的分组依据（见 [packaging.md](./packaging.md) 的发布说明一条），新增或改名必须两边一起改。
+格式是 `type(scope): summary`，summary 用**祈使句**、不带句号、不超过一行；破坏性变更在 type 后加 `!`，并在正文里写 `BREAKING CHANGE:`。type 取自 `feat` / `fix` / `perf` / `refactor` / `polish` / `style` / `docs` / `chore` / `ci` / `build` / `test` / `revert`——这张表同时是 `apps/app/scripts/release-notes.mjs` 的分组依据（见 [packaging.md](../platform/packaging.md) 的发布说明一条），新增或改名必须两边一起改。
 
 **主题与正文一律用英文，不用中文。** 三条理由，任何一条单独成立：
 

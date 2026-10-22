@@ -78,9 +78,9 @@ const registered = {
  * **注册必须早于任何窗口创建**，否则渲染进程会在这一行上永久等下去。
  *
  * 凭证用 getter 传进来而不是直接传值，是为了让每个宿主自己决定它从哪儿来：主进程用自己
- * 在应用启动时生成的那一份（`index.ts`），无头截图入口用磁盘上那一份（它连的是已经跑着的
- * 另一个实例）。真拿不到就给 `null`，让前端按「没有凭证」处理（API 会回 401），而不是把
- * 渲染进程卡在一个永远不会出现的值上。
+ * 在应用启动时生成的那一份（`index.ts`），无头截图入口永远回 `null`（它连的是开发实例，
+ * 管理服务在开发形态下不校验凭证）。真拿不到就给 `null`，让前端按「没有凭证」处理，
+ * 而不是把渲染进程卡在一个永远不会出现的值上。
  */
 export function registerRuntimeConfigIpc(managementApiUrl: string, getApiToken: () => string | null): void {
   if (registered.runtimeConfig) {

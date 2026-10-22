@@ -29,7 +29,7 @@ Your client only ever sees the attempt that succeeded.
 - **Pass through by default.** No protocol parsing, no rewriting, no conversion unless you explicitly ask for it. The safest and fastest request is the one the proxy barely touches.
 - **Every request tells you the truth.** Which provider and model actually served it, which attempt succeeded, how long it took, how fast the first token arrived, tokens per second, how much of the prompt was cached — all of it stored and queryable.
 - **Provider quirks without writing code.** Need to add a `User-Agent`, drop a header, or pin a field to `0.7`? Request rewrite rules do it, and the editor validates the change against a test case on the spot.
-- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS-encrypted store, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay — the one exception is the anonymous usage statistics, on by default and carrying no request content (see [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md)).
+- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS-encrypted store, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay — the one exception is the anonymous usage statistics, on by default and carrying no request content (see [apps/docs/specs/operations/telemetry.md](./apps/docs/specs/operations/telemetry.md)).
 - **English and Chinese UI**, light / dark / follow-system themes, lives in the system tray, auto-launch at login, built-in updater.
 
 ---
@@ -269,7 +269,7 @@ pnpm release:linux   # build Linux arm64 / x64 installers
 
 The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a bilingual Clarify site published to Cloudflare Workers; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
-Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
+Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/platform/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
 
 ## Sponsors
 

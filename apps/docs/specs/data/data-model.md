@@ -700,7 +700,7 @@ CREATE INDEX idx_request_logs_client_protocol
 
 `clientProtocol` 与 `logicalModelId` 均可为空：请求可能在协议识别或模型解析之前就被拒掉，但它同样是用户真实发出的请求，必须留下记录。为空表达的是「还没走到那一步」，不是「没有这一列」。
 
-`transport` 是**请求进入代理时就已经定下的预期**（客户端要流式还是非流式，见 [proxy-engine.md](./proxy-engine.md) §1.1）——它是客户端跳的形态，取自入口对请求体的解析，因此属于请求级事实；上游跳实际是什么形态是**上游视角的事实**，写在 `request_attempts.upstreamTransport` 上。两者不相等不是「上游不配合」这种可容错的小事，而是「本次传输无法按声明兑现」——代理不自己攒出一份整包来弥合（见 [proxy-engine.md](./proxy-engine.md) §1.2）。`totalDurationMilliseconds` 是从收到请求到写完响应的总耗时，它无法由尝试耗时稳定推导（尝试之间还有调度与等待），因此落在日志主表。
+`transport` 是**请求进入代理时就已经定下的预期**（客户端要流式还是非流式，见 [proxy-engine.md](../proxy/proxy-engine.md) §1.1）——它是客户端跳的形态，取自入口对请求体的解析，因此属于请求级事实；上游跳实际是什么形态是**上游视角的事实**，写在 `request_attempts.upstreamTransport` 上。两者不相等不是「上游不配合」这种可容错的小事，而是「本次传输无法按声明兑现」——代理不自己攒出一份整包来弥合（见 [proxy-engine.md](../proxy/proxy-engine.md) §1.2）。`totalDurationMilliseconds` 是从收到请求到写完响应的总耗时，它无法由尝试耗时稳定推导（尝试之间还有调度与等待），因此落在日志主表。
 
 原始协议 `usage` 报文不再占用日志主表的列：它属于某个视角的一份事实，以 `type = 'raw'` 的记录保存在对应的用量表里（见 3.10）。
 
@@ -778,7 +778,7 @@ CREATE INDEX idx_attempt_usages_created_time
 
 请求总耗时是请求级事实，落在 `request_logs.totalDurationMilliseconds`；缓存命中是派生量，由 `cachedInputTokens > 0` 现算，不单独落库。Token、缓存 Token 和其他协议用量按视角放入 `request_usages` / `attempt_usages`，不得重复记录。TTFT 是**尝试级事实**，写在 `request_attempts.ttftMilliseconds` 上——把尝试级样本平均成「请求级 TTFT」会直接污染延迟分布；需要请求粒度展示时按**服务该请求的那次尝试**（尝试顺序里恒为最后一次）的 `ttftMilliseconds` 现算，不落库。取历次尝试的最小值是错的：被放弃的尝试从没向客户端写出过一个字节，它的首字延迟不是「客户端多久看到第一个 token」。`request_logs` 只保留请求身份、客户端协议、传输形态、状态、逻辑模型、总耗时和创建时间等稳定字段。
 
-本文只回答「这些量各自落在哪张表上、谁是事实谁是派生」。延迟与速度的**公式、聚合与展示规则**（TPS 为什么以整段尝试耗时作分母、平均速度为什么先求和再相除、无样本时为什么是空而不是 0）统一写在 [可观测性](./observability.md#延迟与速度指标口径) 里，两边不得各说一套。
+本文只回答「这些量各自落在哪张表上、谁是事实谁是派生」。延迟与速度的**公式、聚合与展示规则**（TPS 为什么以整段尝试耗时作分母、平均速度为什么先求和再相除、无样本时为什么是空而不是 0）统一写在 [可观测性](../operations/observability.md#延迟与速度指标口径) 里，两边不得各说一套。
 
 日志表的稳定查询字段为：
 
@@ -891,7 +891,7 @@ CREATE UNIQUE INDEX idx_attempt_contents_attempt
 }
 ```
 
-正文 envelope 只有两种形态，由**本次传输是否逐帧**决定（`request_logs.transport` 是不是 `http-stream`，不是「是不是流式请求」——见 [proxy-engine.md](./proxy-engine.md) §1.1）：
+正文 envelope 只有两种形态，由**本次传输是否逐帧**决定（`request_logs.transport` 是不是 `http-stream`，不是「是不是流式请求」——见 [proxy-engine.md](../proxy/proxy-engine.md) §1.1）：
 
 逐帧传输时存分块 envelope，保留每个 chunk 的原始文本（SSE 事件可能跨 chunk，拼回去才能重放）：
 
@@ -1163,9 +1163,9 @@ CREATE INDEX idx_route_rule_sets_updated_time
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
-- `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；`scope` 是写入时按行首 `[前缀]` 解析出的模块归属（见 [observability.md](./observability.md)「模块归属」），运行日志页按它筛选。日志级别与保留策略见同文。
-- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](./request-rewrite-rules.md)。
-- `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](./route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](./workflow-engine.md)。
+- `runtime_logs` 是应用运行时日志，与配置和请求生命周期无关，按 `timestamp` 保留和清理；`scope` 是写入时按行首 `[前缀]` 解析出的模块归属（见 [observability.md](../operations/observability.md)「模块归属」），运行日志页按它筛选。日志级别与保留策略见同文。
+- `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](../proxy/request-rewrite-rules.md)。
+- `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](../routing/route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](../routing/workflow-engine.md)。
 - `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
 
 ## 4. JSON 文档版本
@@ -1248,7 +1248,7 @@ Token、缓存 Token 和其他协议用量 -> `request_usages` / `attempt_usages
 
 `initDatabases(dataDir)` 一次建两个库，下面这套流程对每个角色各跑一遍：
 
-1. 创建数据目录（`<用户主目录>/.osw`，开发档是 `<用户主目录>/.osw-development`，见 [packaging.md](./packaging.md) §5.5）；
+1. 创建数据目录（`<用户主目录>/.osw`，开发档是 `<用户主目录>/.osw-development`，见 [packaging.md](../platform/packaging.md) §5.5）；
 2. 打开 `config-<v>.db` 与 `data-<v>.db`（版本号取自 `DATABASE_SCHEMA_VERSIONS`，同名文件存在就直接复用）；
 3. 按角色设置 PRAGMA：两个库都开 `foreign_keys = ON` 并切 WAL；配置库 `synchronous = FULL`，数据库 `synchronous = NORMAL` + `cache_size = -64000` + `temp_store = MEMORY` + `auto_vacuum = INCREMENTAL`（`auto_vacuum` 必须在建表之前设定才生效，且要排在 `journal_mode = WAL` **之前**：WAL 一写库头，文件就不再算「空库」，这条 PRAGMA 会被静默忽略）；
 4. 应用该角色的 migration 链，创建全部表和索引；
@@ -1328,7 +1328,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 2. **同一实体重新添加时优先复用仍存在的行**（就地更新并把 `deletedTime` 置空），而不是插入新行；这样 ID 稳定，历史引用不会指向两条语义相同的记录。`scheduling_policies` 的主键是 `(logicalModelId, providerModelId)`、`provider_model_request_rewrite_rules` 的主键是 `(providerModelId, requestRewriteRuleId)`，因此它们的「复活」天然是主键冲突更新；端点、绑定、协议转换器则由 store 先找历史行、命中就原地复活。
 3. **身份是记录 id，不是名字。** `providerModels` 允许同一供应商下存在多条同名模型，逻辑模型、路由图版本、规则表版本同理——名字是给人看的注记，唯一性不成立，删掉再建一条同名的是常见动作。删除时也**不改写标识**（不造墓碑名），因为身份本来就不是靠名字成立。
 
-软删除的行因此仍会被观测侧读到：请求日志、统计分析里的名字与 id 都能对上一条真实存在过的配置，记录照旧展示、照旧计账。列表接口默认只回活跃行，观测侧要分辨「这个名字还在用」与「它的主人已经删了」时，用 `includeDeleted` 一并取回（`/api/logical-model/list`、`/api/provider/list`、`/api/provider-model/list`），比对后给名字补一枚「已删除」标签——纯展示，见 [observability.md](./observability.md)。
+软删除的行因此仍会被观测侧读到：请求日志、统计分析里的名字与 id 都能对上一条真实存在过的配置，记录照旧展示、照旧计账。列表接口默认只回活跃行，观测侧要分辨「这个名字还在用」与「它的主人已经删了」时，用 `includeDeleted` 一并取回（`/api/logical-model/list`、`/api/provider/list`、`/api/provider-model/list`），比对后给名字补一枚「已删除」标签——纯展示，见 [observability.md](../operations/observability.md)。
 
 ### 运行状态
 

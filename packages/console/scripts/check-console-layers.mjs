@@ -14,7 +14,7 @@ import { log } from '../../toolkit/scripts/lib/log.mjs'
 // 新增文件自动纳入，不维护白名单；相对导入先规范化成 `@/` 别名，否则 `../../api/x`
 // 一句就绕开了全部规则。
 //
-// 分层图（散文说明见 `apps/docs/specs/console-architecture.md`）：
+// 分层图（散文说明见 `apps/docs/specs/overview/console-architecture.md`）：
 //
 //   shell / routing / App          组合根：可以认识一切
 //   pages/<页面>/components        渲染层：只渲染 props 与 store，不自己发请求

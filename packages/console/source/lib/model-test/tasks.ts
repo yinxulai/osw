@@ -53,7 +53,7 @@ export interface TestRow {
  * `model-test-runner.ts`）就是 `result?.success ? 'success' : 'failed'`，搬到队列时漏掉了
  * 这一层映射——漏掉的后果不是「少一个红字」，而是失败被显示成绿色的「成功」：错误框不出现、
  * 进度条不红、失败角标不出现、「只看失败」永久置灰、`retryFailedTests` 变成死代码。
- * 规格对它的要求写在 `apps/docs/specs/diagnostics.md` §6：跑三轮挂一轮仍然要红。
+ * 规格对它的要求写在 `apps/docs/specs/operations/diagnostics.md` §6：跑三轮挂一轮仍然要红。
  *
  * **这条映射不能放进引擎**：它读的是 `result.success`，即诊断的业务语义。引擎一旦开始
  * 解释结论，通用队列就变成了诊断专用的队列（见 `queue.ts` 的「它只懂生命周期」）。

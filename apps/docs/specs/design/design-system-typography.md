@@ -241,7 +241,7 @@ rg -o --no-filename '\bsystem-[a-z0-9-]+\b' --glob '*.tsx' . | sort | uniq -c   
 | 3 | **机器标识一律 `font-mono`**：ID、端口、URL、模型名、字段路径、密钥前缀 | 这些要能逐字符核对 |
 | 4 | **中文正文不要用 `font-mono`** | `Source Code Pro` 没有中文字形，会回落到系统字体，出现中英混排的字面差异 |
 | 5 | **`tabular-nums` 与 `font-mono` 是两件事**，可以叠加：等宽字体里的数字仍建议显式加 `tabular-nums`（`Source Code Pro` 本身是等宽的，但换字体后就不保证了） |
-| 6 | **数字不要写进目录**（[`i18n.md`](./i18n.md) §4）：用 `Intl.NumberFormat` / `Intl.DateTimeFormat` 按当前 locale 格式化 | 中文的千分位与日期格式和英文不同 |
+| 6 | **数字不要写进目录**（[`i18n.md`](../data/i18n.md) §4）：用 `Intl.NumberFormat` / `Intl.DateTimeFormat` 按当前 locale 格式化 | 中文的千分位与日期格式和英文不同 |
 
 ---
 

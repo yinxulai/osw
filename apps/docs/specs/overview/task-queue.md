@@ -6,9 +6,9 @@
 
 已实现：引擎 `packages/core/source/management/tasks/queue.ts`、进程级单例与 kind 注册 `packages/core/source/management/tasks/index.ts`、推送通道 `packages/core/source/management/infrastructure/task-stream.ts`、五条管理接口 `packages/core/source/management/routes/tasks.ts`、线上契约 `packages/contracts/source/tasks.ts`、客户端订阅 `packages/console/source/data/tasks.tsx`。
 
-**渠道诊断是第一个 kind，不是它的定义。** 队列本身只懂生命周期，一个业务字段都不认识。诊断那部分的口径（请求怎么写、多轮怎么汇总、什么算通过）在 [diagnostics.md](./diagnostics.md)。
+**渠道诊断是第一个 kind，不是它的定义。** 队列本身只懂生命周期，一个业务字段都不认识。诊断那部分的口径（请求怎么写、多轮怎么汇总、什么算通过）在 [diagnostics.md](../operations/diagnostics.md)。
 
-本文不覆盖：诊断的探测细节（[diagnostics.md](./diagnostics.md)）；推送通道的传输骨架与背压（`packages/core/source/realtime/stream-fanout.ts` 的文件头，与「进行中的请求」共用同一份）；管理 API 的守卫与错误边界（[server-architecture.md](./server-architecture.md)）。
+本文不覆盖：诊断的探测细节（[diagnostics.md](../operations/diagnostics.md)）；推送通道的传输骨架与背压（`packages/core/source/realtime/stream-fanout.ts` 的文件头，与「进行中的请求」共用同一份）；管理 API 的守卫与错误边界（[server-architecture.md](./server-architecture.md)）。
 
 ## 2. 为什么是通用的
 

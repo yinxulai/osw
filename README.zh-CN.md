@@ -29,7 +29,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 - **默认透传。** 不解析协议、不改写、不转换，除非你明确要求。最安全也最快的请求，是代理几乎没碰过的那一个。
 - **每个请求都查得到真相。** 实际走了哪个供应商、哪个模型、第几次尝试才成功、耗时多少、首字多快、每秒多少 Token、缓存命中了多少 —— 全都落库可查。
 - **不同供应商的小脾气，不用写代码。** 需要补一个 `User-Agent`、删掉一个 Header、把某个字段固定成 `0.7`？用请求重写规则配出来就行，编辑器里还能直接对着用例验证。
-- **默认只在本地。** 只监听 `127.0.0.1`，密钥交给系统加密存储，请求只发往你配置的上游：没有账号体系、没有云同步、没有中转服务器。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容（口径见 [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md)）。
+- **默认只在本地。** 只监听 `127.0.0.1`，密钥交给系统加密存储，请求只发往你配置的上游：没有账号体系、没有云同步、没有中转服务器。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容（口径见 [apps/docs/specs/operations/telemetry.md](./apps/docs/specs/operations/telemetry.md)）。
 - **中英文界面**，亮色 / 暗色 / 跟随系统随便切，常驻系统托盘，支持开机自启和自动更新。
 
 ---
@@ -269,7 +269,7 @@ pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 
 仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/docs` 是面向使用者的手册与仓库文档根（Clarify 站点，`pnpm --filter @osw/docs dev`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
 
-设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/specs/`](./apps/docs/specs/README.md)，构建与打包细节见 [packaging.md](./apps/docs/specs/packaging.md)；上游 API 的逐字快照见 [`apps/docs/upstream/`](./apps/docs/upstream/)。`apps/docs` 自身的布局（`source/`、`specs/`、`upstream/`、`assets/` 各放什么）见 [`apps/docs/README.md`](./apps/docs/README.md)。
+设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/specs/`](./apps/docs/specs/README.md)，构建与打包细节见 [packaging.md](./apps/docs/specs/platform/packaging.md)；上游 API 的逐字快照见 [`apps/docs/upstream/`](./apps/docs/upstream/)。`apps/docs` 自身的布局（`source/`、`specs/`、`upstream/`、`assets/` 各放什么）见 [`apps/docs/README.md`](./apps/docs/README.md)。
 
 ## 赞助商
 

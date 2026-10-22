@@ -149,4 +149,4 @@ export const useLogsUiStore = scratch.store   // scratch = createPageScratchStor
 | 纯逻辑与组件分家 | `lib/model-test/selection.ts`、`results.ts`、`config.ts` + 同名测试（从 `components/model-test-panel.tsx` 搬出） |
 | 护栏本体 | `packages/console/scripts/check-console-layers.mjs`、`check-console-view-purity.mjs` + `view-logic-budget.json` |
 
-页面清单与侧边栏分组仍以 `components/app-sidebar.tsx` 为准（见 [desktop.md](./desktop.md)）；技术栈与构建见 [tech-architecture.md](./tech-architecture.md)。
+页面清单与侧边栏分组仍以 `components/app-sidebar.tsx` 为准（见 [desktop.md](../platform/desktop.md)）；技术栈与构建见 [tech-architecture.md](./tech-architecture.md)。

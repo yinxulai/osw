@@ -14,7 +14,7 @@ import { buildDiagnosticBody } from '../../diagnostics/probe-request'
 /**
  * 供应商模型对话框里的「连接测试」。
  *
- * 与队列里的 `model-test` kind（渠道诊断，见 `apps/docs/specs/task-queue.md`）是**两件事**，
+ * 与队列里的 `model-test` kind（渠道诊断，见 `apps/docs/specs/overview/task-queue.md`）是**两件事**，
  * 不是同一件事的两个入口：
  *
  * | | 渠道诊断 | 这里的连接测试 |

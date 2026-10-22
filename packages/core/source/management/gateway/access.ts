@@ -22,17 +22,35 @@
  *
  * 头里凡是「挡不住凭证持有者、又挡不住凭证泄漏」的检查，都是故障源，不留在这条链路上。
  *
- * ## 凭证没有例外
+ * ## 凭证没有例外（正式形态）
  *
- * 这是**无条件**的：每一条 `/api/*` 请求都要带着本次启动的凭证，不看它从哪儿来。
+ * 正式形态下这是**无条件**的：每一条 `/api/*` 请求都要带着本次启动的凭证，不看它从哪儿来。
+ * 开发形态（`environment === 'development'`）是唯一的例外，理由见下面「开发形态的旁路」。
  *
- * 曾经这里有过一条例外——「请求里没有 `Origin` / `Sec-Fetch-*` 就当非浏览器客户端放行」，
- * 好让 `osw stop` / `osw status` 这些读不到内存凭证的自家命令用。那条判断是错的，而且
- * 错得很彻底：`Origin` / `Sec-Fetch-*` 是**调用方自己写的请求头**。任何本机进程（一个
- * `curl` 就够）不发这两个头就能直接调 `/api/provider/export` 拿走明文密钥。等于把门锁
- * 装在被拦的人手里。回环 TCP 对**同机其他用户**同样可达，他们连「故意不发头」都不用做。
+ * ## 开发形态的旁路
  *
- * 所以现在的形状是：凭证是唯一的门，且没有旁路；交付通道是数据目录里的 `0600` 文件
+ * 开发形态不校验凭证。判据只有「这次启动是不是开发形态」这一条，由调用方
+ * （`../gateway.ts`）算成一个布尔值传进来，这里不回头读环境。
+ *
+ * 为什么值得开这个口子：管理接口的调用方只有自家前端，而开发期前端不是宿主加载的——
+ * Vite 页面、`dev:preview`、调试脚本、自动化脚本都拿不到 `window.__OSW__` 里的凭证，
+ * 于是每一次联调都要先把 `management.token` 读出来再塞进请求头，自动化开发直接卡住。
+ * 开发形态的数据目录与正式形态是两个（见 `@common/runtime-profile`），演示数据与密钥
+ * 都不共享，放宽它不会污染用户的实际数据。
+ *
+ * 代价要说清：开发形态下本机任意网页都能调 `/api/*`。只在本机跑开发实例时成立，
+ * 且代理入口在两种形态下一样不校验调用方身份——这是开发便利换来的、有意识的取舍，
+ * 不是漏掉的一步。正式形态（含命令行 `osw start`）仍然 fail-closed，见下面的说明。
+ *
+ * 不要把它和另一条曾经存在的例外混淆：那时是「请求里没有 `Origin` / `Sec-Fetch-*` 就当
+ * 非浏览器客户端放行」，好让 `osw stop` / `osw status` 这些读不到内存凭证的自家命令用。
+ * 那条判断是错的，而且错得很彻底：`Origin` / `Sec-Fetch-*` 是**调用方自己写的请求头**。
+ * 任何本机进程（一个 `curl` 就够）不发这两个头就能直接调 `/api/provider/export` 拿走
+ * 明文密钥。等于把门锁装在被拦的人手里；回环 TCP 对**同机其他用户**同样可达，他们连
+ * 「故意不发头」都不用做。**判据不能来自请求内容**，只能来自启动配置——开发形态的旁路
+ * 看的正是启动配置，与请求长什么样无关。
+ *
+ * 所以正式形态的形状是：凭证是唯一的门，且没有旁路；交付通道是数据目录里的 `0600` 文件
  * （见 `../token-file.ts`），随启动写入、随退出删除。
  *
  * 它挡得住本机网页、沙箱应用、容器、同机其他用户；挡不住**同一用户的**本机进程——那种
@@ -47,6 +65,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /** 被挡下的四种情形。网关只把它当日志字段用，不改行为。 */
 export type ApiAccessRejection = 'preflight' | 'path' | 'method' | 'credential'
+
+export interface ApiAccessOptions {
+  /**
+   * 是否要求携带凭证。默认 `true`（fail-closed）；只有开发形态会传 `false`。
+   *
+   * 缺省必须是严的那个：忘了传不该顺手把门打开。
+   */
+  requireCredential?: boolean
+}
 
 export type ApiAccess =
   | { readonly accepted: true }
@@ -64,7 +91,7 @@ const ALLOWED_METHODS = 'POST, OPTIONS'
  *
  * 不返回 `Promise`：这里没有任何异步操作，之前那个 `async` 只是让调用方多等一个 tick。
  */
-export function checkApiAccess(req: IncomingMessage, res: ServerResponse, token: string | null): ApiAccess {
+export function checkApiAccess(req: IncomingMessage, res: ServerResponse, token: string | null, options: ApiAccessOptions = {}): ApiAccess {
   const method = req.method
   const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
 
@@ -84,7 +111,8 @@ export function checkApiAccess(req: IncomingMessage, res: ServerResponse, token:
     sendError(res, 'METHOD_NOT_ALLOWED', `Only POST is supported, received ${method ?? 'UNKNOWN'}`, 405, { method: method ?? 'UNKNOWN' })
     return { accepted: false, reason: 'method' }
   }
-  if (!hasValidToken(req, token)) {
+  // `requireCredential: false` 只由开发形态传下来，见文件头的「开发形态的旁路」。
+  if (options.requireCredential !== false && !hasValidToken(req, token)) {
     sendError(res, 'UNAUTHORIZED', 'Missing or invalid management token', 401)
     return { accepted: false, reason: 'credential' }
   }

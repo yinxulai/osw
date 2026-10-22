@@ -74,7 +74,7 @@ OSW 既是本地代理，也是一套请求路由与模型选择系统。为了�
 
 上下文里还可以带上调用方已经确定的两个值：`protocol`（`openai-completions` / `openai-responses` / `anthropic-messages`）与 `transport`（`http` / `http-stream` / `websocket`，**传输形态**：这条对话在线上长什么样）。入口在认路径时就已经知道协议，从请求体拿出 `stream` 后就知道形态；引擎优先采信声明值，只有缺省时才按路径与请求头做启发式识别——避免同一次运行里两套依据各算一遍。
 
-这两个词表共用 `@common/schemas`，不要再立一套「工作流传输」枚举。它们都是**一手事实**：`protocol` 由端点匹配得出，`transport` 由客户端请求体里的 `stream` 直接读出——`stream: true` 就是 `http-stream`，不存在需要算的乘积，也不存在回推不出的投影。所以图上裸露的就是 `route.protocol` 与 `route.transport` **两个字段**，它们就是 [proxy-engine.md](./proxy-engine.md) §1.1 里定义的那两个词，不在路由层另起含义。这根轴只有一格：连接形态由端点地址的 scheme 表达（`wss://` = WebSocket），不存在按跳复制的第三个枚举（`engine.ts` 的 `writeRouteProtocol` 与 `field-hints.ts` 都有逐字说明）。
+这两个词表共用 `@common/schemas`，不要再立一套「工作流传输」枚举。它们都是**一手事实**：`protocol` 由端点匹配得出，`transport` 由客户端请求体里的 `stream` 直接读出——`stream: true` 就是 `http-stream`，不存在需要算的乘积，也不存在回推不出的投影。所以图上裸露的就是 `route.protocol` 与 `route.transport` **两个字段**，它们就是 [proxy-engine.md](../proxy/proxy-engine.md) §1.1 里定义的那两个词，不在路由层另起含义。这根轴只有一格：连接形态由端点地址的 scheme 表达（`wss://` = WebSocket），不存在按跳复制的第三个枚举（`engine.ts` 的 `writeRouteProtocol` 与 `field-hints.ts` 都有逐字说明）。
 
 后续节点统一对该对象读取或写入，而不是去猜测 API 差异。
 
@@ -119,7 +119,7 @@ interface RouteDecision {
 
 - **决策结果**（`modelIds`）与**决策依据**（`protocol` / `transport` / `controls` …）都放在 `route` 下，条件节点可直接按 `route.*` 选字段；
 - **请求模型不存副本**：「客户端请求的是哪个模型」就是请求自己的字段（`request.body.model`），图里的条件与变量取值直接按那个路径读。在 `route` 下再存一份只会多出第二个事实源：一旦副本与请求不同步（脚本节点改过请求体、入口与引擎各自读一遍），就没人说得清哪个是真的。入口仍然会用协议的**封装描述**（`ProtocolEnvelope.readModel`）读一次模型名，但那是它自己的事（400 校验 + 它自己的 `[proxy]` 日志），不进图 —— 那一次读到的值只在日志里就地引用，`RouteResolutionInput` 里没有这个字段，也没有为它留过任何变量。要注意这条路径**不是入口节点报出来的**：入口只给 `request.body` 整体，`request.body.model` 由协议发现节点按命中的协议声明，因此默认策略里协议发现是必经的一环（§2.7）。运行面板也一样：输入节点下没有「请求模型」这一行，它在协议发现节点下 —— 引擎没有任何地方绕过声明表去读请求体；
-- **协议与形态是同一层的两个平级事实**：`route.protocol` 与 `route.transport` 都是**一手事实**，分别由端点匹配和请求体里的 `stream` 读出，谁也不是谁的投影，也没有需要按跳复制的第三个词。要注意的是：**流式不属于「连接方式」**——SSE 只是 `http-stream` 这一档的线格式，连接本身还是一根 HTTP 请求；也**不要把客户端形态喂给规划器**——上游跳用 `http` 还是 `http-stream` 由 `resolveUpstreamTransport()` 从上游端点地址与客户端跳推出来（`wss://` → `websocket`，否则镜像客户端跳），而客户端偏好从来不改变哪个上游端点合法：`PlannerInput` 里没有任何传输字段。详见 [proxy-engine.md](./proxy-engine.md) §1.1 与 §2.3；
+- **协议与形态是同一层的两个平级事实**：`route.protocol` 与 `route.transport` 都是**一手事实**，分别由端点匹配和请求体里的 `stream` 读出，谁也不是谁的投影，也没有需要按跳复制的第三个词。要注意的是：**流式不属于「连接方式」**——SSE 只是 `http-stream` 这一档的线格式，连接本身还是一根 HTTP 请求；也**不要把客户端形态喂给规划器**——上游跳用 `http` 还是 `http-stream` 由 `resolveUpstreamTransport()` 从上游端点地址与客户端跳推出来（`wss://` → `websocket`，否则镜像客户端跳），而客户端偏好从来不改变哪个上游端点合法：`PlannerInput` 里没有任何传输字段。详见 [proxy-engine.md](../proxy/proxy-engine.md) §1.1 与 §2.3；
 - **可推导的数据不落库**：像「本次可见的逻辑模型 modelId 列表」这种由 `logicalModels` 直接推出来的数组不再单独写进 `route`，需要时用通配投影 `logicalModels[*].modelId` 现算（见 §2.8）；
 - **过程性数据**只进 trace，不进 payload —— 例如协议归一化后的请求体（`{protocol, transport, model, messages}`）与每个节点的判定明细，避免 payload 里出现只有调试才看的字段；
 - **引擎不预计算业务判定**：像「请求模型是否命中逻辑模型列表」这种结论由条件节点在图上现场算出，引擎只提供原始字段（`request.body.model` 与 `logicalModels`）；
@@ -401,7 +401,7 @@ Input ─▶ 协议发现 ─▶ Condition（request.body.model in logicalModels
 
 ## 4. 节点目录
 
-路由工作台只保留“路由决策”相关节点；修改请求内容的逻辑属于独立的重写层（见 [request-rewrite-rules.md](./request-rewrite-rules.md)）与协议转换层，不进入路由图执行路径。唯一的非执行节点是 `note`：它是画布上的说明便签，写给人看不参与执行（§4.7）。
+路由工作台只保留“路由决策”相关节点；修改请求内容的逻辑属于独立的重写层（见 [request-rewrite-rules.md](../proxy/request-rewrite-rules.md)）与协议转换层，不进入路由图执行路径。唯一的非执行节点是 `note`：它是画布上的说明便签，写给人看不参与执行（§4.7）。
 
 节点类型清单以 `packages/contracts/source/router/types.ts` 的 `WorkflowNodeKind` 为准，共 10 种：
 
@@ -553,7 +553,7 @@ Input ─▶ 协议发现 ─▶ Condition（request.body.model in logicalModels
 
 说明：
 - 脚本文本是**函数体**，用 `return` 交回结果；写回值静态类型记为 `unknown`，下游条件节点不限制操作符，语义交给运行时；
-- 沙箱里没有 `require` / `import` / `eval` / 网络 / 文件系统，超时即中断（见 [security-privacy.md](./security-privacy.md)）；
+- 沙箱里没有 `require` / `import` / `eval` / 网络 / 文件系统，超时即中断（见 [security-privacy.md](../operations/security-privacy.md)）；
 - 脚本执行失败（空源码、异常、超时、写回路径为空）记 `success: false` 的 trace，但不阻断执行，图继续往下走；
 - 沙箱能力由执行方注入（`RunCapabilities.runScript`），引擎自身不依赖任何运行时模块：渲染进程里做静态推演时该节点只是「能力缺失」，服务端执行时才真正跑。
 
@@ -619,7 +619,7 @@ Input ─▶ 协议发现 ─▶ Condition（request.body.model in logicalModels
 
 ## 5. 结论
 
-- 路由编排回答的是「这次请求去哪个逻辑模型」，不负责改写请求内容；改写属于重写层（[request-rewrite-rules.md](./request-rewrite-rules.md)）与协议转换层（[protocol-conversion.md](./protocol-conversion.md)），不进入路由定义；
+- 路由编排回答的是「这次请求去哪个逻辑模型」，不负责改写请求内容；改写属于重写层（[request-rewrite-rules.md](../proxy/request-rewrite-rules.md)）与协议转换层（[protocol-conversion.md](../proxy/protocol-conversion.md)），不进入路由定义；
 - 判定靠 `condition` + 路径取值，落点靠 `model-select`，需要算力时用 `script` / `prompt`，需要遍历时用 `iteration` —— 引擎不内置任何专用语义（`note` 只是画布旁注，不参与执行）；
 - 「模型直达」也只是基础节点的一种拼法（§2.7），逻辑模型增减时规则自动生效；
 - 路由有两种模式：工作流图与规则表，相互独立、由 `settings.routeMode` 决定同一时刻只生效一种（§2.11）。简单场景用规则表（顺序读一遍就是全部语义），需要循环 / 脚本 / LLM 判定时用图；
