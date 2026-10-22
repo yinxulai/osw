@@ -9,7 +9,6 @@ import {
   logRoutes,
   modelConnectivityRoutes,
   modelRoutes,
-  modelTestRoutes,
   outboundProxyTestRoutes,
   providerModelFetchRoutes,
   routerGraphRoutes,
@@ -23,6 +22,7 @@ import {
   runtimeControlRoutes,
   settingsRoutes,
   storageRoutes,
+  taskRoutes,
   telemetryRoutes,
 } from './routes'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
@@ -41,7 +41,6 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(logRoutes)
   .mount(requestLogRoutes)
   .mount(analyticsRoutes)
-  .mount(modelTestRoutes)
   .mount(modelConnectivityRoutes)
   .mount(outboundProxyTestRoutes)
   .mount(providerModelFetchRoutes)
@@ -54,6 +53,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(storageRoutes)
   .mount(clientConfigRoutes)
   .mount(cloudSyncRoutes)
+  .mount(taskRoutes)
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse, environment: RuntimeEnvironment = 'production'): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')

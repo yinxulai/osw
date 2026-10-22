@@ -1,0 +1,339 @@
+import { generateId } from '@common/utils'
+import type { TaskRecord, TaskStatus } from '@common/tasks'
+
+/**
+ * 进程级通用任务队列的**引擎**。
+ *
+ * ## 它只懂生命周期
+ *
+ * 一个任务从 `queued` 起步，最多走到 `running`，然后落在 `success` / `failed` /
+ * `cancelled` 之一。除此之外引擎什么都不知道：一个 kind 的业务语义（「这一轮是什么」
+ * 「算不算通过」「进度长什么样」）通过 `progress` / `result` 两个**不透明**字段原样携带，
+ * 引擎不读、不改、不解释它。
+ *
+ * 所以这里没有也不可能出现「诊断」「模型」「渠道」这些词。渠道诊断只是第一个 kind
+ *（`./kinds/model-test.ts`），不是这个模块的定义。
+ *
+ * ## 为什么不是「`Promise.all` 分批」
+ *
+ * 队列里的任务都是真的打上游、真的计费，而它们的耗时差异很大（连着挂的渠道 300ms 就回，
+ * 慢的上游能拖十几秒）。按固定分片跑时，整批的节奏由最慢的那一片决定——上一片还剩一个
+ * 在等，下一片已经开始跑，并发数在一段时间里是「片大小」，不是配置的那个数。
+ * 这里按「谁先空出来谁取下一个」发放任务（{@link TaskQueue.pump}），同时在飞的数量
+ * 才真的等于 `concurrency`。
+ *
+ * ## 取消粒度
+ *
+ * 按 `taskId` 取消。**未开跑的直接出队**：它一个上游请求都还没发出去，也就没有费用；
+ * 在跑的通过 `AbortSignal` 在**步边界**收——kind 在每一步开始前检查 `signal.aborted`，
+ * 引擎不强行把它掰断（掰断只会留下一个半途的结论）。`cancelled` 是独立结局，不是失败。
+ *
+ * ## 不落盘
+ *
+ * 纯内存。重启即空——「此刻有什么在跑」没有恢复语义（见 `@common/tasks` 的文件头）。
+ */
+
+/**
+ * 一个 kind 的注册信息。
+ *
+ * `P` 载荷、`R` 结果、`G` 进度各由 kind 自己定，引擎只负责把它们搬来搬去。
+ */
+export interface TaskKind<P, R, G> {
+  kind: string
+  /** 同 kind 同时在飞的上限，默认 **1（串行）**。理由见 `apps/docs/specs/task-queue.md`。 */
+  concurrency?: number
+  /**
+   * 把线上来的原始载荷解析成 `P`。解析不过就抛——那一项会被算作 `skipped`。
+   *
+   * 这一层是必须的：载荷来自 HTTP，运行时是一团 `unknown`，而 `keyOf` / `run` 的签名
+   * 要的是已经成形的 `P`。没有它就只能靠类型断言把界面的错误输入直接喂给 kind。
+   */
+  parse(input: unknown): P
+  /** 去重键。同 kind 内 `key` 相同的任务在排队 / 运行中时不会重复入队。 */
+  keyOf(payload: P): string
+  run(payload: P, context: TaskRunContext<G>): Promise<R>
+}
+
+/** 交给 kind 的运行上下文。它从这里拿到 id、取消信号与进度写口。 */
+export interface TaskRunContext<G> {
+  /** 本次任务的 id，与快照里的 `TaskRecord.id` 同一个。 */
+  taskId: string
+  /** 取消信号：kind 要在**步边界**检查它，并在中断后尽快返回。 */
+  signal: AbortSignal
+  /** 汇报一次进行中的观测。引擎只做携带与推送，不看内容。 */
+  report(progress: G): void
+}
+
+/**
+ * 队列总长上界。
+ *
+ * 它是**内存上界**而不是调度策略：终态项也要靠 `clear` 才回收，所以上限管的是
+ * 「这个进程最多替多少条任务记账」。到顶之后新的入队被拒绝（返回 `skipped`），
+ * 而不是把旧任务挤掉——旧任务有结论，挤掉它等于把用户刚看到的东西抹了。
+ */
+export const MAX_QUEUE_TASKS = 500
+
+export interface EnqueueResult {
+  accepted: number
+  skipped: number
+}
+
+/** 收尾时要写进记录的那几个字段。 */
+interface TaskSettlement {
+  result?: unknown
+  errorMessage?: string
+}
+
+interface Entry {
+  record: TaskRecord
+  kind: TaskKind<unknown, unknown, unknown>
+  payload: unknown
+  controller: AbortController
+}
+
+/**
+ * 队列。
+ *
+ * 并发安全不靠锁：Node 是单线程的，每个写方法都在一次同步执行里完成，不存在交错。
+ * 一个进程一套队列即可（见 `./index.ts` 的单例）。
+ */
+export class TaskQueue {
+  private readonly kinds = new Map<string, TaskKind<unknown, unknown, unknown>>()
+  /** 全部任务，插入顺序即入队顺序（快照顺序由此而来）。 */
+  private readonly entries = new Map<string, Entry>()
+  /** 每个 kind 当前在飞的数量。 */
+  private readonly inFlight = new Map<string, number>()
+  /** 写入订阅者。推送通道靠它把「台账变了」变成「推一帧」。 */
+  private readonly listeners = new Set<() => void>()
+
+  /** 注册一个 kind。同 `kind` 重复注册时以后者为准。 */
+  register<P, R, G>(kind: TaskKind<P, R, G>): void {
+    this.kinds.set(kind.kind, kind as TaskKind<unknown, unknown, unknown>)
+  }
+
+  /**
+   * 订阅队列的每一次写入。返回退订函数。
+   *
+   * 回调是**同步**的，可能在任意一次写入中触发，因此订阅者只该做一件事：把「脏了」
+   * 记下来，真正的快照与推送留给自己的定时器（与 `live-request-store` 同一条约定）。
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  /** 当前全部任务的快照，按入队顺序。 */
+  snapshot(): TaskRecord[] {
+    return [...this.entries.values()].map(entry => ({ ...entry.record }))
+  }
+
+  /**
+   * 入队一批载荷。
+   *
+   * 逐项判定，任何一项被拒都不影响其余项：
+   *
+   * - kind 没注册 → 拒；
+   * - 载荷解析不过 → 拒；
+   * - 同 kind 同 `keyOf` 已经在排队 / 运行中 → 拒（连点两下不该变成两倍计费）；
+   * - 队列已满 → 拒。
+   *
+   * 拒掉的数量记在返回值的 `skipped` 里。这是**正常的调度结果**，不是请求失败：
+   * 一次「全选 → 开始」里本来就可能有一半已经在跑。
+   */
+  enqueue(kind: string, items: readonly unknown[]): EnqueueResult {
+    const definition = this.kinds.get(kind)
+    let accepted = 0
+    let skipped = 0
+
+    for (const item of items) {
+      const entry = definition ? this.accept(definition, item) : null
+      if (entry) accepted += 1
+      else skipped += 1
+    }
+
+    if (accepted > 0) {
+      // 入队之后再统一发放：一批里先入队的先跑，与「一次一项」的观感一致。
+      this.pump(kind)
+      this.notify()
+    }
+    return { accepted, skipped }
+  }
+
+  /**
+   * 取消一批任务。返回真的落到「取消」上的数量。
+   *
+   * 未开跑的：直接标成 `cancelled` 并让它退出调度（它从未发出任何上游请求）。
+   * 在跑的：给它发信号，收尾由那次运行自己完成（引擎在它 settle 时归到 `cancelled`）。
+   * 已经结束的：什么都不做。
+   */
+  cancel(taskIds: readonly string[]): number {
+    let cancelled = 0
+    for (const taskId of taskIds) {
+      const entry = this.entries.get(taskId)
+      if (!entry) continue
+      if (entry.record.status === 'queued') {
+        this.settle(entry, 'cancelled')
+        cancelled += 1
+        continue
+      }
+      if (entry.record.status === 'running') {
+        entry.controller.abort()
+        cancelled += 1
+      }
+    }
+    if (cancelled > 0) this.notify()
+    return cancelled
+  }
+
+  /** 取消某个 kind 的全部未结束任务。 */
+  cancelKind(kind: string): number {
+    const ids = [...this.entries.values()]
+      .filter(entry => entry.record.kind === kind)
+      .filter(entry => entry.record.status === 'queued' || entry.record.status === 'running')
+      .map(entry => entry.record.id)
+    return this.cancel(ids)
+  }
+
+  /**
+   * 清掉终态项。
+   *
+   * 有任务在跑时**整条空操作**：那会让「进行中」的行凭空消失，而用户还没来得及看它跑完。
+   * 这也是界面今天的行为（与 §「最小化 ≠ 关闭」同一条判断）。
+   */
+  clear(): number {
+    if ([...this.entries.values()].some(entry => entry.record.status === 'running')) return 0
+    let cleared = 0
+    for (const [id, entry] of [...this.entries]) {
+      if (entry.record.status === 'queued') continue
+      this.entries.delete(id)
+      cleared += 1
+    }
+    if (cleared > 0) this.notify()
+    return cleared
+  }
+
+  /** 队列里当前有没有任务在跑。 */
+  isRunning(): boolean {
+    return [...this.entries.values()].some(entry => entry.record.status === 'running')
+  }
+
+  /** 造一条记录并放上调度台。返回 `null` 表示这一项被拒。 */
+  private accept(definition: TaskKind<unknown, unknown, unknown>, item: unknown): Entry | null {
+    if (this.entries.size >= MAX_QUEUE_TASKS) return null
+
+    let payload: unknown
+    try {
+      payload = definition.parse(item)
+    } catch {
+      // 载荷不属于这个 kind（或形状不对）：拒掉这一项，而不是把整个批次带下水。
+      return null
+    }
+    const key = definition.keyOf(payload)
+    if (this.hasLiveKey(definition.kind, key)) return null
+
+    const entry: Entry = {
+      record: {
+        id: generateId('task_'),
+        kind: definition.kind,
+        key,
+        status: 'queued',
+        enqueuedAt: Date.now(),
+      },
+      kind: definition,
+      payload,
+      controller: new AbortController(),
+    }
+    this.entries.set(entry.record.id, entry)
+    return entry
+  }
+
+  /** 同 kind 同键的任务是否已经在排队或运行中。 */
+  private hasLiveKey(kind: string, key: string): boolean {
+    for (const entry of this.entries.values()) {
+      if (entry.record.kind !== kind || entry.record.key !== key) continue
+      if (entry.record.status === 'queued' || entry.record.status === 'running') return true
+    }
+    return false
+  }
+
+  /**
+   * 发放任务：只要某个 kind 还有空位，就取它队首的那个跑起来。
+   *
+   * 「谁先空出来谁取下一个」的全部实现就是这里——每有一个任务收尾，就调用一次，
+   * 于是空出来的那个槽立刻被队首填上，而不是等整批跑完再开下一批。
+   */
+  private pump(kind: string): void {
+    const definition = this.kinds.get(kind)
+    if (!definition) return
+    const limit = Math.max(1, Math.floor(definition.concurrency ?? 1))
+    while ((this.inFlight.get(kind) ?? 0) < limit) {
+      const next = [...this.entries.values()].find(entry => entry.record.kind === kind && entry.record.status === 'queued')
+      if (!next) return
+      this.start(next)
+    }
+  }
+
+  private start(entry: Entry): void {
+    const kind = entry.record.kind
+    entry.record.status = 'running'
+    this.inFlight.set(kind, (this.inFlight.get(kind) ?? 0) + 1)
+
+    const context: TaskRunContext<unknown> = {
+      taskId: entry.record.id,
+      signal: entry.controller.signal,
+      // 进度只在任务还活着时写入：一个已经被取消的任务忽然又更新一格进度，界面上就是
+      // 「取消了但还在动」。
+      report: progress => {
+        if (entry.record.status !== 'running') return
+        entry.record.progress = progress
+        this.notify()
+      },
+    }
+
+    void entry.kind.run(entry.payload, context).then(
+      result => {
+        // 被取消的那次不发结论：它没有答案，记成成功/失败都不诚实。
+        if (entry.controller.signal.aborted) this.settle(entry, 'cancelled')
+        else this.settle(entry, 'success', { result })
+      },
+      error => {
+        if (entry.controller.signal.aborted) this.settle(entry, 'cancelled')
+        else this.settle(entry, 'failed', { errorMessage: (error as Error).message })
+      },
+    )
+  }
+
+  /** 收尾：写结局、放出槽位、继续发放同一个 kind 的下一项。 */
+  private settle(entry: Entry, status: TaskStatus, patch: TaskSettlement = {}): void {
+    if (entry.record.status === 'success' || entry.record.status === 'failed' || entry.record.status === 'cancelled') return
+    const wasRunning = entry.record.status === 'running'
+    entry.record.status = status
+    entry.record.finishedAt = Date.now()
+    if ('result' in patch) entry.record.result = patch.result
+    if (patch.errorMessage !== undefined) entry.record.errorMessage = patch.errorMessage
+    if (wasRunning) {
+      const kind = entry.record.kind
+      this.inFlight.set(kind, Math.max(0, (this.inFlight.get(kind) ?? 1) - 1))
+      this.pump(kind)
+    }
+    this.notify()
+  }
+
+  /**
+   * 通知订阅者「台账变了」。
+   *
+   * 单个订阅者抛错不该影响其他订阅者，更不该把异常送回写入方——一个看界面的连接
+   * 不能把任务本身搞挂。
+   */
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch (error) {
+        console.error(`[tasks] queue subscriber failed: ${(error as Error).message}`)
+      }
+    }
+  }
+}

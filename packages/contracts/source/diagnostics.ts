@@ -26,19 +26,22 @@ import { ModelTestModeSchema, ProtocolSchema, type ModelTestMode, type Protocol 
 export const MIN_MODEL_TEST_ROUNDS = 1
 
 /**
- * 渠道诊断的请求体。
+ * 队列里一个诊断任务的载荷。
  *
- * `default()` 是**契约的一部分**，不是服务端的宽容：老界面、老脚本发来的请求
- * 少了某个字段时，语义必须仍然是「按最朴素的方式测一次」，否则升级服务端会
- * 让旧调用方悄悄换一套测法。
+ * 它是「模型 × 协议 × 测法」的一次具体执行：一个载荷只描述**一个目标**，因为队列本身
+ * 已经负责把一批任务排好、并发好、取消好——同一次请求里塞多个目标只会让「进度」与
+ * 「取消」的粒度重新变成一个说不清的东西（见 `apps/docs/specs/task-queue.md`）。
+ *
+ * 它是**队列的载荷**，不是 HTTP 请求体：它由界面按当前选中项与设置拼出来，随
+ * `POST /api/tasks/enqueue` 一次性下发。
  */
-export const ModelTestRunRequestSchema = z.object({
+export const ModelTestTaskItemSchema = z.object({
+  modelId: z.string().trim().min(1),
+  providerId: z.string().trim().min(1),
   protocol: ProtocolSchema,
-  /** 不给模式就是流式：老界面、老脚本发的请求仍然按最朴素的方式跑一次。 */
+  /** 不给模式就是流式：只关心「通不通」的调用方拿到的仍是最全的读数。 */
   mode: ModelTestModeSchema.default('streaming'),
-  providerIds: z.array(z.string()).optional(),
-  modelIds: z.array(z.string()).optional(),
-  /** 每个目标重复测几轮；默认 1，与旧行为逐字相同。 */
+  /** 每个目标重复测几轮；默认 1。 */
   rounds: z.number().int().min(MIN_MODEL_TEST_ROUNDS).default(1),
   /** 自定义提示词；留空按模式取默认值。 */
   prompt: z.string().optional(),
@@ -46,7 +49,30 @@ export const ModelTestRunRequestSchema = z.object({
   inputLength: z.number().int().min(0).default(0),
 })
 
-export type ModelTestRunRequest = z.infer<typeof ModelTestRunRequestSchema>
+export type ModelTestTaskItem = z.infer<typeof ModelTestTaskItemSchema>
+
+/**
+ * 诊断任务的进行中画面。
+ *
+ * 身份字段（模型 / 渠道名）要一起带上：任务的 `progress` 是**唯一**能让一个还没跑完
+ *（甚至只是排队中）的任务在界面上说出「我是谁」的东西——通用队列不认识任何业务字段
+ *（见 `@common/tasks` 的 `TaskRecord`）。
+ *
+ * `result` 是**已完成轮次**的汇总结论（`summarizeRounds`），一轮都没跑完时为 `null`；
+ * 它和前一条 `progress` 一样，是同一个「唯一定义处」算出来的值，界面不重算。
+ */
+export interface ModelTestTaskProgress {
+  modelId: string
+  modelName: string
+  providerId: string
+  providerName: string
+  protocol: Protocol
+  mode: ModelTestMode
+  /** 已经跑完的轮数；还没跑完第一轮时是 0。 */
+  round: number
+  totalRounds: number
+  result: ModelTestTaskResult | null
+}
 
 /**
  * 一轮诊断的结论。
@@ -111,10 +137,19 @@ export interface ModelTestResult {
   rounds?: ModelTestRoundResult[]
 }
 
-/** `/api/model-test/run` 的响应体。每个被测目标一条，顺序与目标规划顺序一致。 */
-export interface ModelTestRunResponse {
-  results: ModelTestResult[]
+/**
+ * 一条诊断**任务**的结论：{@link ModelTestResult} 加上它测的是哪个协议。
+ *
+ * 协议为什么不在 `ModelTestResult` 里：那个类型是「一次诊断请求的产出」，而发出请求的那一方
+ * 本来就知道自己请求的是哪个协议，所以它没有把协议抄进结论。队列之后情形反过来了——
+ * 结论由**服务端**产出、由任意一个订阅者消费，谁都不知道这条结论是从哪条任务来的，
+ * 协议必须跟着结论一起走。差异只在这一个字段，所以用交叉类型而不是复制一遍。
+ */
+export interface ModelTestTaskResult extends ModelTestResult {
+  protocol: Protocol
 }
+
+
 
 /**
  * 模型对话框里「连接测试」的一行草稿端点。
