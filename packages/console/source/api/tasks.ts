@@ -18,9 +18,18 @@ import { request } from './client'
  * `items` 的类型是 `unknown[]` 是刻意的：每个 kind 的载荷形状由它自己声明
  *（诊断的在 `@common/diagnostics` 的 `ModelTestTaskItem`），这一层只负责把
  * 「哪个 kind、哪些项」原样送出去。
+ *
+ * `options.concurrency` 是**这一批的调度上限**（不是载荷的一部分）：诊断面板把用户填的
+ * 并发数量放在这里，它不进去重键、不写进任何记录（见 `@common/tasks`）。不给就按 kind
+ * 声明的默认值走。
  */
+export interface EnqueueTaskOptions {
+  concurrency?: number
+}
+
 export const taskApi = {
-  enqueue: (kind: string, items: readonly unknown[]) => request<TaskEnqueueResponse>('/tasks/enqueue', { kind, items }),
+  enqueue: (kind: string, items: readonly unknown[], options: EnqueueTaskOptions = {}) =>
+    request<TaskEnqueueResponse>('/tasks/enqueue', { kind, items, concurrency: options.concurrency }),
   snapshot: () => request<TaskSnapshotResponse>('/tasks/snapshot'),
   cancel: (input: TaskCancelRequest) => request<TaskCancelResponse>('/tasks/cancel', input),
   clear: () => request<TaskClearResponse>('/tasks/clear'),

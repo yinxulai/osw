@@ -50,7 +50,7 @@ interface TaskRecord {
 ```ts
 interface TaskKind<P, R, G> {
   kind: string
-  concurrency?: number          // 同 kind 同时在飞上限，默认 1
+  concurrency?: number          // 同 kind 同时在飞上限，默认 1；入队时可显式覆盖（见 §4.1）
   parse(input: unknown): P      // HTTP 载荷是 unknown，解析不过就抛
   keyOf(payload: P): string
   run(payload: P, context: { taskId: string; signal: AbortSignal; report(progress: G): void }): Promise<R>
@@ -78,9 +78,13 @@ queued ──pump──▶ running ──run 成功──▶ success
 
 引擎按「谁先空出来谁取下一个」发放任务（`TaskQueue.pump`），所以同一时刻在飞的数量**真的等于** `concurrency`，不是「分片大小」——按固定分片跑时，整批的节奏由最慢的那一片决定。
 
-默认是 **1（串行）**，因为诊断量的是**延迟与首字**：同时打多个上游会互相污染读数（连接复用、出口带宽、上游侧排队）。串行是诚实的默认——一个数只有一次请求在飞时才说得清是谁的。需要更快就由 kind 显式调大，并接受读数被稀释的代价。
+默认是 **1（串行）**，因为诊断量的是**延迟与首字**：同时打多个上游会互相污染读数（连接复用、出口带宽、上游侧排队）。串行是诚实的默认——一个数只有一次请求在飞时才说得清是谁的。需要更快就显式调大，并接受读数被稀释的代价。
 
-`concurrency` 写成 0 或负数时按 1 处理：配置写错不该把队列卡死。
+**入队时可以显式覆盖**：`POST /api/tasks/enqueue` 的 `concurrency`（`TaskEnqueueRequestSchema`）经归一化后成为该 kind **此刻**的上限，盖过 `TaskKind.concurrency` 声明的那个。诊断面板的「并发数量」走的就是这条路：kind 声明 1 是诚实默认，用户填 8 是他自己的选择。
+
+它是**调度参数，不是任务属性**：不随载荷走、不进 `keyOf` 的去重键（同一目标换个并发数再点一次仍是同一条任务），也不写进任何记录。上限是 **kind 级**的，所以同 kind 后一次入队会改写它（last write wins）——「这一次想跑多快」按最近一次说的算。今天诊断是唯一注册的 kind，不存在两次入队抢同一个上限的实际后果。
+
+`concurrency` 写成 0、负数或非有限值（`NaN` / `Infinity`）时按 1 处理：配置写错不该把队列卡死，也不该变成不设上限地全放。契约层另有一道 `.int().min(1)`，引擎这层归一化是给直接调用它的代码兜底。
 
 ### 4.2 去重
 

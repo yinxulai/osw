@@ -253,6 +253,12 @@ function startTest() {
   fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.start') }))
 }
 
+/** 配置页里某一项的 `+` 按钮：按那一行的标题定位，再在行内找 `aria-label="+"`。 */
+function configPlus(title: string): HTMLElement {
+  const row = screen.getByText(title).closest('div.flex') as HTMLElement
+  return [...row.querySelectorAll('button')].find(node => node.getAttribute('aria-label') === '+')!
+}
+
 beforeEach(() => {
   harness.tasks = []
   harness.enqueue.mockReset().mockResolvedValue({ accepted: 1, skipped: 0 })
@@ -612,21 +618,38 @@ describe('开始诊断：把整批行交给服务端队列', () => {
     expect(items[0].prompt).toBeUndefined()
   })
 
-  it('配置页改的轮次随这一批走，并发不在界面里', async () => {
+  /**
+   * 轮次走**载荷**（每一项自己带 `rounds`），并发走**入队参数**（这一批同时在飞几个）。
+   *
+   * 两者一起发出去，但落点不同：并发不是任务属性，进 `items` 就等于说「这条任务自带一个
+   * 并发数」，去重键也会跟着漂。所以这里两条都断言：`items[0]` 里有轮次、没有并发，
+   * 并发在第三个参数里。
+   */
+  it('轮次与并发随请求一起发出', async () => {
     renderPanel()
     selectProvider()
+    // 结果头部如实报出当前并发：默认 3（`TEST_CONCURRENCY`）。
+    expect(screen.getByText(zh('modelTest.metric.concurrency')).previousElementSibling?.textContent).toBe('3')
 
     fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.settings') }))
-    const roundsRow = screen.getByText(zh('modelTest.config.rounds')).closest('div.flex') as HTMLElement
-    const plus = [...roundsRow.querySelectorAll('button')].find(node => node.getAttribute('aria-label') === '+')!
-    fireEvent.click(plus)
-    fireEvent.click(plus)
+    // 轮次 1 → 3、并发 3 → 4：各点自己那一行的 +。
+    fireEvent.click(configPlus(zh('modelTest.config.rounds')))
+    fireEvent.click(configPlus(zh('modelTest.config.rounds')))
+    fireEvent.click(configPlus(zh('modelTest.config.concurrency')))
 
     fireEvent.click(screen.getByRole('button', { name: zh('modelTest.config.back') }))
+    // 头部那个数跟着配置走，不留在默认值上。
+    expect(screen.getByText(zh('modelTest.metric.concurrency')).previousElementSibling?.textContent).toBe('4')
+
     startTest()
 
     await waitFor(() => { expect(harness.enqueue).toHaveBeenCalled() })
-    expect(harness.enqueue.mock.calls[0][1][0]).toMatchObject({ rounds: 3, inputLength: 0 })
+    const [kind, items, options] = harness.enqueue.mock.calls[0]
+    expect(kind).toBe(MODEL_TEST_TASK_KIND)
+    expect(items[0]).toMatchObject({ rounds: 3, inputLength: 0 })
+    expect(options).toEqual({ concurrency: 4 })
+    // 并发不进载荷：它不是「这条任务是什么」的一部分。
+    expect(items[0].concurrency).toBeUndefined()
   })
 
   it('有目标被跳过时必须说出来：去重 / 超限 / 解析失败不该静默吞掉', async () => {
@@ -750,9 +773,14 @@ describe('测试配置页', () => {
     expect(settings.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(settings)
+    expect(screen.getByText(zh('modelTest.config.concurrency'))).toBeTruthy()
     expect(screen.getByText(zh('modelTest.config.rounds'))).toBeTruthy()
     expect(screen.getByText(zh('modelTest.config.inputLength'))).toBeTruthy()
     expect(screen.getByText(zh('modelTest.config.prompt'))).toBeTruthy()
+    // 并发是第一行：它决定这一批跑多快，先于「测几轮 / 补多长」。
+    const concurrency = screen.getByText(zh('modelTest.config.concurrency'))
+    const rounds = screen.getByText(zh('modelTest.config.rounds'))
+    expect(concurrency.compareDocumentPosition(rounds) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // 结果表与开始按钮都不在了——是换页，不是叠层。
     expect(screen.queryByRole('button', { name: zh('modelTest.action.start') })).toBeNull()
 

@@ -40,7 +40,12 @@ import type { TaskRecord, TaskStatus } from '@common/tasks'
  */
 export interface TaskKind<P, R, G> {
   kind: string
-  /** 同 kind 同时在飞的上限，默认 **1（串行）**。理由见 `apps/docs/specs/overview/task-queue.md`。 */
+  /**
+   * 同 kind 同时在飞的上限，默认 **1（串行）**。理由见 `apps/docs/specs/overview/task-queue.md`。
+   *
+   * 它是**默认值**，不是不可改的上限：入队时可以用 {@link EnqueueOptions.concurrency}
+   * 显式覆盖（诊断面板的「并发数量」走的就是这条路）。
+   */
   concurrency?: number
   /**
    * 把线上来的原始载荷解析成 `P`。解析不过就抛——那一项会被算作 `skipped`。
@@ -76,6 +81,27 @@ export const MAX_QUEUE_TASKS = 500
 interface EnqueueResult {
   accepted: number
   skipped: number
+}
+
+/**
+ * 入队时可给的调度参数。
+ *
+ * 目前只有 `concurrency` 一项，仍然用对象而不是裸数字：这是**调度参数**的入口，
+ * 与载荷（`items` 里那些 kind 自己的字段）不是一回事，以后多一项也不必再改签名。
+ */
+export interface EnqueueOptions {
+  /**
+   * 这次入队的并发上限，覆盖 kind 注册时声明的 {@link TaskKind.concurrency}。
+   *
+   * 它是**kind 级**的：同一个 kind 只有一个在飞上限，所以同 kind 后一次入队会改写
+   * 这个上限（last write wins）——「这一次想跑多快」按最近一次说的话算。今天诊断是
+   * 唯一注册的 kind，因此这条改写不会影响别的行为；将来多 kind 并存时，各 kind 各记
+   * 各的上限，也不会互相串。
+   *
+   * 不合法（非有限值、小于 1）时经 {@link usableConcurrency} 归一化——按 1 处理，
+   * 而不是让队列停摆。
+   */
+  concurrency?: number
 }
 
 /** 收尾时要写进记录的那几个字段。 */
@@ -124,6 +150,8 @@ export class TaskQueue {
   private readonly entries = new Map<string, Entry>()
   /** 每个 kind 当前在飞的数量。 */
   private readonly inFlight = new Map<string, number>()
+  /** 入队时显式给过的并发上限，按 kind 记。没有条目时才回落到 kind 声明的那个。 */
+  private readonly limits = new Map<string, number>()
   /** 写入订阅者。推送通道靠它把「台账变了」变成「推一帧」。 */
   private readonly listeners = new Set<() => void>()
 
@@ -162,11 +190,20 @@ export class TaskQueue {
    *
    * 拒掉的数量记在返回值的 `skipped` 里。这是**正常的调度结果**，不是请求失败：
    * 一次「全选 → 开始」里本来就可能有一半已经在跑。
+   *
+   * `options.concurrency` 给的是**这一批的调度上限**，覆盖 kind 声明的那一个（口径见
+   * {@link EnqueueOptions.concurrency}）。它先于发放生效，所以同一批就能按新的上限开跑。
    */
-  enqueue(kind: string, items: readonly unknown[]): EnqueueResult {
+  enqueue(kind: string, items: readonly unknown[], options: EnqueueOptions = {}): EnqueueResult {
     const definition = this.kinds.get(kind)
     let accepted = 0
     let skipped = 0
+
+    // 归一化之后才记下来：`NaN` / `Infinity` / `0` 都在这里收成 1，pump 拿到的永远是
+    // 一个能用的上限（`NaN` 会让 `inFlight < limit` 恒为假，整条 kind 就此停摆）。
+    if (definition && options.concurrency !== undefined) {
+      this.limits.set(kind, usableConcurrency(options.concurrency))
+    }
 
     for (const item of items) {
       const entry = definition ? this.accept(definition, item) : null
@@ -307,11 +344,16 @@ export class TaskQueue {
    *
    * 「谁先空出来谁取下一个」的全部实现就是这里——每有一个任务收尾，就调用一次，
    * 于是空出来的那个槽立刻被队首填上，而不是等整批跑完再开下一批。
+   *
+   * 上限取三层里的第一层：**这次入队显式给过的** → kind 注册时声明的 →
+   * {@link usableConcurrency} 的兜底 1。取的是「当前」值而不是入队那一刻的快照，
+   * 所以后一次入队调大/调小会立刻作用到还在排队的那批上——调度参数本就该这样，
+   * 它不是任务的属性。
    */
   private pump(kind: string): void {
     const definition = this.kinds.get(kind)
     if (!definition) return
-    const limit = usableConcurrency(definition.concurrency)
+    const limit = this.limits.get(kind) ?? usableConcurrency(definition.concurrency)
     while ((this.inFlight.get(kind) ?? 0) < limit) {
       const next = [...this.entries.values()].find(entry => entry.record.kind === kind && entry.record.status === 'queued')
       if (!next) return

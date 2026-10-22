@@ -30,6 +30,52 @@ describe('任务队列路由', () => {
     expect(response.end).not.toHaveBeenCalled()
   })
 
+  it('enqueue 的 concurrency 必须是 ≥1 的整数，0 / 小数 / 负数在契约层就拒掉', async () => {
+    for (const concurrency of [0, -1, 1.5]) {
+      const response = mockResponse()
+      await expect(
+        taskRoutes.invoke('/api/tasks/enqueue', response, { kind: 'model-test', items: [], concurrency }),
+      ).rejects.toThrow()
+      expect(response.end).not.toHaveBeenCalled()
+    }
+  })
+
+  /**
+   * `concurrency` 是**这一次入队的调度上限**，路由原样透传给引擎。这里从 HTTP 这一头验
+   * 到底：给 3，同一个 kind 就真的同时跑起 3 条（kind 本身声明的是串行）。
+   *
+   * 顺带钉住「它不是载荷」：`items` 里的每一项都不该因此多出一个字段。
+   */
+  it('enqueue 的 concurrency 透传给队列，那一刻同时在飞的条数就是它', async () => {
+    const kind = 'enqueue-concurrency'
+    const seen: unknown[] = []
+    taskQueue.register({
+      kind,
+      concurrency: 1,
+      parse: input => input as { id: string },
+      keyOf: payload => payload.id,
+      run: (payload, context) => new Promise<string>(resolve => {
+        seen.push(payload)
+        context.signal.addEventListener('abort', () => resolve('stopped'))
+      }),
+    })
+
+    const response = mockResponse()
+    await taskRoutes.invoke('/api/tasks/enqueue', response, {
+      kind,
+      items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+      concurrency: 3,
+    })
+
+    expect(responsePayload(response)).toEqual({ success: true, data: { accepted: 4, skipped: 0 } })
+    expect(seen).toEqual([{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+    expect(taskQueue.snapshot().filter(record => record.kind === kind && record.status === 'running')).toHaveLength(3)
+
+    taskQueue.cancelKind(kind)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    taskQueue.clear()
+  })
+
   it('cancel 的 taskIds 必须是字符串数组', async () => {
     const response = mockResponse()
 

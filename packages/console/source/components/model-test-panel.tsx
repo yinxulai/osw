@@ -107,8 +107,9 @@ import { useModelTestConfigStore, type TestConfig } from '@/store/model-test-con
  *
  * ## 为什么这一层不再持有队列
  *
- * 状态、并发、取消、去重全在服务端（`packages/core/source/management/tasks/`）。这个文件
- * 只做三件事：从 {@link useTasks} 拿快照、把服务端任务翻成表格行（`lib/model-test/tasks`）、
+ * 状态、并发、取消、去重全在服务端执行（`packages/core/source/management/tasks/`）；界面
+ * 只是把「用户填的并发」当入队参数发出去，自己不发放任何任务。这个文件只做三件事：
+ * 从 {@link useTasks} 拿快照、把服务端任务翻成表格行（`lib/model-test/tasks`）、
  * 把「用户点了什么」翻成命令。它卸载、切页、关窗口，都不会中断一个已经在跑的任务。
  */
 
@@ -635,6 +636,14 @@ function TestConfigPanel(props: TestConfigPanelProps) {
 
       <div className="divide-y divide-border/50 px-4">
         <ConfigNumberRow
+          title={t('modelTest.config.concurrency')}
+          description={t('modelTest.config.concurrencyHint')}
+          value={config.concurrency}
+          min={1}
+          unitKey="modelTest.config.unit.concurrency"
+          onChange={concurrency => props.onChange({ ...config, concurrency })}
+        />
+        <ConfigNumberRow
           title={t('modelTest.config.rounds')}
           description={t('modelTest.config.roundsHint')}
           value={config.rounds}
@@ -884,7 +893,8 @@ export function ModelTestPanel() {
   /**
    * 把当前参数与选择交给**服务端队列**。
    *
-   * 这里只说「用这些参数跑这几行」，排队、并发、去重、取消收尾都在服务端。参数是
+   * 这里只说「用这些参数跑这几行」，排队、去重、取消收尾都在服务端；并发作为**入队参数**
+   * 一起发出去——它覆盖 kind 声明的那条串行默认，说的是「这一批同时在飞几个」。参数是
    * 开跑那一刻的快照：跑的过程中改配置不影响已经发出去的那一批。
    */
   const startRows = async (batch: readonly TestRow[]) => {
@@ -894,7 +904,7 @@ export function ModelTestPanel() {
         rounds: config.rounds,
         prompt: config.prompt,
         inputLength: config.inputLength,
-      }))
+      }), { concurrency: config.concurrency })
       // `skipped` 是正常调度结果（同键已在队列里、队列满、载荷解析不过），但界面上必须
       // 说出来：静默跳过就是「点了没反应」。服务端只给两个计数，这里如实报两个数。
       if (skipped > 0) toast.warning(t('modelTest.notice.enqueueSkipped', { accepted, skipped }))
@@ -1000,6 +1010,11 @@ export function ModelTestPanel() {
                     <div>
                       <div className="font-mono text-base font-medium tabular-nums leading-none text-text-primary">{selectedProviderIds.size}</div>
                       <div className="mt-1 system-2xs-regular text-text-tertiary">{t('modelTest.metric.channels')}</div>
+                    </div>
+                    <div className="h-7 w-px bg-border" />
+                    <div>
+                      <div className="font-mono text-base font-medium tabular-nums leading-none text-text-primary">{config.concurrency}</div>
+                      <div className="mt-1 system-2xs-regular text-text-tertiary">{t('modelTest.metric.concurrency')}</div>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
