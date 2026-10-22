@@ -51,6 +51,75 @@ export const ModelTestTaskItemSchema = z.object({
 
 export type ModelTestTaskItem = z.infer<typeof ModelTestTaskItemSchema>
 
+/** 去重键里能区分「这是哪一次诊断」的全部参数。 */
+export interface ModelTestTaskKey {
+  modelId: string
+  protocol: Protocol
+  mode: ModelTestMode
+  rounds: number
+  inputLength: number
+}
+
+/**
+ * 键的版本前缀。格式发生变化时升版本，旧键自然认不出来，而不是被半懂不懂地解析。
+ *
+ * 格式：`v1:<编码后的模型 id>:<协议>:<模式>:<轮次>:<输入长度>`
+ *（模型 id 是用户可写的字符串，用 `encodeURIComponent` 编进去，分隔符不会被它切错）。
+ */
+const MODEL_TEST_TASK_KEY_PREFIX = 'v1'
+
+/**
+ * 诊断任务去重键的**唯一构造处**，服务端 `keyOf` 与界面读键共用这一份。
+ *
+ * 键里必须带 `mode` / `rounds` / `inputLength`：只带「模型 × 协议」会把「同一目标换了
+ * 参数重测」误判成重复任务而静默跳过——用户看到的是「点了没反应」。
+ * 反过来，键相同就只能是同一件事：同一目标、同一套参数，确实不该同时在飞两份。
+ */
+export function modelTestTaskKeyOf(identity: ModelTestTaskKey): string {
+  return [
+    MODEL_TEST_TASK_KEY_PREFIX,
+    encodeURIComponent(identity.modelId),
+    identity.protocol,
+    identity.mode,
+    String(identity.rounds),
+    String(identity.inputLength),
+  ].join(':')
+}
+
+/**
+ * 解析 {@link modelTestTaskKeyOf} 的产物；形状不对返回 `null`。
+ *
+ * 返回 `null` 而不是抛：键来自网络上另一头（或一次版本升级之前留下的任务），一条认不
+ * 出来的任务应该被跳过，而不是让整张表渲染失败。
+ */
+export function parseModelTestTaskKey(key: string): ModelTestTaskKey | null {
+  const parts = key.split(':')
+  if (parts.length !== 6) return null
+  const [prefix, encodedModelId, protocolText, modeText, roundsText, inputLengthText] = parts
+  if (prefix !== MODEL_TEST_TASK_KEY_PREFIX) return null
+
+  let modelId: string
+  try {
+    modelId = decodeURIComponent(encodedModelId)
+  } catch {
+    return null
+  }
+  if (modelId.length === 0) return null
+
+  const protocol = ProtocolSchema.safeParse(protocolText)
+  if (!protocol.success) return null
+  const mode = ModelTestModeSchema.safeParse(modeText)
+  if (!mode.success) return null
+
+  // 只认规范写法：`01` 与 `1` 不能是两个能对上的键。
+  const rounds = Number(roundsText)
+  if (!Number.isSafeInteger(rounds) || rounds < MIN_MODEL_TEST_ROUNDS || String(rounds) !== roundsText) return null
+  const inputLength = Number(inputLengthText)
+  if (!Number.isSafeInteger(inputLength) || inputLength < 0 || String(inputLength) !== inputLengthText) return null
+
+  return { modelId, protocol: protocol.data, mode: mode.data, rounds, inputLength }
+}
+
 /**
  * 诊断任务的进行中画面。
  *

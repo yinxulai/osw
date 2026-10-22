@@ -184,6 +184,11 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.filter.all': '全部',
   'modelTest.filter.failed': '只看失败',
   'modelTest.action.retryFailed': '重测失败项',
+  // 入队结果是「正常调度结果」，但界面必须说出来：静默跳过就是「点了没反应」。
+  'modelTest.notice.enqueueSkipped': '已开始 {accepted} 个目标，{skipped} 个未入队（已在队列中、队列已满或参数无效）。',
+  'modelTest.notice.enqueueFailed': '入队失败，任务没有开始。',
+  // 服务端在有任务在跑时不许清空，按钮置灰并在这里说明原因。
+  'modelTest.action.clearResultsBusy': '有诊断在跑，跑完才能清空结果',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': '统计分析',

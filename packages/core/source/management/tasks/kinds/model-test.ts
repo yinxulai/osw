@@ -1,5 +1,5 @@
 import type { ModelTestRoundResult, ModelTestTaskItem, ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
-import { ModelTestTaskItemSchema } from '@common/diagnostics'
+import { ModelTestTaskItemSchema, modelTestTaskKeyOf } from '@common/diagnostics'
 import { reportTelemetryEvent } from '@server/telemetry'
 import { runDiagnosticRound } from '../../diagnostics/run-round'
 import { summarizeRounds } from '../../diagnostics/round-summary'
@@ -21,9 +21,6 @@ import type { TaskKind } from '../queue'
 /** 队列里这类任务的 `kind`。 */
 export const MODEL_TEST_TASK_KIND = 'model-test'
 
-/** 诊断任务的结果就等于一条诊断结论（加上协议，见 `@common/diagnostics`）。 */
-export type { ModelTestTaskResult }
-
 export const modelTestTaskKind: TaskKind<ModelTestTaskItem, ModelTestTaskResult, ModelTestTaskProgress> = {
   kind: MODEL_TEST_TASK_KIND,
   /**
@@ -36,8 +33,11 @@ export const modelTestTaskKind: TaskKind<ModelTestTaskItem, ModelTestTaskResult,
    */
   concurrency: 1,
   parse: input => ModelTestTaskItemSchema.parse(input),
-  /** 去重键：同一个「模型 × 协议」不该同时在飞两份（那是一次真实的双倍计费）。 */
-  keyOf: payload => `${payload.modelId}:${payload.protocol}`,
+  /**
+   * 去重键由契约层唯一给出（`@common/diagnostics` 的 `modelTestTaskKeyOf`）：
+   * 界面读键与这里写键共用同一个函数，格式漂移会变成编译期错误而不是「对不上号」。
+   */
+  keyOf: payload => modelTestTaskKeyOf(payload),
   run: runModelTestTask,
 }
 

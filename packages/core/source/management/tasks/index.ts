@@ -15,5 +15,5 @@ export const taskQueue = new TaskQueue()
 taskQueue.register(modelTestTaskKind)
 
 export { TaskQueue, MAX_QUEUE_TASKS } from './queue'
-export type { EnqueueResult, TaskKind, TaskRunContext } from './queue'
+export type { TaskKind, TaskRunContext } from './queue'
 export { MODEL_TEST_TASK_KIND } from './kinds/model-test'

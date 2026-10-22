@@ -70,7 +70,6 @@ export const TasksStreamSnapshotMessageSchema = TasksStreamEnvelopeSchema.extend
   type: z.literal('snapshot'),
   tasks: z.array(TaskRecordSchema),
 })
-export type TasksStreamSnapshotMessage = z.infer<typeof TasksStreamSnapshotMessageSchema>
 
 /**
  * 只证明连接仍然活着，不携带也不改变任何状态。
@@ -80,7 +79,6 @@ export type TasksStreamSnapshotMessage = z.infer<typeof TasksStreamSnapshotMessa
 export const TasksStreamHeartbeatMessageSchema = TasksStreamEnvelopeSchema.extend({
   type: z.literal('heartbeat'),
 })
-export type TasksStreamHeartbeatMessage = z.infer<typeof TasksStreamHeartbeatMessageSchema>
 
 /** 推送流里一行的完整类型集合；`type` 是唯一的消息判别字段。 */
 export const TasksStreamMessageSchema = z.discriminatedUnion('type', [
@@ -100,7 +98,6 @@ export const TaskEnqueueRequestSchema = z.object({
   kind: z.string().trim().min(1),
   items: z.array(z.unknown()),
 })
-export type TaskEnqueueRequest = z.infer<typeof TaskEnqueueRequestSchema>
 
 /**
  * 入队结果。
@@ -118,10 +115,14 @@ export interface TaskEnqueueResponse {
 }
 
 /** `POST /api/tasks/cancel` 的请求体。`taskIds` 与 `kind` 至少给一个。 */
-export const TaskCancelRequestSchema = z.object({
-  taskIds: z.array(z.string()).optional(),
-  kind: z.string().optional(),
-})
+export const TaskCancelRequestSchema = z
+  .object({
+    taskIds: z.array(z.string()).optional(),
+    kind: z.string().optional(),
+  })
+  .refine(request => request.taskIds !== undefined || request.kind !== undefined, {
+    message: 'Provide taskIds or kind.',
+  })
 export type TaskCancelRequest = z.infer<typeof TaskCancelRequestSchema>
 
 /** 取消的结果：真的落到「取消」上的任务数（已经结束的不算）。 */

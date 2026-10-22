@@ -95,6 +95,30 @@ describe('状态机', () => {
     expect(queue.snapshot()[0]).toMatchObject({ status: 'failed', errorMessage: 'upstream down' })
   })
 
+  it('run 在返回 promise 之前同步抛错也落到 failed，槽位接着发给下一条', async () => {
+    const queue = new TaskQueue()
+    const calls: string[] = []
+    queue.register({
+      kind: 'thing',
+      concurrency: 1,
+      parse: input => input as Thing,
+      keyOf: payload => payload.id,
+      run: payload => {
+        calls.push(payload.id)
+        if (payload.id === 'boom') throw new Error('sync boom')
+        return Promise.resolve('ok')
+      },
+    })
+
+    // 异常不能穿出 enqueue（那会让整批 HTTP 请求失败），而且第一条失败后必须继续发放。
+    expect(() => queue.enqueue('thing', [{ id: 'boom' }, { id: 'next' }])).not.toThrow()
+    expect(calls).toEqual(['boom', 'next'])
+
+    await settle()
+    expect(queue.snapshot()[0]).toMatchObject({ status: 'failed', errorMessage: 'sync boom' })
+    expect(queue.snapshot()[1].status).toBe('success')
+  })
+
   it('report 写进 progress；收尾之后不再接受进度（「取消了还在动」那种错觉）', async () => {
     const { queue, calls } = scenario()
     queue.enqueue('thing', [{ id: 'a' }])
@@ -155,6 +179,22 @@ describe('入队与去重', () => {
     const { queue } = scenario()
     expect(queue.enqueue('unknown', [{ id: 'a' }, { id: 'b' }])).toEqual({ accepted: 0, skipped: 2 })
     expect(queue.snapshot()).toEqual([])
+  })
+
+  it('keyOf 抛错的那一项算 skipped，同批其它项照常入队', () => {
+    const queue = new TaskQueue()
+    queue.register({
+      kind: 'thing',
+      parse: input => input as Thing,
+      keyOf: payload => {
+        if (payload.id === 'bad') throw new Error('cannot key')
+        return payload.id
+      },
+      run: () => new Promise<string>(() => {}),
+    })
+
+    expect(() => queue.enqueue('thing', [{ id: 'bad' }, { id: 'good' }])).not.toThrow()
+    expect(queue.snapshot().map(record => record.key)).toEqual(['good'])
   })
 
   it('超过总长上界后拒绝入队，且不会把旧任务挤掉', async () => {
@@ -261,6 +301,21 @@ describe('取消', () => {
 
     expect(queue.cancel(ids(queue))).toBe(0)
     expect(queue.snapshot()[0].status).toBe('success')
+  })
+
+  it('已在取消中的任务不会被再数一次（`cancelled` 不能大于任务总数）', async () => {
+    const { queue, calls } = scenario()
+    queue.enqueue('thing', [{ id: 'a' }])
+
+    const runningId = ids(queue)[0]
+    expect(queue.cancel([runningId])).toBe(1)
+    // `abort()` 不会同步改状态，紧接着的第二次取消（或 cancelKind）仍会看到 running。
+    expect(queue.cancel([runningId])).toBe(0)
+    expect(queue.cancelKind('thing')).toBe(0)
+
+    calls[0].done.reject(new Error('aborted'))
+    await settle()
+    expect(queue.snapshot()[0].status).toBe('cancelled')
   })
 
   it('cancelKind 只碰这个 kind', async () => {

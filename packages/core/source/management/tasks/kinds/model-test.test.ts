@@ -47,9 +47,20 @@ describe('kind 注册信息', () => {
     expect(modelTestTaskKind.concurrency).toBe(1)
   })
 
-  it('去重键是「模型 × 协议」，同一个目标不该同时在飞两份', () => {
-    expect(modelTestTaskKind.keyOf(item())).toBe('pm_1:openai-completions')
-    expect(modelTestTaskKind.keyOf(item({ protocol: 'anthropic-messages' }))).toBe('pm_1:anthropic-messages')
+  it('去重键含「模型 × 协议 × 测法」，同一个目标不该同时在飞两份', () => {
+    expect(modelTestTaskKind.keyOf(item())).toBe('v1:pm_1:openai-completions:streaming:1:0')
+    expect(modelTestTaskKind.keyOf(item({ protocol: 'anthropic-messages' }))).toBe('v1:pm_1:anthropic-messages:streaming:1:0')
+  })
+
+  it('换了参数重测是另一个键：原来的键只区分目标，会把重测静默跳过', () => {
+    const base = modelTestTaskKind.keyOf(item())
+    expect(modelTestTaskKind.keyOf(item({ mode: 'speed' }))).not.toBe(base)
+    expect(modelTestTaskKind.keyOf(item({ rounds: 3 }))).not.toBe(base)
+    expect(modelTestTaskKind.keyOf(item({ inputLength: 200 }))).not.toBe(base)
+  })
+
+  it('提示词不进键：换提示词不改「这是哪一个任务」', () => {
+    expect(modelTestTaskKind.keyOf(item({ prompt: '数到一百' }))).toBe(modelTestTaskKind.keyOf(item()))
   })
 })
 

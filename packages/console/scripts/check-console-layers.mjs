@@ -67,7 +67,7 @@ const RULES = [
       { pattern: REACT_RUNTIME, why: '领域层不得依赖 React —— 这是本项目分层的核心约束' },
       ...UI_STATE_LIBS.map(pattern => ({
         pattern,
-        why: '领域层不得依赖界面状态库；需要可观察状态时用普通类 + 订阅（见 ModelTestRunner）',
+        why: '领域层不得依赖界面状态库；需要可观察状态时用普通类 + 订阅（服务端任务队列即如此：packages/core/source/management/tasks/queue.ts）',
       })),
       { pattern: /^@\/(components|hooks|shell|routing)(\/|$)/, why: '领域层不得依赖上层（界面/绑定/组合根）' },
       { pattern: /^@\/data(\/|$)/, why: '领域层不得依赖 data 绑定层（那里装着 react-query hook）；请把纯函数下沉到 lib' },

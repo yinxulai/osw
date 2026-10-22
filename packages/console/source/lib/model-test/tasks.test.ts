@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { ModelTestTaskItem, ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
-import type { Provider, ProviderModelRoute } from '@common/schemas'
+import type { ModelTestTaskItem, ModelTestTaskKey, ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
+import { modelTestTaskKeyOf } from '@common/diagnostics'
+import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
 import type { TaskRecord } from '@common/tasks'
 import {
   MODEL_TEST_TASK_KIND,
@@ -8,7 +9,6 @@ import {
   getCurrentRoundLabel,
   getVisibleTestRows,
   mergeTestRows,
-  modelTestKeyOf,
   summarizeTestRows,
   toModelTestItems,
   toTestRow,
@@ -40,6 +40,11 @@ function provider(overrides: Partial<Provider> = {}): Provider {
 
 type ModelOverrides = Partial<ProviderModelRoute> & { id: string }
 
+/** 默认那套测法参数（流式、一轮、不补长度）下的去重键；要换参数就传 `overrides`。 */
+function keyOf(modelId: string, protocol: Protocol, overrides: Partial<ModelTestTaskKey> = {}): string {
+  return modelTestTaskKeyOf({ modelId, protocol, mode: 'streaming', rounds: 1, inputLength: 0, ...overrides })
+}
+
 function model(overrides: ModelOverrides): ProviderModelRoute {
   return {
     providerId: 'prov_1',
@@ -63,7 +68,7 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
   return {
     id: 'task_1',
     kind: MODEL_TEST_TASK_KIND,
-    key: modelTestKeyOf('m1', 'openai-completions'),
+    key: keyOf('m1', 'openai-completions'),
     status: 'queued',
     enqueuedAt: 1,
     ...overrides,
@@ -105,9 +110,11 @@ const MODELS = [
 ]
 const PROVIDERS = [provider()]
 
-describe('modelTestKeyOf — 与服务端 keyOf 同一口径', () => {
-  it('是「模型 id:协议」，去重与对号入座都靠它', () => {
-    expect(modelTestKeyOf('m1', 'anthropic-messages')).toBe('m1:anthropic-messages')
+describe('键 —— 契约层唯一给出，界面只负责读', () => {
+  it('键里带着测法参数，所以「换了参数重测」不会被误认成同一行', () => {
+    expect(keyOf('m1', 'anthropic-messages')).toBe('v1:m1:anthropic-messages:streaming:1:0')
+    expect(keyOf('m1', 'anthropic-messages', { mode: 'speed' })).not.toBe(keyOf('m1', 'anthropic-messages'))
+    expect(keyOf('m1', 'anthropic-messages', { rounds: 3 })).not.toBe(keyOf('m1', 'anthropic-messages'))
   })
 })
 
@@ -119,7 +126,7 @@ describe('toTestRow', () => {
   it('排队中的任务没有 progress，名字从本地目录取', () => {
     const row = toTestRow(task(), MODELS, PROVIDERS)!
     expect(row).toMatchObject({
-      id: 'm1:openai-completions',
+      id: keyOf('m1', 'openai-completions'),
       modelId: 'm1',
       modelName: 'gpt-4o',
       providerName: '示例渠道',
@@ -128,6 +135,10 @@ describe('toTestRow', () => {
       status: 'queued',
     })
     expect(row.result).toBeUndefined()
+  })
+
+  it('键认不出来（旧版本 / 别的业务写的）时这一行不进表，而不是编一个空协议', () => {
+    expect(toTestRow(task({ key: 'm1:openai-completions' }), MODELS, PROVIDERS)).toBeNull()
   })
 
   it('有 progress 时用服务端给的名字（目录可能刚被改过）', () => {
@@ -148,7 +159,7 @@ describe('toTestRow', () => {
   })
 
   it('模型已从目录里消失也能读出这一行（任务是真的，藏起来只会无法解释）', () => {
-    const row = toTestRow(task({ key: modelTestKeyOf('gone', 'openai-responses') }), MODELS, PROVIDERS)!
+    const row = toTestRow(task({ key: keyOf('gone', 'openai-responses') }), MODELS, PROVIDERS)!
     expect(row.modelId).toBe('gone')
     expect(row.protocol).toBe('openai-responses')
     expect(row.providerId).toBe('')
@@ -156,9 +167,9 @@ describe('toTestRow', () => {
 })
 
 describe('buildPlannedRows — 这一批要跑哪些「模型 × 协议」', () => {
-  it('id 稳定成「模型 id:协议」，重测才能命中同一行', () => {
+  it('id 是契约层的去重键（含测法参数），重测才能命中同一行', () => {
     const rows = buildPlannedRows(MODELS, PROVIDERS, new Set(['prov_1']), {})
-    expect(rows.map(row => row.id)).toEqual(['m1:openai-completions'])
+    expect(rows.map(row => row.id)).toEqual([keyOf('m1', 'openai-completions')])
     expect(rows[0]).toMatchObject({
       modelId: 'm1',
       modelName: 'gpt-4o',
@@ -167,6 +178,11 @@ describe('buildPlannedRows — 这一批要跑哪些「模型 × 协议」', () 
       status: 'queued',
       converted: false,
     })
+  })
+
+  it('参数跟着这一批走：换了轮次骨架就是另一组键', () => {
+    const rows = buildPlannedRows(MODELS, PROVIDERS, new Set(['prov_1']), {}, { mode: 'streaming', rounds: 3, inputLength: 0 })
+    expect(rows.map(row => row.id)).toEqual([keyOf('m1', 'openai-completions', { rounds: 3 })])
   })
 
   it('供应商没找到（数据不同步）时这一行不出现，而不是编一个空名字', () => {
@@ -195,29 +211,29 @@ describe('buildPlannedRows — 这一批要跑哪些「模型 × 协议」', () 
 
 describe('mergeTestRows — 计划是骨架，服务端是事实', () => {
   const plan: TestRow[] = [
-    { id: 'm1:openai-completions', modelId: 'm1', modelName: 'gpt-4o', providerId: 'prov_1', providerName: '示例渠道', protocol: 'openai-completions', converted: false, status: 'queued' },
-    { id: 'm1:anthropic-messages', modelId: 'm1', modelName: 'gpt-4o', providerId: 'prov_1', providerName: '示例渠道', protocol: 'anthropic-messages', converted: false, status: 'queued' },
+    { id: keyOf('m1', 'openai-completions'), modelId: 'm1', modelName: 'gpt-4o', providerId: 'prov_1', providerName: '示例渠道', protocol: 'openai-completions', converted: false, status: 'queued' },
+    { id: keyOf('m1', 'anthropic-messages'), modelId: 'm1', modelName: 'gpt-4o', providerId: 'prov_1', providerName: '示例渠道', protocol: 'anthropic-messages', converted: false, status: 'queued' },
   ]
 
   it('同 key 的任务覆盖骨架那一行，状态从服务端来', () => {
     const rows = mergeTestRows(plan, [task({ status: 'success', result: result() })], MODELS, PROVIDERS)
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toMatchObject({ id: 'm1:openai-completions', status: 'success' })
+    expect(rows[0]).toMatchObject({ id: keyOf('m1', 'openai-completions'), status: 'success' })
     expect(rows[1].status).toBe('queued')
   })
 
   it('服务端有、计划里没有的任务追加在后面', () => {
-    const rows = mergeTestRows(plan, [task({ key: modelTestKeyOf('m9', 'openai-responses'), status: 'failed' })], MODELS, PROVIDERS)
+    const rows = mergeTestRows(plan, [task({ key: keyOf('m9', 'openai-responses'), status: 'failed' })], MODELS, PROVIDERS)
     expect(rows.map(row => row.id)).toEqual([
-      'm1:openai-completions',
-      'm1:anthropic-messages',
-      'm9:openai-responses',
+      keyOf('m1', 'openai-completions'),
+      keyOf('m1', 'anthropic-messages'),
+      keyOf('m9', 'openai-responses'),
     ])
   })
 
   it('别的 kind 的任务不进这张表', () => {
-    const rows = mergeTestRows(plan, [task({ kind: 'export', key: modelTestKeyOf('m9', 'openai-responses') })], MODELS, PROVIDERS)
-    expect(rows.map(row => row.id)).toEqual(['m1:openai-completions', 'm1:anthropic-messages'])
+    const rows = mergeTestRows(plan, [task({ kind: 'export', key: keyOf('m9', 'openai-responses') })], MODELS, PROVIDERS)
+    expect(rows.map(row => row.id)).toEqual([keyOf('m1', 'openai-completions'), keyOf('m1', 'anthropic-messages')])
   })
 })
 

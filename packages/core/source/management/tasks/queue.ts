@@ -73,7 +73,7 @@ export interface TaskRunContext<G> {
  */
 export const MAX_QUEUE_TASKS = 500
 
-export interface EnqueueResult {
+interface EnqueueResult {
   accepted: number
   skipped: number
 }
@@ -82,6 +82,11 @@ export interface EnqueueResult {
 interface TaskSettlement {
   result?: unknown
   errorMessage?: string
+}
+
+/** 失败原因取错误原文；kind 抛出非 `Error` 时也不该把这一格留空。 */
+function errorMessageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 interface Entry {
@@ -179,6 +184,9 @@ export class TaskQueue {
         continue
       }
       if (entry.record.status === 'running') {
+        // 已经在取消中的不再数一次：`abort()` 不会同步改状态，重复点（或同时给了
+        // `taskIds` 与 `kind`）会让同一个任务被计两遍，`cancelled` 就会大于任务总数。
+        if (entry.controller.signal.aborted) continue
         entry.controller.abort()
         cancelled += 1
       }
@@ -191,7 +199,7 @@ export class TaskQueue {
   cancelKind(kind: string): number {
     const ids = [...this.entries.values()]
       .filter(entry => entry.record.kind === kind)
-      .filter(entry => entry.record.status === 'queued' || entry.record.status === 'running')
+      .filter(entry => entry.record.status === 'queued' || (entry.record.status === 'running' && !entry.controller.signal.aborted))
       .map(entry => entry.record.id)
     return this.cancel(ids)
   }
@@ -230,7 +238,15 @@ export class TaskQueue {
       // 载荷不属于这个 kind（或形状不对）：拒掉这一项，而不是把整个批次带下水。
       return null
     }
-    const key = definition.keyOf(payload)
+
+    let key: string
+    try {
+      key = definition.keyOf(payload)
+    } catch {
+      // `keyOf` 是 kind 自己的代码，抛错同样只该让这一项被跳过：让异常穿出去会把
+      // 「一批里的一项算不出键」变成「整个 HTTP 请求失败」。
+      return null
+    }
     if (this.hasLiveKey(definition.kind, key)) return null
 
     const entry: Entry = {
@@ -292,7 +308,18 @@ export class TaskQueue {
       },
     }
 
-    void entry.kind.run(entry.payload, context).then(
+    // 同步抛错必须在这里接住：`kind.run` 在返回 promise 之前抛出的异常会穿过
+    // `start → pump → enqueue` 回到路由，而这条任务已经停在 `running` 上——槽位再也不会
+    // 被放出来，队列就此卡死。同步抛错与异步拒绝在这里合并成同一个结局。
+    let running: Promise<unknown>
+    try {
+      running = entry.kind.run(entry.payload, context)
+    } catch (error) {
+      this.settle(entry, 'failed', { errorMessage: errorMessageOf(error) })
+      return
+    }
+
+    void running.then(
       result => {
         // 被取消的那次不发结论：它没有答案，记成成功/失败都不诚实。
         if (entry.controller.signal.aborted) this.settle(entry, 'cancelled')
@@ -300,7 +327,7 @@ export class TaskQueue {
       },
       error => {
         if (entry.controller.signal.aborted) this.settle(entry, 'cancelled')
-        else this.settle(entry, 'failed', { errorMessage: (error as Error).message })
+        else this.settle(entry, 'failed', { errorMessage: errorMessageOf(error) })
       },
     )
   }

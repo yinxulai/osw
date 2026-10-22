@@ -60,4 +60,36 @@ describe('任务队列路由', () => {
 
     expect(responsePayload(response)).toEqual({ success: true, data: { cleared: taskQueue.snapshot().length } })
   })
+
+  it('cancel 两个字段都没给时在契约层就拒掉，一个字节都不写', async () => {
+    const response = mockResponse()
+
+    await expect(taskRoutes.invoke('/api/tasks/cancel', response, {})).rejects.toThrow()
+    expect(response.end).not.toHaveBeenCalled()
+  })
+
+  it('cancel 同时给 taskIds 与 kind 时，一个在跑的任务只算一次', async () => {
+    const kind = 'cancel-dedup'
+    taskQueue.register({
+      kind,
+      parse: input => input as { id: string },
+      keyOf: payload => payload.id,
+      // 收尾交给取消信号：验收「在跑」这一格，而不是一条马上结束的任务。
+      run: (_payload, context) => new Promise<string>(resolve => {
+        context.signal.addEventListener('abort', () => resolve('stopped'))
+      }),
+    })
+    taskQueue.enqueue(kind, [{ id: 'x' }])
+    const [record] = taskQueue.snapshot()
+    expect(record).toMatchObject({ kind, status: 'running' })
+
+    const response = mockResponse()
+    await taskRoutes.invoke('/api/tasks/cancel', response, { taskIds: [record.id], kind })
+
+    // 两条路径指向同一条在跑的任务：`abort()` 不立即改状态，不特别处理会返回 2。
+    expect(responsePayload(response)).toEqual({ success: true, data: { cancelled: 1 } })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    taskQueue.clear()
+  })
 })

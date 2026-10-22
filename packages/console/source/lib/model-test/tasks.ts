@@ -1,4 +1,5 @@
 import type { ModelTestTaskItem, ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
+import { modelTestTaskKeyOf, parseModelTestTaskKey } from '@common/diagnostics'
 import type { ModelTestMode, Protocol, Provider, ProviderModelRoute } from '@common/schemas'
 import type { TaskRecord, TaskStatus } from '@common/tasks'
 import { getTestableProtocols, supportsConvertedProtocol, type ModelProtocolSelection } from './selection'
@@ -10,8 +11,8 @@ import { getTestableProtocols, supportsConvertedProtocol, type ModelProtocolSele
  * 为什么这一层必须存在：队列是**通用**的，它的任务只带 `kind` / `key` / `status` /
  * `progress` / `result` 这些生命周期字段，没有任何「模型」「协议」——它是刻意不认识这些
  * 东西的（见 `@common/tasks`）。而面板要的是一张按「模型 × 协议」排开的表。把它们接起来
- * 的就是这里：用 `keyOf` 的同一口径（`${modelId}:${protocol}`）把任务对回本地目录里的
- * 模型与渠道。
+ * 的就是这里：键的构造与解析都来自契约层（`@common/diagnostics` 的
+ * `modelTestTaskKeyOf` / `parseModelTestTaskKey`），服务端写键与这里读键共用同一份实现。
  *
  * 这里只有纯函数，没有 React，也没有网络：口径能直接断言，不必先挂一棵组件树。
  */
@@ -24,7 +25,7 @@ export type TestRowStatus = TaskStatus
 
 /** 结果表里的一行：一个「模型 × 协议」。 */
 export interface TestRow {
-  /** `${modelId}:${protocol}` —— 服务端 `keyOf` 的同一口径，也是去重与对号入座的凭据。 */
+  /** 服务端 `keyOf` 的同一口径（含测法参数），也是去重与对号入座的凭据。 */
   id: string
   modelId: string
   modelName: string
@@ -40,24 +41,12 @@ export interface TestRow {
   errorMessage?: string
 }
 
-/** 队列的去重键口径：同一次诊断里同一个「模型 × 协议」只该有一个任务。 */
-export function modelTestKeyOf(modelId: string, protocol: Protocol): string {
-  return `${modelId}:${protocol}`
-}
-
-/** 把一个任务的 `key` 拆回「模型 + 协议」。协议词表是封闭的，从最后一段取即可。 */
-function splitKey(key: string): { modelId: string; protocol: Protocol } {
-  const separator = key.lastIndexOf(':')
-  return {
-    modelId: separator === -1 ? key : key.slice(0, separator),
-    protocol: (separator === -1 ? '' : key.slice(separator + 1)) as Protocol,
-  }
-}
-
-/** 把服务端的一条任务翻成一行；不属于诊断 kind 的返回 `null`。 */
+/** 把服务端的一条任务翻成一行；不属于诊断 kind、或键认不出来的返回 `null`。 */
 export function toTestRow(task: TaskRecord, models: readonly ProviderModelRoute[], providers: readonly Provider[]): TestRow | null {
   if (task.kind !== MODEL_TEST_TASK_KIND) return null
-  const { modelId, protocol } = splitKey(task.key)
+  const parsed = parseModelTestTaskKey(task.key)
+  if (!parsed) return null
+  const { modelId, protocol } = parsed
   const progress = isProgress(task.progress) ? task.progress : undefined
   const result = isResult(task.result) ? task.result : undefined
   const model = models.find(candidate => candidate.id === modelId)
@@ -135,13 +124,20 @@ export function toModelTestItems(rows: readonly TestRow[], options: TestRunOptio
   }))
 }
 
+/** 计划行只关心键里那三个测法参数；提示词不进去重键（换提示词不改「这是哪个任务」）。 */
+export type TestPlanOptions = Pick<TestRunOptions, 'mode' | 'rounds' | 'inputLength'>
+
+/** 与 `ModelTestTaskItemSchema` 的默认值同一套：不给选项时就是「流式、一轮、不补长度」。 */
+const DEFAULT_PLAN_OPTIONS: TestPlanOptions = { mode: 'streaming', rounds: 1, inputLength: 0 }
+
 /**
  * 计划行：模型 × 已勾选的协议，状态一律 `queued`。
  *
- * `id` 用 `keyOf` 的同一口径（`模型 id:协议`），所以重测时必须命中同一行——服务端那边
- * 也是按这个键去重的，两边说的是同一件事。
+ * `id` 用契约层 `modelTestTaskKeyOf` 的同一口径（含 `mode` / `rounds` / `inputLength`），
+ * 所以「同一目标、同一套参数」重测时会命中同一行，而换了参数重测在服务端是一个新任务、
+ * 在表里也会如实多出一行——界面不把两件不同的事说成同一件。
  */
-export function buildPlannedRows(models: readonly ProviderModelRoute[], providers: readonly Provider[], providerIds: ReadonlySet<string>, modelProtocols: ModelProtocolSelection): TestRow[] {
+export function buildPlannedRows(models: readonly ProviderModelRoute[], providers: readonly Provider[], providerIds: ReadonlySet<string>, modelProtocols: ModelProtocolSelection, options: TestPlanOptions = DEFAULT_PLAN_OPTIONS): TestRow[] {
   return models.flatMap(model => {
     if (!providerIds.has(model.providerId)) return []
     const provider = providers.find(item => item.id === model.providerId)
@@ -150,7 +146,7 @@ export function buildPlannedRows(models: readonly ProviderModelRoute[], provider
     return getTestableProtocols(model)
       .filter(protocol => selectedProtocols.has(protocol))
       .map(protocol => ({
-        id: modelTestKeyOf(model.id, protocol),
+        id: modelTestTaskKeyOf({ modelId: model.id, protocol, mode: options.mode, rounds: options.rounds, inputLength: options.inputLength }),
         modelId: model.id,
         modelName: model.modelName,
         providerId: provider.id,

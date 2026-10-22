@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/components/ui/toast'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useTranslation } from '@/i18n/provider'
 import { formatPercent } from '@/lib/format-percent'
@@ -78,6 +79,7 @@ import {
   buildPlannedRows,
   getCurrentRoundLabel,
   getVisibleTestRows,
+  hasSettledOrRunning,
   mergeTestRows,
   summarizeTestRows,
   toModelTestItems,
@@ -725,6 +727,7 @@ function TestPanelBadge(props: TestPanelBadgeProps) {
 export function ModelTestPanel() {
   const t = useTranslation()
   const confirm = useConfirm()
+  const toast = useToast()
   const open = useAppUiStore(state => state.testPanelOpen)
   const minimized = useAppUiStore(state => state.testPanelMinimized)
   const setOpen = useAppUiStore(state => state.setTestPanelOpen)
@@ -782,17 +785,26 @@ export function ModelTestPanel() {
     }
   }, [open, enabledModels, availableProviders])
 
-  /** 这一批的骨架：用户打算测的每一行。服务端任务按 `key` 叠在它上面。 */
+  /**
+   * 这一批的骨架：用户打算测的每一行。服务端任务按 `key` 叠在它上面。
+   *
+   * 键里带着 `mode` / `rounds` / `inputLength`（见 `@common/diagnostics`），所以参数一变
+   * 骨架的键就变——「换了参数重测」在服务端是新任务，在表里也该是另一行，不会假装成同一次。
+   */
   const plannedRows = useMemo(
-    () => buildPlannedRows(enabledModels, providers, selectedProviderIds, selectedModelProtocols),
-    [enabledModels, providers, selectedProviderIds, selectedModelProtocols],
+    () => buildPlannedRows(enabledModels, providers, selectedProviderIds, selectedModelProtocols, {
+      mode: testMode,
+      rounds: config.rounds,
+      inputLength: config.inputLength,
+    }),
+    [enabledModels, providers, selectedProviderIds, selectedModelProtocols, testMode, config.rounds, config.inputLength],
   )
   const rows = useMemo(() => mergeTestRows(plannedRows, tasks, models, providers), [plannedRows, tasks, models, providers])
   const summary = useMemo(() => summarizeTestRows(rows), [rows])
   /** 服务端真的还在跑 / 还没跑的诊断任务（本地计划里的「排队」不算）。 */
   const busy = useMemo(() => tasks.some(task => task.kind === MODEL_TEST_TASK_KIND && (task.status === 'running' || task.status === 'queued')), [tasks])
 
-  const hasResults = rows.some(row => row.status !== 'queued')
+  const hasResults = hasSettledOrRunning(rows)
   const startDisabled = plannedRows.length === 0
   const { rows: visibleRows, total: visibleTotal, failedOnlyActive: showFailedOnly } = getVisibleTestRows(rows, failedOnly)
 
@@ -806,6 +818,9 @@ export function ModelTestPanel() {
   }
 
   const clearResults = () => {
+    // 有任务在跑时服务端整条空操作，按钮那时也是禁用的——这里只是不让「先点了清空、
+    // 任务紧接着开始」的竞态留下一个按下去没反应的按钮。
+    if (busy) return
     void clear()
     setFailedOnly(false)
     setExpandedRowIds(current => (current.size === 0 ? current : new Set()))
@@ -847,23 +862,30 @@ export function ModelTestPanel() {
    * 这里只说「用这些参数跑这几行」，排队、并发、去重、取消收尾都在服务端。参数是
    * 开跑那一刻的快照：跑的过程中改配置不影响已经发出去的那一批。
    */
-  const startRows = (batch: readonly TestRow[]) => {
-    void enqueue(MODEL_TEST_TASK_KIND, toModelTestItems(batch, {
-      mode: testMode,
-      rounds: config.rounds,
-      prompt: config.prompt,
-      inputLength: config.inputLength,
-    }))
+  const startRows = async (batch: readonly TestRow[]) => {
+    try {
+      const { accepted, skipped } = await enqueue(MODEL_TEST_TASK_KIND, toModelTestItems(batch, {
+        mode: testMode,
+        rounds: config.rounds,
+        prompt: config.prompt,
+        inputLength: config.inputLength,
+      }))
+      // `skipped` 是正常调度结果（同键已在队列里、队列满、载荷解析不过），但界面上必须
+      // 说出来：静默跳过就是「点了没反应」。服务端只给两个计数，这里如实报两个数。
+      if (skipped > 0) toast.warning(t('modelTest.notice.enqueueSkipped', { accepted, skipped }))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('modelTest.notice.enqueueFailed'))
+    }
   }
 
   const startTests = () => {
     setFailedOnly(false)
-    startRows(plannedRows)
+    void startRows(plannedRows)
   }
 
   /** 重测不重新规划：直接拿表里失败的那几行重跑，服务端按 `key` 去重、结果就地刷新。 */
   const retryFailedTests = () => {
-    startRows(rows.filter(row => row.status === 'failed'))
+    void startRows(rows.filter(row => row.status === 'failed'))
   }
 
   const stopTests = () => {
@@ -956,8 +978,19 @@ export function ModelTestPanel() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {hasResults && !busy && (
-                      <Button variant="ghost" size="icon-sm" title={t('modelTest.action.clearResults')} aria-label={t('modelTest.action.clearResults')} onClick={clearResults}>
+                    {hasResults && (
+                      /*
+                       * 有任务在跑时服务端不许清（那条在跑的行不该凭空消失），所以按钮留在
+                       * 原地、置灰并说明原因——收起来只会让用户以为这个功能没了。
+                       */
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={busy}
+                        title={t(busy ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
+                        aria-label={t(busy ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
+                        onClick={clearResults}
+                      >
                         <Trash2 size={13} />
                       </Button>
                     )}

@@ -183,6 +183,12 @@ export const uiEn = {
   'modelTest.filter.all': 'All',
   'modelTest.filter.failed': 'Failed only',
   'modelTest.action.retryFailed': 'Retry failed',
+  // The enqueue result is a normal scheduling outcome, but the UI must say it out loud:
+  // a silent skip reads as "the button did nothing".
+  'modelTest.notice.enqueueSkipped': 'Started {accepted} target(s); skipped {skipped} (already queued or running, queue full, or invalid).',
+  'modelTest.notice.enqueueFailed': 'Could not enqueue the run; nothing was started.',
+  // The server refuses to clear while a run is in flight, so the button stays put and explains why.
+  'modelTest.action.clearResultsBusy': 'Diagnostics are running; clear the results once they finish',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': 'Analytics',

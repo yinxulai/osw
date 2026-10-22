@@ -3,8 +3,9 @@
 import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
-import type { Provider, ProviderModelRoute } from '@common/schemas'
+import type { ModelTestTaskKey, ModelTestTaskProgress, ModelTestTaskResult } from '@common/diagnostics'
+import { modelTestTaskKeyOf } from '@common/diagnostics'
+import type { Protocol, Provider, ProviderModelRoute } from '@common/schemas'
 import type { TaskRecord } from '@common/tasks'
 import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
 import { createAppTranslator } from '@common/i18n/catalogs'
@@ -39,6 +40,13 @@ const harness = vi.hoisted(() => ({
 
 vi.mock('@/data/tasks', () => ({
   useTasks: () => ({ tasks: harness.tasks, enqueue: harness.enqueue, cancel: harness.cancel, clear: harness.clear }),
+}))
+
+/** toast 的替身：入队被跳过 / 失败时界面必须说出来，那条提示在这里断言。 */
+const toastHarness = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn() }))
+
+vi.mock('@/components/ui/toast', () => ({
+  useToast: () => ({ toast: vi.fn(), success: vi.fn(), error: toastHarness.error, info: vi.fn(), warning: toastHarness.warning }),
 }))
 
 const zh = createAppTranslator('zh-CN')
@@ -106,11 +114,16 @@ vi.mock('@/data/settings', () => ({ useSettings: () => null }))
 /* 服务端队列的替身                                                     */
 /* ------------------------------------------------------------------ */
 
+/** 面板默认那套测法参数（流式、一轮、不补长度）下的去重键——契约层唯一给出。 */
+function keyOf(modelId: string, protocol: Protocol, overrides: Partial<ModelTestTaskKey> = {}): string {
+  return modelTestTaskKeyOf({ modelId, protocol, mode: 'streaming', rounds: 1, inputLength: 0, ...overrides })
+}
+
 function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
   return {
     id: 'task_1',
     kind: MODEL_TEST_TASK_KIND,
-    key: 'm1:openai-completions',
+    key: keyOf('m1', 'openai-completions'),
     status: 'queued',
     enqueuedAt: 1,
     ...overrides,
@@ -174,10 +187,10 @@ function successResult(overrides: Partial<ModelTestTaskResult> = {}): ModelTestT
 /** 一批典型的台账：一个协议失败、一个协议在跑第二轮、原生模型成功，剩下一个还排着。 */
 function mixedLedger(): TaskRecord[] {
   return [
-    task({ id: 'task_failed', key: 'm1:anthropic-messages', status: 'failed', errorMessage: 'invalid api key', result: failedResult({ protocol: 'anthropic-messages' }) }),
-    task({ id: 'task_running', key: 'm1:openai-completions', status: 'running', progress: progress({ round: 2, totalRounds: 3 }) }),
-    task({ id: 'task_ok', key: 'm2:anthropic-messages', status: 'success', result: successResult() }),
-    task({ id: 'task_queued', key: 'm1:openai-responses' }),
+    task({ id: 'task_failed', key: keyOf('m1', 'anthropic-messages'), status: 'failed', errorMessage: 'invalid api key', result: failedResult({ protocol: 'anthropic-messages' }) }),
+    task({ id: 'task_running', key: keyOf('m1', 'openai-completions'), status: 'running', progress: progress({ round: 2, totalRounds: 3 }) }),
+    task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', result: successResult() }),
+    task({ id: 'task_queued', key: keyOf('m1', 'openai-responses') }),
   ]
 }
 
@@ -238,6 +251,8 @@ beforeEach(() => {
   harness.enqueue.mockReset().mockResolvedValue({ accepted: 1, skipped: 0 })
   harness.cancel.mockReset().mockResolvedValue(1)
   harness.clear.mockReset().mockResolvedValue(0)
+  toastHarness.warning.mockReset()
+  toastHarness.error.mockReset()
   /*
    * 测试参数记在本机，而 store 是模块级的：不清就会把上一条用例调的轮次带到下一条里，
    * 断言看起来「明明没点过却是 3 轮」。localStorage 一并清掉，免得存档跨用例复活。
@@ -353,7 +368,7 @@ describe('结果表的列划分', () => {
   })
 
   it('排队中的行只有骨架：状态是「等待」，四列全写 —', () => {
-    renderPanel([task({ id: 'task_queued', key: 'm1:openai-responses' })])
+    renderPanel([task({ id: 'task_queued', key: keyOf('m1', 'openai-responses') })])
     selectProvider()
 
     const row = rowFor(CONVERTING_MODEL)
@@ -422,7 +437,7 @@ describe('展开逐轮明细', () => {
   it('多轮时逐轮列出来，成功率按轮次算（总账失败、其中一轮通过）', () => {
     renderPanel([task({
       id: 'task_rounds',
-      key: 'm1:openai-completions',
+      key: keyOf('m1', 'openai-completions'),
       status: 'failed',
       errorMessage: 'rate limited',
       result: failedResult({
@@ -522,6 +537,28 @@ describe('开始诊断：把整批行交给服务端队列', () => {
     expect(harness.enqueue.mock.calls[0][1][0]).toMatchObject({ rounds: 3, inputLength: 0 })
   })
 
+  it('有目标被跳过时必须说出来：去重 / 超限 / 解析失败不该静默吞掉', async () => {
+    harness.enqueue.mockResolvedValueOnce({ accepted: 2, skipped: 2 })
+    renderPanel()
+    selectProvider()
+
+    startTest()
+
+    await waitFor(() => {
+      expect(toastHarness.warning).toHaveBeenCalledWith(zh('modelTest.notice.enqueueSkipped', { accepted: 2, skipped: 2 }))
+    })
+  })
+
+  it('入队请求本身失败时给一条错误提示，而不是留一个未处理的 rejection', async () => {
+    harness.enqueue.mockRejectedValueOnce(new Error('offline'))
+    renderPanel()
+    selectProvider()
+
+    startTest()
+
+    await waitFor(() => { expect(toastHarness.error).toHaveBeenCalledWith('offline') })
+  })
+
   it('在跑时「开始」换成「停止」：停止按 kind 取消，不逐条点', () => {
     renderPanel([task({ id: 'task_running', status: 'running', progress: progress() })])
     selectProvider()
@@ -529,6 +566,19 @@ describe('开始诊断：把整批行交给服务端队列', () => {
     fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.stop') }))
 
     expect(harness.cancel).toHaveBeenCalledWith({ kind: MODEL_TEST_TASK_KIND })
+  })
+})
+
+describe('清空结果', () => {
+  it('有任务在跑时按钮禁用并说明原因（服务端那时整条空操作）', () => {
+    renderPanel([task({ id: 'task_running', status: 'running', progress: progress() })])
+    selectProvider()
+
+    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResultsBusy') })
+    expect(clear.hasAttribute('disabled')).toBe(true)
+
+    fireEvent.click(clear)
+    expect(harness.clear).not.toHaveBeenCalled()
   })
 })
 
@@ -600,7 +650,7 @@ describe('最小化成角标', () => {
   })
 
   it('没有行在跑时角标说「全部结束」，不说「第 0 轮」', () => {
-    minimize([task({ id: 'task_ok', key: 'm2:anthropic-messages', status: 'success', result: successResult() })])
+    minimize([task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', result: successResult() })])
 
     expect(screen.queryByText(zh('modelTest.badge.round', { round: 0, total: 0 }))).toBeNull()
     // 计划里还有 4 个目标（勾上渠道后默认全选），已经结束的是 1 个。

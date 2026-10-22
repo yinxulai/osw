@@ -66,7 +66,7 @@ Both providers and models support **drag-to-reorder**. The order affects the try
 
 ## Channel diagnostics
 
-To verify that a channel works, use **Connection test** (channel diagnostics): tick several channels and protocols to validate them concurrently, and pick a diagnostic mode:
+To verify that a channel works, use **Connection test** (channel diagnostics): tick several channels and protocols; targets are validated **one at a time** (only one request is in flight, so latency readings are not distorted). Then pick a diagnostic mode:
 
 | Mode | What it does |
 | --- | --- |
