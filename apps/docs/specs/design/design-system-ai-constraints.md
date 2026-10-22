@@ -40,7 +40,7 @@
 
 | 允许 | 位置 | 说明 |
 | --- | --- | --- |
-| `components/ui/*` 的 69 个组件 | `components/ui/` | 除 `field.tsx`（死代码）与 `chart.tsx`/`direction.tsx`（0 引用）外 |
+| `components/ui/*` 的 40 个组件 | `components/ui/` | 全部有真实调用方（无调用方的脚手架已删除，见 [`design-system-components.md`](./design-system-components.md) §1） |
 | `components/form-kit.tsx` | 表单 | **表单必须用它**，见 §3.2 |
 | `components/table-primitives.tsx` | 表格 | 四个类常量 + `TableFrame` / `TableViewport` / `TablePager` / `SortableHeader` |
 | `components/table-state.tsx` 的 `TableStateRow` | 表格三态 | 加载 / 空 / 错误 |
@@ -141,7 +141,7 @@
 | 引入虚拟滚动 | 分页已把 DOM 行数控制住 | [`design-system-data-display.md`](./design-system-data-display.md) §7 |
 | 引入密度档位 | 单窗口桌面工具，一套密度够用 | 同上 §2 |
 | 新增 `components/ui/*` 而未过 7 条门槛 | 见 [`design-system-components.md`](./design-system-components.md) §6 | 同左 |
-| 照抄 `components/ui/field.tsx` | **它是死代码（0 引用）** | 同上 §1 |
+| 从上游复制官方 shadcn 脚手架进来 | `components/ui/` 只保留有真实调用方的原语，`field` / `sidebar` / `carousel` 等 29 个已删除 | [`design-system-components.md`](./design-system-components.md) §1 |
 | 照抄 `components/ui/table.tsx` 当公共基础 | 表格的公共基础是 `table-primitives.tsx` | [`design-system-data-display.md`](./design-system-data-display.md) §0 |
 | 用 `EmptyState` 做表格空态 | 表格空态用 `TableStateRow`（在 `<tr>` 里） | 同上 §5.4 |
 | 感叹号 / 人称 / 产品自称 | 用语规范 | [`design-system-copy.md`](./design-system-copy.md) §1.3 |
@@ -173,8 +173,8 @@
 ### 3.2 表单
 
 ```tsx
-// ❌ 用 ui/field.tsx（死代码）
-import { Field, FieldError } from '@/components/ui/field'
+// ❌ 从上游复制 shadcn 的 Field 脚手架（已作为死代码删除，也删了 `@shadcn/react` 依赖）
+// import { Field, FieldError } from 'components/ui/field'
 
 // ❌ 自己拼 label + input + 错误
 <div>

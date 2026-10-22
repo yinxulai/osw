@@ -114,14 +114,13 @@ equivalent size for **Chinese, Japanese and Korean (CJK) fonts**"。
 | 项 | 结果 |
 | --- | --- |
 | `size-11`（44px 方形） | **0 处** |
-| 精确的 `h-11`（44px） | **0 处** |
-| `min-h-11` | **7 处**，全在 `components/ui/questionnaire.tsx`（`:109,169,200,223,248,273,298`），且其中 `:169` 起还带 `sm:min-h-0` / `sm:min-h-8` 覆盖 |
+| 精确的 `h-11`（44px） | **0 处**（唯一接近的是 `pages/router/rules/rule-editor-panel.tsx:113` 的 `h-11.5`，高度上的偶然相等，不当作基线） |
+| `min-h-11` | **0 处**（原先 7 处全在 `components/ui/questionnaire.tsx`，该文件已作为死代码删除） |
 | `pointer: coarse` / `any-pointer` 媒体查询 | **不存在**（0 处） |
 | 命中区扩展 | Radix 原语用 `after:absolute after:-inset-x-3 after:-inset-y-2`（checkbox / switch / radio）。以 16px 的勾选框算：16 + 12×2 = **40px 宽、16 + 8×2 = 32px 高** |
 
-**结论**：osw **只在问卷组件里**表达过 44px 下限，其余组件没有触控目标的概念。
-因为 osw 是桌面鼠标产品，**24px 是可接受的下限**；但 `questionnaire.tsx` 的做法（用
-`min-h-11` 且在小屏收紧）说明**这条规则是有人知道的，只是没写下来**——本文把它写下来。
+**结论**：osw **当前没有任何组件表达过 44px 下限**，全部按 24px 走。
+因为 osw 是桌面鼠标产品，**24px 是可接受的下限**，这条规则写下来是为了将来出现触控场景时有据可依。
 
 ### 2.4 待补缺口
 
@@ -151,9 +150,9 @@ equivalent size for **Chinese, Japanese and Korean (CJK) fonts**"。
 | 宽度 | 出现在 |
 | --- | --- |
 | `ring-2` | 主用：`button` `switch` `badge` `select` `tabs` `sidebar` `app-sidebar` `breadcrumbs` `info-hint` `table-primitives` `route-mode-switch` `workflow-button` `rule-editor-panel` `onboarding-topbar` … |
-| `ring-3` | `accordion` `checkbox` `radio-group` `native-select` `questionnaire` `interactive-hover-button` `navigation-menu` |
-| `ring-[3px]`（任意值） | `item.tsx:37` `scroll-area.tsx:19` `toggle.tsx:8` |
-| `ring-1` | `resizable.tsx:38` |
+| `ring-3` | `checkbox` `combobox` `radio-group` `interactive-hover-button` |
+| `ring-[3px]`（任意值） | `calendar.tsx:216`（只此 1 处） |
+| `ring-1` | `badge.tsx:17` `combobox.tsx:115` `provider-grid.tsx:80` |
 
 **颜色**：
 
@@ -270,7 +269,6 @@ osw 有三类**作者创建的内容**会遮挡焦点：
 | `pages/logical-models/components/logical-model-card.tsx:124`（`touch-none`） | 拖拽排序 | **待补** |
 | `pages/model-management/components/provider-grid.tsx:88`（`touch-none`） | 拖拽排序 | **待补** |
 | `pages/router` 画布节点 | 拖动位置 | ✅ React Flow 提供键盘移动（但其可达性未核） |
-| `components/ui/resizable.tsx` | 面板尺寸 | `[未核实]` 是否只支持拖拽 |
 
 **规则**：任何拖拽排序必须同时提供**上下移动按钮**或**键盘操作**（如 `Alt+↑/↓`）。
 `touch-none` 只是禁掉了触摸滚动，**不等于**满足 2.5.7。
@@ -369,15 +367,14 @@ osw 有三类**作者创建的内容**会遮挡焦点：
 
 | 项 | 结果 |
 | --- | --- |
-| `components/ui/direction.tsx` | 存在（23 行，包装 Radix `Direction.DirectionProvider` + 导出 `useDirection`） |
-| **它是否被使用** | **0 处 import**——**死代码** |
+| `components/ui/direction.tsx` | **已删除**（原先是个 0 import 的 Radix `Direction` 包装，随死代码清理一并移除） |
 | `dir="rtl"` / `dir="ltr"` 字面量 | **0 处** |
 | `--direction` CSS 变量 | **0 处** |
-| **逻辑属性** | `ms-auto`×1（`questionnaire.tsx:138`）、`inset-s-1/2`×1（`message-scroller.tsx:100`）、`after:start-1/2`×1（`sidebar.tsx:289`）、`text-start`×1（`questionnaire.tsx:109`） |
+| **逻辑属性** | `inset-s-1/2`×1（`message-scroller.tsx`，也已删除）→ 现全仓 **0 处** |
 | **物理属性** | `pl-`×63、`pr-`×51、`ml-`×41、`mr-`×16、`text-end`×0 |
-| `rtl:` 变体 | ×4（`message-scroller.tsx:100`、`calendar.tsx:35,36`）；`ltr:` ×1 |
+| `rtl:` 变体 | ×2（`components/ui/calendar.tsx:35,36`）；`ltr:` **0 处** |
 
-**结论**：osw 目前是**物理方向（LTR-only）**的实现，逻辑属性采用率约 **4 / 175**。
+**结论**：osw **是纯物理方向（LTR-only）**的实现，逻辑属性采用率 **0**。
 
 ### 7.2 规则
 
@@ -387,8 +384,8 @@ osw 有三类**作者创建的内容**会遮挡焦点：
 | # | 规则 | 理由 |
 | --- | --- | --- |
 | 1 | **新代码优先用逻辑属性**（`ps-`/`pe-`/`ms-`/`me-`/`start-`/`end-`/`text-start`） | 它们与物理属性在 LTR 下**渲染完全相同**，零成本 |
-| 2 | **不要引入只在 RTL 下才对的写法** | 现在没有 RTL 分支，任何 `rtl:` 变体都是不可测的死代码（现有的 4 处 `rtl:` 属此类） |
-| 3 | **`direction.tsx` 的处置待定** | 它是死代码。**要么删、要么在 `layout` 里挂上并承诺 RTL**——不要留着当装饰 |
+| 2 | **不要引入只在 RTL 下才对的写法** | 现在没有 RTL 分支，任何 `rtl:` 变体都是不可测的死代码（现有的 2 处 `rtl:` 属此类，全部在 `calendar.tsx`） |
+| 3 | **不要再引入 `DirectionProvider`** | 原先那个 `direction.tsx` 包装已经删了。真要做 RTL 时，应该在 `layout` 里挂一次，而不是先放一个 0 引用的组件候选 |
 | 4 | **图标方向敏感** | 箭头类图标（`ArrowRight` / `ChevronRight`）在 RTL 下要镜像。`block-icon.tsx` 用 `ArrowRight` 表示 `output` 节点，属方向敏感 |
 
 ---
@@ -435,8 +432,8 @@ osw 有三类**作者创建的内容**会遮挡焦点：
 **缺口二：`role="alert"` 只有 2 处**，`aria-live` 只有 3 处。
 toast / 保存成功 / 复制成功这类反馈的播报路径不统一。
 
-> 注：`components/ui/field.tsx:176`（`FieldError`）实现了 `role="alert"`，
-> 但 **`field.tsx` 是死代码（0 引用）**，所以它没有生效。
+> 注：当年官方 shadcn 的 `field.tsx`（`FieldError`）实现过 `role="alert"`，
+> 但它 0 引用、已作为死代码删除，所以这条能力从未生效过。
 
 ### 8.4 规则
 
@@ -444,7 +441,7 @@ toast / 保存成功 / 复制成功这类反馈的播报路径不统一。
 | --- | --- |
 | 1 | **表单错误必须 `aria-describedby` 关联**：`<Input aria-invalid aria-describedby={errorId} />` + `<p id={errorId}>`。这是 3.3.1 的最低要求 |
 | 2 | **状态播报用 `aria-live="polite"`**，不用 `alert`（`alert` 会打断用户）；只有**必须立刻知道**的（会话失效）才用 `role="alert"` |
-| 3 | **纯图标按钮必须有 `aria-label`**，且文案来自 i18n 目录（`sr-only` + 文本也可，但要注意 `field.tsx:59,63` 的 `[&>.sr-only]:w-auto` 那类选择器） |
+| 3 | **纯图标按钮必须有 `aria-label`**，且文案来自 i18n 目录（`sr-only` + 文本也可，但不要依赖组件库里那类 `[&>.sr-only]:w-auto` 选择器） |
 | 4 | **装饰性图标 `aria-hidden="true"`**。**`lucide-react` 会自动加**：无 `aria-*` / `role` / `title` 时它自己补 `aria-hidden="true"`（`[源码]`，`lucide-react@1.59.0` 的 `dist/esm/shared/src/build/buildLucideIconNode.mjs:47-49`：`...params.hasA11yProp === false ? { 'aria-hidden': "true" } : {}`）。所以**不要**再手写（版本口径见 [`design-system-icons.md`](./design-system-icons.md) §8） |
 | 5 | **数据表格用真 `<table>` 语义**，不用 `role="grid"` 手工搭 |
 | 6 | **不要用 `sr-only` 组件化**：仓库用 `className="sr-only"` 是既定做法，引入 `VisuallyHidden` 会造成两套写法 |
@@ -536,5 +533,5 @@ rg -n 'onKeyDown|addEventListener\(.keydown' --glob '*.tsx' --glob '*.ts' . | gr
 | **`2.4.11` 在 sticky 表头下的实际表现** | `[未核实]` | 需要真机滚动 + 键盘导航实测。本文只登记风险，**未判定为缺陷** |
 | **React Flow 画布节点的键盘可达性** | `[未核实]` | 已知 `use-workflow-studio.ts:354-361` 有全局 `Delete` 处理，但**节点能否用键盘遍历/选中/移动**未核实。这直接关系到 2.1.1 与 2.5.7 |
 | **每个浮层的 `Esc`/焦点陷阱是否真的来自 Radix 原语** | `[未核实]` | 本文确认了"没有手写 `Esc`/方向键"，但 `components/ui/*` 本身是 shadcn 风格的二次封装，**没有逐个核对**它对 Radix 的透传是否有遗漏。这是最值得接着做的一项 |
-| **`components/ui/resizable.tsx` 是否只支持拖拽** | `[未核实]` | 未读该组件实现，无法判定 2.5.7 是否适用 |
+| **`components/ui/*` 中是否还有未删的死代码** | 已核 | 此前无调用方的 29 个脚手架已删除，现内 40 个文件全部有真实调用方（见 [`design-system-components.md`](./design-system-components.md) §1） |
 | **`bill-export-scene.tsx` 导出图的对比度** | 不适用 | 导出产物是一张 PNG 图片，属"图片内容"，不适用 1.4.3 的文字对比度条款（但其中的账单文字是真实文字，**若账单本身要满足对比度，需单独核**）→ 这条边界本身也 `[未核实]` |

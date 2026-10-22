@@ -109,21 +109,21 @@ comm -23 \
 
 ```bash
 cd packages/console/source
-rg -o --no-filename '\bdark:' --glob '*.tsx' . | wc -l   # 56
-rg -l '\bdark:' --glob '*.tsx' . | wc -l                 # 22 个文件
+rg -o --no-filename '\bdark:' --glob '*.tsx' . | wc -l   # 29
+rg -l '\bdark:' --glob '*.tsx' . | wc -l                 # 13 个文件
 ```
 
 分布（按文件的 `dark:` 行数）：
 
 | 文件 | 说明 |
 | --- | --- |
-| `components/ui/bubble.tsx` | 4 |
-| `components/ui/questionnaire.tsx` | 3 |
-| `pages/request-logs/components/request-contents-stage.tsx` | 2（**搜索命中高亮**，见 §2.4） |
-| `components/ui/{input-otp,input-group}.tsx` | 各 2 |
-| 另外 17 个文件 | 各 1（`toggle` `switch` `radio-group` `native-select` `menubar` `kbd` `field` `dropdown-menu` `context-menu` `combobox` `checkbox` `chart` `calendar` `avatar` `workflow-node` `rule-editor` `overview/page`） |
+| `components/ui/checkbox.tsx` | 5 |
+| `components/ui/{input-group,radio-group}.tsx` | 各 4 |
+| `components/ui/combobox.tsx`、`pages/router/components/workflow-node.tsx` | 各 3 |
+| `components/ui/{switch}.tsx`、`pages/request-logs/components/request-contents-stage.tsx`（**搜索命中高亮**，见 §2.4） | 各 2 |
+| 另外 6 个文件 | 各 1（`input` `chart` `calendar` `avatar` `rule-editor` `overview/page`） |
 
-**这 56 处是本文要处理的第二套机制**——见 §2。
+**这 29 处是本文要处理的第二套机制**——见 §2。
 
 ---
 

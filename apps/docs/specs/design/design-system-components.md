@@ -11,7 +11,7 @@
 
 ## 范围
 
-工作对象是 `packages/console/source/components/ui/*`（69 个 `.tsx`，含 2 个测试文件）
+工作对象是 `packages/console/source/components/ui/*`（40 个 `.tsx`，含 2 个测试文件）
 与 `packages/console/source/components/*`（应用级组合组件）。
 
 ---
@@ -22,21 +22,21 @@
 
 | 项 | 实测结果 | 命令 |
 | --- | --- | --- |
-| `cva` 使用 | **15 个文件**调用 `cva()`（`toggle-group.tsx` 只引 `VariantProps` 类型，不调 `cva`） | `rg -l 'cva\(' components/ui` |
-| `data-slot` | **60 个文件、363 处** | `rg -c 'data-slot' components/ui` |
+| `cva` 使用 | **7 个文件**调用 `cva()` | `rg -l 'cva\(' components/ui` |
+| `data-slot` | **26 个文件、184 处** | `rg -c 'data-slot' components/ui` |
 | `cn()` 工具 | `lib/utils.ts:4` → `twMerge(clsx(inputs))` | — |
 | barrel 文件 | **不存在**（`components/ui/` 无 `index.ts`） | — |
 | `forwardRef` | **仅 3 处**：`button.tsx:61`、`dialog.tsx:39`、`alert-dialog.tsx` | `rg -l forwardRef components/ui` |
 | props 类型 | `React.ComponentProps<"button">`（原生）／`React.ComponentProps<typeof XPrimitive.Root>`（Radix）／`VariantProps<typeof xVariants>` | — |
-| `asChild` | **8 个组件**显式声明（`button` `badge` `breadcrumb` `item` `marker` `bubble` `button-group` `attachment` `sidebar`） | — |
+| `asChild` | **3 个组件**显式声明（`button` `badge` `button-group`） | — |
 | `components-*` token 使用 | `components/ui/` 里 8 个文件；全部 `packages/console/source` 里 41 个文件 | — |
 
 **两个必须知道的坑**：
 
-1. **`components/ui/field.tsx` 是死代码**——239 行的官方 shadcn Field，**0 个文件 import 它**。
-   本应用真正的表单体系是 `components/form-kit.tsx`（228 行，**28 个文件**引用）。
-   新增表单时**不要**照抄 `field.tsx`，见
-   [`design-system-data-display.md`](./design-system-data-display.md) §3。
+1. **`components/ui/` 已经做过一次减法**：只保留有真实调用方的原语，
+   从未被 import 的官方脚手架（`field` / `sidebar` / `carousel` / `menubar` / `navigation-menu`
+   等 28 个）已删除。**新增原语前先确认至少有一个调用点**，否则不要落盘。
+   表单体系始终是 `components/form-kit.tsx`（228 行，**28 个文件**引用）。
 2. **`components/ui/table.tsx` 只有 2 个文件用**（`logs-table.tsx`、`rules-table.tsx`）。
    应用级表格走 `components/table-primitives.tsx` 的类常量，第三张表甚至直接写裸 `<table>`。
    见 [`design-system-data-display.md`](./design-system-data-display.md) §4。
@@ -113,7 +113,7 @@ interface ConfirmDialogProps {
 | --- | --- | --- |
 | 1 | **原生语义优先**：能继承就继承，不重命名 | `React.ComponentProps<"button">` → `disabled` / `hidden` 直接可用，不要造 `isDisabled` |
 | 2 | **布尔用裸形容词** | `asChild`（`button.tsx:53`）、`loading`（`sonner.tsx:25`）、`embedded`（`empty-state.tsx`） |
-| 3 | **组件内部状态才用 `is*`** | `isActive`（`pagination.tsx:37`、`sidebar.tsx:498`）、`isMobile`（`sidebar.tsx:38`） |
+| 3 | **组件内部状态才用 `is*`** | `isMobile`（`hooks/use-mobile.ts:6`）。**不要再新增**：原 `pagination.tsx` / `sidebar.tsx` 里的 `isActive` 已随文件删除 |
 | 4 | **不用 `has*` 前缀** | 全仓 **0 处**。存在性判断走 `has-data-*` 这类 CSS 变体，不做成 prop |
 | 5 | **枚举用单个 prop，不用多个布尔** | `tone?: 'muted' \| 'destructive'`（`table-state.tsx:10`），而不是 `isMuted` + `isDestructive`。多个布尔会产生"两个都为 true"的非法组合 |
 | 6 | **受控 props 沿用 Radix 名** | `open` + `onOpenChange`（`confirm-dialog.tsx:17-18`）。**不要**改成 `visible` / `onVisibleChange` |
@@ -129,14 +129,14 @@ interface ConfirmDialogProps {
 
 | 项 | 形式 | 为什么 |
 | --- | --- | --- |
-| **`data-slot`** | `data-slot="kebab-name"`，放在该子组件渲染出的**根元素**上 | 60 个文件、363 处在用；`styles/index.css:27-41` 的窗口拖拽豁免、以及大量 `[data-slot=…]` 选择器都依赖它 |
+| **`data-slot`** | `data-slot="kebab-name"`，放在该子组件渲染出的**根元素**上 | 26 个文件、184 处在用；`styles/index.css:27-41` 的窗口拖拽豁免、以及大量 `[data-slot=…]` 选择器都依赖它 |
 | **`className` 透传** | `React.ComponentProps<"…">` 已含，但必须真的用 `cn()` 合并 | 调用方唯一的逃生口 |
 | **状态数据属性** | `data-variant` / `data-size` / `data-state` | `button.tsx:69-70` 就导出了 `data-variant` + `data-size`；让样式与测试都能不靠类名定位 |
 | **`asChild`（可选）** | `asChild?: boolean` + `const Comp = asChild ? Slot.Root : "button"` | 需要嵌入 `<a>` / 路由 `<Link>` 时必需 |
 
 **`Slot` 的来源**：`import { Slot } from "radix-ui"`（`button.tsx:3`）。
-仓库同时存在 `radix-ui` 统一包与 `@radix-ui/react-*` 分包的依赖（根 `package.json:54-61,82`），
-**新代码一律用 `radix-ui` 统一包**，别再加分包依赖。
+仓库只用 `radix-ui` 统一包，**不再有 `@radix-ui/react-*` 分包依赖**（已随死原语一并移除），
+新代码也只准用统一包。
 
 ### 3.2 `forwardRef` 只在一个理由下使用
 
@@ -271,6 +271,5 @@ interface ConfirmDialogProps {
 | 项 | 状态 | 为什么 |
 | --- | --- | --- |
 | **variant 名与 token 前缀的错位是有意还是历史偶然** | `[未核实]` | `default`↔`primary-*`、`outline`↔`secondary-*` 这层错位在仓库里**没有任何注释解释**。可能是沿用 shadcn 的 variant 名 + 上游的 token 名，但无法从代码判定是否有意 |
-| **`components/ui/field.tsx` 是否计划删除** | `[未核实]` | 确认它 0 引用；但它是官方 shadcn 脚手架的一部分，无法判断"刻意保留待迁移"还是"忘记删"。本文按"不要用"处理，但**没有**建议删除——删除是代码改动，不在本文范围 |
 | **`Empty`（`empty.tsx`）与 `EmptyState`（`empty-state.tsx`）的取舍** | `[未核实]` | `empty-state.tsx` 自称 "Compatibility wrapper built from the official shadcn Empty primitives"，但两者都在用（12 个文件用 `EmptyState`，`inline-empty-state.tsx` 是第三套）。是"迁移中"还是"两套都要"无法判定。见 [`design-system-data-display.md`](./design-system-data-display.md) §6 |
 | **`Radix` 原语的完整覆盖清单** | `[未核实]` | 本文只确认了"手写键盘逻辑的文件清单"（见 [`design-system-accessibility.md`](./design-system-accessibility.md) §4.3），**没有**逐个核对每个浮层的 `Esc` / 焦点陷阱是否真的来自原语而非 shadcn 层的二次封装。这是 [`design-system-accessibility.md`](./design-system-accessibility.md) §10 未核实项里登记的同一条 |

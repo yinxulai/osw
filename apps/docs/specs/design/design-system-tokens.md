@@ -126,9 +126,8 @@ rg -o --no-filename 'rgba?\([^)]*\)'         --glob '*.tsx' --glob '*.ts' . | wc
 
 - **不含** `hsl(var(--x))`——那是对 token 的引用，是正确的写法。
 - **不含** `oklch(from var(--primary) …)`——这是**相对颜色语法**，从 `--primary` 派生，
-  同样会随明暗自动切换。它出现在 `components/ui/bubble.tsx:29`（4 处，`tinted` 变体），
-  属于**合法但未登记**：建议登记为 `components-bubble-tinted-*` 系列 token，
-  但在登记前它不构成本节要归位的问题。
+  同样会随明暗自动切换。原先唯一的用户是 `components/ui/bubble.tsx`，该文件已作为死代码删除，
+  现在全仓 **0 处**。
 
 ### 3.2 逐条归位表
 
@@ -209,26 +208,25 @@ rg -o --no-filename '\b(text|bg|border|ring|from|to|via|fill|stroke)-(zinc|slate
 
 | 口径 | 处数 | 命令（均在 `packages/console/source` 下执行） |
 | --- | --- | --- |
-| 任意像素 `[Npx]` | 78（**口径见右**） | 归属 [`design-token-mapping.md`](./design-token-mapping.md) §1.1，**该数字的计算口径没有记录在案**；本文以更宽的 glob 复测得 104 处（见 [`design-system-typography.md`](./design-system-typography.md) §9 未核实项）。**本文不改动 §1.1 的 78**，两者是口径差异不是矛盾 |
-| 任意 rem/em `[N rem]` | 15 | `rg -o '\[[0-9.]+(rem\|em)\]'`（**新增口径**，见 §3.5） |
+| 任意像素 `[Npx]` | 78（**口径见右**） | 归属 [`design-token-mapping.md`](./design-token-mapping.md) §1.1，**该数字的计算口径没有记录在案**；本文以 `\[[0-9.]+px\]` 对 `packages/console/source/**/*.{ts,tsx}` 复测得 96 处。**本文不改动 §1.1 的 78**，两者是口径差异不是矛盾 |
+| 任意 rem/em `[N rem]` | 13 | `rg -o '\[[0-9.]+(rem|em)\]'`（**新增口径**，见 §3.5） |
 | 字面色值（hex/rgb） | 44 | `rg -o '#[0-9a-fA-F]{3,8}\|rgba?\([^)]*\)'` |
 | 调色板类名 | **34** | `rg -o '\b(text\|bg\|border\|…)-(zinc\|red\|amber\|…)-[0-9]{2,3}\b'` |
 
 ### 3.5 另一个新增口径：任意 rem / em
 
-`design-token-mapping.md` 的 78 处只统计 `[Npx]`，**漏掉了 `rem` / `em` 写法**（10 + 5 = 15 处）：
+`design-token-mapping.md` 的 78 处只统计 `[Npx]`，**漏掉了 `rem` / `em` 写法**（8 + 5 = 13 处）：
 
 | 值 | 处数 | 性质 |
 | --- | --- | --- |
-| `[0.625rem]` | 4 | 10px，**小于 11px 下限**（`index.css:141` 写明"11px 是这套界面的字号下限，不要再往下压"）→ 其中 3 处在账单（导出场景例外），**1 处是真缺陷** |
-| `[0.8rem]` | 3 | 12.8px，非刻度值 |
+| `[0.625rem]` | 3 | 10px，**小于 11px 下限**（`index.css:141` 写明"11px 是这套界面的字号下限，不要再往下压"）→ 全部在账单（导出场景例外） |
+| `[0.8rem]` | 2 | 12.8px，非刻度值（`calendar.tsx:93,102`） |
 | `[2.3rem]` `[0.7rem]` `[0.5rem]` | 各 1 | 账单印章上的艺术字（插图例外） |
 | `[0.2em]` `[0.22em]` `[0.18em]` `[0.16em]` `[0.08em]` | 各 1 | 字距，见 [`design-system-typography.md`](./design-system-typography.md) §5 |
 
-> `[0.625rem]`(10px) 出现在 4 处，是**唯一突破了字号下限**的写法。逐处定位与处置见
-> [`design-system-typography.md`](./design-system-typography.md) §2.1——
-> 结论是 **3 处属于导出场景例外（`bill-content.tsx`），只有 1 处是界面里的真缺陷**
-> （`components/ui/questionnaire.tsx:138` 的快捷键徽标）。
+> `[0.625rem]`(10px) 现在只剩 3 处，**全部在导出物里**。界面层已经没有小于 11px 的字号——
+> 原本那 1 处真缺陷（`components/ui/questionnaire.tsx` 的快捷键徽标）已随死代码清理删除，
+> 详见 [`design-system-typography.md`](./design-system-typography.md) §2.1。
 
 ---
 
@@ -301,8 +299,7 @@ rg -o --no-filename 'rounded[a-z-]*\[[0-9]+px\]' --glob '*.tsx' --glob '*.ts' . 
 | 3 | `components/ui/chart.tsx:225` | 2px | **→ token** | `rounded-sm`（恰好 2px） |
 | 4 | `components/ui/chart.tsx:316` | 2px | **→ token** | `rounded-sm` |
 | 5 | `components/ui/checkbox.tsx:27` | 4px | **→ token** | `rounded-md`。16px 的小方块上 4px 是合适的档 |
-| 6 | `components/ui/questionnaire.tsx:122` | 4px | **→ token** | `rounded-md` |
-| 7 | `components/ui/tooltip.tsx:51` | 2px | **→ token** | `rounded-sm`。Tooltip 的箭头/内衬用最小档是合理的 |
+| 6 | `components/ui/tooltip.tsx:51` | 2px | **→ token** | `rounded-sm`。Tooltip 的箭头/内衬用最小档是合理的 |
 | 8 | `pages/overview/components/usage-heat-grid.tsx:114` | 2px | **→ token** | `rounded-sm` |
 | 9 | `pages/overview/components/usage-heat-grid.tsx:124` | 2px | **→ token** | `rounded-sm` |
 | 10 | `pages/overview/page.tsx:252` | 2px | **→ token** | `rounded-sm` |
@@ -386,7 +383,6 @@ rg -o --no-filename 'rounded[a-z-]*\[[0-9]+px\]' --glob '*.tsx' --glob '*.ts' . 
 | `--z-*` 六个语义层 | `z-10/20/30/40/50/70` 混用 | **过门槛**：对照 Primer `zIndex.*`，见映射文档 §7.3 |
 | `components-button-*-{bg,text,border}-disabled` 等三组 | 状态矩阵缺口 23 格 | 见 [`design-system-components.md`](./design-system-components.md) §5.3 |
 | 分类色板（8~9 色） | §3.4 的 16 处调色板类名 | **新增候选**：`util-colors-*` 已有 9 个，优先复用而非新建 |
-| `components-bubble-tinted-*` | `oklch(from var(--primary) …)` 4 处 | **新增候选**：目前是合法但未登记的派生值 |
 | `workflow-node-note-*` | §3.4 的便签 8 处 | **新增候选**：真实 UI 状态走错了通道 |
 
 ---

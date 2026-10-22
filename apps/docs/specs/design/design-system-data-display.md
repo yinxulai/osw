@@ -95,18 +95,19 @@ Carbon 的密度刻度是 13 档（`spacing-01..13`），`[源码]` 见表
 
 ## 3. 表单：`form-kit.tsx` 是唯一的表单体系
 
-`[源码]` 实测的两个陷阱，见 [`design-system-components.md`](./design-system-components.md) §1：
+`[源码]` 实测：
 
 | 文件 | 行数 | 引用它的文件数 | 结论 |
 | --- | --- | --- | --- |
-| `components/form-kit.tsx` | 228 | **28** | ✅ 真正的表单体系 |
-| `components/ui/field.tsx` | 239 | **0** | ❌ 官方 shadcn 脚手架，**死代码** |
+| `components/form-kit.tsx` | 228 | **28** | ✅ 唯一的表单体系 |
+
+官方 shadcn 的 `components/ui/field.tsx`（239 行、0 个调用方）已随死代码清理删除。
 
 **规则**：
 
 | # | 规则 |
 | --- | --- |
-| 1 | **表单用 `form-kit.tsx`**（`FormField` / `FormSwitchRow` 等），不要用 `ui/field.tsx`，也不要新造 |
+| 1 | **表单用 `form-kit.tsx`**（`FormField` / `FormSwitchRow` 等），不要新造 |
 | 2 | **错误文案必须与控件程序化关联**（`aria-describedby`）——当前全仓 **0 处**，是 [`design-system-accessibility.md`](./design-system-accessibility.md) §8.3 登记的**最高优先级缺口**（违反 WCAG 3.3.1 A 级） |
 | 3 | **表单控件的默认高度是 32px**（`h-8`），与 `Button` 的默认档一致（[`design-system-components.md`](./design-system-components.md) §4）。表单行里按钮与输入框不等高是最容易看出来的不齐 |
 | 4 | **校验时机**：错误在**提交后**或**失焦后**出现，不要在每次按键时弹（中文输入时每个拼音字母都会触发一次） |
@@ -228,7 +229,8 @@ if (logs.length === 0)           → 空态行（区分"筛选后为空"与"从�
 
 `components/table-primitives.tsx:38-51` 的 `TablePager`：计数文案（`common.pagination.page`）+ 两个
 `icon-sm` 的翻页按钮（带 `aria-label`，来自目录 `common.pagination.previous` / `next`）。
-`components/ui/pagination.tsx` 是**另一套**（页码列表式），当前**没有被表格使用**。
+**这是全仓唯一的分页实现**——shadcn 那套页码列表式的 `ui/pagination.tsx` 从来没有被表格用过，
+已随死代码清理删除。
 
 **规则**：
 
@@ -284,5 +286,4 @@ if (logs.length === 0)           → 空态行（区分"筛选后为空"与"从�
 | **`model-ranking` / `provider-detail` 两处裸 `<table>` 是否有意** | `[未核实]` | 前者混用了常量与裸 `<table>`，后者完全手写（`min-w-180`）。两处都没有注释说明为什么不用常量。**未判定是有意（概览页的表格更简单）还是遗漏** |
 | **`rules-table.tsx` 用 `px-4 py-2` 是有意还是笔误** | `[未核实]` | 常量是 `px-3 py-2`，该表表头写 `px-4`；且它同表的表体既有 `px-4 py-2.5` 也有 `px-3 py-2.5`（每条规则的第一列与其余列不同宽）。这种"首列更宽"在其他表里也存在（`model-ranking.tsx:68` 也写 `cn(tableCellClass, 'px-4')`）——**可能是"首列对齐卡片内边距"的有意做法**，无法从代码判定 |
 | **批量操作条的位置约定** | `[未核实]` | §4.1 的 7 条是**新功能的建议**，仓库里没有实现，因此没有"现有做法"可对照 |
-| **`ui/pagination.tsx` 是否计划给表格用** | `[未核实]` | 它存在但 0 引用（表格用 `TablePager`）。是"备用"还是"遗留"无法判定 |
 | **骨架行数与真实首屏行数的关系** | `[未核实]` | 需要按真实窗口高度实测一屏几行。本文只给出"不超过一屏"的原则 |

@@ -77,8 +77,9 @@ Radix Colors 给每个色相（hue）定义 **12 个固定序号**，每个序�
 | **`@radix-ui/colors` npm 包** | ❌ 不借 | **零依赖**。我们借的是一张**表**，不是一个运行时 |
 
 **零依赖是硬的**（§8 可复现）：`@radix-ui/colors` **不是**本仓库任何 `package.json` 的依赖。
-根 `package.json:54-61` 只有 8 个 `@radix-ui/react-*` **行为原语**（dialog / dropdown-menu /
-label / select / slot / switch / tabs / tooltip）——它们**只提供行为，不含任何颜色**。
+根 `package.json` 里跟 Radix 相关的依赖只有**一个统一包 `radix-ui`**——行为原语（dialog /
+dropdown-menu / select / switch / tabs / tooltip …）全部从这一个包里取，`@radix-ui/react-*`
+分包已全部移除。它们**只提供行为，不含任何颜色**。
 
 > 这与 [`design-system.md`](./design-system.md) 的「第一层：行为层」是同一个取舍的两个面：
 > **行为层借 Radix（带依赖），颜色骨架借 Radix 的角色（不带依赖）。**

@@ -103,26 +103,25 @@ rg -o --no-filename '\bsystem-[a-z0-9-]+\b' --glob '*.tsx' . | sort | uniq -c   
 --text-2xs: 0.6875rem;
 ```
 
-### 2.1 越线的四处 `text-[0.625rem]`（= 10px）
+### 2.1 三处 `text-[0.625rem]`（= 10px）
 
 | 位置 | 用途 | 性质 |
 | --- | --- | --- |
 | `pages/overview/components/bill-content.tsx:38` | 账单品牌行 | **导出场景**——与 [`design-system-tokens.md`](./design-system-tokens.md) §3.3 的「导出场景层」同一类例外（账单是印在票据上的，不是界面） |
 | `bill-content.tsx:52` | 账单表头 | 同上 |
 | `bill-content.tsx:107` | 账单页脚网址 | 同上 |
-| **`components/ui/questionnaire.tsx:138`** | **快捷键徽标（`A`/`B`/`C`）** | ⚠️ **这是真正的越线**——它是界面里的元素，不是导出物 |
 
-**结论**：10px 只有 **1 处**真正活在界面上（问卷快捷键徽标）。修法不是"把下限降到 10px"，
-而是把那处改成 **`text-2xs`（11px）** 或 `system-kbd`（12px，它 0 使用，本就是为键盘提示准备的）。
+**结论**：界面层已无任何小于 11px 的字号——**1 处真缺陷（`questionnaire.tsx` 的快捷键徽标）已随死代码清理一并消失**。
+剩下 3 处全部在导出物里，不要动它们，也不要把下限降到 10px。
 
 ### 2.2 其余任意字号
 
 | 任意值 | 处数 | 折算 | 位置 | 处置 |
 | --- | --- | --- | --- | --- |
-| `text-[13px]` | **25** | 13px | 主要在 `components/ui/`（`dropdown-menu` `select` `input-group` 等） | → **`system-sm-*`**（同为 13px/16px）。**但 25 处里 19 处同行带 `leading-4`**，说明作者是"13px + 16px 行高"手写出来的 `system-sm-*` |
-| `text-[12px]` | 4 | 12px | — | → `system-xs-*` / `text-xs`（都是 12px） |
-| `text-[14px]` | 1 | 14px | — | → `text-sm` 或 `system-md-*` |
-| `text-[0.8rem]` | 3 | 12.8px | `toggle.tsx:18` `calendar.tsx:93,102` | ⚠️ **不在任何刻度上**（12.8px）。→ `system-xs-*`（12px）或 `system-sm-*`（13px） |
+| `text-[13px]` | **24** | 13px | 主要在 `components/ui/`（`dropdown-menu` `select` `command` `tabs` 等） | → **`system-sm-*`**（同为 13px/16px）。**但 24 处里 19 处同行带 `leading-4`**，说明作者是"13px + 16px 行高"手写出来的 `system-sm-*` |
+| `text-[12px]` | 4 | 12px | `button.tsx` `command.tsx` `workflow-run-drawer.tsx` `rules-run-drawer.tsx` | → `system-xs-*` / `text-xs`（都是 12px） |
+| `text-[14px]` | 1 | 14px | `card.tsx:41` | → `text-sm` 或 `system-md-*` |
+| `text-[0.8rem]` | 2 | 12.8px | `calendar.tsx:93,102` | ⚠️ **不在任何刻度上**（12.8px）。→ `system-xs-*`（12px）或 `system-sm-*`（13px） |
 | `text-[0.7rem]` | 1 | 11.2px | `bill-content.tsx:41` | 导出场景例外 |
 | `text-[0.5rem]` | 1 | 8px | `bill-content.tsx:98` | 导出场景例外 |
 | `text-[2.3rem]` | 1 | 36.8px | `bill-content.tsx:93` | 导出场景例外 |
@@ -310,4 +309,4 @@ rg -o --no-filename '\bsystem-[a-z0-9-]+\b' --glob '*.tsx' . | sort | uniq -c   
 | **`text-[13px]` 的 25 处是否都该换成 `system-sm-*`** | `[未核实]` | 19 处同行带 `leading-4`（与 `system-sm-*` 的 16px 行高一致），但**另外 6 处没有**——那 6 处的行高来自父级或 Tailwind 默认（`text-[13px]` 不带行高，会继承）。**逐处核对才能判定**，本文只登记方向 |
 | **`leading-snug`/`leading-normal` 等相对值在中文下的实际行距** | `[未核实]` | 相对行高乘以字号后得到非整数像素，中文基线位置与拉丁文不同。**需要真机看**，本文只按"不落在刻度上"登记 |
 | **`title` 属性和 Tooltip 对截断内容的覆盖完整性** | `[未核实]` | 需要逐个判断 101 处 `truncate` 的内容是不是用户数据。**未统计** |
-| **`system-kbd` 的定位** | `[未核实]` | 它定义于 `styles/index.css:535-539`，**0 处使用**；而 `components/ui/kbd.tsx` 是另一套实现。两者关系（是否重复）未核实 |
+| **`system-kbd` 的定位** | 待删 | 它定义于 `styles/index.css:535-539`，**0 处使用**；原先的 `components/ui/kbd.tsx` 同样是 0 引用，**已随死代码清理删除**。两者都没有真实调用方，建议下一步把 `system-kbd` 类也删掉（纯 CSS，无风险） |
