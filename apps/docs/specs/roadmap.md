@@ -81,7 +81,7 @@
 #### 7. 安全与隐私验证
 
 - [x] 服务默认只监听 `127.0.0.1`
-- [x] 管理接口叠加独立的访问控制：`Host` 必须是回环地址（挡 DNS rebinding，且在静态托管之前校验）+ 每次应用启动随机生成的凭证 `x-osw-token`（挡本机网页直接发请求）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只落盘到 `<dataDir>/management.token`（`0600`）、退出时删除；服务进程崩溃重启不会换新，也和代理是否启动无关。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
+- [x] 管理接口叠加独立的访问控制：`Host` 必须是回环地址（挡 DNS rebinding，且在静态托管之前校验）+ 每次应用启动随机生成的凭证 `x-osw-token`（挡本机网页直接发请求）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），只活在宿主内存里，**不落盘**；服务进程崩溃重启不会换新，也和代理是否启动无关。凭证只校验带浏览器痕迹的请求（`Origin` / `Sec-Fetch-Site`），本地非浏览器进程（`stop` / `status`）因此不必也不该拿到它；无头截图是真浏览器，走开发形态专用的读取口。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
 - [ ] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体

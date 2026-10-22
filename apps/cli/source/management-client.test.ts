@@ -83,9 +83,9 @@ describe('callManagementApi', () => {
     expect(requests[0]!.headers['x-osw-token']).toBe('runtime-management-token')
   })
 
-  it('omits the token header when there is no token file', async () => {
-    // 用户手动删了 `management.token`：请求照发，但不要送一个空头——服务端会把
-    // 「没带凭证」与「带了错凭证」记成同一件 401，日志里多一条空值只添噪声。
+  it('omits the token header when there is no token', async () => {
+    // 凭证只在宿主内存里，命令行一般拿不到：请求照发，但不要送一个空头——服务端会把
+    // 「没带凭证」与「带了空凭证」记成同一件事，日志里多一条空值只添噪声。
     const { port, requests } = await startServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ success: true, data: null }))

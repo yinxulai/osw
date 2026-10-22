@@ -16,7 +16,6 @@ import { cliTranslator } from '../native-i18n'
 import { formatEndpoint, resolveDataDirectory } from '../host'
 import { callManagementApi, isPortListening } from '../management-client'
 import { isProcessAlive, readRuntimeState, runtimeFilePath } from '../runtime-state'
-import { readManagementToken } from '@server/management/token'
 import { renderStatusJson, renderStatusLines, type InstanceReport } from './status-report'
 import type { CliArguments } from '../options'
 
@@ -59,11 +58,12 @@ export async function runStatus(values: CliArguments): Promise<number> {
 
     // 探一次就够：它同时回答「管理服务活着吗」与「代理现在在哪个地址」。
     // 代理实际生效的地址来自设置，可能与运行时文件里记的不同（用户在界面上改过）。
+    // 不带凭证：它只活在宿主内存里，命令行读不到；请求没有浏览器痕迹，守卫直接放行
+    // （见 core 的 `management/core/request-guards.ts`）。
     const probe = await callManagementApi({
       host: state.managementHost,
       port: state.managementPort,
       path: '/api/proxy/status',
-      token: await readManagementToken(dataDir),
     })
 
     if (probe.ok) {

@@ -7,7 +7,6 @@ import { closeDatabases, initDatabases } from './database'
 import { updateSettings } from './database/settings-store'
 import { startServer, stopServer } from './index'
 import type { StartServerOptions } from './index'
-import { readManagementToken } from './management/token'
 import { getProxyServerStatus, startProxyServer, stopProxyServer } from './proxy/runtime/server'
 import type { SecretStore } from '@common/secret-store'
 import { createRuntimeConfig, type RuntimeConfig } from '@common/runtime-config'
@@ -129,24 +128,19 @@ describe('server lifecycle', () => {
       runtimeConfig: createTestRuntimeConfig(proxyPort, managementPort),
     })
 
-    // 落盘是为了让 `stop` / `status` / 无头截图这些**另外的**自家进程拿到它。
-    expect(await readManagementToken(temporaryDirectory)).toBe(MANAGEMENT_TOKEN)
-
     const endpoint = `http://127.0.0.1:${managementPort}/api/proxy/status`
     // 带对的凭证：通；带错的：401。这两条合起来才能证明凭证真的在起作用，
     // 只测其中一条的话，一个「什么都不校验」的实现也能过。
     expect(await post(endpoint)).toMatchObject({ success: true })
     const rejected = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OSW-Token': 'not-the-token', Connection: 'close' },
+      // `Origin` 是「这条请求来自浏览器」的证据，也是这条断言还成立的前提：凭证只卡浏览器。
+      headers: { 'Content-Type': 'application/json', 'X-OSW-Token': 'not-the-token', Origin: 'null', Connection: 'close' },
       body: '{}',
     })
     expect(rejected.status).toBe(401)
 
     await stopServer()
-
-    // 进程停了就不该再留一张能进管理 API 的票据。
-    expect(await readManagementToken(temporaryDirectory)).toBeNull()
   })
 
   it('isolates manual selection by logical model through the management API', async () => {

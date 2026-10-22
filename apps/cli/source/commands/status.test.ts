@@ -36,10 +36,6 @@ vi.mock('../management-client', () => ({
   isPortListening: async () => mocks.portListening,
 }))
 
-// 凭证只影响服务端要不要接，不影响 `status` 的结论；真去读盘只会读到开发机上的
-// 真实数据目录，用例之间互相影响。
-vi.mock('@server/management/token', () => ({ readManagementToken: async () => null }))
-
 function runtimeState(overrides: Partial<RuntimeFileState> = {}): RuntimeFileState {
   return {
     pid: 4242,

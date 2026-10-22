@@ -2,8 +2,9 @@ import http from 'node:http'
 import { handleApiRequest } from './router'
 import { applyManagementRequestGuards, checkManagementHost } from './core/request-guards'
 import { createStaticWebHost, type StaticWebHost } from './core/static-web'
+import { isDevelopmentTokenRequest } from './core/development-token'
 import { normalizeError } from '@server/errors'
-import { sendManagementError } from './core/response'
+import { sendManagementError, sendSuccess } from './core/response'
 import type { Server } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
@@ -84,6 +85,14 @@ async function handleManagementRequest(req: http.IncomingMessage, res: http.Serv
       const message = `[management] request handled by guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${Date.now() - startedAt}ms`
       if (req.method === 'OPTIONS') console.debug(message)
       else console.warn(message)
+      return
+    }
+    // 开发形态的凭证读取口（唯一消费者是无头截图的那个独立进程）。放在守卫之后、
+    // 路由之前：守卫已经把它限定成「非浏览器客户端」，路由则不该知道有这么一条旁路。
+    // 没配凭证时**不**应答这条路径，让它继续落到路由层拿 404——回一份 `token: null`
+    // 会让调用方以为「宿主这次没生成」，带着空凭证去撞 401。
+    if (token !== null && environment === 'development' && isDevelopmentTokenRequest(req)) {
+      sendSuccess(res, { token })
       return
     }
     await handleApiRequest(req, res, environment)

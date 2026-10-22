@@ -25,10 +25,15 @@ export interface ManagementCallOptions {
   body?: unknown
   timeoutMilliseconds?: number
   /**
-   * 本次启动的管理 API 凭证（`<dataDir>/management.token`）。
+   * 本次启动的管理 API 凭证（可选）。
    *
-   * 不传就是「没有凭证可用」（比如用户手动删了这个文件），管理服务会回 401，
-   * 那在调用方看来就是 `rejected`——但 `host` 本身是通的，两种情况的下一步不一样。
+   * 凭证只在宿主的**内存**里（见 `@server/management/token`），不落盘，所以命令行
+   * 根本读不到它——`stop` / `status` 都不传这个字段，靠的是「请求里没有 `Origin` /
+   * `Sec-Fetch-*` → 判为非浏览器客户端 → 免凭证」（见 core 的 `../management/core/request-guards.ts`）。
+   *
+   * 保留这个字段是给“手里真的能拿到凭证”的调用方用的（例如将来的宿主机内调用），
+   * 传了就带上，没传就不带——绝不能送一个空头，那会让服务端把「没有凭证」
+   * 和「凭证是空字符串」混成一件事。
    */
   token?: string | null
 }

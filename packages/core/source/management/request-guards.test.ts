@@ -9,6 +9,8 @@ interface MockRequestOptions {
   origin?: string
   host?: string | null
   token?: string
+  secFetchSite?: string
+  secFetchMode?: string
 }
 
 /** 本次启动的凭证。固定值，因为这里测的是「对不对得上」而不是「猜不猜得到」。 */
@@ -19,12 +21,16 @@ const TOKEN = 'test-management-token'
  *
  * `host` 默认给回环地址：真实请求一定带 Host，不带上就等于在测一个不存在的形态。
  * 传 `null` 表示「这条请求没有 Host 头」。
+ *
+ * 默认**不带** `Origin` / `Sec-Fetch-*`，也就是模拟命令行、脚本、测试这类非浏览器客户端。
  */
 function mockRequest(options: MockRequestOptions): IncomingMessage {
   const headers: Record<string, string> = {}
   if (options.origin !== undefined) headers.origin = options.origin
   if (options.host !== null) headers.host = options.host ?? '127.0.0.1:19301'
   if (options.token !== undefined) headers['x-osw-token'] = options.token
+  if (options.secFetchSite !== undefined) headers['sec-fetch-site'] = options.secFetchSite
+  if (options.secFetchMode !== undefined) headers['sec-fetch-mode'] = options.secFetchMode
   return { method: options.method ?? 'POST', url: options.url ?? '/api/provider/list', headers } as unknown as IncomingMessage
 }
 
@@ -87,38 +93,74 @@ describe('management request guards', () => {
   it('accepts a POST that carries the credential', async () => {
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(mockRequest({ token: TOKEN }), response, TOKEN)
+    const accepted = await applyManagementRequestGuards(mockRequest({ origin: 'http://localhost:5173', token: TOKEN }), response, TOKEN)
 
     expect(accepted).toBe(true)
-    expect(response.setHeader).not.toHaveBeenCalled()
+    expect(response.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://localhost:5173')
   })
 
-  it('rejects a POST without a credential', async () => {
+  it('rejects a browser POST without a credential', async () => {
     // 最核心的一条：本机任意网页都能发这个请求，没有凭证就必须被挡住，
     // 否则 issue #76 里那条「沙箱 iframe 读走明文密钥」的路依然通着。
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(mockRequest({}), response, TOKEN)
+    const accepted = await applyManagementRequestGuards(mockRequest({ origin: 'http://localhost:5173' }), response, TOKEN)
 
     expect(accepted).toBe(false)
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a POST with the wrong credential', async () => {
+  it('rejects a browser POST that only carries Sec-Fetch-Site', async () => {
+    // 浏览器不一定给 `Origin`（同源 GET 就没有），但 Chromium 系总给 `Sec-Fetch-Site`，
+    // 而且页面脚本改不了它。只看 `Origin` 会留下一个可以绕的缺口。
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(mockRequest({ token: 'not-the-token' }), response, TOKEN)
+    const accepted = await applyManagementRequestGuards(mockRequest({ secFetchSite: 'same-origin' }), response, TOKEN)
 
     expect(accepted).toBe(false)
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a credential of the right length but the wrong content', async () => {
+  it('accepts a local client that only carries Sec-Fetch-Mode', async () => {
+    // Node 内置的 `fetch`（undici）会自发带 `sec-fetch-mode: cors`，而它确实不是浏览器。
+    // 真实踩过一次：把 `Sec-Fetch-Mode` 当判据时 `osw stop` / `osw status` 全部 401，
+    // 而这在单测里看不出来、只有连真进程的冒烟测试才暴露。
+    const response = mockResponse()
+
+    const accepted = await applyManagementRequestGuards(mockRequest({ secFetchMode: 'cors' }), response, TOKEN)
+
+    expect(accepted).toBe(true)
+  })
+
+  it('accepts a local client that shows no browser traces and no credential', async () => {
+    // 凭证只在宿主内存里，`osw stop` / `osw status` 读不到它。它们发出的请求没有
+    // `Origin` 也没有 `Sec-Fetch-*`，正是这里判为非浏览器客户端的依据。
+    const response = mockResponse()
+
+    const accepted = await applyManagementRequestGuards(mockRequest({}), response, TOKEN)
+
+    expect(accepted).toBe(true)
+  })
+
+  it('rejects a browser POST with the wrong credential', async () => {
+    const response = mockResponse()
+
+    const accepted = await applyManagementRequestGuards(mockRequest({ origin: 'http://localhost:5173', token: 'not-the-token' }), response, TOKEN)
+
+    expect(accepted).toBe(false)
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('rejects a browser credential of the right length but the wrong content', async () => {
     // 长度相同但内容不同：专门走一遍 `timingSafeEqual` 的正常分支，而不是提前
     // 被长度比较挡在门外。
     const response = mockResponse()
 
-    const accepted = await applyManagementRequestGuards(mockRequest({ token: 'x'.repeat(TOKEN.length) }), response, TOKEN)
+    const accepted = await applyManagementRequestGuards(
+      mockRequest({ origin: 'http://localhost:5173', token: 'x'.repeat(TOKEN.length) }),
+      response,
+      TOKEN,
+    )
 
     expect(accepted).toBe(false)
     expect(response.statusCode).toBe(401)

@@ -253,6 +253,51 @@ describe('request boundary', () => {
   })
 })
 
+/*
+ * 开发形态的凭证读取口。
+ *
+ * 这个口存在的唯一理由：无头截图是一个**另外的** Electron 进程，要驱动一个真浏览器去连
+ * `pnpm dev` 那个实例，而凭证只在宿主内存里、磁盘上没有。所以三道边界必须一起断言，
+ * 缺一条都会变成「生产环境上有个能白拿凭证的接口」：
+ *   1. 只有 `environment === 'development'` 才应答；
+ *   2. 只有宿主真的生成了凭证（`token !== null`）才应答；
+ *   3. 只有非浏览器客户端能拿到（这一条由 `request-guards` 负责，不在这里重复）。
+ */
+describe('the development token endpoint', () => {
+  it('answers with the token in development', async () => {
+    const { origin } = await start({ environment: 'development', token: TOKEN })
+
+    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ success: true, data: { token: TOKEN } })
+    // 它是旁路，不该顺路把真实路由也跑一遍。
+    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+  })
+
+  it('never answers outside development', async () => {
+    // 生产形态下这条路径必须不存在。断言到「没走到这条路」为止，而不是只看状态码：
+    // 路由层回 404 与这里有意的静默是两件不同的事，混淆会让以后有人顺手放宽环境判断。
+    const { origin } = await start({ environment: 'production', token: TOKEN })
+
+    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
+
+    expect(response.status).toBe(200) // 落到被替身的路由，真实路由会回 404
+    expect(mocks.handleApiRequest).toHaveBeenCalled()
+  })
+
+  it('falls through when the host did not hand over a token', async () => {
+    // 没有凭证时回一份 `token: null` 更糟：调用方会以为「宿主这次没生成」，
+    // 带着空凭证去撞 401，而真正的原因（这条路径根本没开）就被掩掉了。
+    const { origin } = await start({ environment: 'development', token: null })
+
+    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(mocks.handleApiRequest).toHaveBeenCalled()
+  })
+})
+
 describe('stopManagementServer', () => {
   it('waits for an in-flight startup and then closes the listener', async () => {
     const pending = startManagementServer({ host: '127.0.0.1', port: 0 })

@@ -10,7 +10,6 @@ import { describeError } from '../errors'
 import { cliTranslator } from '../native-i18n'
 import { resolveDataDirectory } from '../host'
 import { callManagementApi } from '../management-client'
-import { readManagementToken } from '@server/management/token'
 import { isProcessAlive, readRuntimeState, removeRuntimeState, runtimeFilePath } from '../runtime-state'
 import type { CliArguments } from '../options'
 
@@ -51,9 +50,9 @@ export async function runStop(values: CliArguments): Promise<number> {
     host: state.managementHost,
     port: state.managementPort,
     path: '/api/runtime/shutdown',
-    // 凭证与 `runtime.json` 在同一个数据目录里，读不到就照旧发（服务会回 401），
-    // 由下面「进程是否真的消失」来判定结果——请求被拒也未必意味着它没在停。
-    token: await readManagementToken(dataDir),
+    // 不带凭证：它只活在宿主的**内存**里（见 `@server/management/token`），我们读不到。
+    // 命令行请求没有 `Origin` / `Sec-Fetch-*`，正是守卫判为「非浏览器客户端」的那一类，
+    // 所以能直接进去（见 core 的 `management/core/request-guards.ts`）。
   })
 
   // 不按响应判定成败：服务端收尾时会关掉监听，客户端可能在读完响应前就被断开，

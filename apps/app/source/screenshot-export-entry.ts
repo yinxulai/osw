@@ -1,9 +1,8 @@
 import { app } from 'electron'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
-import { readManagementToken } from '@server/management/token'
+import { DEVELOPMENT_TOKEN_PATH } from '@server/management/core/development-token'
 import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
@@ -26,6 +25,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 //
 // 它不启动服务进程、不开主窗口、不碰数据目录：只开一个受控截图窗口去加载渲染层 dev server，
 // 页面照常从已经跑着的管理服务取数据。因此前提是 `pnpm dev`（或至少控制台 dev server）已经在跑。
+//
+// 凭证靠向那个开发实例要（见下方 `fetchDevelopmentToken`），这是本进程唯一需要连服务的地方。
 //
 // - `VITE_DEV_SERVER_URL`：渲染层地址，默认 `http://localhost:5173`。
 // - `SCREENSHOT_SET`：拍哪一份编排（见 `source/screenshot-sets.ts`，如 `site` / `docs`）；
@@ -82,21 +83,38 @@ app.on('window-all-closed', () => {
 //     `app.setPath('userData', ...)` 尤其不能设：与正在跑的应用共用同一个数据目录会让
 //     Chromium 的 userData 单例锁撞在一起，两个 Electron 进程互相干扰。
 //
-// 凭证从**磁盘**读：本进程没有自己的服务进程，页面连的是「已经跑着的那个开发实例」，
-// 所以只能用它落盘的那份（`<dataDir>/management.token`）。读不到就照旧给 `null`，
-// 页面会 401——比让截图脚本在第一步就死掉更容易看懂。
+// 凭证只能向**已经跑着的那个开发实例**要：本进程没有自己的管理服务，而凭证现在只活在
+// 宿主的内存里（不落盘，见 `@server/management/token`），没有文件可读。开发形态为此开了
+// 一条专用通道（`packages/core/source/management/core/development-token.ts`），它只对
+// 非浏览器客户端应答，所以这里用 Node 的 `fetch`（不带 `Origin`）直取。
+//
+// 拿不到就照旧给 `null`：页面会 401，但脚本不会在第一步就死掉——那样连“到底是服务没起
+// 还是凭证不对”都看不出来。
 const developmentProfile = getRuntimeProfile('development')
-const developmentTokenPromise = readManagementToken(
-  path.join(os.homedir(), developmentProfile.dataDirectoryName),
-)
-// `sendSync` 的处理器是同步的，读文件是异步的，所以这里先开读、注册时给一个
-// 「读到之前一律 null」的 getter：窗口创建远晚于这次读盘完成。
-let developmentToken: string | null = null
-void developmentTokenPromise.then(token => {
-  developmentToken = token
-  if (token === null) console.warn('[screenshots] development management token not found; API calls may return 401')
-})
+// 路径拼在**根**上，不是 `managementApiUrl` 上：后者的结尾已经带了 `/api`，再拼一条
+// 完整路径就会变成 `/api/api/...`。这个写法与 CLI 的 `formatUrl` 是同一个形状。
+const DEVELOPMENT_TOKEN_ENDPOINT = `${developmentProfile.managementApiUrl.replace(/\/api$/, '')}${DEVELOPMENT_TOKEN_PATH}`
 
+async function fetchDevelopmentToken(): Promise<string | null> {
+  try {
+    const response = await fetch(DEVELOPMENT_TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(3_000),
+    })
+    if (!response.ok) return null
+    const payload = (await response.json()) as { success?: unknown; data?: { token?: unknown } }
+    if (payload.success !== true || typeof payload.data?.token !== 'string') return null
+    return payload.data.token
+  } catch {
+    return null
+  }
+}
+
+// 取凭证是异步的，而 preload 用的是 `sendSync`，所以必须在**创建窗口之前**拿到它：
+// 否则第一次 `runtime:get-config` 就会回一份 null，那一整张图的 API 全部 401。
+let developmentToken: string | null = null
 registerRuntimeConfigIpc(developmentProfile.managementApiUrl, () => developmentToken)
 registerExternalLinkIpc()
 registerOpenDataDirectoryIpc()
@@ -108,6 +126,13 @@ registerWindowFullScreenIpc()
 app.whenReady().then(async () => {
   const outputDirectory = process.env.SCREENSHOT_OUTPUT_DIR
     ?? path.resolve(app.getAppPath(), '..', '..', 'snapshot')
+
+  // 先把凭证拿到手再开窗口，理由见 `developmentToken` 的注释。拿不到不是致命错误：
+  // 页面会 401、图会全是空状态，但至少脚本能跑完并把「为什么是空的」说清楚。
+  developmentToken = await fetchDevelopmentToken()
+  if (developmentToken === null) {
+    console.warn('[screenshots] could not read the development management token; API calls will return 401 — is `pnpm dev` running?')
+  }
 
   try {
     const result = await exportWebsiteScreenshots({

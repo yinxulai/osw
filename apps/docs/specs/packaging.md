@@ -256,7 +256,9 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景。这条路径下凭证由管理服务在**入口 HTML 被送出时**注入（`management/core/static-web.ts`，插在 `</head>` 之前、`boot.js` 之后），因为浏览器形态没有任何别的渠道能把它交给页面。
 3. 回退到内置默认端口 —— 保证 `dev:preview` 与单测不炸。
 
-凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只把它落盘（`<dataDir>/management.token`，给 `stop` / `status` / 无头截图读）并拿去强制校验。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。
+凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只拿去强制校验、**不落盘**。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。
+
+不落盘带来一个必须说清的前提：`stop` / `status` 这类另一个进程的命令读不到凭证。它们也不需要——凭证**只卡浏览器**（判据是 `Origin` / `Sec-Fetch-Site`，**不含** `Sec-Fetch-Mode`），本机 `fetch` / `http.request` 不发这些头，自然就跳过了校验。无头截图偏偏是真浏览器，所以它走开发形态专用的读取口（`POST /api/development/management-token`，只在 `development` 且宿主确实生成了凭证时存在）。三条边界都在 `security-privacy.md` 的「访问控制」里。
 
 这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。凭证**不写 `localStorage`**：它每次启动都会变，缓存一份只会让下一次启动读到废值。`pnpm dev:preview` 直接在浏览器打开产物、拿不到任何注入，因此那条通路的管理 API 调用一律 `401`——它只适合看静态界面。
 

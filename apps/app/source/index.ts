@@ -96,8 +96,9 @@ let fatalErrorShown = false
  * 独立进程里（见 `server-host.ts` 的重启预算），让它自己在每次 `startServer` 时生成的话，
  * 主进程手里那份会在第一次重启后立刻作废，渲染层随后的每一次请求都 401。
  *
- * 只存在于主进程内存里：preload 每次同步取一次就交给渲染层，落盘由 core 自己管
- * （`<dataDir>/management.token`，给命令行与无头截图用）。这里绝不写日志。
+ * 只存在于主进程内存里，**不落盘**：preload 每次同步取一次交给渲染层，再无第二个出口。
+ * 命令行（`stop` / `status`）与无头截图都读不到它，走的是守卫里那条「本机非浏览器进程
+ * 免凭证」的通道（见 `@server/management/core/request-guards`）。这里也绝不写日志。
  */
 const managementToken = generateManagementToken()
 

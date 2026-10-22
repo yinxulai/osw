@@ -8,11 +8,28 @@
  *   - **Host 白名单**：挡 DNS rebinding。攻击者把自己的域名解析到 127.0.0.1，浏览器就
  *     认为请求与目标同源，CORS 直接失效；那种请求的 `Host` 是攻击者的域名，不是回环地址。
  *   - **本次启动的凭证**（`x-osw-token`）：挡「本机网页直接发请求」。凭证只存在于本次启动
- *     的自家进程之间（见 `../token.ts`），页面猜不到，也就发不出被接受的请求。
+ *     的自家进程内存里（见 `../token.ts`），页面猜不到，也就发不出被接受的请求。
  *   - **路由收口 + CORS 白名单**：只接 `/api/*` 的 `POST`，且只对回环来源回显 CORS 头。
  *
  * 顺序是有原因的：Host 必须最靠前。DNS rebinding 的请求在浏览器眼里是「同源」的，
  * 不会为它发预检，也就轮不到 CORS 说话；先验 Host 才能在它造成任何影响之前拦住。
+ *
+ * ## 凭证为什么只卡浏览器
+ *
+ * 凭证**只活在内存里**（不落盘，见 `../token.ts`），于是别的进程读不到它——`osw stop` /
+ * `osw status` 这类自家命令也就没法带上它。它们必须继续能用，所以这里把「是不是浏览器
+ * 发来的」当成判据：
+ *
+ *   - 浏览器发的请求**一定**带 `Origin`（对非 `GET` 请求从无例外，`file://` 页面带
+ *     `Origin: null`），Chromium 系还会带 `Sec-Fetch-Site`；这类请求必须凭证对得上，
+ *     否则 `401`。
+ *   - 命令行、脚本、测试这类非浏览器客户端不会带这些头，直接放行。注意 Node 的
+ *     `fetch` 会自发带 `Sec-Fetch-Mode: cors`，所以判据里**没有**它（见 `isBrowserRequest`）。
+ *
+ * 这个分界是安全的：真正的威胁模型是「用户打开了某个网页，那个网页替他调本机接口」。
+ * 而同用户的本机进程本来就能读数据目录、能改配置，给它设一道需要落盘才能共享的口令，
+ * 换来的是「多一份要保管的长期秘密」而挡不住任何东西。**不要**把这条例外扩展到浏览器：
+ * 只要请求里有浏览器痕迹，就必须有凭证。
  */
 
 import { timingSafeEqual } from 'node:crypto'
@@ -73,12 +90,34 @@ export async function applyManagementRequestGuards(req: IncomingMessage, res: Se
     sendError(res, 'METHOD_NOT_ALLOWED', `Only POST is supported, received ${method ?? 'UNKNOWN'}`, 405, { method: method ?? 'UNKNOWN' })
     return false
   }
-  if (!hasValidToken(req, token)) {
+  if (!hasValidToken(req, token) && isBrowserRequest(req)) {
     sendError(res, 'UNAUTHORIZED', 'Missing or invalid management token', 401)
     return false
   }
 
   return true
+}
+
+/**
+ * 这条请求是不是浏览器发来的。
+ *
+ * 判据只用两样东西：
+ *
+ *   - `Origin`：浏览器对所有非 `GET` / `HEAD` 请求都会带（`file://` 页面表达成 `null`），
+ *     而网页发起的写请求捕获不到例外。跨源、同源 `POST` 都在内。
+ *   - `Sec-Fetch-Site`：Chromium 系对所有请求都会加，页面脚本无法改写。它是 `Origin`
+ *     之外的第二个佐证，不是替代品。
+ *
+ * ⚠️ **不要用 `Sec-Fetch-Mode`**，尽管 Chromium 系确实对它从不缺席：Node 内置的
+ * `fetch`（undici）也会自己加一条 `sec-fetch-mode: cors`。把它算进判据，命令行就会被
+ * 当成浏览器，`osw stop` / `osw status` 一律 401。这个坑单测发现不了（替身请求想带什么
+ * 就带什么），是 `pnpm smoke:cli` 连真进程时才炸出来的——所以这里留一条记号，别再加回来。
+ * `Sec-Fetch-Dest` 同理不可靠。
+ */
+function isBrowserRequest(req: IncomingMessage): boolean {
+  if (typeof req.headers.origin === 'string') return true
+  if (typeof req.headers['sec-fetch-site'] === 'string') return true
+  return false
 }
 
 /**
