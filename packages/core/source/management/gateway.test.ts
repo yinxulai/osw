@@ -266,3 +266,40 @@ describe('development-only paths', () => {
     expect(response.outcome).toBe('development-path')
   })
 })
+
+/*
+ * 开发形态不校验管理凭证。
+ *
+ * 理由：开发期前端不是宿主加载的（Vite 页面、调试脚本、自动化脚本），拿不到
+ * `window.__OSW__`，每一条请求都要先从数据目录读凭证才能发——自动化开发直接卡住。
+ * 开发形态的数据目录与正式形态分开，放宽这里不会碰到用户的数据。
+ *
+ * 代价是公认的：本机任意网页在开发实例上都能调 `/api/*`。正式形态一个字都不能松。
+ */
+describe('the credential gate in development', () => {
+  it('lets a request through without a credential', async () => {
+    const response = await serve({ path: '/api/settings/get', environment: 'development', origin: 'http://localhost:5173' })
+
+    expect(response.outcome).toBe('api')
+    expect(mocks.handleApiRequest).toHaveBeenCalledOnce()
+  })
+
+  it('lets a credential-less request through even when the host handed over no credential', async () => {
+    // 开发形态下「宿主没传凭证」不再是配置异常，而是常态。
+    const response = await serve({ path: '/api/settings/get', environment: 'development', token: null })
+
+    expect(response.outcome).toBe('api')
+  })
+
+  it('still checks the path and the method', async () => {
+    // 放宽的只有凭证一步，其它判据一字不变。
+    const wrongMethod = await serve({ path: '/api/settings/get', method: 'GET', environment: 'development' })
+    const wrongPath = await serve({ path: '/not-an-api-path', environment: 'development' })
+
+    expect(wrongMethod.status).toBe(405)
+    expect(wrongMethod.outcome).toBe('rejected')
+    expect(wrongPath.status).toBe(404)
+    expect(wrongPath.outcome).toBe('rejected')
+    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+  })
+})

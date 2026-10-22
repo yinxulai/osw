@@ -260,7 +260,7 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 
 跨进程那一步靠一个 `0600` 的文件：管理服务在 listen 成功后把凭证写到 `<dataDir>/management.token`，退出时删掉（`management/token-file.ts`、`management/server.ts`）。写失败就让启动失败——一个「起得来但停不掉」的进程比一次启动失败更难收拾。`stop` / `status` 也读这份文件；无头截图那个 Electron 进程同理。这三条边界（文件为什么不能是 `runtime.json`、挡得住谁、什么时候消失）都在 [`../operations/security-privacy.md`](../operations/security-privacy.md) 的「访问控制」里。
 
-这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。凭证**不写 `localStorage`**：它每次启动都会变，缓存一份只会让下一次启动读到废值。`pnpm dev:preview` 直接在浏览器打开产物、拿不到任何注入，因此那条通路的管理 API 调用一律 `401`——它只适合看静态界面。
+这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。凭证**不写 `localStorage`**：它每次启动都会变，缓存一份只会让下一次启动读到废值。`pnpm dev:preview` 直接在浏览器打开产物、拿不到任何注入，但因为开发形态的管理服务不校验凭证（见 [security-privacy.md](../operations/security-privacy.md)），它照样能调通接口。
 
 ### 5.4 桌面能力抽象
 

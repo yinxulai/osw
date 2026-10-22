@@ -46,8 +46,8 @@ function resolveApiBaseFromEnvironment(fallback: string): string {
  * 管理 API 的请求头。
  *
  * 凭证来自宿主注入的 `window.__OSW__.apiToken`（桌面走 preload，命令行 web 形态走入口
- * HTML 注入，见 `apps/docs/specs/operations/security-privacy.md`）。没有注入时不带这个头——那只发生在
- * 浏览器里直接开 Vite dev server 的开发预览，那种形态本来就拿不到凭证，服务会回 401。
+ * HTML 注入，见 `apps/docs/specs/operations/security-privacy.md`）。没有注入时不带这个头——那发生在
+ * 浏览器里直接开 Vite dev server 的开发预览；开发形态的管理服务不校验凭证，所以照样能调通。
  *
  * 这里不缓存、不落 localStorage：凭证的寿命就是这次进程启动，存起来只会多一份会过期的副本。
  */

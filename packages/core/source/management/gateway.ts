@@ -14,7 +14,7 @@
  * | 2 | 静态文件命中 | 控制台产物 | SPA 回退要拿到**未被改写过的**请求，所以它在所有门之前 |
  * | 3 | `OPTIONS` | CORS 预检 204 | 预检是浏览器自己发的，不该被要求带凭证 |
  * | 4 | 非 `/api/`、非 `POST` | 404 / 405 | 对不存在的路径回 `401` 等于用状态码确认「凭证不对」，语义倒置 |
- * | 5 | 凭证不对 | 401 | 唯一的门，**没有例外**，见 `./gateway/access.ts` |
+ * | 5 | 凭证不对（正式形态） | 401 | 唯一的门，**没有例外**，见 `./gateway/access.ts` |
  * | 6 | 正式形态的 `/api/development/seed` | 404 | 开发路径在正式形态必须**不存在**，不能靠路由自己记得判 |
  * | 7 | 其它 `/api/*` | 路由 | 到这里请求一定合规，剩下的是业务 |
  *
@@ -26,10 +26,12 @@
  * `ManagementGatewayOptions` 是本文件唯一的输入，三个字段决定上表里哪几步生效：
  *
  *   - `webRoot`：不给就没有第 2 步（桌面形态自己 `loadFile`）。
- *   - `token`：本次启动的凭证。不给时第 5 步**仍然生效**——所有 `/api/*` 一律被挡
- *     （见 `./gateway/access.ts` 的 `hasValidToken`），因为「宿主忘了传」是配置异常，
- *     不该让一个漏配的环境静默变成对本机任何进程可写的环境。
- *   - `environment`：决定第 6 步是否存在。
+ *   - `token`：本次启动的凭证。不给时第 5 步在**正式形态**下**仍然生效**——所有
+ *     `/api/*` 一律被挡（见 `./gateway/access.ts` 的 `hasValidToken`），因为「宿主忘了传」
+ *     是配置异常，不该让一个漏配的环境静默变成对本机任何进程可写的环境。
+ *   - `environment`：决定第 6 步是否存在，同时决定第 5 步是否生效——**开发形态不校验
+ *     凭证**（见 `./gateway/access.ts` 的「开发形态的旁路」）。两个问题用的是同一个判据，
+ *     所以它们共用这一个字段，不新增开关。
  *
  * 之前这三件事各自在模块级闭包里被读一次，于是「这次启动到底开了哪些门」要跨六个文件
  * 拼出来。现在它们只在 `createManagementGateway` 里读一次。
@@ -49,11 +51,16 @@ export interface ManagementGatewayOptions {
    */
   webRoot?: string | null
   /**
-   * 本次应用启动的管理 API 凭证。给了就强制校验，并注入进托管的入口页面。
-   * 不给时所有 `/api/*` 一律 `401`（fail-closed），没有任何例外。
+   * 本次应用启动的管理 API 凭证。正式形态下给了就强制校验；没给时所有 `/api/*` 一律
+   * `401`（fail-closed），没有任何例外。
+   *
+   * 开发形态不校验凭证（给不给都一样），见 `./gateway/access.ts`。
    */
   token?: string | null
-  /** 运行形态。只有开发专用路径看它，见 `./gateway/development.ts`。 */
+  /**
+   * 运行形态。决定开发专用路径是否存在，以及是否校验管理凭证。
+   * 见 `./gateway/development.ts`。
+   */
   environment?: RuntimeEnvironment
 }
 
@@ -95,8 +102,9 @@ export function createManagementGateway(options: ManagementGatewayOptions = {}):
       // 1 + 2：静态托管先分流。它自己会判方法与非 `/api` 路径，命中就整条请求结束了。
       if (consoleHost && await consoleHost.handle(req, res)) return 'console'
 
-      // 3 + 4 + 5：CORS、预检、路径、方法、凭证。
-      const access = checkApiAccess(req, res, token)
+      // 3 + 4 + 5：CORS、预检、路径、方法、凭证。开发形态不要求凭证，
+      // 其它判据在两种形态下完全一致（见 `./gateway/access.ts`）。
+      const access = checkApiAccess(req, res, token, { requireCredential: !isDevelopment })
       if (!access.accepted) return 'rejected'
 
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
