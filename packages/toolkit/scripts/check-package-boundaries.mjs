@@ -78,13 +78,12 @@ const RULES = {
   },
 }
 
-/** 别名到包的映射。历史别名（`@common` / `@server` / `@render` / `@`）与包名别名并存。 */
+/** 别名到包的映射。历史别名（`@common` / `@server` / `@`）与包名别名并存。 */
 const ALIASES = [
   { pattern: /^@common(\/|$)/, packageName: 'contracts' },
   { pattern: /^@osw\/contracts(\/|$)/, packageName: 'contracts' },
   { pattern: /^@server(\/|$)/, packageName: 'core' },
   { pattern: /^@osw\/core(\/|$)/, packageName: 'core' },
-  { pattern: /^@render(\/|$)/, packageName: 'console' },
   { pattern: /^@(\/|$)/, packageName: 'console' },
   { pattern: /^@osw\/console(\/|$)/, packageName: 'console' },
   { pattern: /^@osw\/api(\/|$)/, packageName: 'api' },

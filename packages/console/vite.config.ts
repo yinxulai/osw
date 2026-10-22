@@ -21,7 +21,6 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./source', import.meta.url)),
       '@common': fileURLToPath(new URL('../contracts/source', import.meta.url)),
-      '@render': fileURLToPath(new URL('.', import.meta.url)),
     },
   },
   define: { __APP_VERSION__: JSON.stringify(appVersion) },

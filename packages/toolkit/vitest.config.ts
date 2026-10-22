@@ -27,7 +27,6 @@ export default defineConfig({
     alias: {
       '@common': fileURLToPath(new URL('../../packages/contracts/source', import.meta.url)),
       '@server': fileURLToPath(new URL('../../packages/core/source', import.meta.url)),
-      '@render': fileURLToPath(new URL('../../packages/console', import.meta.url)),
       '@': fileURLToPath(new URL('../../packages/console/source', import.meta.url)),
     },
   },
