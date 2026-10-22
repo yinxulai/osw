@@ -187,11 +187,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // 入队结果是「正常调度结果」，但界面必须说出来：静默跳过就是「点了没反应」。
   'modelTest.notice.enqueueSkipped': '已开始 {accepted} 个目标，{skipped} 个未入队（已在队列中、队列已满或参数无效）。',
   'modelTest.notice.enqueueFailed': '入队失败，任务没有开始。',
-  // 清空的返回值不是废的：服务端说「一条都没清掉」时，界面不能假装清过了。
-  'modelTest.notice.clearSkipped': '结果没有清掉，请稍后再试。',
+  // 清空的返回值不是废的：服务端说「一条都没清掉」时，界面不能假装清过了。0 的含义是
+  // 「台账里此刻没有终态项可清」——在跑 / 排队的任务不算，服务端一个都不删。
+  'modelTest.notice.clearSkipped': '没有可清空的已结束结果。',
   'modelTest.notice.clearFailed': '清空失败，结果还在。',
-  // 服务端在有任务在跑时不许清空（判据是整本台账，不限诊断），按钮置灰并在这里说明原因。
-  'modelTest.action.clearResultsBusy': '有任务在跑，跑完才能清空结果',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': '统计分析',

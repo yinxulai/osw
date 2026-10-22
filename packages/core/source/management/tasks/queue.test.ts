@@ -357,12 +357,65 @@ describe('取消', () => {
 })
 
 describe('clear', () => {
-  it('有任务在跑时整条空操作（那条在跑的行不该凭空消失）', () => {
-    const { queue } = scenario()
-    queue.enqueue('thing', [{ id: 'a' }, { id: 'b' }])
+  it('有任务在跑时不再整条空操作：终态项照清，在跑 / 排队的一条不少', async () => {
+    const { queue, calls } = scenario()
+    queue.enqueue('thing', [{ id: 'done' }])
+    calls[0].done.resolve('ok')
+    await settle()
+    // 串行 kind：`busy` 顶上槽位，`waiting` 留在队列里。
+    queue.enqueue('thing', [{ id: 'busy' }, { id: 'waiting' }])
 
-    expect(queue.clear()).toBe(0)
-    expect(queue.snapshot()).toHaveLength(2)
+    const [done, busy, waiting] = queue.snapshot()
+    expect([done.status, busy.status, waiting.status]).toEqual(['success', 'running', 'queued'])
+
+    expect(queue.clear()).toBe(1)
+
+    // 旧实现那条守卫防的是「在跑的行凭空消失」；这条承诺原样保留，只是改由「逐条跳过
+    // 活任务」来兑现——比整条空操作精确：终态项清了，活任务一条不少。
+    expect(ids(queue)).toEqual([busy.id, waiting.id])
+    expect(queue.isRunning()).toBe(true)
+  })
+
+  it('三种终态都算可清的：成功 / 失败 / 取消一并清掉，返回值就是实际条数', async () => {
+    const { queue, calls } = scenario()
+    queue.enqueue('thing', [{ id: 'ok' }, { id: 'boom' }, { id: 'stop' }, { id: 'busy' }])
+
+    calls[0].done.resolve('ok')
+    await settle()
+    calls[1].done.reject(new Error('upstream down'))
+    await settle()
+
+    // 第三条在跑：取消它，让它在步边界自己收尾成 `cancelled`（独立结局，不是失败）。
+    const stopId = queue.snapshot().find(record => record.key === 'stop')!.id
+    expect(queue.cancel([stopId])).toBe(1)
+    calls[2].done.reject(new Error('aborted'))
+    await settle()
+
+    expect(queue.snapshot().map(record => record.status)).toEqual(['success', 'failed', 'cancelled', 'running'])
+    expect(queue.clear()).toBe(3)
+    expect(queue.snapshot().map(record => record.status)).toEqual(['running'])
+  })
+
+  it('端到端解锁：台账灌满、新入队被拒之后，在跑的情况下 clear 一次就能重新入队', async () => {
+    const { queue, calls } = scenario()
+    queue.enqueue('thing', Array.from({ length: MAX_QUEUE_TASKS }, (_, index) => ({ id: `fill_${index}` })))
+    expect(queue.snapshot()).toHaveLength(MAX_QUEUE_TASKS)
+
+    // 让两条真的跑完：既要「此刻有任务在跑」，也要台账里有终态项可清。
+    calls[0].done.resolve('ok')
+    await settle()
+    calls[1].done.resolve('ok')
+    await settle()
+
+    // 满额：新入队被拒，一条都进不来。
+    expect(queue.enqueue('thing', [{ id: 'late' }])).toEqual({ accepted: 0, skipped: 1 })
+
+    // 旧实现在这里返回 0（有任务在跑 → 整条空操作），额度永远腾不出来，队列就此锁死。
+    expect(queue.isRunning()).toBe(true)
+    expect(queue.clear()).toBe(2)
+
+    // 解锁：同一个载荷现在进得去。
+    expect(queue.enqueue('thing', [{ id: 'late' }])).toEqual({ accepted: 1, skipped: 0 })
   })
 
   it('没有在跑的时清掉终态项', async () => {

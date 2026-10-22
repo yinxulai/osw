@@ -522,11 +522,13 @@ describe('展开逐轮明细', () => {
   })
 
   it('多轮时逐轮列出来，成功率按轮次算（总账失败、其中一轮通过）', () => {
+    // 按服务端真实产出的形状写：跑完三轮、总账失败，队列记录上仍是 `success`——「算不算
+    // 通过」只在 `result.success` 里（见 `deriveRowStatus`）。写成 `status: 'failed'` 就等于
+    // 替界面把结论判好了，那条缝会被这条用例盖住。
     renderPanel([task({
       id: 'task_rounds',
       key: keyOf('m1', 'openai-completions'),
-      status: 'failed',
-      errorMessage: 'rate limited',
+      status: 'success',
       result: failedResult({
         success: false,
         statusCode: 429,
@@ -543,6 +545,9 @@ describe('展开逐轮明细', () => {
     fireEvent.click(row)
 
     expect(within(row).getByText('1/2 · 50%')).toBeTruthy()
+    // 记录是 `success`、结论是失败：状态列必须读结论那一边（`deriveRowStatus`）。
+    // 按 `title` 取状态格——明细里每一轮的「失败」也是同样的字，按文字取会撞上。
+    expect(within(row).getByTitle(`${zh('modelTest.status.failed')} · HTTP 429`).textContent).toBe(zh('modelTest.status.failed'))
     expect(within(row).getByText(zh('modelTest.detail.round', { round: 1 }))).toBeTruthy()
     expect(within(row).getByText(zh('modelTest.detail.round', { round: 2 }))).toBeTruthy()
     expect(within(row).getByText('rate limited')).toBeTruthy()
@@ -662,27 +667,43 @@ describe('清空结果', () => {
     return [task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', result: successResult() })]
   }
 
-  it('有任务在跑时按钮禁用并说明原因（服务端那时整条空操作）', () => {
-    renderPanel([task({ id: 'task_running', status: 'running', progress: progress() })])
-    selectProvider()
+  it('有任务在跑时按钮照常可点：终态行被清掉，在跑的那行留在原地', async () => {
+    const running = task({ id: 'task_running', status: 'running', progress: progress() })
+    // 一条终态结论，键里的轮次与当前计划不同——它是账单里单独的一行，清掉之后就该消失。
+    const settled = task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages', { rounds: 2 }), status: 'success', result: successResult() })
+    harness.clear.mockResolvedValueOnce(1)
+    const { rerender } = renderPanel([settled, running])
 
-    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResultsBusy') })
-    expect(clear.hasAttribute('disabled')).toBe(true)
+    // 这里不点选渠道：诊断在跑时勾选区本来就是锁的（`busy`）。两行都由账单里的任务给出，
+    // 恰好是「清空结果」要处理的那种行。
+    expect(expandToggles()).toHaveLength(2)
+
+    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResults') })
+    expect(clear.hasAttribute('disabled')).toBe(false)
 
     fireEvent.click(clear)
-    expect(harness.clear).not.toHaveBeenCalled()
+    await waitFor(() => { expect(harness.clear).toHaveBeenCalledTimes(1) })
+
+    // 服务端清完之后推来的快照：终态那条不见了，在跑的那条原样还在。
+    harness.tasks = [running]
+    rerender(panelNode())
+
+    expect(expandToggles()).toHaveLength(1)
+    expect(screen.getByText(zh('modelTest.status.running'))).toBeTruthy()
+    expect(screen.queryByText(zh('modelTest.status.success'))).toBeNull()
   })
 
-  it('别的 kind 在跑时也置灰：服务端 clear 的判据是整本台账，不限诊断', () => {
+  it('别的 kind 在跑时也照常可点：服务端只删终态项，不看谁在跑', async () => {
     // 诊断这一批已经结束（`busy` 为假），但台账里还有别的 kind 在跑。
+    harness.clear.mockResolvedValueOnce(1)
     renderPanel([...settledOnly(), task({ id: 'task_other', kind: 'export', key: 'export:1', status: 'running' })])
     selectProvider()
 
-    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResultsBusy') })
-    expect(clear.hasAttribute('disabled')).toBe(true)
+    const clear = screen.getByRole('button', { name: zh('modelTest.action.clearResults') })
+    expect(clear.hasAttribute('disabled')).toBe(false)
 
     fireEvent.click(clear)
-    expect(harness.clear).not.toHaveBeenCalled()
+    await waitFor(() => { expect(harness.clear).toHaveBeenCalledTimes(1) })
   })
 
   it('清掉之后不多说一句', async () => {
@@ -698,7 +719,7 @@ describe('清空结果', () => {
   })
 
   it('服务端说「一条都没清掉」时如实说出来，不假装清过了', async () => {
-    // 竞态：按钮按下的那一刻还没有任务在跑，服务端处理时已经有了，于是整条空操作。
+    // `cleared === 0` 的含义：台账里此刻真的没有终态项（在跑 / 排队的任务一条都不删）。
     harness.clear.mockResolvedValueOnce(0)
     renderPanel(settledOnly())
     selectProvider()

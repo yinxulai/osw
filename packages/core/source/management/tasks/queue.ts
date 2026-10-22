@@ -224,16 +224,25 @@ export class TaskQueue {
   }
 
   /**
-   * 清掉终态项。
+   * 清掉终态项，返回真的删掉了几条。
    *
-   * 有任务在跑时**整条空操作**：那会让「进行中」的行凭空消失，而用户还没来得及看它跑完。
-   * 这也是界面今天的行为（与 §「最小化 ≠ 关闭」同一条判断）。
+   * **逐条跳过活任务，而不是「有活的就整条空操作」。** 一个活任务都不删（`queued` /
+   * `running` 全留），所以「那条在跑的行凭空消失」这件事依然不会发生——旧实现用整条守卫
+   * 防的正是它，而这条守卫只剩下副作用。变的只是「一批还在跑时，**已完成**的行也可以被
+   * 清掉」：那些行用户已经看过结论了，这正是「清空结果」的语义。
+   *
+   * ## 整条空操作曾经是一条死锁
+   *
+   * `MAX_QUEUE_TASKS` 是**内存上界**（见上），终态项也占额度，而终态项**只有这里**一条
+   * 回收路径（`entries.delete` 全仓只此一处）。两者一撞就是：只要队列里有任何一条任务还在
+   * 跑，入队就已被永久拒绝（满额）而 `clear` 又是空操作——「等着跑完再清」等不到，因为
+   * 腾不出额度就发不出新任务。改成逐条跳过后，这条路变成**一键可恢复**。
    */
   clear(): number {
-    if ([...this.entries.values()].some(entry => entry.record.status === 'running')) return 0
     let cleared = 0
     for (const [id, entry] of [...this.entries]) {
-      if (entry.record.status === 'queued') continue
+      const status = entry.record.status
+      if (status === 'queued' || status === 'running') continue
       this.entries.delete(id)
       cleared += 1
     }

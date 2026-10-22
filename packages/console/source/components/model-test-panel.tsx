@@ -803,15 +803,6 @@ export function ModelTestPanel() {
   const summary = useMemo(() => summarizeTestRows(rows), [rows])
   /** 服务端真的还在跑 / 还没跑的诊断任务（本地计划里的「排队」不算）。 */
   const busy = useMemo(() => tasks.some(task => task.kind === MODEL_TEST_TASK_KIND && (task.status === 'running' || task.status === 'queued')), [tasks])
-  /**
-   * 台账里有没有任务在跑——**任何 kind**，不只是诊断。
-   *
-   * 服务端的 `clear()` 是有在跑的就不清（`queue.ts`：那条在跑的行不该凭空消失），而它的
-   * 判断是全台账的。所以「清空结果」的禁用条件必须是这一个，不能只看诊断的 `busy`：
-   * 只看 `busy` 的话，将来加了第二个 kind，另一个 kind 在跑时按钮会亮着，按下去什么也不会
-   * 发生——正是那条注释想防的事。
-   */
-  const anyRunning = useMemo(() => tasks.some(task => task.status === 'running'), [tasks])
 
   const hasResults = hasSettledOrRunning(rows)
   const startDisabled = plannedRows.length === 0
@@ -829,15 +820,15 @@ export function ModelTestPanel() {
   /**
    * 清空结果。
    *
-   * 服务端有任务在跑时整条空操作，所以按钮那时是禁用的（见 {@link anyRunning}）；这里
-   * 再挡一次是防「先点了清空、任务紧接着开跑」的竞态。
+   * 服务端的 `clear()` **逐条跳过活任务、只删终态项**（`queue.ts`），所以有任务在跑时这一
+   * 步照样有意义：在跑的行一条都不会消失，能清掉的是那些用户已经看过结论的行。这里因此
+   * 不做任何前置拦截——拦了就等于把「一键可恢复」重新关掉。
    *
-   * 返回值**要读**：`cleared` 是服务端真的删掉了几条。它不会是 0 却没告诉我们——那种情况
-   * 说明服务端什么都没清（竞态正好撞上、或台账已被别人清了），这时把本地视图当作「清过了」
-   * 是自欺：结果其实还在，下一帧快照会把它们推回来。所以那种情况说一句实话，不动本地状态。
+   * 返回值**要读**：`cleared` 是服务端真的删掉了几条，为 0 就是「台账里此刻真的没有终态项」
+   * （活任务不计数）。那种情况不动本地视图，并说一句实话：把没清掉的表当作「清过了」是自欺，
+   * 下一帧快照会把那些行原样推回来。
    */
   const clearResults = async () => {
-    if (anyRunning) return
     let cleared: number
     try {
       cleared = await clear()
@@ -1007,15 +998,15 @@ export function ModelTestPanel() {
                   <div className="flex shrink-0 items-center gap-2">
                     {hasResults && (
                       /*
-                       * 有任务在跑时服务端不许清（那条在跑的行不该凭空消失），所以按钮留在
-                       * 原地、置灰并说明原因——收起来只会让用户以为这个功能没了。
+                       * 不随「有没有任务在跑」置灰：服务端的 clear 只删终态项，在跑的行不受
+                       * 影响（见 {@link clearResults}）。置灰反而会把「队列满了一键清空」这条
+                       * 出路堵死——那正是这个按钮存在的意义。
                        */
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        disabled={anyRunning}
-                        title={t(anyRunning ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
-                        aria-label={t(anyRunning ? 'modelTest.action.clearResultsBusy' : 'modelTest.action.clearResults')}
+                        title={t('modelTest.action.clearResults')}
+                        aria-label={t('modelTest.action.clearResults')}
                         onClick={() => void clearResults()}
                       >
                         <Trash2 size={13} />

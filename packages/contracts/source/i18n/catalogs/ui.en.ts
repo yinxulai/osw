@@ -187,11 +187,11 @@ export const uiEn = {
   // a silent skip reads as "the button did nothing".
   'modelTest.notice.enqueueSkipped': 'Started {accepted} target(s); skipped {skipped} (already queued or running, queue full, or invalid).',
   'modelTest.notice.enqueueFailed': 'Could not enqueue the run; nothing was started.',
-  // The clear response carries a count for a reason: when the server cleared nothing, the UI must not pretend it did.
-  'modelTest.notice.clearSkipped': 'Nothing was cleared; try again in a moment.',
+  // The clear response carries a count for a reason: when the server cleared nothing, the UI must not
+  // pretend it did. Zero means there are no finished results to clear — running / queued tasks are
+  // never removed.
+  'modelTest.notice.clearSkipped': 'Nothing to clear; no finished results are on the ledger.',
   'modelTest.notice.clearFailed': 'Could not clear the results; they are still here.',
-  // The server refuses to clear while any task is in flight (whole ledger, not just diagnostics), so the button stays put and explains why.
-  'modelTest.action.clearResultsBusy': 'A task is still running; clear the results once it finishes',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': 'Analytics',
