@@ -5,6 +5,19 @@
 >
 > 那份文档回答了「**借谁、借什么**」；这份回答「**借来的每一个数字，落在我们哪一档；我们缺哪一格**」。
 > 它是映射表，不是迁移计划。
+>
+> **本文在整套文档里的位置**：上游数值的**唯一证据来源**。`[源码]` / `[文档]` / `[未核实]`
+> 三档标签由本文 §0 定义，§8 是版本与抓取路径的**唯一登记处**，§9 是上游侧的未核实项。
+> 各分册（[`design-system-tokens.md`](./design-system-tokens.md)、
+> [`design-system-components.md`](./design-system-components.md)、
+> [`design-system-accessibility.md`](./design-system-accessibility.md)、
+> [`design-system-typography.md`](./design-system-typography.md)、
+> [`design-system-icons.md`](./design-system-icons.md)、
+> [`design-system-data-display.md`](./design-system-data-display.md)、
+> [`design-system-copy.md`](./design-system-copy.md)、
+> [`design-system-theming.md`](./design-system-theming.md)）**只引用本文的数值，不重复论证**；
+> 它们各自末尾的「未核实」节只登记**本文没有覆盖的那些**。
+> 文档地图见 [`design-system.md`](./design-system.md) §文档地图。
 
 ## 范围与不做什么
 
