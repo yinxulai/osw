@@ -121,6 +121,7 @@
 - [x] 两种诊断模式（流式 / 速度）、多轮重复与自定义提示词、输入长度补齐；参数只保留下界、不设上界（见 [diagnostics.md](./operations/diagnostics.md) §5）
 - [x] 领域拆分：请求构造、流式读取、轮次汇总、目标规划四个模块各自单独测，路由只剩 HTTP 适配；线上契约收敛到 `packages/contracts/source/diagnostics.ts`（原先被抄了三份）
 - [x] 界面侧执行器改为 `ModelTestRunner` 类 + `subscribe`/`getSnapshot`（`useSyncExternalStore` 绑定），并发队列、取消收尾与同步闸门可在无 React 环境下测（见 [diagnostics.md](./operations/diagnostics.md) §8）
+- [x] 诊断队列整体搬到服务端：进程级通用任务队列 + `model-test` kind，客户端只剩订阅与转发；面板提为外壳级非模态浮窗、可最小化成角标，切页不再中断在跑的任务（见 [task-queue.md](./overview/task-queue.md)）
 
 ### MVP（P0）：代理管线收尾
 

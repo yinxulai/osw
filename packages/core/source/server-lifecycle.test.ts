@@ -123,9 +123,13 @@ describe('server lifecycle', () => {
     await initDatabases(temporaryDirectory)
     await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
     await closeDatabases()
+    // **正式形态**：凭证这道门只在正式形态存在，开发形态整条跳过
+    // （`gateway.ts` 传 `requireCredential: false`）。这条用例要证明的是「凭证真的在
+    // 起作用」，判据只能落在还会校验它的那个形态上——跑在开发形态下，它测的会是一个
+    // 本就不校验凭证的服务，下面那句 401 断言就变成了对空气的要求。
     await startTestServer({
       secretStore,
-      runtimeConfig: createTestRuntimeConfig(proxyPort, managementPort),
+      runtimeConfig: createTestRuntimeConfig(proxyPort, managementPort, 'production'),
     })
 
     const endpoint = `http://127.0.0.1:${managementPort}/api/proxy/status`
@@ -198,9 +202,9 @@ describe('server lifecycle', () => {
 
 })
 
-function createTestRuntimeConfig(proxyPort: number, managementPort: number): RuntimeConfig {
+function createTestRuntimeConfig(proxyPort: number, managementPort: number, environment: RuntimeConfig['environment'] = 'development'): RuntimeConfig {
   return createRuntimeConfig({
-    environment: 'development',
+    environment,
     appVersion: '0.0.0-test',
     runtime: 'desktop',
     dataDir: temporaryDirectory,

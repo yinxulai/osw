@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import type { Provider, ProviderModelRoute } from '@common/schemas'
 import {
-  buildPlannedTasks,
   buildSelectionView,
   clearAllTasks,
   getProtocolSegmentClassName,
@@ -331,53 +330,5 @@ describe('prune* — 集合变了之后收敛选择，没变就不换引用', ()
     const stable = new Set(['prov_1'])
     expect(pruneProviderSelection([provider('prov_1')], stable)).toBe(stable)
     expect([...pruneProviderSelection([provider('prov_2')], stable)]).toEqual([])
-  })
-})
-
-describe('buildPlannedTasks — 这一批要跑哪些「模型 × 协议」', () => {
-  const providers = [provider('prov_1', '示例渠道')]
-  const models = [
-    model({ id: 'm1', providerId: 'prov_1', modelName: 'gpt-4o' }),
-    model({ id: 'm2', providerId: 'prov_2', modelName: 'orphan' }),
-  ]
-
-  it('id 稳定成「模型 id:协议」，重测才能命中同一行', () => {
-    const tasks = buildPlannedTasks(models, providers, new Set(['prov_1']), {})
-    expect(tasks.map(task => task.id)).toEqual(['m1:openai-completions'])
-    expect(tasks[0]).toMatchObject({
-      modelId: 'm1',
-      modelName: 'gpt-4o',
-      providerId: 'prov_1',
-      providerName: '示例渠道',
-      status: 'queued',
-      converted: false,
-    })
-  })
-
-  it('供应商没找到（数据不同步）时这一行不出现，而不是编一个空名字', () => {
-    const tasks = buildPlannedTasks(models, providers, new Set(['prov_2']), {})
-    expect(tasks).toEqual([])
-  })
-
-  it('显式清空的模型一行都不排；没存过选择时按默认全测', () => {
-    expect(buildPlannedTasks(models, providers, new Set(['prov_1']), { m1: new Set() })).toEqual([])
-    expect(buildPlannedTasks(models, providers, new Set(['prov_1']), {})).toHaveLength(1)
-  })
-
-  it('转换出来的协议带上 converted 标记', () => {
-    const converting = model({
-      id: 'm3',
-      providerId: 'prov_1',
-      endpoints: [{
-        protocol: 'openai-completions',
-        endpointUrl: 'https://api.example.com/v1/chat/completions',
-        customAuthHeader: null,
-        protocolConversionEnabled: true,
-      }],
-    })
-    const tasks = buildPlannedTasks([converting], providers, new Set(['prov_1']), {
-      m3: new Set(['anthropic-messages']),
-    })
-    expect(tasks).toEqual([expect.objectContaining({ protocol: 'anthropic-messages', converted: true })])
   })
 })

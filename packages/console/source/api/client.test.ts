@@ -182,7 +182,7 @@ describe('request', () => {
     const { request } = await loadClient()
     const controller = new AbortController()
 
-    await request('/model-test/run', {}, { signal: controller.signal })
+    await request('/tasks/enqueue', {}, { signal: controller.signal })
 
     expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
   })

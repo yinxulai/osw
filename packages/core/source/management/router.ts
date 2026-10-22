@@ -20,7 +20,6 @@ import {
   logRoutes,
   modelConnectivityRoutes,
   modelRoutes,
-  modelTestRoutes,
   outboundProxyTestRoutes,
   providerModelFetchRoutes,
   routerGraphRoutes,
@@ -34,6 +33,7 @@ import {
   runtimeControlRoutes,
   settingsRoutes,
   storageRoutes,
+  taskRoutes,
   telemetryRoutes,
 } from './routes'
 import { parseJsonBody } from './core/request-body'
@@ -50,7 +50,6 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(logRoutes)
   .mount(requestLogRoutes)
   .mount(analyticsRoutes)
-  .mount(modelTestRoutes)
   .mount(modelConnectivityRoutes)
   .mount(outboundProxyTestRoutes)
   .mount(providerModelFetchRoutes)
@@ -63,6 +62,7 @@ const router = new HttpRouter<ManagementHandler>()
   .mount(storageRoutes)
   .mount(clientConfigRoutes)
   .mount(cloudSyncRoutes)
+  .mount(taskRoutes)
 
 export async function handleApiRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url!, 'http://localhost')

@@ -1,5 +1,6 @@
 import { LIVE_REQUEST_STREAM_PROTOCOL_VERSION, type LiveRequestStreamMessage } from '@common/live-request-stream'
 import { LIVE_METRICS_STREAM_PROTOCOL_VERSION, type LiveMetricsStreamMessage } from '@common/live-metrics-stream'
+import { TASKS_STREAM_PROTOCOL_VERSION, type TasksStreamMessage } from '@common/tasks'
 import { openStream } from './client'
 
 export interface LiveRequestStreamOptions {
@@ -10,6 +11,11 @@ export interface LiveRequestStreamOptions {
 export interface LiveMetricsStreamOptions {
   signal: AbortSignal
   onMessage: (message: LiveMetricsStreamMessage) => void
+}
+
+export interface TaskStreamOptions {
+  signal: AbortSignal
+  onMessage: (message: TasksStreamMessage) => void
 }
 
 /**
@@ -28,6 +34,16 @@ export async function readLiveRequestStream(options: LiveRequestStreamOptions): 
  */
 export async function readLiveMetricsStream(options: LiveMetricsStreamOptions): Promise<void> {
   await readStream('/live-metrics/stream', options.signal, line => parseStreamLine(line, isLiveMetricsStreamMessage, 'live metrics'), options.onMessage)
+}
+
+/**
+ * 逐帧读取「通用任务队列」推送流。
+ *
+ * 与前两条完全同构（同一条 NDJSON 分帧逻辑），只是数据源是 `/api/tasks/stream`：
+ * 队列里的任务变更时服务端推 `snapshot`，空闲时只推 `heartbeat`。
+ */
+export async function readTaskStream(options: TaskStreamOptions): Promise<void> {
+  await readStream('/tasks/stream', options.signal, line => parseStreamLine(line, isTaskStreamMessage, 'task'), options.onMessage)
 }
 
 /**
@@ -107,4 +123,12 @@ function isLiveMetricsStreamMessage(value: unknown): value is LiveMetricsStreamM
   if (message.protocolVersion !== LIVE_METRICS_STREAM_PROTOCOL_VERSION) return false
   if (message.type === 'heartbeat') return true
   return message.type === 'snapshot' && typeof message.metrics === 'object' && message.metrics !== null
+}
+
+function isTaskStreamMessage(value: unknown): value is TasksStreamMessage {
+  if (typeof value !== 'object' || value === null) return false
+  const message = value as { protocolVersion?: unknown; type?: unknown; tasks?: unknown }
+  if (message.protocolVersion !== TASKS_STREAM_PROTOCOL_VERSION) return false
+  if (message.type === 'heartbeat') return true
+  return message.type === 'snapshot' && Array.isArray(message.tasks)
 }

@@ -1,20 +1,21 @@
 import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { providerModelApi } from '@/api/models'
-import { unwrap } from '@/api/unwrap'
 import { useProviders, useProvidersActions, useProvidersLoading } from '@/data/providers'
 import { useHealth, useHealthActions } from '@/data/health'
+import { loadProviderModels, providerModelKeys } from '@/data/provider-models'
 import type { ProviderModelRoute } from '@common/schemas'
 import { useModelManagementUiStore } from '../store'
 
-export const modelKeys = { all: ['provider-models'] as const }
+/**
+ * 模型列表的缓存键。
+ *
+ * 唯一来源已搬到 `@/data/provider-models`（诊断面板挂在外壳上，也要读同一份），
+ * 这里保留 `modelKeys` 这个名字继续给页面内部使用。
+ */
+export const modelKeys = providerModelKeys
 
 /** 数据未就绪时复用的空数组，避免 `?? []` 每次渲染都产生新引用。 */
 const EMPTY_MODELS: ProviderModelRoute[] = []
-
-function loadProviderModels(): Promise<ProviderModelRoute[]> {
-  return unwrap(providerModelApi.list()).then(data => data.map(model => ({ id: model.id, providerId: model.providerId, modelName: model.modelName, endpoints: model.endpoints.map(endpoint => ({ protocol: endpoint.protocol, endpointUrl: endpoint.url ?? '', customAuthHeader: null, protocolConversionEnabled: endpoint.conversions.some(conversion => conversion.enabled) })), priority: 0, enabled: model.enabled, createdTime: model.createdTime, updatedTime: model.updatedTime, deletedTime: model.deletedTime })))
-}
 
 export function useModelData() {
   const client = useQueryClient()

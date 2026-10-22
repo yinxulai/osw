@@ -6,10 +6,12 @@ import { ModelTestModeSchema, ProtocolSchema, type ModelTestMode, type Protocol 
 /**
  * 渠道诊断的线上契约：**两端共用这一份**，服务端产出、界面消费。
  *
- * 为什么住在契约层而不是服务端路由里：这套形状原先被抄了三份——服务端
- * `routes/diagnostics/model-test.ts` 一份、界面 `api/tools.ts` 一份、连接测试
- * `model-connectivity.ts` 一份，字段名与可空性各写各的。三份里任意两份漂移都不会
- * 有任何构建或测试报警，只会表现为「界面上那一格永远是 —」这种行为级故障。
+ * 为什么住在契约层而不是服务端路由里：这套形状原先被抄了三份——诊断路由一份、界面一份、
+ * 连接测试一份，字段名与可空性各写各的。三份里任意两份漂移都不会有任何构建或测试报警，
+ * 只会表现为「界面上那一格永远是 —」这种行为级故障。
+ *
+ *（那份被抄的服务端路由是 `routes/diagnostics/model-test.ts`，已经随任务队列一起删掉：
+ * 今天诊断由 `tasks/kinds/model-test.ts` 这个 kind 跑，形状仍然只从本文件取。）
  *
  * 词表的归属也在这里划清：**模式词表（{@link ModelTestMode}）留在 `schemas.ts`**，
  * 因为那一层同时被服务端校验、界面渲染与 i18n 目录引用，是比诊断结果更底层的词；
@@ -26,19 +28,22 @@ import { ModelTestModeSchema, ProtocolSchema, type ModelTestMode, type Protocol 
 export const MIN_MODEL_TEST_ROUNDS = 1
 
 /**
- * 渠道诊断的请求体。
+ * 队列里一个诊断任务的载荷。
  *
- * `default()` 是**契约的一部分**，不是服务端的宽容：老界面、老脚本发来的请求
- * 少了某个字段时，语义必须仍然是「按最朴素的方式测一次」，否则升级服务端会
- * 让旧调用方悄悄换一套测法。
+ * 它是「模型 × 协议 × 测法」的一次具体执行：一个载荷只描述**一个目标**，因为队列本身
+ * 已经负责把一批任务排好、并发好、取消好——同一次请求里塞多个目标只会让「进度」与
+ * 「取消」的粒度重新变成一个说不清的东西（见 `apps/docs/specs/overview/task-queue.md`）。
+ *
+ * 它是**队列的载荷**，不是 HTTP 请求体：它由界面按当前选中项与设置拼出来，随
+ * `POST /api/tasks/enqueue` 一次性下发。
  */
-export const ModelTestRunRequestSchema = z.object({
+export const ModelTestTaskItemSchema = z.object({
+  modelId: z.string().trim().min(1),
+  providerId: z.string().trim().min(1),
   protocol: ProtocolSchema,
-  /** 不给模式就是流式：老界面、老脚本发的请求仍然按最朴素的方式跑一次。 */
+  /** 不给模式就是流式：只关心「通不通」的调用方拿到的仍是最全的读数。 */
   mode: ModelTestModeSchema.default('streaming'),
-  providerIds: z.array(z.string()).optional(),
-  modelIds: z.array(z.string()).optional(),
-  /** 每个目标重复测几轮；默认 1，与旧行为逐字相同。 */
+  /** 每个目标重复测几轮；默认 1。 */
   rounds: z.number().int().min(MIN_MODEL_TEST_ROUNDS).default(1),
   /** 自定义提示词；留空按模式取默认值。 */
   prompt: z.string().optional(),
@@ -46,7 +51,99 @@ export const ModelTestRunRequestSchema = z.object({
   inputLength: z.number().int().min(0).default(0),
 })
 
-export type ModelTestRunRequest = z.infer<typeof ModelTestRunRequestSchema>
+export type ModelTestTaskItem = z.infer<typeof ModelTestTaskItemSchema>
+
+/** 去重键里能区分「这是哪一次诊断」的全部参数。 */
+export interface ModelTestTaskKey {
+  modelId: string
+  protocol: Protocol
+  mode: ModelTestMode
+  rounds: number
+  inputLength: number
+}
+
+/**
+ * 键的版本前缀。格式发生变化时升版本，旧键自然认不出来，而不是被半懂不懂地解析。
+ *
+ * 格式：`v1:<编码后的模型 id>:<协议>:<模式>:<轮次>:<输入长度>`
+ *（模型 id 是用户可写的字符串，用 `encodeURIComponent` 编进去，分隔符不会被它切错）。
+ */
+const MODEL_TEST_TASK_KEY_PREFIX = 'v1'
+
+/**
+ * 诊断任务去重键的**唯一构造处**，服务端 `keyOf` 与界面读键共用这一份。
+ *
+ * 键里必须带 `mode` / `rounds` / `inputLength`：只带「模型 × 协议」会把「同一目标换了
+ * 参数重测」误判成重复任务而静默跳过——用户看到的是「点了没反应」。
+ * 反过来，键相同就只能是同一件事：同一目标、同一套参数，确实不该同时在飞两份。
+ */
+export function modelTestTaskKeyOf(identity: ModelTestTaskKey): string {
+  return [
+    MODEL_TEST_TASK_KEY_PREFIX,
+    encodeURIComponent(identity.modelId),
+    identity.protocol,
+    identity.mode,
+    String(identity.rounds),
+    String(identity.inputLength),
+  ].join(':')
+}
+
+/**
+ * 解析 {@link modelTestTaskKeyOf} 的产物；形状不对返回 `null`。
+ *
+ * 返回 `null` 而不是抛：键来自网络上另一头（或一次版本升级之前留下的任务），一条认不
+ * 出来的任务应该被跳过，而不是让整张表渲染失败。
+ */
+export function parseModelTestTaskKey(key: string): ModelTestTaskKey | null {
+  const parts = key.split(':')
+  if (parts.length !== 6) return null
+  const [prefix, encodedModelId, protocolText, modeText, roundsText, inputLengthText] = parts
+  if (prefix !== MODEL_TEST_TASK_KEY_PREFIX) return null
+
+  let modelId: string
+  try {
+    modelId = decodeURIComponent(encodedModelId)
+  } catch {
+    return null
+  }
+  if (modelId.length === 0) return null
+
+  const protocol = ProtocolSchema.safeParse(protocolText)
+  if (!protocol.success) return null
+  const mode = ModelTestModeSchema.safeParse(modeText)
+  if (!mode.success) return null
+
+  // 只认规范写法：`01` 与 `1` 不能是两个能对上的键。
+  const rounds = Number(roundsText)
+  if (!Number.isSafeInteger(rounds) || rounds < MIN_MODEL_TEST_ROUNDS || String(rounds) !== roundsText) return null
+  const inputLength = Number(inputLengthText)
+  if (!Number.isSafeInteger(inputLength) || inputLength < 0 || String(inputLength) !== inputLengthText) return null
+
+  return { modelId, protocol: protocol.data, mode: mode.data, rounds, inputLength }
+}
+
+/**
+ * 诊断任务的进行中画面。
+ *
+ * 身份字段（模型 / 渠道名）要一起带上：任务的 `progress` 是**唯一**能让一个还没跑完
+ *（甚至只是排队中）的任务在界面上说出「我是谁」的东西——通用队列不认识任何业务字段
+ *（见 `@common/tasks` 的 `TaskRecord`）。
+ *
+ * `result` 是**已完成轮次**的汇总结论（`summarizeRounds`），一轮都没跑完时为 `null`；
+ * 它和前一条 `progress` 一样，是同一个「唯一定义处」算出来的值，界面不重算。
+ */
+export interface ModelTestTaskProgress {
+  modelId: string
+  modelName: string
+  providerId: string
+  providerName: string
+  protocol: Protocol
+  mode: ModelTestMode
+  /** 已经跑完的轮数；还没跑完第一轮时是 0。 */
+  round: number
+  totalRounds: number
+  result: ModelTestTaskResult | null
+}
 
 /**
  * 一轮诊断的结论。
@@ -111,10 +208,19 @@ export interface ModelTestResult {
   rounds?: ModelTestRoundResult[]
 }
 
-/** `/api/model-test/run` 的响应体。每个被测目标一条，顺序与目标规划顺序一致。 */
-export interface ModelTestRunResponse {
-  results: ModelTestResult[]
+/**
+ * 一条诊断**任务**的结论：{@link ModelTestResult} 加上它测的是哪个协议。
+ *
+ * 协议为什么不在 `ModelTestResult` 里：那个类型是「一次诊断请求的产出」，而发出请求的那一方
+ * 本来就知道自己请求的是哪个协议，所以它没有把协议抄进结论。队列之后情形反过来了——
+ * 结论由**服务端**产出、由任意一个订阅者消费，谁都不知道这条结论是从哪条任务来的，
+ * 协议必须跟着结论一起走。差异只在这一个字段，所以用交叉类型而不是复制一遍。
+ */
+export interface ModelTestTaskResult extends ModelTestResult {
+  protocol: Protocol
 }
+
+
 
 /**
  * 模型对话框里「连接测试」的一行草稿端点。

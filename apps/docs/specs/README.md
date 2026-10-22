@@ -48,6 +48,7 @@
 | 技术架构 | [tech-architecture.md](./overview/tech-architecture.md) | 技术栈与依赖、构建与打包、仓库顶层结构 |
 | 服务端结构 | [server-architecture.md](./overview/server-architecture.md) | 两个监听服务、模块划分、依赖方向、启动与关闭 |
 | 控制台分层 | [console-architecture.md](./overview/console-architecture.md) | 五层职责与依赖方向、业务逻辑与 React 的分工、`pnpm lint` 里的分层护栏 |
+| 通用任务队列 | [task-queue.md](./overview/task-queue.md) | 进程级队列的生命周期、kind 分工、并发/去重/取消/上限、推送流与外壳浮窗 |
 
 ### 代理与请求（[`proxy/`](./proxy/)）
 
@@ -108,7 +109,7 @@
 | 主题 | 权威文档 | 覆盖范围 |
 |------|---------|---------|
 | 观测 | [observability.md](./operations/observability.md) | 请求日志与正文采集、用量统计、健康状态与冷却 |
-| 渠道诊断 | [diagnostics.md](./operations/diagnostics.md) | 两个入口的分工、探测请求构造、多轮汇总口径、界面队列与取消语义 |
+| 渠道诊断 | [diagnostics.md](./operations/diagnostics.md) | 两个入口的分工、探测请求构造、多轮汇总口径、交付与取消语义 |
 | 安全与隐私 | [security-privacy.md](./operations/security-privacy.md) | 监听边界、访问控制、密钥存储、脚本沙箱、隐私 |
 | 匿名使用统计 | [telemetry.md](./operations/telemetry.md) | 默认开启、界面无任何入口的统计口径、事件白名单、上报链路与分析口径 |
 
