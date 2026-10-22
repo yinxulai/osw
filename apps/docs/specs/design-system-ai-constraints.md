@@ -439,6 +439,6 @@ rg -o --no-filename '\bsize-(5|6|7|8|9|10|11)\b' --glob '*.tsx' . | sort | uniq 
 | 图标 14 档 | [`design-system-icons.md`](./design-system-icons.md) §0 |
 | 5 张表 / 三种实现 | [`design-system-data-display.md`](./design-system-data-display.md) §0 |
 
-**未核实项的完整清单**在各分册末尾，共 **47 项**（tokens 5 / components 4 / accessibility 7 /
-typography 6 / icons 5 / data-display 7 / copy 6 / theming 7）。
+**未核实项的完整清单**在各分册末尾，共 **56 项**（tokens 5 / components 4 / accessibility 7 /
+typography 6 / icons 5 / data-display 7 / copy 6 / theming 7 / colors 9）。
 本文不重复列举，但延续同一条规则：**未核实项不进结论、不写成规则**。

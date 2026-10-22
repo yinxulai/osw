@@ -41,12 +41,14 @@
 | 9 | [`design-system-copy.md`](./design-system-copy.md) | **用语规范**：中英文案语气与长度、出错文案写法 |
 | 10 | [`design-system-theming.md`](./design-system-theming.md) | **明暗两套的验证机制与 checklist** |
 | 11 | [`design-system-ai-constraints.md`](./design-system-ai-constraints.md) | **AI 生成器约束**：允许 / 禁止 / 正确做法 |
+| 12 | [`design-system-colors.md`](./design-system-colors.md) | **颜色体系**：12 步「角色骨架」与色值清单、每个色的来源与用量、实测到的色值冲突、新增颜色 token 的门槛 |
 | — | [`i18n.md`](./i18n.md) | **语言分层与目录契约**（哪一层可切换语言、错误码契约）。本文档第 9 份只补「语气与长度」，不重复它 |
 
 **读法**：
 
 - 想知道「某个数字为什么是这个值」→ 第 2 份（映射与证据）。
 - 想知道「我这段代码该写哪个 token」→ 第 3 份（归位规则）。
+- 想知道「某个颜色值站第几步、为什么是这个色」→ 第 12 份（角色骨架与色值清单）。
 - 想知道「这个 PR 会被打回吗」→ 第 5、10、11 份的清单。
 - 想知道「上游到底怎么写的」→ 第 2 份 §8 的证据来源表，那里是**唯一**登记上游版本与路径的地方。
 
@@ -142,7 +144,9 @@ Radix 不提供"把任意容器变成按钮"的原语。实测仓库里存在 `r
 这意味着换主题、换明暗、换品牌色都不需要改组件。**新增 token 必须延续这个约定。**
 
 > 完整清单、每个 token 的用途与归位规则见
-> [`design-system-tokens.md`](./design-system-tokens.md)。本文不重复列举。
+> [`design-system-tokens.md`](./design-system-tokens.md)；每个色值的**来源、用量与它站在
+> 12 步骨架的第几步**见 [`design-system-colors.md`](./design-system-colors.md)。
+> 本文不重复列举。
 
 ---
 
@@ -186,6 +190,9 @@ PR 涉及界面改动时，先用这张**入口清单**筛一遍；每条都指�
       [`accessibility`](./design-system-accessibility.md) §5
 - [ ] 有没有字面色值、任意像素、`!important` 覆盖 token？（→ 打回）——
       [`tokens`](./design-system-tokens.md) §3、§4
+- [ ] 新增的颜色是否落在 [`colors`](./design-system-colors.md) 的 12 步骨架里，
+      且过了该文 §6 的门槛？（不是"看着好看"就能加）——
+      [`colors`](./design-system-colors.md) §6
 - [ ] 新增状态是否复用了 `components-*` 的既有档位？——
       [`components`](./design-system-components.md) §5
 - [ ] 明暗两套是否都验证过？（`.dark` 覆盖是否补齐）——

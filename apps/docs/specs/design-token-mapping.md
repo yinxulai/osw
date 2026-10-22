@@ -15,7 +15,8 @@
 > [`design-system-icons.md`](./design-system-icons.md)、
 > [`design-system-data-display.md`](./design-system-data-display.md)、
 > [`design-system-copy.md`](./design-system-copy.md)、
-> [`design-system-theming.md`](./design-system-theming.md)）**只引用本文的数值，不重复论证**；
+> [`design-system-theming.md`](./design-system-theming.md)、
+> [`design-system-colors.md`](./design-system-colors.md)）**只引用本文的数值，不重复论证**；
 > 它们各自末尾的「未核实」节只登记**本文没有覆盖的那些**。
 > 文档地图见 [`design-system.md`](./design-system.md) §文档地图。
 

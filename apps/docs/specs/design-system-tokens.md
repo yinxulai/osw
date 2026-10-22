@@ -9,6 +9,9 @@
 > 3. **什么情况下才允许新增 token**（门槛，不是原则口号）。
 >
 > 上游数值与刻度映射不在本文——那是 [`design-token-mapping.md`](./design-token-mapping.md)。
+> **色值的来源、用量与角色骨架**（哪个色站在 12 步的哪一步）也不在本文——
+> 那是 [`design-system-colors.md`](./design-system-colors.md)。两文互链：本文管**清单与归位**，
+> 该文管**值从哪来、站在哪一步**，不重复正文。
 
 ## 范围与不做什么
 

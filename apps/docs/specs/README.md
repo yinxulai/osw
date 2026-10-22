@@ -82,6 +82,7 @@
 | 用语规范 | [design-system-copy.md](./design-system-copy.md) | 中英文语气与长度上限、出错文案骨架、标点、术语表（与 [i18n.md](./i18n.md) 的机制分层不重叠） |
 | 明暗主题机制 | [design-system-theming.md](./design-system-theming.md) | `.dark` 的 4 个读写点、token 与 `dark:` 两套机制、**明暗覆盖完整性的三条静态检查**与 11 项人工检查 |
 | AI 生成器约束 | [design-system-ai-constraints.md](./design-system-ai-constraints.md) | 允许 / 禁止 / 正确做法三段式清单、常见任务配方、提交前自检脚本、不确定时的默认动作 |
+| 颜色体系 | [design-system-colors.md](./design-system-colors.md) | 借 Radix Colors 的 **12 步「角色骨架」**（零依赖、零改值）、12 步 → osw 落位表、完整色值清单（中性 11 档 / 透明 8 档 / 语义族 / 分类色 / 热力）、**实测到的色值冲突**、新增颜色 token 的门槛 |
 
 ### 观测与安全
 
