@@ -24,7 +24,7 @@
 
 **一个主题只在一处展开。** 下表右列是每个主题的权威文档；其它文档提到同一主题时只写一句结论加一个链接，不再复述细节。发现两处描述不一致时，以权威文档和代码为准。
 
-本目录（`specs/`）是**内部产品规格**，只服务实现与评审，**不进静态站**——使用者的「怎么用」写在 [`../source/`](../source/)（分类与布局见 [`../README.md`](../README.md)）。下表按主题聚成几簇，方便定位：**总览 → 代理与请求 → 路由 → 配置与数据 → 观测与安全 → 形态与工程**。
+本目录（`specs/`）是**内部产品规格**，只服务实现与评审，**不进静态站**——使用者的「怎么用」写在 [`../source/`](../source/)（分类与布局见 [`../README.md`](../README.md)）。下表按主题聚成几簇，方便定位：**总览 → 代理与请求 → 路由 → 配置与数据 → 界面与设计系统 → 观测与安全 → 形态与工程**。
 
 ### 总览与架构
 
@@ -63,6 +63,26 @@
 | 数据模型 | [data-model.md](./data-model.md) | 全部表结构与字段定义、JSON 文档版本、初始化与删除规则 |
 | 配置云同步 | [cloud-sync.md](./cloud-sync.md) | 同步范围、承载方式（后端）与凭据、推送/拉取语义、不传播的动作 |
 | 国际化 | [i18n.md](./i18n.md) | 三层语言模型、UI 目录、诊断固定英文、错误码契约、迁移阶段 |
+
+### 界面与设计系统
+
+这一簇的入口是 [`design-system.md`](./design-system.md)（**总纲**：三层取舍原则、红线、文档地图）。
+**一条主题只在一份分册里展开**，总纲只留结论加链接。
+
+| 主题 | 权威文档 | 覆盖范围 |
+|------|---------|---------|
+| 设计系统总纲 | [design-system.md](./design-system.md) | 三层取舍（行为层 Radix / 刻度与状态层借成熟系统 / 品牌层自定）、**不许手写的 7 条红线**、文档地图、全局铁律、评审入口清单 |
+| 上游刻度映射 | [design-token-mapping.md](./design-token-mapping.md) | Carbon / Fluent 2 / Primer → osw 的间距、字号、密度、elevation、状态矩阵对照；**上游证据来源表与未核实项的唯一登记处** |
+| 语义 token 与圆角 | [design-system-tokens.md](./design-system-tokens.md) | 四层 token 结构、语义 token 全清单、**字面色值与调色板类名的逐条归位**、圆角体系、**新增 token 的 4 条门槛**、明暗覆盖账 |
+| 组件 API 约定 | [design-system-components.md](./design-system-components.md) | variant vs 组合的判定树、props 命名 11 条、`components-*` 与组件的关系、**新增组件的 7 条门槛** |
+| 无障碍基线 | [design-system-accessibility.md](./design-system-accessibility.md) | 对比度 / 目标尺寸 / 焦点可见 / 键盘完整性 / 动效降级 / IME / RTL / 播报，含 WCAG 2.2 条文与可执行 checklist |
+| 排版规范 | [design-system-typography.md](./design-system-typography.md) | 两套字阶（`system-*` 与 `text-*` 的 `sm` 冲突）、11px 下限、字重、行高、字距、数字与等宽、截断与换行 |
+| 图标规范 | [design-system-icons.md](./design-system-icons.md) | `lucide-react` 唯一来源、尺寸五档、描边三档、基线与文字对齐、品牌标志与协议图标 |
+| 表单与数据表格 | [design-system-data-display.md](./design-system-data-display.md) | `table-primitives` 类常量、行高与密度、批量操作、空/加载/错误三态、分页 |
+| 用语规范 | [design-system-copy.md](./design-system-copy.md) | 中英文语气与长度上限、出错文案骨架、标点、术语表（与 [i18n.md](./i18n.md) 的机制分层不重叠） |
+| 明暗主题机制 | [design-system-theming.md](./design-system-theming.md) | `.dark` 的 4 个读写点、token 与 `dark:` 两套机制、**明暗覆盖完整性的三条静态检查**与 11 项人工检查 |
+| AI 生成器约束 | [design-system-ai-constraints.md](./design-system-ai-constraints.md) | 允许 / 禁止 / 正确做法三段式清单、常见任务配方、提交前自检脚本、不确定时的默认动作 |
+| 颜色体系 | [design-system-colors.md](./design-system-colors.md) | 借 Radix Colors 的 **12 步「角色骨架」**（零依赖、零改值）、12 步 → osw 落位表、完整色值清单（中性 11 档 / 透明 8 档 / 语义族 / 分类色 / 热力）、**实测到的色值冲突**、新增颜色 token 的门槛 |
 
 ### 观测与安全
 
