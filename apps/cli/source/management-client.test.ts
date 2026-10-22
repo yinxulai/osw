@@ -17,19 +17,31 @@ import { callManagementApi, isPortListening } from './management-client'
 const servers: http.Server[] = []
 
 /** 起一个回环服务，把「收到什么」记下来，返回端口。 */
-async function startServer(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<{ port: number; requests: Array<{ method: string; url: string; body: string }> }> {
-  const requests: Array<{ method: string; url: string; body: string }> = []
+async function startServer(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<{ port: number; requests: Array<RecordedRequest> }> {
+  const requests: Array<RecordedRequest> = []
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = []
     req.on('data', chunk => chunks.push(chunk as Buffer))
     req.on('end', () => {
-      requests.push({ method: req.method ?? '', url: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') })
+      requests.push({
+        method: req.method ?? '',
+        url: req.url ?? '',
+        body: Buffer.concat(chunks).toString('utf8'),
+        headers: req.headers,
+      })
       handler(req, res)
     })
   })
   servers.push(server)
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   return { port: (server.address() as AddressInfo).port, requests }
+}
+
+interface RecordedRequest {
+  method: string
+  url: string
+  body: string
+  headers: http.IncomingHttpHeaders
 }
 
 /** 一个没人监听的端口：先占住再放开，操作系统不会立刻把它分给别人。 */
@@ -56,7 +68,34 @@ describe('callManagementApi', () => {
 
     expect(result).toEqual({ ok: true, data: { running: true, port: 9300 } })
     // 管理 API 全是 POST + JSON；改掉任一条，服务端会拿不到 body。
-    expect(requests).toEqual([{ method: 'POST', url: '/api/proxy/status', body: '{"probe":1}' }])
+    expect(requests[0]).toMatchObject({ method: 'POST', url: '/api/proxy/status', body: '{"probe":1}' })
+  })
+
+  it('sends the management token when one is given', async () => {
+    // 服务端用 `timingSafeEqual` 验的就是这个头；名字大小写在 HTTP 里不敏感，Node 会归一到小写。
+    const { port, requests } = await startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ success: true, data: null }))
+    })
+
+    await callManagementApi({ host: '127.0.0.1', port, path: '/api/proxy/status', token: 'runtime-management-token' })
+
+    expect(requests[0]!.headers['x-osw-token']).toBe('runtime-management-token')
+  })
+
+  it('omits the token header when there is no token', async () => {
+    // 凭证只在宿主内存里，命令行一般拿不到：请求照发，但不要送一个空头——服务端会把
+    // 「没带凭证」与「带了空凭证」记成同一件事，日志里多一条空值只添噪声。
+    const { port, requests } = await startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ success: true, data: null }))
+    })
+
+    for (const token of [undefined, null]) {
+      requests.length = 0
+      await callManagementApi({ host: '127.0.0.1', port, path: '/api/proxy/status', token })
+      expect(requests[0]!.headers['x-osw-token']).toBeUndefined()
+    }
   })
 
   it('sends an empty object when no body is given', async () => {

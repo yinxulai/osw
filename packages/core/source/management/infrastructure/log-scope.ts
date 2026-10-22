@@ -42,7 +42,7 @@ const RULES: ScopeRule[] = [
   { prefix: 'telemetry', scope: 'runtime' },
   { prefix: 'database', scope: 'database' },
   { prefix: 'store', scope: 'database' },
-  { prefix: 'static-web', scope: 'management' },
+  { prefix: 'console-host', scope: 'management' },
   { prefix: 'tray', scope: 'desktop' },
   { prefix: 'updater', scope: 'desktop' },
   { prefix: 'secrets', scope: 'desktop' },

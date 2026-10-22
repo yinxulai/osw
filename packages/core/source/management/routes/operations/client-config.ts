@@ -27,7 +27,7 @@ import { sendSuccess } from '../../core/response'
  * 客户端配置读写。
  *
  * 全部是 POST：这几个入口都会动用户的磁盘文件，而管理 API 的约定就是「只认 POST /api/*」
- * （见 `core/request-guards.ts`），顺带避开浏览器对 GET 的预取/CORS 简化请求。
+ * （见 `gateway/access.ts`），顺带避开浏览器对 GET 的预取/CORS 简化请求。
  *
  * 路径与客户端 key 的合法性校验在 service 里（`resolveClientConfigTarget`）——
  * 注册表只有 core 与 console 共享，把「哪些文件可写」这件事放在路由层会让规则有两份。

@@ -235,7 +235,7 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 
 管理服务在 `/api` 之外还能托管控制台静态产物，由宿主在 `RuntimeConfig.webRoot` 里传入根目录决定是否启用；App 仍用 `loadFile` 以 `file://` 加载、传 `null`。
 
-托管实现落在 `packages/core/source/management/core/static-web.ts`，两个宿主共享同一份行为。落定下来的细节都只在真实 HTTP 交互下才看得出来，因此都有对应单测（真起 `http.createServer` 并 `listen(0)`，不用假的 `ServerResponse`——它用的是 `createReadStream().pipe(res)`，假对象盖不住流式写入）：
+托管实现落在 `packages/core/source/management/gateway/console-host.ts`，两个宿主共享同一份行为。落定下来的细节都只在真实 HTTP 交互下才看得出来，因此都有对应单测（真起 `http.createServer` 并 `listen(0)`，不用假的 `ServerResponse`——它用的是 `createReadStream().pipe(res)`，假对象盖不住流式写入）：
 
 - 入口页不缓存（否则每次升级用户看到的还是旧 HTML），哈希资产一年 immutable。
 - SPA fallback 只在「未命中静态文件且不是 `/api/*`」时生效；带扩展名却没命中的路径**不**回退 HTML，否则一个写错的资源路径会返回 `200` + 一段 HTML，浏览器报的错会指向语法而不是「文件不存在」。
@@ -246,17 +246,21 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 - App：保持 `loadFile`，不启用静态托管（避免多开一个可被局域网访问的入口）。
 - 静态根目录由宿主传入（App 用 asar 内路径，CLI 用包内 `output/web`），core 不硬编码路径。
 
-守卫必须保持：静态托管只挂在管理服务上，默认只监听 `127.0.0.1`。**不做 Host 头白名单校验**：网络可达性交给 `listenHost` 与操作系统防火墙（见 [security-privacy.md](./security-privacy.md)）。这里刻意不叠加第二套应用层白名单——一旦叠上，就只能监听 `localhost` 系名字，「能访问」与「不能访问」的理由就从一处变成两处，而 CLI 形态下用户完全可以自行改 `--host`。
+守卫必须保持：静态托管只挂在管理服务上，默认只监听 `127.0.0.1`。**凭证只注入给 `Host` 指向回环的请求**——页面本身照发不误（前端产物本来就是公开的），但被 rebinding 的域名读不到入口 HTML 里那行 `window.__OSW__`，它的 API 调用就全是 `401`。管理 API 自己不看 `Host`，也不看来源名单。这条判断只对管理服务生效，代理入口不受影响（它的边界是 `listenHost` 与操作系统防火墙）。理由与攻击链路见 [security-privacy.md](./security-privacy.md)。
 
 ### 5.3 前端运行时注入
 
-`packages/console/source/api/client.ts` 在运行时解析 API base，优先级从高到低：
+`packages/console/source/api/client.ts` 在运行时解析 API base 与凭证：
 
-1. `window.__OSW__?.apiBase` —— 宿主注入（目前只有 Electron preload 会注入绝对地址；CLI 托管时不注入，走第 2 条）。
-2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景，无需注入也能工作。
+1. `window.__OSW__?.apiBase` —— 宿主注入绝对地址（Electron preload），顺带上 `window.__OSW__?.apiToken`。
+2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景。这条路径下凭证由管理服务在**入口 HTML 被送出时**注入（`management/gateway/console-host.ts`，插在 `</head>` 之前、`boot.js` 之后），因为浏览器形态没有任何别的渠道能把它交给页面。
 3. 回退到内置默认端口 —— 保证 `dev:preview` 与单测不炸。
 
-这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。
+凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只拿去强制校验。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。
+
+跨进程那一步靠一个 `0600` 的文件：管理服务在 listen 成功后把凭证写到 `<dataDir>/management.token`，退出时删掉（`management/token-file.ts`、`management/server.ts`）。写失败就让启动失败——一个「起得来但停不掉」的进程比一次启动失败更难收拾。`stop` / `status` 也读这份文件；无头截图那个 Electron 进程同理。这三条边界（文件为什么不能是 `runtime.json`、挡得住谁、什么时候消失）都在 `security-privacy.md` 的「访问控制」里。
+
+这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。凭证**不写 `localStorage`**：它每次启动都会变，缓存一份只会让下一次启动读到废值。`pnpm dev:preview` 直接在浏览器打开产物、拿不到任何注入，因此那条通路的管理 API 调用一律 `401`——它只适合看静态界面。
 
 ### 5.4 桌面能力抽象
 
@@ -296,7 +300,7 @@ interface RuntimeConfig {
 - 宿主负责构造：App 用 `app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))`（必须在 `app.whenReady()` 之前设，之后 `app.getPath('userData')` 与 `os.homedir()` 才是同一个答案），`shutdown` 传 `null`（它有自己的退出路径）；CLI 用参数 + `defaultDataDirectory()`，并传入一个退出握手对象（见 §6 的 `stop`）。
 - **两边都不算数据库文件名**：两个库各自带 schema 版本常量，文件名由 `@common/database-file` 从版本号推导。宿主少算一次文件名，就少一个两种形态可能算出不同结果的地方。
 - CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
-- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务不带鉴权，固定监听回环，要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
+- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务固定监听回环，要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
 - `--host` 与 `proxyHost` 的关系要注意：`RuntimeConfig.proxyHost` 只是**默认值**，真正生效的监听地址是设置里的 `listenHost`（用户在界面上改过就以设置为准）。因此「命令行传了 `--host` 却没生效」在已有数据目录上是正常行为，而不是配置没被读到。
 
 数据目录的规则只有一条：**`<用户主目录>/<预设数据目录名>`**，两种形态共用这一条，三个平台也是同一条——不再有「先按平台算 appData 目录、再拼目录名」这一步。App 侧是 `app.setPath('userData', path.join(os.homedir(), profile.dataDirectoryName))`；CLI 侧是 `apps/cli/source/host.ts` 里的 `defaultDataDirectory()`（纯函数，`path.dirname()` 的结果就是 `os.homedir()`，能单测）：
@@ -448,7 +452,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
   - 读到「锁文件存在但内容读不出」时不能立刻当残留删掉：创建与写入之间必然有一瞬是空文件，把这一瞬当成残留会让两个进程同时认为自己拿到了锁。按 mtime 给 5 s 宽限，超过它才是上次崩溃留下的半截文件。
 - **崩溃也要留下干净的现场**。`uncaughtException` / `unhandledRejection` 统一走一次清理（删掉自己写的 `runtime.json`、打印一条 `[cli]` 前缀的说明）后以退出码 `1` 结束，并挂一个 5 s 的兜底定时器防止清理本身卡死；实例锁不归这里管——它由上面那套持有者判定接手，所以清理函数只删自己的文件，不会误伤别人的现场。少了这一段，崩溃一次就会留下「`status` 说在跑、`stop` 停不掉、`start` 又起不来」的三重假象。
 - **`status --json` 与文本输出同源**。两者都由同一份 `InstanceReport` 渲染（`status-report.ts`），字段顺序固定为 `state` / `cliVersion` / `instanceVersion` / `dataDir` / `pid` / `startedAt` / `management` / `proxy` / `consoleUrl` / `staleRuntimeFile` / `portListening`，未知值一律 `null`，不出现给人看的占位符 `—`（脚本拿到 `"—"` 会当成字符串值用下去）。端点写成 `{host, port, url}`：`url` 是**连得过去**的地址，与 `host` 可能不同——`0.0.0.0` 是监听地址，不是可连接地址。
-- **非回环监听时说清楚代价**。启动时若监听地址不是本机回环，往 stderr 打两行告警（代理端口不带鉴权，局域网内任何人可读写）；走 stderr 是为了不让它混进 `--json` 的 stdout，而且告警只提**代理**端口——管理接口虽然也没有凭证（见 [security-privacy.md](./security-privacy.md) 的「访问控制」），但它固定只监听回环、且只服务于自家控制台，拿一句模糊的「无鉴权」把它一起吓进来并不解决问题。
+- **非回环监听时说清楚代价**。启动时若监听地址不是本机回环，往 stderr 打两行告警（代理端口不带鉴权，局域网内任何人可读写）；走 stderr 是为了不让它混进 `--json` 的 stdout，而且告警只提**代理**端口——管理接口有自己的凭证（见 [security-privacy.md](./security-privacy.md) 的「访问控制」），拿一句模糊的「无鉴权」把它一起吓进来并不解决问题。
 - 诊断信息（失效的运行时文件、端口未被监听、CLI 与实例版本不一致）一律走 stderr 且保持英文：它们面向的是日志与排查，不是终端里的用户，`--json` 的 stdout 必须可以原样喂给解析器。
 - 冒烟验证由 `pnpm smoke:cli` 承担（`apps/cli/scripts/smoke.mjs`，9 步、对**构建产物**起真实子进程）：启动并校验横幅不泄露通配地址、管理 API 与 `GET /`、`status --json` 的运行中形态与文本 9 行布局、第二个实例被拒且第一个存活、`stop` 后端口释放与文件清理、伪造的死 pid 运行时文件被识别为「未运行」、`--no-web` 下 `GET /` 为 `404` 而 API 照常、以及各用法错误的退出码。静态检查全绿不等于 CLI 可用——它写文件、占端口、起子进程，这些只有真跑才会暴露。
 
@@ -478,7 +482,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 
 进度与验收状态以 [roadmap.md](./roadmap.md) 的「工程演进」为准；本节只写阶段划分与**还没做完的部分**。
 
-- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口、管理接口去鉴权）。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](./roadmap.md)。
+- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](./security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](./roadmap.md)。
 - **S1「core 可独立运行」跳过**：CLI 在构建期用 Vite 别名直接打包 `core` / `contracts` 的**源码**，不消费它们的独立产物，因此没有驱动这一阶段的需求。代价是 `apps/cli/vite.config.ts` 必须自带一份完整的 `rolldownOptions`（外部化、`platform`、`define`，见 §5.8），不能复用 `vite.shared.ts`——那份外部化了 `electron`。等真有第三方单独消费 `core` 时再做。
 - **S3 App 回归（未开始）**：`apps/app/source` 按 §4.1 目标态拆出 `main/` 与 `preload/`，并复核构建产物映射（`electron-builder` 配置与打包脚本均归 `apps/app/`）。托盘、自动更新、开机自启、原生对话框保持。验收：桌面安装包端到端可用；升级路径（检查更新 → 下载 → 安装）不回归。
 - **S4 分发与文档（未开始）**：CLI 发布形态（npm 全局 bin）+ `engines` 声明 + 使用说明。**CLI 当前明确不发布**，所以 `apps/cli/package.json` 里 `bin` 已就位但 `private: true` 未摘。开工前要先办三件：定 `files`（至少含 `output/` 与 `packages/core/drizzle`，见 §5.7）、确定启动时如何提示 `node:sqlite` 不可用，以及确认 `bin` 入口的 shebang 与执行位在三个平台都成立。

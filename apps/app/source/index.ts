@@ -16,6 +16,9 @@ import {
 import { listCurrentDatabaseFileNames } from '@common/database-file'
 import { createRuntimeConfig } from '@common/runtime-config'
 import { getRuntimeProfile } from '@common/runtime-profile'
+// 只引这一个叶子模块：它只有 `node:crypto` / `node:fs` / `node:path`，不碰数据库，所以不会
+// 把 `node:sqlite` 拖回主进程（那是 `server-host.ts` 整条进程边界要防的事）。
+import { generateManagementToken } from '@server/management/token'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
 import { AutoLaunchManager, shouldStartHidden } from './auto-launch'
@@ -85,6 +88,20 @@ let trayManager: TrayManager | null = null
 let autoLaunchManager: AutoLaunchManager | null = null
 let updaterManager: UpdaterManager | null = null
 let fatalErrorShown = false
+
+/**
+ * 本次**应用启动**的管理 API 凭证。
+ *
+ * 生成放在这里（模块求值 = 应用启动）而不是等服务起来再拿：服务跑在一个可能崩溃重启的
+ * 独立进程里（见 `server-host.ts` 的重启预算），让它自己在每次 `startServer` 时生成的话，
+ * 主进程手里那份会在第一次重启后立刻作废，渲染层随后的每一次请求都 401。
+ *
+ * 只由主进程生成，preload 每次同步取一次交给渲染层。它还会被管理服务写成数据目录里的
+ * 一个 `0600` 文件（见 `@server/management/token-file`），寿命与那个服务进程相同——
+ * `osw stop` / `osw status` 靠它过校验，因为管理 API 的校验**没有例外**。
+ * 这里也绝不写日志。
+ */
+const managementToken = generateManagementToken()
 
 /**
  * 开机自启时不显示主窗口。必须等 `app.ready` 之后再赋值：macOS 的 `wasOpenedAtLogin`
@@ -166,7 +183,8 @@ if (isPrimaryInstance) {
   // （backgroundColor '#00000000'），`setBackgroundColor` 会把透明底换成实色，砸掉面板的浮层观感。
   // 面板的亮暗由渲染层的 `prefers-color-scheme` 跟着变，不依赖这里的底色。
   registerExternalLinkIpc()
-  registerRuntimeConfigIpc(runtimeProfile.managementApiUrl)
+  // 凭证在模块求值时（= 应用启动）就生成好了，不等服务起来，所以这里只是一个取值器。
+  registerRuntimeConfigIpc(runtimeProfile.managementApiUrl, () => managementToken)
   registerOpenDataDirectoryIpc()
   registerScreenshotExportIpc()
   registerWindowThemeIpc()
@@ -484,6 +502,8 @@ async function bootstrap(): Promise<void> {
     appVersion: app.getVersion(),
     runtime: 'desktop',
     dataDir: userDataDir,
+    // 凭证与宿主同寿：服务进程重启不会换一份（见 `managementToken` 的注释）。
+    managementToken,
     // 桌面形态的窗口直接 loadFile 加载控制台产物，不由管理服务托管静态文件。
     serveWeb: false,
   })

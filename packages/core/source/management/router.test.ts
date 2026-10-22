@@ -20,13 +20,4 @@ describe('management router', () => {
     expect(response.statusCode).toBe(404)
     expect(responsePayload(response)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
   })
-
-  it('hides development-only paths outside development', async () => {
-    const response = mockResponse()
-
-    await handleApiRequest(request('/api/development/seed'), response, 'production')
-
-    expect(response.statusCode).toBe(404)
-    expect(responsePayload(response)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
-  })
 })

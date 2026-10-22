@@ -100,23 +100,47 @@ function fire(channel: string, ...args: unknown[]): unknown {
 describe('registerRuntimeConfigIpc', () => {
   it('answers the synchronous runtime:get-config call the preload makes', async () => {
     const { registerRuntimeConfigIpc } = await loadHostIpc()
-    registerRuntimeConfigIpc('http://127.0.0.1:19301/api')
+    registerRuntimeConfigIpc('http://127.0.0.1:19301/api', () => 'runtime-management-token')
 
     // `sendSync` 的调用方读的就是 `event.returnValue`；这里换成 `ipcMain.handle` 就不管用，
     // 渲染进程会一直等下去。
     const event = { returnValue: undefined as unknown }
     fire('runtime:get-config', event)
 
-    expect(event.returnValue).toEqual({ apiBase: 'http://127.0.0.1:19301/api' })
+    expect(event.returnValue).toEqual({
+      apiBase: 'http://127.0.0.1:19301/api',
+      apiToken: 'runtime-management-token',
+    })
     expect(mocks.handlers.has('runtime:get-config')).toBe(false)
+  })
+
+  it('omits the token field while the server has not produced one yet', async () => {
+    // 窗口可能在服务启动完成前就发出请求。宁可回一个没有 `apiToken` 的对象（页面拿到
+    // undefined，请求照常发出、可能 401），也不要阻塞 `sendSync` 等启动——那是主线程卡死。
+    const { registerRuntimeConfigIpc } = await loadHostIpc()
+    let token: string | null = null
+    registerRuntimeConfigIpc('http://127.0.0.1:19301/api', () => token)
+
+    const early = { returnValue: undefined as unknown }
+    fire('runtime:get-config', early)
+    expect(early.returnValue).toEqual({ apiBase: 'http://127.0.0.1:19301/api' })
+
+    // 取的是**每次调用时**的值，不是注册时固定下来的值：凭证在启动完成后才会出现。
+    token = 'runtime-management-token'
+    const later = { returnValue: undefined as unknown }
+    fire('runtime:get-config', later)
+    expect(later.returnValue).toEqual({
+      apiBase: 'http://127.0.0.1:19301/api',
+      apiToken: 'runtime-management-token',
+    })
   })
 
   it('stays idempotent so a second registration cannot silently replace the first', async () => {
     const { registerRuntimeConfigIpc } = await loadHostIpc()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    registerRuntimeConfigIpc('http://127.0.0.1:19301/api')
-    registerRuntimeConfigIpc('http://127.0.0.1:9301/api')
+    registerRuntimeConfigIpc('http://127.0.0.1:19301/api', () => 'token-a')
+    registerRuntimeConfigIpc('http://127.0.0.1:9301/api', () => 'token-b')
 
     // 两条注册若都落下去，后一个监听者会盖掉前一个，行为就取决于调用顺序——那种差异
     // 只会在很怪的复现步骤里炸，所以宁可是「一条日志 + 跳过」。

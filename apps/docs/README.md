@@ -104,6 +104,7 @@ source/
 - **`wrangler.toml` 就在仓库里**（[`apps/docs/wrangler.toml`](./wrangler.toml)），Git 集成会直接用它：只有 `name`、`compatibility_date`、`routes` 和 `[assets]`，因为站点没有 Worker 脚本、没有绑定、没有密钥。它同时是项目配置的**唯一事实来源**。
 - **包管理器**：`pnpm-lock.yaml` 在仓库根，Root directory 指向子目录时 Cloudflare 未必能自动识别。在 Build 的 **Variables and secrets** 里加一条 `PNPM_VERSION`（与仓库根 `package.json` 的 `packageManager` 同版）最稳。
 - **自定义域名**：本文件用 `routes = [{ pattern = "docs.osw.yinxulai.com", custom_domain = true }]`，`npx wrangler deploy` 会顺带创建 DNS 记录并申请证书（前提是 `yinxulai.com` 这个 zone 在同一个 Cloudflare 账号下）。
+- **非生产分支需要 `previews` 块（空块也算）。** push 到非生产分支时 Cloudflare 跑的是 **Preview 命令**（默认 `npx wrangler preview`），它要求配置里存在 `previews` 块，否则直接报 `missing a previews block` 并失败。这条红叉**只出现在 PR 上、`main` 上永远是绿的**（生产分支跑 deploy），所以极易被误判成「这个分支的内容坏了」——其实任何 PR 都会红。本站是纯静态资源，块里不需要任何东西，但块本身不能省；`assets` / `compatibility_date` / `routes` 仍留在顶层。
 - **产物形态**：Clarify 生成的是逐页静态 HTML（`output/<slug>/index.html`）、Pagefind 全文搜索索引、每页的 `.md` 孪生文件与 `llms.txt`。它是**多页站**，不是 SPA，因此 `not_found_handling` 用 `404-page` 而不是 `single-page-application`。
 
 本地想手动部署一次：`pnpm --filter @osw/docs deploy`（需先 `wrangler login` 或配 `CLOUDFLARE_API_TOKEN`）；想只校验配置不真正上传：`pnpm --filter @osw/docs deploy:dry-run`。

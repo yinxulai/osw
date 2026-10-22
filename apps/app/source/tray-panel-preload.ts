@@ -29,11 +29,12 @@ contextBridge.exposeInMainWorld('trayPanel', trayPanelApi)
  * 运行时信息。
  *
  * 同步取的理由与控制台主窗口完全相同：渲染进程从 `file://` 加载，在控制台发出第一个请求
- * 之前就得知道管理服务在哪儿。这个 handler 在 `app.whenReady()` 之前就注册好了，所以同步
- * 调用不会死等。
+ * 之前就得知道管理服务在哪儿、凭什么被它接受。这个 handler 在 `app.whenReady()` 之前就
+ * 注册好了，所以同步调用不会死等。
  */
-const runtime = ipcRenderer.sendSync('runtime:get-config') as { apiBase: string }
+const runtime = ipcRenderer.sendSync('runtime:get-config') as { apiBase: string; apiToken?: string }
 
 contextBridge.exposeInMainWorld('__OSW__', {
   apiBase: runtime.apiBase,
+  ...(runtime.apiToken ? { apiToken: runtime.apiToken } : {}),
 })

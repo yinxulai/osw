@@ -156,7 +156,7 @@ osw/
 | `packages/core/source/management/diagnostics` | 渠道诊断的领域模块：请求构造、流式读取、轮次汇总、目标规划（都不认识 HTTP） | [diagnostics.md](./diagnostics.md) |
 | `packages/core/source/proxy` | 代理请求链路：入口、路由、规划、执行、协议、修饰、观测 | [proxy-engine.md](./proxy-engine.md) |
 | `packages/core/source/database` | SQLite + Drizzle 持久化层与按域拆分的 `*-store.ts` | [data-model.md](./data-model.md) |
-| `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配、Host 校验 | [security-privacy.md](./security-privacy.md) |
+| `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配 | [security-privacy.md](./security-privacy.md) |
 | `packages/contracts/source` | 全形态共享契约（Zod schema、协议表、路由类型、i18n 核心与语言目录） | 各自主题文档、[i18n.md](./i18n.md) |
 | `apps/app/source` | Electron 主进程：窗口、托盘、开机自启、自动更新、密钥存储 | [desktop.md](./desktop.md) |
 | `packages/console/source` | React 控制台：五层分层（组装 / 视图 / 绑定 / 领域 / 传输），业务逻辑不依赖 React | [console-architecture.md](./console-architecture.md) |
