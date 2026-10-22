@@ -124,14 +124,12 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   }
   const requestEvaluation: RewriteEvaluation = {
     appliedRuleIds: [],
-    skippedRuleIds: [],
     skippedRules: [],
     bodyBytesBefore: requestBody.length,
     bodyBytesAfter: requestBody.length,
   }
   const responseEvaluation: RewriteEvaluation = {
     appliedRuleIds: [],
-    skippedRuleIds: [],
     skippedRules: [],
     bodyBytesBefore: 0,
     bodyBytesAfter: 0,
@@ -201,7 +199,7 @@ export async function prepareAttempt(input: PrepareAttemptInput): Promise<Prepar
   }
 
   console.debug(`[proxy] attempt prepared requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} clientProtocol=${protocol} upstreamProtocol=${endpointProtocol} conversion=${adapter.kind === 'conversion'} requestBytes=${requestBody.length} upstreamRequestBytes=${preparedRequest.body.length} timeout=${target.timeoutMilliseconds}ms`)
-  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRuleIds.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
+  console.debug(`[proxy] request rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} rules=${rules.length} applied=${requestEvaluation.appliedRuleIds.length} skipped=${requestEvaluation.skippedRules.length} appliedRuleIds=${requestEvaluation.appliedRuleIds.join(',') || 'none'} bodyBytesBefore=${requestEvaluation.bodyBytesBefore} bodyBytesAfter=${requestEvaluation.bodyBytesAfter}`)
 
   const attemptLogger = createAttemptLogger({
     requestId,

@@ -16,7 +16,6 @@ import { applyRequestRewriteRules } from '@server/proxy/request-rewrite/request-
  */
 export interface RewriteEvaluation {
   appliedRuleIds: string[]
-  skippedRuleIds: string[]
   skippedRules: RewriteSkippedRule[]
   bodyBytesBefore: number
   bodyBytesAfter: number
@@ -108,7 +107,6 @@ function createRequestRewriteModifier(options: RequestModifierOptions): Modifier
       })
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,
-        skippedRuleIds: modified.skippedRuleIds,
         skippedRules: modified.skippedRules,
         bodyBytesBefore: payload.body.length,
         bodyBytesAfter: modified.body.length,

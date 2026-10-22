@@ -53,14 +53,7 @@ export interface RequestRewriteResult {
   body: Buffer
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
-  /**
-   * 被跳过的规则 id。
-   *
-   * 保留这个扁平数组是为了兼容既有调用方与断言；它是 {@link skippedRules} 的派生视图，
-   * 两者永远同源。
-   */
-  skippedRuleIds: string[]
-  /** 与 `skippedRuleIds` 一一对应，但带上原因。诊断与试跑解释都读它。 */
+  /** 被跳过的规则，带上具名原因。诊断与试跑解释都读它。 */
   skippedRules: RewriteSkippedRule[]
   /** 本次执行里所有脚本动作回传的日志（`console.log / warn / error`），供规则试跑展示。 */
   scriptLogs: string[]
@@ -100,7 +93,7 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
     appliedRuleIds.push(rule.id)
   }
   if (currentBody.length > 0) currentHeaders['content-length'] = String(currentBody.length)
-  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds: skippedRules.map(item => item.ruleId), skippedRules, scriptLogs }
+  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRules, scriptLogs }
 }
 
 /**

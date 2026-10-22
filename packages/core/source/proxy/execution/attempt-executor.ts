@@ -250,7 +250,7 @@ async function concludeAttempt(prepared: PreparedAttempt, execution: AttemptExec
   } else {
     // 跳过原因一并打出来：「跳过了 3 条」回答不了用户真正想问的「我的规则为什么没生效」。
     const skipReasons = responseEvaluation.skippedRules.map(item => `${item.ruleId}:${item.reason}`).join(',') || 'none'
-    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRuleIds.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'} skippedReasons=${skipReasons}`)
+    console.debug(`[proxy] response rewrite evaluated requestId=${requestId} attempt=${attemptIndex} target=${formatTarget(target)} mode=${mode} rules=${prepared.rules.length} applied=${responseEvaluation.appliedRuleIds.length} skipped=${responseEvaluation.skippedRules.length} appliedRuleIds=${responseEvaluation.appliedRuleIds.join(',') || 'none'} skippedReasons=${skipReasons}`)
   }
   return await concludeDeliveredAttempt({ ...conclusion, mode })
 }

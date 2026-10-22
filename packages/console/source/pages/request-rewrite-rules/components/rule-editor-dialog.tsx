@@ -181,7 +181,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                             <div className="grid gap-2 rounded-lg border border-module-border bg-inset p-2.5 system-2xs-regular">
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-text-tertiary">
                                 <span>{t('rules.tests.applied', { value: result.appliedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
-                                <span>{t('rules.tests.skipped', { value: result.skippedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
+                                <span>{t('rules.tests.skipped', { value: result.skippedRules.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
                               </div>
                               {result.skippedRules.length > 0 && (
                                 <ul className="grid gap-0.5 text-text-tertiary" data-testid="rule-test-skip-reasons">

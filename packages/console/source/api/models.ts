@@ -15,7 +15,6 @@ export type RequestRewriteTestResult = {
   body: string
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
-  skippedRuleIds: string[]
   skippedRules: Array<{ ruleId: string; reason: string }>
   scriptLogs: string[]
 }

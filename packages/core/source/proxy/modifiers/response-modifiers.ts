@@ -201,7 +201,6 @@ export function createResponseRewriteModifier(options: ResponseModifierOptions):
       })
       options.onRewriteEvaluated({
         appliedRuleIds: modified.appliedRuleIds,
-        skippedRuleIds: modified.skippedRuleIds,
         skippedRules: modified.skippedRules,
         bodyBytesBefore: body.length,
         bodyBytesAfter: modified.body.length,
