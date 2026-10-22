@@ -4,17 +4,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppUiStore } from './app-ui-store'
 
 /*
- * 本地 UI 偏好（主题模式 / 引导是否走完 / 侧栏是否钉住）。
+ * 本地 UI 偏好（主题模式 / 引导是否走完 / 侧栏是否钉住 / 诊断面板开着与最小化）。
  *
- * 这三项的共性是「这台机器上这个人怎么看这个界面」，所以全部存 localStorage 而不是服务端设置：
+ * 这五项的共性是「这台机器上这个人怎么看这个界面」，所以全部存 localStorage 而不是服务端设置：
  * 换一台机器重新来一遍是对的。另外它们都只是**偏好**，不进地址栏、不参与路由。
+ *
+ * 面板那两项也不是「一次性弹窗开关」：关闭面板是一个会被记下来的显式决定（`closePanel`
+ * 写假值），所以记着的值始终等同于用户的意图；而队列在服务端跑，重载界面不该弄丢
+ * 「我正在看的那一批」——角标与浮窗是唯一会报进度的界面。
  */
 
 const STORAGE_KEY = 'osw-ui'
 
 beforeEach(() => {
   window.localStorage.clear()
-  useAppUiStore.setState({ themeMode: 'system', onboardingComplete: false, sidebarPinned: false })
+  useAppUiStore.setState({
+    themeMode: 'system',
+    onboardingComplete: false,
+    sidebarPinned: false,
+    testPanelOpen: false,
+    testPanelMinimized: false,
+  })
 })
 
 describe('默认值', () => {
@@ -58,24 +68,33 @@ describe('setter', () => {
 })
 
 describe('持久化', () => {
-  it('三项都写进 localStorage，键名是 osw-ui', () => {
+  it('五项都写进 localStorage，键名是 osw-ui', () => {
     useAppUiStore.getState().setThemeMode('dark')
     useAppUiStore.getState().setOnboardingComplete(true)
     useAppUiStore.getState().setSidebarPinned(true)
+    // 面板两项特意设成非默认值：断言才会真的证明它们进了存档，而不是「恰好等于默认值」。
+    useAppUiStore.getState().setTestPanelOpen(true)
+    useAppUiStore.getState().setTestPanelMinimized(true)
 
     const raw = window.localStorage.getItem(STORAGE_KEY)
     expect(raw).toBeTruthy()
     expect(JSON.parse(raw as string)).toEqual({
-      state: { themeMode: 'dark', onboardingComplete: true, sidebarPinned: true },
+      state: {
+        themeMode: 'dark',
+        onboardingComplete: true,
+        sidebarPinned: true,
+        testPanelOpen: true,
+        testPanelMinimized: true,
+      },
       version: 0,
     })
   })
 
-  it('只存这三项，函数不会被序列化进去', () => {
+  it('只存这五项，函数不会被序列化进去', () => {
     useAppUiStore.getState().setThemeMode('light')
 
     const persisted = JSON.parse(window.localStorage.getItem(STORAGE_KEY) as string).state
-    expect(Object.keys(persisted).sort()).toEqual(['onboardingComplete', 'sidebarPinned', 'themeMode'])
+    expect(Object.keys(persisted).sort()).toEqual(['onboardingComplete', 'sidebarPinned', 'testPanelMinimized', 'testPanelOpen', 'themeMode'])
   })
 
   it('重新建一份实例时会读回上次写入的值（模拟刷新页面）', async () => {
