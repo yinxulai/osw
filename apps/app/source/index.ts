@@ -455,6 +455,12 @@ function createWindow() {
  *
  * 只在窗口已经存在时才有意义：第一个实例可能还在启动过程里，此时什么都不做——
  * 用户看到的是第一个实例的启动过程，比弹一个「已经在运行」的报错框要好。
+ *
+ * 关到托盘时 `hideWindow()` 会 `dock.hide()`，进程变成 UI element，只 `show()` 窗口
+ * 不会把 Dock 图标变回来。托盘菜单和 `activate` 已经走 `trayManager.showWindow()`
+ * （先等 `dock.show()` 再显示窗口），这里同一条。最小化仍要先 `restore()`：
+ * `showWindow()` 不做这一步，macOS 上 `show()` 也不会把最小化的窗口展开。
+ * 托盘没起来时 Dock 本来就没藏，退回原来的显示和聚焦。
  */
 function focusExistingInstance(): void {
   if (!win) {
@@ -462,6 +468,10 @@ function focusExistingInstance(): void {
     return
   }
   if (win.isMinimized()) win.restore()
+  if (trayManager) {
+    void trayManager.showWindow()
+    return
+  }
   if (!win.isVisible()) win.show()
   win.focus()
 }
