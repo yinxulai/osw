@@ -2,7 +2,7 @@
 
 ## 设计目标
 
-`packages/core/source` 是一个本地模块化服务，当前由 Electron 主进程使用，并服务于测试。它不依赖 Electron，之后作为核心包同时服务于 CLI 与 App，包边界与阶段划分见 [packaging.md](./packaging.md) 与 [tech-architecture.md](./tech-architecture.md)。当前优先让代码按能力聚合、职责清楚，不为尚未出现的复杂度预设完整的领域驱动目录。
+`packages/core/source` 是一个本地模块化服务，当前由 Electron 主进程使用，并服务于测试。它不依赖 Electron，之后作为核心包同时服务于 CLI 与 App，包边界与阶段划分见 [packaging.md](../platform/packaging.md) 与 [tech-architecture.md](./tech-architecture.md)。当前优先让代码按能力聚合、职责清楚，不为尚未出现的复杂度预设完整的领域驱动目录。
 
 遵循四条规则：
 
@@ -49,7 +49,7 @@ packages/core/source/
 │   │   ├── router/                     # 路由工作台：工作流图 / 规则表与各自试跑
 │   │   └── diagnostics/                # 模型测试、协议发现、出站代理测试
 │   └── provider-transfer/              # 供应商包导入导出
-├── proxy/                              # 分层代理链路，分层契约见 proxy-engine.md
+├── proxy/                              # 分层代理链路，分层契约见 ../proxy/proxy-engine.md
 │   ├── contracts/                      # 层间接口与类型
 │   ├── kernel/                         # 与协议无关的搬运内核
 │   ├── request/ response/ upstream/    # 请求解析、响应产出、上游交互
@@ -171,7 +171,7 @@ stateDiagram-v2
 
 1. 两个监听器均为实例，由 `runtime/server-runtime.ts` 持有，不使用模块级可变状态；启动失败必须回滚已启动的监听器与数据库。
 2. 管理 API 按 Provider、LogicalModel、ProviderModel、关系、配置、日志、分析和运行时控制分域，统一由 `management/router.ts` 注册。
-3. 代理入口解析、路由决策、尝试规划与执行、协议描述与适配、传输、响应产出、修改器、请求重写和观测拆为 `proxy/` 下的独立分层目录，分层契约见 [proxy-engine.md](./proxy-engine.md)。
+3. 代理入口解析、路由决策、尝试规划与执行、协议描述与适配、传输、响应产出、修改器、请求重写和观测拆为 `proxy/` 下的独立分层目录，分层契约见 [proxy-engine.md](../proxy/proxy-engine.md)。
 4. SQLite 代码统一在 `database/`，并按 Provider、Model、LogicalModel、Settings、Health、Request Log、Analytics 拆分 store。
 5. 控制台通过 `api/*.ts`、`features/*`、页面 hooks 和 `infrastructure/polling-manager.ts` 分域。
 6. 不保留兼容 facade、re-export、旧 API 别名、旧领域名称或双读双写。

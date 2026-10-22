@@ -1,12 +1,12 @@
 # 本地代理服务
 
 > 本文只描述代理的**行为契约**：协议识别、候选过滤与排序、自动切换、手动切换、错误分类、流式边界、空闲超时与透传规则。
-> 这些契约不随实现重构而变。承载这些行为的模块结构、分层职责、扩展接口与「协议 × 传输」双轴见 [proxy-engine.md](./proxy-engine.md)；出站网络访问见 [outbound-proxy.md](./outbound-proxy.md)；路由落点怎么算出来见 [route-design.md](./route-design.md) §2.10。
+> 这些契约不随实现重构而变。承载这些行为的模块结构、分层职责、扩展接口与「协议 × 传输」双轴见 [proxy-engine.md](./proxy-engine.md)；出站网络访问见 [outbound-proxy.md](./outbound-proxy.md)；路由落点怎么算出来见 [route-design.md](../routing/route-design.md) §2.10。
 
 ## 服务基本信息
 
 - 默认监听 `127.0.0.1` 的可配置端口，不暴露到局域网
-- 客户端只需配置一个统一的服务根地址（如 `http://127.0.0.1:port`），无需按协议区分；填进客户端的 Base URL 按客户端习惯补路径——OpenAI 兼容客户端填 `<origin>/v1`（它自己拼 `/chat/completions` 等），Anthropic 客户端填 `<origin>`（它自己拼 `/v1/messages`），见 [desktop.md](./desktop.md) §引导第二步
+- 客户端只需配置一个统一的服务根地址（如 `http://127.0.0.1:port`），无需按协议区分；填进客户端的 Base URL 按客户端习惯补路径——OpenAI 兼容客户端填 `<origin>/v1`（它自己拼 `/chat/completions` 等），Anthropic 客户端填 `<origin>`（它自己拼 `/v1/messages`），见 [desktop.md](../platform/desktop.md) §引导第二步
 - 支持普通 HTTP 请求和 SSE 流式响应透传
 - 不强制接管系统代理；推荐用户在 AI 工具中配置本地 Base URL
 - 可选的应用级上游出站代理用于 OSW 访问模型供应商，覆盖真实模型请求、连接测试和模型列表获取；协议、绕过规则和安全边界详见 [outbound-proxy.md](./outbound-proxy.md)
@@ -53,7 +53,7 @@
 
 ### 单逻辑模型
 
-v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前生效的路由定义算出的落点逻辑模型绑定关系和客户端协议动态计算一个**自动切换候选列表**。请求中的 `model` 字段必须是非空字符串；代理把它交给当前生效的定义（工作流图或规则表，由 `settings.routeMode` 决定，见 [route-design.md](./route-design.md) §2.11）算出落点——内建默认策略就是「命中某个已启用逻辑模型的 modelId 就用它，否则回落到内建默认逻辑模型 `default`」（详见 [route-design.md](./route-design.md) §2.7）。转发时，客户端模型名会被替换为当前 ProviderModel 的 `modelName`。
+v0.3 MVP 只有兜底逻辑模型 `default`。ProviderModel 通过 `scheduling_policies` 绑定到逻辑模型；每个请求根据当前生效的路由定义算出的落点逻辑模型绑定关系和客户端协议动态计算一个**自动切换候选列表**。请求中的 `model` 字段必须是非空字符串；代理把它交给当前生效的定义（工作流图或规则表，由 `settings.routeMode` 决定，见 [route-design.md](../routing/route-design.md) §2.11）算出落点——内建默认策略就是「命中某个已启用逻辑模型的 modelId 就用它，否则回落到内建默认逻辑模型 `default`」（详见 [route-design.md](../routing/route-design.md) §2.7）。转发时，客户端模型名会被替换为当前 ProviderModel 的 `modelName`。
 
 - 所有未匹配请求只使用 `scheduling_policies` 中绑定到 `default` 的候选项；后续每个逻辑模型都可以维护自己的绑定集合和顺序
 - 同一个 ProviderModel 可以绑定到多个逻辑模型，并在不同逻辑模型中拥有不同的优先级、权重和启用状态

@@ -813,7 +813,7 @@ export function ModelTestPanel(props: ModelTestPanelProps) {
    *
    * 关掉弹窗再打开，上一回填的轮次还在——「这次怎么测」填到第三遍还从 1 开始，
    * 每次都要重填一遍才叫莫名其妙。但它依然不进服务端配置：这是本机习惯，
-   * 换台机器重新来一遍是对的（`apps/docs/specs/diagnostics.md` §5）。
+   * 换台机器重新来一遍是对的（`apps/docs/specs/operations/diagnostics.md` §5）。
    */
   const config = useModelTestConfigStore(state => state.config)
   const setConfig = useModelTestConfigStore(state => state.setConfig)

@@ -13,7 +13,7 @@ import { planDiagnosticTargets, type DiagnosticTargetPlan } from '../../diagnost
  *
  * 它测的是**用户此刻保存的那一份配置**，并且照实记账（请求日志、用量、健康冷却都进）。
  * 与「模型对话框里的连接测试」不是同一件事，两者的分工见
- * `apps/docs/specs/diagnostics.md` §2。
+ * `apps/docs/specs/operations/diagnostics.md` §2。
  *
  * 这个文件只做 HTTP 适配：校验入参、拿 abort 信号、编排「目标 × 轮次」的循环、
  * 把结果写回响应、发一条遥测。请求怎么拼、流怎么读、多轮怎么汇总、哪些目标可测，

@@ -10,7 +10,7 @@ import { buildDiagnosticBody as buildOpenAiResponsesDiagnosticBody } from '../..
  * 这一层只管「发出去的那句话」，不碰网络、不碰数据库、不碰观测。渠道诊断
  * （`/api/model-test/run`）与草稿连接测试（`/api/model/connectivity-test`）共用它，
  * 因为两者要回答的是同一类问题——「这条链路能不能把我这句话送到上游」——只是
- * 一个测已保存的配置、一个测没保存的草稿（见 `apps/docs/specs/diagnostics.md` §2）。
+ * 一个测已保存的配置、一个测没保存的草稿（见 `apps/docs/specs/operations/diagnostics.md` §2）。
  *
  * 正因为共用，它必须住在两侧都能依赖的位置：原先它长在渠道诊断的路由文件里，
  * 连接测试反过来 import 另一个路由文件，路由与路由之间因此有了一条没人说得清的

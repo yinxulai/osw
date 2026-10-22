@@ -18,7 +18,7 @@
 
 - 实现：[`packages/core/source/proxy/protocols/shared/`](../../../packages/core/source/proxy/protocols/shared/)
 - 转换矩阵（哪些方向存在）：[`conversion-registry.ts`](../../../packages/core/source/proxy/protocols/shared/conversion-registry.ts)
-- 产品侧语义（转换开关、候选过滤、失败语义、流式状态机约定）：[`../specs/protocol-conversion.md`](../specs/protocol-conversion.md)
+- 产品侧语义（转换开关、候选过滤、失败语义、流式状态机约定）：[`../specs/proxy/protocol-conversion.md`](../specs/proxy/protocol-conversion.md)
 
 字段级争议以这里的定义为最终裁决：某个字段能不能映射、枚举值取哪几个、usage 该不该相加，都应当能在下面三份文件里找到对应条目。反过来，参考文档里没有写的东西（例如 Responses 快照未收录的事件名）不得在实现里凭印象发明。
 

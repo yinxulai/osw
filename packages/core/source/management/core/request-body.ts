@@ -9,7 +9,7 @@ import { AppError } from '@server/errors'
  * （`x-osw-token`），要么是同用户的本机进程——两者本来就有权改配置、导出密钥。在「已经
  * 验过身份的调用方」和内存之间再插一道闸门，挡不住任何东西，却会让「导入一个大的配置包」
  * 被一个需要解释、需要调参的数字拦住。这是本地工具，不做资源消耗攻击假设——同一条判断在
- * 规则引擎里也是这么下的（见 `apps/docs/specs/request-rewrite-rules.md`）。
+ * 规则引擎里也是这么下的（见 `apps/docs/specs/proxy/request-rewrite-rules.md`）。
  *
  * 守卫在解析正文**之前**跑，所以「路由之外的人撑不爆这个进程」这条依然成立。
  */

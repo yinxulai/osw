@@ -33,7 +33,7 @@ import { initialPayloadText, parseRunPayload, payloadRowsFor } from './run-paylo
  * 这里只有「把状态接进 React」这一件事：状态本身是渲染期的界面状态（选中了哪个节点、
  * 画布是选择还是平移、抽屉开没开、输入框里是什么），它的生命周期就是这张页面的生命周期，
  * 因此不做成 `lib/` 里那种普通类 + 订阅 —— 那套写法留给「组件卸载后还要继续存在」的东西
- * （见 `apps/docs/specs/console-architecture.md` §2）。
+ * （见 `apps/docs/specs/overview/console-architecture.md` §2）。
  *
  * 真正与 React 无关的口径都在 `.ts` 里，各有自己的单测：图的增删改（`graph-ops`）、
  * 服务端摘要与版本号（`route-versions`）、画布投影（`flow-projection`）、试运行负载

@@ -185,11 +185,11 @@ $$\text{TPS} = \frac{\text{输出 Token}}{\text{尝试耗时}}$$
 
 ### 删掉的配置仍可查看，只是多一枚删除标签
 
-逻辑模型、供应商、供应商模型都是软删除（见 [data-model.md](./data-model.md) §8）：删掉一行配置**不会**让引用它的历史记录消失。请求日志里记的是请求当时的模型名快照，尝试列表里记的是供应商名与模型名快照，统计分析也直接从观测库的尝试行分组——这些都读的是**写入当时的事实**，不是当前配置。删掉一条配置，昨天的请求照样在列表里、照样计进统计：「这条 3 天前的失败请求属于哪个供应商」不该因为一次清理动作而变得无从回答。
+逻辑模型、供应商、供应商模型都是软删除（见 [data-model.md](../data/data-model.md) §8）：删掉一行配置**不会**让引用它的历史记录消失。请求日志里记的是请求当时的模型名快照，尝试列表里记的是供应商名与模型名快照，统计分析也直接从观测库的尝试行分组——这些都读的是**写入当时的事实**，不是当前配置。删掉一条配置，昨天的请求照样在列表里、照样计进统计：「这条 3 天前的失败请求属于哪个供应商」不该因为一次清理动作而变得无从回答。
 
 因此这一层唯一缺的就是**「看得出来」**：历史记录上那个名字此刻还对不对应一条活跃配置。列表与详情里判断「已删除」的方式是同一条——`/api/logical-model/list`、`/api/provider/list`、`/api/provider-model/list` 都接受 `includeDeleted`，观测侧把这份全量名单与名字比对，命中一条已软删除的行，就在名字旁边补一枚「已删除」标签（`deleted-tag.tsx`）。标签是**纯展示**：不隐藏记录、不改写名字、不拦截任何操作，只是把「这个名字的主人今天已经不在了」这件事说清楚。
 
-对应的接口契约仍是**配置侧**的：观测路由不 import 配置 schema，两个库的边界照旧（见 [data-model.md](./data-model.md) §7）。
+对应的接口契约仍是**配置侧**的：观测路由不 import 配置 schema，两个库的边界照旧（见 [data-model.md](../data/data-model.md) §7）。
 
 ### 请求详情
 
@@ -479,7 +479,7 @@ WHERE a.createdTime >= ? GROUP BY a.providerId
 | `idx_request_attempts_created_time(createdTime)` | 不带供应商/模型条件的全量统计 | `(providerId, createdTime)` 与 `(providerModelId, createdTime)` 的最左列都不是时间，服务不了全量排行 |
 | `idx_request_usages_created_time` / `idx_attempt_usages_created_time` | 用量聚合 | 过滤条件永远只有时间窗（五种类型总是一起取），`(type, createdTime)` 的最左列用不上 |
 
-**连接与 PRAGMA 层面的调优同样重要。** 这些调优全部落在**数据文件**上（观测数据都存在 `data-<n>.db`）——`initDatabases` 设定 `temp_store = MEMORY`（聚合的 `GROUP BY` / `ORDER BY` 临时 B 树不再落盘）、`cache_size = -64000`（默认页缓存仅 2 MB，扫一遍日志表就被冲干净）、`synchronous = NORMAL`（WAL 下不会因进程崩溃丢已提交数据）、`auto_vacuum = INCREMENTAL`（保留策略删掉的页能被 `reclaimUnusedSpace()` 逐步回收），并在迁移后执行一次 `PRAGMA optimize` 让规划器拿到统计信息——没有统计信息时它按「所有索引一样好」估计，实测正是这一点让它给带时间窗的聚合选了更差的路径。配置库刻意用 `synchronous = FULL`：那里每次写入都是用户资产，不值得为一点写入速度换掉「断电也不丢」。`auto_vacuum` 只在空库上生效，所以顺序修正之前建出的观测库不会自愈，仍需手工执行一次 `PRAGMA auto_vacuum = INCREMENTAL; VACUUM;` 才能转成 INCREMENTAL（启动时不自动执行，见 [data-model.md](./data-model.md) §6）。
+**连接与 PRAGMA 层面的调优同样重要。** 这些调优全部落在**数据文件**上（观测数据都存在 `data-<n>.db`）——`initDatabases` 设定 `temp_store = MEMORY`（聚合的 `GROUP BY` / `ORDER BY` 临时 B 树不再落盘）、`cache_size = -64000`（默认页缓存仅 2 MB，扫一遍日志表就被冲干净）、`synchronous = NORMAL`（WAL 下不会因进程崩溃丢已提交数据）、`auto_vacuum = INCREMENTAL`（保留策略删掉的页能被 `reclaimUnusedSpace()` 逐步回收），并在迁移后执行一次 `PRAGMA optimize` 让规划器拿到统计信息——没有统计信息时它按「所有索引一样好」估计，实测正是这一点让它给带时间窗的聚合选了更差的路径。配置库刻意用 `synchronous = FULL`：那里每次写入都是用户资产，不值得为一点写入速度换掉「断电也不丢」。`auto_vacuum` 只在空库上生效，所以顺序修正之前建出的观测库不会自愈，仍需手工执行一次 `PRAGMA auto_vacuum = INCREMENTAL; VACUUM;` 才能转成 INCREMENTAL（启动时不自动执行，见 [data-model.md](../data/data-model.md) §6）。
 
 结果：分析页一次完整加载从 1403 ms 降到 550 ms（7 天）、从 3088 ms 降到 1479 ms（30 天）；供应商详情页 30 天从 744 ms 降到 206 ms。
 
@@ -494,7 +494,7 @@ WHERE a.createdTime >= ? GROUP BY a.providerId
 
 ## 健康状态与冷却
 
-Provider 与 ProviderModel 两层健康状态的字段定义、索引与保留规则见 [data-model.md](./data-model.md) §3.8；两层冷却如何参与候选过滤与故障转移见 [proxy-engine.md](./proxy-engine.md)。
+Provider 与 ProviderModel 两层健康状态的字段定义、索引与保留规则见 [data-model.md](../data/data-model.md) §3.8；两层冷却如何参与候选过滤与故障转移见 [proxy-engine.md](../proxy/proxy-engine.md)。
 
 - 连续失败达到 `consecutiveFailureThreshold`（默认 3）后进入冷却
 - 冷却从 `cooldownBaseSeconds`（默认 30 秒）起算，上限 `cooldownMaxSeconds`（默认 300 秒）

@@ -15,7 +15,7 @@ export const TEST_CONCURRENCY = 3
  *
  * 值本身记在本机（`localStorage`），所以关掉面板再打开还在——「这次怎么测」和
  * 「这台机器上习惯怎么测」是同一件事的两面，每次都从 1 轮重新填一遍没有意义。
- * 但它不是服务端事实，换台机器不会带走（见 `apps/docs/specs/diagnostics.md` §5）。
+ * 但它不是服务端事实，换台机器不会带走（见 `apps/docs/specs/operations/diagnostics.md` §5）。
  */
 export interface TestConfig {
   concurrency: number

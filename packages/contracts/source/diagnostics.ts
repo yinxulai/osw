@@ -21,7 +21,7 @@ import { ModelTestModeSchema, ProtocolSchema, type ModelTestMode, type Protocol 
  *
  * 这是**定义**不是策略：诊断至少要问一次上游，零轮不是一个有意义的请求。
  * 上界刻意不给——多跑几轮花的是用户自己的钱、等的是用户自己的时间，
- * 替他判断「测到多少算够」没有依据（见 `apps/docs/specs/diagnostics.md` §5）。
+ * 替他判断「测到多少算够」没有依据（见 `apps/docs/specs/operations/diagnostics.md` §5）。
  */
 export const MIN_MODEL_TEST_ROUNDS = 1
 
@@ -77,7 +77,7 @@ export interface ModelTestRoundResult {
 /**
  * 一个「模型 × 协议」目标的诊断结论；顶层是各轮汇总，`rounds` 是逐轮明细。
  *
- * 汇总口径见 `apps/docs/specs/diagnostics.md` §6（全部通过才算通过、状态码取第一个
+ * 汇总口径见 `apps/docs/specs/operations/diagnostics.md` §6（全部通过才算通过、状态码取第一个
  * 失败轮、耗时与用量取均值）。**界面不重新计算这些字段**，否则同一条结论在服务端
  * 日志与界面上会有两个数。
  */
@@ -148,7 +148,7 @@ export type ModelConnectivityRequest = z.infer<typeof ModelConnectivityRequestSc
  *
  * 与 {@link ModelTestResult} 的差别不只是字段少：它**不进观测**（不写请求日志、用量、
  * 健康冷却），因为它测的配置还没落库，没有 `providerModelId` 可挂，也没有「这个端点
- * 服务过一次真实请求」的事实可以记（见 `apps/docs/specs/diagnostics.md` §2）。
+ * 服务过一次真实请求」的事实可以记（见 `apps/docs/specs/operations/diagnostics.md` §2）。
  */
 export interface ModelConnectivityResult {
   protocol: Protocol
@@ -162,7 +162,7 @@ export interface ModelConnectivityResult {
    * 上游原话式的失败没有码，界面直接显示 `errorMessage`。
    */
   errorCode?: string
-  /** `errorCode` 的模板变量。服务端不拼句子，界面按码取文案（见 `apps/docs/specs/i18n.md` §5）。 */
+  /** `errorCode` 的模板变量。服务端不拼句子，界面按码取文案（见 `apps/docs/specs/data/i18n.md` §5）。 */
   errorParams?: TranslateParams
   /** 上游原话或本地诊断原文（英文）。 */
   errorMessage?: string

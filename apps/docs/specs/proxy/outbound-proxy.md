@@ -43,7 +43,7 @@
 ### 非目标
 
 - 不修改操作系统、Shell 或其他应用的代理设置；
-- 不代理 Electron 自动更新、GitHub 发布页、[匿名使用统计](./telemetry.md)或其他非模型网络流量：统计上报用独立直连连接器，用户配的代理只服务于模型请求；
+- 不代理 Electron 自动更新、GitHub 发布页、[匿名使用统计](../operations/telemetry.md)或其他非模型网络流量：统计上报用独立直连连接器，用户配的代理只服务于模型请求；
 - 不在应用内编辑或托管 PAC 脚本；
 - 不为正在进行的请求动态切换代理；
 - 不将代理失败直接解释为 Provider 或 ProviderModel 故障并触发健康冷却；
@@ -136,7 +136,7 @@ outboundProxyBypass: string
 - 设置更新接口；
 - 设置页草稿与保存请求。
 
-上游代理是全局设置，**不进入供应商包**：`/api/provider/export` 只携带单个供应商的端点、模型、自定义设置和可选的明文 API Key（详见 [provider-model.md](./provider-model.md)）。跨机器迁移代理配置需要在新环境的设置页重新填写。缺少新字段时按 `SettingsSchema` 的默认值处理，不做任何兼容升级路径。
+上游代理是全局设置，**不进入供应商包**：`/api/provider/export` 只携带单个供应商的端点、模型、自定义设置和可选的明文 API Key（详见 [provider-model.md](../data/provider-model.md)）。跨机器迁移代理配置需要在新环境的设置页重新填写。缺少新字段时按 `SettingsSchema` 的默认值处理，不做任何兼容升级路径。
 
 ## 安全与隐私
 

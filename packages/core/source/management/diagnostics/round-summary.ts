@@ -4,7 +4,7 @@ import type { ModelTestResult, ModelTestRoundResult } from '@common/diagnostics'
  * 多轮诊断的汇总口径。
  *
  * 这是「一次诊断的结论」的**唯一定义处**：界面不重新算一遍，服务端日志与面板上
- * 也不会出现两个数。口径本身见 `apps/docs/specs/diagnostics.md` §6。
+ * 也不会出现两个数。口径本身见 `apps/docs/specs/operations/diagnostics.md` §6。
  */
 
 /** 汇总后的顶层字段：目标身份（模型 / 渠道 / 模式）由调用方补上。 */

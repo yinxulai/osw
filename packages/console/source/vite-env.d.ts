@@ -94,7 +94,7 @@ interface ElectronAPI {
  *   preload 注入；浏览器形态是 `undefined`，控制台按页面来源自己算（见 `api/client.ts`）。
  * - `apiToken`：管理 API 本次启动的凭证。桌面由 preload 注入，命令行 web 形态由管理服务
  *   注入进它自己发出的入口 HTML。浏览器里直接开 Vite dev server 时两者都没有，
- *   那种形态下 API 会回 401（见 `apps/docs/specs/security-privacy.md`）。
+ *   那种形态下 API 会回 401（见 `apps/docs/specs/operations/security-privacy.md`）。
  */
 interface OswRuntime {
   apiBase?: string

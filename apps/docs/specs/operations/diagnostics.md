@@ -8,7 +8,7 @@
 
 **诊断不是代理请求。** 它借道代理执行链打一次真实上游请求（走同样的地址解析、同样的鉴权头、同样的出站代理），但它的目的只是拿一个结论回来给人看，不服务任何客户端。这个区别决定了本文后面所有的口径。
 
-本文不覆盖：出站代理本身的配置与连通性（见 [outbound-proxy.md](./outbound-proxy.md)）；上游失败如何影响健康冷却（见 [observability.md](./observability.md)）；遥测事件的白名单与命名规则（见 [telemetry.md](./telemetry.md)）。
+本文不覆盖：出站代理本身的配置与连通性（见 [outbound-proxy.md](../proxy/outbound-proxy.md)）；上游失败如何影响健康冷却（见 [observability.md](./observability.md)）；遥测事件的白名单与命名规则（见 [telemetry.md](./telemetry.md)）。
 
 ## 2. 两个入口
 
