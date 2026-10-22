@@ -31,7 +31,7 @@
   - **开发形态不再有凭证读取口**：曾经有个 `POST /api/development/management-token`，前提正是「凭证只活在内存里」。凭证改成无条件校验之后，一个把凭证发出去的接口只能是绕过校验的后门，因此被整个删掉了。开发形态现在干脆不校验凭证，也就更不需要这个接口。
 - **凭证怎么到页面**：桌面形态由主进程通过 preload 注入（`window.__OSW__.apiToken`，主进程自己就是生成方，不靠服务回报）；命令行 `--web` 形态下页面本来就是管理服务自己发的，入口 HTML 在被送出时被注入同一行脚本（`management/gateway/console-host.ts`，入口文件带 `no-cache`，不会被缓存下来）。两条路给页面的是**同一个值**——也就是磁盘上那份，页面不自己读文件。页面侧仍然不写 `localStorage`：凭证每次启动都会变，缓存一份只会让下一次启动读到废值。
   - **例外**：`pnpm dev:preview` 直接在浏览器里开 Vite 产物，等不到宿主注入，拿不到凭证；但开发形态的管理服务不校验凭证，所以它照样能调通，可直接用来调界面与接口。
-  - **无头截图**（`pnpm screenshots`）是另一个 Electron 进程，页面同样是**真浏览器**，所以它必须拿到凭证；它自己从数据目录里读 `management.token`（`apps/app/source/screenshot-export-entry.ts`）。读文件在这里是安全的：那个进程从不 `app.setPath('userData', ...)`，读一个文件不会把它的 Electron 配置目录带偏。
+  - **无头截图**（`pnpm screenshots`）是另一个 Electron 进程，但它连的永远是开发实例，而开发形态不校验凭证，所以它既不需要向服务要凭证、也不需要从数据目录读 `management.token`（`apps/app/source/screenshot-export-entry.ts`）。
 - **跨域**：管理接口回显请求带来的任何 `Origin`（没有来源时回 `*`），并回显预检里 `Access-Control-Request-Headers` 问的那一份头。**这里没有任何名单**。
   - 原因很直接：CORS 只决定浏览器允不允许页面**读响应**，它从来不是防线——真正的门是凭证。而名单只会制造故障：开发期换了个端口、用局域网 IP 打开控制台、将来多加一个自定义头，每一样都要回来改服务端。
   - 允许的方法是 `POST, OPTIONS`（`/api/*` 全部是 POST，`GET` 一律 `405`）；预检没问任何头时回 `*`。来源变化时响应头也跟着变，所以必须带 `Vary: Origin`。

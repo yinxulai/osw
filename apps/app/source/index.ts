@@ -98,7 +98,8 @@ let fatalErrorShown = false
  *
  * 只由主进程生成，preload 每次同步取一次交给渲染层。它还会被管理服务写成数据目录里的
  * 一个 `0600` 文件（见 `@server/management/token-file`），寿命与那个服务进程相同——
- * `osw stop` / `osw status` 靠它过校验，因为管理 API 的校验**没有例外**。
+ * `osw stop` / `osw status` 靠它过校验，因为**正式形态**的管理 API 校验没有例外
+ * （开发形态不校验凭证，那份进程不走这条链路，见 `@server/management/gateway/access.ts`）。
  * 这里也绝不写日志。
  */
 const managementToken = generateManagementToken()

@@ -115,7 +115,7 @@ POST /api/provider/create
 
 这条链以前散在七个文件里，于是「这次启动开了哪些门」要跨文件拼出来。收敛成网关之后，`server.ts` 不知道静态托管、凭证、开发路径这些概念，它只知道一个网关对象和两个 `if`。
 
-凭证那一步在正式形态下**没有例外**：不区分浏览器与本机进程，也不存在开发形态的读取口。凭证本身由服务写在 `<dataDir>/management.token`（`management/token-file.ts`，`0600`），`stop` / `status` 与无头截图都从那读。
+凭证那一步在正式形态下**没有例外**：不区分浏览器与本机进程，也不存在开发形态的读取口。凭证本身由服务写在 `<dataDir>/management.token`（`management/token-file.ts`，`0600`），`stop` / `status` 从那读。
 
 开发形态是唯一的例外：`environment === 'development'` 时跳过凭证检查（`gateway.ts` 传 `requireCredential: false`），让 Vite 页面、调试脚本与自动化脚本不必先去读凭证就能调接口。路径与方法判据不变，正式形态（含命令行 `osw start`）仍然 fail-closed。
 

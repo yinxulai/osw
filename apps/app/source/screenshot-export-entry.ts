@@ -1,9 +1,7 @@
 import { app } from 'electron'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
-import { readManagementToken } from '@server/management/token-file'
 import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
@@ -27,7 +25,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 它不启动服务进程、不开主窗口、不碰数据目录：只开一个受控截图窗口去加载渲染层 dev server，
 // 页面照常从已经跑着的管理服务取数据。因此前提是 `pnpm dev`（或至少控制台 dev server）已经在跑。
 //
-// 凭证靠向那个开发实例要（见下方 `fetchDevelopmentToken`），这是本进程唯一需要连服务的地方。
+// 本进程不向服务要凭证，也不需要从数据目录读 `management.token`：它连的是开发实例，
+// 而开发形态的管理服务不校验凭证（见 `@server/management/gateway/access.ts`）。
 //
 // - `VITE_DEV_SERVER_URL`：渲染层地址，默认 `http://localhost:5173`。
 // - `SCREENSHOT_SET`：拍哪一份编排（见 `source/screenshot-sets.ts`，如 `site` / `docs`）；
@@ -83,30 +82,11 @@ app.on('window-all-closed', () => {
 //   - 应用级的东西（单实例锁、托盘、服务进程、数据目录）——本进程一概不碰。
 //     `app.setPath('userData', ...)` 尤其不能设：与正在跑的应用共用同一个数据目录会让
 //     Chromium 的 userData 单例锁撞在一起，两个 Electron 进程互相干扰。
-//
-// 凭证从**数据目录里的文件**读（见 `@server/management/token-file`）：管理 API 没有例外，
-// 无头截图进程拿着真凭证才能取到数据。开发形态服务由 `pnpm dev` 起，它把凭证写在
-// `.osw-development/management.token`，寿命与那个进程相同。
-//
-// 读一个文件是安全的：这里**没有** `app.setPath('userData', ...)`，不碰 Chromium 的
-// userData 单例锁，也就不会与正在跑的应用互相干扰。
 const developmentProfile = getRuntimeProfile('development')
-const developmentDataDirectory = path.join(os.homedir(), developmentProfile.dataDirectoryName)
 
-// 拿不到就照旧给 `null`：页面会 401，但脚本不会在第一步就死掉——那样连“到底是服务没起
-// 还是凭证不对”都看不出来。
-async function readDevelopmentToken(): Promise<string | null> {
-  try {
-    return await readManagementToken(developmentDataDirectory)
-  } catch {
-    return null
-  }
-}
-
-// 取凭证是异步的，而 preload 用的是 `sendSync`，所以必须在**创建窗口之前**拿到它：
-// 否则第一次 `runtime:get-config` 就会回一份 null，那一整张图的 API 全部 401。
-let developmentToken: string | null = null
-registerRuntimeConfigIpc(developmentProfile.managementApiUrl, () => developmentToken)
+// 凭证 getter 一律回 `null`：开发形态的服务不校验凭证，页面照样能调通。
+// 仍然要注册这一面，因为 preload 的 `sendSync` 没有监听者时渲染进程会永久阻塞（见上）。
+registerRuntimeConfigIpc(developmentProfile.managementApiUrl, () => null)
 registerExternalLinkIpc()
 registerOpenDataDirectoryIpc()
 registerWindowThemeIpc()
@@ -117,13 +97,6 @@ registerWindowFullScreenIpc()
 app.whenReady().then(async () => {
   const outputDirectory = process.env.SCREENSHOT_OUTPUT_DIR
     ?? path.resolve(app.getAppPath(), '..', '..', 'snapshot')
-
-  // 先把凭证拿到手再开窗口，理由见 `developmentToken` 的注释。拿不到不是致命错误：
-  // 页面会 401、图会全是空状态，但至少脚本能跑完并把「为什么是空的」说清楚。
-  developmentToken = await readDevelopmentToken()
-  if (developmentToken === null) {
-    console.warn('[screenshots] could not read the development management token; API calls will return 401 — is `pnpm dev` running?')
-  }
 
   try {
     const result = await exportWebsiteScreenshots({
