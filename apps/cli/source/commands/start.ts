@@ -18,6 +18,7 @@ import { createRuntimeConfig } from '@common/runtime-config'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { ServerEndpoints } from '@server/index'
 import { InstanceLockError } from '@server/runtime/instance-lock'
+import { generateManagementToken } from '@server/management/token'
 import { delay } from '../async'
 import { describeError } from '../errors'
 import { cliTranslator, startCliLanguageSync } from '../native-i18n'
@@ -124,6 +125,10 @@ export async function runStart(values: CliArguments): Promise<number> {
     appVersion: __CLI_VERSION__,
     runtime: 'cli',
     dataDir,
+    // 凭证属于**这一次进程启动**：在调用 `startServer` 之前生成一次，之后不再变。（这里
+    // 就是「应用启动」，命令行形态没有可重启的宿主层，`start` 跑多久就活多久。）管理服务
+    // 会把它写成 `dataDir` 里的一个 `0600` 文件，供 `stop` / `status` 读取。
+    managementToken: generateManagementToken(),
     proxyHost: values.host ?? undefined,
     proxyPort: values.proxyPort ?? undefined,
     managementPort: values.managementPort ?? undefined,

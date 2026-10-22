@@ -76,8 +76,13 @@ const registered = {
  * preload 里是 `sendSync`，所以必须用 `event.returnValue` 而不是 `ipcMain.handle`：
  * 渲染进程从 `file://` 加载，靠页面 URL 推不出管理服务在哪儿，得在第一个请求之前拿到基地址。
  * **注册必须早于任何窗口创建**，否则渲染进程会在这一行上永久等下去。
+ *
+ * 凭证用 getter 传进来而不是直接传值，是为了让每个宿主自己决定它从哪儿来：主进程用自己
+ * 在应用启动时生成的那一份（`index.ts`），无头截图入口用磁盘上那一份（它连的是已经跑着的
+ * 另一个实例）。真拿不到就给 `null`，让前端按「没有凭证」处理（API 会回 401），而不是把
+ * 渲染进程卡在一个永远不会出现的值上。
  */
-export function registerRuntimeConfigIpc(managementApiUrl: string): void {
+export function registerRuntimeConfigIpc(managementApiUrl: string, getApiToken: () => string | null): void {
   if (registered.runtimeConfig) {
     console.warn('[osw] runtime:get-config handler already registered; skipping')
     return
@@ -85,7 +90,8 @@ export function registerRuntimeConfigIpc(managementApiUrl: string): void {
   registered.runtimeConfig = true
 
   ipcMain.on('runtime:get-config', event => {
-    event.returnValue = { apiBase: managementApiUrl }
+    const apiToken = getApiToken()
+    event.returnValue = apiToken ? { apiBase: managementApiUrl, apiToken } : { apiBase: managementApiUrl }
   })
 }
 

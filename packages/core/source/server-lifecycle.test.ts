@@ -20,8 +20,17 @@ const secretStore: SecretStore = {
 
 let temporaryDirectory: string
 
-async function startTestServer(options: StartServerOptions): Promise<void> {
-  await startServer(options)
+/**
+ * 本次运行的管理 API 凭证。
+ *
+ * 真实宿主（桌面 / 命令行）在**应用启动**时生成一次再交给 core，测试这里扮演宿主。
+ * 刻意写死而不是随机：它要是跟着 `startServer` 重算，下面那条「停服再启后同一份凭证
+ * 仍然能用」的断言就永远发现不了回归。
+ */
+const MANAGEMENT_TOKEN = 'test-management-token'
+
+function startTestServer(options: StartServerOptions): Promise<unknown> {
+  return startServer(options)
 }
 
 beforeEach(() => {
@@ -109,6 +118,31 @@ describe('server lifecycle', () => {
     expect((await fetch(`http://127.0.0.1:${newProxyPort}/v1/models`)).status).toBe(200)
   })
 
+  it('keeps the credential the host handed over for the whole run', async () => {
+    const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
+    await initDatabases(temporaryDirectory)
+    await updateSettings({ listenHost: '127.0.0.1', listenPort: proxyPort })
+    await closeDatabases()
+    await startTestServer({
+      secretStore,
+      runtimeConfig: createTestRuntimeConfig(proxyPort, managementPort),
+    })
+
+    const endpoint = `http://127.0.0.1:${managementPort}/api/proxy/status`
+    // 带对的凭证：通；带错的：401。这两条合起来才能证明凭证真的在起作用，
+    // 只测其中一条的话，一个「什么都不校验」的实现也能过。
+    expect(await post(endpoint)).toMatchObject({ success: true })
+    const rejected = await fetch(endpoint, {
+      method: 'POST',
+      // 不带浏览器痕迹也一样是 401：凭证没有例外，`Origin` 与 `Sec-Fetch-*` 不再是判据。
+      headers: { 'Content-Type': 'application/json', 'X-OSW-Token': 'not-the-token', Connection: 'close' },
+      body: '{}',
+    })
+    expect(rejected.status).toBe(401)
+
+    await stopServer()
+  })
+
   it('isolates manual selection by logical model through the management API', async () => {
     const [managementPort, proxyPort] = await Promise.all([getAvailablePort(), getAvailablePort()])
     await initDatabases(temporaryDirectory)
@@ -172,6 +206,7 @@ function createTestRuntimeConfig(proxyPort: number, managementPort: number): Run
     dataDir: temporaryDirectory,
     proxyPort,
     managementPort,
+    managementToken: MANAGEMENT_TOKEN,
   })
 }
 
@@ -180,6 +215,8 @@ async function post(url: string, body: unknown = {}): Promise<unknown> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // 管理 API 只认本次启动的凭证，没这个头一律 401。
+      'X-OSW-Token': MANAGEMENT_TOKEN,
       Connection: 'close',
     },
     body: JSON.stringify(body),

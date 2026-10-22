@@ -113,11 +113,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 /**
  * 运行时信息。
  *
- * 同步取：渲染进程从 `file://` 加载，控制台的第一个请求之前就得知道管理服务在哪儿。
- * 主进程在 `whenReady` 之前就注册了这个 handler，所以同步调用不会死等。
+ * 同步取：渲染进程从 `file://` 加载，控制台的第一个请求之前就得知道管理服务在哪儿、
+ * 凭什么被它接受。主进程在 `whenReady` 之前就注册了这个 handler，所以同步调用不会死等。
+ *
+ * `apiToken` 只在服务已启动时才有（它就是本次启动的凭证），拿不到就不往下传——
+ * 前端会按「没有凭证」处理，而不是带着一个 `undefined` 去发请求。
  */
-const runtime = ipcRenderer.sendSync('runtime:get-config') as { apiBase: string }
+const runtime = ipcRenderer.sendSync('runtime:get-config') as { apiBase: string; apiToken?: string }
 
 contextBridge.exposeInMainWorld('__OSW__', {
   apiBase: runtime.apiBase,
+  ...(runtime.apiToken ? { apiToken: runtime.apiToken } : {}),
 })

@@ -333,6 +333,9 @@ describe('a successful start', () => {
     expect(options.runtimeConfig.proxyHost).toBe('0.0.0.0')
     expect(options.runtimeConfig.proxyPort).toBe(9400)
     expect(options.runtimeConfig.managementPort).toBe(9401)
+    // 凭证属于「这一次进程启动」：由命令行自己生成后交给 core，不是服务里再算一遍。
+    expect(options.runtimeConfig.managementToken).toBeTypeOf('string')
+    expect(options.runtimeConfig.managementToken).toHaveLength(43)
     expect(options.runtimeConfig.serveWeb).toBe(true)
     expect(options.runtimeConfig.webRoot).toBe(mocks.webRoot)
     // 桌面形态不传这个：交出收尾权是命令行专有的（`stop` 靠它停掉另一个进程）。

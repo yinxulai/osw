@@ -12,12 +12,14 @@
  * `JSON.parse` 的文本，两种都不该被附带信息污染。
  */
 
+import { readManagementToken } from '@server/management/token-file'
 import { cliTranslator } from '../native-i18n'
 import { formatEndpoint, resolveDataDirectory } from '../host'
 import { callManagementApi, isPortListening } from '../management-client'
 import { isProcessAlive, readRuntimeState, runtimeFilePath } from '../runtime-state'
 import { renderStatusJson, renderStatusLines, type InstanceReport } from './status-report'
 import type { CliArguments } from '../options'
+
 
 /** 探测端口用。比一次 API 调用短得多：这里只想知道端口开没开，不是等它处理完。 */
 const PORT_PROBE_TIMEOUT_MILLISECONDS = 1_000
@@ -58,10 +60,14 @@ export async function runStatus(values: CliArguments): Promise<number> {
 
     // 探一次就够：它同时回答「管理服务活着吗」与「代理现在在哪个地址」。
     // 代理实际生效的地址来自设置，可能与运行时文件里记的不同（用户在界面上改过）。
+    // 带凭证：管理 API 没有例外，每一条 `/api/*` 都要带（见 core 的
+    // `management/gateway/access.ts`）。凭证由服务写在数据目录里，读不到就不带，
+    // 于是得到 401——那也会被下面归成「进程在但不答应」，与真实情况一致。
     const probe = await callManagementApi({
       host: state.managementHost,
       port: state.managementPort,
       path: '/api/proxy/status',
+      token: await readManagementToken(dataDir),
     })
 
     if (probe.ok) {

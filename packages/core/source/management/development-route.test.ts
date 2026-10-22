@@ -17,9 +17,9 @@ import { developmentRoutes } from './routes/operations/development'
  *   1. 它**允许已有配置**（`{ allowExisting: true }`）。`seedDevelopmentData` 的默认行为是
  *      「有配置就什么都不做」，那对启动时的自动填充是对的，对这个显式点击的接口就变成了
  *      「点了没反应」。
- *   2. 它被 `core/environment-guard.ts` 限制在 development 环境，所以路由里不重复判断环境。
+ *   2. 它被 `gateway/development.ts` 限制在 development 环境，所以路由里不重复判断环境。
  *
- * 路径访问权限（生产回 404）由 `environment-guard` 自己覆盖；这里验的是路由把「插了多少行」
+ * 生产形态回 404 这件事由网关负责（见 `gateway.test.ts`）；这里验的是路由把「插了多少行」
  * 如实回报，以及它在有既有配置时仍然真的写入了。
  */
 

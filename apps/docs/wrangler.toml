@@ -40,6 +40,26 @@ routes = [
   { pattern = "docs.osw.yinxulai.com", custom_domain = true },
 ]
 
+# ---------------------------------------------------------------- 预览构建
+#
+# 空块，但**必须有**。非生产分支的 push 走的是 Cloudflare 的 Worker Previews
+# （Preview 命令默认 `npx wrangler preview`），而那条命令要求配置里存在 `previews`
+# 块——**即使里面什么都没有**。缺了它不是「预览稍微差一点」，而是直接失败：
+#
+#   ✘ Your Wrangler configuration is missing a `previews` block to run this command.
+#
+# 症状具有欺骗性：GitHub 上那条 `Workers Builds: osw-docs` 红叉只出现在 PR 上，
+# `main` 上永远是绿的（生产分支跑 deploy，不跑 preview），于是很容易当成「分支
+# 上的内容有问题」。实际上与本分支改了什么无关，任何 PR 都会红。
+#
+# 为什么是空的：Previews 不继承生产设置，凡是预览独占的东西（变量、绑定、密钥）
+# 都该写在这里；本站是纯静态资源，一件都没有。`assets`、`compatibility_date`、
+# `routes` 留在顶层——文档明确说它们不进 `previews`，进来反而不生效。
+#
+# 位置同样有讲究：`[previews]` 是一张表，写在 `routes` 之后；`routes` 是顶层键，
+# 必须在任何表头之前，否则会落进上一张表里。
+[previews]
+
 # 静态资源：Clarify 构建产物。站点是**多页站**（不是 SPA），未知路径应按 404 处理，
 # 所以用 `not_found_handling = "404-page"`（而非 `single-page-application`）：
 # 找不到资源时返回 404；产物里没有 `404.html` 时 Cloudflare 会给出默认 404 页。

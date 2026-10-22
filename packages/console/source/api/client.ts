@@ -45,11 +45,17 @@ function resolveApiBaseFromEnvironment(fallback: string): string {
 /**
  * 管理 API 的请求头。
  *
- * 只有 `Content-Type`：本版本的管理 API 不带凭证（见 `apps/docs/specs/security-privacy.md`），
- * 它靠回环监听与 CORS 白名单划边界。
+ * 凭证来自宿主注入的 `window.__OSW__.apiToken`（桌面走 preload，命令行 web 形态走入口
+ * HTML 注入，见 `apps/docs/specs/security-privacy.md`）。没有注入时不带这个头——那只发生在
+ * 浏览器里直接开 Vite dev server 的开发预览，那种形态本来就拿不到凭证，服务会回 401。
+ *
+ * 这里不缓存、不落 localStorage：凭证的寿命就是这次进程启动，存起来只会多一份会过期的副本。
  */
 function buildHeaders(): Record<string, string> {
-  return { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = typeof window === 'undefined' ? undefined : window.__OSW__?.apiToken
+  if (token) headers['X-OSW-Token'] = token
+  return headers
 }
 
 /**
@@ -57,7 +63,7 @@ function buildHeaders(): Record<string, string> {
  *
  * 与 `request()` 的唯一区别是它**不读完整份响应**：管理服务会一直往里写，直到任一侧断开。
  * 除这一点之外两者完全同路——同一个基地址、同一套请求头、同一个 `POST` 契约，
- * 因此「只接 `/api/*` 的 `POST` + CORS 白名单」这条边界一条都没破。
+ * 因此「只接 `/api/*` 的 `POST`」这条边界一条都没破。
  *
  * 非 2xx 的响应在这里就抛：把一张错误页当成流去逐行解析，只会在界面上留下一堆
  * 莫名其妙的解析失败，而真正的原因（服务没起来、端点不存在）反而看不见了。

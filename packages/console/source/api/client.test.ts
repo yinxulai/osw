@@ -14,10 +14,15 @@ async function loadClient() {
   return import('./client')
 }
 
-/** `window.__OSW__` 只由 preload 注入；浏览器形态下它就是 undefined。 */
+/** `window.__OSW__` 只由宿主注入；浏览器形态下它就是 undefined。 */
 function injectApiBase(apiBase: string | undefined) {
   if (apiBase === undefined) delete (window as { __OSW__?: unknown }).__OSW__
   else (window as { __OSW__?: { apiBase?: string } }).__OSW__ = { apiBase }
+}
+
+function injectRuntime(apiBase: string | undefined, apiToken: string | undefined) {
+  if (apiBase === undefined && apiToken === undefined) delete (window as { __OSW__?: unknown }).__OSW__
+  else (window as { __OSW__?: { apiBase?: string; apiToken?: string } }).__OSW__ = { apiBase, apiToken }
 }
 
 interface StubLocationShape { protocol: string; origin: string }
@@ -106,7 +111,12 @@ describe('resolveApiBase', () => {
 })
 
 describe('request', () => {
+  beforeEach(() => {
+    injectRuntime(undefined, undefined)
+  })
+
   afterEach(() => {
+    injectRuntime(undefined, undefined)
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -126,6 +136,34 @@ describe('request', () => {
       body: JSON.stringify({ id: 'prov_1' }),
       signal: undefined,
     })
+  })
+
+  it('宿主注入凭证时随每个请求一起发出去', async () => {
+    // 凭证每次启动都会变，所以不能缓存到 localStorage：它只存在于当前这次页面。
+    injectRuntime('http://127.0.0.1:9301/api', 'runtime-management-token')
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, data: null }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { request } = await loadClient()
+
+    await request('/settings/get')
+
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-OSW-Token': 'runtime-management-token',
+    })
+  })
+
+  it('宿主没注入凭证时不发这个请求头，而不是发一个空值', async () => {
+    // `pnpm dev:preview` 和托管前端以外的浏览器页面拿不到凭证；发空头只会让服务端的
+    // 日志里多出一条无意义的记录，不如让 401 干净地出现。
+    injectRuntime('http://127.0.0.1:9301/api', undefined)
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, data: null }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { request } = await loadClient()
+
+    await request('/settings/get')
+
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({ 'Content-Type': 'application/json' })
   })
 
   it('不传 body 时发一个空对象而不是 undefined', async () => {

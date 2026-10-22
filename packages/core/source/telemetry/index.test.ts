@@ -57,6 +57,8 @@ function createConfig(dataDir: string, environment: RuntimeConfig['environment']
     proxyPort: 19_300,
     managementHost: '127.0.0.1',
     managementPort: 19_301,
+    // 遥测不看这个字段，但 `RuntimeConfig` 要求它（宿主在应用启动时生成）。
+    managementToken: 'test-management-token',
     serveWeb: false,
     webRoot: null,
   }
