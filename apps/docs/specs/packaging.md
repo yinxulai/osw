@@ -235,7 +235,7 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 
 管理服务在 `/api` 之外还能托管控制台静态产物，由宿主在 `RuntimeConfig.webRoot` 里传入根目录决定是否启用；App 仍用 `loadFile` 以 `file://` 加载、传 `null`。
 
-托管实现落在 `packages/core/source/management/core/static-web.ts`，两个宿主共享同一份行为。落定下来的细节都只在真实 HTTP 交互下才看得出来，因此都有对应单测（真起 `http.createServer` 并 `listen(0)`，不用假的 `ServerResponse`——它用的是 `createReadStream().pipe(res)`，假对象盖不住流式写入）：
+托管实现落在 `packages/core/source/management/gateway/console-host.ts`，两个宿主共享同一份行为。落定下来的细节都只在真实 HTTP 交互下才看得出来，因此都有对应单测（真起 `http.createServer` 并 `listen(0)`，不用假的 `ServerResponse`——它用的是 `createReadStream().pipe(res)`，假对象盖不住流式写入）：
 
 - 入口页不缓存（否则每次升级用户看到的还是旧 HTML），哈希资产一年 immutable。
 - SPA fallback 只在「未命中静态文件且不是 `/api/*`」时生效；带扩展名却没命中的路径**不**回退 HTML，否则一个写错的资源路径会返回 `200` + 一段 HTML，浏览器报的错会指向语法而不是「文件不存在」。
@@ -253,7 +253,7 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 `packages/console/source/api/client.ts` 在运行时解析 API base 与凭证：
 
 1. `window.__OSW__?.apiBase` —— 宿主注入绝对地址（Electron preload），顺带上 `window.__OSW__?.apiToken`。
-2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景。这条路径下凭证由管理服务在**入口 HTML 被送出时**注入（`management/core/static-web.ts`，插在 `</head>` 之前、`boot.js` 之后），因为浏览器形态没有任何别的渠道能把它交给页面。
+2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景。这条路径下凭证由管理服务在**入口 HTML 被送出时**注入（`management/gateway/console-host.ts`，插在 `</head>` 之前、`boot.js` 之后），因为浏览器形态没有任何别的渠道能把它交给页面。
 3. 回退到内置默认端口 —— 保证 `dev:preview` 与单测不炸。
 
 凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只拿去强制校验、**不落盘**。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。

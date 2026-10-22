@@ -134,7 +134,7 @@ function isPortOpen(port) {
 }
 
 /**
- * 管理 API 全部是 POST，`GET` 一律 405（见 core 的 `management/core/request-guards.ts`）。
+ * 管理 API 全部是 POST，`GET` 一律 405（见 core 的 `management/gateway/access.ts`）。
  *
  * 凭证每次**应用启动**生成、只活在宿主内存里，一行都不落盘，所以这里没有任何「读文件」
  * 的办法。可选的两样东西正好对应守卫的两条路：

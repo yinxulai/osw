@@ -3,20 +3,25 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createStaticWebHost, type StaticWebHost } from './static-web'
+import { createConsoleHost, type ConsoleHost } from './console-host'
 
-// 真起一个 HTTP 服务而不是构造 `ServerResponse` 替身：这条链路里真正容易错的
-// 地方是流式发送与 URL 归一化（`sendFile` 用 `createReadStream().pipe(res)`，
-// 替身得把可写流实现一遍才测得准）。端口用 0，让内核分配。
+/**
+ * 控制台静态托管。
+ *
+ * 真起 HTTP 服务而不是构造 `ServerResponse` 替身：这条链路里真正容易错的地方是流式发送
+ * 与 URL 归一化（`sendFile` 用 `createReadStream().pipe(res)`），替身得把可写流实现一遍
+ * 才测得准。端口用 0，让内核分配。
+ */
+
 let temporaryDirectory: string
+let host: ConsoleHost
 let server: http.Server
-let host: StaticWebHost
 let baseUrl: string
-/** 带凭证的那些用例各起一个服务；`afterEach` 要一并关掉。 */
+/** 带凭证的用例各起一个服务；`afterEach` 要一并关掉。 */
 const extraServers: http.Server[] = []
 
 beforeEach(async () => {
-  temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-static-web-'))
+  temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-console-host-'))
   fs.mkdirSync(path.join(temporaryDirectory, 'assets'))
   fs.writeFileSync(path.join(temporaryDirectory, 'index.html'), '<!doctype html><html><head><title>console</title></head><body></body></html>')
   fs.writeFileSync(path.join(temporaryDirectory, 'assets', 'app-abc123.js'), 'console.log(1)')
@@ -25,18 +30,26 @@ beforeEach(async () => {
   fs.mkdirSync(path.join(temporaryDirectory, 'docs'))
   fs.writeFileSync(path.join(temporaryDirectory, 'docs', 'index.html'), '<!doctype html><title>docs</title>')
 
-  host = createStaticWebHost(temporaryDirectory)
+  host = createConsoleHost(temporaryDirectory, null)
   server = await listenWith(host)
-  const address = server.address()
-  if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
-  baseUrl = `http://127.0.0.1:${address.port}`
+  baseUrl = originOf(server)
 })
 
-/** 一个真实的 HTTP 服务：宿主说「不归我管」时，外面这层把请求当成 API 处理（200 'api'）。 */
-async function listenWith(webHost: StaticWebHost): Promise<http.Server> {
+afterEach(async () => {
+  await Promise.all([server, ...extraServers.splice(0)].map(next => new Promise<void>(resolve => next.close(() => resolve()))))
+  fs.rmSync(temporaryDirectory, { recursive: true, force: true })
+})
+
+function originOf(target: http.Server): string {
+  const address = target.address()
+  if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
+  return `http://127.0.0.1:${address.port}`
+}
+
+/** 一个真实的 HTTP 服务：托管说「不归我管」时，外面这层把请求当成 API 处理（200 `api`）。 */
+async function listenWith(consoleHost: ConsoleHost): Promise<http.Server> {
   const next = http.createServer(async (req, res) => {
-    const handled = await webHost.handle(req, res)
-    if (!handled) {
+    if (!await consoleHost.handle(req, res)) {
       res.statusCode = 200
       res.end('api')
     }
@@ -46,18 +59,16 @@ async function listenWith(webHost: StaticWebHost): Promise<http.Server> {
 }
 
 async function startWithToken(token: string): Promise<string> {
-  const next = await listenWith(createStaticWebHost(temporaryDirectory, token))
+  const next = await listenWith(createConsoleHost(temporaryDirectory, token))
   extraServers.push(next)
-  const address = next.address()
-  if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
-  return `http://127.0.0.1:${address.port}`
+  return originOf(next)
 }
 
 /**
  * 发一条 `Host` 由我们指定的 GET。
  *
  * 不能用 `fetch`：`Host` 是 Fetch 规范的 forbidden header，undici 会静默丢掉它并按 URL
- * 自己生成——那样测的永远是 `127.0.0.1`，用例会「看起来通过了」但其实没测到东西。
+ * 自己生成——那样测的永远是 `127.0.0.1`，用例会「看起来通过了」但什么都没测到。
  */
 async function getWithHost(baseUrlValue: string, pathname: string, hostHeader: string): Promise<string> {
   const url = new URL(pathname, baseUrlValue)
@@ -75,14 +86,7 @@ async function getWithHost(baseUrlValue: string, pathname: string, hostHeader: s
   })
 }
 
-afterEach(async () => {
-  await Promise.all(
-    [server, ...extraServers.splice(0)].map(next => new Promise<void>(resolve => next.close(() => resolve()))),
-  )
-  fs.rmSync(temporaryDirectory, { recursive: true, force: true })
-})
-
-describe('createStaticWebHost', () => {
+describe('serving files', () => {
   it('serves the entry file for the root path', async () => {
     const response = await fetch(`${baseUrl}/`)
 
@@ -133,8 +137,8 @@ describe('createStaticWebHost', () => {
     expect(await response.text()).toContain('docs')
   })
 
-  it('returns false so the api layer keeps ownership of /api paths', async () => {
-    // 用真实的 socket：宿主说「不归我管」时，外面那层会把请求当成 API 处理（这里就是 200 'api'）。
+  it('hands /api paths back to the api layer', async () => {
+    // 用真实的 socket：托管说「不归我管」时，外面那层把请求当成 API 处理。
     for (const pathname of ['/api', '/api/proxy/status']) {
       const response = await fetch(`${baseUrl}${pathname}`)
       expect(response.status).toBe(200)
@@ -142,7 +146,7 @@ describe('createStaticWebHost', () => {
     }
   })
 
-  it('returns false for non GET and HEAD methods', async () => {
+  it('hands non GET and HEAD methods back to the api layer', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'POST' })
 
     expect(response.status).toBe(200)
@@ -154,7 +158,7 @@ describe('createStaticWebHost', () => {
     const secret = path.join(temporaryDirectory, '..', outsideName)
     fs.writeFileSync(secret, 'secret')
     try {
-      // 前两条会被 `URL` 自身归一化掉，最后一条（编码过的斜杠）只有靠 `locateFile`
+      // 前两条会被 `URL` 自身归一化掉，最后两条（编码过的斜杠）只有靠 `locateFile`
       // 的「解析后仍在根目录内」校验才拦得住。
       for (const attempt of [
         `/../${outsideName}`,
@@ -203,9 +207,13 @@ describe('createStaticWebHost', () => {
   })
 })
 
+/*
+ * 凭证注入。
+ *
+ * 管理 API 要凭证，而 `--web` 形态下页面是从这个端口拿到的，没有别的渠道能把它交给页面。
+ * 所以凭证随入口 HTML 一起下发：同源的页面才拿得到，带 `no-cache` 就不会被缓存下来。
+ */
 describe('runtime config injection', () => {
-  // 管理 API 要凭证，而 `--web` 形态下页面是从这个端口拿到的，没有别的渠道能把它交给页面。
-  // 所以凭证随入口 HTML 一起下发：同源的页面才拿得到，带 `no-cache` 就不会被缓存下来。
   const TOKEN = 'injected-management-token'
 
   it('injects the token into the entry file only', async () => {
@@ -235,7 +243,7 @@ describe('runtime config injection', () => {
     }
   })
 
-  it('mentions the token in HEAD headers without sending a body', async () => {
+  it('reports the injected length on HEAD without sending a body', async () => {
     const tokenized = await startWithToken(TOKEN)
 
     const response = await fetch(`${tokenized}/`, { method: 'HEAD' })
@@ -247,7 +255,7 @@ describe('runtime config injection', () => {
   })
 
   it('leaves the entry file untouched when no token is configured', async () => {
-    // 桌面形态用 `loadFile` 加载产物，凭证由 preload 注入，静态托管的 `token` 就是 null。
+    // 桌面形态用 `loadFile` 加载产物，凭证由 preload 注入，这里的 `token` 就是 null。
     const response = await fetch(`${baseUrl}/`)
 
     expect(await response.text()).not.toContain('window.__OSW__')

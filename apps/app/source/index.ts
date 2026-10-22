@@ -98,7 +98,7 @@ let fatalErrorShown = false
  *
  * 只存在于主进程内存里，**不落盘**：preload 每次同步取一次交给渲染层，再无第二个出口。
  * 命令行（`stop` / `status`）与无头截图都读不到它，走的是守卫里那条「本机非浏览器进程
- * 免凭证」的通道（见 `@server/management/core/request-guards`）。这里也绝不写日志。
+ * 免凭证」的通道（见 `@server/management/gateway/access`）。这里也绝不写日志。
  */
 const managementToken = generateManagementToken()
 

@@ -24,7 +24,7 @@
 | 前缀 | 模块 |
 | --- | --- |
 | `proxy`、`proxy-lifecycle` | `proxy` |
-| `management`、`management-lifecycle`、`static-web` | `management` |
+| `management`、`management-lifecycle`、`console-host` | `management` |
 | `runtime`、`service-host`、`osw`、`rpc`、`telemetry` | `runtime` |
 | `database`、`store` | `database` |
 | `tray`、`updater`、`secrets`、`auto-launch`、`screenshots`、`i18n`、`cli` | `desktop` |

@@ -52,7 +52,7 @@ export async function runStop(values: CliArguments): Promise<number> {
     path: '/api/runtime/shutdown',
     // 不带凭证：它只活在宿主的**内存**里（见 `@server/management/token`），我们读不到。
     // 命令行请求没有 `Origin` / `Sec-Fetch-*`，正是守卫判为「非浏览器客户端」的那一类，
-    // 所以能直接进去（见 core 的 `management/core/request-guards.ts`）。
+    // 所以能直接进去（见 core 的 `management/gateway/access.ts`）。
   })
 
   // 不按响应判定成败：服务端收尾时会关掉监听，客户端可能在读完响应前就被断开，

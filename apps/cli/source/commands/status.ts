@@ -59,7 +59,7 @@ export async function runStatus(values: CliArguments): Promise<number> {
     // 探一次就够：它同时回答「管理服务活着吗」与「代理现在在哪个地址」。
     // 代理实际生效的地址来自设置，可能与运行时文件里记的不同（用户在界面上改过）。
     // 不带凭证：它只活在宿主内存里，命令行读不到；请求没有浏览器痕迹，守卫直接放行
-    // （见 core 的 `management/core/request-guards.ts`）。
+    // （见 core 的 `management/gateway/access.ts`）。
     const probe = await callManagementApi({
       host: state.managementHost,
       port: state.managementPort,

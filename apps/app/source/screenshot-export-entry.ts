@@ -2,7 +2,7 @@ import { app } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
-import { DEVELOPMENT_TOKEN_PATH } from '@server/management/core/development-token'
+import { DEVELOPMENT_TOKEN_PATH } from '@server/management/gateway'
 import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
@@ -85,7 +85,7 @@ app.on('window-all-closed', () => {
 //
 // 凭证只能向**已经跑着的那个开发实例**要：本进程没有自己的管理服务，而凭证现在只活在
 // 宿主的内存里（不落盘，见 `@server/management/token`），没有文件可读。开发形态为此开了
-// 一条专用通道（`packages/core/source/management/core/development-token.ts`），它只对
+// 一条专用通道（`packages/core/source/management/gateway/development.ts`），它只对
 // 非浏览器客户端应答，所以这里用 Node 的 `fetch`（不带 `Origin`）直取。
 //
 // 拿不到就照旧给 `null`：页面会 401，但脚本不会在第一步就死掉——那样连“到底是服务没起

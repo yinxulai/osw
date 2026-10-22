@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
-import { hasLoopbackHost, isLoopbackHost } from './loopback-host'
+import { hasLoopbackHost, isLoopbackHost } from './loopback'
 
 function requestWithHost(host: string | undefined): IncomingMessage {
   const headers: Record<string, string> = {}
@@ -38,5 +38,13 @@ describe('hasLoopbackHost', () => {
   it('treats a missing Host as not loopback', () => {
     // 凭证不能发给一条说不清自己奔着谁来的请求。
     expect(hasLoopbackHost(requestWithHost(undefined))).toBe(false)
+  })
+
+  it('does not crash on a repeated Host header that collapses to an array', () => {
+    // 判据是「明确指向回环」，说不清的输入一律按否处理——回退到 `false` 只会让页面
+    // 少一行注入，而不是把一个畸形请求变成放行。
+    const request = { headers: { host: ['127.0.0.1', 'evil.example.com'] } } as unknown as IncomingMessage
+
+    expect(hasLoopbackHost(request)).toBe(false)
   })
 })

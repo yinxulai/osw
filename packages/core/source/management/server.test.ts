@@ -1,41 +1,31 @@
+import fs from 'node:fs'
 import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError } from '../errors'
 import { startManagementServer, stopManagementServer, type ManagementServerOptions } from './server'
 
 /**
- * 管理服务的生命周期与请求边界。
+ * 管理服务的**生命周期**与**日志分级**。
  *
- * 三个协作者——静态托管、请求守卫、API 路由——各自有自己的测试，这里替身掉它们，
- * 只盯 `server.ts` 自己负责的那几件事：**谁先接手一个请求**、成功/失败各留什么级别的日志、
- * 请求边界上的异常是回一份 4xx/5xx 还是直接掐掉连接，以及启停的幂等性。
- * 监听用真实的 `http.Server`（端口 0）：要被验的正是 listen / close 这段真实行为。
+ * 访问控制、静态托管、开发路径这些判断都不在这里，它们归 `./gateway.ts` 及其测试。这里
+ * 只盯三件 `server.ts` 自己负责的事：listen / close 的幂等性，写不下去时的兜底，以及一条
+ * 请求跑完之后记成什么级别——它明明只影响日志，却和访问控制写在同一段 `if` 里很久。
+ *
+ * 监听用真实的 `http.Server`（端口 0），请求也真的发出去：要被验的正是 listen / close
+ * 这段真实行为。唯一被替身的是路由，因为它会连数据库。
  */
 
-const mocks = vi.hoisted(() => ({
-  createStaticWebHost: vi.fn(),
-  applyManagementRequestGuards: vi.fn(),
-  handleApiRequest: vi.fn(),
-}))
+const mocks = vi.hoisted(() => ({ handleApiRequest: vi.fn() }))
 
-vi.mock('./core/static-web', () => ({ createStaticWebHost: mocks.createStaticWebHost }))
-vi.mock('./core/request-guards', () => ({ applyManagementRequestGuards: mocks.applyManagementRequestGuards }))
 vi.mock('./router', () => ({ handleApiRequest: mocks.handleApiRequest }))
 
-/** 本次启动的凭证。它只是被原样往下传，所以固定值就够。 */
-const TOKEN = 'test-management-token'
-
-/** 被替身的静态托管：`handle` 的结果决定这条请求是否已经在它那里结束。 */
-let webHandle: ReturnType<typeof vi.fn>
+let temporaryDirectory: string | null = null
 
 beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => undefined)
-  webHandle = vi.fn(async () => false)
-  mocks.createStaticWebHost.mockReset()
-  mocks.createStaticWebHost.mockReturnValue({ root: 'C:/console', handle: webHandle })
-  mocks.applyManagementRequestGuards.mockReset()
-  mocks.applyManagementRequestGuards.mockResolvedValue(true)
   mocks.handleApiRequest.mockReset()
   mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.statusCode = 200
@@ -45,6 +35,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   await stopManagementServer()
+  if (temporaryDirectory) fs.rmSync(temporaryDirectory, { recursive: true, force: true })
+  temporaryDirectory = null
   vi.restoreAllMocks()
 })
 
@@ -54,26 +46,11 @@ async function start(options: ManagementServerOptions = {}): Promise<{ server: h
   return { server, origin: `http://127.0.0.1:${address.port}` }
 }
 
-/**
- * 发一条 `Host` 由我们指定的 GET。
- *
- * 不能用 `fetch`：`Host` 是 Fetch 规范的 forbidden header，undici 会静默丢掉它并按 URL
- * 自己生成——那样请求的永远是 `127.0.0.1`，用例会「看起来通过了」但什么都没测到。
- */
-async function getWithHost(baseUrl: string, pathname: string, hostHeader: string): Promise<{ status: number; body: string }> {
-  const url = new URL(pathname, baseUrl)
-  return new Promise((resolve, reject) => {
-    const request = http.request(
-      { hostname: url.hostname, port: url.port, path: url.pathname, method: 'GET', headers: { host: hostHeader } },
-      response => {
-        const chunks: Buffer[] = []
-        response.on('data', (chunk: Buffer) => chunks.push(chunk))
-        response.on('end', () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }))
-      },
-    )
-    request.on('error', reject)
-    request.end()
-  })
+/** 一份最小的控制台产物目录，用于验证「静态托管确实排在所有门之前」。 */
+function createWebRoot(): string {
+  temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-server-'))
+  fs.writeFileSync(path.join(temporaryDirectory, 'index.html'), '<!doctype html><html><head></head><body>console</body></html>')
+  return temporaryDirectory
 }
 
 describe('startManagementServer', () => {
@@ -109,100 +86,57 @@ describe('startManagementServer', () => {
   })
 })
 
-describe('request boundary', () => {
-  it('lets the static host take a request first, and stops there', async () => {
-    webHandle.mockImplementation(async (_req, res: http.ServerResponse) => {
-      res.statusCode = 200
-      res.end('index.html')
-      return true
-    })
-    const { origin } = await start({ webRoot: 'C:/console', environment: 'production' })
+describe('the request boundary', () => {
+  it('serves the console before any access check runs', async () => {
+    // 页面必须能从自己的端口加载，所以静态托管排在凭证之前——否则命令行 `--web` 形态
+    // 连登录页都打不开。
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { origin } = await start({ webRoot: createWebRoot(), token: 'test-management-token' })
 
     const response = await fetch(`${origin}/runtime-settings`)
 
-    expect(await response.text()).toBe('index.html')
-    // 静态托管的 SPA 回退必须拿到未被改写过的请求，所以它在守卫与路由之前。
-    // 凭证注入那一侧的 Host 判断归 `static-web.ts` 自己管，不在这条链路上。
-    expect(mocks.applyManagementRequestGuards).not.toHaveBeenCalled()
+    expect(await response.text()).toContain('console')
     expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('serves the console to a request whose Host is not loopback', async () => {
-    // 以前这里会被 403 掉。凭证成为唯一的门之后，`Host` 不再是访问控制：前端产物
-    // 本来就是公开的，挡住它只会让「用局域网 IP 打开」这种正常用法失效。真正会泄漏的
-    // 是注入进入口 HTML 的凭证，那道判断收在 `static-web.ts` 里（见它的测试）。
-    webHandle.mockImplementation(async (_req, res: http.ServerResponse) => {
-      res.statusCode = 200
-      res.end('index.html')
-      return true
-    })
-    const { origin } = await start({ webRoot: 'C:/console', environment: 'production' })
-
-    const response = await getWithHost(origin, '/runtime-settings', 'evil.example.com')
-
-    expect(response.status).toBe(200)
-    expect(response.body).toBe('index.html')
-  })
-
-  it('does not create a static host when no web root is given', async () => {
+  it('logs a plain success at debug', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
     const { origin } = await start({ environment: 'production' })
 
-    const response = await fetch(`${origin}/api/anything`, { method: 'POST' })
+    await fetch(`${origin}/api/settings/get`, { method: 'POST' })
 
-    expect(await response.text()).toBe('ok')
-    expect(mocks.createStaticWebHost).not.toHaveBeenCalled()
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('outcome=api'))
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('status=200'))
   })
 
-  it('stops at the guard when it turns the request down, and logs it as a warning', async () => {
-    mocks.applyManagementRequestGuards.mockImplementation(async (_req, res: http.ServerResponse) => {
-      res.statusCode = 404
-      res.end('not found')
-      return false
-    })
+  it('logs the step a rejected request stopped at, as a warning', async () => {
+    // 日志里必须能看出「它没走到路由」，否则一个 404 到底是路径不对还是路由没实现
+    // 就只能靠猜。拒绝只打一条 completed，不该再补一条 debug 把同一件事说两遍。
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
     const { origin } = await start({ environment: 'production' })
 
     const response = await fetch(`${origin}/not-an-api-path`)
 
     expect(response.status).toBe(404)
     expect(mocks.handleApiRequest).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('handled by guard'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('outcome=rejected'))
+    expect(debug).not.toHaveBeenCalledWith(expect.stringContaining('outcome=rejected'))
   })
 
   it('logs a rejected preflight at debug, not as a warning', async () => {
     // 浏览器对每个跨源请求都会先问一次 OPTIONS。把它记成 warn 会让日志里全是
     // 这条预期之内的拒绝，真正的问题被淹掉。
-    mocks.applyManagementRequestGuards.mockImplementation(async (_req, res: http.ServerResponse) => {
-      res.statusCode = 204
-      res.end()
-      return false
-    })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
     const { origin } = await start({ environment: 'production' })
 
-    await fetch(`${origin}/api/settings/get`, { method: 'OPTIONS' })
+    const response = await fetch(`${origin}/api/settings/get`, { method: 'OPTIONS' })
 
-    expect(debug).toHaveBeenCalledWith(expect.stringContaining('handled by guard'))
+    expect(response.status).toBe(204)
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('outcome=rejected'))
     expect(warn).not.toHaveBeenCalled()
-  })
-
-  it('passes the configured environment down to the API layer', async () => {
-    const { origin } = await start({ environment: 'development' })
-
-    await fetch(`${origin}/api/settings/get`, { method: 'POST' })
-
-    expect(mocks.handleApiRequest).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'development')
-  })
-
-  it('hands the token to both the guard and the static host', async () => {
-    const { origin } = await start({ webRoot: 'C:/console', token: TOKEN })
-
-    // 静态托管要用它把凭证注入进 HTML，守卫要用它验每一个 API 请求：同一份值，两处都拿得到。
-    expect(mocks.createStaticWebHost).toHaveBeenCalledWith('C:/console', TOKEN)
-
-    await fetch(`${origin}/api/settings/get`, { method: 'POST' })
-    expect(mocks.applyManagementRequestGuards).toHaveBeenCalledWith(expect.anything(), expect.anything(), TOKEN)
   })
 
   it('marks a 5xx as an error and a 4xx as a warning', async () => {
@@ -210,14 +144,14 @@ describe('request boundary', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const { origin } = await start({ environment: 'production' })
 
-    mocks.handleApiRequest.mockImplementation(async (_req, res: http.ServerResponse) => {
+    mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.statusCode = 503
       res.end('nope')
     })
     await fetch(`${origin}/api/broken`, { method: 'POST' })
     expect(error).toHaveBeenCalledWith(expect.stringContaining('status=503'))
 
-    mocks.handleApiRequest.mockImplementation(async (_req, res: http.ServerResponse) => {
+    mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.statusCode = 400
       res.end('bad')
     })
@@ -230,7 +164,7 @@ describe('request boundary', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     let clock = 0
     vi.spyOn(Date, 'now').mockImplementation(() => clock)
-    mocks.handleApiRequest.mockImplementation(async (_req, res: http.ServerResponse) => {
+    mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       clock = 20_000
       res.statusCode = 200
       res.end('slow')
@@ -243,7 +177,7 @@ describe('request boundary', () => {
   })
 
   it('answers a request-boundary failure with a real error response', async () => {
-    mocks.applyManagementRequestGuards.mockRejectedValue(new AppError('VALIDATION_ERROR', 400, 'bad host header'))
+    mocks.handleApiRequest.mockRejectedValue(new AppError('VALIDATION_ERROR', 400, 'bad request body'))
     const { origin } = await start({ environment: 'production' })
 
     const response = await fetch(`${origin}/api/settings/get`, { method: 'POST' })
@@ -253,62 +187,18 @@ describe('request boundary', () => {
   })
 
   it('hangs up instead of writing a second response once headers are out', async () => {
-    // 已经在往下流的时候再 `sendError` 只会抛 ERR_HTTP_HEADERS_SENT，把真实原因盖掉。
+    // 已经在往下流的时候再 `sendError` 只会抛 `ERR_HTTP_HEADERS_SENT`，把真实原因盖掉。
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    mocks.handleApiRequest.mockImplementation(async (_req, res: http.ServerResponse) => {
+    mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.statusCode = 200
       res.write('partial')
       throw new Error('upstream died mid-body')
     })
     const { origin } = await start({ environment: 'production' })
 
-    await expect(fetch(`${origin}/api/streamed`, { method: 'POST' })).rejects.toThrow()
+    // 响应头已经发出去了，所以 `fetch` 本身会成功；断开发生在读 body 的时候。
+    await expect(fetch(`${origin}/api/streamed`, { method: 'POST' }).then(response => response.text())).rejects.toThrow()
     expect(error).toHaveBeenCalledWith(expect.stringContaining('request boundary failed'), expect.anything())
-  })
-})
-
-/*
- * 开发形态的凭证读取口。
- *
- * 这个口存在的唯一理由：无头截图是一个**另外的** Electron 进程，要驱动一个真浏览器去连
- * `pnpm dev` 那个实例，而凭证只在宿主内存里、磁盘上没有。所以三道边界必须一起断言，
- * 缺一条都会变成「生产环境上有个能白拿凭证的接口」：
- *   1. 只有 `environment === 'development'` 才应答；
- *   2. 只有宿主真的生成了凭证（`token !== null`）才应答；
- *   3. 只有非浏览器客户端能拿到（这一条由 `request-guards` 负责，不在这里重复）。
- */
-describe('the development token endpoint', () => {
-  it('answers with the token in development', async () => {
-    const { origin } = await start({ environment: 'development', token: TOKEN })
-
-    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ success: true, data: { token: TOKEN } })
-    // 它是旁路，不该顺路把真实路由也跑一遍。
-    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
-  })
-
-  it('never answers outside development', async () => {
-    // 生产形态下这条路径必须不存在。断言到「没走到这条路」为止，而不是只看状态码：
-    // 路由层回 404 与这里有意的静默是两件不同的事，混淆会让以后有人顺手放宽环境判断。
-    const { origin } = await start({ environment: 'production', token: TOKEN })
-
-    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
-
-    expect(response.status).toBe(200) // 落到被替身的路由，真实路由会回 404
-    expect(mocks.handleApiRequest).toHaveBeenCalled()
-  })
-
-  it('falls through when the host did not hand over a token', async () => {
-    // 没有凭证时回一份 `token: null` 更糟：调用方会以为「宿主这次没生成」，
-    // 带着空凭证去撞 401，而真正的原因（这条路径根本没开）就被掩掉了。
-    const { origin } = await start({ environment: 'development', token: null })
-
-    const response = await fetch(`${origin}/api/development/management-token`, { method: 'POST' })
-
-    expect(response.status).toBe(200)
-    expect(mocks.handleApiRequest).toHaveBeenCalled()
   })
 })
 

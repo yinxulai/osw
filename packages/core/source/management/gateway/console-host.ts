@@ -27,8 +27,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createReadStream } from 'node:fs'
-import { hasLoopbackHost } from './loopback-host'
-import { sendError } from './response'
+import { hasLoopbackHost } from './loopback'
+import { sendError } from '../core/response'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -55,7 +55,7 @@ const CONTENT_TYPES: Record<string, string> = {
 /** 带扩展名的路径按资源处理：找不到就 404，不做 SPA 回退。 */
 const HAS_EXTENSION = /\.[a-z0-9]+$/i
 
-export interface StaticWebHost {
+export interface ConsoleHost {
   /** 静态产物根目录（绝对路径）。 */
   readonly root: string
   /**
@@ -67,7 +67,7 @@ export interface StaticWebHost {
   handle(req: IncomingMessage, res: ServerResponse): Promise<boolean>
 }
 
-export function createStaticWebHost(webRoot: string, token: string | null = null): StaticWebHost {
+export function createConsoleHost(webRoot: string, token: string | null): ConsoleHost {
   const root = path.resolve(webRoot)
   const indexFile = path.join(root, 'index.html')
 
@@ -85,7 +85,7 @@ export function createStaticWebHost(webRoot: string, token: string | null = null
       if (pathname === '/api' || pathname.startsWith('/api/')) return false
 
       // 凭证只交给「奔着回环来的」请求，理由见文件头注释。判断在**每次请求**上做，
-      // 不能放到 `createStaticWebHost` 里——那样就把一个 per-request 的事实冻成了启动配置。
+      // 不能放到 `createConsoleHost` 里——那样就把一个 per-request 的事实冻成了启动配置。
       const tokenForRequest = hasLoopbackHost(req) ? token : null
 
       const file = locateFile(root, pathname)
@@ -95,7 +95,7 @@ export function createStaticWebHost(webRoot: string, token: string | null = null
       }
 
       if (HAS_EXTENSION.test(pathname)) {
-        console.warn(`[static-web] asset not found root=${root} path=${pathname}`)
+        console.warn(`[console-host] asset not found root=${root} path=${pathname}`)
         sendError(res, 'RESOURCE_NOT_FOUND', `Static asset not found: ${pathname}`, 404, { path: pathname })
         return true
       }
@@ -144,10 +144,10 @@ function statOrNull(target: string): fs.Stats | null {
   }
 }
 
-async function sendFile(res: ServerResponse, file: string, headOnly: boolean, token: string | null = null): Promise<void> {
+async function sendFile(res: ServerResponse, file: string, headOnly: boolean, token: string | null): Promise<void> {
   const stat = statOrNull(file)
   if (!stat?.isFile()) {
-    console.error(`[static-web] index file is missing file=${file}`)
+    console.error(`[console-host] index file is missing file=${file}`)
     sendError(res, 'RESOURCE_NOT_FOUND', 'Static asset not found', 404)
     return
   }
@@ -176,7 +176,7 @@ async function sendFile(res: ServerResponse, file: string, headOnly: boolean, to
   await new Promise<void>(resolve => {
     const stream = createReadStream(file)
     stream.on('error', error => {
-      console.error(`[static-web] read failed file=${file}`, error)
+      console.error(`[console-host] read failed file=${file}`, error)
       if (res.headersSent) res.destroy(error)
       else sendError(res, 'INTERNAL_ERROR', 'Failed to read static asset', 500)
       resolve()
@@ -205,7 +205,7 @@ async function injectRuntimeConfig(file: string, token: string): Promise<string 
   } catch (error) {
     // 读不出来就退回原始流式响应：页面照常打开，只是 API 调用会 401，
     // 这比「首页打不开」更容易被用户看懂，也不掩盖真正的问题。
-    console.error(`[static-web] inject failed file=${file}`, error)
+    console.error(`[console-host] inject failed file=${file}`, error)
     return null
   }
 }

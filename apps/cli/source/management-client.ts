@@ -29,7 +29,7 @@ export interface ManagementCallOptions {
    *
    * 凭证只在宿主的**内存**里（见 `@server/management/token`），不落盘，所以命令行
    * 根本读不到它——`stop` / `status` 都不传这个字段，靠的是「请求里没有 `Origin` /
-   * `Sec-Fetch-*` → 判为非浏览器客户端 → 免凭证」（见 core 的 `../management/core/request-guards.ts`）。
+   * `Sec-Fetch-*` → 判为非浏览器客户端 → 免凭证」（见 core 的 `../management/gateway/access.ts`）。
    *
    * 保留这个字段是给“手里真的能拿到凭证”的调用方用的（例如将来的宿主机内调用），
    * 传了就带上，没传就不带——绝不能送一个空头，那会让服务端把「没有凭证」

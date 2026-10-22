@@ -1,26 +1,25 @@
+/**
+ * 管理服务的**生命周期**：listen、close、以及一条请求跑完之后的日志分级。
+ *
+ * 请求该不该被应答、由谁应答，全部归 `./gateway.ts`。这里刻意不知道「静态托管」「凭证」
+ * 「开发路径」这些概念——它只知道一个网关对象和两个 `if`。这台服务以前也兼着做访问控制，
+ * 于是「这次启动开了哪些门」要跨六个文件拼出来；现在那些判断只有 `gateway.ts` 一处。
+ */
+
 import http from 'node:http'
-import { handleApiRequest } from './router'
-import { applyManagementRequestGuards } from './core/request-guards'
-import { createStaticWebHost, type StaticWebHost } from './core/static-web'
-import { isDevelopmentTokenRequest } from './core/development-token'
 import { normalizeError } from '@server/errors'
-import { sendManagementError, sendSuccess } from './core/response'
-import type { Server } from 'node:http'
+import { createManagementGateway, type GatewayOutcome, type ManagementGateway } from './gateway'
+import { sendManagementError } from './core/response'
+import type { IncomingMessage, Server } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
 export interface ManagementServerOptions {
   host?: string
   port?: number
   environment?: RuntimeEnvironment
-  /**
-   * 控制台静态产物根目录。给了才托管；桌面形态自己 `loadFile`，不走这里。
-   * 路径由宿主决定，core 不猜（见 `apps/docs/specs/packaging.md` §5.2）。
-   */
+  /** 控制台静态产物根目录。给了才托管，见 `./gateway.ts`。 */
   webRoot?: string | null
-  /**
-   * 本次启动的管理 API 凭证。给了就强制校验，并注入进托管的入口页面。
-   * 测试与「只想验证路由」的场景可以不传，那时等价于过去的无凭证形态。
-   */
+  /** 本次启动的管理 API 凭证。给了就强制校验，并注入进托管的入口页面。 */
   token?: string | null
 }
 
@@ -34,12 +33,10 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
 
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 9301
-  const environment = options.environment ?? 'production'
-  const token = options.token ?? null
-  const webHost = options.webRoot ? createStaticWebHost(options.webRoot, token) : null
-  if (webHost) console.log(`[management-lifecycle] serving console static root=${webHost.root}`)
+  const gateway = createManagementGateway(options)
+  if (gateway.consoleRoot !== null) console.log(`[management-lifecycle] serving console static root=${gateway.consoleRoot}`)
   const candidate = http.createServer((req, res) => {
-    void handleManagementRequest(req, res, environment, webHost, token)
+    void handleManagementRequest(req, res, gateway)
   })
 
   managementServer = candidate
@@ -65,51 +62,49 @@ export function startManagementServer(options: ManagementServerOptions = {}): Pr
   return startupPromise
 }
 
-async function handleManagementRequest(req: http.IncomingMessage, res: http.ServerResponse, environment: RuntimeEnvironment, webHost: StaticWebHost | null, token: string | null): Promise<void> {
+/**
+ * 一条请求的日志分级。
+ *
+ * 分级只看两件事：**走到哪一步**、**结果是什么**。这段判断以前混在请求主流程里与访问
+ * 控制交错，读起来像是在决定「要不要继续」——它其实只决定日志级别。
+ */
+async function handleManagementRequest(req: IncomingMessage, res: http.ServerResponse, gateway: ManagementGateway): Promise<void> {
   const startedAt = Date.now()
   console.debug(`[management] request begin method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} host=${req.headers.host ?? 'none'}`)
+  let outcome: GatewayOutcome = 'rejected'
   try {
-    // 这里不再有 Host 门。API 的门是凭证，静态托管的 Host 判断收在它自己那边
-    // （只有回环请求才拿得到注入凭证的入口 HTML，见 core/static-web.ts）。
-    // 静态托管优先接管非 /api 的 GET：它的 SPA 回退必须拿到「未被改写过的」请求。
-    if (webHost && await webHost.handle(req, res)) {
-      const duration = Date.now() - startedAt
-      console.debug(`[management] static request completed path=${req.url ?? '/'} status=${res.statusCode} duration=${duration}ms`)
-      return
-    }
-    if (!await applyManagementRequestGuards(req, res, token)) {
-      const message = `[management] request handled by guard method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${Date.now() - startedAt}ms`
-      if (req.method === 'OPTIONS') console.debug(message)
-      else console.warn(message)
-      return
-    }
-    // 开发形态的凭证读取口（唯一消费者是无头截图的那个独立进程）。放在守卫之后、
-    // 路由之前：守卫已经把它限定成「非浏览器客户端」，路由则不该知道有这么一条旁路。
-    // 没配凭证时**不**应答这条路径，让它继续落到路由层拿 404——回一份 `token: null`
-    // 会让调用方以为「宿主这次没生成」，带着空凭证去撞 401。
-    if (token !== null && environment === 'development' && isDevelopmentTokenRequest(req)) {
-      sendSuccess(res, { token })
-      return
-    }
-    await handleApiRequest(req, res, environment)
-    const duration = Date.now() - startedAt
-    const message = `[management] request completed method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${duration}ms`
-    if (res.statusCode >= 500) console.error(message)
-    else if (res.statusCode >= 400 || duration >= 1_000) console.warn(message)
-    else console.debug(message)
+    outcome = await gateway.handle(req, res)
   } catch (error) {
-    console.error(`[management] request boundary failed: ${req.method ?? 'UNKNOWN'} ${req.url ?? '/'}`, error)
+    console.error(
+      `[management] request boundary failed method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} duration=${Date.now() - startedAt}ms`,
+      error,
+    )
+    // 已经在往下流的时候再 `sendError` 只会抛 `ERR_HTTP_HEADERS_SENT`，把真实原因盖掉。
     if (res.headersSent || res.writableEnded) {
       res.destroy(error instanceof Error ? error : new Error(String(error)))
       return
     }
-    handleApiRequestError(res, error)
+    sendManagementError(res, normalizeError(error))
+    return
   }
+
+  logCompleted(req, res, outcome, Date.now() - startedAt)
 }
 
-function handleApiRequestError(res: http.ServerResponse, error: unknown): void {
-  const normalized = normalizeError(error)
-  sendManagementError(res, normalized)
+function logCompleted(req: IncomingMessage, res: http.ServerResponse, outcome: GatewayOutcome, duration: number): void {
+  const message = `[management] request completed outcome=${outcome} method=${req.method ?? 'UNKNOWN'} path=${req.url ?? '/'} status=${res.statusCode} duration=${duration}ms`
+  if (res.statusCode >= 500) {
+    console.error(message)
+    return
+  }
+  // 一个 200 但花了 20 秒的请求，在用户那里和失败没有区别；只按状态码分级会把它藏起来。
+  if (res.statusCode >= 400 || duration >= 1_000) {
+    // 预检被拒是预期之内的（浏览器对每个跨源请求都会先问一次），记成 warn 会把日志填满。
+    if (outcome === 'rejected' && req.method === 'OPTIONS') console.debug(message)
+    else console.warn(message)
+    return
+  }
+  console.debug(message)
 }
 
 export async function stopManagementServer(): Promise<void> {

@@ -86,7 +86,7 @@ async function handleProxyRestart(_req: IncomingMessage, res: ServerResponse): P
  * 请求宿主优雅退出。
  *
  * 端点只在宿主显式配置了握手时存在（CLI 会配，桌面形态不会）。**这里不再做身份校验**：
- * 凭证已经由请求守卫验过了（`x-osw-token`，见 `../../core/request-guards.ts`），
+ * 凭证已经由请求守卫验过了（`x-osw-token`，见 `../../gateway/access.ts`），
  * 这个端点只回答「本次宿主允许被停掉吗」。
  */
 function handleRuntimeShutdown(_req: IncomingMessage, res: ServerResponse): void {

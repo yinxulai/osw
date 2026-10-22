@@ -19,7 +19,7 @@ import { createFanout } from '@server/realtime/stream-fanout'
  * 这条既有守卫，还得另写一份 Origin 校验——浏览器**不对 WebSocket 施加同源策略**，
  * 本机任意网页都能直接连上来读走这条流。换来的只是省下一条 HTTP 连接。
  * 而「`POST` + 分块响应」能拿到完全一样的东西：管理 API 的形状一条没变，
- * 守卫、CORS、路由匹配、错误边界全部原样复用（见 `core/request-guards.ts`）。
+ * 守卫、CORS、路由匹配、错误边界全部原样复用（见 `gateway/access.ts`）。
  *
  * ## 帧的形状
  *

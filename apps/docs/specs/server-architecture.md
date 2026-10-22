@@ -32,8 +32,14 @@ packages/core/source/
 ├── index.ts
 ├── runtime/server-runtime.ts
 ├── management/
-│   ├── server.ts / router.ts
-│   ├── core/{request-body,response,error-handler,request-guards,environment-guard}.ts
+│   ├── server.ts / router.ts / token.ts
+│   ├── gateway.ts                     # 管理端口的唯一入口：所有配置在这里读一次
+│   ├── gateway/                       # 网关的四段判据，互不知道对方
+│   │   ├── access.ts                  # CORS、预检、路径、方法、凭证
+│   │   ├── console-host.ts            # 控制台静态托管 + 凭证注入
+│   │   ├── development.ts             # 开发形态专属路径
+│   │   └── loopback.ts                # `Host` 头是不是回环
+│   ├── core/{request-body,response,error-handler}.ts
 │   ├── routes/                         # 管理 API，按域分组后由 index.ts 合并注册
 │   │   ├── catalog/                    # Provider、ProviderModel、模型
 │   │   ├── relations/                  # 绑定关系、请求重写规则
@@ -90,6 +96,23 @@ flowchart TD
 - 新增进程级状态时必须说明所有者，不能默认放进模块级变量。
 
 ## 关键调用链
+
+### 管理端口的一条请求
+
+管理端口的**所有**配置（静态产物根、本次启动凭证、运行形态）只在 `management/gateway.ts` 的工厂里读一次，之后每一段判据只拿到自己需要的那一个值，不回头去读环境。顺序是契约的一部分：
+
+```text
+POST /api/provider/create
+  -> management/server.ts                   # 只负责 listen / close / 日志分级
+  -> management/gateway.ts                  # 顺序表：谁先接手
+       1. gateway/console-host.ts           #   控制台静态产物（页面得能先加载）
+       2. gateway/access.ts                 #   CORS → 预检 → 路径 → 方法 → 凭证
+       3. gateway/development.ts            #   开发形态专属路径（生产形态下 404）
+       4. management/router.ts              #   真正的业务路由
+  -> management/routes/…
+```
+
+这条链以前散在七个文件里，于是「这次启动开了哪些门」要跨文件拼出来。收敛成网关之后，`server.ts` 不知道静态托管、凭证、开发路径这些概念，它只知道一个网关对象和两个 `if`。
 
 ### 创建 Provider
 
