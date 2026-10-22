@@ -256,9 +256,9 @@ CLI 侧的取舍要写清楚：这是**文件级加密**，防止的是备份、
 2. `location.protocol` 为 `http:` / `https:` 时用 `${location.origin}/api` —— CLI 同源场景。这条路径下凭证由管理服务在**入口 HTML 被送出时**注入（`management/gateway/console-host.ts`，插在 `</head>` 之前、`boot.js` 之后），因为浏览器形态没有任何别的渠道能把它交给页面。
 3. 回退到内置默认端口 —— 保证 `dev:preview` 与单测不炸。
 
-凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只拿去强制校验、**不落盘**。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。
+凭证的**唯一来源是宿主**：桌面主进程 / 命令行进程在应用启动时生成一次（`RuntimeConfig.managementToken`），core 只拿去强制校验。它不能跟着 core 的 `startServer()` 走——桌面服务进程崩溃后会被宿主重启，重算一次就等于把主进程手里那份作废（重启预算见 `server-host.ts`），也与代理是否启动完全无关。
 
-不落盘带来一个必须说清的前提：`stop` / `status` 这类另一个进程的命令读不到凭证。它们也不需要——凭证**只卡浏览器**（判据是 `Origin` / `Sec-Fetch-Site`，**不含** `Sec-Fetch-Mode`），本机 `fetch` / `http.request` 不发这些头，自然就跳过了校验。无头截图偏偏是真浏览器，所以它走开发形态专用的读取口（`POST /api/development/management-token`，只在 `development` 且宿主确实生成了凭证时存在）。三条边界都在 `security-privacy.md` 的「访问控制」里。
+跨进程那一步靠一个 `0600` 的文件：管理服务在 listen 成功后把凭证写到 `<dataDir>/management.token`，退出时删掉（`management/token-file.ts`、`management/server.ts`）。写失败就让启动失败——一个「起得来但停不掉」的进程比一次启动失败更难收拾。`stop` / `status` 也读这份文件；无头截图那个 Electron 进程同理。这三条边界（文件为什么不能是 `runtime.json`、挡得住谁、什么时候消失）都在 `security-privacy.md` 的「访问控制」里。
 
 这一项是 CLI 能跑起来的前提：`file://` 下 `location.origin` 为 `null`，必须靠注入；而 CLI 同源场景则天然可用。凭证**不写 `localStorage`**：它每次启动都会变，缓存一份只会让下一次启动读到废值。`pnpm dev:preview` 直接在浏览器打开产物、拿不到任何注入，因此那条通路的管理 API 调用一律 `401`——它只适合看静态界面。
 
@@ -300,7 +300,7 @@ interface RuntimeConfig {
 - 宿主负责构造：App 用 `app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))`（必须在 `app.whenReady()` 之前设，之后 `app.getPath('userData')` 与 `os.homedir()` 才是同一个答案），`shutdown` 传 `null`（它有自己的退出路径）；CLI 用参数 + `defaultDataDirectory()`，并传入一个退出握手对象（见 §6 的 `stop`）。
 - **两边都不算数据库文件名**：两个库各自带 schema 版本常量，文件名由 `@common/database-file` 从版本号推导。宿主少算一次文件名，就少一个两种形态可能算出不同结果的地方。
 - CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
-- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务固定监听回环（凭证只卡浏览器，不限制本机进程），要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
+- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务固定监听回环，要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
 - `--host` 与 `proxyHost` 的关系要注意：`RuntimeConfig.proxyHost` 只是**默认值**，真正生效的监听地址是设置里的 `listenHost`（用户在界面上改过就以设置为准）。因此「命令行传了 `--host` 却没生效」在已有数据目录上是正常行为，而不是配置没被读到。
 
 数据目录的规则只有一条：**`<用户主目录>/<预设数据目录名>`**，两种形态共用这一条，三个平台也是同一条——不再有「先按平台算 appData 目录、再拼目录名」这一步。App 侧是 `app.setPath('userData', path.join(os.homedir(), profile.dataDirectoryName))`；CLI 侧是 `apps/cli/source/host.ts` 里的 `defaultDataDirectory()`（纯函数，`path.dirname()` 的结果就是 `os.homedir()`，能单测）：

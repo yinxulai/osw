@@ -6,9 +6,9 @@
  *
  * **本模块不是鉴权**：它只回答一个问题——**本次宿主是否允许被外部请求停掉**。
  * 桌面形态不配置它，端点当作不存在（用户自己点「退出」）；命令行形态配置它，
- * `stop` 才有办法收尾。至于「浏览器能不能调这个端点」，靠网关里的本次启动凭证
- * （`x-osw-token`，见 `../gateway/access.ts`）；`osw stop` 自己是本机非浏览器进程，
- * 读不到不落盘的凭证，走的是同一条通道里的豁免。
+ * `stop` 才有办法收尾。至于「谁能调这个端点」，靠网关里的本次启动凭证
+ * （`x-osw-token`，见 `../gateway/access.ts`），**没有例外**：`osw stop` 从
+ * 数据目录里读那份 `0600` 的 `management.token` 再带上（`../token-file.ts`）。
  */
 
 export interface ShutdownHandshake {

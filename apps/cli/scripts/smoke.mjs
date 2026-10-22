@@ -136,11 +136,11 @@ function isPortOpen(port) {
 /**
  * 管理 API 全部是 POST，`GET` 一律 405（见 core 的 `management/gateway/access.ts`）。
  *
- * 凭证每次**应用启动**生成、只活在宿主内存里，一行都不落盘，所以这里没有任何「读文件」
- * 的办法。可选的两样东西正好对应守卫的两条路：
- *   - `origin`：带上它就是「浏览器发来的」。没带对的凭证就 401。
- *   - `token`：浏览器需要的那张票据，只能从入口 HTML 的注入里拿（第 2 步）。
- * 两者都不给就是「本机普通进程」，与 `stop` / `status` 同一条通路，不需要凭证。
+ * 凭证**没有例外**：任何 `/api/*` 都得带上它，带上没带都一样。它由服务写在数据目录里的
+ * `management.token`（`0600`），所以这里用 `readManagementToken()` 去拿。
+ *
+ * `origin` 只是个可选项：带上它就是「浏览器发来的」，用来验证 CORS 预检与页面注入那条链；
+ * 它不再参与「要不要凭证」的判断。
  */
 async function postJson(port, apiPath, options = {}) {
   const token = options.token ?? null
@@ -155,6 +155,18 @@ async function postJson(port, apiPath, options = {}) {
   })
   const body = await response.json().catch(() => null)
   return { status: response.status, body }
+}
+
+/**
+ * 读本次启动的凭证。
+ *
+ * 文件名与权限见 core 的 `management/token-file.ts`。它在这里就是「另一个进程」能拿到的
+ * 全部东西——`osw stop` / `osw status` 走的是同一条路，所以这一步顺便证明了那条契约。
+ */
+function readManagementToken(dataDir) {
+  const filePath = path.join(dataDir, 'management.token')
+  assert.ok(fs.existsSync(filePath), 'the management token file must exist while the server is listening')
+  return fs.readFileSync(filePath, 'utf8').trim()
 }
 
 /**
@@ -240,32 +252,39 @@ async function main() {
   const consoleResponse = await fetch(`http://127.0.0.1:${managementPort}/`)
   assert.equal(consoleResponse.status, 200, 'the console index must be served')
   assert.match(consoleResponse.headers.get('content-type') ?? '', /text\/html/, 'the console index must be text/html')
-  // 命令行形态下页面是管理服务自己发的，凭证只能随入口 HTML 下发。这条断的是整条链路的最后一环，
-  // 顺便也是**唯一**能拿到本次凭证的地方——磁盘上没有。
+  // 命令行形态下页面是管理服务自己发的，凭证随入口 HTML 一并下发，页面才能请求 API。
   const consoleHtml = await consoleResponse.text()
   const injected = /window\.__OSW__=\{apiToken:"([^"]+)"/.exec(consoleHtml)
   assert.ok(injected, 'the served console must receive the management token')
   const apiToken = injected[1]
+  // 注入给页面的那份必须**就是**磁盘上那份。两边对不上，页面会拿着一个自己以为
+  // 对的凭证去撞 401——这种错在前端表现成「白屏」，很难查。
+  assert.equal(readManagementToken(dataDir), apiToken, 'the injected token must be the one published on disk')
   const browserOrigin = `http://127.0.0.1:${managementPort}`
-  // 浏览器痕迹 + 无凭证 = 401。它必须拒，否则「本地进程免签」就会顺带把浏览器也放进来。
+  // 无凭证 = 401。不带任何浏览器痕迹的那一种也一样——它曾经是本机进程的免费通行证，
+  // 而 `Origin` / `Sec-Fetch-*` 都是调用方自己写的头，等于把门锁交给被拦的人。
+  assert.equal(
+    (await postJson(managementPort, '/api/provider/export')).status,
+    401,
+    'a local request without the token must be refused',
+  )
   assert.equal(
     (await postJson(managementPort, '/api/proxy/status', { origin: browserOrigin })).status,
     401,
     'a browser request without the token must be refused',
   )
-  // 浏览器痕迹 + 错凭证 = 401。证明通过的不是「带了头」而是「带对了」。
+  // 错凭证 = 401。证明通过的不是「带了头」而是「带对了」。
   assert.equal(
-    (await postJson(managementPort, '/api/proxy/status', { token: 'not-the-token', origin: browserOrigin })).status,
+    (await postJson(managementPort, '/api/proxy/status', { token: 'not-the-token' })).status,
     401,
-    'a browser request with the wrong token must be refused',
+    'a request with the wrong token must be refused',
   )
-  // 浏览器痕迹 + 页面里那份凭证 = 200：`osw --web` 能用的根本原因。
-  const browserStatus = await postJson(managementPort, '/api/proxy/status', { token: apiToken, origin: browserOrigin })
-  assert.equal(browserStatus.status, 200, `browser-like POST /api/proxy/status → ${browserStatus.status}`)
-  assert.equal(browserStatus.body?.success, true, 'the management API must answer with success: true')
-  // 无任何浏览器痕迹 = 本机进程。`stop` / `status` 全靠这条活着，所以它必须是 200。
-  const localStatus = await postJson(managementPort, '/api/proxy/status')
-  assert.equal(localStatus.status, 200, 'a local non-browser client must not need the token')
+  // 带对凭证 = 200：`osw --web` 能用、`osw stop` / `osw status` 也能用的根本原因。
+  const statusWithToken = await postJson(managementPort, '/api/proxy/status', { token: apiToken, origin: browserOrigin })
+  assert.equal(statusWithToken.status, 200, `POST /api/proxy/status with the token → ${statusWithToken.status}`)
+  assert.equal(statusWithToken.body?.success, true, 'the management API must answer with success: true')
+  const localStatus = await postJson(managementPort, '/api/proxy/status', { token: apiToken })
+  assert.equal(localStatus.status, 200, 'the same token must work without any browser headers')
   // `Host` 不是访问控制：带着攻击者域名的请求照样拿得到页面（前端产物本来就是公开的）。
   // 但它必须拿**不到**凭证——DNS rebinding 的全部杀伤力就在那行注入的 HTML 上。
   const rebound = await getWithHost(managementPort, '/', 'evil.example.com')
@@ -312,6 +331,13 @@ async function main() {
   assert.equal(stoppedReport.pid, null, 'a stopped instance must not report a pid')
   assert.equal(stoppedReport.management, null)
   assert.equal(stoppedReport.staleRuntimeFile, false)
+  // 凭证文件必须跟着服务一起消失。留一份「上次启动的凭证」在目录里，等于让一个已经
+  // 作废的秘密长期可读；而且下一次 `status` 会读到它就去敲一个不存在的服务。
+  assert.equal(
+    fs.existsSync(path.join(dataDir, 'management.token')),
+    false,
+    'stopping must remove the management token file',
+  )
   const stopAgain = await runOnce(['stop', '--data-dir', dataDir])
   assertExitCode(stopAgain, 0) // 「本来就没在跑」是成功，不是失败
   log.info('status is clean and stop is idempotent')
@@ -361,11 +387,17 @@ async function main() {
   )
   const noWebIndex = await fetch(`http://127.0.0.1:${managementPort}/`)
   assert.equal(noWebIndex.status, 404, '--no-web must not serve the console')
-  // 页面没发出去，于是本次的凭证就没法从这里拿到——而 API 仍然要能用，靠的就是
-  // 「本机非浏览器进程免凭证」这条。这一步因此同时根本地证明了它。
-  const stillAlive = await postJson(managementPort, '/api/proxy/status')
+  // 页面没发出去，于是凭证只能从数据目录里读——`osw stop` / `osw status` 走的正是这条路。
+  // 这一步因此同时证明了「没有页面也能用 API」与「凭证文件是真的能被另一个进程读到」。
+  const stillAlive = await postJson(managementPort, '/api/proxy/status', { token: readManagementToken(dataDir) })
+  assert.equal(stillAlive.status, 200, '--no-web must still expose the management API')
   assert.equal(stillAlive.body?.success, true, '--no-web must still expose the management API')
   assertExitCode(await runOnce(['stop', '--data-dir', dataDir]), 0)
+  assert.equal(
+    fs.existsSync(path.join(dataDir, 'management.token')),
+    false,
+    'the second instance must also remove its token file on the way out',
+  )
 
   log.step(9, TOTAL_STEPS, 'usage errors')
   const jsonOnStop = await runOnce(['stop', '--json', '--data-dir', dataDir])

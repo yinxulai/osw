@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   removeError: null as unknown,
   apiResult: { ok: true, data: {} } as unknown,
   apiCalls: [] as unknown[],
+  token: 'management-token' as string | null,
   logged: [] as string[],
   errors: [] as string[],
 }))
@@ -51,6 +52,12 @@ vi.mock('../management-client', () => ({
     mocks.apiCalls.push(options)
     return mocks.apiResult
   },
+}))
+
+// 凭证文件是服务写在数据目录里的。这里不碰真实文件系统：这条命令要验的是
+// 「读到了就带上」，而不是 file IO（那在 `@server/management/token-file` 自己的测试里）。
+vi.mock('@server/management/token-file', () => ({
+  readManagementToken: async () => mocks.token,
 }))
 
 // 真实的 `waitFor` 按毫秒轮询，超时用例要真等 10 秒。这里把「等」这件事本身抽掉，
@@ -99,6 +106,7 @@ beforeEach(() => {
   mocks.removeError = null
   mocks.apiResult = { ok: true, data: {} }
   mocks.apiCalls = []
+  mocks.token = 'management-token'
   mocks.logged = []
   mocks.errors = []
   vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { mocks.logged.push(args.join(' ')) })
@@ -144,21 +152,32 @@ describe('stop when an instance is running', () => {
     mocks.aliveSequence = [true, true, false]
 
     expect(await runStop(values)).toBe(0)
-    // 不带凭证：它只活在宿主内存里，我们读不到；守卫只卡浏览器，本地进程照过。
-    expect(mocks.apiCalls).toEqual([{ host: '127.0.0.1', port: 9330, path: '/api/runtime/shutdown' }])
+    // 凭证无条件，所以 stop 也必须带上它；它从数据目录里的文件读。
+    expect(mocks.apiCalls).toEqual([{ host: '127.0.0.1', port: 9330, path: '/api/runtime/shutdown', token: 'management-token' }])
     expect(mocks.logged.join('\n')).toContain('OSW stopped.')
   })
 
-  it('talks to the management API without requiring a credential', async () => {
-    // 凭证每次应用启动重新生成、且**不落盘**，所以 `stop` / `status` 这类另起的自家
-    // 进程本来就拿不到。这件事不能靠「尽可能带一份」凑过去：一旦哪天改成必需，
-    // 恰好就是这条命令先坏。于是把「不带凭证」固定成契约，而不是遗漏。
+  it('reads the credential from the data directory instead of assuming it has none', async () => {
+    // 凭证以前只在宿主内存里，于是 `stop` / `status` 这类另起的自家进程只能靠一个
+    // 「本机进程免凭证」的例外进去——那个例外对任何 `curl` 同样成立。现在凭证由
+    // 服务写成 0600 文件，谁都能读，所以命令必须真的去读。
     mocks.state = stateOf(4242)
     mocks.aliveSequence = [true, true, false]
 
     expect(await runStop(values)).toBe(0)
     expect(mocks.apiCalls).toHaveLength(1)
-    expect(Object.keys(mocks.apiCalls[0] as Record<string, unknown>)).not.toContain('token')
+    expect((mocks.apiCalls[0] as Record<string, unknown>).token).toBe('management-token')
+  })
+
+  it('asks without a credential when the file is missing', async () => {
+    // 读不到说明对面不是我们的服务，或者它已停在收尾中间。不带凭证去敲，会得到
+    // 401 或连接被拒，而下面的超时判断会把话说清楚——不要自己猜、也不要伪造一份。
+    mocks.state = stateOf(4242)
+    mocks.token = null
+
+    await runStop(values)
+
+    expect((mocks.apiCalls[0] as Record<string, unknown>).token).toBeNull()
   })
 
   it('trusts the process disappearing over the HTTP response, so a rejected response is not fatal on its own', async () => {

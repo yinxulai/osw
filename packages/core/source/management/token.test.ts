@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { MANAGEMENT_TOKEN_HEADER, generateManagementToken } from './token'
 
 /*
- * 只测生成器。凭证已经没有“存取”这回事了：它只活在宿主内存里，一行都不落盘
- * （见 `token.ts` 的文件头）。所以这里能断言的只有「它长什么样」与「两次不一样」。
+ * 只测生成器。凭证已经没有“存取”这回事了：生成归宿主，落盘与清理归 `token-file.ts`，
+ * 本模块只负责随机性、长度与请求头名。所以这里能断言的只有「它长什么样」与「两次不一样」。
  */
 
 describe('generateManagementToken', () => {

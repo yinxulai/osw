@@ -33,11 +33,12 @@ packages/core/source/
 ├── runtime/server-runtime.ts
 ├── management/
 │   ├── server.ts / router.ts / token.ts
+│   ├── token-file.ts                  # 凭证的交付通道：数据目录里的 0600 文件
 │   ├── gateway.ts                     # 管理端口的唯一入口：所有配置在这里读一次
 │   ├── gateway/                       # 网关的四段判据，互不知道对方
 │   │   ├── access.ts                  # CORS、预检、路径、方法、凭证
 │   │   ├── console-host.ts            # 控制台静态托管 + 凭证注入
-│   │   ├── development.ts             # 开发形态专属路径
+│   │   ├── development.ts             # 开发形态专属路径（只剩造演示数据）
 │   │   └── loopback.ts                # `Host` 头是不是回环
 │   ├── core/{request-body,response,error-handler}.ts
 │   ├── routes/                         # 管理 API，按域分组后由 index.ts 合并注册
@@ -113,6 +114,8 @@ POST /api/provider/create
 ```
 
 这条链以前散在七个文件里，于是「这次启动开了哪些门」要跨文件拼出来。收敛成网关之后，`server.ts` 不知道静态托管、凭证、开发路径这些概念，它只知道一个网关对象和两个 `if`。
+
+凭证那一步**没有例外**：不区分浏览器与本机进程，也不存在开发形态的读取口。凭证本身由服务写在 `<dataDir>/management.token`（`management/token-file.ts`，`0600`），`stop` / `status` 与无头截图都从那读。
 
 ### 创建 Provider
 

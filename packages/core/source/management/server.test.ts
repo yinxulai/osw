@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError } from '../errors'
 import { startManagementServer, stopManagementServer, type ManagementServerOptions } from './server'
+import { managementTokenFilePath, readManagementToken } from './token-file'
 
 /**
  * 管理服务的**生命周期**与**日志分级**。
@@ -21,6 +22,8 @@ import { startManagementServer, stopManagementServer, type ManagementServerOptio
 const mocks = vi.hoisted(() => ({ handleApiRequest: vi.fn() }))
 
 vi.mock('./router', () => ({ handleApiRequest: mocks.handleApiRequest }))
+
+const TOKEN = 'test-management-token'
 
 let temporaryDirectory: string | null = null
 
@@ -44,6 +47,16 @@ async function start(options: ManagementServerOptions = {}): Promise<{ server: h
   const server = await startManagementServer({ host: '127.0.0.1', port: 0, ...options })
   const address = server.address() as AddressInfo
   return { server, origin: `http://127.0.0.1:${address.port}` }
+}
+
+/**
+ * 发一条**带凭证**的请求。
+ *
+ * 凭证现在没有例外，所以任何想走到路由的请求都得带上它。写到这个助手里的好处是：
+ * 「终于是 401 还是终于是 200」这层区别在调用处一眼可见（不带凭证就直接 `fetch`）。
+ */
+function call(origin: string, apiPath: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${origin}${apiPath}`, { ...init, headers: { ...init.headers, 'x-osw-token': TOKEN } })
 }
 
 /** 一份最小的控制台产物目录，用于验证「静态托管确实排在所有门之前」。 */
@@ -102,9 +115,9 @@ describe('the request boundary', () => {
 
   it('logs a plain success at debug', async () => {
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
-    const { origin } = await start({ environment: 'production' })
+    const { origin } = await start({ environment: 'production', token: TOKEN })
 
-    await fetch(`${origin}/api/settings/get`, { method: 'POST' })
+    await call(origin, '/api/settings/get', { method: 'POST' })
 
     expect(debug).toHaveBeenCalledWith(expect.stringContaining('outcome=api'))
     expect(debug).toHaveBeenCalledWith(expect.stringContaining('status=200'))
@@ -142,20 +155,20 @@ describe('the request boundary', () => {
   it('marks a 5xx as an error and a 4xx as a warning', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const { origin } = await start({ environment: 'production' })
+    const { origin } = await start({ environment: 'production', token: TOKEN })
 
     mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.statusCode = 503
       res.end('nope')
     })
-    await fetch(`${origin}/api/broken`, { method: 'POST' })
+    await call(origin, '/api/broken', { method: 'POST' })
     expect(error).toHaveBeenCalledWith(expect.stringContaining('status=503'))
 
     mocks.handleApiRequest.mockImplementation(async (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.statusCode = 400
       res.end('bad')
     })
-    await fetch(`${origin}/api/wrong`, { method: 'POST' })
+    await call(origin, '/api/wrong', { method: 'POST' })
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('status=400'))
   })
 
@@ -169,18 +182,18 @@ describe('the request boundary', () => {
       res.statusCode = 200
       res.end('slow')
     })
-    const { origin } = await start({ environment: 'production' })
+    const { origin } = await start({ environment: 'production', token: TOKEN })
 
-    await fetch(`${origin}/api/slow`, { method: 'POST' })
+    await call(origin, '/api/slow', { method: 'POST' })
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('duration=20000ms'))
   })
 
   it('answers a request-boundary failure with a real error response', async () => {
     mocks.handleApiRequest.mockRejectedValue(new AppError('VALIDATION_ERROR', 400, 'bad request body'))
-    const { origin } = await start({ environment: 'production' })
+    const { origin } = await start({ environment: 'production', token: TOKEN })
 
-    const response = await fetch(`${origin}/api/settings/get`, { method: 'POST' })
+    const response = await call(origin, '/api/settings/get', { method: 'POST' })
 
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({ success: false, errorCode: 'VALIDATION_ERROR' })
@@ -194,11 +207,90 @@ describe('the request boundary', () => {
       res.write('partial')
       throw new Error('upstream died mid-body')
     })
-    const { origin } = await start({ environment: 'production' })
+    const { origin } = await start({ environment: 'production', token: TOKEN })
 
     // 响应头已经发出去了，所以 `fetch` 本身会成功；断开发生在读 body 的时候。
-    await expect(fetch(`${origin}/api/streamed`, { method: 'POST' }).then(response => response.text())).rejects.toThrow()
+    await expect(call(origin, '/api/streamed', { method: 'POST' }).then(response => response.text())).rejects.toThrow()
     expect(error).toHaveBeenCalledWith(expect.stringContaining('request boundary failed'), expect.anything())
+  })
+
+  it('turns down an api request that carries no credential', async () => {
+    // 以前这条会走到路由。凭证成为唯一的门之后，同一台机器上的 `curl` 与浏览器一样被挡。
+    const { origin } = await start({ environment: 'production', token: TOKEN })
+
+    const response = await fetch(`${origin}/api/settings/get`, { method: 'POST' })
+
+    expect(response.status).toBe(401)
+    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 凭证文件是**跨进程**的那一半：同用户的 `osw stop` / `osw status` 靠它拿到凭证。
+ *
+ * 它的生命周期就是服务的生命周期，所以断言点全在这里：listen 成功之后才有、能读回
+ * 同样的值、停掉之后不再有。写成文件而不是塞进 `runtime.json`，是因为 `runtime.json`
+ * 会被 `osw status --json` 原样打到标准输出（见 `./token-file.ts`）。
+ */
+describe('the credential file', () => {
+  function createDataDir(): string {
+    temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-data-'))
+    return temporaryDirectory
+  }
+
+  it('is written once the server is listening', async () => {
+    const dataDir = createDataDir()
+
+    await start({ token: TOKEN, dataDir })
+
+    expect(await readManagementToken(dataDir)).toBe(TOKEN)
+  })
+
+  it('is readable only by its owner', async () => {
+    // 这是它对「同一台机器上的其他用户」有效的全部理由：目录里躺着的是一把能读写
+    // 全部配置（含明文密钥导出）的钥匙。
+    const dataDir = createDataDir()
+
+    await start({ token: TOKEN, dataDir })
+
+    expect(fs.statSync(managementTokenFilePath(dataDir)).mode & 0o777).toBe(0o600)
+  })
+
+  it('is gone once the server stops', async () => {
+    const dataDir = createDataDir()
+    await start({ token: TOKEN, dataDir })
+
+    await stopManagementServer()
+
+    expect(await readManagementToken(dataDir)).toBeNull()
+  })
+
+  it('is not written when there is no credential to publish', async () => {
+    const dataDir = createDataDir()
+
+    await start({ dataDir })
+
+    expect(await readManagementToken(dataDir)).toBeNull()
+  })
+
+  it('is not written when the host gave no data directory', async () => {
+    // 测试与进程内调用不需要它；没有目录就什么都不写，而不是自己挑一个地方落盘。
+    await expect(start({ token: TOKEN })).resolves.toMatchObject({ server: { listening: true } })
+  })
+
+  it('fails the start when the file cannot be written', async () => {
+    // 起得来但停不掉，比一次启动失败更难收拾：调用方看不到「这个环境没有 stop 通道」，
+    // 只会在某天需要停的时候发现多了一个僵住的进程。
+    const readOnlyParent = createDataDir()
+    fs.chmodSync(readOnlyParent, 0o500)
+
+    try {
+      // 子目录建不出来 → 写文件必然失败。用权限而不是「随便塞个坏路径」，
+      // 是为了让失败原因落在真实的写入路径上。
+      await expect(start({ token: TOKEN, dataDir: path.join(readOnlyParent, 'nested') })).rejects.toThrow()
+    } finally {
+      fs.chmodSync(readOnlyParent, 0o700)
+    }
   })
 })
 

@@ -96,9 +96,10 @@ let fatalErrorShown = false
  * 独立进程里（见 `server-host.ts` 的重启预算），让它自己在每次 `startServer` 时生成的话，
  * 主进程手里那份会在第一次重启后立刻作废，渲染层随后的每一次请求都 401。
  *
- * 只存在于主进程内存里，**不落盘**：preload 每次同步取一次交给渲染层，再无第二个出口。
- * 命令行（`stop` / `status`）与无头截图都读不到它，走的是守卫里那条「本机非浏览器进程
- * 免凭证」的通道（见 `@server/management/gateway/access`）。这里也绝不写日志。
+ * 只由主进程生成，preload 每次同步取一次交给渲染层。它还会被管理服务写成数据目录里的
+ * 一个 `0600` 文件（见 `@server/management/token-file`），寿命与那个服务进程相同——
+ * `osw stop` / `osw status` 靠它过校验，因为管理 API 的校验**没有例外**。
+ * 这里也绝不写日志。
  */
 const managementToken = generateManagementToken()
 

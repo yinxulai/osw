@@ -5,6 +5,7 @@
  * 数据库与监听端口都来不及收尾。握手契约见 core 的 `management/core/shutdown-handshake.ts`。
  */
 
+import { readManagementToken } from '@server/management/token-file'
 import { waitFor } from '../async'
 import { describeError } from '../errors'
 import { cliTranslator } from '../native-i18n'
@@ -50,9 +51,10 @@ export async function runStop(values: CliArguments): Promise<number> {
     host: state.managementHost,
     port: state.managementPort,
     path: '/api/runtime/shutdown',
-    // 不带凭证：它只活在宿主的**内存**里（见 `@server/management/token`），我们读不到。
-    // 命令行请求没有 `Origin` / `Sec-Fetch-*`，正是守卫判为「非浏览器客户端」的那一类，
-    // 所以能直接进去（见 core 的 `management/gateway/access.ts`）。
+    // 凭证现在写在数据目录里（见 `@server/management/token-file`），由服务自己在 listen
+    // 成功后写入、退出时删除。读不到就不带——那说明对面不是我们的服务，或者它已经
+    // 停在收尾中间；两种都会得到 401，而下面的超时判断会把话说清楚。
+    token: await readManagementToken(dataDir),
   })
 
   // 不按响应判定成败：服务端收尾时会关掉监听，客户端可能在读完响应前就被断开，

@@ -14,23 +14,22 @@
  * | 2 | 静态文件命中 | 控制台产物 | SPA 回退要拿到**未被改写过的**请求，所以它在所有门之前 |
  * | 3 | `OPTIONS` | CORS 预检 204 | 预检是浏览器自己发的，不该被要求带凭证 |
  * | 4 | 非 `/api/`、非 `POST` | 404 / 405 | 对不存在的路径回 `401` 等于用状态码确认「凭证不对」，语义倒置 |
- * | 5 | 浏览器且凭证不对 | 401 | 唯一的门，见 `./gateway/access.ts` |
+ * | 5 | 凭证不对 | 401 | 唯一的门，**没有例外**，见 `./gateway/access.ts` |
  * | 6 | 正式形态的 `/api/development/seed` | 404 | 开发路径在正式形态必须**不存在**，不能靠路由自己记得判 |
- * | 7 | `POST /api/development/management-token` 且开发形态且有凭证 | 凭证 | 唯一消费者是无头截图进程；放在路由之前，因为路由不该知道这条旁路 |
- * | 8 | 其它 `/api/*` | 路由 | 到这里请求一定合规，剩下的是业务 |
+ * | 7 | 其它 `/api/*` | 路由 | 到这里请求一定合规，剩下的是业务 |
  *
  * 注意 3 在 2 之后：静态托管只接 `GET`/`HEAD`，`OPTIONS` 走不到它，两者互不干扰，
  * 但把静态放前面是为了让「页面从自己的端口加载」这条路径一条门都不经过。
  *
  * ## 配置只有一处
  *
- * `ManagementGatewayOptions` 是本文件唯一的输入，四个字段决定上表里哪几步生效：
+ * `ManagementGatewayOptions` 是本文件唯一的输入，三个字段决定上表里哪几步生效：
  *
  *   - `webRoot`：不给就没有第 2 步（桌面形态自己 `loadFile`）。
- *   - `token`：本次启动的凭证。不给时第 7 步不存在，第 5 步**仍然生效**——浏览器请求
- *     一律被挡（见 `./gateway/access.ts` 的 `hasValidToken`），因为「宿主忘了传」
- *     是配置异常，不该让一个漏配的环境静默变成对任何本机网页可写的环境。
- *   - `environment`：决定第 6、7 步是否存在。
+ *   - `token`：本次启动的凭证。不给时第 5 步**仍然生效**——所有 `/api/*` 一律被挡
+ *     （见 `./gateway/access.ts` 的 `hasValidToken`），因为「宿主忘了传」是配置异常，
+ *     不该让一个漏配的环境静默变成对本机任何进程可写的环境。
+ *   - `environment`：决定第 6 步是否存在。
  *
  * 之前这三件事各自在模块级闭包里被读一次，于是「这次启动到底开了哪些门」要跨六个文件
  * 拼出来。现在它们只在 `createManagementGateway` 里读一次。
@@ -38,14 +37,8 @@
 
 import { checkApiAccess } from './gateway/access'
 import { createConsoleHost, type ConsoleHost } from './gateway/console-host'
-import {
-  DEVELOPMENT_TOKEN_PATH,
-  isDevelopmentOnlyPath,
-  isDevelopmentTokenRequest,
-  rejectDevelopmentOnlyPath,
-} from './gateway/development'
+import { isDevelopmentOnlyPath, rejectDevelopmentOnlyPath } from './gateway/development'
 import { handleApiRequest } from './router'
-import { sendSuccess } from './core/response'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
 
@@ -57,10 +50,10 @@ export interface ManagementGatewayOptions {
   webRoot?: string | null
   /**
    * 本次应用启动的管理 API 凭证。给了就强制校验，并注入进托管的入口页面。
-   * 不给时浏览器请求全部 `401`（fail-closed），非浏览器客户端照常放行。
+   * 不给时所有 `/api/*` 一律 `401`（fail-closed），没有任何例外。
    */
   token?: string | null
-  /** 运行形态。只有两个开发专用路径看它，见 `./gateway/development.ts`。 */
+  /** 运行形态。只有开发专用路径看它，见 `./gateway/development.ts`。 */
   environment?: RuntimeEnvironment
 }
 
@@ -72,8 +65,6 @@ export type GatewayOutcome =
   | 'rejected'
   /** 正式形态下被当作不存在的开发路径。 */
   | 'development-path'
-  /** 开发形态的凭证读取口。 */
-  | 'development-token'
   /** 走到了路由。 */
   | 'api'
 
@@ -117,18 +108,9 @@ export function createManagementGateway(options: ManagementGatewayOptions = {}):
         return 'development-path'
       }
 
-      // 7：凭证读取口。没配凭证时**不**应答，让它继续落到路由层拿 404——回一份
-      // `token: null` 会让调用方以为「宿主这次没生成」，带着空凭证去撞 401。
-      if (isDevelopment && token !== null && isDevelopmentTokenRequest(req)) {
-        sendSuccess(res, { token })
-        return 'development-token'
-      }
-
-      // 8：业务路由。
+      // 7：业务路由。
       await handleApiRequest(req, res)
       return 'api'
     },
   }
 }
-
-export { DEVELOPMENT_TOKEN_PATH }

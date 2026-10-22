@@ -42,7 +42,13 @@ interface ServeOptions extends ManagementGatewayOptions {
   method?: string
   path: string
   origin?: string
-  /** 请求头里带的凭证。`null` 表示宿主没生成凭证，`undefined` 表示「按默认值带上」。 */
+  /**
+   * 请求头里带的凭证。`undefined` 表示「不带」，`null` 等同于不带（只为让「没凭证」
+   * 在调用处读起来明确）。
+   *
+   * 与 `token`（服务端配的那份）分开：这两件事经常要单独验证，合成一个字段就无法
+   * 写出「宿主配了凭证、但这条请求没带」。
+   */
   requestToken?: string | null
   host?: string
 }
@@ -63,7 +69,7 @@ interface ServedResponse {
 async function serve(options: ServeOptions): Promise<ServedResponse> {
   const gateway = createManagementGateway({
     webRoot: options.webRoot,
-    token: options.requestToken === undefined ? TOKEN : options.requestToken,
+    token: options.token === undefined ? TOKEN : options.token,
     environment: options.environment,
   })
   let report: (outcome: GatewayOutcome) => void = () => undefined
@@ -124,7 +130,7 @@ describe('the console comes first', () => {
   })
 
   it('leaves /api paths to the api layer even when a web root is configured', async () => {
-    const response = await serve({ path: '/api/settings/get', webRoot: createWebRoot(), environment: 'production' })
+    const response = await serve({ path: '/api/settings/get', webRoot: createWebRoot(), environment: 'production', requestToken: TOKEN })
 
     expect(response.body).toBe('api')
     expect(response.outcome).toBe('api')
@@ -132,7 +138,7 @@ describe('the console comes first', () => {
 
   it('has no console at all when no web root is given', async () => {
     // 桌面形态自己 `loadFile`，不经过这里。
-    const response = await serve({ path: '/api/settings/get', environment: 'production' })
+    const response = await serve({ path: '/api/settings/get', environment: 'production', requestToken: TOKEN })
 
     expect(response.body).toBe('api')
     expect(response.outcome).toBe('api')
@@ -175,10 +181,19 @@ describe('the access gate', () => {
     expect(mocks.handleApiRequest).toHaveBeenCalledOnce()
   })
 
-  it('lets a local process through without a credential', async () => {
-    // 凭证只在宿主内存里，`osw stop` / `osw status` 读不到它。它们发出的请求没有
-    // 浏览器痕迹，正是这里放行的依据。
+  it('turns down a local process that carries no credential', async () => {
+    // 这条曾经是「免凭证」的通行证。`Origin` / `Sec-Fetch-*` 是调用方自己写的头，
+    // 任何本机进程不发它们就能调 `/api/provider/export` 拿走明文密钥——凭什么它就该
+    // 比别人更自由。凭证是唯一的门，对谁都一样。
     const response = await serve({ path: '/api/settings/get' })
+
+    expect(response.status).toBe(401)
+    expect(response.outcome).toBe('rejected')
+    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
+  })
+
+  it('lets any caller through once it presents the credential', async () => {
+    const response = await serve({ path: '/api/settings/get', requestToken: TOKEN })
 
     expect(response.outcome).toBe('api')
     expect(mocks.handleApiRequest).toHaveBeenCalledOnce()
@@ -187,7 +202,15 @@ describe('the access gate', () => {
   it('still turns down a browser request when the host handed over no credential', async () => {
     // 凭证缺失是配置异常，不是「不设防」：这时必须 fail-closed，否则一个漏传配置的
     // 环境会静默变成一个对任何本机网页可写的环境。
-    const response = await serve({ path: '/api/settings/get', origin: 'http://localhost:5173', requestToken: null })
+    const response = await serve({ path: '/api/settings/get', origin: 'http://localhost:5173', token: null, requestToken: TOKEN })
+
+    expect(response.status).toBe(401)
+    expect(response.outcome).toBe('rejected')
+  })
+
+  it('also turns down a local process when the host handed over no credential', async () => {
+    // 同上，但不带任何浏览器痕迹：凭证缺失时没有「谁比较可信」这回事，全挡。
+    const response = await serve({ path: '/api/settings/get', token: null, requestToken: TOKEN })
 
     expect(response.status).toBe(401)
     expect(response.outcome).toBe('rejected')
@@ -202,51 +225,17 @@ describe('the access gate', () => {
 })
 
 /*
- * 开发形态的两个旁路。
+ * 开发形态的旁路。
  *
- * 它们的存在理由不同，边界是同一套：**只在开发形态**、**只在网关这一层判**。散在各处
+ * 它只剩一条：造演示数据。边界是**只在开发形态**、**只在网关这一层判**。散在各处
  * 判断过一轮的后果是明确的——路由里忘判一次，生产实例就能被一键灌满演示数据。
+ *
+ * 曾经还有一条「读出本次启动的凭证」。凭证改成无条件校验之后它被删了：一个把凭证
+ * 发出去的接口，在全局校验下只能是绕过校验的后门（见 `gateway/development.ts`）。
  */
 describe('development-only paths', () => {
-  it('answers the token readout in development', async () => {
-    const response = await serve({ path: '/api/development/management-token', environment: 'development' })
-
-    expect(response.status).toBe(200)
-    expect(JSON.parse(response.body)).toEqual({ success: true, data: { token: TOKEN } })
-    expect(response.outcome).toBe('development-token')
-    // 它是旁路，不该顺路把真实路由也跑一遍。
-    expect(mocks.handleApiRequest).not.toHaveBeenCalled()
-  })
-
-  it('falls through to the router outside development', async () => {
-    // 生产形态下这条路径必须**不存在**。断言到「没走到这条路」为止，而不是只看状态码：
-    // 路由层回 404 与这里的有意静默是两件不同的事，混淆会让以后有人顺手放宽环境判断。
-    const response = await serve({ path: '/api/development/management-token', environment: 'production' })
-
-    expect(response.outcome).toBe('api')
-    expect(mocks.handleApiRequest).toHaveBeenCalled()
-  })
-
-  it('falls through when the host did not hand over a credential', async () => {
-    // 回一份 `token: null` 更糟：调用方会以为「宿主这次没生成」，带着空凭证去撞 401，
-    // 而真正的原因（这条路径根本没开）就被掩掉了。
-    const response = await serve({ path: '/api/development/management-token', environment: 'development', requestToken: null })
-
-    expect(response.outcome).toBe('api')
-    expect(mocks.handleApiRequest).toHaveBeenCalled()
-  })
-
-  it('asks for a credential before answering the token readout', async () => {
-    // 凭证读取口本身也要凭证（只要配了）：否则「开发环境」这张标签就能换来一次免认证的请求。
-    const response = await serve({ path: '/api/development/management-token', environment: 'development', origin: 'http://localhost:5173' })
-
-    expect(response.status).toBe(401)
-    expect(response.body).not.toContain(TOKEN)
-    expect(response.outcome).toBe('rejected')
-  })
-
   it('hides the seed path outside development', async () => {
-    const response = await serve({ path: '/api/development/seed', environment: 'production' })
+    const response = await serve({ path: '/api/development/seed', environment: 'production', requestToken: TOKEN })
 
     expect(response.status).toBe(404)
     expect(JSON.parse(response.body)).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
@@ -255,7 +244,7 @@ describe('development-only paths', () => {
   })
 
   it('lets the seed path through in development', async () => {
-    const response = await serve({ path: '/api/development/seed', environment: 'development' })
+    const response = await serve({ path: '/api/development/seed', environment: 'development', requestToken: TOKEN })
 
     expect(response.outcome).toBe('api')
     expect(mocks.handleApiRequest).toHaveBeenCalled()
@@ -264,14 +253,14 @@ describe('development-only paths', () => {
   it('matches the whole path, so a lookalike is left to the router', async () => {
     // `/api/development/seed/` 是另一条路径（它不存在，路由会给 404）。门禁顺手盖住它，
     // 只会让一个本该由路由回答的问题变成第二处判断。
-    const response = await serve({ path: '/api/development/seed/', environment: 'production' })
+    const response = await serve({ path: '/api/development/seed/', environment: 'production', requestToken: TOKEN })
 
     expect(response.outcome).toBe('api')
   })
 
   it('defaults to production when no environment is given', async () => {
     // 缺省必须是严的那个：忘了传环境不该顺手打开开发路径。
-    const response = await serve({ path: '/api/development/seed' })
+    const response = await serve({ path: '/api/development/seed', requestToken: TOKEN })
 
     expect(response.status).toBe(404)
     expect(response.outcome).toBe('development-path')

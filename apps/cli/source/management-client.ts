@@ -25,13 +25,12 @@ export interface ManagementCallOptions {
   body?: unknown
   timeoutMilliseconds?: number
   /**
-   * 本次启动的管理 API 凭证（可选）。
+   * 本次启动的管理 API 凭证。
    *
-   * 凭证只在宿主的**内存**里（见 `@server/management/token`），不落盘，所以命令行
-   * 根本读不到它——`stop` / `status` 都不传这个字段，靠的是「请求里没有 `Origin` /
-   * `Sec-Fetch-*` → 判为非浏览器客户端 → 免凭证」（见 core 的 `../management/gateway/access.ts`）。
+   * 管理 API **没有例外**：每一条 `/api/*` 请求都必须带着它（见 core 的
+   * `../management/gateway/access.ts`），所以 `stop` / `status` 也要传——它们从数据目录
+   * 里那个 `0600` 文件读（`@server/management/token-file`），服务自己写、自己删。
    *
-   * 保留这个字段是给“手里真的能拿到凭证”的调用方用的（例如将来的宿主机内调用），
    * 传了就带上，没传就不带——绝不能送一个空头，那会让服务端把「没有凭证」
    * 和「凭证是空字符串」混成一件事。
    */

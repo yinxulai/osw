@@ -30,6 +30,7 @@ Before moving machines or reinstalling, backing up `config-v1.db` is enough. `da
 | `secrets.json` | Encrypted upstream credentials, etc.; permission-restricted. |
 | `telemetry-id` | Anonymous installation identifier (UUID v4, permissions `0600`). |
 | `instance.lock` | Single-instance lock. |
+| `management.token` | Credential for the local management API of this run (permissions `0600`); exists only while running, removed on exit. |
 
 ## Location
 

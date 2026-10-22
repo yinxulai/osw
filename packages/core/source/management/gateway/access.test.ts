@@ -8,8 +8,6 @@ interface MockRequestOptions {
   url?: string
   origin?: string
   token?: string
-  secFetchSite?: string
-  secFetchMode?: string
   allowHeaders?: string
 }
 
@@ -19,14 +17,13 @@ const TOKEN = 'test-management-token'
 /**
  * 边界只管四件事：路径、方法、凭证与 CORS。这里逐个断言。
  *
- * 默认**不带** `Origin` / `Sec-Fetch-*`，也就是模拟命令行、脚本、测试这类非浏览器客户端。
+ * 凭证是**无条件**的：默认不带它，所以默认的请求会被 401。要测别的分支就得显式
+ * 带上 `token`。
  */
 function mockRequest(options: MockRequestOptions): IncomingMessage {
   const headers: Record<string, string> = { host: '127.0.0.1:19301' }
   if (options.origin !== undefined) headers.origin = options.origin
   if (options.token !== undefined) headers['x-osw-token'] = options.token
-  if (options.secFetchSite !== undefined) headers['sec-fetch-site'] = options.secFetchSite
-  if (options.secFetchMode !== undefined) headers['sec-fetch-mode'] = options.secFetchMode
   if (options.allowHeaders !== undefined) headers['access-control-request-headers'] = options.allowHeaders
   return {
     method: options.method ?? 'POST',
@@ -124,7 +121,7 @@ describe('path and method', () => {
     // 「我要用这个方法」这件事都没问对。
     const response = mockResponse()
 
-    const access = checkApiAccess(mockRequest({ method: 'DELETE', origin: 'http://localhost:5173' }), response, TOKEN)
+    const access = checkApiAccess(mockRequest({ method: 'DELETE' }), response, TOKEN)
 
     expect(access).toEqual({ accepted: false, reason: 'method' })
     expect(response.statusCode).toBe(405)
@@ -135,13 +132,13 @@ describe('credential', () => {
   it('accepts a POST that carries the credential', () => {
     const response = mockResponse()
 
-    const access = checkApiAccess(mockRequest({ origin: 'http://localhost:5173', token: TOKEN }), response, TOKEN)
+    const access = checkApiAccess(mockRequest({ token: TOKEN }), response, TOKEN)
 
     expect(access).toEqual({ accepted: true })
   })
 
   it('rejects a browser POST without a credential', () => {
-    // 最核心的一条：本机任意网页都能发这个请求，没有凭证就必须被挡住，
+    // 最核心的一条：本机任意网页都能发这个请求，没有凭证就必须被挡下，
     // 否则 issue #76 里那条「沙箱 iframe 读走明文密钥」的路依然通着。
     const response = mockResponse()
 
@@ -151,62 +148,59 @@ describe('credential', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a browser POST that only carries Sec-Fetch-Site', () => {
-    // 浏览器不一定给 `Origin`（同源 GET 就没有），但 Chromium 系总给 `Sec-Fetch-Site`，
-    // 而且页面脚本改不了它。只看 `Origin` 会留下一个可以绕的缺口。
-    const response = mockResponse()
-
-    const access = checkApiAccess(mockRequest({ secFetchSite: 'same-origin' }), response, TOKEN)
-
-    expect(access).toEqual({ accepted: false, reason: 'credential' })
-    expect(response.statusCode).toBe(401)
-  })
-
-  it('accepts a local client that only carries Sec-Fetch-Mode', () => {
-    // Node 内置的 `fetch`（undici）会自发带 `sec-fetch-mode: cors`，而它确实不是浏览器。
-    // 真实踩过一次：把 `Sec-Fetch-Mode` 当判据时 `osw stop` / `osw status` 全部 401，
-    // 而这在单测里看不出来、只有连真进程的冒烟测试才暴露。
-    const response = mockResponse()
-
-    const access = checkApiAccess(mockRequest({ secFetchMode: 'cors' }), response, TOKEN)
-
-    expect(access).toEqual({ accepted: true })
-  })
-
-  it('accepts a local client that shows no browser traces and no credential', () => {
-    // 凭证只在宿主内存里，`osw stop` / `osw status` 读不到它。它们发出的请求没有
-    // `Origin` 也没有 `Sec-Fetch-*`，正是这里判为非浏览器客户端的依据。
+  it('rejects a local process that sends no browser headers at all', () => {
+    // 这条曾经是「免凭证」的通行证：`Origin` / `Sec-Fetch-*` 是调用方自己写的头，
+    // 一个 `curl` 不发它们就能直接调 `/api/provider/export` 拿走明文密钥。
+    // 把判据装在请求头里，等于把门锁交给被拦的人。
     const response = mockResponse()
 
     const access = checkApiAccess(mockRequest({}), response, TOKEN)
 
-    expect(access).toEqual({ accepted: true })
+    expect(access).toEqual({ accepted: false, reason: 'credential' })
+    expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a browser POST with the wrong credential', () => {
+  it('rejects a request that only carries Sec-Fetch-Mode', () => {
+    // Node 内置的 `fetch`（undici）会自发带 `sec-fetch-mode: cors`。以前这条测试是为了
+    // 证明「它不是浏览器，所以放行」；现在它证明的是同一件事的另一面：不带凭证就过不去，
+    // 不管它带了多少浏览器的头。
+    const request = mockRequest({})
+    request.headers['sec-fetch-mode'] = 'cors'
     const response = mockResponse()
 
-    const access = checkApiAccess(mockRequest({ origin: 'http://localhost:5173', token: 'not-the-token' }), response, TOKEN)
+    expect(checkApiAccess(request, response, TOKEN)).toEqual({ accepted: false, reason: 'credential' })
+  })
+
+  it('rejects a POST with the wrong credential', () => {
+    const response = mockResponse()
+
+    const access = checkApiAccess(mockRequest({ token: 'not-the-token' }), response, TOKEN)
 
     expect(access).toEqual({ accepted: false, reason: 'credential' })
     expect(response.statusCode).toBe(401)
   })
 
-  it('rejects a browser credential of the right length but the wrong content', () => {
+  it('rejects a credential of the right length but the wrong content', () => {
     // 长度相同但内容不同：专门走一遍 `timingSafeEqual` 的正常分支，而不是提前
     // 被长度比较挡在门外。
     const response = mockResponse()
 
-    const access = checkApiAccess(mockRequest({ origin: 'http://localhost:5173', token: 'x'.repeat(TOKEN.length) }), response, TOKEN)
+    const access = checkApiAccess(mockRequest({ token: 'x'.repeat(TOKEN.length) }), response, TOKEN)
 
     expect(access).toEqual({ accepted: false, reason: 'credential' })
     expect(response.statusCode).toBe(401)
+  })
+
+  it('rejects an empty credential header', () => {
+    const response = mockResponse()
+
+    expect(checkApiAccess(mockRequest({ token: '' }), response, TOKEN)).toEqual({ accepted: false, reason: 'credential' })
   })
 
   it('rejects a duplicated credential header that collapses to an array', () => {
     // 同一个头出现两次时 Node 会把它交成数组。`timingSafeEqual` 只吃 Buffer，
     // 直接传数组会抛——这里必须当成「不匹配」，而不是让请求边界接一个 500。
-    const request = mockRequest({ origin: 'http://localhost:5173' })
+    const request = mockRequest({})
     request.headers['x-osw-token'] = [TOKEN, TOKEN] as unknown as string
     const response = mockResponse()
 
@@ -225,18 +219,14 @@ describe('credential', () => {
     expect(checkApiAccess(request, response, TOKEN)).toEqual({ accepted: true })
   })
 
-  it('refuses a browser request when the host handed over no credential', () => {
+  it('refuses every request when the host handed over no credential', () => {
     // 宿主没把凭证交下来是配置异常，不是「不设防」。这时必须 fail-closed：
-    // 静默放行等于「一个没配凭证的环境」自动变成一个对全网可写的环境。
-    const response = mockResponse()
+    // 静默放行等于「一个没配凭证的环境」自动变成一个对任何本机进程可写的环境。
+    // 没有浏览器痕迹的请求也不例外——这里曾经就是那个例外。
+    const browser = mockResponse()
+    const local = mockResponse()
 
-    expect(checkApiAccess(mockRequest({ origin: 'http://localhost:5173' }), response, null)).toEqual({ accepted: false, reason: 'credential' })
-  })
-
-  it('still lets a local process through when no credential was configured', () => {
-    // 非浏览器通道不靠凭证，所以凭证缺失不会误伤 `osw stop` / `osw status`。
-    const response = mockResponse()
-
-    expect(checkApiAccess(mockRequest({}), response, null)).toEqual({ accepted: true })
+    expect(checkApiAccess(mockRequest({ origin: 'http://localhost:5173' }), browser, null)).toEqual({ accepted: false, reason: 'credential' })
+    expect(checkApiAccess(mockRequest({}), local, null)).toEqual({ accepted: false, reason: 'credential' })
   })
 })

@@ -134,8 +134,8 @@ describe('server lifecycle', () => {
     expect(await post(endpoint)).toMatchObject({ success: true })
     const rejected = await fetch(endpoint, {
       method: 'POST',
-      // `Origin` 是「这条请求来自浏览器」的证据，也是这条断言还成立的前提：凭证只卡浏览器。
-      headers: { 'Content-Type': 'application/json', 'X-OSW-Token': 'not-the-token', Origin: 'null', Connection: 'close' },
+      // 不带浏览器痕迹也一样是 401：凭证没有例外，`Origin` 与 `Sec-Fetch-*` 不再是判据。
+      headers: { 'Content-Type': 'application/json', 'X-OSW-Token': 'not-the-token', Connection: 'close' },
       body: '{}',
     })
     expect(rejected.status).toBe(401)

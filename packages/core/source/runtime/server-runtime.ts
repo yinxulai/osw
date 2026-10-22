@@ -93,9 +93,9 @@ export class ServerRuntime {
       const settings = await getSettings()
       console.debug(`[runtime] proxy endpoint resolved host=${settings.listenHost} port=${settings.listenPort}`)
       // 凭证由宿主在**应用启动**时生成一次并随配置传进来，这里只把它交给管理服务去强制校验。
-      // 它**不落盘**（见 `../management/token.ts`）：既然只在宿主内存里活一次，就不该在数据
-      // 目录里留一份需要看管的副本；跨进程的 `stop` / `status` 走守卫里那条非浏览器通道。
-      // 也绝不进日志：日志会被用户粘到 issue 里。
+      // 校验**没有例外**：每一条 `/api/*` 都要带它，所以管理服务会把它写成数据目录里的一个
+      // `0600` 文件（见 `../management/token-file.ts`），退出时删掉——放在这里而不是宿主里，
+      // 是因为它的寿命就等于是这台服务的寿命。也绝不进日志：日志会被用户粘到 issue 里。
       const { managementToken } = config
       console.info(`[runtime] starting management server host=${config.managementHost} port=${config.managementPort}`)
       this.managementServer = await startManagementServer({
@@ -104,6 +104,7 @@ export class ServerRuntime {
         environment: config.environment,
         webRoot,
         token: managementToken,
+        dataDir: config.dataDir,
       })
       console.info(`[runtime] management server started listening=${this.managementServer.listening}`)
       console.info(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)

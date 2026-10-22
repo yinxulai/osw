@@ -7,7 +7,8 @@ import { declaredPathForPlatform, envOverrideForPlatform, expandDeclaredPath, re
 /**
  * 路径解析——整个功能的**安全边界**。
  *
- * 管理 API 的门是本次启动的凭证，而凭证只卡浏览器（见 `apps/docs/specs/security-privacy.md`），
+ * 管理 API 的门是本次启动的凭证（见 `apps/docs/specs/security-privacy.md`），但它只证明
+ * 「调用方是本机那个持有数据目录的人」，不决定它能写哪个文件，
  * 所以「能写哪个文件」这件事只能由注册表说了算：调用方给的是「客户端 key + 声明过的那条路径」，
  * 两者对不上就没有路径可写。下面一半的断言其实是**否定断言**：越界、猜测、拼路径都必须拿到 `null`。
  */

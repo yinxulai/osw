@@ -1,8 +1,9 @@
 import { app } from 'electron'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeProfile } from '@common/runtime-profile'
-import { DEVELOPMENT_TOKEN_PATH } from '@server/management/gateway'
+import { readManagementToken } from '@server/management/token-file'
 import { exportWebsiteScreenshots, resolveScreenshotCases } from './screenshot-export'
 import {
   registerExternalLinkIpc,
@@ -83,30 +84,20 @@ app.on('window-all-closed', () => {
 //     `app.setPath('userData', ...)` 尤其不能设：与正在跑的应用共用同一个数据目录会让
 //     Chromium 的 userData 单例锁撞在一起，两个 Electron 进程互相干扰。
 //
-// 凭证只能向**已经跑着的那个开发实例**要：本进程没有自己的管理服务，而凭证现在只活在
-// 宿主的内存里（不落盘，见 `@server/management/token`），没有文件可读。开发形态为此开了
-// 一条专用通道（`packages/core/source/management/gateway/development.ts`），它只对
-// 非浏览器客户端应答，所以这里用 Node 的 `fetch`（不带 `Origin`）直取。
+// 凭证从**数据目录里的文件**读（见 `@server/management/token-file`）：管理 API 没有例外，
+// 无头截图进程拿着真凭证才能取到数据。开发形态服务由 `pnpm dev` 起，它把凭证写在
+// `.osw-development/management.token`，寿命与那个进程相同。
 //
+// 读一个文件是安全的：这里**没有** `app.setPath('userData', ...)`，不碰 Chromium 的
+// userData 单例锁，也就不会与正在跑的应用互相干扰。
+const developmentProfile = getRuntimeProfile('development')
+const developmentDataDirectory = path.join(os.homedir(), developmentProfile.dataDirectoryName)
+
 // 拿不到就照旧给 `null`：页面会 401，但脚本不会在第一步就死掉——那样连“到底是服务没起
 // 还是凭证不对”都看不出来。
-const developmentProfile = getRuntimeProfile('development')
-// 路径拼在**根**上，不是 `managementApiUrl` 上：后者的结尾已经带了 `/api`，再拼一条
-// 完整路径就会变成 `/api/api/...`。这个写法与 CLI 的 `formatUrl` 是同一个形状。
-const DEVELOPMENT_TOKEN_ENDPOINT = `${developmentProfile.managementApiUrl.replace(/\/api$/, '')}${DEVELOPMENT_TOKEN_PATH}`
-
-async function fetchDevelopmentToken(): Promise<string | null> {
+async function readDevelopmentToken(): Promise<string | null> {
   try {
-    const response = await fetch(DEVELOPMENT_TOKEN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-      signal: AbortSignal.timeout(3_000),
-    })
-    if (!response.ok) return null
-    const payload = (await response.json()) as { success?: unknown; data?: { token?: unknown } }
-    if (payload.success !== true || typeof payload.data?.token !== 'string') return null
-    return payload.data.token
+    return await readManagementToken(developmentDataDirectory)
   } catch {
     return null
   }
@@ -129,7 +120,7 @@ app.whenReady().then(async () => {
 
   // 先把凭证拿到手再开窗口，理由见 `developmentToken` 的注释。拿不到不是致命错误：
   // 页面会 401、图会全是空状态，但至少脚本能跑完并把「为什么是空的」说清楚。
-  developmentToken = await fetchDevelopmentToken()
+  developmentToken = await readDevelopmentToken()
   if (developmentToken === null) {
     console.warn('[screenshots] could not read the development management token; API calls will return 401 — is `pnpm dev` running?')
   }
