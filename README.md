@@ -11,6 +11,22 @@
 <p align="center">English | <a href="./README.zh-CN.md">简体中文</a></p>
 
 <p align="center">
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/yinxulai/osw/ci.yml?branch=main&label=CI" alt="CI status" /></a>
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/yinxulai/osw/badges/coverage.json" alt="Test coverage" /></a>
+  <a href="https://github.com/yinxulai/osw/releases/latest"><img src="https://img.shields.io/github/v/release/yinxulai/osw?sort=semver" alt="Latest release" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue" alt="License: PolyForm Noncommercial 1.0.0" /></a>
+  <a href="https://github.com/yinxulai/osw/releases"><img src="https://img.shields.io/github/downloads/yinxulai/osw/total" alt="Total downloads" /></a>
+  <a href="https://github.com/yinxulai/osw/stargazers"><img src="https://img.shields.io/github/stars/yinxulai/osw" alt="GitHub stars" /></a>
+  <a href="https://github.com/yinxulai/osw/commits/main"><img src="https://img.shields.io/github/last-commit/yinxulai/osw/main" alt="Last commit" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js >=22" />
+  <img src="https://img.shields.io/badge/pnpm-12.14.0-orange" alt="pnpm 12.14.0" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux" />
+</p>
+
+<p align="center">
   <img src="./apps/docs/assets/x-post/x-cover.png" alt="Every model, one address: automatic failover across all your providers" />
 </p>
 

@@ -1,0 +1,81 @@
+name: Coverage badge
+
+# 只做一件事：把 CI 跑出来的覆盖率写进 `badges` 分支上的 `coverage.json`，
+# 供两份 README 里的 endpoint 徽章读取。
+#
+# 为什么另起一个 workflow，而不是塞进 `ci.yml`：
+#   - 只有这个 workflow 需要 `contents: write`。`ci.yml` 要跑 PR，给它写权限是错的。
+#   - `workflow_run` 直接复用 CI 已经上传的 `server-coverage` artifact，
+#     不必把那 4800+ 个用例再跑一遍。
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  # 跨 run 下载 artifact 靠的就是它 + `github-token`。
+  actions: read
+
+concurrency:
+  group: coverage-badge
+  cancel-in-progress: true
+
+jobs:
+  badge:
+    name: Publish coverage badge
+    runs-on: ubuntu-latest
+    # 只在 CI 成功时更新：失败时保留上一次的真实数字，
+    # 而不是拿一个红徽章去覆盖它——CI 红不红由 CI 徽章负责表达。
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Download coverage artifact from the CI run
+        uses: actions/download-artifact@v6
+        with:
+          name: server-coverage
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: coverage
+
+      - name: Build coverage.json for the badge
+        run: |
+          node --input-type=module - <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises'
+
+          const summary = JSON.parse(await readFile('coverage/coverage-summary.json', 'utf8'))
+          const pct = Math.floor(summary.total.lines.pct)
+
+          // 颜色阈值仅供观感，与仓库里的覆盖率门槛无关。
+          const color = pct >= 80 ? 'brightgreen' : pct >= 70 ? 'green' : pct >= 60 ? 'yellow' : 'red'
+
+          // 这正是 shields 的 endpoint 徽章格式。
+          const badge = { schemaVersion: 1, label: 'coverage', message: `${pct}%`, color }
+          await writeFile('coverage.json', `${JSON.stringify(badge, null, 2)}\n`)
+          console.log(`coverage badge -> ${pct}% (${color})`)
+          NODE
+
+      - name: Push coverage.json to the badges branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # `badges` 是个纯数据分支：要么接上已有的，要么从零开一个孤儿分支。
+          if git ls-remote --exit-code --heads origin badges >/dev/null 2>&1; then
+            git fetch --depth=1 origin badges
+            git checkout -B badges FETCH_HEAD
+          else
+            git checkout --orphan badges
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          # `-f`：`coverage.json` 是个新文件，且不该被任何忽略规则挡在外面。
+          git add -f coverage.json
+          if git diff --cached --quiet; then
+            echo 'Coverage badge unchanged, nothing to push.'
+            exit 0
+          fi
+
+          git commit -m 'chore(badges): update coverage badge'
+          git push origin badges

@@ -46,7 +46,9 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'text-summary', 'json', 'html'],
+      // `json-summary` 是给 CI 里的覆盖率徽章（`.github/workflows/coverage-badge.yml`）读的：
+      // 它落一个 `coverage-summary.json`，只有四个总数，不像 `json` 那样逐文件全量。
+      reporter: ['text', 'text-summary', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: [
         'apps/app/source/updater.ts',
