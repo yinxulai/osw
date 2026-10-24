@@ -546,23 +546,25 @@ export const SettingsSchema = z.object({
    */
   cacheAffinityEnabled: z.boolean().default(false),
   /**
-   * 是否校验客户端 API Key。**默认关闭**。
+   * 是否**拒绝**没带有效客户端 API Key 的请求。**默认关闭**。
    *
-   * 关闭时 `/v1/*` 不检查调用方身份——与这个代理一直以来「零配置即可用」的形态一致，
+   * 关闭时 `/v1/*` 不拦调用方——与这个代理一直以来「零配置即可用」的形态一致，
    * 装在回环上、只有自己能连的机器不受影响。开启后，任何没有携带一把有效 Key 的请求
    * 都会被拒绝（`UNAUTHORIZED`），这是把代理暴露到 `0.0.0.0` 或对局域网开放时应有的状态
    * （见 issue #27 与 `apps/docs/specs/security-privacy.md` §本地 API Key）。
    *
-   * 这是「要不要拦」，与 {@link Settings.apiKeyFeatureEnabled}（模块在不在）是两件事：
-   * 模块关掉时这一项被忽略——整块能力都不在了，没有理由还因为没带 Key 而拒绝请求。
+   * 这是「要不要拦」，与「认不认身份」是两件事：只要模块开着（{@link Settings.apiKeyFeatureEnabled}），
+   * 请求带的 Key 就会被认出来并记进请求日志与用量统计——不管这一项开没开。否则默认配置下
+   * 「按 Key 统计」「最近使用时间」永远没有数据。
+   * 模块关掉时这一项被忽略：整块能力都不在了，也没有理由再因为没带 Key 而拒绝请求。
    */
   apiKeyAuthEnabled: z.boolean().default(false),
   /**
    * 客户端 API Key **整个模块**的开关。默认开启。
    *
    * 关掉之后这一整块能力从界面上消失：侧栏入口、管理页、请求日志里的「按 Key 筛选」与
-   * 详情里的那一行、统计页的按 Key 用量都不再出现；代理也不再做任何身份校验
-   * （{@link Settings.apiKeyAuthEnabled} 被忽略）。
+   * 详情里的那一行、统计页的按 Key 用量都不再出现；代理也不再认身份
+   * （{@link Settings.apiKeyAuthEnabled} 被忽略，所有请求都记成匿名）。
    *
    * 之所以要这个开关：这套东西是为「把代理暴露出去」准备的，只监听回环、或者干脆把 Key
    * 全交给客户端自己填的用户根本用不到它，多出来的导航项与统计卡片只是噪音。数据不会被
