@@ -19,9 +19,14 @@ import { configReadCacheGeneration } from '@server/database/config-read-cache'
  *
  * ## 什么时候才做这件事
  *
- * 只有设置 `apiKeyAuthEnabled` 打开时才校验（未打开时全部请求都算匿名）。
+ * 两个开关分开看（见 `ApiKeyIdentityPolicy`）：
+ *
+ * - **认身份**：模块开着（`apiKeyFeatureEnabled`）就做——请求带的 Key 对上了就记下它属于哪一把。
+ *   「按 Key 统计用量」「最近使用时间」全靠这一步，所以它**不能**只在拦截打开时才跑。
+ * - **拦请求**：还要 `apiKeyAuthEnabled` 也打开。没带 / 带错的请求立刻 401（issue #27 的威胁模型）。
+ *
  * 这是**运行期设置**而不是编译期特性开关：默认保持零配置可用（新用户不必先建 Key），
- * 但一旦打开，没带 Key / 带错 Key 的请求立刻被 401 挡住（issue #27 的威胁模型）。
+ * 但一旦打开拦截，没带 Key / 带错 Key 的请求立刻被挡住。
  */
 
 /** 客户端可能用来递 Key 的头，与转发侧脱敏用的 `CLIENT_AUTH_HEADERS` 保持一致。 */
@@ -106,25 +111,39 @@ async function matchApiKey(presented: string): Promise<string | null> {
 }
 
 export interface ApiKeyIdentity {
-  /** 通过校验后绑定的记录 id；未开启校验或匿名时为 `null`。 */
+  /** 认出来的那把 Key 的记录 id；没带、对不上、或模块关着时为 `null`。 */
   apiKeyId: string | null
-  /** 这次请求是否被允许继续。仅在校验开启且未通过时为 `false`。 */
+  /** 这次请求是否被允许继续。仅在「拦截」打开且没认出来时为 `false`。 */
   authorized: boolean
+}
+
+/**
+ * 这次请求按哪套规则处理身份。
+ *
+ * 「认身份」与「拦请求」是**两件不同的事**，这里把它们分开，因为默认配置下两者恰好相反：
+ * 默认「认身份但不拦」（零配置可用，同时按 Key 的用量有数据可看）。
+ */
+export interface ApiKeyIdentityPolicy {
+  /** Key 模块是否存在。关掉时整条按 Key 的路径不存在，一律匿名、且不读密钥存储。 */
+  tracked: boolean
+  /** 是否拒绝没带 / 带错 Key 的请求。 */
+  enforced: boolean
 }
 
 /**
  * 解析这次请求的 API Key 身份。
  *
- * - 校验关闭：一律放行，身份为 `null`（所有请求都算匿名）。
- * - 校验开启且带了有效 Key：放行，身份为该 Key 的记录 id。
- * - 校验开启但没带 / 带了不匹配、已停用、已过期的 Key：不放行。
+ * - 模块关着：一律放行且不带身份（等价于这个功能从没实现过，也免得白读一遍密钥存储）。
+ * - 模块开着：带了能对上号的 Key 就**记下身份**——不论要不要拦。这是「按 Key 统计用量」
+ *   与「最近使用时间」的数据来源；只认不拦不会让任何请求被多拒一次。
+ * - 拦截也开着：没带 / 对不上（含已停用、已过期）一律不放行。
  */
-export async function resolveApiKeyIdentity(headers: IncomingHttpHeaders, enforced: boolean): Promise<ApiKeyIdentity> {
-  if (!enforced) return { apiKeyId: null, authorized: true }
+export async function resolveApiKeyIdentity(headers: IncomingHttpHeaders, policy: ApiKeyIdentityPolicy): Promise<ApiKeyIdentity> {
+  if (!policy.tracked) return { apiKeyId: null, authorized: true }
   const presented = extractPresentedApiKey(headers)
-  if (!presented) return { apiKeyId: null, authorized: false }
+  if (!presented) return { apiKeyId: null, authorized: !policy.enforced }
   const apiKeyId = await matchApiKey(presented)
-  return { apiKeyId, authorized: apiKeyId !== null }
+  return { apiKeyId, authorized: !policy.enforced || apiKeyId !== null }
 }
 
 /** 仅供测试：清空反查表缓存。 */

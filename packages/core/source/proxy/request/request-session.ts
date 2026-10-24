@@ -6,7 +6,7 @@ import type { RequestLoggingInput, RequestLogger } from '@server/proxy/observabi
 /** 一次代理请求在生命周期内固定使用的设置快照。 */
 export type ProxyRequestSettings = Pick<
   Settings,
-  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds' | 'apiKeyAuthEnabled'
+  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds' | 'apiKeyAuthEnabled' | 'apiKeyFeatureEnabled'
 >
 
 /**
@@ -40,8 +40,9 @@ export async function createProxyRequestSession(input: CreateProxyRequestSession
       captureRequestLogs: settings.captureRequestLogs,
       captureRequestContent: settings.captureRequestContent,
       idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
-      // 整个模块关掉时，校验开关必须一起失效：模块都不在界面上出现了，再返回 401
-      // 只会变成一个无法排查、也无处关闭的拦截。折算放在这一层做，消费方读到的仍是单个布尔。
+      // 「模块是否存在」与「要不要拦请求」原样带下去，让请求入口自己决定是「只认身份」还是「既认又拦」。
+      // 别在这里折算成一个布尔：认身份必须在模块开着时始终发生，否则按 Key 的用量永远没有数据。
+      apiKeyFeatureEnabled: settings.apiKeyFeatureEnabled,
       apiKeyAuthEnabled: settings.apiKeyFeatureEnabled && settings.apiKeyAuthEnabled,
     },
     logger,
