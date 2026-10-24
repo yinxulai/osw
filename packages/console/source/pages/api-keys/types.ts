@@ -13,7 +13,7 @@ export interface ApiKeyRow extends ApiKey {
   status: ApiKeyStatus
   /** 最近一次被使用的时间；`null` 表示这把 Key 签发后一次都没被用过。 */
   lastUsedTime: number | null
-  /** 最近 {@link API_KEY_RECENT_WINDOW_DAYS} 天内的请求数。没用过就是 0，不是空。 */
+  /** 最近 7 天内的请求数（窗口由 `API_KEY_RECENT_WINDOW_DAYS` 决定）。没用过就是 0，不是空。 */
   recentRequests: number
 }
 

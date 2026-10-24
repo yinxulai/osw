@@ -1,8 +1,10 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiKey, ApiKeyUsageRecency } from '@common/schemas'
 import { apiKeyApi, type CreateApiKeyInput, type UpdateApiKeyInput } from '@/api/api-keys'
 import { analyticsApi } from '@/api/observability'
 import { unwrap } from '@/api/unwrap'
+import { useSettings } from '@/data/settings'
 
 export const apiKeyKeys = { all: ['api-keys'] as const, recency: ['api-keys', 'recency'] as const }
 
@@ -34,15 +36,29 @@ export function useApiKeysLoading(): boolean {
  *
  * 刷新节奏跟统计页一致（15 秒）：它回答的是「这把刚才还在用吗」，慢了就没意义。
  */
-const useApiKeyRecencyQuery = () => useQuery({
-  queryKey: apiKeyKeys.recency,
-  queryFn: () => unwrap(analyticsApi.apiKeyRecency()),
-  refetchInterval: 15_000,
-})
+const useApiKeyRecencyQuery = () => {
+  // 模块关着时这份数据没有任何地方会渲染（页面跳走、统计卡不显示），
+  // 就别让它继续挂着 15 秒一次的轮询；重新打开开关时 `enabled` 变化会自动拉一次。
+  const featureEnabled = useSettings()?.apiKeyFeatureEnabled ?? true
+  return useQuery({
+    queryKey: apiKeyKeys.recency,
+    queryFn: () => unwrap(analyticsApi.apiKeyRecency()),
+    enabled: featureEnabled,
+    refetchInterval: featureEnabled ? 15_000 : false,
+  })
+}
 
+/**
+ * 索引必须按响应**引用**记忆化。
+ *
+ * 直接在 hook 体里 `new Map(...)` 会让每次渲染都产出一个新的 Map：消费方拿它当
+ * `useMemo` 依赖时，依赖永远「变了」，拼接出来的行数组也跟着每帧重建——列表与统计卡
+ * 于是每次父组件重渲染都要全量重算、重挂。放这里而不是让调用方自己 `useMemo`，
+ * 是因为「一份 Map」正是这个 hook 的返回值本身。
+ */
 export function useApiKeyRecency(): Map<string, ApiKeyUsageRecency> {
-  const rows = useApiKeyRecencyQuery().data ?? []
-  return new Map(rows.map(row => [row.apiKeyId, row]))
+  const rows = useApiKeyRecencyQuery().data
+  return useMemo(() => new Map((rows ?? []).map(row => [row.apiKeyId, row])), [rows])
 }
 
 /** 列表加载失败要能显示出来并重试，所以这里把错误原文透出去（页面再本地化）。 */

@@ -274,15 +274,18 @@ export function OverviewPage() {
             ))}
           </div>
         </Card>
-        {/* 按 Key 用量：与供应商排行同形，多铺一张卡片，数据到位时不会多跳出一块高度。 */}
-        <Card className="p-4">
-          <Skeleton className="mb-4 h-4 w-24" />
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full" />
-            ))}
-          </div>
-        </Card>
+        {/* 按 Key 用量：与供应商排行同形，多铺一张卡片，数据到位时不会多跳出一块高度。
+            模块关掉时这张卡绝不会出现，骨架也跟着不铺——否则加载完会凭空缩掉一块高度。 */}
+        {showApiKeyUsage && (
+          <Card className="p-4">
+            <Skeleton className="mb-4 h-4 w-24" />
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">
