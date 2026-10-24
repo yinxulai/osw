@@ -4,36 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { FORM_DIALOG_BODY_CLASSNAME, FormField, FormSwitchRow } from '@/components/form-kit'
 import { useTranslation } from '@/i18n/provider'
-import type { ApiKeyRow } from '../types'
-
-export interface ApiKeyDraft {
-  name: string
-  enabled: boolean
-  /** 过期日期（本地日期输入框的值，形如 `2026-01-31`）；空串表示永不过期。 */
-  expiresDate: string
-}
-
-/** 把草稿里的日期串转成毫秒时间戳：取当天**结束**时刻，避免「选了今天就立刻过期」。 */
-export function draftExpiresTime(expiresDate: string): number | null {
-  if (!expiresDate) return null
-  return new Date(`${expiresDate}T00:00:00`).getTime() + 24 * 60 * 60 * 1000 - 1
-}
-
-/** 反向：毫秒时间戳 → 日期输入框的值。 */
-function toDateInput(expiresTime: number | null): string {
-  if (expiresTime === null) return ''
-  const date = new Date(expiresTime)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
-}
-
-export function emptyApiKeyDraft(): ApiKeyDraft {
-  return { name: '', enabled: true, expiresDate: '' }
-}
-
-export function apiKeyToDraft(key: ApiKeyRow): ApiKeyDraft {
-  return { name: key.name, enabled: key.status !== 'expired', expiresDate: toDateInput(key.expiresTime) }
-}
+import type { ApiKeyDraft } from '../lib/draft'
 
 interface ApiKeyDialogProps {
   open: boolean

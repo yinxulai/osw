@@ -12,8 +12,9 @@ import { useAnalyticsSummary } from '@/data/analytics'
 import { ApiKeyStats } from './components/api-key-stats'
 import { ApiKeysTable } from './components/api-keys-table'
 import { ApiKeyUsage } from './components/api-key-usage'
-import { ApiKeyDialog, apiKeyToDraft, draftExpiresTime, emptyApiKeyDraft, type ApiKeyDraft } from './components/api-key-dialog'
+import { ApiKeyDialog } from './components/api-key-dialog'
 import { ApiKeySecretDialog } from './components/api-key-secret-dialog'
+import { apiKeyToDraft, draftExpiresTime, emptyApiKeyDraft, type ApiKeyDraft } from './lib/draft'
 import type { ApiKeyRow } from './types'
 
 /**

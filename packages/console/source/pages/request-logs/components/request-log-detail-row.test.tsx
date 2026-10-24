@@ -79,6 +79,7 @@ function attemptOf(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogE
 function logOf(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
   return {
     id: 'req_1',
+    apiKeyId: null,
     logicalModelId: 'model_default',
     clientProtocol: 'openai-responses',
     transport: 'http-stream',
