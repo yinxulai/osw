@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatCount } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
+import { formatNumber } from '@/pages/request-logs/lib/format'
 import { formatApiKeyStatus, formatDate, formatExpiry, formatLastUsed } from '../lib/format'
 import type { ApiKeyRow } from '../types'
 
@@ -83,7 +83,7 @@ export function ApiKeysTable(props: ApiKeysTableProps) {
                     {formatLastUsed(t, locale, key.lastUsedTime)}
                   </TableCell>
                   <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
-                    {formatCount(locale, key.recentRequests)}
+                    {formatNumber(key.recentRequests)}
                   </TableCell>
                   <TableCell className="px-4 py-2.5">
                     <div className="flex justify-end gap-0.5">

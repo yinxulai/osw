@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Navigate } from '@tanstack/react-router'
 import { KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -6,6 +7,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import { useApiKeyRecency, useApiKeys, useApiKeysActions, useApiKeysError, useApiKeysLoading } from '@/data/api-keys'
+import { useSettings } from '@/data/settings'
+import { routePaths } from '@/routing/routes'
 import { ApiKeyStats } from './components/api-key-stats'
 import { ApiKeysTable } from './components/api-keys-table'
 import { ApiKeyDialog } from './components/api-key-dialog'
@@ -40,6 +43,7 @@ export function ApiKeysPage() {
   const loadError = useApiKeysError()
   const actions = useApiKeysActions()
   const recency = useApiKeyRecency()
+  const settings = useSettings()
 
   // 状态由「现在」推导，而不落库：过期是时间到了自动发生的事，不经过任何写操作。
   // 活跃度与 Key 列表来自两个库，拼接在 `lib/rows.ts` 里——它要处理「签发后一次都没用过」这个分支。
@@ -130,6 +134,10 @@ export function ApiKeysPage() {
       }
     })()
   }
+
+  // 模块被关掉后这个地址不该还能直接打开（侧栏入口已经收起，但书签和后退还在）。
+  // 不报错、不留空页：静默送回统计分析，与「关掉 = 我没有这个功能」一致。
+  if (settings && !settings.apiKeyFeatureEnabled) return <Navigate to={routePaths.overview} search={{ range: '7d' }} replace />
 
   return (
     <PageLayout>

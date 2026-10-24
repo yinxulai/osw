@@ -20,6 +20,8 @@ function rowOf(overrides: Partial<ApiKeyRow> = {}): ApiKeyRow {
     updatedTime: 0,
     deletedTime: null,
     status: 'enabled',
+    lastUsedTime: null,
+    recentRequests: 0,
     ...overrides,
   }
 }

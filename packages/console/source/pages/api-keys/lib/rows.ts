@@ -12,11 +12,7 @@ import { resolveApiKeyStatus, type ApiKeyRow } from '../types'
  * 「一把没用过的 Key 不会因为缺记录而消失」「活跃度里有一把已被删除的 Key 也不会多出一行」
  * 这两条都属于「只会在用户手上体现」的行为。
  */
-export function buildApiKeyRows(
-  keys: ReadonlyArray<ApiKey>,
-  recency: ReadonlyMap<string, ApiKeyUsageRecency>,
-  now: number,
-): ApiKeyRow[] {
+export function buildApiKeyRows(keys: ReadonlyArray<ApiKey>, recency: ReadonlyMap<string, ApiKeyUsageRecency>, now: number): ApiKeyRow[] {
   return keys.map(key => {
     const usage = recency.get(key.id)
     return {
