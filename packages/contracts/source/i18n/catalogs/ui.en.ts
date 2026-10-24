@@ -284,7 +284,7 @@ export const uiEn = {
   'overview.apiKeys.column.key': 'Key',
   'overview.apiKeys.column.requests': 'Requests',
   'overview.apiKeys.column.tokens': 'Tokens',
-  'overview.apiKeys.column.successRate': 'Success',
+  'overview.apiKeys.column.successRate': 'Success rate',
   'overview.apiKeys.column.avgLatency': 'Avg. latency',
   'overview.apiKeys.empty': 'No requests in this range yet.',
   'overview.latency.title': 'TTFT distribution',
