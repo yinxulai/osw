@@ -110,6 +110,7 @@ function renderRow(log: RequestLogEntry) {
           detail={null}
           modelName="Default model"
           modelDeleted={false}
+          apiKeys={[]}
           detailLoading={false}
           detailError={null}
         />

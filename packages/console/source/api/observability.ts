@@ -2,7 +2,14 @@ import type { AnalyticsRange, AnalyticsSummary, LogEntry, LogScope, ProviderAnal
 import { request } from './client'
 
 export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; scope?: LogScope; query?: string }
-export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; providerModelId?: string; logicalModelId?: string; protocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
+/**
+ * 请求记录的筛选参数。
+ *
+ * `apiKeyId` 的 `null` 是**有意义的取值**：「只看没带 Key 的请求」。因此它是 `string | null`
+ * 而不是 `string`——把 `null` 当成「没筛」在这里正好反了。
+ * 协议那一维的服务端字段名是 `clientProtocol`（见 `ListRequestLogsSchema`），与卡片其它地方一致。
+ */
+export type ListRequestLogsParams = { limit?: number; offset?: number; providerId?: string; providerModelId?: string; logicalModelId?: string; apiKeyId?: string | null; clientProtocol?: string; status?: 'pending' | 'success' | 'failed' | 'cancelled'; createdTimeFrom?: number; createdTimeTo?: number }
 
 export type PruneRequestLogsParams = { requestLogRetentionDays?: number; contentRetentionDays?: number }
 

@@ -21,6 +21,7 @@ const EMPTY_FILTER: RequestLogFilter = {
   providerId: 'all',
   providerModelId: 'all',
   logicalModelId: 'all',
+  apiKeyId: 'all',
   clientProtocol: 'all',
   status: 'all',
   createdTimeFrom: null,
@@ -32,7 +33,7 @@ function renderFilters(filter: RequestLogFilter = EMPTY_FILTER) {
   const applyFilter = vi.fn<(next: Partial<RequestLogFilter>) => void>()
   render(
     <I18nProvider>
-      <RequestLogsFilters filter={filter} providerModelOptions={[]} total={0} applyFilter={applyFilter} />
+      <RequestLogsFilters filter={filter} providerModelOptions={[]} apiKeys={[]} total={0} applyFilter={applyFilter} />
     </I18nProvider>,
   )
   return applyFilter

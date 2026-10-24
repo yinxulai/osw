@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useTranslation } from '@/i18n/provider'
-import { formatApiKeyStatus, formatExpiry } from '../lib/format'
+import { useLocale, useTranslation } from '@/i18n/provider'
+import { formatApiKeyStatus, formatDate, formatExpiry } from '../lib/format'
 import type { ApiKeyRow } from '../types'
 
 interface ApiKeysTableProps {
@@ -27,6 +27,7 @@ interface ApiKeysTableProps {
  */
 export function ApiKeysTable(props: ApiKeysTableProps) {
   const t = useTranslation()
+  const locale = useLocale()
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <div className="border-b border-border/50 px-4 py-3">
@@ -70,10 +71,10 @@ export function ApiKeysTable(props: ApiKeysTableProps) {
                     </div>
                   </TableCell>
                   <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
-                    {formatExpiry(t, key.expiresTime)}
+                    {formatExpiry(t, locale, key.expiresTime)}
                   </TableCell>
                   <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
-                    {new Date(key.createdTime).toLocaleDateString()}
+                    {formatDate(locale, key.createdTime)}
                   </TableCell>
                   <TableCell className="px-4 py-2.5">
                     <div className="flex justify-end gap-0.5">

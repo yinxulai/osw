@@ -1,11 +1,12 @@
 import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
-import type { Protocol } from '@common/schemas'
+import type { ApiKey, Protocol } from '@common/schemas'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { FilterBar } from '@/components/filter-bar'
 import { SearchableSelect } from '@/components/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTranslation } from '@/i18n/provider'
 import { shiftLocalCalendarDays } from '@/lib/calendar-day'
+import { ANONYMOUS_API_KEY } from '../lib/api-key-filter'
 import type { RequestLogFilter } from '../service'
 
 export type StatusFilter = 'all' | 'pending' | 'success' | 'failed' | 'cancelled'
@@ -15,6 +16,8 @@ interface RequestLogsFiltersProps {
   filter: RequestLogsFilter
   /** 只保留「供应商模型」这一维筛选：供应商自身那一维与它是父子关系，一起给用户只是重复。 */
   providerModelOptions: Array<{ id: string; name: string }>
+  /** 当前已知的 API Key：用来选「只看某一把」，以及把记录里的 id 映回名字。 */
+  apiKeys: ApiKey[]
   total: number
   applyFilter: (next: Partial<RequestLogsFilter>) => void
 }
@@ -36,6 +39,23 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
         searchPlaceholder={t('requestLogs.filters.providerModelSearch')}
         emptyLabel={t('requestLogs.filters.providerModelEmpty')}
         className="w-56"
+      />
+      {/*
+       * 「未署名」是一个真实选项而不是「全部」的同义词：没开校验时全部请求都在那一组，
+       * 排查「到底是谁在花额度」时它和「全部」是两种问法。
+       */}
+      <SearchableSelect
+        value={props.filter.apiKeyId}
+        onValueChange={value => props.applyFilter({ apiKeyId: value })}
+        options={[
+          ...props.apiKeys.map(key => ({ value: key.id, label: key.name })),
+          { value: ANONYMOUS_API_KEY, label: t('apiKeys.usage.anonymous') },
+        ]}
+        allOption={{ value: 'all', label: t('requestLogs.filters.allApiKeys') }}
+        label={t('requestLogs.filters.apiKey')}
+        searchPlaceholder={t('requestLogs.filters.apiKeySearch')}
+        emptyLabel={t('requestLogs.filters.apiKeyEmpty')}
+        className="w-44"
       />
       <Select value={props.filter.clientProtocol} onValueChange={value => props.applyFilter({ clientProtocol: value })}>
         <SelectTrigger aria-label={t('requestLogs.filters.protocol')} className="w-36"><SelectValue placeholder={t('requestLogs.filters.allProtocols')} /></SelectTrigger>

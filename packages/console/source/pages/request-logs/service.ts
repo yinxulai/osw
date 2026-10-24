@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { unwrap } from '@/api/unwrap'
 import { providerModelApi } from '@/api/models'
 import { useLiveRequests } from '@/data/live-requests'
+import { useApiKeys } from '@/data/api-keys'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
@@ -10,7 +11,17 @@ import { isRequestExecuting } from './lib/execution'
 import { buildRequestLogRows, type RequestLogsRow } from './lib/rows'
 import { useRequestLogsUiStore } from './store'
 
-export interface RequestLogFilter { providerId: string; providerModelId: string; logicalModelId: string; clientProtocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
+/**
+ * 这一页的筛选条件。
+ *
+ * `apiKeyId` 用 `'all'` 当「不筛」，用 `'anonymous'` 表示「只看没带 Key 的请求」：
+ * 服务端把 `apiKeyId: null` 当成一个**真实的筛选值**（只看匿名的），所以界面不能拿 `null`
+ * 兼任「没选」，否则「没筛」会变成「只看匿名」。翻译在 `queries.ts` 的 `toParams` 里做。
+ */
+export interface RequestLogFilter { providerId: string; providerModelId: string; logicalModelId: string; apiKeyId: string; clientProtocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
+
+/** 「只看没带 Key 的请求」在筛选栏里的取值；定义在 `lib/api-key-filter.ts`，与参数翻译同一处。 */
+export { ALL_API_KEYS, ANONYMOUS_API_KEY } from './lib/api-key-filter'
 
 /**
  * 这个页面的筛选下拉只需要「id + 名字」，因此它缓存的是**接口原始载荷**。
@@ -55,6 +66,8 @@ export function useRequestLogsService() {
   }), [logs, liveRequests, page, filterApplied])
   const providers = useProviders()
   const logicalModels = useLogicalModels()
+  // 记录里只存 Key 的 id，名字在这里实时反查——与「按 Key 统计用量」同一口径。
+  const apiKeys = useApiKeys()
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
   const providerNameById = useMemo(() => new Map(providers.map(provider => [provider.id, provider.name])), [providers])
   const providerModelOptions = useMemo(() => {
@@ -79,7 +92,7 @@ export function useRequestLogsService() {
     rows, total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
     error, filtered,
-    page, expandedId, filter, providerModelOptions, getModelName, isModelDeleted,
+    page, expandedId, filter, providerModelOptions, apiKeys, getModelName, isModelDeleted,
     details: detailQuery.data && expandedId ? { [expandedId]: detailQuery.data } : {},
     // 只认「还没有数据」，不认后台重取：请求还挂着时详情每 1.5s 会被重取一次，
     // 那是为了拿到新的状态与用量，画面上的东西不该跟着闪一下。
