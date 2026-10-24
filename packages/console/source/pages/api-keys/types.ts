@@ -11,6 +11,10 @@ export type ApiKeyStatus = 'enabled' | 'disabled' | 'expired'
  */
 export interface ApiKeyRow extends ApiKey {
   status: ApiKeyStatus
+  /** 最近一次被使用的时间；`null` 表示这把 Key 签发后一次都没被用过。 */
+  lastUsedTime: number | null
+  /** 最近 {@link API_KEY_RECENT_WINDOW_DAYS} 天内的请求数。没用过就是 0，不是空。 */
+  recentRequests: number
 }
 
 export function resolveApiKeyStatus(key: ApiKey, now: number): ApiKeyStatus {

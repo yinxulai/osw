@@ -18,6 +18,8 @@ interface RequestLogsFiltersProps {
   providerModelOptions: Array<{ id: string; name: string }>
   /** 当前已知的 API Key：用来选「只看某一把」，以及把记录里的 id 映回名字。 */
   apiKeys: ApiKey[]
+  /** API Key 模块被关掉时整条筛选一起收起：没有 Key 可选的筛选器只会让人以为出了错。 */
+  showApiKeyFilter: boolean
   total: number
   applyFilter: (next: Partial<RequestLogsFilter>) => void
 }
@@ -42,21 +44,23 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
       />
       {/*
        * 「未署名」是一个真实选项而不是「全部」的同义词：没开校验时全部请求都在那一组，
-       * 排查「到底是谁在花额度」时它和「全部」是两种问法。
+       * 排查「到底是谁在花额度」时它和「全部]是两种问法。
        */}
-      <SearchableSelect
-        value={props.filter.apiKeyId}
-        onValueChange={value => props.applyFilter({ apiKeyId: value })}
-        options={[
-          ...props.apiKeys.map(key => ({ value: key.id, label: key.name })),
-          { value: ANONYMOUS_API_KEY, label: t('apiKeys.usage.anonymous') },
-        ]}
-        allOption={{ value: 'all', label: t('requestLogs.filters.allApiKeys') }}
-        label={t('requestLogs.filters.apiKey')}
-        searchPlaceholder={t('requestLogs.filters.apiKeySearch')}
-        emptyLabel={t('requestLogs.filters.apiKeyEmpty')}
-        className="w-44"
-      />
+      {props.showApiKeyFilter && (
+        <SearchableSelect
+          value={props.filter.apiKeyId}
+          onValueChange={value => props.applyFilter({ apiKeyId: value })}
+          options={[
+            ...props.apiKeys.map(key => ({ value: key.id, label: key.name })),
+            { value: ANONYMOUS_API_KEY, label: t('apiKeys.label.anonymous') },
+          ]}
+          allOption={{ value: 'all', label: t('requestLogs.filters.allApiKeys') }}
+          label={t('requestLogs.filters.apiKey')}
+          searchPlaceholder={t('requestLogs.filters.apiKeySearch')}
+          emptyLabel={t('requestLogs.filters.apiKeyEmpty')}
+          className="w-44"
+        />
+      )}
       <Select value={props.filter.clientProtocol} onValueChange={value => props.applyFilter({ clientProtocol: value })}>
         <SelectTrigger aria-label={t('requestLogs.filters.protocol')} className="w-36"><SelectValue placeholder={t('requestLogs.filters.allProtocols')} /></SelectTrigger>
         <SelectContent>

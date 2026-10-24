@@ -16,6 +16,25 @@ export function formatExpiry(t: AppTranslator, locale: string, expiresTime: numb
   return formatDate(locale, expiresTime)
 }
 
+/**
+ * 「最近使用」的展示：日期 + 时分。
+ *
+ * 只写日期不够用：同一把 Key 一天内被用了很多次时，「今天」这三个字没法区分
+ * 「五分钟前还在用」和「早上用过一次就再没动静」。`null` 读作「从未使用」，
+ * 与「永不过期」同一套写法——**空值要有词，不能是空单元格**，否则看不出是没数据还是没加载。
+ */
+export function formatLastUsed(t: AppTranslator, locale: string, lastUsedTime: number | null): string {
+  if (lastUsedTime === null) return t('apiKeys.lastUsed.never')
+  return new Date(lastUsedTime).toLocaleString(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 /** 状态徽标读的是**当前时刻**推导出的状态，而不是库里存的开关——过期是时间说了算的。 */
 export function formatApiKeyStatus(t: AppTranslator, status: ApiKeyStatus): string {
   switch (status) {

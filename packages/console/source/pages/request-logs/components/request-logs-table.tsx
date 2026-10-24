@@ -29,6 +29,8 @@ interface RequestLogTableRowProps {
   modelDeleted: boolean
   /** 当前 API Key 列表：详情头部把记录里的 `apiKeyId` 反查成名字。 */
   apiKeys: ApiKey[]
+  /** Key 模块是否启用：关掉时详情不再展示「谁发的」这一行。 */
+  showApiKey: boolean
   toggleExpand: (id: string) => void
 }
 
@@ -50,6 +52,8 @@ interface RequestLogsTableProps {
   detailErrors: Record<string, string>
   /** 当前 API Key 列表（筛选栏与详情共用同一份）。 */
   apiKeys: ApiKey[]
+  /** Key 模块是否启用：关掉时详情里不再展示「谁发的」这一行。 */
+  showApiKey: boolean
   getModelName: (id: string | null) => string
   /** 这条记录指向的逻辑模型是否已被删除（只影响是否补「已删除」标签）。 */
   isModelDeleted: (id: string | null) => boolean
@@ -247,6 +251,7 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
           modelName={props.modelName}
           modelDeleted={props.modelDeleted}
           apiKeys={props.apiKeys}
+          showApiKey={props.showApiKey}
           detailLoading={props.detailLoading}
           detailError={props.detailError}
         />
@@ -297,6 +302,7 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
           modelName={props.getModelName(row.log.logicalModelId)}
           modelDeleted={props.isModelDeleted(row.log.logicalModelId)}
           apiKeys={props.apiKeys}
+          showApiKey={props.showApiKey}
           toggleExpand={props.toggleExpand}
         />
       ))

@@ -37,3 +37,15 @@ export const appNavigationItems: AppNavigationItem[] = [
 export function findCurrentNavigationItem(pathname: string): AppNavigationItem | undefined {
   return appNavigationItems.find(item => pathname === item.to || pathname.startsWith(`${item.to}/`))
 }
+
+/**
+ * 按运行时设置过滤导航项。
+ *
+ * 只过滤「整个模块被关掉」的那几项，其余原样返回——所以它是 `appNavigationItems` 的一层筛子，
+ * 而不是另一份列表。设置还没加载出来时（`null`）按默认值显示：加载中先少一个入口再冒出来，
+ * 比先给一个点进去是空页的入口更难受。
+ */
+export function resolveNavigationItems(apiKeyFeatureEnabled: boolean): AppNavigationItem[] {
+  if (apiKeyFeatureEnabled) return appNavigationItems
+  return appNavigationItems.filter(item => item.to !== routePaths.apiKeys)
+}

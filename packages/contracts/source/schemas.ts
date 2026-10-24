@@ -248,6 +248,34 @@ export const ApiKeyStatSchema = z.object({
 })
 export type ApiKeyStat = z.infer<typeof ApiKeyStatSchema>
 
+/**
+ * 一把 Key 的**活跃度**：最近一次被使用的时间，以及最近一段时间内的请求数。
+ *
+ * 与 {@link ApiKeyStatSchema} 的区别是「问的是什么」：那个是「这段时间里谁花了多少」，
+ * 回答的是一个时间窗内的排名；这个是「这把 Key 还活着吗」，回答的是列表页最需要的那一眼。
+ * 所以它**不带时间范围参数**——列表页不该因为用户上次在统计页选了「今天」而忽然全是 0。
+ *
+ * 只统计**有名字**的 Key：匿名请求没有「最近使用」可言，它们由 `ApiKeyStat` 的
+ * `apiKeyId: null` 那一行负责。
+ */
+export const ApiKeyUsageRecencySchema = z.object({
+  apiKeyId: z.string(),
+  /** 最近一次被使用的时间（毫秒时间戳）。仍在库里、但一次都没被用过的 Key 不会出现在列表里。 */
+  lastUsedTime: z.number().int(),
+  /** 最近 {@link API_KEY_RECENT_WINDOW_DAYS} 天内的请求数。 */
+  recentRequests: z.number().int().nonnegative(),
+})
+export type ApiKeyUsageRecency = z.infer<typeof ApiKeyUsageRecencySchema>
+
+/**
+ * 「最近请求次数」这个口径有多长。
+ *
+ * 固定 7 天而不是跟着统计页的时间范围走：Key 列表要的是一眼判断「这把还在用吗」，
+ * 跟着范围跑会让同一列在两个页面显示两个数。`7d` 也正是统计页的默认范围，
+ * 两处的「最近」指的是同一段时间。
+ */
+export const API_KEY_RECENT_WINDOW_DAYS = 7
+
 export const ProviderSettingSchema = z.object({
   providerId: z.string().startsWith('prov_'),
   key: z.string().min(1),
@@ -525,10 +553,22 @@ export const SettingsSchema = z.object({
    * 都会被拒绝（`UNAUTHORIZED`），这是把代理暴露到 `0.0.0.0` 或对局域网开放时应有的状态
    * （见 issue #27 与 `apps/docs/specs/security-privacy.md` §本地 API Key）。
    *
-   * 它是**运行时开关**而不是编译期功能闸门：签发 Key、按 Key 统计用量这两件事永远可用，
-   * 「要不要拦」才是一个用户自己该拿主意的选择。
+   * 这是「要不要拦」，与 {@link Settings.apiKeyFeatureEnabled}（模块在不在）是两件事：
+   * 模块关掉时这一项被忽略——整块能力都不在了，没有理由还因为没带 Key 而拒绝请求。
    */
   apiKeyAuthEnabled: z.boolean().default(false),
+  /**
+   * 客户端 API Key **整个模块**的开关。默认开启。
+   *
+   * 关掉之后这一整块能力从界面上消失：侧栏入口、管理页、请求日志里的「按 Key 筛选」与
+   * 详情里的那一行、统计页的按 Key 用量都不再出现；代理也不再做任何身份校验
+   * （{@link Settings.apiKeyAuthEnabled} 被忽略）。
+   *
+   * 之所以要这个开关：这套东西是为「把代理暴露出去」准备的，只监听回环、或者干脆把 Key
+   * 全交给客户端自己填的用户根本用不到它，多出来的导航项与统计卡片只是噪音。数据不会被
+   * 删除——重新打开开关，之前的 Key 与历史统计都还在。
+   */
+  apiKeyFeatureEnabled: z.boolean().default(true),
   /**
    * 缓存亲和绑定的保持时长。
    *

@@ -6,7 +6,8 @@ import type { Theme } from '@/lib/theme-mode'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
-import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
+import { useSettings } from '@/data/settings'
+import { findCurrentNavigationItem, resolveNavigationItems, type AppNavigationItem } from '@/routing/navigation'
 import { type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 
@@ -86,7 +87,10 @@ export function AppSidebar(props: AppSidebarProps) {
   const navRef = useRef<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef(new Map<AppNavPath, HTMLAnchorElement>())
-  const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
+  // Key 模块被关掉时入口一起收起；设置还没到位时按默认（开着）渲染。
+  const settings = useSettings()
+  const navigationItems = resolveNavigationItems(settings?.apiKeyFeatureEnabled ?? true)
+  const navSections = navigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
     if (currentSection?.key === item.sectionKey) {
       currentSection.items.push(item)
@@ -95,7 +99,7 @@ export function AppSidebar(props: AppSidebarProps) {
     }
     return sections
   }, [])
-  const activeKey = appNavigationItems.find(item => pathname === item.to || pathname.startsWith(`${item.to}/`))?.to ?? null
+  const activeKey = findCurrentNavigationItem(pathname)?.to ?? null
 
   useLayoutEffect(() => {
     const measureItem = (key: AppNavPath): IndicatorRect | null => {

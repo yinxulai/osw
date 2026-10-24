@@ -2,7 +2,7 @@ import { and, eq, gte, sql, type SQL } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { DAY_MILLISECONDS, formatLatencyBinLabel, formatTrendBucketLabel, resolveHeatBuckets, resolveLatencyBinEdges, resolveTrendBuckets, type AnalyticsBuckets } from '@common/analytics-buckets'
 import { cacheHitRate } from '@common/metrics'
-import type { ApiKeyStat, FailureReasonCategory, RequestSourceStat, RequestStatus, UsageTrendPoint } from '@common/schemas'
+import type { ApiKeyStat, ApiKeyUsageRecency, FailureReasonCategory, RequestSourceStat, RequestStatus, UsageTrendPoint } from '@common/schemas'
 import { getDataDb } from './index'
 import { attemptUsages, requestAttempts, requestAttributes, requestLogs, requestUsages } from './data-schema'
 
@@ -322,6 +322,35 @@ export async function getApiKeyStats(sinceMs: number, limit = 50): Promise<ApiKe
     totalTokens: row.totalTokens ?? 0,
     avgLatencyMs: row.avgLatency ?? 0,
   }))
+}
+
+/**
+ * 每把 Key 的「最近一次被使用」与「最近这段时间被用了多少次」。
+ *
+ * 与 {@link getApiKeyStats} 是两把不同的尺子，所以不合并：
+ *   - `getApiKeyStats` 回答「这个时间窗里谁花了多少额度」，它需要 join 用量表，代价高；
+ *   - 这里回答「这把 Key 还活着吗」，只看 `request_logs` 的两个列，走
+ *     `(apiKeyId, createdTime)` 索引一次扫描即可。
+ *
+ * `lastUsedTime` 取**全时段**的最大值，`recentRequests` 才受 `recentSinceMs` 限制：
+ * 一把两周没用过的 Key 仍然要显示「上次是两周前」，而不是因为落在窗外就变成「从未使用」。
+ *
+ * 匿名组（`apiKeyId is null`）不在这里返回：它没有「最近使用」这回事，
+ * 也不对应列表里的任何一行。
+ */
+export async function getApiKeyUsageRecency(recentSinceMs: number): Promise<ApiKeyUsageRecency[]> {
+  const rows = getDataDb().select({
+    apiKeyId: requestLogs.apiKeyId,
+    lastUsedTime: sql<number>`max(${requestLogs.createdTime})`.as('lastUsedTime'),
+    recentRequests: sql<number>`sum(case when ${requestLogs.createdTime} >= ${recentSinceMs} then 1 else 0 end)`.as('recentRequests'),
+  }).from(requestLogs)
+    .where(sql`${requestLogs.apiKeyId} is not null`)
+    .groupBy(requestLogs.apiKeyId)
+    .all()
+  // `is not null` 已经把匿名组过滤掉了，这里的判断只是把可空类型收窄成 `ApiKeyUsageRecency` 的形状。
+  return rows.flatMap(row => row.apiKeyId === null
+    ? []
+    : [{ apiKeyId: row.apiKeyId, lastUsedTime: row.lastUsedTime ?? 0, recentRequests: row.recentRequests ?? 0 }])
 }
 
 // 提供方统计的时间窗一律用「尝试表自己的 `createdTime`」。

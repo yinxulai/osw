@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appNavigationItems, findCurrentNavigationItem } from './navigation'
+import { appNavigationItems, findCurrentNavigationItem, resolveNavigationItems } from './navigation'
 import { routePaths } from './routes'
 import { getTranslator } from '@/i18n/active'
 
@@ -113,5 +113,17 @@ describe('导航清单', () => {
     for (const item of appNavigationItems) {
       expect(findCurrentNavigationItem(item.to)?.to).toBe(item.to)
     }
+  })
+})
+
+describe('resolveNavigationItems', () => {
+  it('Key 模块关闭时只收起 Key 这一项，其它原样保留（包括顺序）', () => {
+    const visible = resolveNavigationItems(false)
+    expect(visible.map(item => item.to)).not.toContain(routePaths.apiKeys)
+    expect(visible.map(item => item.to)).toEqual(appNavigationItems.map(item => item.to).filter(to => to !== routePaths.apiKeys))
+  })
+
+  it('Key 模块打开时返回完整清单', () => {
+    expect(resolveNavigationItems(true)).toEqual(appNavigationItems)
   })
 })

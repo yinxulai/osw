@@ -33,7 +33,7 @@ function renderFilters(filter: RequestLogFilter = EMPTY_FILTER) {
   const applyFilter = vi.fn<(next: Partial<RequestLogFilter>) => void>()
   render(
     <I18nProvider>
-      <RequestLogsFilters filter={filter} providerModelOptions={[]} apiKeys={[]} total={0} applyFilter={applyFilter} />
+      <RequestLogsFilters filter={filter} providerModelOptions={[]} apiKeys={[]} showApiKeyFilter total={0} applyFilter={applyFilter} />
     </I18nProvider>,
   )
   return applyFilter

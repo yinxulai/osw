@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react'
-import type { AnalyticsRange } from '@common/schemas'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { useApiKeys, useApiKeysActions, useApiKeysError, useApiKeysLoading } from '@/data/api-keys'
-import { useAnalyticsSummary } from '@/data/analytics'
+import { useApiKeyRecency, useApiKeys, useApiKeysActions, useApiKeysError, useApiKeysLoading } from '@/data/api-keys'
 import { ApiKeyStats } from './components/api-key-stats'
 import { ApiKeysTable } from './components/api-keys-table'
-import { ApiKeyUsage } from './components/api-key-usage'
 import { ApiKeyDialog } from './components/api-key-dialog'
 import { ApiKeySecretDialog } from './components/api-key-secret-dialog'
 import { apiKeyToDraft, draftExpiresTime, emptyApiKeyDraft, type ApiKeyDraft } from './lib/draft'
+import { buildApiKeyRows } from './lib/rows'
 import type { ApiKeyRow } from './types'
 
 /**
@@ -38,18 +35,15 @@ export function ApiKeysPage() {
   const confirm = useConfirm()
   const now = useNow()
 
-  const [range, setRange] = useState<AnalyticsRange>('7d')
   const rawKeys = useApiKeys()
   const loading = useApiKeysLoading()
   const loadError = useApiKeysError()
   const actions = useApiKeysActions()
-  const analytics = useAnalyticsSummary(range)
+  const recency = useApiKeyRecency()
 
   // 状态由「现在」推导，而不落库：过期是时间到了自动发生的事，不经过任何写操作。
-  const rows: ApiKeyRow[] = useMemo(
-    () => rawKeys.map(key => ({ ...key, status: key.expiresTime !== null && key.expiresTime <= now ? 'expired' : key.enabled ? 'enabled' : 'disabled' })),
-    [rawKeys, now],
-  )
+  // 活跃度与 Key 列表来自两个库，拼接在 `lib/rows.ts` 里——它要处理「签发后一次都没用过」这个分支。
+  const rows = useMemo(() => buildApiKeyRows(rawKeys, recency, now), [rawKeys, recency, now])
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -172,18 +166,6 @@ export function ApiKeysPage() {
               onToggle={toggle}
             />
           )}
-
-        <div className="flex items-center justify-between">
-          <h2 className="px-1 system-xs-medium text-text-tertiary">{t('apiKeys.usage.title')}</h2>
-          <Tabs value={range} onValueChange={value => setRange(value as AnalyticsRange)}>
-            <TabsList>
-              <TabsTrigger value="today" className="px-2.5 text-xs">{t('overview.range.today')}</TabsTrigger>
-              <TabsTrigger value="7d" className="px-2.5 text-xs">{t('overview.range.7d')}</TabsTrigger>
-              <TabsTrigger value="30d" className="px-2.5 text-xs">{t('overview.range.30d')}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <ApiKeyUsage stats={analytics.data?.apiKeyStats ?? []} keys={rawKeys} />
 
         <ApiKeyDialog
           open={dialogOpen}

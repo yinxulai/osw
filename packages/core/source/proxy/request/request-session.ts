@@ -40,7 +40,9 @@ export async function createProxyRequestSession(input: CreateProxyRequestSession
       captureRequestLogs: settings.captureRequestLogs,
       captureRequestContent: settings.captureRequestContent,
       idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
-      apiKeyAuthEnabled: settings.apiKeyAuthEnabled,
+      // 整个模块关掉时，校验开关必须一起失效：模块都不在界面上出现了，再返回 401
+      // 只会变成一个无法排查、也无处关闭的拦截。折算放在这一层做，消费方读到的仍是单个布尔。
+      apiKeyAuthEnabled: settings.apiKeyFeatureEnabled && settings.apiKeyAuthEnabled,
     },
     logger,
   }

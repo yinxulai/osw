@@ -1,4 +1,4 @@
-import type { AnalyticsRange, AnalyticsSummary, LogEntry, LogScope, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import type { AnalyticsRange, AnalyticsSummary, ApiKeyUsageRecency, LogEntry, LogScope, ProviderAnalyticsDetail, RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
 import { request } from './client'
 
 export type ListLogsParams = { limit?: number; offset?: number; level?: LogEntry['level']; scope?: LogScope; query?: string }
@@ -36,4 +36,6 @@ export const requestLogApi = {
 export const analyticsApi = {
   summary: (range: AnalyticsRange = '7d') => request<AnalyticsSummary>('/analytics/summary', { range }),
   providerDetail: (providerId: string, range: AnalyticsRange = '7d') => request<ProviderAnalyticsDetail>('/analytics/provider-detail', { providerId, range }),
+  /** 每把 Key 的活跃度：没有范围参数，口径固定在契约里（最近 7 天）。 */
+  apiKeyRecency: () => request<ApiKeyUsageRecency[]>('/analytics/api-key-recency'),
 }

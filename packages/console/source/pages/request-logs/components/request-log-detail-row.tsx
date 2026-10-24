@@ -46,6 +46,8 @@ interface RequestLogDetailRowProps {
   modelDeleted: boolean
   /** 当前 API Key 列表：把记录里的 `apiKeyId` 反查成名字（记录只存 id）。 */
   apiKeys: ApiKey[]
+  /** Key 模块是否启用：关掉时不再展示「谁发的」这一行。 */
+  showApiKey: boolean
   detailLoading: boolean
   detailError: string | null
 }
@@ -504,14 +506,16 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                   tone={converted ? 'warning' : 'default'}
                 />
                 {/* 谁发的：记录只存 id，名字从当前 Key 列表实时反查（删了也照旧展示）。 */}
-                <MetaFact
-                  label={t('requestLogs.detail.apiKey')}
-                  value={apiKeyLabel(log.apiKeyId, props.apiKeys, {
-                    anonymous: t('apiKeys.usage.anonymous'),
-                    unknown: t('apiKeys.usage.unknown'),
-                  })}
-                  mono={log.apiKeyId !== null && !props.apiKeys.some(key => key.id === log.apiKeyId)}
-                />
+                {props.showApiKey && (
+                  <MetaFact
+                    label={t('requestLogs.detail.apiKey')}
+                    value={apiKeyLabel(log.apiKeyId, props.apiKeys, {
+                      anonymous: t('apiKeys.label.anonymous'),
+                      unknown: t('apiKeys.label.unknown'),
+                    })}
+                    mono={log.apiKeyId !== null && !props.apiKeys.some(key => key.id === log.apiKeyId)}
+                  />
+                )}
                 {/* 传输形态是客户端跳声明的预期，与上游跳实际怎么回无关。 */}
                 <MetaFact label={t('requestLogs.detail.transport')} value={formatTransport(t, log.transport)} />
                 <MetaFact label={t('common.label.time')} value={formatTime(locale, log.createdTime)} />

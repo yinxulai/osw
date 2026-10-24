@@ -4,6 +4,7 @@ import { unwrap } from '@/api/unwrap'
 import { providerModelApi } from '@/api/models'
 import { useLiveRequests } from '@/data/live-requests'
 import { useApiKeys } from '@/data/api-keys'
+import { useSettings } from '@/data/settings'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
@@ -68,6 +69,8 @@ export function useRequestLogsService() {
   const logicalModels = useLogicalModels()
   // 记录里只存 Key 的 id，名字在这里实时反查——与「按 Key 统计用量」同一口径。
   const apiKeys = useApiKeys()
+  // Key 模块被关掉时，筛选器与详情里的「谁发的」一起收起（记录本身照旧保留）。
+  const showApiKey = useSettings()?.apiKeyFeatureEnabled ?? true
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
   const providerNameById = useMemo(() => new Map(providers.map(provider => [provider.id, provider.name])), [providers])
   const providerModelOptions = useMemo(() => {
@@ -92,7 +95,7 @@ export function useRequestLogsService() {
     rows, total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
     error, filtered,
-    page, expandedId, filter, providerModelOptions, apiKeys, getModelName, isModelDeleted,
+    page, expandedId, filter, providerModelOptions, apiKeys, showApiKey, getModelName, isModelDeleted,
     details: detailQuery.data && expandedId ? { [expandedId]: detailQuery.data } : {},
     // 只认「还没有数据」，不认后台重取：请求还挂着时详情每 1.5s 会被重取一次，
     // 那是为了拿到新的状态与用量，画面上的东西不该跟着闪一下。

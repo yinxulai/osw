@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatCount } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
-import { formatApiKeyStatus, formatDate, formatExpiry } from '../lib/format'
+import { formatApiKeyStatus, formatDate, formatExpiry, formatLastUsed } from '../lib/format'
 import type { ApiKeyRow } from '../types'
 
 interface ApiKeysTableProps {
@@ -43,12 +44,14 @@ export function ApiKeysTable(props: ApiKeysTableProps) {
               <TableHead className="w-40 px-3 py-2">{t('apiKeys.table.column.status')}</TableHead>
               <TableHead className="w-36 px-3 py-2">{t('apiKeys.table.column.expires')}</TableHead>
               <TableHead className="w-40 px-3 py-2">{t('apiKeys.table.column.created')}</TableHead>
+              <TableHead className="w-40 px-3 py-2">{t('apiKeys.table.column.lastUsed')}</TableHead>
+              <TableHead className="w-28 px-3 py-2">{t('apiKeys.table.column.recentRequests')}</TableHead>
               <TableHead className="w-32 px-4 py-2 text-right">{t('apiKeys.table.column.operations')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {props.keys.length === 0
-              ? <TableStateRow colSpan={5} icon={KeyRound} title={t('apiKeys.empty.title')} description={t('apiKeys.empty.description')} />
+              ? <TableStateRow colSpan={7} icon={KeyRound} title={t('apiKeys.empty.title')} description={t('apiKeys.empty.description')} />
               : props.keys.map(key => (
                 <TableRow key={key.id} className={tableRowClass}>
                   <TableCell className="px-4 py-2.5">
@@ -75,6 +78,12 @@ export function ApiKeysTable(props: ApiKeysTableProps) {
                   </TableCell>
                   <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
                     {formatDate(locale, key.createdTime)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
+                    {formatLastUsed(t, locale, key.lastUsedTime)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 system-2xs-regular text-text-tertiary">
+                    {formatCount(locale, key.recentRequests)}
                   </TableCell>
                   <TableCell className="px-4 py-2.5">
                     <div className="flex justify-end gap-0.5">

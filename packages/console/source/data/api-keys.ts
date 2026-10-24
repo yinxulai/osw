@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ApiKey } from '@common/schemas'
+import type { ApiKey, ApiKeyUsageRecency } from '@common/schemas'
 import { apiKeyApi, type CreateApiKeyInput, type UpdateApiKeyInput } from '@/api/api-keys'
+import { analyticsApi } from '@/api/observability'
 import { unwrap } from '@/api/unwrap'
 
-export const apiKeyKeys = { all: ['api-keys'] as const }
+export const apiKeyKeys = { all: ['api-keys'] as const, recency: ['api-keys', 'recency'] as const }
 
 /** 更新入参：id 与要改的字段分开，避免把 id 也当成可改字段。 */
 export type UpdateApiKeyMutationInput = { id: string; updates: UpdateApiKeyInput }
@@ -22,6 +23,26 @@ export function useApiKeys(): ApiKey[] {
 
 export function useApiKeysLoading(): boolean {
   return useApiKeysQuery().isPending
+}
+
+/**
+ * 每把 Key 的活跃度（最近使用时间 + 最近 7 天请求数），按 `apiKeyId` 索引。
+ *
+ * 单独一条查询而不是并进列表接口：列表来自**配置库**（用户写的），活跃度来自
+ * **观测库**（系统写的），两条库的读取节奏与失效时机都不一样。索引在这里建，
+ * 因为渲染层不该自己 `find` 一遍——那是纯逻辑，属于 `pages/api-keys/lib`。
+ *
+ * 刷新节奏跟统计页一致（15 秒）：它回答的是「这把刚才还在用吗」，慢了就没意义。
+ */
+const useApiKeyRecencyQuery = () => useQuery({
+  queryKey: apiKeyKeys.recency,
+  queryFn: () => unwrap(analyticsApi.apiKeyRecency()),
+  refetchInterval: 15_000,
+})
+
+export function useApiKeyRecency(): Map<string, ApiKeyUsageRecency> {
+  const rows = useApiKeyRecencyQuery().data ?? []
+  return new Map(rows.map(row => [row.apiKeyId, row]))
 }
 
 /** 列表加载失败要能显示出来并重试，所以这里把错误原文透出去（页面再本地化）。 */
@@ -51,4 +72,3 @@ export function useApiKeysActions() {
 
   return { refresh, create, update, remove, rotate }
 }
-

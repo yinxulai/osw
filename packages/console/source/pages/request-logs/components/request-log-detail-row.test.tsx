@@ -111,6 +111,7 @@ function renderRow(log: RequestLogEntry) {
           modelName="Default model"
           modelDeleted={false}
           apiKeys={[]}
+          showApiKey
           detailLoading={false}
           detailError={null}
         />
