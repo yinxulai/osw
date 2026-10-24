@@ -154,6 +154,7 @@ describe('schema split', () => {
 
     expect(tableNames(getConfigDb().$client)).toEqual([
       '__drizzle_migrations',
+      'api_keys',
       'client_config_versions',
       'logical_models',
       'protocol_converters',
@@ -244,7 +245,7 @@ describe('schema split', () => {
     // `PRAGMA table_info` 返回的是物理列顺序；两个库各由一个首发基线建表，物理顺序等于
     // schema 声明顺序。这里仍然比较集合，避免测试在有人重排 schema 时无意义地变红。
     expect(columnNames(data, 'request_logs').sort()).toEqual([
-      'clientProtocol', 'createdTime', 'id', 'logicalModelId', 'status', 'totalDurationMilliseconds', 'transport',
+      'apiKeyId', 'clientProtocol', 'createdTime', 'id', 'logicalModelId', 'status', 'totalDurationMilliseconds', 'transport',
     ])
     // 正文列存的是压缩后落库、读取时还原的字节，但列亲和性仍是 `text`：压缩是列定义里的
     // 细节，不产生 schema 变更，所以这两张表的物理列与首发基线完全一致。这里断言的是
@@ -276,6 +277,8 @@ describe('schema split', () => {
     // 而且只会在运行期以写入失败的形式暴露。这里把配置库的索引逐个列全，
     // 少一个多一个都要在评审时被看见。
     expect(indexNames(config).filter(name => name.startsWith('idx_')).sort()).toEqual([
+      'idx_api_keys_deleted_time',
+      'idx_api_keys_enabled',
       'idx_client_config_versions_file',
       'idx_client_config_versions_hash',
       'idx_logical_models_deleted_time',

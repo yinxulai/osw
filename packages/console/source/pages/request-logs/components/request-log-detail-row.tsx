@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { resolveProxyOrigin } from '@common/proxy-origin'
 import { cacheHitRate, failoverDurationOf, firstTokenShareOf, formatMilliseconds, formatOutputSpeed, requestOutputTokensPerSecond, servingAttemptOf } from '@common/metrics'
 import type {
+  ApiKey,
   RequestContentSummary,
   RequestLogDetail,
   RequestLogEntry,
@@ -21,6 +22,7 @@ import { formatPercent } from '@/lib/format-percent'
 import { cn } from '@/lib/utils'
 import { routePaths } from '@/routing/routes'
 import { fetchRequestLogBodies } from '../queries'
+import { apiKeyLabel } from '../lib/api-key-filter'
 import { buildCurl } from '../lib/build-curl'
 import {
   PROTOCOL_LABEL,
@@ -42,6 +44,10 @@ interface RequestLogDetailRowProps {
   modelName: string
   /** 记录里那个逻辑模型名此刻已不再对应一条活跃配置（被删了）。 */
   modelDeleted: boolean
+  /** 当前 API Key 列表：把记录里的 `apiKeyId` 反查成名字（记录只存 id）。 */
+  apiKeys: ApiKey[]
+  /** Key 模块是否启用：关掉时不再展示「谁发的」这一行。 */
+  showApiKey: boolean
   detailLoading: boolean
   detailError: string | null
 }
@@ -499,6 +505,17 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                   value={protocolText}
                   tone={converted ? 'warning' : 'default'}
                 />
+                {/* 谁发的：记录只存 id，名字从当前 Key 列表实时反查（删了也照旧展示）。 */}
+                {props.showApiKey && (
+                  <MetaFact
+                    label={t('requestLogs.detail.apiKey')}
+                    value={apiKeyLabel(log.apiKeyId, props.apiKeys, {
+                      anonymous: t('apiKeys.label.anonymous'),
+                      unknown: t('apiKeys.label.unknown'),
+                    })}
+                    mono={log.apiKeyId !== null && !props.apiKeys.some(key => key.id === log.apiKeyId)}
+                  />
+                )}
                 {/* 传输形态是客户端跳声明的预期，与上游跳实际怎么回无关。 */}
                 <MetaFact label={t('requestLogs.detail.transport')} value={formatTransport(t, log.transport)} />
                 <MetaFact label={t('common.label.time')} value={formatTime(locale, log.createdTime)} />

@@ -84,6 +84,7 @@ const initialFilter = {
   providerId: 'all',
   providerModelId: 'all',
   logicalModelId: 'all',
+  apiKeyId: 'all',
   clientProtocol: 'all',
   status: 'all',
   createdTimeFrom: null,

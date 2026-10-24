@@ -1,4 +1,4 @@
-export { modelRoutes, providerRoutes, providerModelRoutes } from './catalog'
+export { modelRoutes, providerRoutes, providerModelRoutes, apiKeyRoutes } from './catalog'
 export { settingsRoutes, runtimeControlRoutes, telemetryRoutes, developmentRoutes, storageRoutes, clientConfigRoutes, cloudSyncRoutes } from './operations'
 export { logRoutes, requestLogRoutes, analyticsRoutes } from './observability'
 export { modelConnectivityRoutes, outboundProxyTestRoutes, providerModelFetchRoutes } from './diagnostics'

@@ -42,6 +42,7 @@ const noFilter = {
   providerId: 'all',
   providerModelId: 'all',
   logicalModelId: 'all',
+  apiKeyId: 'all',
   clientProtocol: 'all',
   status: 'all',
   createdTimeFrom: null,
@@ -108,6 +109,8 @@ describe('请求记录列表查询', () => {
     expect(params).not.toHaveProperty('providerId')
     expect(params).not.toHaveProperty('providerModelId')
     expect(params).not.toHaveProperty('logicalModelId')
+    // Key 这一维的「没筛」必须一个字段都不发：发 `null` 会变成「只看匿名请求」。
+    expect(params).not.toHaveProperty('apiKeyId')
     expect(params).not.toHaveProperty('clientProtocol')
     expect(params).not.toHaveProperty('status')
     // 时间范围默认 null（不是 0）——0 会被服务端当成「从 1970 年起」，那是个真实的筛选条件。
@@ -125,6 +128,7 @@ describe('请求记录列表查询', () => {
       providerId: 'prov_1',
       providerModelId: 'pm_1',
       logicalModelId: 'lm_1',
+      apiKeyId: 'ak_1',
       clientProtocol: 'openai-completions',
       status: 'failed',
       createdTimeFrom: 1_700_000_000_000,
@@ -140,11 +144,23 @@ describe('请求记录列表查询', () => {
       providerId: 'prov_1',
       providerModelId: 'pm_1',
       logicalModelId: 'lm_1',
+      apiKeyId: 'ak_1',
       clientProtocol: 'openai-completions',
       status: 'failed',
       createdTimeFrom: 1_700_000_000_000,
       createdTimeTo: 1_700_100_000_000,
     })
+  })
+
+  it('筛「未署名」时发 null（null 是服务端真实的筛选值，不是「没筛」）', async () => {
+    list.mockReset()
+    list.mockResolvedValue(ok({ logs: [], total: 0 }))
+    const { wrapper } = createQueryFixture()
+
+    const { result } = renderHook(() => useRequestLogsQuery({ ...noFilter, apiKeyId: 'anonymous' }, 1), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(list.mock.calls[0][0]).toMatchObject({ apiKeyId: null })
   })
 
   it('接口报错时把错误抛出来（而不是回一份空列表——那会显示成「没有记录」）', async () => {

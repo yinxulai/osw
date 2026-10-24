@@ -82,7 +82,7 @@
 
 - [x] 服务默认只监听 `127.0.0.1`
 - [x] 管理接口叠加独立的访问控制：每次应用启动随机生成的凭证 `x-osw-token`，`Host` 只在注入凭证那一刻判一次回环（挡 DNS rebinding 读走凭证）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），服务进程崩溃重启不会换新，也和代理是否启动无关。**凭证没有例外**：每一条 `/api/*` 都必须带上它，不区分浏览器与本机进程——曾经按 `Origin` / `Sec-Fetch-Site` 只卡浏览器，而那两个头是调用方自己写的，任何本机 `curl` 不发它们就能调 `/api/provider/export` 拿走明文密钥。凭证由服务在 listen 成功后写到 `<dataDir>/management.token`（`0600`）、退出时删除，`stop` / `status` 从这读；不写进 `runtime.json`，因为那份快照会随 `status --json` 进 shell 历史。凭证之外不再有 `Host` 白名单与来源白名单：它们挡不住拿着凭证的调用方，只制造「用局域网 IP 打开就上不去」这类故障。**开发形态（`environment === 'development'`）不校验凭证**，让 Vite 页面与自动化脚本无需先读 `management.token`；开发形态使用独立数据目录，正式形态仍然 fail-closed。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./operations/security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
-- [ ] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
+- [x] 本地 API Key（**代理入口向下签发的调用方凭证**）：**已实现，两级开关默认「有模块、只认身份、不拦截」**。`apiKeyFeatureEnabled`（默认 `true`）决定模块是否存在——关掉后侧栏项、路由、请求日志的 Key 筛选与详情、总览的按 Key 用量卡片一并收起，代理侧也不再认身份（等价全部匿名），但**已有数据原地保留**；模块开着就认身份（记进 `request_logs.apiKeyId`，否则按 Key 的用量与最近使用时间永远无数据），`apiKeyAuthEnabled`（默认 `false`）只在打开后才**拦**：未带 / 错误 / 停用 / 过期的 Key 一律 `401`。支持多个具名 Key、启用开关与可选过期时间，明文只存宿主密钥存储（与 Provider Key 同一套设施），DB 只留引用且**明文只在创建 / 轮换时回一次**；提供创建 / 轮换 / 删除 / 启停，Key 列表直接给出**最近使用时间与近 7 天请求数**，「按 Key 拆分用量」放在总览统计里（回答「额度花在谁身上」，与「这把还能不能用」分开）。见 [security-privacy.md](./operations/security-privacy.md) §「客户端 API Key」，动机见 [#27](https://github.com/yinxulai/osw/issues/27)
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
 - [x] 关闭应用后代理端口释放

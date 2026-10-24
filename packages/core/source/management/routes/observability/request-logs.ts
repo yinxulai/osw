@@ -23,6 +23,8 @@ const ListRequestLogsSchema = z.object({
   providerId: z.string().optional(),
   providerModelId: z.string().optional(),
   logicalModelId: z.string().optional(),
+  // `null` 是合法过滤值（只看匿名请求），因此用 nullable 而不是 optional-only。
+  apiKeyId: z.string().nullable().optional(),
   clientProtocol: z.string().optional(),
   status: z.enum(['pending', 'success', 'failed', 'cancelled']).optional(),
   createdTimeFrom: z.number().int().nonnegative().optional(),
@@ -133,9 +135,9 @@ async function handlePruneRequestLogs(_req: IncomingMessage, res: ServerResponse
 }
 
 async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
-  const { limit, offset, providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
+  const { limit, offset, providerId, providerModelId, logicalModelId, apiKeyId, clientProtocol, status, createdTimeFrom, createdTimeTo } = ListRequestLogsSchema.parse(body ?? {})
   const pageSize = limit ?? 50
-  const filter = { providerId, providerModelId, logicalModelId, clientProtocol, status, createdTimeFrom, createdTimeTo }
+  const filter = { providerId, providerModelId, logicalModelId, apiKeyId, clientProtocol, status, createdTimeFrom, createdTimeTo }
   const [logs, total] = await Promise.all([
     listRequestLogs(pageSize, offset ?? 0, filter),
     countRequestLogs(filter),
@@ -161,6 +163,7 @@ async function handleListRequestLogs(_req: IncomingMessage, res: ServerResponse,
 function mapRequestLogEntry(log: RequestLog, attempts: RequestAttempt[]): RequestLogEntry {
   return {
     id: log.id,
+    apiKeyId: log.apiKeyId,
     logicalModelId: log.logicalModelId,
     clientProtocol: log.clientProtocol,
     transport: log.transport,
