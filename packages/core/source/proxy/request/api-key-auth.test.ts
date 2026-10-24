@@ -33,7 +33,9 @@ afterEach(async () => {
 })
 
 /** 建一把带明文的 Key：配置库那一行走 store，明文留在内存版的密钥存储里。 */
-async function seedKey(name: string, secret: string, options: { enabled?: boolean; expiresTime?: number | null } = {}) {
+type SeedKeyOptions = { enabled?: boolean; expiresTime?: number | null }
+
+async function seedKey(name: string, secret: string, options: SeedKeyOptions = {}) {
   const reference = `ref_${name}`
   secrets.set(reference, secret)
   return createApiKey({ name, keyReference: reference, enabled: options.enabled ?? true, expiresTime: options.expiresTime ?? null })

@@ -70,6 +70,7 @@ vi.mock('@server/database/settings-store', () => ({
 function inputOf(overrides: Partial<RequestLoggingInput> = {}): RequestLoggingInput {
   return {
     requestId: 'req_1',
+    apiKeyId: null,
     logicalModelId: 'gpt-4o',
     clientProtocol: 'openai-completions',
     transport: 'http-stream',
@@ -139,6 +140,7 @@ describe('initializeRequestLogger 的建行', () => {
 
     expect(state.createRequestLogCalls[0]).toEqual({
       id: 'req_1',
+      apiKeyId: null,
       logicalModelId: 'gpt-4o',
       clientProtocol: 'openai-completions',
       transport: 'http-stream',
@@ -205,6 +207,7 @@ describe('initializeRequestLogger 的关闭路径', () => {
     const logger = await initializeRequestLogger(inputOf({ captureRequestLogs: false }))
 
     await logger.updateRequest({
+      apiKeyId: null,
       logicalModelId: 'gpt-4o',
       clientProtocol: 'openai-completions',
       transport: 'http-stream',
@@ -239,6 +242,7 @@ describe('updateRequest', () => {
     const logger = await initializeRequestLogger(inputOf({ logicalModelId: null, clientProtocol: null }))
 
     await logger.updateRequest({
+      apiKeyId: null,
       logicalModelId: 'claude-3-5',
       clientProtocol: 'anthropic-messages',
       transport: 'http',
@@ -250,7 +254,7 @@ describe('updateRequest', () => {
 
     expect(state.updateContextCalls[0]).toEqual({
       id: 'req_1',
-      update: { logicalModelId: 'claude-3-5', clientProtocol: 'anthropic-messages', transport: 'http' },
+      update: { apiKeyId: null, logicalModelId: 'claude-3-5', clientProtocol: 'anthropic-messages', transport: 'http' },
     })
   })
 
@@ -258,6 +262,7 @@ describe('updateRequest', () => {
     const logger = await initializeRequestLogger(inputOf())
 
     await logger.updateRequest({
+      apiKeyId: null,
       logicalModelId: 'gpt-4o',
       clientProtocol: 'openai-completions',
       transport: 'http-stream',
@@ -282,6 +287,7 @@ describe('updateRequest', () => {
     const logger = await initializeRequestLogger(inputOf({ captureRequestContent: false }))
 
     await logger.updateRequest({
+      apiKeyId: null,
       logicalModelId: 'gpt-4o',
       clientProtocol: 'openai-completions',
       transport: 'http-stream',
@@ -301,6 +307,7 @@ describe('updateRequest', () => {
     state.updateContextError = new Error('database is locked')
 
     await expect(logger.updateRequest({
+      apiKeyId: null,
       logicalModelId: 'gpt-4o',
       clientProtocol: 'openai-completions',
       transport: 'http-stream',

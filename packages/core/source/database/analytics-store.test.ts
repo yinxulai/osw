@@ -414,7 +414,9 @@ describe('analytics is unaffected by deleted configuration', () => {
 
 describe('getApiKeyStats', () => {
   /** 建一条带 apiKeyId 身份的请求，并记下它的用量，供按 Key 拆分统计。 */
-  async function createKeyedRequest(input: { apiKeyId: string | null; status: 'success' | 'failed'; totalDurationMilliseconds: number; inputTokens: number; outputTokens: number }): Promise<void> {
+  type KeyedRequestInput = { apiKeyId: string | null; status: 'success' | 'failed'; totalDurationMilliseconds: number; inputTokens: number; outputTokens: number | null }
+
+  async function createKeyedRequest(input: KeyedRequestInput): Promise<void> {
     const log = await createRequestLog({
       logicalModelId: 'model_default',
       clientProtocol: 'openai-responses',
