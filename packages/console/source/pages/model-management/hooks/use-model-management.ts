@@ -11,7 +11,6 @@ import { useModelData } from './use-model-data'
 import { useProviderDialog } from './use-provider-dialog'
 import { useProviderManagement } from './use-provider-management'
 import { useModelDialog } from './use-model-dialog'
-import { useModelReordering } from './use-model-reordering'
 import { useProviderTransfer } from './use-provider-transfer'
 import { PROTOCOL_OPTIONS } from '../lib/protocols'
 
@@ -31,7 +30,9 @@ export function useModelManagement() {
   const providerTransfer = useProviderTransfer({ reload: data.reload })
 
   const invalidateModels = useCallback(async () => { await Promise.all([client.invalidateQueries({ queryKey: modelKeys.all }), client.invalidateQueries({ queryKey: ['logical-model-provider-models'] })]) }, [client])
-  const updateModelMutation = useMutation({ mutationFn: ({ id, enabled }: UpdateModelEnabledVariables) => unwrap(providerModelApi.update(id, { logicalModelId: 'default', enabled })), onMutate: async ({ id, enabled }) => { await client.cancelQueries({ queryKey: modelKeys.all }); const previous = client.getQueryData<ProviderModelRoute[]>(modelKeys.all); client.setQueryData<ProviderModelRoute[]>(modelKeys.all, current => current?.map(model => model.id === id ? { ...model, enabled } : model)); return { previous } }, onError: (error, _variables, context) => { client.setQueryData(modelKeys.all, context?.previous); toast.error(error.message) }, onSettled: invalidateModels })
+  // 不传 `logicalModelId`：改模型本体开关与调度绑定无关（服务端会在关闭时级联禁用所有绑定），
+  // 传 `'default'`（模型名）会被当成外键写进 `scheduling_policies` 而撞 FK。
+  const updateModelMutation = useMutation({ mutationFn: ({ id, enabled }: UpdateModelEnabledVariables) => unwrap(providerModelApi.update(id, { enabled })), onMutate: async ({ id, enabled }) => { await client.cancelQueries({ queryKey: modelKeys.all }); const previous = client.getQueryData<ProviderModelRoute[]>(modelKeys.all); client.setQueryData<ProviderModelRoute[]>(modelKeys.all, current => current?.map(model => model.id === id ? { ...model, enabled } : model)); return { previous } }, onError: (error, _variables, context) => { client.setQueryData(modelKeys.all, context?.previous); toast.error(error.message) }, onSettled: invalidateModels })
   const removeModelMutation = useMutation({ mutationFn: (id: string) => unwrap(providerModelApi.remove(id)), onError: error => toast.error(error.message) })
   const updateModelEnabled = useCallback(async (model: typeof data.models[number], enabled: boolean) => {
     try { await updateModelMutation.mutateAsync({ id: model.id, enabled }); toast.success(enabled ? t('models.toast.enabled') : t('models.toast.disabled')) } catch { /* handled by mutation */ }
@@ -98,8 +99,6 @@ export function useModelManagement() {
     return false
   }, [invalidateModels, toast, t, updateModelMutation])
 
-  const handleDragEnd = useModelReordering(selectedModels, data.setModels, data.reload)
-
   return {
     ...data,
     selectedProvider,
@@ -113,7 +112,6 @@ export function useModelManagement() {
     removeModels,
     disableModels,
     saving: providerDialog.savingProvider || modelDialog.savingModel,
-    handleDragEnd,
     PROTOCOL_OPTIONS,
   }
 }

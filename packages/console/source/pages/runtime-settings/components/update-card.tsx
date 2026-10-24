@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import { Download, ExternalLink, Package, RefreshCw, Rocket } from 'lucide-react'
 import { SettingsCardHeader } from '@/components/settings-card-header'
@@ -9,6 +9,7 @@ import { FormRow } from '@/components/form-kit'
 import { useToast } from '@/components/ui/toast'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatBytes } from '@/lib/format-bytes'
+import { REPOSITORY_RELEASES_URL } from '@/lib/external-links'
 import { getPlatformCapabilities } from '@/platform/capabilities'
 
 type StatusBadgeProps = {
@@ -231,6 +232,10 @@ export function UpdateCard() {
     downloadProgress: null,
     downloadedFile: null,
   })
+  // 已下载时主进程故意不进入 checking，否则「立即安装」会先消失。
+  // 检查按钮自己记这一次调用：转圈到 promise 结束为止，不能等一个不会来的 checking。
+  const checkInFlight = useRef(false)
+  const [isCheckPending, setIsCheckPending] = useState(false)
 
   // 浏览器预览模式（VITE_PREVIEW_ONLY）下没有 preload 注入的 API
   const updater = getUpdater()
@@ -252,15 +257,27 @@ export function UpdateCard() {
   }, [applyState, refresh, updater])
 
   const handleCheck = async () => {
-    if (!updater) return
-    const next = await updater.check()
-    applyState(next)
-    if (next.status === 'up-to-date') {
-      toast.success(t('settings.update.upToDateToast'))
-    } else if (next.status === 'update-available') {
-      toast.success(t('settings.update.availableToast', { version: next.info?.latestVersion ?? '' }))
-    } else if (next.status === 'error') {
-      toast.error(next.errorMessage ?? t('settings.update.checkFailed'))
+    if (!updater || checkInFlight.current) return
+    checkInFlight.current = true
+    setIsCheckPending(true)
+    try {
+      const next = await updater.check()
+      applyState(next)
+      if (next.status === 'up-to-date') {
+        toast.success(t('settings.update.upToDateToast'))
+      } else if (next.status === 'update-available') {
+        toast.success(t('settings.update.availableToast', { version: next.info?.latestVersion ?? '' }))
+      } else if (next.status === 'downloaded') {
+        if (next.errorMessage) toast.error(next.errorMessage)
+        else toast.success(t('settings.update.readyToInstallToast', { version: next.info?.latestVersion ?? '' }))
+      } else if (next.status === 'error') {
+        toast.error(next.errorMessage ?? t('settings.update.checkFailed'))
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('settings.update.checkFailed'))
+    } finally {
+      checkInFlight.current = false
+      setIsCheckPending(false)
     }
   }
 
@@ -288,7 +305,7 @@ export function UpdateCard() {
   const capabilities = getPlatformCapabilities()
   const handleOpenReleases = async () => {
     if (!updater) {
-      capabilities.openExternal('https://github.com/yinxulai/osw/releases/latest')
+      capabilities.openExternal(REPOSITORY_RELEASES_URL)
       return
     }
     await updater.openReleases()
@@ -298,7 +315,7 @@ export function UpdateCard() {
 
   const { status, info, errorMessage, downloadProgress } = state
   const isMacOS = capabilities.os === 'darwin'
-  const isChecking = status === 'checking'
+  const isChecking = status === 'checking' || (isCheckPending && status === 'downloaded')
   const isDownloading = status === 'downloading'
   const hasUpdate = status === 'update-available' || status === 'downloading' || status === 'downloaded'
 

@@ -324,10 +324,21 @@ export const runtimeLogs = sqliteTable(
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
     level: text('level').notNull(),
+    /**
+     * 日志所属模块（`LogScope`），**写入时**由行首前缀解析后存下，不是读取时现算。
+     *
+     * 存字符串而不是用判别列：模块取值域由 `@common/schemas` 的 `LogScopeSchema` 钉住，
+     * 历史行（无前缀 / 未登记）落成 `other`，查询按 `scope` 等值匹配。
+     */
+    scope: text('scope').notNull().default('other'),
     message: text('message').notNull(),
     timestamp: integer('timestamp').notNull(),
   },
-  table => [index('idx_runtime_logs_timestamp').on(table.timestamp), index('idx_runtime_logs_level_timestamp').on(table.level, table.timestamp)],
+  table => [
+    index('idx_runtime_logs_timestamp').on(table.timestamp),
+    index('idx_runtime_logs_level_timestamp').on(table.level, table.timestamp),
+    index('idx_runtime_logs_scope_timestamp').on(table.scope, table.timestamp),
+  ],
 )
 
 export type ProviderHealthRow = typeof providerHealth.$inferSelect

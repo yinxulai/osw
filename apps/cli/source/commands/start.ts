@@ -7,7 +7,7 @@
  *   1. 优雅退出的兜底时限（命令行不能让用户卡在「退不掉」的状态）
  *   2. 退出握手（`stop` 靠它停掉另一个进程）与运行时文件
  *   3. 终端语言要跟随后端设置
- * 另有两处固定值属于形态差异而非行为差异，见 `apps/docs/specs/packaging.md` §5.2 与 §5.1：
+ * 另有两处固定值属于形态差异而非行为差异，见 `apps/docs/specs/platform/packaging.md` §5.2 与 §5.1：
  * `--web` 默认开（命令行没有窗口，控制台只能由管理服务托管）、`secretStore` 用文件加密
  * （命令行拿不到系统钥匙串）。
  */
@@ -18,6 +18,7 @@ import { createRuntimeConfig } from '@common/runtime-config'
 import type { RuntimeConfig } from '@common/runtime-config'
 import type { ServerEndpoints } from '@server/index'
 import { InstanceLockError } from '@server/runtime/instance-lock'
+import { generateManagementToken } from '@server/management/token'
 import { delay } from '../async'
 import { describeError } from '../errors'
 import { cliTranslator, startCliLanguageSync } from '../native-i18n'
@@ -43,7 +44,7 @@ import type { CliArguments } from '../options'
  * 优雅退出的兜底时限。
  *
  * `Ctrl+C` 之后卡住不退，比退得不够漂亮严重得多：端口不释放，用户只能 `kill -9`。
- * 桌面形态不需要这个（进程自己说了算），见 `apps/docs/specs/packaging.md` §5.5。
+ * 桌面形态不需要这个（进程自己说了算），见 `apps/docs/specs/platform/packaging.md` §5.5。
  */
 const SHUTDOWN_TIMEOUT_MILLISECONDS = 5_000
 
@@ -124,6 +125,10 @@ export async function runStart(values: CliArguments): Promise<number> {
     appVersion: __CLI_VERSION__,
     runtime: 'cli',
     dataDir,
+    // 凭证属于**这一次进程启动**：在调用 `startServer` 之前生成一次，之后不再变。（这里
+    // 就是「应用启动」，命令行形态没有可重启的宿主层，`start` 跑多久就活多久。）管理服务
+    // 会把它写成 `dataDir` 里的一个 `0600` 文件，供 `stop` / `status` 读取。
+    managementToken: generateManagementToken(),
     proxyHost: values.host ?? undefined,
     proxyPort: values.proxyPort ?? undefined,
     managementPort: values.managementPort ?? undefined,

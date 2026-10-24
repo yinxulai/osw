@@ -28,3 +28,10 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
       dispatchEvent: () => false,
     }) as MediaQueryList
 }
+
+// jsdom 也没有实现 `Element.prototype.scrollIntoView`，而 radix 的 Select / DropdownMenu
+// 在打开时会对高亮项调用它（选中项滚动到可视区）。缺了这个 shim，一交互就抛
+// `candidate?.scrollIntoView is not a function`。空实现即可——测试里不验滚动位置。
+if (typeof window !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {}
+}

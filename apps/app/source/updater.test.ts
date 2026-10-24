@@ -291,6 +291,102 @@ describe('UpdaterManager', () => {
     expect(mocks.autoUpdater.checkForUpdates).toHaveBeenCalledOnce()
   })
 
+  it('keeps a downloaded update when a later check reports the same version', async () => {
+    const manager = new UpdaterManager()
+    emit('update-downloaded', updateInfo())
+    const statuses: string[] = []
+    manager.subscribe(state => statuses.push(state.status))
+    mocks.autoUpdater.checkForUpdates.mockImplementation(async () => {
+      emit('checking-for-update')
+      emit('update-available', updateInfo())
+    })
+
+    await manager.checkForUpdates()
+
+    expect(mocks.autoUpdater.checkForUpdates).toHaveBeenCalledOnce()
+    expect(statuses).toEqual(['downloaded'])
+    expect(manager.getState()).toMatchObject({
+      status: 'downloaded',
+      downloadProgress: 1,
+      info: { latestVersion: '1.1.0' },
+    })
+    await manager.installUpdate()
+    expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+  })
+
+  it('keeps a downloaded update when a later check fails', async () => {
+    const manager = new UpdaterManager()
+    emit('update-downloaded', updateInfo())
+    mocks.autoUpdater.checkForUpdates.mockImplementation(async () => {
+      emit('checking-for-update')
+      emit('error', new Error('network unavailable'))
+      throw new Error('network unavailable')
+    })
+
+    await expect(manager.checkForUpdates()).resolves.toMatchObject({
+      status: 'downloaded',
+      downloadProgress: 1,
+      errorMessage: 'Cannot check for updates in development: network unavailable',
+      info: { latestVersion: '1.1.0' },
+    })
+    await manager.installUpdate()
+    expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+  })
+
+  it('keeps a downloaded update when the check promise rejects without an error event', async () => {
+    const manager = new UpdaterManager()
+    emit('update-downloaded', updateInfo())
+    mocks.autoUpdater.checkForUpdates.mockRejectedValue(new Error('offline'))
+
+    await expect(manager.checkForUpdates()).resolves.toMatchObject({
+      status: 'downloaded',
+      downloadProgress: 1,
+      errorMessage: 'offline',
+      info: { latestVersion: '1.1.0' },
+    })
+  })
+
+  it('clears a recheck error once the same version is confirmed again', async () => {
+    const manager = new UpdaterManager()
+    emit('update-downloaded', updateInfo())
+    mocks.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      emit('checking-for-update')
+      emit('error', new Error('network unavailable'))
+      throw new Error('network unavailable')
+    })
+    await manager.checkForUpdates()
+
+    mocks.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      emit('checking-for-update')
+      emit('update-available', updateInfo())
+    })
+    await manager.checkForUpdates()
+
+    expect(manager.getState()).toMatchObject({
+      status: 'downloaded',
+      errorMessage: null,
+      downloadProgress: 1,
+      info: { latestVersion: '1.1.0' },
+    })
+  })
+
+  it('replaces a downloaded update when a later check reports a newer version', async () => {
+    const manager = new UpdaterManager()
+    emit('update-downloaded', updateInfo())
+    mocks.autoUpdater.checkForUpdates.mockImplementation(async () => {
+      emit('checking-for-update')
+      emit('update-available', updateInfo({ version: '1.2.0' }))
+    })
+
+    await manager.checkForUpdates()
+
+    expect(manager.getState()).toMatchObject({
+      status: 'update-available',
+      downloadProgress: null,
+      info: { latestVersion: '1.2.0' },
+    })
+  })
+
   it('turns thrown check failures into an error state', async () => {
     const manager = new UpdaterManager()
     mocks.autoUpdater.checkForUpdates.mockRejectedValue('offline')

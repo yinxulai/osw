@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createUsageTracker, emptyUsage, extractTokenUsage, hasOutput } from './usage'
+import { createUsageTracker, emptyUsage, extractTokenUsage, hasOutput } from '../protocols/shared/usage'
 
 describe('usage tracker', () => {
   it('starts empty so that "not reported" is never mistaken for zero', () => {
@@ -36,6 +36,27 @@ describe('usage tracker', () => {
     const tracker = createUsageTracker()
     tracker.consumeJson(JSON.stringify(body))
     expect(tracker.usage()).toMatchObject(expected)
+  })
+
+  it('does not add Anthropic cache reads to an already-total OpenAI prompt count', () => {
+    // Workbuddy 会在 Chat Completions 的 usage 里同时返回 `prompt_tokens` 与
+    // `cache_read_input_tokens`。前者已经是含缓存的总输入，后者只是同一批缓存的
+    // Anthropic 字段；把两者相加会让输入翻倍并腰斩缓存命中率。
+    const tracker = createUsageTracker()
+    tracker.consumeJson(JSON.stringify({
+      usage: {
+        prompt_tokens: 30607,
+        cache_read_input_tokens: 30080,
+        prompt_cache_hit_tokens: 30080,
+        prompt_cache_miss_tokens: 527,
+        completion_tokens: 1270,
+      },
+    }))
+    expect(tracker.usage()).toMatchObject({
+      inputTokens: 30607,
+      outputTokens: 1270,
+      cachedInputTokens: 30080,
+    })
   })
 
   it('prefers the real values when a gateway mixes chat-style placeholder zeros with responses-style fields', () => {

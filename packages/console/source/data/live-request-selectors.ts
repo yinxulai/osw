@@ -1,5 +1,5 @@
 import type { LiveRequest } from '@common/schemas'
-import { liveActivityToneOf, type LiveActivity } from './live-activity'
+import { liveActivityToneOf, type LiveActivity } from '@/lib/live-activity'
 
 function requestActivityOf(request: LiveRequest): LiveActivity | null {
   if (request.status !== 'pending') return null

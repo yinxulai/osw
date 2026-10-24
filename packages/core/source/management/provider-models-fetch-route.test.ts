@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { EventEmitter } from 'node:events'
 import type { ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SecretStore } from '@common/secret-store'
@@ -166,5 +167,32 @@ describe('fetch provider models route', () => {
 
     expect(response.statusCode).toBe(502)
     expect(payload(response).errorCode).toBe('UPSTREAM_MODELS_UNAVAILABLE')
+  })
+
+  it('客户端关了页面就停手：不再试下一个候选，也不往已断的响应里写', async () => {
+    // 用户关掉面板后，这次探测已经没有接收方。继续把剩下的候选地址跑一遍，
+    // 既没有任何人会看到结果，又白白占住一条可能是给他自己用的出站代理。
+    const request = new EventEmitter() as EventEmitter & { method: string; url: string; headers: Record<string, string> }
+    request.method = 'POST'
+    request.url = '/api/provider/fetch-models'
+    request.headers = { host: 'localhost', 'content-type': 'application/json' }
+
+    vi.mocked(coreNetworkClient.requestHttpBuffered).mockImplementation(async () => {
+      // 第一次请求就在路上被中断（关面板 / 断网）。
+      request.emit('aborted')
+      return { statusCode: 500, headers: {}, body: 'boom' }
+    })
+
+    const response = mockResponse()
+    await providerModelFetchRoutes.invoke(
+      '/api/provider/fetch-models',
+      response,
+      { protocol: 'openai-completions', baseUrl: 'https://api.example.com' },
+      request as never,
+    )
+
+    // 裸 base 与 /v1 变体两个候选，中断后第二个不该再发。
+    expect(coreNetworkClient.requestHttpBuffered).toHaveBeenCalledTimes(1)
+    expect(response.end).not.toHaveBeenCalled()
   })
 })

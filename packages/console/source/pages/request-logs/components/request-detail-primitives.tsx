@@ -50,31 +50,17 @@ export function DetailSection(props: DetailSectionProps) {
   )
 }
 
-export interface MetricCardProps {
-  label: string
-  value: string
-}
-
 /**
- * 单个指标格。
+ * 单个指标格已经升到 `@/components/metric-card`。
  *
- * 只有两行：标签 + 数值。不再加第三行的补充说明——「缓存是否命中」这类上下文
- * 在请求列表和下面的「原始 Usage」里都已经有落点，在数值底下再写一遍只会稀释数字本身。
- * 空值走最淡的一档灰，让有数字的格子自己浮出来。
+ * 它原先只服务请求详情，现在诊断明细也要用同一种格子——两个页面的卡片里装同一种
+ * 嵌套模块，样式各写一份只会在尺寸上分岔。这里保留这层转出，是因为请求详情的
+ * 「公共零件」入口已经是一个稳定概念：调用方找的是「请求详情的格子」，不必知道
+ * 它住在哪一层。
  */
-export function MetricCard(props: MetricCardProps) {
-  // 指标块是请求详情卡片里的嵌套模块：只留边框，不再铺一层灰底。
-  const empty = props.value === '—'
+export { MetricCard, type MetricCardProps } from '@/components/metric-card'
 
-  return (
-    <div className="rounded-lg border border-module-border px-3 py-2.5">
-      <div className="system-2xs-medium-uppercase tracking-wider text-text-tertiary">{props.label}</div>
-      <div className={cn('mt-1 font-mono system-md-medium tabular-nums', empty ? 'text-text-quaternary' : 'text-text-primary')}>
-        {props.value}
-      </div>
-    </div>
-  )
-}
+export { METRIC_CARD_GRID_CLASS } from '@/components/metric-card'
 
 interface CopyIconButtonProps {
   value: string

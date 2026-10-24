@@ -360,7 +360,7 @@ function convertInputItem(item: unknown, messages: Json[], toolNames: ToolNameRe
  * `item_reference` / `include: ["reasoning.encrypted_content"]`。这些都要求服务端保存会话，
  * 而 Chat Completions 没有会话概念，转换器又必须无状态（适配器是模块级单例、服务全部并发请求），
  * 所以直接丢弃、不编造近似值；丢了什么可以从 `request_contents` 与 `attempt_contents` 的差异看出来。
- * 详细清单见 apps/docs/specs/protocol-conversion.md「不可逆字段与已知限制」。
+ * 详细清单见 apps/docs/specs/proxy/protocol-conversion.md「不可逆字段与已知限制」。
  */
 export function responsesToOpenAiRequest(body: Json, model: string, toolNames: ToolNameRegistry = new ToolNameRegistry()): Json {
   // 占位要早于 input 转换：历史里的 namespace 限定调用也会往同一张表里登记展平名。

@@ -27,7 +27,6 @@ export default defineConfig({
     alias: {
       '@common': fileURLToPath(new URL('../../packages/contracts/source', import.meta.url)),
       '@server': fileURLToPath(new URL('../../packages/core/source', import.meta.url)),
-      '@render': fileURLToPath(new URL('../../packages/console', import.meta.url)),
       '@': fileURLToPath(new URL('../../packages/console/source', import.meta.url)),
     },
   },
@@ -47,7 +46,9 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'text-summary', 'json', 'html'],
+      // `json-summary` 是给 CI 里的覆盖率徽章（`.github/workflows/coverage-badge.yml`）读的：
+      // 它落一个 `coverage-summary.json`，只有四个总数，不像 `json` 那样逐文件全量。
+      reporter: ['text', 'text-summary', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: [
         'apps/app/source/updater.ts',
@@ -55,6 +56,9 @@ export default defineConfig({
         'apps/cli/source/**/*.ts',
         'packages/core/source/**/*.ts',
         'packages/contracts/source/**/*.ts',
+        // 控制台（React）也在统计范围内：只算服务端会给出一个偏高的总数，
+        // 而界面恰恰是「点一下就出错」的那一半——漏在统计外等于没人看得见它还差多少。
+        'packages/console/source/**/*.{ts,tsx}',
       ],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/types.ts', '**/schemas.ts', '**/test-support.ts'],
     },

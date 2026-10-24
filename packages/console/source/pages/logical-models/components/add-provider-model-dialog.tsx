@@ -1,66 +1,56 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, X } from 'lucide-react'
-import { providerApi } from '@/api/providers'
-import { providerModelApi, schedulingPolicyApi } from '@/api/models'
-import { unwrap } from '@/api/unwrap'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-
-type ProviderModelOption = { id: string; providerId: string; providerName: string; modelName: string }
+import {
+  appendProviderModelBindings,
+  filterCandidates,
+  groupCandidatesByProvider,
+  loadProviderModelCandidates,
+  type ProviderModelCandidate,
+} from '../lib/provider-model-candidates'
 
 interface AddProviderModelDialogProps {
   open: boolean
   /** 加到哪个逻辑模型上。这里是**数据记录 id**（`lm_*`）：绑定的外键指着它。 */
   logicalModelRecordId: string
+  /** 当前已经绑了几条：新绑定要接在它们后面，所以这个数是调用方的现状。 */
+  existingBindingCount: number
   onOpenChange: (open: boolean) => void
   onAdded: () => void
 }
 
+/**
+ * 往逻辑模型里追加供应商模型的对话框。
+ *
+ * 候选怎么算、优先级怎么排全在 `lib/provider-model-candidates` 里；这里只剩下「哪些被
+ * 勾上了」和「按供应商分组画出来」。
+ */
 export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
-  const { open, logicalModelRecordId, onOpenChange, onAdded } = props
+  const { open, logicalModelRecordId, existingBindingCount, onOpenChange, onAdded } = props
   const toast = useToast()
   const t = useTranslation()
-  const [models, setModels] = useState<ProviderModelOption[]>([])
+  const [candidates, setCandidates] = useState<ProviderModelCandidate[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const modelGroups = useMemo(() => {
-    const groups = new Map<string, ProviderModelOption[]>()
-    for (const model of models) {
-      const group = groups.get(model.providerName) ?? []
-      group.push(model)
-      groups.set(model.providerName, group)
-    }
-    return [...groups.entries()]
-  }, [models])
-
-  const selectedModels = models.filter(model => selectedIds.includes(model.id))
-  const filteredModelGroups = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return modelGroups
-    return modelGroups
-      .map(([providerName, providerModels]) => [providerName, providerModels.filter(model => `${providerName} ${model.modelName} ${model.id}`.toLowerCase().includes(query))] as const)
-      .filter(([, providerModels]) => providerModels.length > 0)
-  }, [modelGroups, search])
+  const modelGroups = useMemo(() => groupCandidatesByProvider(candidates), [candidates])
+  const visibleGroups = useMemo(() => filterCandidates(modelGroups, search), [modelGroups, search])
+  const selectedModels = candidates.filter(model => selectedIds.includes(model.id))
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     setLoading(true)
-    void Promise.all([unwrap(providerApi.list()), unwrap(providerModelApi.list()), unwrap(schedulingPolicyApi.list(logicalModelRecordId))])
-      .then(([providersResult, modelsResult, policiesResult]) => {
+    void loadProviderModelCandidates(logicalModelRecordId)
+      .then(next => {
         if (cancelled) return
-        const providerNameById = new Map(providersResult.map(provider => [provider.id, provider.name]))
-        const policies = new Set(policiesResult.map(policy => policy.providerModelId))
-        // 全局停用的模型不进候选：加了也只能是一条关着的绑定，服务端也会拒绝为它打开绑定。
-        setModels(modelsResult
-          .filter(model => model.deletedTime === null && model.enabled && !policies.has(model.id))
-          .map(model => ({ id: model.id, providerId: model.providerId, providerName: providerNameById.get(model.providerId) ?? model.providerId, modelName: model.modelName })))
+        setCandidates(next)
         setSelectedIds([])
         setSearch('')
       })
@@ -73,13 +63,16 @@ export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
     if (selectedIds.length === 0) return
     setSaving(true)
     try {
-      await Promise.all(selectedIds.map((providerModelId, index) => unwrap(schedulingPolicyApi.update({ logicalModelId: logicalModelRecordId, providerModelId, priority: models.length + index + 1, enabled: true }))))
+      await appendProviderModelBindings(logicalModelRecordId, selectedIds, existingBindingCount)
       toast.success(t('logicalModels.addModels.added', { count: selectedIds.length }))
       onAdded()
       onOpenChange(false)
       setSelectedIds([])
-    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)) }
-    finally { setSaving(false) }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -89,13 +82,13 @@ export function AddProviderModelDialog(props: AddProviderModelDialogProps) {
           <DialogTitle>{t('logicalModels.addModels.title')}</DialogTitle>
           <DialogDescription>{t('logicalModels.addModels.description')}</DialogDescription>
         </DialogHeader>
-        {loading ? <p className="system-sm-regular text-text-tertiary">{t('logicalModels.addModels.loading')}</p> : models.length === 0 ? <p className="system-sm-regular text-text-tertiary">{t('logicalModels.addModels.none')}</p> : (
+        {loading ? <p className="system-sm-regular text-text-tertiary">{t('logicalModels.addModels.loading')}</p> : candidates.length === 0 ? <p className="system-sm-regular text-text-tertiary">{t('logicalModels.addModels.none')}</p> : (
           <div className="flex min-h-0 flex-col gap-2">
             <Command shouldFilter={false} className="min-h-0 rounded-lg border border-module-border bg-workflow-block-parma-bg p-0">
               <CommandInput className="px-2" placeholder={t('logicalModels.addModels.searchPlaceholder')} value={search} onValueChange={setSearch} />
               <CommandList className="max-h-64 px-1 pb-1">
                 <CommandEmpty>{t('logicalModels.addModels.noMatch')}</CommandEmpty>
-                {filteredModelGroups.map(([providerName, providerModels]) => (
+                {visibleGroups.map(([providerName, providerModels]) => (
                   <CommandGroup key={providerName} heading={providerName} className="p-1">
                     {providerModels.map(model => (
                       <CommandItem key={model.id} value={model.id} className="min-h-9" onSelect={() => setSelectedIds(current => current.includes(model.id) ? current.filter(id => id !== model.id) : [...current, model.id])}>

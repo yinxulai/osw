@@ -2,15 +2,13 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { Theme } from '@/lib/theme-mode'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
 import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
 import { type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
-
-export type Theme = 'light' | 'dark'
-export type ThemeMode = 'system' | Theme
 
 interface IndicatorRect {
   top: number

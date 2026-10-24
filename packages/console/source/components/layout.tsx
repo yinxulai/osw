@@ -58,8 +58,16 @@ export function AppLayout(props: AppLayoutProps) {
         {sidebar}
       </aside>
       <main className="relative isolate min-h-0 min-w-0 p-2 pl-1">
-        <div className="relative h-full overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-card shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
-          <div className="relative z-10 mx-auto h-full w-full max-w-7xl px-6 py-5">{children}</div>
+        {/*
+          滚动容器用 flex 列 + 内层 `flex-1`，而不是内层 `h-full`。
+          `h-full` 把内层盒子的高度锁成容器高度，内容一超高就变成「子元素溢出父元素」，
+          滚动容器算不到真实内容高度（`scrollHeight` 只等于可视高度），底部的 `py-5`
+          因此既不参与滚动、也拦不住内容——滚到底或内容本来就高时最后一块直接贴住底边。
+          换成 `flex-1` 后：内容不足一屏时撑满一屏（路由画布靠它拿到确定高度，`h-full`
+          才解析得出来），内容超高时盒子随内容长高，`py-5` 始终是真正的尾部留白。
+        */}
+        <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-card shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
+          <div className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-6 py-5">{children}</div>
         </div>
       </main>
     </div>

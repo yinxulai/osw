@@ -2,6 +2,24 @@ import { app } from 'electron'
 import { getSettings, onSettingsChanged } from './server-host'
 import type { Settings } from '@common/schemas'
 
+export interface StartHiddenInput {
+  platform: NodeJS.Platform
+  argv: readonly string[]
+  wasOpenedAtLogin: boolean
+}
+
+/**
+ * 登录自启时要不要把主窗口留在隐藏状态。
+ *
+ * Windows / Linux 的登录项会带上 `--hidden`。macOS 13+ 的 SMAppService 不接收这组参数，
+ * Electron 44 也删掉了 `wasOpenedAsHidden`；登录启动只能在 `app.ready` 之后看
+ * `getLoginItemSettings().wasOpenedAtLogin`。两个信号都没有就是用户自己打开的，窗口要显示。
+ */
+export function shouldStartHidden(input: StartHiddenInput): boolean {
+  if (input.argv.includes('--hidden')) return true
+  return input.platform === 'darwin' && input.wasOpenedAtLogin
+}
+
 /**
  * 开机自启管理器
  * 同步设置中的 autoLaunch 到系统登录项
@@ -30,10 +48,8 @@ export class AutoLaunchManager {
     try {
       app.setLoginItemSettings({
         openAtLogin: enabled,
-        // macOS 用它表达「登录后静默启动」，主进程读 `app.wasOpenedAsHidden`。
-        openAsHidden: true,
-        // Windows 不认 `openAsHidden`，只能靠启动参数；主进程读 `--hidden`
-        //（见 `index.ts` 里的 `startHidden`）。Linux 的登录项由打包产物生成，同样按参数传。
+        // Windows / Linux 把 `--hidden` 写进登录项。macOS 13+ 的 SMAppService 会丢掉
+        // args，隐藏与否改由启动时的 `wasOpenedAtLogin` 决定（见 `shouldStartHidden`）。
         args: ['--hidden'],
       })
       this.currentValue = enabled

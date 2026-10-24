@@ -100,12 +100,14 @@ interface ScriptTimeoutInputProps {
  *
  * 输入过程中允许出现非数字／超范围的中间态，失去焦点时才归一：直接边输入边钳制，
  * 用户删光重敲（`""` → 想输 `1500`）会被立刻回填成默认值，反而没法编辑。
+ * 点进来却没改过数字时草稿仍是 `undefined`，这时直接返回，避免把已保存的超时写成默认值。
  */
 function ScriptTimeoutInput(props: ScriptTimeoutInputProps) {
   const { action, onChange, t } = props
   const [draft, setDraft] = useState<string | undefined>(undefined)
   const value = draft ?? String(action.timeoutMilliseconds ?? REWRITE_SCRIPT_TIMEOUT_DEFAULT)
   const commit = () => {
+    if (draft === undefined) return
     const parsed = Number(draft)
     onChange({ timeoutMilliseconds: Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.round(parsed), REWRITE_SCRIPT_TIMEOUT_LIMIT) : REWRITE_SCRIPT_TIMEOUT_DEFAULT })
     setDraft(undefined)

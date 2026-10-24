@@ -3,7 +3,7 @@ import { Braces, Check, ChevronRight, Copy, LoaderCircle, Route, ScrollText } fr
 import { Link } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { resolveProxyOrigin } from '@common/proxy-origin'
-import { formatMilliseconds, formatOutputSpeed, requestOutputTokensPerSecond, servingAttemptOf } from '@common/metrics'
+import { cacheHitRate, failoverDurationOf, firstTokenShareOf, formatMilliseconds, formatOutputSpeed, requestOutputTokensPerSecond, servingAttemptOf } from '@common/metrics'
 import type {
   RequestContentSummary,
   RequestLogDetail,
@@ -17,6 +17,7 @@ import { DeletedTag } from '@/components/deleted-tag'
 import { useToast } from '@/components/ui/toast'
 import { useProxyStatus } from '@/data/proxy'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
+import { formatPercent } from '@/lib/format-percent'
 import { cn } from '@/lib/utils'
 import { routePaths } from '@/routing/routes'
 import { fetchRequestLogBodies } from '../queries'
@@ -26,13 +27,12 @@ import {
   distinctAttemptErrorCode,
   distinctAttemptErrorMessage,
   formatAttemptOutcome,
-  formatNumber,
   formatStatus,
   formatTime,
   formatTransport,
 } from '../lib/format'
 import { RequestContentsSheet } from './request-contents-sheet'
-import { DetailSection, MetricCard, MetaFact, CopyIconButton, type MetricCardProps } from './request-detail-primitives'
+import { DetailSection, MetricCard, MetaFact, CopyIconButton, METRIC_CARD_GRID_CLASS, type MetricCardProps } from './request-detail-primitives'
 
 interface RequestLogDetailRowProps {
   /** 列表接口已经拿到的基础记录；详情接口还没回来时也能渲染头部与尝试列表。 */
@@ -389,28 +389,49 @@ function RawUsage(props: RawUsageProps) {
 }
 
 /**
- * 指标集合是固定的：没有值的指标照样占格，值显示「—」。
+ * 指标集合是固定的六枚：耗时、重试耗时、首字延迟、首字占比、速度、缓存命中率。
+ * 没有值的照样占格，值显示「—」。
  *
  * 不用「有值才出现」的写法，是因为那样每次请求的格子数量和顺序都不一样，
  * 上下扫的时候数字会跑到别的列上，也没法一眼看出「哪一格是空的」——
  * 而「这里没有数」本身就是排障要知道的事。
  *
- * 口径统一到「服务该请求的那次尝试」：Token 六项与首字延迟读的都是那次尝试的值
+ * 这六格分两类：**四枚是读出来的数**（总耗时、首字延迟、速度、缓存命中率），
+ * **两枚是算出来的数**（重试耗时、首字占比）。后者在用量报文里没有对应字段，
+ * 只能把已经落库的事实相减、相除得到——它们回答的也正是单看任何一个原始数都答不了的问题：
+ * 这段时间是花在「等第一个字」上还是花在「传完」上，总耗时里有多少是被放弃的尝试吃掉的。
+ *
+ * Token 的各路明细（总量、输入、输出、思考、缓存读取、缓存写入）不在这排格子里重复一遍：
+ * 它们本来就在右边的「原始 Usage」里逐项列出，而且是上游原样报回来的数字。
+ * 同一批数字抄两份，改口径时只会让两份各自漂移。
+ *
+ * 口径统一到「服务该请求的那次尝试」：首字延迟、速度与缓存命中率读的都是那次尝试的值
  * （请求级用量本来就是它镜像过来的一份，`ttftMilliseconds` 也是按它现算的），
  * 所以多次重试的请求不会把历次尝试的数字加在一起。
- * 只有「总耗时」是请求级事实——客户端等的是整条链路，不是某一个候选。
+ * 「总耗时」与「首字占比」是请求级事实——客户端等的是整条链路，不是某一个候选；
+ * 「重试耗时」刻意只数被放弃的尝试，网关自身的开销不混进去。
  */
 function buildMetrics(t: AppTranslator, log: RequestLogEntry | RequestLogDetail, tps: string): MetricCardProps[] {
+  // 任一侧没记到用量就写「—」：上游压根没报缓存字段时，算出来的是「命中率 0%」，
+  // 而那会被读成「这次一次都没命中」——两件事必须分得开。
+  const hitRate = log.cachedInputTokens == null || log.inputTokens == null
+    ? null
+    : cacheHitRate(log.cachedInputTokens, log.inputTokens)
+  const failoverDuration = failoverDurationOf(log)
+  const ttftShare = firstTokenShareOf(log)
+
   return [
     { label: t('requestLogs.metric.totalDuration'), value: formatMilliseconds(log.totalDurationMilliseconds) },
+    {
+      // 重试过才给色调：它不为零就是「这次多花了几秒在没有交付的尝试上」，值得一眼看见。
+      label: t('requestLogs.metric.failoverDuration'),
+      value: formatMilliseconds(failoverDuration),
+      tone: failoverDuration !== null && failoverDuration > 0 ? 'destructive' : 'default',
+    },
     { label: t('requestLogs.metric.ttft'), value: formatMilliseconds(log.ttftMilliseconds) },
+    { label: t('requestLogs.metric.ttftShare'), value: ttftShare == null ? '—' : formatPercent(ttftShare) },
     { label: t('requestLogs.metric.outputSpeed'), value: tps === '—' ? '—' : `${tps} t/s` },
-    { label: t('requestLogs.metric.totalTokens'), value: formatNumber(log.totalTokens) },
-    { label: t('requestLogs.metric.inputTokens'), value: formatNumber(log.inputTokens) },
-    { label: t('requestLogs.metric.outputTokens'), value: formatNumber(log.outputTokens) },
-    { label: t('requestLogs.metric.reasoningTokens'), value: formatNumber(log.reasoningTokens) },
-    { label: t('requestLogs.metric.cacheRead'), value: formatNumber(log.cachedInputTokens) },
-    { label: t('requestLogs.metric.cacheWrite'), value: formatNumber(log.cacheCreationInputTokens) },
+    { label: t('requestLogs.metric.cacheHitRate'), value: hitRate == null ? '—' : formatPercent(hitRate) },
   ]
 }
 
@@ -491,7 +512,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
           </div>
 
           {/* auto-fill（而非 auto-fit）：只有一两个指标有值时也让格子保持统一宽度，不被拉满整行。 */}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2">
+          <div className={METRIC_CARD_GRID_CLASS}>
             {metrics.map(metric => <MetricCard key={metric.label} {...metric} />)}
           </div>
 

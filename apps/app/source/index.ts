@@ -16,15 +16,19 @@ import {
 import { listCurrentDatabaseFileNames } from '@common/database-file'
 import { createRuntimeConfig } from '@common/runtime-config'
 import { getRuntimeProfile } from '@common/runtime-profile'
+// 只引这一个叶子模块：它只有 `node:crypto` / `node:fs` / `node:path`，不碰数据库，所以不会
+// 把 `node:sqlite` 拖回主进程（那是 `server-host.ts` 整条进程边界要防的事）。
+import { generateManagementToken } from '@server/management/token'
 import { ElectronSecretStore } from './secret-store'
 import { TrayManager } from './tray-manager'
-import { AutoLaunchManager } from './auto-launch'
+import { AutoLaunchManager, shouldStartHidden } from './auto-launch'
 import { UpdaterManager, type UpdateState } from './updater'
 import { nativeTranslator, startNativeLanguageSync } from './i18n'
 import { installWindowShortcuts } from './window-actions'
 import { exportWebsiteScreenshots, resolveScreenshotCases, type ScreenshotExportProgress } from './screenshot-export'
 import {
   WINDOW_BACKGROUND,
+  WINDOW_CONTROLS_SYMBOL,
   WINDOW_TITLEBAR_HEIGHT,
   applyWindowTheme,
   registerExternalLinkIpc,
@@ -64,12 +68,12 @@ const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'produc
 // 互不干扰。必须在任何一次 `safeStorage` 调用之前设好；`setName` 之后已有密钥
 // 仍按各自的名字存取，所以开发态反复重置数据目录不会碰到生产态的密文。
 // 历史上 `app.name` 曾随包名（`@osw/app`）漂移，旧命名空间的残留在钥匙串里，
-// 见 `apps/docs/specs/packaging.md` §5.1。
+// 见 `apps/docs/specs/platform/packaging.md` §5.1。
 app.setName(runtimeProfile.applicationName)
 
 process.env.OUTPUT = path.join(__dirname, '..')
 
-// 数据目录固定落在用户主目录，与命令行形态同一处（见 `apps/docs/specs/packaging.md` §5.5）：两种形态
+// 数据目录固定落在用户主目录，与命令行形态同一处（见 `apps/docs/specs/platform/packaging.md` §5.5）：两种形态
 // 共用同一份配置与同一对数据库文件，所以「先用命令行跑起来、再开桌面端」不会看到两套空数据。
 // Electron 自己的缓存与凭据也跟着搬过去——`app.getPath('userData')` 是它们的唯一落点。
 app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))
@@ -86,17 +90,26 @@ let updaterManager: UpdaterManager | null = null
 let fatalErrorShown = false
 
 /**
- * 开机自启时隐藏启动（`auto-launch.ts` 里声明了 `openAsHidden`）。
+ * 本次**应用启动**的管理 API 凭证。
  *
- * macOS 有 `app.wasOpenedAsHidden`；Windows 通过登录项参数 `--hidden` 表达，Linux 的登录项
- * 由打包产物生成，同样按参数传。两者都没有时按正常启动——用户双击图标就是要看窗口。
+ * 生成放在这里（模块求值 = 应用启动）而不是等服务起来再拿：服务跑在一个可能崩溃重启的
+ * 独立进程里（见 `server-host.ts` 的重启预算），让它自己在每次 `startServer` 时生成的话，
+ * 主进程手里那份会在第一次重启后立刻作废，渲染层随后的每一次请求都 401。
+ *
+ * 只由主进程生成，preload 每次同步取一次交给渲染层。它还会被管理服务写成数据目录里的
+ * 一个 `0600` 文件（见 `@server/management/token-file`），寿命与那个服务进程相同——
+ * `osw stop` / `osw status` 靠它过校验，因为**正式形态**的管理 API 校验没有例外
+ * （开发形态不校验凭证，那份进程不走这条链路，见 `@server/management/gateway/access.ts`）。
+ * 这里也绝不写日志。
  */
-const startHidden = readWasOpenedAsHidden() || process.argv.includes('--hidden')
+const managementToken = generateManagementToken()
 
-/** `app.wasOpenedAsHidden` 只存在于 macOS，且不在当前 Electron 的类型定义里。 */
-function readWasOpenedAsHidden(): boolean {
-  return (app as unknown as { wasOpenedAsHidden?: boolean }).wasOpenedAsHidden === true
-}
+/**
+ * 开机自启时不显示主窗口。必须等 `app.ready` 之后再赋值：macOS 的 `wasOpenedAtLogin`
+ * 在 `applicationDidFinishLaunching` 里才写上，模块顶层去读会把登录启动当成普通启动。
+ * 判断本身见 `shouldStartHidden`。
+ */
+let startHidden = false
 
 // Windows 任务栏图标依赖 AppUserModelID；必须在创建任何窗口前设置，
 // 否则系统会把进程归到默认 Electron 应用，导致显示默认图标。
@@ -171,7 +184,8 @@ if (isPrimaryInstance) {
   // （backgroundColor '#00000000'），`setBackgroundColor` 会把透明底换成实色，砸掉面板的浮层观感。
   // 面板的亮暗由渲染层的 `prefers-color-scheme` 跟着变，不依赖这里的底色。
   registerExternalLinkIpc()
-  registerRuntimeConfigIpc(runtimeProfile.managementApiUrl)
+  // 凭证在模块求值时（= 应用启动）就生成好了，不等服务起来，所以这里只是一个取值器。
+  registerRuntimeConfigIpc(runtimeProfile.managementApiUrl, () => managementToken)
   registerOpenDataDirectoryIpc()
   registerScreenshotExportIpc()
   registerWindowThemeIpc()
@@ -373,11 +387,13 @@ function createWindow() {
         }
       : {
           titleBarStyle: 'hidden' as const,
+          // 与 `applyWindowChrome` 同一份取色理由（见该函数注释）：底色透明，让渲染层
+          // 铺满整宽的标题栏透出来，控件随应用主题而非主进程独立通道切换。
           titleBarOverlay: {
-            color: nativeTheme.shouldUseDarkColors
-              ? WINDOW_BACKGROUND.dark
-              : WINDOW_BACKGROUND.light,
-            symbolColor: nativeTheme.shouldUseDarkColors ? '#f5f5f5' : '#171717',
+            color: '#00000000',
+            symbolColor: nativeTheme.shouldUseDarkColors
+              ? WINDOW_CONTROLS_SYMBOL.dark
+              : WINDOW_CONTROLS_SYMBOL.light,
             height: WINDOW_TITLEBAR_HEIGHT,
           },
         }),
@@ -453,6 +469,11 @@ function focusExistingInstance(): void {
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
+  startHidden = shouldStartHidden({
+    platform: process.platform,
+    argv: process.argv,
+    wasOpenedAtLogin: app.getLoginItemSettings().wasOpenedAtLogin,
+  })
   app.setAboutPanelOptions({
     applicationName: runtimeProfile.applicationName,
     applicationVersion: app.getVersion(),
@@ -482,6 +503,8 @@ async function bootstrap(): Promise<void> {
     appVersion: app.getVersion(),
     runtime: 'desktop',
     dataDir: userDataDir,
+    // 凭证与宿主同寿：服务进程重启不会换一份（见 `managementToken` 的注释）。
+    managementToken,
     // 桌面形态的窗口直接 loadFile 加载控制台产物，不由管理服务托管静态文件。
     serveWeb: false,
   })

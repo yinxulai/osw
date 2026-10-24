@@ -34,6 +34,8 @@ export type ProtocolModelReadResult =
  */
 export interface ProtocolEnvelope {
   readonly body: ProtocolBodyKind
+  /** 由协议声明的保护字段：这些字段属于传输形态/协议封装，不允许被通用改写规则改动。 */
+  readonly deliveryModeFields: readonly string[]
   /** 读出请求里的模型名；没有模型字段时返回失败原因。 */
   readModel(input: EnvelopeInput): ProtocolModelReadResult
   /** 写入模型名。允许同时改写 URL（路径携带模型的协议）。 */

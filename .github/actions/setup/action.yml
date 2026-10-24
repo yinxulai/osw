@@ -16,9 +16,14 @@ runs:
   using: composite
   steps:
     # 不写 `version:`——根 `package.json` 的 `packageManager` 是唯一的 pnpm 版本权威，
-    # 在两处各写一遍就会出现「CI 装 9、本地跑 11」这种只在 CI 上暴露的差异。
+    # 在两处各写一遍就会出现「CI 装 9、本地跑 12」这种只在 CI 上暴露的差异。
+    #
+    # 必须钉 `v6.1.0`，不能用浮动的 `@v6`：symbolic `v6` 标签至今仍指向 v6.0.10，
+    # 而 pnpm 12 的支持（`targetsPnpm12` 分支 + native bootstrap lockfile）是
+    # v6.1.0 才加的（release note: `feat: support pnpm v12`）。用 `@v6` 会装到
+    # 一个不认识 pnpm 12 的 bootstrap，靠 `pnpm self-update` 硬升，行为不确定。
     - name: Set up pnpm
-      uses: pnpm/action-setup@v6
+      uses: pnpm/action-setup@v6.1.0
 
     - name: Set up Node.js
       uses: actions/setup-node@v5

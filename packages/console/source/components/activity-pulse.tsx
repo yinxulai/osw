@@ -1,4 +1,4 @@
-import type { LiveActivity } from '@/data/live-activity'
+import type { LiveActivity } from '@/lib/live-activity'
 
 interface ActivityPulseProps {
   /** 为空表示没有进行中的活动；组件不渲染任何占位内容。 */

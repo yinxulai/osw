@@ -68,7 +68,9 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div data-slot="command-input-wrapper" className="p-1 pb-0">
+    // `p-1` 而不是 `p-1 pb-0`：底部留出 4px，让搜索框与下方候选之间有一条缝。
+    // 之前 `pb-0` + `CommandList` 无上内边距，输入框和第一条候选是贴死的。
+    <div data-slot="command-input-wrapper" className="p-1">
       <InputGroup className="h-8! rounded-lg! *:data-[slot=input-group-addon]:pl-2!">
         <CommandPrimitive.Input
           data-slot="command-input"

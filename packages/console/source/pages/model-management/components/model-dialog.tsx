@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { CheckCircle2, Loader2, PlugZap, RefreshCw, XCircle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormField, FormGroup, FormHint, FORM_DIALOG_BODY_CLASSNAME } from '@/components/form-kit'
@@ -13,6 +14,8 @@ import { ProviderRuleBindings } from './provider-rule-bindings'
 import { ProviderIcon } from './provider-icon'
 import type { FetchedProviderModel } from '@/api/providers'
 import type { Provider } from '@common/schemas'
+import { PROTOCOL_DISPLAY_NAMES } from '@common/protocols'
+import type { ModelConnectivityTest } from '../hooks/use-model-connectivity-test'
 import type { ProtocolEndpointEntry } from '../hooks/types'
 
 interface ModelDialogProps {
@@ -36,6 +39,10 @@ interface ModelDialogProps {
   invertFetchedModels: (ids: string[]) => void
   clearSelectedModels: () => void
   updateProtocolEntry: (index: number, patch: Partial<ProtocolEndpointEntry>) => void
+  /** 点「测试连接」时由调用方决定测什么（表单当前启用的那几行），不在对话框里自己拼。 */
+  onTestConnectivity: () => void
+  /** 上一次探测的状态与逐协议结果。初始态（`idle`）什么都不展示。 */
+  connectivityTest: ModelConnectivityTest
   onCancel: () => void
   onSave: () => void
 }
@@ -62,12 +69,17 @@ export function ModelDialog(props: ModelDialogProps) {
     invertFetchedModels,
     clearSelectedModels,
     updateProtocolEntry,
+    onTestConnectivity,
+    connectivityTest,
     onCancel,
     onSave,
   } = props
 
   const t = useTranslation()
   const canSave = (editingModel ? modelId.trim() : selectedModelIds.length > 0 || modelId.trim()) && protocolEntries.some(entry => entry.enabled)
+  // 能不能测：与能不能存同一套条件。这两件事不该有两套规则——
+  // 存不了的东西没有可测的对象，而测不了的东西（模型名都空着）也存不下去。
+  const canTestConnectivity = canSave && !saving && connectivityTest.status !== 'running'
 
   const [modelSearch, setModelSearch] = useState('')
   const filteredModels = useMemo(() => {
@@ -177,8 +189,48 @@ export function ModelDialog(props: ModelDialogProps) {
           {editingModel && <ProviderRuleBindings providerModelId={editingModel.id} embedded />}
         </div>
 
+        {/*
+           * 探测结果放在页脚上方、紧挨着按钮：它是「刚点了那个按钮」的产物，
+           * 跟里面的表单是两件事——表单是输入，这里是结论。
+           * 逐协议一行：三个协议里通了两个，用户要看见的是哪一个没过。
+           */}
+        {connectivityTest.status !== 'idle' && (
+          <div className="grid gap-1">
+            {connectivityTest.errorMessage && (
+              <Alert variant="destructive" className="border-0 bg-destructive/10">
+                <XCircle />
+                <AlertDescription>{connectivityTest.errorMessage}</AlertDescription>
+              </Alert>
+            )}
+            {connectivityTest.results.map(result => (
+              <Alert
+                key={result.protocol}
+                variant={result.success ? 'default' : 'destructive'}
+                className={cn('border-0', result.success && 'bg-success/10 text-text-success')}
+              >
+                {result.success ? <CheckCircle2 /> : <XCircle />}
+                <AlertDescription className={cn(result.success && 'text-current')}>
+                  <span className="font-medium">{PROTOCOL_DISPLAY_NAMES[result.protocol]}</span>
+                  {' · '}
+                  {result.success
+                    ? t('models.dialog.testSuccess', { status: result.statusCode ?? 0, duration: result.durationMilliseconds })
+                    : result.errorMessage}
+                </AlertDescription>
+              </Alert>
+            ))}
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>{t('common.action.cancel')}</Button>
+          {/*
+           * 测试排在保存前面：先验通、再落库。它是**反悔成本**最低的一个按钮——
+           * 测出来不通，用户改地址就行；保存了再发现不通，还得回来改一遍。
+           */}
+          <Button variant="outline" disabled={!canTestConnectivity} onClick={onTestConnectivity}>
+            {connectivityTest.status === 'running' ? <Loader2 className="size-3.5 animate-spin" /> : <PlugZap className="size-3.5" />}
+            {connectivityTest.status === 'running' ? t('models.dialog.testing') : t('models.dialog.test')}
+          </Button>
           <Button disabled={saving || !canSave} onClick={onSave}>
             {saving ? t('common.action.saving') : editingModel ? t('models.dialog.save') : selectedModelIds.length > 0 ? t('models.dialog.submitBulk', { count: selectedModelIds.length }) : t('models.dialog.submit')}
           </Button>

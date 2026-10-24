@@ -110,12 +110,15 @@ function Calendar({
           defaultClassNames.day
         ),
         range_start: cn(
-          "relative isolate z-0 rounded-l-(--cell-radius) bg-muted after:absolute after:inset-y-0 after:right-0 after:w-4 after:bg-muted",
+          // 不能给端点单元格铺 `bg-muted`：选中的端点按钮是深色圆角块，铺在它背后的
+          // 灰色方块会在圆角处露出四条灰边（看起来就像选中块被区间底色裁了一角）。
+          // 只用 `::after` 画通向区间内部的连接条，圆角由单元格自己的 `rounded-l` 裁掉。
+          "relative isolate z-0 rounded-l-(--cell-radius) after:absolute after:inset-y-0 after:right-0 after:w-4 after:bg-muted after:rounded-r-none",
           defaultClassNames.range_start
         ),
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
         range_end: cn(
-          "relative isolate z-0 rounded-r-(--cell-radius) bg-muted after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-muted",
+          "relative isolate z-0 rounded-r-(--cell-radius) after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-muted after:rounded-l-none",
           defaultClassNames.range_end
         ),
         today: cn(

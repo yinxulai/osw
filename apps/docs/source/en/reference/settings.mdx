@@ -9,7 +9,7 @@ keywords:
 
 # Settings
 
-The **Settings** page manages app behavior, network connections, failover, and local data, organized into six sections: **App / Network / Routing / Reliability / Data / Cloud sync**. Changes take effect on save, and the bottom shows the sync and save status.
+The **Settings** page manages app behavior, network connections, failover, and local data, organized into seven sections: **App / Network / Routing / Reliability / Data / Cloud sync / Developer**. Changes take effect on save, and the bottom shows the sync and save status.
 
 ![OSW Settings page top: the App section's appearance & startup, live metric, version updates, and re-run onboarding.](/screenshots/en/light/settings-overview.png)
 
@@ -129,6 +129,10 @@ The retention duration for runtime logs, a **separate setting** from request log
 Choose a sync method, connect credentials, bind a remote location, and manually **back up to cloud** or **restore from cloud**. A restore overwrites this machine's providers, models, and bindings wholesale with the remote snapshot, and cannot be undone; logical models absent from the snapshot are left untouched. See [Config cloud sync](/observability/cloud-sync).
 
 ![OSW Settings → Cloud sync card: choose the sync method, credentials, and remote binding, plus the two manual actions, back up to cloud / restore from cloud.](/screenshots/en/light/settings-cloud-sync.png)
+
+## Developer
+
+Direct links to the **GitHub repository** and the **Discord community**, plus a **contributor avatar wall** (data from GitHub's public API, cached for an hour to stay within the rate limit; when unavailable only the links show, and they keep working). External links always open in your system browser.
 
 ---
 

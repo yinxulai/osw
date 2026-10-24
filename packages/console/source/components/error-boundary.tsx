@@ -3,6 +3,7 @@ import { RotateCcw, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
+import { clearAllPageScratch } from '@/store/page-scratch'
 
 /**
  * 渲染层的错误边界。
@@ -148,7 +149,14 @@ export function ErrorFallback(props: ErrorFallbackProps & ErrorFallbackOptions) 
             <RotateCcw size={13} /> {t('common.action.retry')}
           </Button>
           {reloadable ? (
-            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+            <Button size="sm" variant="outline" onClick={() => {
+              // 重载前先丢掉所有页面的临时草稿（筛选、页码、展开项）。
+              // 崩掉的那一页按定义还记着崩的时候那份筛选；原样重载很可能一脚踩回
+              // 同一个状态里，用户看到的就是「重载也没用」。这里清的是临时状态，
+              // 主题、语言这类长期偏好不受影响。
+              clearAllPageScratch()
+              window.location.reload()
+            }}>
               {t('common.action.reloadApp')}
             </Button>
           ) : null}

@@ -61,6 +61,52 @@ export function requestOutputTokensPerSecond(log: RequestLogEntry): number | nul
 }
 
 /**
+ * 首字等待占整条请求的比重：首字延迟 ÷ 请求总耗时。
+ *
+ * 单看 `TTFT 800ms` 说不出这次请求是「等得久」还是「本来就大」：总耗时 60s 的请求里
+ * 800ms 可以忽略，总耗时 1s 的请求里它占了八成。这个比值回答的是**慢在等开始，
+ * 还是慢在传完**——它与输出速度分别站在时间轴的两端，缺一个就只剩半张账。
+ *
+ * 分母取请求总耗时而不是尝试耗时：读者关心的是客户端等了多久，那是整条链路。
+ * 因此有重试的请求会把前面被放弃的尝试也算进分母，得到一个偏低的占比——那是对的，
+ * 那部分时间确实不是「等第一个字」。
+ *
+ * 三种情况返回 `null`：没有首字样本、总耗时不正（没有可分配的时间）、
+ * 首字延迟竟然超过总耗时（两侧起点不同造成的测量边界）。**不写出一个超过 100% 的比值**，
+ * 那会被读成「等待比整个请求还长」这种不存在的事实。
+ */
+export function firstTokenShareOf(log: RequestLogEntry): number | null {
+  const { ttftMilliseconds, totalDurationMilliseconds } = log
+  if (ttftMilliseconds == null || !(totalDurationMilliseconds > 0)) return null
+  if (ttftMilliseconds < 0 || ttftMilliseconds > totalDurationMilliseconds) return null
+  return ttftMilliseconds / totalDurationMilliseconds
+}
+
+/**
+ * 故障转移吃掉了多少时间：请求里**被放弃的那些尝试**的耗时之和。
+ *
+ * 这个数在用量报文和任何一行尝试记录里都读不出来，但它正是排障时最先要回答的问题：
+ * 一次 8s 的请求，是上游那一次尝试就花了 8s，还是前面两次被放弃的尝试加起来吃掉了 6s？
+ * 同一个总耗时，前者是上游慢，后者是故障转移在起作用——两种完全不同的结论，
+ * 而只看总耗时与最终落点，这两种情况长得一模一样。
+ *
+ * 只加被放弃的尝试，不含网关自身的排队与序列化：把那些混进来，
+ * 「重试贵不贵」会变成一个说不清的综合数。服务该请求的是最后一条（见
+ * {@link servingAttemptOf}），其余都在交付前被放弃。
+ *
+ * 只有一次尝试时返回 0（不是 `null`）——「一次就通、没重试过」是真实的测得零；
+ * 整条记录里没有尝试时返回 `null`，那时相减没有意义。
+ */
+export function failoverDurationOf(log: RequestLogEntry): number | null {
+  if (log.attempts.length === 0) return null
+  let milliseconds = 0
+  for (const attempt of log.attempts.slice(0, -1)) {
+    milliseconds += attempt.durationMilliseconds
+  }
+  return milliseconds
+}
+
+/**
  * 速度公式本体：同一批样本的输出 Token 合计 ÷ **同一批样本的尝试耗时**合计。
  *
  * 单条尝试与多条尝试的平均走的都是这一步，只是合计来自一条还是多条。
@@ -150,6 +196,45 @@ export function formatMilliseconds(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—'
   const parts = millisecondsDisplayParts(value)
   return `${parts.value.toFixed(parts.decimalPlaces)}${parts.unit}`
+}
+
+/**
+ * Token 计数的展示分解：数值与进位后缀。
+ *
+ * 拆成两半是给「后缀要单独改小一号」的界面用的——请求日志的 `1.2K` 里那个 `K`
+ * 比数字淡一档，需要自己拼装。数值与后缀的分界只此一处，各处不再各自 `toFixed`。
+ */
+export interface TokenCountParts {
+  /** 数值部分，不含后缀。 */
+  value: string
+  /** 进位后缀；未进位时是空串，「1.2k」与「9700」因此共用同一条拼装规则。 */
+  suffix: string
+}
+
+/**
+ * Token 计数的展示值：一万及以上折成 `1.2k`，以下原样。
+ *
+ * 与输出速度的 {@link formatOutputSpeed} 分开，因为两者回答的不是同一类问题：
+ * 速度是**比率**，量级决定小数位（10 以下留一位，10 以上取整）；这里是**计数**，
+ * 一位小数只在进位之后才有意义——「1.2k 个 Token」里那个 0.2 是量级信息，
+ * 而 1234 写成 `1234.0` 只多占了两个字符。
+ *
+ * 阈值取 10 000 而不是 1 000：四位以内的数写成 `9.7k` 比 `9700` 更难读，
+ * 而 9700 在列里也只占四个字符。进位用 1000 而不是 1024：Token 是**数的**，
+ * 不是存储量换算（对比 `formatBytes` 的 1024）。
+ *
+ * `null` 写 `—`、0 写 `0`：没有样本与测得为零是两件事，这个区别在整份界面里保持一致。
+ */
+export function formatTokenCount(value: number | null | undefined): string {
+  const parts = formatTokenCountParts(value)
+  return parts === null ? '—' : `${parts.value}${parts.suffix}`
+}
+
+/** {@link formatTokenCount} 的分解形态；没有样本时返回 `null` 而不是 `{ value: '—' }`。 */
+export function formatTokenCountParts(value: number | null | undefined): TokenCountParts | null {
+  if (value == null || !Number.isFinite(value)) return null
+  if (Math.abs(value) < 10_000) return { value: String(value), suffix: '' }
+  return { value: (value / 1000).toFixed(1), suffix: 'k' }
 }
 
 /**

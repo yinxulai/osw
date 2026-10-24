@@ -14,14 +14,13 @@ import packageJson from '../../package.json' with { type: 'json' }
 const appVersion = packageJson.version
 
 // 渲染层是纯静态产物：不导入 `@server/*`，也不认识 `electron`。
-// 目录职责见 apps/docs/specs/packaging.md。
+// 目录职责见 apps/docs/specs/platform/packaging.md。
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./source', import.meta.url)),
       '@common': fileURLToPath(new URL('../contracts/source', import.meta.url)),
-      '@render': fileURLToPath(new URL('.', import.meta.url)),
     },
   },
   define: { __APP_VERSION__: JSON.stringify(appVersion) },

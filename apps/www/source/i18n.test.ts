@@ -1,7 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { en } from './i18n'
 
@@ -37,21 +36,12 @@ function collectStaticTranslationKeys(): Set<string> {
 
   for (const file of collectSourceFiles(SOURCE_DIRECTORY)) {
     const source = readFileSync(file, 'utf8')
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const literalPattern = /\bt\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*)\1\s*\)/g
 
-    const visit = (node: ts.Node) => {
-      if (
-        ts.isCallExpression(node)
-        && node.expression.getText(sourceFile) === 't'
-        && node.arguments[0]
-        && ts.isStringLiteral(node.arguments[0])
-      ) {
-        keys.add(node.arguments[0].text)
-      }
-      ts.forEachChild(node, visit)
+    for (const match of source.matchAll(literalPattern)) {
+      const [, , value] = match
+      if (value) keys.add(value)
     }
-
-    visit(sourceFile)
   }
 
   return keys

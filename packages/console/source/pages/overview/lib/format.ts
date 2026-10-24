@@ -1,4 +1,4 @@
-import { trendIntervalParts } from '@common/analytics-buckets'
+import { resolveAnalyticsBuckets, trendIntervalParts } from '@common/analytics-buckets'
 import type { AnalyticsRange } from '@common/schemas'
 import type { AppTranslator } from '@/i18n/provider'
 
@@ -23,12 +23,10 @@ export function formatBillTokens(tokens: number): string {
 /**
  * 百分比：固定一位小数。
  *
- * 账单、命中率、成功率共用同一口径，散在各处的 `${(x * 100).toFixed(1)}%` 会先漂成不同的
- * 小数位。调用方负责把 `null` 换掉（写 '—'），本函数只处理数字。
+ * 实现在 `@/lib/format-percent`：请求详情那排指标格要报缓存命中率，那个比率不能在这里
+ * 有一份、在那里再写一份（同一个数在两页写成不同小数位，就是两个数）。
  */
-export function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
-}
+export { formatPercent } from '@/lib/format-percent'
 
 /** 与 `formatCount` 同理：账单上的千分位也要跟随界面语言，不能用运行时默认语言。 */
 export function formatBillCount(locale: string, value: number): string {
@@ -50,22 +48,13 @@ function formatBillDateTime(locale: string, value: Date) {
 /**
  * 账单抬头上的数据区间。
  *
- * 区间口径与页面的 range 开关一致：`today` 从当天零点起，`7d` / `30d` 含当天往回数，
- * 终点就是这次的打印时刻。
+ * 起点跟统计查询是同一扇窗（`resolveAnalyticsBuckets`）：`today` 从本地零点起，
+ * `7d` / `30d` 从打印时刻往前推 7 或 30 个 24 小时。用日历日零点会把起点印晚将近一天，
+ * Token 合计却仍按更早的那一窗算。终点就是这次的打印时刻。
  */
 export function formatBillRangeLabel(locale: string, range: AnalyticsRange, endAt: Date): string {
   const end = new Date(endAt)
-  const start = new Date(endAt)
-
-  if (range === 'today') {
-    start.setHours(0, 0, 0, 0)
-  } else if (range === '7d') {
-    start.setDate(start.getDate() - 6)
-    start.setHours(0, 0, 0, 0)
-  } else {
-    start.setDate(start.getDate() - 29)
-    start.setHours(0, 0, 0, 0)
-  }
+  const start = new Date(resolveAnalyticsBuckets(range, endAt.getTime()).sinceMs)
 
   return `${formatBillDateTime(locale, start)} - ${formatBillDateTime(locale, end)}`
 }

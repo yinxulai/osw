@@ -3,6 +3,8 @@ import { MarkerType, type Edge } from '@xyflow/react'
 import {
   type AppendableKind,
   type NodePosition,
+  type NoteNodeSize,
+  type WorkflowEdge,
   type WorkflowGraph,
   type WorkflowNodeKind,
   type WorkflowNodeModel,
@@ -11,8 +13,11 @@ import {
   NODE_KIND_ORDER,
   edgeRunStatusStroke,
   edgeStrokeColor,
+  resolveNoteNodeSize,
+  toCanvasNodeType,
 } from './node-meta'
-import type { NodeRunStatus } from './node-data'
+import { withFixedNodeCopy } from '@common/router/presets'
+import type { NodeInsertRequest, NodeRunStatus, RouteFlowNode } from './node-data'
 
 /**
  * 路由图的画布投影：把引擎的图数据翻译成 React Flow 的节点位置与连线。
@@ -96,6 +101,11 @@ export type BuildFlowEdgesOptions = {
   hoveredNodeId?: string | null
 }
 
+/** 服务端返回的图直接铺到画布上：补齐固定节点文案，并按分层算法重排坐标。 */
+export function toCanvasGraph(graph: WorkflowGraph): WorkflowGraph {
+  return { ...graph, nodes: withFixedNodeCopy(layoutRouterNodes(graph.nodes)) }
+}
+
 /**
  * 图数据 → React Flow 边。
  * 端口用显式 id 传递，避免依赖 handle 挂载顺序。
@@ -141,4 +151,104 @@ export function buildFlowEdges(graph: WorkflowGraph, options: BuildFlowEdgesOpti
       },
     }
   })
+}
+
+export interface FlowNodeCacheEntry {
+  model: WorkflowNodeModel
+  /** 影响渲染结果的全部条件；一样就复用上一次的节点对象。 */
+  flags: string
+  node: RouteFlowNode
+}
+
+export type FlowNodeCache = Map<string, FlowNodeCacheEntry>
+
+export interface FlowNodeHandlers {
+  onOpen: (nodeId: string) => void
+  onUpdateNode: (nodeId: string, updater: (node: WorkflowNodeModel) => WorkflowNodeModel) => void
+  onResizeNode: (nodeId: string, size: NoteNodeSize) => void
+  onRequestInsert: (request: NodeInsertRequest) => void
+  onDeleteNode: (nodeId: string) => void
+  onDuplicateNode: (nodeId: string) => void
+}
+
+export interface BuildFlowNodesOptions {
+  /** 要画的节点（画布上显示的那一份文案）。 */
+  nodes: readonly WorkflowNodeModel[]
+  /** 当前图上的全部连线，用来算端口占用与是否已接入。 */
+  edges: readonly WorkflowEdge[]
+  selectedNodeId: string | null
+  /** 允许拖动（`dragEnabled && dockMode === 'select'`）。 */
+  draggable: boolean
+  runStatusByNode: ReadonlyMap<string, NodeRunStatus>
+  /**
+   * React Flow 量到的节点尺寸。
+   *
+   * 它对**缓存键有影响**：React Flow 是异步量节点的，首帧量到的是 `undefined`，
+   * 之后才是真实尺寸；不把尺寸算进缓存键，缓存会一直拿首次那个没有尺寸的对象，
+   * 后续 `adoptUserNodes` 重建内部节点时尺寸被抹平（拖动报 error015、fitView 拿到 0 尺寸）。
+   */
+  measure: (nodeId: string) => { width?: number; height?: number } | undefined
+  handlers: FlowNodeHandlers
+  /** 上一次的缓存；返回的新缓存交给调用方保存。 */
+  cache: FlowNodeCache
+}
+
+/**
+ * 图数据 + 画布状态 → React Flow 节点，并复用没变的节点对象。
+ *
+ * 复用不是为了省渲染，而是为了**不打断 React Flow 的状态机**：每帧都换新对象，
+ * 它就会把每个节点当成刚挂载，量到的尺寸、正在进行的拖动全丢。
+ * `flags` 就是「哪些条件变了」——节点对象本身、选中态、可拖动、运行状态、端口占用、
+ * 是否已接入、量到的尺寸；其中任何一项变了才重建。
+ */
+export function buildFlowNodes(options: BuildFlowNodesOptions): { nodes: RouteFlowNode[]; cache: FlowNodeCache } {
+  const previous = options.cache
+  const next: FlowNodeCache = new Map()
+
+  const nodes = options.nodes.map(model => {
+    const sourcePorts = options.edges
+      .filter(edge => edge.sourceNodeId === model.id)
+      .map(edge => String(edge.sourcePort))
+    const targetConnected = options.edges.some(edge => edge.targetNodeId === model.id)
+    const runStatus = options.runStatusByNode.get(model.id) ?? 'idle'
+    const measured = options.measure(model.id)
+    // 便签是唯一一个尺寸不等于内容的节点：它的大小由 `model.size` 说了算，
+    // 所以要把尺寸同时写成 `measured` 与节点样式（`getNodeInlineStyleDimensions` 只认 style / width，不认 measured）。
+    // 其余节点不写 style，宽度交给卡片自己（`w-60`）。
+    const noteSize = model.kind === 'note' ? resolveNoteNodeSize(model) : null
+    const noteDimensions = noteSize ? { width: noteSize.width, height: noteSize.height } : undefined
+    const flags = `${model.id === options.selectedNodeId}|${options.draggable}|${runStatus}|${sourcePorts.join(',')}|${targetConnected}|${measured?.width ?? 0}x${measured?.height ?? 0}`
+
+    const cached = previous.get(model.id)
+    if (cached && cached.model === model && cached.flags === flags) {
+      next.set(model.id, cached)
+      return cached.node
+    }
+
+    const node: RouteFlowNode = {
+      id: model.id,
+      type: toCanvasNodeType(model.kind),
+      position: model.position,
+      // React Flow 把量到的尺寸记在 internal node 上，而 `adoptUserNodes` 重建内部节点时
+      // 会直接取用户节点对象的 `measured`。这里重建对象（例如拖动时每帧写回位置）如果不把
+      // 尺寸带回来，尺寸会被重置成 undefined。
+      measured: noteDimensions ?? measured,
+      style: noteDimensions,
+      draggable: options.draggable,
+      data: {
+        model,
+        isSelected: model.id === options.selectedNodeId,
+        runStatus,
+        connectedSourcePorts: [...new Set(sourcePorts)],
+        targetConnected,
+        canInsert: true,
+        ...options.handlers,
+      },
+    }
+
+    next.set(model.id, { model, flags, node })
+    return node
+  })
+
+  return { nodes, cache: next }
 }

@@ -44,6 +44,7 @@ async function startHarness(options: HarnessOptions = {}): Promise<Harness> {
     dataDir: dataDirectory,
     proxyPort,
     managementPort,
+    managementToken: 'fixture-management-token',
   })
 
   const pair = new MessageChannel()

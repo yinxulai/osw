@@ -109,6 +109,24 @@ export async function getDefaultLogicalModelRecordId(): Promise<string> {
 }
 
 /**
+ * 按**数据记录 id** 取一个活跃逻辑模型，取不到就抛 404。
+ *
+ * 给「写入前先确认落点存在」用：调度绑定的外键指着记录 id，拿一个不存在的 id 去写，
+ * SQLite 会抛 `FOREIGN KEY constraint failed` —— 而这句话对用户毫无意义，且如果写入分两步
+ * （先建模型、再建绑定），第一步已经落库了，第二步才失败就成了**孤儿模型**。
+ *
+ * 这里故意按记录 id 查、不做「模型名 → 记录 id」的兜底：接口口径就是记录 id，
+ * 传模型名（例如 `'default'`）属于调用方拿错了钥匙，就该在查不到这一步停下，
+ * 而不是猜它想表达哪个落点。模型名到记录 id 的翻译由 `getDefaultLogicalModelRecordId`
+ * 与 `mapLogicalModelIdsToRecordIds` 两处显式完成。
+ */
+export async function getLogicalModelRecordIdOrThrow(id: string): Promise<string> {
+  const model = await getLogicalModel(id)
+  if (!model || model.deletedTime !== null) throw logicalModelNotFoundError(id)
+  return model.id
+}
+
+/**
  * 确认一个**模型 id** 当前没有被活跃的逻辑模型占用，否则抛 409。
  *
  * 收成一处，是因为三个入口问的是同一个问题（新建、改名、从快照导入），而答案必须一致：
@@ -310,14 +328,14 @@ export type UpsertSchedulingPolicyInput = Pick<SchedulingPolicy, 'logicalModelId
 export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput): Promise<SchedulingPolicy> {
   if (input.strategy !== undefined && input.strategy !== 'priority') throw new Error('unsupported scheduling policy strategy')
   if (input.weight !== undefined && (!Number.isInteger(input.weight) || input.weight < 1)) throw new Error('scheduling policy weight must be positive')
-  // 显式要求打开绑定时，先看模型本体还在不在：模型被全局停用后，打开的绑定不会被调度，
-  // 只会让逻辑模型页看起来「可用」。新建行时需要的是同一个判断，所以调用方必须把模型
-  // 本体的开关透传进来（`enabled`），而不是依赖这里的默认值 true。
-  if (input.enabled === true) {
-    const model = getConfigDb().select({ modelName: providerModels.modelName, enabled: providerModels.enabled })
-      .from(providerModels).where(eq(providerModels.id, input.providerModelId)).get()
-    if (model && !model.enabled) throw providerModelDisabledError(model.modelName)
-  }
+  // 模型被全局停用后，打开的绑定不会被调度，只会让逻辑模型页看起来「可用」。
+  // 新建行省略 `enabled` 时抄模型自身的开关，不默认成 true；要存成打开时
+  // （显式传入，或抄到的就是打开）走同一道守卫。模型行不存在时仍默认打开，
+  // 与原先「查不到就不拦」一致。冲突更新只写调用方给出的列，省略不会改已有行。
+  const model = getConfigDb().select({ modelName: providerModels.modelName, enabled: providerModels.enabled })
+    .from(providerModels).where(eq(providerModels.id, input.providerModelId)).get()
+  const enabled = input.enabled ?? model?.enabled ?? true
+  if (enabled === true && model && !model.enabled) throw providerModelDisabledError(model.modelName)
   const time = now()
   const values = {
     logicalModelId: input.logicalModelId,
@@ -325,7 +343,7 @@ export async function upsertSchedulingPolicy(input: UpsertSchedulingPolicyInput)
     strategy: input.strategy ?? 'priority',
     priority: input.priority ?? 0,
     weight: input.weight ?? 100,
-    enabled: input.enabled ?? true,
+    enabled,
     createdTime: time,
     updatedTime: time,
     deletedTime: null,

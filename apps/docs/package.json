@@ -1,6 +1,6 @@
 {
   "name": "@osw/docs",
-  "version": "1.3.0-beta.1",
+  "version": "1.3.1",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@clarify-labs/cli": "^0.11.21",
-    "style-to-js": "^1.1.21",
-    "wrangler": "^4.42.0"
+    "style-to-js": "^2.0.2",
+    "wrangler": "^4.150.0"
   }
 }

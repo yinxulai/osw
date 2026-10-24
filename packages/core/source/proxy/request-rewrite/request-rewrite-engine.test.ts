@@ -58,7 +58,7 @@ describe('applyRequestRewriteRules', () => {
     expect(result.headers['content-length']).toBe(String(result.body.length))
     expect(parsed(result)).toEqual({ metadata: { source: 'osw' }, text: 'hi' })
     expect(result.appliedRuleIds).toEqual(['rule-test'])
-    expect(result.skippedRuleIds).toEqual([])
+    expect(result.skippedRules).toEqual([])
   })
 
   it('支持 Header 追加、大小写不敏感匹配和删除', () => {
@@ -91,7 +91,7 @@ describe('applyRequestRewriteRules', () => {
     const responseOnly = rule([jsonAction({ type: 'body-set', path: '$.x', value: 1 }, 'response')], { id: 'response-only' })
     const result = applyRequestRewriteRules(body({}), {}, [disabled, deleted, unmatched, responseOnly], context('request'))
     expect(result.appliedRuleIds).toEqual([])
-    expect(result.skippedRuleIds).toEqual(['disabled', 'deleted', 'unmatched', 'response-only'])
+    expect(result.skippedRules.map(item => item.ruleId)).toEqual(['disabled', 'deleted', 'unmatched', 'response-only'])
   })
 
   it('按客户端和上游协议匹配条件筛选', () => {
@@ -123,7 +123,7 @@ describe('applyRequestRewriteRules', () => {
     // 引擎认的是**交付形态**：只有手里拿着一整份正文时，改写才能成立。
     const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([jsonAction({ type: 'body-replace', path: '$.text', search: 'old', replacement: 'new', regex: false }, 'response')])], context('response', { shape: 'incremental' }))
     expect(result.appliedRuleIds).toEqual([])
-    expect(result.skippedRuleIds).toEqual(['rule-test'])
+    expect(result.skippedRules.map(item => item.ruleId)).toEqual(['rule-test'])
     expect(parsed(result)).toEqual({ text: 'old' })
   })
 
@@ -216,7 +216,7 @@ describe('applyRequestRewriteRules - script action', () => {
 
   it('响应流式场景跳过脚本动作', () => {
     const result = applyRequestRewriteRules(body({ text: 'old' }), {}, [rule([scriptAction('return { body: {} }', { stage: 'response' })])], context('response', { shape: 'incremental' }))
-    expect(result.skippedRuleIds).toEqual(['rule-test'])
+    expect(result.skippedRules.map(item => item.ruleId)).toEqual(['rule-test'])
     expect(parsed(result)).toEqual({ text: 'old' })
     expect(result.scriptLogs).toEqual([])
   })
@@ -233,8 +233,6 @@ describe('applyRequestRewriteRules - script action', () => {
       { ruleId: 'unmatched', reason: 'unmatched-protocol' },
       { ruleId: 'response-only', reason: 'no-stage-actions' },
     ])
-    // 扁平视图与结构化视图永远同源，不能一处有一套。
-    expect(result.skippedRuleIds).toEqual(result.skippedRules.map(item => item.ruleId))
   })
 
   it('流式响应的跳过原因为 unsupported-shape，而不是笼统的「跳过」', () => {

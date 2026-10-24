@@ -49,6 +49,7 @@ const PI_SETTINGS_FILE = '~/.pi/agent/settings.json'
 const PI_MODELS_FILE = '~/.pi/agent/models.json'
 const DSH_FILE = 'deepseek-harness'
 const DSH_SETTINGS_FILE = '~/.dsh/settings.yaml'
+const DSH_CONFIG_FILE = '~/.dsh/config.yaml'
 const COPILOT = 'copilot-cli'
 const COPILOT_ENV_FILE = '~/.copilot/osw.env'
 const VSCODE = 'vscode'
@@ -62,7 +63,9 @@ const VSCODE_FILE = AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!.path
 const VSCODE_RESOLVED_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_KEY[VSCODE]!.files[0]!, process.platform)
 
 /**
- * 注册表里声明了「目录可被环境变量改道」的变量名（OpenCode 的 XDG、DeepSeek Harness 的 DSH_HOME）。
+ * 注册表里声明了「目录可被环境变量改道」的变量名。文件级 `envVar`（OpenCode 的 XDG、
+ * DeepSeek Harness 的 `DSH_HOME`）和平台路径自己的 `envVar`（VS Code 的
+ * `XDG_CONFIG_HOME` / `APPDATA`）都算。
  *
  * 这些变量在 CI 上是**预设好的**——GitHub Actions 的 ubuntu runner 就带着 `XDG_CONFIG_HOME`——
  * 于是 `resolveClientConfigPath` 会把文件指到临时主目录之外：写入落到真实用户目录里，
@@ -73,7 +76,16 @@ const VSCODE_RESOLVED_FILE = declaredPathForPlatform(AGENT_CLIENT_DEFINITION_BY_
  * 从注册表推导而不是手抄变量名：以后新增带 `envVar` 的客户端会自动被覆盖。
  */
 const ENV_OVERRIDE_NAMES = [
-  ...new Set(AGENT_CLIENT_DEFINITIONS.flatMap(client => client.files.flatMap(file => (file.envVar ? [file.envVar.name] : [])))),
+  ...new Set(
+    AGENT_CLIENT_DEFINITIONS.flatMap(client =>
+      client.files.flatMap(file => [
+        ...(file.envVar ? [file.envVar.name] : []),
+        ...Object.values(file.platformPaths ?? {}).flatMap(entry =>
+          typeof entry !== 'string' && entry.envVar ? [entry.envVar.name] : [],
+        ),
+      ]),
+    ),
+  ),
 ]
 
 let temporaryDirectory: string
@@ -93,14 +105,26 @@ function readFile(declaredPath: string): string {
 }
 
 /**
+ * 把绝对路径翻回用例用的 `~/` 声明式写法。
+ *
+ * 分隔符必须从 `path.relative` 的结果里归一，不能假设是正斜杠——生产拼出来的是**真实文件系统
+ * 路径**（Windows 上是 `\`），而 `fullPath()` 只认 `~/` 开头。写死正斜杠会让 Windows 上
+ * `replace` 落空，得到一个原封不动的绝对路径，再被 `fullPath()` 拼一次主目录。
+ */
+function declaredPath(absolute: string): string {
+  return `~/${path.relative(mocks.home, absolute).split(path.sep).join('/')}`
+}
+
+/**
  * `load` 文件的启动文件落点：候选里的第一个（`resolveShellProfilePath` 在候选都不存在时的兜底）。
  *
- * 候选顺序跟着 `$SHELL` 走——CI 的 ubuntu runner 用 bash，第一候选是 `.bash_profile` 而不是 `.zshrc`。
- * 从 `defaultShellProfileCandidates()` 现取，保证与生产代码选中的是同一个文件，而不是把 `.zshrc` 写死。
+ * 候选顺序跟着平台与 `$SHELL` 走——macOS/Linux 默认 `.zshrc` 或 bash 的启动文件，Windows 是
+ * PowerShell 的 profile。从 `defaultShellProfileCandidates()` 现取，保证与生产代码选中的是
+ * 同一个文件，而不是把 `.zshrc` 写死。
  */
 function firstShellProfilePath(): string {
   const [first] = defaultShellProfileCandidates()
-  return first!.replace(`${mocks.home}/`, '~/')
+  return declaredPath(first!)
 }
 
 /** 同步入口抛错时，把 `AppError` 的 code 取出来；这条路径本身不该走到返回值。 */
@@ -286,20 +310,21 @@ describe('saveClientConfigContent', () => {
   })
 
   it('reports a write the filesystem refused instead of pretending it worked', async () => {
-    // 备份已经登记、临时文件却写不下去（目录只读）：这个错误必须抛出来。
+    // 备份已经登记、临时文件却写不下去：这个错误必须抛出来。
     // 吞掉它会让界面显示「已保存」而磁盘上什么也没变。
-    const directory = path.dirname(fullPath(CLAUDE_FILE))
-    fs.mkdirSync(directory, { recursive: true })
-    fs.chmodSync(directory, 0o500)
-    try {
-      await expect(saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')).rejects.toMatchObject({
-        code: 'CLIENT_CONFIG_WRITE_FAILED',
-        statusCode: 500,
-      })
-      expect(fs.existsSync(fullPath(CLAUDE_FILE))).toBe(false)
-    } finally {
-      fs.chmodSync(directory, 0o700)
-    }
+    //
+    // 制造失败的手法必须两端一致：旧写法 `chmod 0o500` 只对 POSIX 生效，Windows 上目录只读**不拦**
+    // 写入，于是这条用例会静默变成「写入成功」——看着是绿的，其实什么也没验证。
+    // 改成让临时路径先被一个**目录**占住：`writeFile` 在两端都会拒绝（EISDIR / EPERM）。
+    // 若哪天生产改了临时文件命名，占位失效、断言从 rejects 变成 resolve，用例会立刻报红而不是假绿。
+    const target = fullPath(CLAUDE_FILE)
+    fs.mkdirSync(path.join(path.dirname(target), `.${path.basename(target)}.osw-tmp`), { recursive: true })
+
+    await expect(saveClientConfigContent(CLAUDE, CLAUDE_FILE, '{"a":1}')).rejects.toMatchObject({
+      code: 'CLIENT_CONFIG_WRITE_FAILED',
+      statusCode: 500,
+    })
+    expect(fs.existsSync(target)).toBe(false)
   })
 })
 
@@ -560,15 +585,19 @@ describe('applyClientConfigOverrides', () => {
   })
 
   it('prefers an existing shell profile over creating a new one', async () => {
-    // 用户实际在用的是 `.bash_profile`：就改它，别另外造一个 `.zshrc`。
-    writeFile('~/.bash_profile', 'export PATH="$HOME/bin:$PATH"\n')
+    // 用户实际在用的启动文件（候选里的第二个）就改它，别另外造一个第一候选。
+    // 不写死 `.bash_profile`：这台机器上候选跟着平台走（Windows 是 PowerShell profile），
+    // 写死的名字根本不在候选里，用例会去断言「第一候选被写入」而实际它一个都没被选中。
+    const [first, second] = defaultShellProfileCandidates()
+    writeFile(declaredPath(second!), 'export PATH="$HOME/bin:$PATH"\n')
 
     await applyClientConfigDefaults(COPILOT)
 
-    const profile = readFile('~/.bash_profile')
+    const profile = readFile(declaredPath(second!))
     expect(profile).toContain('export PATH="$HOME/bin:$PATH"')
     expect(profile).toContain('>>> osw managed env >>>')
-    expect(fs.existsSync(fullPath('~/.zshrc'))).toBe(false)
+    // 第一候选没有被凭空创建：既然用户在用的是第二个，就不该再落一个新文件。
+    expect(fs.existsSync(first!)).toBe(false)
   })
 
   it('refuses to overwrite a file it cannot parse', async () => {
@@ -619,6 +648,33 @@ describe('previewClientConfigOverrides', () => {
 
     // 列表页的「已生效」就是这个空数组。
     expect(preview.changes).toEqual([])
+  })
+
+  it('plans a file with no changes as an empty container, never as null', async () => {
+    // dsh 的 `~/.dsh/config.yaml` 是一份空文件，而注册表里没有任何字段声明落在它上面：
+    // 「改 0 处」但内容仍会被写下去。原来 `yaml` 会把这份空文档序列化成字面量 `null`，
+    // 于是「一键生效」把一份空文件写成了一份坏文件。空内容就该是空内容。
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.changes).toEqual([])
+    expect(preview.content).toBe('[]\n')
+  })
+
+  it('replaces the null root this bug already wrote to disk', async () => {
+    // 已经被写坏的文件：下一次保存把它换成空容器。用户不需要自己知道该填什么。
+    writeFile(DSH_CONFIG_FILE, 'null\n')
+
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.content).toBe('[]\n')
+  })
+
+  it('keeps a comment-only file a comment, not a null', async () => {
+    writeFile(DSH_CONFIG_FILE, '# 我还没写\n')
+
+    const preview = await previewClientConfigOverrides(DSH_FILE, DSH_CONFIG_FILE, MODEL)
+
+    expect(preview.content).toBe('# 我还没写\n\n[]\n')
   })
 })
 
@@ -766,6 +822,35 @@ describe('applyClientConfigDefaults', () => {
     expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]`)
   })
 
+  it('keeps a claude model that is named only on ANTHROPIC_MODEL', async () => {
+    // 顶层 `model` 经常不写，模型名在 `env.ANTHROPIC_MODEL`。一键生效必须沿用这个名字，
+    // 而不是因为角色的第一个字段是空的，就把 model / ANTHROPIC_MODEL / opus 整组写成兜底值 `default`。
+    writeFile(
+      CLAUDE_FILE,
+      `${JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+          ANTHROPIC_MODEL: 'claude-sonnet-4-5',
+          ANTHROPIC_SMALL_FAST_MODEL: 'claude-haiku-4-5',
+        },
+      })}\n`,
+    )
+
+    await applyClientConfigDefaults(CLAUDE)
+
+    const written = JSON.parse(readFile(CLAUDE_FILE)) as { model?: string; env: Record<string, string> }
+    expect(written.model).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME).toBe('claude-sonnet-4-5')
+    expect(written.env.ANTHROPIC_SMALL_FAST_MODEL).toBe('claude-haiku-4-5')
+    expect((await readClientConfigFile(CLAUDE, CLAUDE_FILE)).detected).toMatchObject({
+      model: 'claude-sonnet-4-5',
+      mainModel: 'claude-sonnet-4-5',
+      smallFast: 'claude-haiku-4-5',
+    })
+  })
+
   it('fills the harness runtime settings with a route and a default model', async () => {
     const [harness] = await applyClientConfigDefaults(DSH_FILE)
 
@@ -775,14 +860,29 @@ describe('applyClientConfigDefaults', () => {
 
     const settings = parse(readFile(DSH_SETTINGS_FILE)) as {
       'agent-default-model'?: { provider?: string; model?: string }
-      'llm-pi-ai'?: { providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string }> }> }
+      'llm-pi-ai'?: {
+        providers?: Record<string, { baseURL?: string; models?: Array<{ id?: string; reasoningEfforts?: unknown }> }>
+      }
     }
 
     // 新会话的默认路由指向本机服务提供方（表项键 = provider id）。
     expect(settings['agent-default-model']).toMatchObject({ provider: LOCAL_PROVIDER_ID })
     // 手工声明的 provider 路由带上本机地址与 /v1，以及数组形态的模型清单。
     expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.baseURL).toContain('127.0.0.1:9300/v1')
-    expect(settings['llm-pi-ai']?.providers?.[LOCAL_PROVIDER_ID]?.models?.[0]).toMatchObject({ id: 'default' })
+    const [model] = settings['llm-pi-ai']!.providers![LOCAL_PROVIDER_ID]!.models!
+    expect(model).toMatchObject({ id: 'default' })
+    // 手工声明的模型默认**一个推理档位都不声明**，于是 harness 打开会话选的档位会被拒为
+    // UNSUPPORTED_REASONING_EFFORT——所以这份配方必须把档位连到线上拼写上；`off` 空值表示这一档
+    // 支持但请求里什么都不发。
+    expect(model.reasoningEfforts).toEqual({
+      off: null,
+      minimal: 'minimal',
+      low: 'low',
+      medium: 'medium',
+      high: 'high',
+      xhigh: 'xhigh',
+      max: 'max',
+    })
   })
 
   it('is idempotent for the harness too: a second run has nothing to write', async () => {

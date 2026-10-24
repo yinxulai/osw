@@ -176,11 +176,21 @@ export class UpdaterManager {
 
     autoUpdater.on('checking-for-update', () => {
       console.info(`[updater] check started currentVersion=${app.getVersion()} packaged=${app.isPackaged}`)
+      // 下载已经结束之后再检查，electron-updater 仍会发这条事件：它只按版本号判断，
+      // 不记得包在不在磁盘上。这里若降到 checking，「立即安装」会消失，而安装包还在。
+      if (this.state.status === 'downloaded') return
       this.setState({ status: 'checking', errorMessage: null })
     })
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       console.info(`[updater] update available currentVersion=${app.getVersion()} latestVersion=${info.version}`)
+      // 下载结束时 downloadPromise 会被清掉，同版本再检查仍会走到 update-available。
+      // 版本没变就留在 downloaded，否则更新的版本会被已经下完的旧包挡住。
+      // 顺手清掉上一次检查失败留下的错误，否则成功的复查仍会显示旧的失败原因。
+      if (this.state.status === 'downloaded' && this.state.info?.latestVersion === info.version) {
+        if (this.state.errorMessage) this.setState({ errorMessage: null })
+        return
+      }
       this.setState({
         status: 'update-available',
         info: this.mapInfo(info),
@@ -224,6 +234,12 @@ export class UpdaterManager {
         ? error.message
         : nativeTranslator()('native.update.devCheckFailed', { message: error.message })
       console.error(`[updater] operation failed status=${this.state.status} message=${message}`, error)
+      // 检查失败只说明这次没问到服务器。包已经在磁盘上时，把状态改成 error 会收掉
+      // 「立即安装」，下一次同版本的成功检查也不再被当成已下载，按钮又变回「下载更新」。
+      if (this.state.status === 'downloaded') {
+        this.setState({ errorMessage: message })
+        return
+      }
       this.setState({
         status: 'error',
         errorMessage: message,
@@ -277,8 +293,16 @@ export class UpdaterManager {
     try {
       await autoUpdater.checkForUpdates()
     } catch (error) {
-      // autoUpdater 的 error 事件已处理，这里兜底防止未捕获异常
-      if (this.state.status !== 'error') {
+      // 已下载时 error 事件只记下原因、不改状态。这里若再写成 error，会把上面的保留盖掉。
+      // 事件没来（promise 直接拒绝）时补上原因，状态仍然留在 downloaded。
+      if (this.state.status === 'downloaded') {
+        if (!this.state.errorMessage) {
+          this.setState({
+            errorMessage: error instanceof Error ? error.message : String(error),
+          })
+        }
+      } else if (this.state.status !== 'error') {
+        // autoUpdater 的 error 事件已处理，这里兜底防止未捕获异常
         this.setState({
           status: 'error',
           errorMessage: error instanceof Error ? error.message : String(error),

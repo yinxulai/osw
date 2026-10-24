@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { DOCS_URL, REPO_URL } from '../downloads'
-import { GitHubMark } from './site-header'
+import { DISCORD_URL, DOCS_URL, REPO_URL } from '../downloads'
+import { DiscordMark, GitHubMark } from './site-header'
 
 /**
  * 页脚。
@@ -36,6 +36,15 @@ export function SiteFooter() {
           >
             <GitHubMark className="h-3.5 w-3.5" />
             {t('footerRepo', '在 GitHub 上查看源码')}
+          </a>
+          <a
+            href={DISCORD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-[12px] text-ink-4 transition-colors hover:text-ink-2"
+          >
+            <DiscordMark className="h-3.5 w-3.5" />
+            {t('footerDiscord', '加入 Discord 社区')}
           </a>
         </div>
       </div>

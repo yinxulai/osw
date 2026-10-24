@@ -21,7 +21,7 @@ import { resolveLocale, type Locale } from '@common/i18n'
 import { getSystemLocale, useLanguageStore } from '@/i18n/store'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { appearanceSearch, useUrlOverrides } from '@/routing/url-overrides'
-import type { Theme, ThemeMode } from '@/components/app-sidebar'
+import type { Theme, ThemeMode } from '@/lib/theme-mode'
 
 export interface ResolvedAppearance {
   /** 唯一状态源：持久化的语言偏好。 */

@@ -4,13 +4,13 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已按不兼容的新版本契约实施：22 张表数据库基线（现为配置库与观测库两个文件，见 [data-model.md](./data-model.md) §2.1）、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面已经完成；当前主要收尾协议转换补充验收、跨平台和正式发布包端到端验证。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已按不兼容的新版本契约实施：22 张表数据库基线（现为配置库与观测库两个文件，见 [data-model.md](./data/data-model.md) §2.1）、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面已经完成；当前主要收尾协议转换补充验收、跨平台和正式发布包端到端验证。
 
 当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
-- [x] [data-model.md](./data-model.md)：22 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_rewrite_rules、provider_model_request_rewrite_rules、workflows、request_logs、request_attributes、request_usages、attempt_usages、request_attempts、request_contents、attempt_contents、runtime_logs；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
-- [x] [proxy.md](./proxy.md)（外部行为契约）、[proxy-engine.md](./proxy-engine.md)（分层引擎）：代理管线按入口 → 路由 → 尝试规划 → 尝试执行 → 协议/适配 → 传输 → 响应产出 → 观测分层。
-- [x] [protocol-conversion.md](./protocol-conversion.md)、[server-architecture.md](./server-architecture.md)、[tech-architecture.md](./tech-architecture.md)、[security-privacy.md](./security-privacy.md)、[observability.md](./observability.md)、[telemetry.md](./telemetry.md)。
+- [x] [data-model.md](./data/data-model.md)：22 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_rewrite_rules、provider_model_request_rewrite_rules、workflows、request_logs、request_attributes、request_usages、attempt_usages、request_attempts、request_contents、attempt_contents、runtime_logs；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
+- [x] [proxy.md](./proxy/proxy.md)（外部行为契约）、[proxy-engine.md](./proxy/proxy-engine.md)（分层引擎）：代理管线按入口 → 路由 → 尝试规划 → 尝试执行 → 协议/适配 → 传输 → 响应产出 → 观测分层。
+- [x] [protocol-conversion.md](./proxy/protocol-conversion.md)、[server-architecture.md](./overview/server-architecture.md)、[tech-architecture.md](./overview/tech-architecture.md)、[security-privacy.md](./operations/security-privacy.md)、[observability.md](./operations/observability.md)、[telemetry.md](./operations/telemetry.md)。
 
 ### 当前实现结论
 
@@ -81,8 +81,8 @@
 #### 7. 安全与隐私验证
 
 - [x] 服务默认只监听 `127.0.0.1`
-- [x] 网络可达性由监听地址与操作系统防火墙负责：`listenHost` 可由用户改为 `0.0.0.0` / `::` 以暴露给局域网 / WSL / 容器，**不做 Host 头白名单校验**（原「拒绝不允许的 Host」条目已按此决策撤销，见 [security-privacy.md](./security-privacy.md)）
-- [x] 本地 API Key（**代理入口向下签发的调用方凭证**）：**已实现**，默认关闭。设置里打开 `apiKeyAuthEnabled` 后 `/v1/*` 校验调用方身份，未带 / 错误 / 停用 / 过期的 Key 一律 `401`；支持多个具名 Key、启用开关与可选过期时间，明文只存宿主密钥存储（与 Provider Key 同一套设施），DB 只留引用且**明文只在创建 / 轮换时回一次**；提供创建 / 轮换 / 删除 / 启停与「按 Key 拆分用量」。见 [security-privacy.md](./security-privacy.md) §「客户端 API Key」，动机见 [#27](https://github.com/yinxulai/osw/issues/27)
+- [x] 管理接口叠加独立的访问控制：每次应用启动随机生成的凭证 `x-osw-token`，`Host` 只在注入凭证那一刻判一次回环（挡 DNS rebinding 读走凭证）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），服务进程崩溃重启不会换新，也和代理是否启动无关。**凭证没有例外**：每一条 `/api/*` 都必须带上它，不区分浏览器与本机进程——曾经按 `Origin` / `Sec-Fetch-Site` 只卡浏览器，而那两个头是调用方自己写的，任何本机 `curl` 不发它们就能调 `/api/provider/export` 拿走明文密钥。凭证由服务在 listen 成功后写到 `<dataDir>/management.token`（`0600`）、退出时删除，`stop` / `status` 从这读；不写进 `runtime.json`，因为那份快照会随 `status --json` 进 shell 历史。凭证之外不再有 `Host` 白名单与来源白名单：它们挡不住拿着凭证的调用方，只制造「用局域网 IP 打开就上不去」这类故障。**开发形态（`environment === 'development'`）不校验凭证**，让 Vite 页面与自动化脚本无需先读 `management.token`；开发形态使用独立数据目录，正式形态仍然 fail-closed。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./operations/security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
+- [x] 本地 API Key（**代理入口向下签发的调用方凭证**）：**已实现，默认关闭**。设置里打开 `apiKeyAuthEnabled` 后 `/v1/*` 校验调用方身份，未带 / 错误 / 停用 / 过期的 Key 一律 `401`；支持多个具名 Key、启用开关与可选过期时间，明文只存宿主密钥存储（与 Provider Key 同一套设施），DB 只留引用且**明文只在创建 / 轮换时回一次**；提供创建 / 轮换 / 删除 / 启停与「按 Key 拆分用量」。见 [security-privacy.md](./operations/security-privacy.md) §「客户端 API Key」，动机见 [#27](https://github.com/yinxulai/osw/issues/27)
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
 - [x] 关闭应用后代理端口释放
@@ -118,6 +118,10 @@
 - [x] 渠道诊断面板重做：进度与结果统计常驻、失败过滤与重试失败、清空结果、真实 token 用量（无数据显 `—`）
 - [x] 诊断请求的载荷按协议对齐：OpenAI 协议不带输出上限，Anthropic 直连补最小 `max_tokens`（避免转换层默认 4096 带来的成本）
 - [x] 客户端中止诊断时正常收尾并返回已完成的尝试结果，不再出现无响应
+- [x] 两种诊断模式（流式 / 速度）、多轮重复与自定义提示词、输入长度补齐；参数只保留下界、不设上界（见 [diagnostics.md](./operations/diagnostics.md) §5）
+- [x] 领域拆分：请求构造、流式读取、轮次汇总、目标规划四个模块各自单独测，路由只剩 HTTP 适配；线上契约收敛到 `packages/contracts/source/diagnostics.ts`（原先被抄了三份）
+- [x] 界面侧执行器改为 `ModelTestRunner` 类 + `subscribe`/`getSnapshot`（`useSyncExternalStore` 绑定），并发队列、取消收尾与同步闸门可在无 React 环境下测（见 [diagnostics.md](./operations/diagnostics.md) §8）
+- [x] 诊断队列整体搬到服务端：进程级通用任务队列 + `model-test` kind，客户端只剩订阅与转发；面板提为外壳级非模态浮窗、可最小化成角标，切页不再中断在跑的任务（见 [task-queue.md](./overview/task-queue.md)）
 
 ### MVP（P0）：代理管线收尾
 
@@ -144,7 +148,7 @@
 
 ### 国际化（i18n）
 
-完整设计见 [i18n.md](./i18n.md)。核心约束：**界面文案可切换语言，日志与错误固定英文。** 阶段 1 为硬需求。
+完整设计见 [i18n.md](./data/i18n.md)。核心约束：**界面文案可切换语言，日志与错误固定英文。** 阶段 1 为硬需求。
 
 - [x] 阶段 0：`SettingsSchema` 增 `language`、i18n 核心、目录骨架、`I18nProvider`、设置页语言行
 - [x] 阶段 1：日志与错误英文化（`errors.ts`、管理 API、代理层、运行日志），错误码收窄为 `ApiErrorCode`，渲染层按错误码本地化
@@ -153,7 +157,7 @@
 - [x] 阶段 4：原生托盘 / 菜单 / 对话框本地化
 - [x] 阶段 5：门禁与清理（`no-hardcoded-cjk` ESLint 规则、目录一致性检查、移除硬编码中文）
 
-> 实施状态以 [i18n.md](./i18n.md) §8 为准：六个阶段全部落地（en / zh-CN 双目录、`no-hardcoded-cjk` 已接入 `pnpm lint`、目录一致性由 `catalogs.test.ts` 兜底）。
+> 实施状态以 [i18n.md](./data/i18n.md) §8 为准：六个阶段全部落地（en / zh-CN 双目录、`no-hardcoded-cjk` 已接入 `pnpm lint`、目录一致性由 `catalogs.test.ts` 兜底）。
 
 ### 范围
 
@@ -161,9 +165,9 @@
 - [x] 冷却/熔断状态可视化：逻辑模型页展示冷却状态与连续失败次数徽标
 - [x] 供应商包备份/恢复：按供应商导出/导入端点、模型与自定义设置，密钥仅存系统密钥环
 - [x] Token 用量统计：按 `request_usages.type` 聚合展示今日/本周用量（overview 的 `range` 已支持 `today` / `7d` / `30d`，统计卡与趋势图按 `request_usages.type` 拆分输入 / 输出 / 推理 / 缓存读写，见 `analytics-store.ts` 的 usage pivot）
-- [ ] 协议兼容转换器补充验收（详见 [protocol-conversion.md](./protocol-conversion.md) 验收清单）：三个方向的转换器、`ToolNameRegistry` 可逆展平、custom 工具往返、转换候选故障切换与 400/502 语义、流式收尾均已落地并有单测（协议转换 196 例）；剩余全部是**真实供应商人工回归**——含命名空间工具寻址、custom 工具全链路与流式事件名复核
-- [x] 代理引擎（设计详见 [proxy-engine.md](./proxy-engine.md)）：协议矩阵收敛到单一描述符注册表，内核没有协议与 HTTP 分支，重写/转换/日志/用量/健康落位为 Modifier 与 Observer 插件；双向传输能力预留在内核，当前没有实现、也不在计划内
-- [x] 上游出站代理设置（详见 [outbound-proxy.md](./outbound-proxy.md)）：HTTP/HTTPS/SOCKS 代理、绕过规则、草稿连接测试，覆盖模型请求与模型列表获取
+- [ ] 协议兼容转换器补充验收（详见 [protocol-conversion.md](./proxy/protocol-conversion.md) 验收清单）：三个方向的转换器、`ToolNameRegistry` 可逆展平、custom 工具往返、转换候选故障切换与 400/502 语义、流式收尾均已落地并有单测（协议转换 196 例）；剩余全部是**真实供应商人工回归**——含命名空间工具寻址、custom 工具全链路与流式事件名复核
+- [x] 代理引擎（设计详见 [proxy-engine.md](./proxy/proxy-engine.md)）：协议矩阵收敛到单一描述符注册表，内核没有协议与 HTTP 分支，重写/转换/日志/用量/健康落位为 Modifier 与 Observer 插件；双向传输能力预留在内核，当前没有实现、也不在计划内
+- [x] 上游出站代理设置（详见 [outbound-proxy.md](./proxy/outbound-proxy.md)）：HTTP/HTTPS/SOCKS 代理、绕过规则、草稿连接测试，覆盖模型请求与模型列表获取
 - Linux 打包与托盘体验完善
 - 更细粒度的错误切换策略配置
 - [x] 日志导出
@@ -172,24 +176,25 @@
 
 ### 请求重写模块
 
-行为契约、实现状态与剩余项：[request-rewrite-rules.md](./request-rewrite-rules.md)（§12 分阶段实施状态）
+行为契约、实现状态与剩余项：[request-rewrite-rules.md](./proxy/request-rewrite-rules.md)（§12 分阶段实施状态）
 
 - [x] 规则模型已冻结并实现：全局规则与 ProviderModel 绑定、绑定顺序（`priority`）、启停，以及「失败即阻断当前 attempt」语义
 - [x] 请求阶段动作与非流式响应阶段动作已生效；`stage` 是动作级字段，不是匹配条件
 - [x] Header 动作、受限 JSON Path 动作与 `User-Agent` 场景已落地
-- [ ] 三种协议的 thinking/reasoning 字段矩阵，以及 OpenAI Responses、Anthropic Messages 的人工验收（**部分实现**：Responses `reasoning.effort` ↔ Chat `reasoning_effort` 与用量层 `reasoning_tokens` 已映射；Anthropic `thinking` / `thinking_delta` 当前双向丢弃，完整字段矩阵与人工验收未做，见 [request-rewrite-rules.md](./request-rewrite-rules.md) §5.4）
-- [ ] 请求日志中的规则执行摘要与响应字段修改安全审计（**部分实现**：`request_attempts.requestRewriteRuleIds` / `responseRewriteRuleIds` 已落库并在请求详情展示规则名，粒度只到规则 ID 列表；响应字段修改的安全审计未做，见 [request-rewrite-rules.md](./request-rewrite-rules.md) §12）
+- [ ] 三种协议的 thinking/reasoning 字段矩阵，以及 OpenAI Responses、Anthropic Messages 的人工验收（**部分实现**：Responses `reasoning.effort` ↔ Chat `reasoning_effort` 与用量层 `reasoning_tokens` 已映射；Anthropic `thinking` / `thinking_delta` 当前双向丢弃，完整字段矩阵与人工验收未做，见 [request-rewrite-rules.md](./proxy/request-rewrite-rules.md) §5.4）
+- [ ] 请求日志中的规则执行摘要与响应字段修改安全审计（**部分实现**：`request_attempts.requestRewriteRuleIds` / `responseRewriteRuleIds` 已落库并在请求详情展示规则名，粒度只到规则 ID 列表；响应字段修改的安全审计未做，见 [request-rewrite-rules.md](./proxy/request-rewrite-rules.md) §12）
 - [ ] 流式事件级规则（仅在独立设计评审通过后实施）
 
 ### 匿名使用统计
 
-默认开启的匿名使用统计（界面不提供开关，只在设置页说明）：事件白名单、匿名标识口径、上报链路与分析口径见 [telemetry.md](./telemetry.md)。
+默认开启的匿名使用统计（界面不提供开关，只在设置页说明）：事件白名单、匿名标识口径、上报链路与分析口径见 [telemetry.md](./operations/telemetry.md)。
 
-**状态：客户端与服务端两侧均已落地（2026-09）。** `apps/apis/` Worker 已按「契约 → `TelemetrySink` 抽象 → `sinks/aptabase.ts`」实现（下游为 Aptabase 欧盟区）；客户端侧实现（core 安装标识 / 队列 / 直连发送与生命周期接线、`SettingsSchema` 统计字段、管理接口预览与上报）已回到仓库。默认开启，界面上不提供任何入口（引导页的同意步骤与设置页的说明均已移除）。详见 [telemetry.md](./telemetry.md)。
+**状态：客户端与服务端两侧均已落地（2026-09）；存储侧于 2026-10 从 Aptabase 换到 Cloudflare Analytics Engine。** `apps/apis/` Worker 已按「契约 → `TelemetrySink` 抽象 → `sinks/analytics-engine.ts`」实现（下游为同账号里的一个 Analytics Engine 数据集，无密钥、无第三方账号）。换后端的原因与代价（保留期从可配变为固定 3 个月）见 [telemetry.md](./operations/telemetry.md) §7.3 / §8.1。客户端侧实现（core 安装标识 / 队列 / 直连发送与生命周期接线、`SettingsSchema` 统计字段、管理接口预览与上报）已回到仓库。默认开启，界面上不提供任何入口（引导页的同意步骤与设置页的说明均已移除）。详见 [telemetry.md](./operations/telemetry.md)。
 
 - [x] 设计定稿：事件目录（首版 12 个事件，命名规则见 §5.3）、信封字段、稳定不轮换的 `installId` 与保留期取舍、端点恒定与后端可换、不自建存储、Worker 职责与下游抽象边界、分析口径
 - [x] 契约层去厂商化：`packages/contracts/source/telemetry.ts` 只描述事实、不描述去向，事件名闭集、属性枚举与长度约束、端点常量
-- [x] `apps/apis/`：严格校验、补服务端事实、`TelemetrySink` 抽象与 Aptabase 适配器（纯事件流、`CF-IPCountry` 落成事件属性、ISO 时间戳、单批 25 条硬上限）；限流不下在 Worker 里，交给域名级的 Rate limiting 规则
+- [x] `apps/apis/`：严格校验、补服务端事实、`TelemetrySink` 抽象与 Analytics Engine 适配器（纯事件流、`CF-IPCountry` 落成列、17 列位置表、单批 25 条硬上限）；限流不下在 Worker 里，交给域名级的 Rate limiting 规则
+- [ ] `apps/apis/` 读侧：查询接口与控制台分析页（**未开始**：写侧先落地、先验证数据真的进得去，见 [telemetry.md](./operations/telemetry.md) §10）
 - [x] 客户端上报链路：`SettingsSchema` 统计字段、core 安装标识 / 队列 / 直连发送与生命周期接线、管理接口预览与上报
 - [x] 客户端域事件埋点：契约里的 12 个事件各自接上了真实触发点（启动、引导、路由模式、Provider / 模型 / 改写规则的新建、连接测试、协议转换、故障转移、工作流节点、请求处理成功），每个发点都有针对性用例
 - [ ] `apps/apis/` 自动部署：push 到 `main` 且 `apps/apis/**` 变更时发布，支持手动触发
@@ -202,20 +207,20 @@
 - 按延迟、成功率、权重或成本的智能路由
 - 主动健康探测
 - 多配置 Profile
-- 本地 CLI 或无头模式（设计、包边界与阶段验收见 [packaging.md](./packaging.md)，进度见下文「工程演进」）
+- 本地 CLI 或无头模式（设计、包边界与阶段验收见 [packaging.md](./platform/packaging.md)，进度见下文「工程演进」）
 
 ## 工程演进：包拆分与多形态分发（S0–S4）
 
-目标是把核心能力拆成包，让同一套能力同时服务 CLI 与桌面 App 两种形态。设计、包边界、目录映射与宿主适配点以 [packaging.md](./packaging.md) 为唯一权威；本节的勾选状态是该计划的进度来源。
+目标是把核心能力拆成包，让同一套能力同时服务 CLI 与桌面 App 两种形态。设计、包边界、目录映射与宿主适配点以 [packaging.md](./platform/packaging.md) 为唯一权威；本节的勾选状态是该计划的进度来源。
 
 - [x] S0 搬目录与配置：建立 pnpm workspace 与 `packages/{contracts,core,console}` + `apps/app` 宿主壳；目录名统一为 `source/`，脚本按业务归入各包 `scripts/`（跨包收在 `packages/toolkit/scripts/`），打包资产按「谁用谁持有」进 `apps/app/`，turbo 接管任务编排。
 - [ ] S1 `core` 可独立运行：`core` / `contracts` 产出独立构建产物 + 裸 Node 冒烟脚本。**跳过**：CLI 直接用 Vite 别名打包 `core` / `contracts` 的源码，不消费它们的独立产物，因此没有驱动它的需求；留到真有第三方单独消费 `core` 时再做。
 - [x] S2 CLI 成型：落地 §5.1–§5.5 五项宿主适配，建立 `apps/cli` 并实现 `start` / `stop` / `status` / `version`。**未包含**：`config` 子命令、`--daemon`、发布形态。
 - [x] S2.1 CLI 生产级细节：单实例互斥（`instance.lock`）与崩溃兜底、`status --json`、端口/版本漂移诊断、非回环监听告警、9 步真实子进程冒烟脚本 `pnpm smoke:cli`。
-- [x] S2.2 两种形态的一致性：同一套服务、同一份数据，差别只在「怎么把它起来」。数据目录名唯一取自 `runtimeProfile.dataDirectoryName`；两个形态的密钥文件分开命名（密文算法不同，同名会让后写的把前一份全部作废）；「一致 / 能力差异 / 形态差异」三类逐项列清（[packaging.md](./packaging.md) §6）。
+- [x] S2.2 两种形态的一致性：同一套服务、同一份数据，差别只在「怎么把它起来」。数据目录名唯一取自 `runtimeProfile.dataDirectoryName`；两个形态的密钥文件分开命名（密文算法不同，同名会让后写的把前一份全部作废）；「一致 / 能力差异 / 形态差异」三类逐项列清（[packaging.md](./platform/packaging.md) §6）。
 - [x] S2.3 数据落用户主目录 + 两库拆分：数据目录改为 `<用户主目录>/.osw`（开发档 `~/.osw-development`）；原先的单一数据库拆成 `config-<n>.db` / `data-<n>.db`，两份 schema、两条 Drizzle 链，跨库外键全部移除（健康行惰性创建 + 启动时清理孤儿行），文件名版本号改用各库自己的 schema 版本常量，新增库边界守卫 `check-database-boundaries.mjs`。**不考虑兼容与历史**：拆分当时不做数据搬迁，换代（换文件名）只用于大版本发布，日常结构变化就地重画基线。
 - [x] S2.4 宿主与实例身份收口：把只在某一个宿主/某一条路径上成立的保证收进 core——实例互斥移到 `packages/core/source/runtime/instance-lock.ts` 并由 `startServer` 在绑定端口前取锁（存活判定为「pid 活着且心跳新鲜」）；代理侧修失败归因（双向形态不符、流中途截断）、观察者隔离、下游背压、`accept-encoding` 协商与协议固定头丢失，并把请求头改成**默认转发**（只动鉴权头、逐跳头、与位置绑定的 `host`/`content-length` 和 `accept-encoding`，协议固定头分「该覆盖」与「只补缺」两半）；控制台修查询键撞车、监听器泄漏与加载失败静默。
-- [x] S2.5 管理接口去鉴权 + 拆掉专门加的校验：管理接口撤掉实例 Token（`runtime-identity.ts` 删除），边界只剩回环监听与来源白名单；`node:sqlite` 的产物级断言删除，`external` 固定为 `[...builtinModules, /^node:/]`；`typecheck.mjs` 的 `include` 前置检查删除。保留三个 `check-*` 边界守卫与 `version.mjs --check`（声明式规则表，验的是架构约束而非某次构建的输出）。
+- [x] S2.5 管理接口去鉴权 + 拆掉专门加的校验：管理接口撤掉实例 Token（`runtime-identity.ts` 删除），边界只剩回环监听与来源白名单；`node:sqlite` 的产物级断言删除，`external` 固定为 `[...builtinModules, /^node:/]`；`typecheck.mjs` 的 `include` 前置检查删除。保留三个 `check-*` 边界守卫与 `version.mjs --check`（声明式规则表，验的是架构约束而非某次构建的输出）。**后续修正**：撤掉鉴权的前提是「回环 + CORS 就是访问控制」，而这两个都挡不住本机网页（简单请求不过预检、`Origin: null` 还在白名单里）。[#76](https://github.com/yinxulai/osw/issues/76) 之后以「每次启动随机生成的 `x-osw-token`」重新加回，`Host` 与来源名单不再参与访问控制，见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」。
 - [ ] S3 App 回归：`apps/app/source` 按 §4.1 拆出 `main/` 与 `preload/` 并复核构建产物映射（`electron-builder` 配置与打包脚本已归 `apps/app/`）；托盘 / 自动更新 / 开机自启 / 原生对话框保持。验收：桌面安装包端到端可用且升级路径不回归。
 - [ ] S4 分发与文档：CLI 以 npm 全局 bin 分发并声明 `engines`。**当前明确不发布**，`bin` 已就位但 `private: true` 未摘。
 

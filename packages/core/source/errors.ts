@@ -31,7 +31,7 @@ export function normalizeError(error: unknown): AppError {
     return new AppError(
       'VALIDATION_ERROR',
       400,
-      error.errors.map(issue => issue.message).join('; '),
+      error.issues.map(issue => issue.message).join('; '),
       { cause: error },
     )
   }

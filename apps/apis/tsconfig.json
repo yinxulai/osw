@@ -5,13 +5,11 @@
     "noEmit": true,
     // 别名在这里重写一遍，而不是继承根 `tsconfig.json` 的那份。
     //
-    // wrangler 用 esbuild 打包，它按「离入口最近的那份 tsconfig」解析 `paths`，而 `baseUrl` 是
-    // 相对**声明它的那份文件**算的。继承写法在 tsc 下没问题，在 esbuild 下会把 `@common/*`
-    // 指到 `apps/apis/packages/...` 上，于是要等部署那一刻才发现解析不到。
+    // wrangler 用 esbuild 打包，它按「离入口最近的那份 tsconfig」解析 `paths`；
+    // 这里写成相对路径以兼容现代 TypeScript，避免 `baseUrl` 这类已移除配置。
     //
     // 只留 Worker 真用得上的一个别名：它依赖 `packages/contracts/source`，其余都不行
     // （包边界由 `packages/toolkit/scripts/check-package-boundaries.mjs` 保证）。
-    "baseUrl": ".",
     "paths": {
       "@common/*": ["../../packages/contracts/source/*"]
     }

@@ -16,7 +16,7 @@ import { cloudBackupCredentialReference } from './cloud-sync/backends'
 import { normalizeGistTarget } from './cloud-sync/backends/github-gist'
 import { exportConfigSnapshot } from './cloud-sync/export-config-snapshot'
 import { importConfigSnapshot } from './cloud-sync/import-config-snapshot'
-import { configureCloudSync, pullConfigSnapshot, pushConfigSnapshot } from './cloud-sync/service'
+import { configureCloudSync, pullConfigSnapshot, pushConfigSnapshot, testCloudSync } from './cloud-sync/service'
 
 /**
  * HTTP 出口整体替换成假实现：这里要验的是「拿到某个状态码之后我们怎么做」，
@@ -381,4 +381,77 @@ describe('cloud sync service', () => {
   it('refuses to talk to the storage before a credential is saved', async () => {
     await expectAppError(() => pushConfigSnapshot(), 'CLOUD_SYNC_NOT_CONFIGURED')
   })
+})
+
+/**
+ * 「试一下」与「同步一下」的差别：它只问「这份凭据看得见这个远端吗」，
+ * 一点数据都不该动。下面三条把这三件事分开验：提问、不带数据、以及账号名只在变了才写回。
+ */
+describe('cloud sync test', () => {
+  it('verifies the credential and reads the bound remote without transferring anything', async () => {
+    mockGithub({
+      'GET /user': () => githubReply(200, { login: 'octocat' }),
+      [`GET /gists/${GIST_ID}`]: () => githubReply(200, gistPayload()),
+    })
+    await configureCloudSync({ credential: 'ghp_good', target: GIST_ID })
+    requestHttpBuffered.mockClear()
+
+    const status = await testCloudSync()
+
+    expect(status.credentialConfigured).toBe(true)
+    expect(status.accountLabel).toBe('@octocat')
+    // 恰好两次：问一次「我是谁」，读一次远端文件确认权限。写入远端或本地都不该发生。
+    expect(requestHttpBuffered.mock.calls.map(call => (call[1] as RequestOptions).method)).toEqual(['GET', 'GET'])
+    expect((await getSettings()).cloudSyncLastPushedTime).toBe(0)
+  })
+
+  it('does not read any remote file when nothing is bound yet', async () => {
+    mockGithub({ 'GET /user': () => githubReply(200, { login: 'octocat' }) })
+    await configureCloudSync({ credential: 'ghp_good' })
+    requestHttpBuffered.mockClear()
+
+    const status = await testCloudSync()
+
+    expect(status.target).toBe('')
+    expect(requestHttpBuffered).toHaveBeenCalledOnce()
+  })
+
+  it('refreshes the cached account label, because the token may now belong to someone else', async () => {
+    mockGithub({
+      'GET /user': () => githubReply(200, { login: 'octocat' }),
+      [`GET /gists/${GIST_ID}`]: () => githubReply(200, gistPayload()),
+    })
+    await configureCloudSync({ credential: 'ghp_good', target: GIST_ID })
+    expect((await getSettings()).cloudSyncAccountLabel).toBe('@octocat')
+
+    mockGithub({
+      'GET /user': () => githubReply(200, { login: 'hubot' }),
+      [`GET /gists/${GIST_ID}`]: () => githubReply(200, gistPayload()),
+    })
+    const status = await testCloudSync()
+
+    expect(status.accountLabel).toBe('@hubot')
+    expect((await getSettings()).cloudSyncAccountLabel).toBe('@hubot')
+  })
+
+  it('reports a credential the storage does not accept as a credential problem', async () => {
+    // 先绑上凭据（此时后端是通的），再把令牌换成后端不认的那一把。
+    // 否则 401 会在保存那一步就抛出来，验不到「试一下」自己的分类。
+    mockGithub({
+      'GET /user': () => githubReply(200, { login: 'octocat' }),
+      [`GET /gists/${GIST_ID}`]: () => githubReply(200, gistPayload()),
+    })
+    await configureCloudSync({ credential: 'ghp_good', target: GIST_ID })
+    addressesCredentialThatBecameInvalid()
+
+    await expectAppError(() => testCloudSync(), 'CLOUD_SYNC_AUTH_FAILED')
+  })
+
+  /** 「令牌在保存之后失效了」——这是「试一下」存在的理由。 */
+  function addressesCredentialThatBecameInvalid(): void {
+    mockGithub({
+      'GET /user': () => githubReply(401, { message: 'Bad credentials' }),
+      [`GET /gists/${GIST_ID}`]: () => githubReply(401, { message: 'Bad credentials' }),
+    })
+  }
 })

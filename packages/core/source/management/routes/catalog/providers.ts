@@ -67,7 +67,16 @@ async function handleListProviderEndpoints(_req: IncomingMessage, res: ServerRes
   sendSuccess(res, await listProviderEndpoints(id))
 }
 
-const ProviderEndpointsSchema = z.record(ProtocolSchema, z.string().url())
+/**
+ * 「协议 → 默认地址」的**部分**映射：请求只说它在改哪些协议。
+ *
+ * 这里必须是 `partialRecord` 而不是 `record`。zod v4 给 `record` 加了一条 v3 没有的
+ * 约束：键集必须**穷举**——三个协议少写一个就报「地址是 undefined」，而「只改
+ * anthropic-messages 这一条」恰恰是这个接口最正常的用法。`partialRecord` 是 v4 为
+ * 这种语义新开的构造，输出类型正好是 `replaceProviderEndpoints` 收的
+ * `Partial<Record<Protocol, string>>`。
+ */
+const ProviderEndpointsSchema = z.partialRecord(ProtocolSchema, z.string().url())
 
 const CreateProviderSchema = ProviderSchema.pick({
   name: true,
@@ -116,7 +125,10 @@ const UpdateProviderSchema = ProviderSchema.pick({
 async function handleUpdateProvider(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id, apiKey, endpoints, ...updates } = UpdateProviderSchema.parse(body)
   const current = await getProvider(id)
-  if (!current) {
+  // `getProvider` 会把软删除的行也读出来（观测侧要标出「这一家已经删了」）。
+  // 更新不能跟着写：设置 upsert 不看 `deletedTime`，带 `endpoints` 时还会把已删端点复活。
+  // 这一步必须排在 `replaceProviderEndpoints` 和写密钥之前。
+  if (!current || current.deletedTime !== null) {
     sendError(res, 'NOT_FOUND', `Provider not found: ${id}`, 404, { providerId: id })
     return
   }

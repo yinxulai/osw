@@ -34,7 +34,7 @@ export interface ConfigSnapshotImportResult {
  *
  * 后两条的取舍和供应商包是一致的：把一个供应商从队列里移掉要能同步过去，但对快照没提到的
  * 对象动刀就不是同步而是删除了。代价是「删掉一个逻辑模型」这个动作不会传播，见
- * `apps/docs/specs/cloud-sync.md`。
+ * `apps/docs/specs/data/cloud-sync.md`。
  */
 export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapshotImportResult> {
   const snapshot = parseConfigSnapshot(input)
@@ -73,7 +73,7 @@ export async function importConfigSnapshot(input: unknown): Promise<ConfigSnapsh
 function parseConfigSnapshot(input: unknown): ConfigSnapshot {
   const parsed = ConfigSnapshotSchema.safeParse(input)
   if (parsed.success) return parsed.data
-  const detail = parsed.error.errors.slice(0, 3).map(issue => `${issue.path.join('.') || 'root'} ${issue.message}`).join('; ')
+  const detail = parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join('.') || 'root'} ${issue.message}`).join('; ')
   throw new AppError('VALIDATION_ERROR', 400, `Not a recognizable config snapshot (expected ${CONFIG_SNAPSHOT_FILE_NAME}): ${detail}`, {
     cause: parsed.error,
   })

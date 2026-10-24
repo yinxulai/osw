@@ -7,6 +7,7 @@ import {
   type SchemaFieldDescriptor,
   type SchemaValueType,
   type WorkflowGraph,
+  type WorkflowNodeKind,
   type WorkflowProtocol,
 } from '@common/router/types'
 import type { AppTranslator } from '@/i18n/provider'
@@ -84,6 +85,21 @@ function addUniqueField(fields: SchemaFieldDescriptor[], field: SchemaFieldDescr
   if (existing.valueType === 'unknown' && field.valueType !== 'unknown') {
     existing.valueType = field.valueType
   }
+}
+
+/**
+ * 这个节点用不用得上字段提示。
+ *
+ * 条件节点用它挑字段，逻辑模型选择节点用它挑「变量取值」的来源字段，
+ * 遍历迭代节点用它挑遍历来源与结果写回路径，脚本与 LLM 节点用它挑结果写回路径。
+ * 其余节点（输入 / 输出 / 便签）的字段是固定的，不提示也就没有候选。
+ */
+export function supportsFieldHints(kind: WorkflowNodeKind): boolean {
+  return kind === 'condition'
+    || kind === 'model-select'
+    || kind === 'iteration'
+    || kind === 'script'
+    || kind === 'prompt'
 }
 
 export function resolveInputHints(t: AppTranslator, graph: WorkflowGraph, targetNodeId: string): InputHintResult {

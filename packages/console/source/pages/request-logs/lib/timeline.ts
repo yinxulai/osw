@@ -1,5 +1,5 @@
 import type { LiveRequest, LiveRequestEvent } from '@common/schemas'
-import { liveActivityToneOf, type LiveActivityTone } from '@/data/live-activity'
+import { liveActivityToneOf, type LiveActivityTone } from '@/lib/live-activity'
 
 /**
  * 「执行中的请求」那条时间轴。

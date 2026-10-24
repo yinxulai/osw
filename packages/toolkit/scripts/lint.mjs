@@ -18,11 +18,19 @@ const main = async () => {
     // 代理分层规则属于 core（改代理的人必须能自己跑它），所以脚本放在那个包里。
     await run(process.execPath, ['packages/core/scripts/check-proxy-layers.mjs'], { cwd: repositoryRoot })
     await run(process.execPath, ['packages/core/scripts/check-database-boundaries.mjs'], { cwd: repositoryRoot })
+    // 控制台分层同理属于 console：改界面的那个人必须能自己跑它，所以脚本放在那个包里。
+    // 它只管三条会真的把业务逻辑焊死在 React 上的边界（传输层、领域层、渲染层），
+    // 不试图规定整个目录的导入顺序——理由写在脚本头部。
+    await run(process.execPath, ['packages/console/scripts/check-console-layers.mjs'], { cwd: repositoryRoot })
+    // 分层检查管「谁 import 谁」，管不到「一段纯逻辑直接写进 .tsx」——那种代码一条 import
+    // 规则都不违反。这条闸门守的就是它：视图文件不得持有模块级可变状态，模块作用域的纯函数
+    // 只准降不准升（新文件从 0 起算）。理由写在脚本头部。
+    await run(process.execPath, ['packages/console/scripts/check-console-view-purity.mjs'], { cwd: repositoryRoot })
     await run(process.execPath, ['packages/toolkit/scripts/check-package-boundaries.mjs'], { cwd: repositoryRoot })
     // 版本号写在仓库根与每一个 workspace 包的 manifest 里，而「哪几份会被提交」归
     // `release.yml` 里那行 `git add` 管——那是这条链路上唯一不是代码的清单。
     // 放在这里而不是单开一个 job：漏提交一份，下一次 CI 就是红的，
-    // 不必等发布之后靠人回头读一遍仓库（来龙去脉见 apps/docs/specs/packaging.md §5.8）。
+    // 不必等发布之后靠人回头读一遍仓库（来龙去脉见 apps/docs/specs/platform/packaging.md §5.8）。
     await run(process.execPath, ['packages/toolkit/scripts/version.mjs', '--check'], { cwd: repositoryRoot })
     log.success('Lint passed')
   } catch (error) {

@@ -12,6 +12,7 @@ import {
   protocolConverters,
   providerSettings,
   providers,
+  schedulingPolicies,
   type ProviderEndpointRow,
 } from './config-schema'
 
@@ -68,6 +69,9 @@ export async function updateProvider(id: string, updates: Partial<Omit<Provider,
   const time = now()
   const existing = db.select().from(providers).where(eq(providers.id, id)).get()
   if (!existing) throw resourceNotFoundError('provider', id)
+  // 供应商行的 UPDATE 带 `deletedTime IS NULL`，名字写不进去；设置行的 upsert 没有这道条件，
+  // 超时仍会被写进去，返回值却是请求拼出来的新名字。已删除的行按找不到处理，写库之前就停。
+  if (existing.deletedTime !== null) throw resourceNotFoundError('provider', id)
   const next = ProviderSchema.parse({ ...mapProvider(existing), ...updates, id, createdTime: Number(existing.createdTime), updatedTime: time })
   // 供应商行与两条设置行是一次修改：中间失败会让保存的结果只生效一半。
   db.transaction(transaction => {
@@ -314,11 +318,14 @@ export async function deleteProvider(id: string): Promise<void> {
   getConfigDb().transaction(transaction => {
     transaction.update(providers).set({ deletedTime: time, updatedTime: time }).where(and(eq(providers.id, id), isNull(providers.deletedTime))).run()
     transaction.update(providerModels).set({ enabled: false, updatedTime: time, deletedTime: time }).where(and(eq(providerModels.providerId, id), isNull(providerModels.deletedTime))).run()
-    // 端点、模型-端点绑定、协议转换器一并软删除：它们是供应商的子结构，
-    // 只有打标才能保住「这个模型曾经绑过哪个端点/开过哪些协议转换」这份信息。
+    // 端点、模型-端点绑定、协议转换器、调度策略一并软删除：它们是供应商的子结构，
+    // 只有打标才能保住「这个模型曾经绑过哪个端点/开过哪些协议转换、挂过哪些逻辑模型」这份信息。
     const endpointIds = transaction.select({ id: providerEndpoints.id }).from(providerEndpoints).where(eq(providerEndpoints.providerId, id)).all().map(row => row.id)
     const modelIds = transaction.select({ id: providerModels.id }).from(providerModels).where(eq(providerModels.providerId, id)).all().map(row => row.id)
     if (modelIds.length > 0) {
+      // 与 `deleteProviderModelRoute` 同一口径：策略只按自己的 deletedTime 过滤，漏打标就会继续被列出来。
+      transaction.update(schedulingPolicies).set({ enabled: false, deletedTime: time, updatedTime: time })
+        .where(and(inArray(schedulingPolicies.providerModelId, modelIds), isNull(schedulingPolicies.deletedTime))).run()
       const bindingIds = transaction.select({ id: providerModelEndpoints.id }).from(providerModelEndpoints)
         .where(inArray(providerModelEndpoints.providerModelId, modelIds)).all().map(row => row.id)
       if (bindingIds.length > 0) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { UNSAVED_ROUTE_RULE_VERSION } from '@common/router/route-rules'
 import { UNSAVED_ROUTER_GRAPH_VERSION } from '@common/router/types'
-import { formatVersionTime, hasSavedVersion, toRouterGraphVersion, toRouterGraphVersions } from './route-versions'
+import { formatVersionTime, hasSavedVersion, nextVersionNumber, toRouterGraphVersion, toRouterGraphVersions, type RouteVersion } from './route-versions'
 
 describe('路由版本展示模型', () => {
   it('把服务端摘要翻成列表要用的形状', () => {
@@ -46,5 +46,14 @@ describe('路由版本展示模型', () => {
     expect(UNSAVED_ROUTER_GRAPH_VERSION).toBe(UNSAVED_ROUTE_RULE_VERSION)
     expect(hasSavedVersion(UNSAVED_ROUTER_GRAPH_VERSION)).toBe(false)
     expect(hasSavedVersion(1)).toBe(true)
+  })
+})
+
+describe('下一个版本号', () => {
+  it('接着最新那一版走；一版都没存过时就是首版', () => {
+    const latest: RouteVersion = { id: 'workflow_abc', sequence: 7, name: '命中分流', description: '', savedAt: '2026-09-11T14:41:05.000Z', itemCount: 4 }
+
+    expect(nextVersionNumber([])).toBe(1)
+    expect(nextVersionNumber([latest])).toBe(8)
   })
 })

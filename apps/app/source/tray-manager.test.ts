@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 import type { BrowserWindow, MenuItemConstructorOptions } from 'electron'
 import { createAppTranslator } from '@common/i18n/catalogs'
 
@@ -310,7 +311,9 @@ describe('托盘面板窗口', () => {
     const packaged = createPanel()
     packaged.show()
     // 两个 HTML 入口同在 Vite 根下，所以产物里也只差一个文件名。
-    expect(mocks.panelWindows.at(-1)?.loadFile).toHaveBeenCalledWith(`${OUTPUT_DIRECTORY}/render/tray.html`)
+    // 期望值用 `path.join` 拼：`OUTPUT` 是**真实文件系统路径**，生产代码也是 `path.join` 出来的，
+    // 写死正斜杠只会在 POSIX 上成立，Windows 上得到的是反斜杠。
+    expect(mocks.panelWindows.at(-1)?.loadFile).toHaveBeenCalledWith(path.join(OUTPUT_DIRECTORY, 'render', 'tray.html'))
     packaged.destroy()
   })
 

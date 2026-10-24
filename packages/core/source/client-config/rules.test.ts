@@ -224,8 +224,23 @@ describe('provider entries', () => {
       api: 'openai-completions',
       // baseURL 落在 route 上、指向本机服务的 `/v1`。
       baseURL: `${CONTEXT.baseUrl}/v1`,
-      // 与 OpenCode/Pi 不同，dsh 的 models 是 { id } 数组。
-      models: [{ id: 'gpt-5' }],
+      // 与 OpenCode/Pi 不同，dsh 的 models 是 { id } 数组；而手工声明的模型**自带零个推理档位**，
+      // 必须显式声明 `reasoningEfforts`，否则 harness 会对任何请求的档位报 UNSUPPORTED_REASONING_EFFORT。
+      // `off` 留空 = 这一档支持、但请求里什么都不发。
+      models: [
+        {
+          id: 'gpt-5',
+          reasoningEfforts: {
+            off: null,
+            minimal: 'minimal',
+            low: 'low',
+            medium: 'medium',
+            high: 'high',
+            xhigh: 'xhigh',
+            max: 'max',
+          },
+        },
+      ],
       // pi-ai 的 OpenAI 兼容实现即使本地服务不校验密钥也要求带一个凭证，于是写一个占位 Bearer 头。
       headers: { Authorization: `Bearer ${CONTEXT.apiKey}` },
     })

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useResolvedAppearance } from '@/hooks/use-appearance'
-import type { Theme } from '@/components/app-sidebar'
+import type { Theme } from '@/lib/theme-mode'
 
 /**
  * 把生效主题落到 `<html>` 上。

@@ -1,8 +1,9 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import fsPromises from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EncryptedFileSecretStore, MASTER_KEY_ENVIRONMENT_VARIABLE, MASTER_KEY_FILE_NAME, SECRETS_FILE_NAME } from './secret-store'
 
 let dataDirectory: string
@@ -62,6 +63,46 @@ describe('EncryptedFileSecretStore', () => {
     if (process.platform !== 'win32') {
       expect(fs.statSync(secretsPath()).mode & 0o777).toBe(0o600)
       expect(fs.statSync(masterKeyPath()).mode & 0o777).toBe(0o600)
+    }
+  })
+
+  it('keeps both keys when two writes overlap', async () => {
+    const store = new EncryptedFileSecretStore(dataDirectory)
+    await Promise.all([store.set('key_a', 'a'), store.set('key_b', 'b')])
+
+    expect(await store.get('key_a')).toBe('a')
+    expect(await store.get('key_b')).toBe('b')
+    // 同实例 get 用的是内存里的主密钥。重新打开才证明第一次写下的 key 文件能解开这两条。
+    const reopened = new EncryptedFileSecretStore(dataDirectory)
+    expect(await reopened.get('key_a')).toBe('a')
+    expect(await reopened.get('key_b')).toBe('b')
+    expect(fs.readdirSync(dataDirectory).filter(name => name.endsWith('.tmp'))).toHaveLength(0)
+  })
+
+  it('does not let a rejected write poison the queue or leave a temp file', async () => {
+    const store = new EncryptedFileSecretStore(dataDirectory)
+    await store.set('key_a', 'a')
+
+    const originalRename = fsPromises.rename
+    const rename = vi.spyOn(fsPromises, 'rename').mockImplementation((from, to) => {
+      if (String(from).includes(`${SECRETS_FILE_NAME}.`) && String(from).endsWith('.tmp')) {
+        rename.mockImplementation(originalRename)
+        return Promise.reject(Object.assign(new Error('rename failed'), { code: 'EBUSY' }))
+      }
+      return originalRename(from, to)
+    })
+
+    try {
+      const failed = store.set('key_b', 'b')
+      const followed = store.set('key_c', 'c')
+      await expect(failed).rejects.toThrow(/rename failed/)
+      await followed
+      expect(await store.get('key_a')).toBe('a')
+      expect(await store.get('key_b')).toBeNull()
+      expect(await store.get('key_c')).toBe('c')
+      expect(fs.readdirSync(dataDirectory).filter(name => name.endsWith('.tmp'))).toEqual([])
+    } finally {
+      rename.mockRestore()
     }
   })
 

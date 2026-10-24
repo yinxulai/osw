@@ -95,7 +95,7 @@ function CachedTokensCell(props: CachedTokensCellProps) {
 function RequestLogsTableHeader() {
   const t = useTranslation()
   return (
-    <thead className={tableHeaderClass}>
+    <thead className={cn(tableHeaderClass, 'sticky top-0 z-10 bg-inset')}>
       <tr className="h-8">
         <th className={cn(tableHeaderCellClass, 'w-8 py-1.5')} />
         <th className={cn(tableHeaderCellClass, 'py-1.5')}>{t('requestLogs.table.status')}</th>
@@ -297,8 +297,8 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
   }
 
   return (
-    <TableFrame>
-      <div className="overflow-x-auto">
+    <TableFrame className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full text-xs">
           <RequestLogsTableHeader />
           <tbody>{body}</tbody>

@@ -75,7 +75,7 @@ export function RequestTrace() {
         <TraceRow
           active={rejected}
           tone="rose"
-          label={t('trace.hop2', '渠道 A · 火山引擎')}
+          label={t('trace.hop2', '渠道 A · Anthropic')}
           detail={t('trace.hop2Detail', '429 · 该渠道限流')}
           badge={rejected ? t('trace.hop2Badge', '自动改道') : undefined}
         />

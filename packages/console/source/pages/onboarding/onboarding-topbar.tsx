@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { settingsKeys } from '@/data/settings'
 import { useTranslation, useLocale } from '@/i18n/provider'
 import { useAppearance } from '@/hooks/use-appearance'
-import type { Theme } from '@/components/app-sidebar'
+import type { Theme } from '@/lib/theme-mode'
 import type { Locale } from '@common/i18n'
 import type { Settings } from '@common/schemas'
 

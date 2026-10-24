@@ -1,6 +1,6 @@
 import { createId } from '@common/router/presets'
 import type { NodeInsertRequest } from './node-data'
-import type { WorkflowEdge, WorkflowGraph, WorkflowNodeModel } from '@common/router/types'
+import type { NodePosition, WorkflowEdge, WorkflowGraph, WorkflowNodeModel } from '@common/router/types'
 
 /** 端口的唯一定位键：一个 source 端口最多只能有一条出边（与引擎的 Map 语义一致）。 */
 export function portKey(sourceNodeId: string, sourcePort: string): string {
@@ -196,4 +196,24 @@ export function connectEdge(graph: WorkflowGraph, sourceNodeId: string, sourcePo
 export function removeEdges(graph: WorkflowGraph, edgeIds: string[]): WorkflowGraph {
   const removing = new Set(edgeIds)
   return { ...graph, edges: graph.edges.filter(edge => !removing.has(edge.id)) }
+}
+
+/**
+ * 插入节点的落点：在两端点之间取中点，否则排在来源节点右侧。
+ *
+ * 与图数据操作放在一起，是因为它服务的就是「插入」这一个动作 —— 两个端点分别对应
+ * 连线上插入（前后各一个节点）与端口插入（只有来源）。两个都没有时落在原点，
+ * 反正调用方紧接着会把它挪到画布中心（`appendAtCanvasCenter`）。
+ */
+export function resolveInsertPosition(source: WorkflowNodeModel | null, target: WorkflowNodeModel | null): NodePosition {
+  if (source && target) {
+    return {
+      x: Math.round((source.position.x + target.position.x) / 2),
+      y: Math.round((source.position.y + target.position.y) / 2),
+    }
+  }
+  if (source) {
+    return { x: source.position.x + 320, y: source.position.y }
+  }
+  return { x: 0, y: 0 }
 }

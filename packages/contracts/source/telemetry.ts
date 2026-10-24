@@ -1,6 +1,6 @@
 /**
  * 上报接口契约：**客户端 → Worker 的报文格式**，也就是两端之间唯一的一份约定
- * （默认开启、界面上不提供开关，见 `apps/docs/specs/telemetry.md`）。
+ * （默认开启、界面上不提供开关，见 `apps/docs/specs/operations/telemetry.md`）。
  *
  * ## 这个接口只描述事实
  *
@@ -326,10 +326,11 @@ export const TelemetryEventSchema = z.discriminatedUnion('name', [
   /**
    * 连接测试（`provider` 是被测对象，`tested` 是发生在它身上的事）。
    *
-   * **每个被测目标一条**：界面上点一次「测试全部模型」是若干个目标，界面侧把它们拆成若干次
-   * 服务端请求（`model-test.ts` 一次请求只测一个目标），拿到结论就发一条，`result` 说的是
-   * **那一个目标**的结论。事件次数因此是「测过多少个上游目标」，比「点了几次测试」更细，
-   * 也更接近要回答的问题——「这些接进来的端点真的连得上吗」。
+   * **每个被测目标一条**：界面上点一次「测试全部模型」是若干个目标，界面侧把它们作为一批
+   * 交给服务端任务队列（`POST /api/tasks/enqueue`），队列逐项执行、每个目标一条任务；
+   * `provider_tested` 在每条任务收尾处发一条，`result` 说的是**那一个目标**的结论。事件次数
+   * 因此是「测过多少个上游目标」，比「点了几次测试」更细，也更接近要回答的问题——「这些接
+   * 进来的端点真的连得上吗」。
    *
    * 中途被取消的那次不发：它没有结论，记成 `failed` 会把「用户点了取消」算进失败率里；
    * 跑完了但一个结果都没有（一个候选都没落下来）同样不发。
@@ -532,7 +533,7 @@ export type TelemetryBatch = z.infer<typeof TelemetryBatchSchema>
  *
  * 把每个信封字段钉到某家后端的某个概念上（`client_id` / `user_properties` / `device`…）的那份
  * 声明不能放在这里：一份 vendor 的表格放在双方的公共契约里，等于让「换一个存储」变成一次契约
- * 变更。换后端只写一个新的 sink 文件（见 `apps/docs/specs/telemetry.md` §6）。
+ * 变更。换后端只写一个新的 sink 文件（见 `apps/docs/specs/operations/telemetry.md` §6）。
  */
 
 // ========== 预览 ==========

@@ -62,13 +62,25 @@ describe('log routes', () => {
     expect(queryPayload.data.logs.every(log => log.message.includes('alpha marker'))).toBe(true)
   })
 
+  it('filters logs by module scope', async () => {
+    console.info('[proxy] proxy marker')
+    console.info('[database] database marker')
+
+    const scopeRes = mockResponse()
+    await logRoutes.invoke('/api/logs/list', scopeRes, { limit: 50, scope: 'proxy' })
+    const scopePayload = responseData(scopeRes) as { data: { logs: Array<{ scope: string; message: string }> } }
+    expect(scopePayload.data.logs.every(log => log.scope === 'proxy')).toBe(true)
+    expect(scopePayload.data.logs.some(log => log.message.includes('proxy marker'))).toBe(true)
+    expect(scopePayload.data.logs.some(log => log.message.includes('database marker'))).toBe(false)
+  })
+
   // 宿主（Electron 主进程）的 console 转发走这条路：它自己碰不到数据库，
   // 所以由服务侧按同样的形状写进来（见 `writeRuntimeLog` 与协议里的 `logs.write`）。
   it('writes a forwarded host line verbatim, timestamp included', () => {
     writeRuntimeLog('warn', 'forwarded from host', 1234)
 
     expect(listLogs()).toEqual([
-      expect.objectContaining({ level: 'warn', message: 'forwarded from host', timestamp: 1234 }),
+      expect.objectContaining({ level: 'warn', message: 'forwarded from host', timestamp: 1234, scope: 'other' }),
     ])
   })
 })

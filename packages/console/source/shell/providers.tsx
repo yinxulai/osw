@@ -39,16 +39,24 @@ export interface ShellProvidersProps {
 
 export function ShellProviders(props: ShellProvidersProps) {
   return (
-    <ErrorBoundary
-      onError={(error, info) => {
-        // 应用最外层的兜底：这里再往上就没有别的东西了，能做的只有留痕。
-        console.error('[root]', error, info.componentStack)
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider>{props.children}</I18nProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider>
+        {/*
+          错误边界必须在 `I18nProvider` **内部**：兜底界面自己要用 `useTranslation()`，
+          放在外面时兜底一渲染就抛「useI18n must be used inside I18nProvider」——
+          于是错误边界反而成了白屏的来源（比没有它更糟）。
+          `QueryClientProvider` 也留在外面：`I18nProvider` 读服务端语言设置需要它。
+        */}
+        <ErrorBoundary
+          onError={(error, info) => {
+            // 应用最外层的兜底：这里再往上就没有别的东西了，能做的只有留痕。
+            console.error('[root]', error, info.componentStack)
+          }}
+        >
+          {props.children}
+        </ErrorBoundary>
+      </I18nProvider>
+    </QueryClientProvider>
   )
 }
 

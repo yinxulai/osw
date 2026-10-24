@@ -4,7 +4,7 @@
  * 新增文案先加在这里，再补 `ui.zh-CN.ts`：后者声明为 `Record<keyof typeof uiEn, MessageValue>`，
  * 少一个 key 编译就会失败，不需要运行时完整性检查来兜底。
  *
- * key 规范见 `apps/docs/specs/i18n.md` §4：层级点分、全英文小写驼峰、整句一条、变量用 `{name}`。
+ * key 规范见 `apps/docs/specs/data/i18n.md` §4：层级点分、全英文小写驼峰、整句一条、变量用 `{name}`。
  * **诊断文案（日志、错误消息）不进这里**——它们固定英文，写在源码里。
  */
 
@@ -64,6 +64,8 @@ export const uiEn = {
   'common.pagination.page': 'Page {page} / {totalPages}',
   'common.pagination.previous': 'Previous page',
   'common.pagination.next': 'Next page',
+  'common.table.sort.hint': 'Select the header to sort by this column',
+  'common.table.sort.aria': 'Sort by {column}',
   'common.error.pageTitle': 'This page crashed',
   'common.error.pageDescription': 'A component on this page threw while rendering. It has been contained, so the rest of the app keeps working.',
   'common.error.rootTitle': 'The interface crashed',
@@ -75,6 +77,10 @@ export const uiEn = {
   'common.confirm.cancelLabel': 'Cancel',
   'common.toast.copied': 'Copied to clipboard',
   'common.listSeparator': ', ',
+  'common.dateRange.placeholder': 'Select date range',
+  'common.dateRange.today': 'Today',
+  'common.dateRange.last7Days': 'Last 7 days',
+  'common.dateRange.last30Days': 'Last 30 days',
 
   // ========== 代理服务开关 ==========
   'proxy.toggle.pause': 'Pause service',
@@ -89,13 +95,15 @@ export const uiEn = {
 
   // ========== 模型诊断面板 ==========
   // 面板自身的界面文案进目录；表格里展示的诊断消息（服务端 `errorMessage`）保持英文原文，
-  // 见 `apps/docs/specs/i18n.md` §5「诊断 / 详情面板保留英文原文」。
+  // 见 `apps/docs/specs/data/i18n.md` §5「诊断 / 详情面板保留英文原文」。
   'modelTest.title': 'Channel diagnostics',
   'modelTest.description': 'Verify upstream connectivity and streaming, measure TTFT and TPS, across the protocol conversion chain',
   'modelTest.selection.title': 'Diagnostic scope',
   'modelTest.selection.description': 'Pick channels first, then narrow down to the target protocols',
   'modelTest.selection.searchPlaceholder': 'Search channels or models',
   'modelTest.selection.modelCount': '{count} models',
+  'modelTest.selection.protocolCount': '{selected}/{total} protocols',
+  'modelTest.selection.modelAria': 'Select every testable protocol of model {name}',
   'modelTest.selection.clear': 'Clear',
   'modelTest.selection.empty': 'No matching channel or model',
   'modelTest.progress.running': 'Verifying channels concurrently',
@@ -115,33 +123,80 @@ export const uiEn = {
   'modelTest.empty.noModels': 'No provider model can be tested',
   'modelTest.empty.noTasksHint': 'Select the channels and protocols to test in the list on the left; the results show up here.',
   'modelTest.empty.noModelsHint': 'Add and enable a provider model in Model Management first, then come back to verify protocols and channels.',
-  'modelTest.error.missingEndpoint': 'No testable protocol endpoint was found. Refresh the model configuration and try again.',
-  'modelTest.error.requestFailed': 'The diagnostic request failed',
   'modelTest.metric.tasks': 'Test tasks',
   'modelTest.metric.channels': 'Channels selected',
   'modelTest.metric.concurrency': 'Concurrent requests',
   'modelTest.action.clearResults': 'Clear diagnostic results',
+  'modelTest.action.settings': 'Test settings',
   'modelTest.action.stop': 'Stop',
   'modelTest.action.start': 'Start diagnostics',
+  'modelTest.action.minimize': 'Minimize (diagnostics keep running)',
+  'modelTest.action.close': 'Close diagnostics',
+  'modelTest.action.expand': 'Expand diagnostics',
+  // The badge is what you read while doing something else: rounds, done, failed.
+  'modelTest.badge.round': 'Round {round}/{total}',
+  'modelTest.badge.completed': '{completed}/{total} done',
+  'modelTest.badge.summary': '{total} targets done',
+  'modelTest.badge.failed': '{count} failed',
+  'modelTest.confirm.close.title': 'Close the diagnostic panel?',
+  'modelTest.confirm.close.description': 'A diagnostic run is still in progress. Closing the panel cancels the remaining tasks; results already collected stay visible until cleared.',
+  'modelTest.confirm.close.confirm': 'Close and cancel',
+  'modelTest.config.title': 'Test settings',
+  'modelTest.config.description': 'These parameters only affect diagnostics; they are not saved to the server. Your values are kept on this machine.',
+  'modelTest.config.back': 'Back to results',
+  'modelTest.config.concurrency': 'Concurrency',
+  'modelTest.config.concurrencyHint': 'How many channels to request at once. No upper limit — whatever you enter is how many run in parallel. Higher is faster and more likely to hit upstream rate limits.',
+  'modelTest.config.rounds': 'Rounds',
+  'modelTest.config.roundsHint': 'How many times each target is tested. Multiple rounds reveal stability, and cost scales with rounds. No upper limit.',
+  'modelTest.config.inputLength': 'Input length',
+  'modelTest.config.inputLengthHint': 'Pad the prompt to this many characters to observe long-context latency. No upper limit; 0 disables padding.',
+  'modelTest.config.prompt': 'Custom prompt',
+  'modelTest.config.promptHint': 'Leave empty to use the default prompt for the diagnostic mode (speed diagnostics use a longer counting prompt).',
+  'modelTest.config.promptPlaceholder': 'Leave empty to use the default prompt',
+  'modelTest.config.reset': 'Restore defaults',
+  'modelTest.config.unit.concurrency': 'concurrent',
+  'modelTest.config.unit.rounds': 'rounds',
+  'modelTest.config.unit.characters': 'chars',
+  'modelTest.table.protocol': 'Protocol',
+  'modelTest.detail.expand': 'Show test details',
+  'modelTest.detail.collapse': 'Hide test details',
+  'modelTest.detail.successRate': 'Success rate',
+  'modelTest.detail.round': 'Round {round}',
+  'modelTest.detail.roundColumn': 'Round',
+  'modelTest.detail.httpStatus': 'HTTP status',
+  'modelTest.detail.outputTokens': 'Output tokens',
+  'modelTest.detail.ttft': 'TTFT',
+  'modelTest.detail.duration': 'Duration',
+  'modelTest.detail.tps': 'TPS',
+  'modelTest.detail.cacheHitRate': 'Cache hit rate',
+  'modelTest.detail.noError': 'No error message',
   'modelTest.mode.label': 'Diagnostic mode',
   'modelTest.mode.select': 'Diagnostic mode: {mode}',
-  'modelTest.mode.connectivity': 'Connectivity',
-  'modelTest.mode.connectivityHint': 'One minimal request; answers only whether the chain works.',
   'modelTest.mode.streaming': 'Streaming',
   'modelTest.mode.streamingHint': 'Requires a real SSE reply; a buffered body counts as a failure.',
   'modelTest.mode.speed': 'Speed',
   'modelTest.mode.speedHint': 'Measures TTFT and TPS; the prompt is longer.',
   'modelTest.costWarning': 'Each target receives one real request (speed diagnostics use a longer prompt and cost more). This is recorded in the request log.',
   'modelTest.table.target': 'Channel / Model',
-  'modelTest.table.protocol': 'Target protocol',
+  // Protocol no longer has its own column: it is the gutter on the Channel / Model cell.
   'modelTest.table.status': 'Status',
-  'modelTest.table.response': 'Response',
+  // "Output tokens" rather than "Output": this column is the upstream-reported count, not the response body.
+  'modelTest.table.tokens': 'Output tokens',
   'modelTest.table.duration': 'Duration',
   'modelTest.table.ttft': 'TTFT',
   'modelTest.table.speed': 'TPS',
   'modelTest.filter.all': 'All',
   'modelTest.filter.failed': 'Failed only',
   'modelTest.action.retryFailed': 'Retry failed',
+  // The enqueue result is a normal scheduling outcome, but the UI must say it out loud:
+  // a silent skip reads as "the button did nothing".
+  'modelTest.notice.enqueueSkipped': 'Started {accepted} target(s); skipped {skipped} (already queued or running, queue full, or invalid).',
+  'modelTest.notice.enqueueFailed': 'Could not enqueue the run; nothing was started.',
+  // The clear response carries a count for a reason: when the server cleared nothing, the UI must not
+  // pretend it did. Zero means there are no finished results to clear — running / queued tasks are
+  // never removed.
+  'modelTest.notice.clearSkipped': 'Nothing to clear; no finished results are on the ledger.',
+  'modelTest.notice.clearFailed': 'Could not clear the results; they are still here.',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': 'Analytics',
@@ -213,7 +268,7 @@ export const uiEn = {
   'overview.heat.legend.less': 'Less',
   'overview.heat.legend.more': 'More',
   'overview.models.title': 'Model ranking',
-  'overview.models.description': 'Sorted by request volume',
+  'overview.models.description': 'Sorted by request volume by default · select a column header to change',
   'overview.models.empty': 'No model request data yet',
   'overview.models.column.rank': '#',
   'overview.models.column.model': 'Model',
@@ -241,7 +296,7 @@ export const uiEn = {
   'overview.providerDetail.cacheHitRateHint': 'Cached input tokens ÷ total input tokens over this provider\u2019s successful attempts. Shows — with no input: not measured is not a zero hit rate.',
   'overview.providerDetail.usage': 'Usage',
   'overview.providerDetail.models.title': 'Model performance',
-  'overview.providerDetail.models.description': 'Sorted by call volume · spot quality and cache differences per model',
+  'overview.providerDetail.models.description': 'Sorted by call volume by default · select a column header to sort, spot quality and cache differences per model',
   'overview.providerDetail.models.empty': 'No model data yet',
 
   // ========== 页面 · 运行日志 ==========
@@ -249,6 +304,8 @@ export const uiEn = {
   'logs.description': 'Service logs captured while this process is running, for live monitoring and troubleshooting',
   'logs.toolbar.searchPlaceholder': 'Search log content…',
   'logs.toolbar.searchAria': 'Search log content',
+  'logs.toolbar.scopeAria': 'Filter by module',
+  'logs.toolbar.scopeAll': 'All modules',
   'logs.toolbar.levelAria': 'Filter by log level',
   'logs.toolbar.levelAll': 'All levels',
   'logs.toolbar.totalCount': '{count} entries',
@@ -259,6 +316,12 @@ export const uiEn = {
   'logs.toolbar.refresh': 'Refresh logs',
   'logs.toolbar.export': 'Export logs',
   'logs.toolbar.clear': 'Clear logs',
+  'logs.scope.proxy': 'Proxy',
+  'logs.scope.management': 'Management',
+  'logs.scope.runtime': 'Runtime',
+  'logs.scope.database': 'Database',
+  'logs.scope.desktop': 'Desktop',
+  'logs.scope.other': 'Other',
   'logs.clearDialog.title': 'Clear runtime logs?',
   'logs.clearDialog.description': 'This deletes every runtime log captured in this process and cannot be undone.',
   'logs.empty.filteredTitle': 'No matching runtime logs',
@@ -277,16 +340,15 @@ export const uiEn = {
   // ========== 页面 · 请求记录 ==========
   'requestLogs.title': 'Request logs',
   'requestLogs.description': 'Recent proxy requests, and the channel model plus failover actually used by each request',
-  'requestLogs.filters.channel': 'Filter by channel',
-  'requestLogs.filters.allChannels': 'All channels',
   'requestLogs.filters.providerModel': 'Filter by channel model',
   'requestLogs.filters.allProviderModels': 'All channel models',
+  'requestLogs.filters.providerModelSearch': 'Search channel models',
+  'requestLogs.filters.providerModelEmpty': 'No matching channel models',
   'requestLogs.filters.protocol': 'Filter by client protocol',
   'requestLogs.filters.allProtocols': 'All protocols',
   'requestLogs.filters.status': 'Filter by status',
   'requestLogs.filters.allStatuses': 'All statuses',
-  'requestLogs.filters.startDate': 'Start date',
-  'requestLogs.filters.endDate': 'End date',
+  'requestLogs.filters.dateRange': 'Filter by date range',
   'requestLogs.filters.totalCount': '{count} records',
   'requestLogs.status.pending': 'In progress',
   'requestLogs.status.success': 'Success',
@@ -384,14 +446,11 @@ export const uiEn = {
   'requestLogs.detail.copyRequestTitle': 'Copy this request as a ready-to-run cURL command',
   'requestLogs.detail.copyRequestUnavailable': 'This request has no captured body to copy',
   'requestLogs.metric.totalDuration': 'Total duration',
+  'requestLogs.metric.failoverDuration': 'Retry time',
   'requestLogs.metric.ttft': 'TTFT',
+  'requestLogs.metric.ttftShare': 'TTFT share',
   'requestLogs.metric.outputSpeed': 'TPS',
-  'requestLogs.metric.totalTokens': 'Total tokens',
-  'requestLogs.metric.inputTokens': 'Input tokens',
-  'requestLogs.metric.outputTokens': 'Output tokens',
-  'requestLogs.metric.reasoningTokens': 'Reasoning tokens',
-  'requestLogs.metric.cacheRead': 'Cache read',
-  'requestLogs.metric.cacheWrite': 'Cache write',
+  'requestLogs.metric.cacheHitRate': 'Cache hit rate',
   'requestLogs.usage.title': 'Raw usage',
   'requestLogs.usage.provenance': 'From the last attempt',
   'requestLogs.usage.copy': 'Copy the raw usage JSON',
@@ -473,12 +532,6 @@ export const uiEn = {
   'access.field.baseUrl.label': 'Endpoint',
   'access.interface.title': 'Paths this service accepts',
   'access.interface.description': 'Forwarded to the upstream models; the equivalent paths without /v1 work too',
-  'access.interface.entry.chatCompletions': 'Chat completions',
-  'access.interface.entry.responses': 'Responses',
-  'access.interface.entry.messages': 'Messages',
-  // 保留：`INTERFACE_DESCRIPTION_KEYS` 是 `Record<ProxyInterfaceId, …>`，`models` 仍是契约里的一个 id。
-  // 该条目已不在界面表格里渲染（本地应答、不转发上游），这里的说明只用于满足类型完整性。
-  'access.interface.entry.models': 'Model list (fallback only)',
 
   // ========== 页面 · 逻辑模型 ==========
   'logicalModels.title': 'Logical models',
@@ -554,6 +607,7 @@ export const uiEn = {
   'logicalModels.create.idHint': 'Starts with a letter or digit and may contain letters, digits, dots, underscores and hyphens, up to 64 characters. Requests must send this ID as the model name, so version dots are allowed (e.g. deepseek-v4.1-flash).',
   'logicalModels.create.idPlaceholder': 'e.g. deepseek-v4.1-flash',
   'logicalModels.create.idInvalid': 'Enter a valid logical model ID',
+  'logicalModels.create.idRequired': 'Logical model ID is required',
   'logicalModels.create.descriptionLabel': 'Description (optional)',
   'logicalModels.create.descriptionPlaceholder': 'Describe what this logical model is for',
   'logicalModels.create.submitting': 'Creating…',
@@ -672,6 +726,10 @@ export const uiEn = {
   'models.dialog.endpointsTitle': 'Protocol endpoints',
   'models.dialog.endpointsDescription': 'Enable at least one protocol. Provider-level URLs are used by default and can be overridden per model.',
   'models.dialog.save': 'Save changes',
+  'models.dialog.test': 'Test connection',
+  'models.dialog.testing': 'Testing',
+  'models.dialog.testTimeout': 'The test timed out before returning; check that the upstream url is reachable',
+  'models.dialog.testSuccess': 'Connected, HTTP {status}, {duration} ms',
   'models.dialog.submitBulk': 'Add {count} models',
   'models.dialog.submit': 'Add model',
   'models.endpoint.enabled': 'Enabled',
@@ -691,7 +749,6 @@ export const uiEn = {
   'models.list.disable': 'Disable',
   'models.list.emptyTitle': 'No provider models yet',
   'models.list.emptyDescription': 'Add one to call it through the local proxy',
-  'models.row.dragAria': 'Drag {name}',
   'models.row.consecutiveFailures': 'Failed {count} times in a row',
   'models.row.lastSuccess': 'Last success',
   'models.row.noRequests': 'No requests yet',
@@ -741,7 +798,6 @@ export const uiEn = {
   'models.delete.bulkTitle': 'Delete {count} selected models?',
   'models.delete.bulkDescription': 'All protocol endpoints linked to these models will be removed. This cannot be undone.',
   'models.delete.bulkConfirmLabel': 'Delete {count} models',
-  'models.reorder.failed': 'Could not save the model order; server data restored: {message}',
 
   // ========== 页面 · 请求重写 ==========
   'rules.title': 'Request Rewrite',
@@ -1723,7 +1779,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'clientConfig.time.daysAgo': '{count} d ago',
 
   // ========== 错误码本地化 ==========
-  // 服务端只输出英文诊断消息；界面按错误码本地化，见 `apps/docs/specs/i18n.md` §5。
+  // 服务端只输出英文诊断消息；界面按错误码本地化，见 `apps/docs/specs/data/i18n.md` §5。
   // key 与 `ApiErrorCodeSchema` 一一对应（`catalogs.test.ts` 会校验）——
   // 刻意不设 `errors.UNKNOWN`：目录里没有的错码直接退回英文诊断原文（`localizeErrorCode`）。
   'errors.NOT_FOUND': 'Resource not found',
@@ -1810,6 +1866,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.section.reliability': 'Reliability',
   'settings.section.data': 'Data',
   'settings.section.sync': 'Cloud sync',
+  'settings.section.developer': 'Developer',
   'settings.footer.allSaved': 'All settings saved',
   'settings.footer.dirty': 'You have unsaved changes',
   'settings.footer.synced': 'Settings are in sync',
@@ -2022,6 +2079,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.update.checking': 'Checking…',
   'settings.update.upToDateToast': 'You are on the latest version',
   'settings.update.availableToast': 'Version {version} is available',
+  'settings.update.readyToInstallToast': 'Version {version} is already downloaded and ready to install',
   'settings.update.checkFailed': 'Update check failed',
   'settings.update.download': 'Download update',
   'settings.update.downloadedToast': 'Installer downloaded',
@@ -2063,6 +2121,21 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.development.screenshotsDone': 'Exported {count} screenshots to {path}',
   'settings.development.screenshotsFailed': 'Screenshot export failed: {message}',
 
+  // 开发者
+  'settings.developer.title': 'Developer',
+  'settings.developer.description': 'Source code, community and the people behind OSW',
+  'settings.developer.repository': 'GitHub repository',
+  'settings.developer.repositoryDescription': 'Star it, read the source, or report an issue',
+  'settings.developer.repositoryAction': 'Open repository',
+  'settings.developer.community': 'Discord community',
+  'settings.developer.communityDescription': 'Ask questions and chat with other users',
+  'settings.developer.communityAction': 'Join Discord',
+  'settings.developer.contributors': 'Contributors',
+  'settings.developer.contributorsDescription': 'Everyone who has contributed code to OSW',
+  'settings.developer.contributorsAction': 'View all',
+  'settings.developer.contributorsLoading': 'Loading contributors…',
+  'settings.developer.contributorsEmpty': 'Contributor avatars are unavailable right now; open GitHub to see them.',
+
   // 服务端只发机器码的枚举值（见 `FAILURE_REASON_CATEGORIES`）
   'failureReason.TIMEOUT': 'Timeout',
   'failureReason.RATE_LIMITED': 'Rate limited (429)',
@@ -2085,7 +2158,6 @@ Score request size in a sandbox script, then route by score band to different lo
   'tray.panel.subtitle': 'Local proxy',
   'tray.panel.openApp': 'Open the main window',
   'tray.panel.quit': 'Quit',
-  'tray.panel.footnote': 'Status and logical models stay in sync',
   'tray.panel.startProxy': 'Start proxy',
   'tray.panel.stopProxy': 'Stop proxy',
   'tray.panel.actionFailed': 'The action failed. Try again shortly',
@@ -2111,7 +2183,7 @@ Score request size in a sandbox script, then route by score band to different lo
 
   // ========== 命令行（终端输出） ==========
   // 面向用户的可读文案：帮助、启动横幅、状态、停止结果。
-  // 诊断消息（日志、异常堆栈）仍固定英文（见 apps/docs/specs/i18n.md §2），不在这里。
+  // 诊断消息（日志、异常堆栈）仍固定英文（见 apps/docs/specs/data/i18n.md §2），不在这里。
   // 参数名、端口号、路径都是原样打印的字面量，所以占位符名保持与代码一致。
   'native.cli.usage': 'Usage: osw [command] [options]',
   'native.cli.commands': 'Commands:',

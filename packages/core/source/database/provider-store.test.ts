@@ -204,6 +204,26 @@ describe('provider store', () => {
     expect((await listProviders(true)).map(item => item.id)).toContain(provider.id)
   })
 
+  it('refuses to update a deleted provider and keeps its stored settings', async () => {
+    const provider = await createProvider({
+      name: 'OpenAI',
+      apiKeyReference: 'key_deleted_update',
+      timeoutMilliseconds: 30_000,
+      enabled: true,
+    })
+    await deleteProvider(provider.id)
+
+    await expect(updateProvider(provider.id, { name: 'Renamed', timeoutMilliseconds: 1000 })).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
+      statusCode: 404,
+    })
+    expect(await getProvider(provider.id)).toMatchObject({
+      name: 'OpenAI',
+      timeoutMilliseconds: 30_000,
+      deletedTime: expect.any(Number),
+    })
+  })
+
   it('persists the dragged provider order across reads and appends later creations', async () => {
     const alpha = await createProvider({ name: 'Alpha', apiKeyReference: 'key_alpha', enabled: true })
     const beta = await createProvider({ name: 'Beta', apiKeyReference: 'key_beta', enabled: true })

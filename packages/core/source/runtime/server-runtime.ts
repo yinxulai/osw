@@ -92,12 +92,19 @@ export class ServerRuntime {
       configureCoreNetworkConnector(outboundConnector)
       const settings = await getSettings()
       console.debug(`[runtime] proxy endpoint resolved host=${settings.listenHost} port=${settings.listenPort}`)
+      // 凭证由宿主在**应用启动**时生成一次并随配置传进来，这里只把它交给管理服务去强制校验。
+      // 校验**没有例外**：每一条 `/api/*` 都要带它，所以管理服务会把它写成数据目录里的一个
+      // `0600` 文件（见 `../management/token-file.ts`），退出时删掉——放在这里而不是宿主里，
+      // 是因为它的寿命就等于是这台服务的寿命。也绝不进日志：日志会被用户粘到 issue 里。
+      const { managementToken } = config
       console.info(`[runtime] starting management server host=${config.managementHost} port=${config.managementPort}`)
       this.managementServer = await startManagementServer({
         host: config.managementHost,
         port: config.managementPort,
         environment: config.environment,
         webRoot,
+        token: managementToken,
+        dataDir: config.dataDir,
       })
       console.info(`[runtime] management server started listening=${this.managementServer.listening}`)
       console.info(`[runtime] starting proxy server host=${settings.listenHost} port=${settings.listenPort}`)
@@ -204,7 +211,7 @@ export class ServerRuntime {
  * 把启动异常归类成事件契约里的闭集。
  *
  * 归类粗是**故意的**：`service_start_failed` 要回答的是「最近失败变多了吗、主要是哪一类」
- * （见 `apps/docs/specs/telemetry.md` §7），把每个异常类型都映射成一档，只会把这张图画成噪声。
+ * （见 `apps/docs/specs/operations/telemetry.md` §7），把每个异常类型都映射成一档，只会把这张图画成噪声。
  * 归不进去的一律进 `other`——`other` 常年偏高才说明该来加一档了。
  */
 function classifyStartFailure(error: unknown): TelemetryServiceFailureReason {

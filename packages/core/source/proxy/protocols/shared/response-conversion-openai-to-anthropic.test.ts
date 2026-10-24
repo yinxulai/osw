@@ -66,6 +66,62 @@ describe('openAiResponseToAnthropic', () => {
     expect(result.usage).toEqual({ input_tokens: 0, output_tokens: 1, cache_read_input_tokens: 7 })
   })
 
+  it('prefers responses-style counts when chat usage fields are placeholder zeros', () => {
+    // 聚合网关把两套字段塞进同一个 usage：Chat 的 prompt_tokens / completion_tokens /
+    // prompt_tokens_details.cached_tokens 是占位 0，真实值在 input_tokens / output_tokens /
+    // input_tokens_details.cached_tokens。停在第一个数字上会把客户端看到的用量写成全 0。
+    // Anthropic 的 input_tokens 只计未缓存输入，所以 30 要扣掉缓存 12。
+    const result = openAiResponseToAnthropic({
+      choices: [{ message: { content: 'x' }, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        prompt_tokens_details: { cached_tokens: 0 },
+        input_tokens: 30,
+        output_tokens: 4,
+        input_tokens_details: { cached_tokens: 12 },
+      },
+    })
+
+    expect(result.usage).toEqual({ input_tokens: 18, output_tokens: 4, cache_read_input_tokens: 12 })
+  })
+
+  it('keeps a reported zero when every usage candidate is zero', () => {
+    const result = openAiResponseToAnthropic({
+      choices: [{ message: { content: 'x' }, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        prompt_tokens_details: { cached_tokens: 0 },
+        input_tokens: 0,
+        output_tokens: 0,
+        input_tokens_details: { cached_tokens: 0 },
+      },
+    })
+
+    expect(result.usage).toEqual({ input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 })
+  })
+
+  it('still subtracts cached tokens from a positive prompt total', () => {
+    const result = openAiResponseToAnthropic({
+      choices: [{ message: { content: 'x' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 30, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 12 } },
+    })
+
+    expect(result.usage).toEqual({ input_tokens: 18, output_tokens: 4, cache_read_input_tokens: 12 })
+  })
+
+  it('leaves a positive prompt total unchanged when only Anthropic cache fields are present', () => {
+    // prompt_tokens 已经是含缓存的总输入。旁边的 cache_read_input_tokens 不是
+    // OpenAI 的 cached_tokens，不能再从总输入里扣一次。
+    const result = openAiResponseToAnthropic({
+      choices: [{ message: { content: 'x' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 30, completion_tokens: 4, cache_read_input_tokens: 12 },
+    })
+
+    expect(result.usage).toEqual({ input_tokens: 30, output_tokens: 4 })
+  })
+
   it('ignores usage objects that carry no token counters', () => {
     const result = openAiResponseToAnthropic({ choices: [{ message: { content: 'x' } }], usage: {} })
     expect(result).toEqual({
@@ -167,8 +223,15 @@ describe('OpenAI to Anthropic stream conversion', () => {
       choices: [{ delta: { tool_calls: [{ index: 1, function: { arguments: '{}' } }] } }],
     }, streamState)
 
-    expect(first.filter(event => event.type === 'content_block_start').map(event => (event as { index: number }).index)).toEqual([0, 1])
-    expect(second).toEqual([{ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{}' } }])
+    // 下一个工具说明前一个名字已经收齐，所以 index 0 在本块里开。
+    // index 1 要等到参数才开，并且继续用同一个 Anthropic index。
+    expect(first.filter(event => event.type === 'content_block_start')).toEqual([
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_1', name: 'a', input: {} } },
+    ])
+    expect(second).toEqual([
+      { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'call_2', name: 'b', input: {} } },
+      { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{}' } },
+    ])
   })
 
   it('skips custom tool calls instead of emitting a nameless tool_use block', () => {
@@ -230,6 +293,172 @@ describe('OpenAI to Anthropic stream conversion', () => {
     }, streamState)
 
     expect(events.map(event => event.type)).toEqual(['message_start', 'message_delta', 'message_stop'])
+  })
+
+  it('opens a tool block immediately when the first delta already has the full name', () => {
+    const streamState = createOpenAiToAnthropicState()
+    const events = openAiChunkToAnthropicEvents({
+      id: 'chat_6',
+      model: 'gpt',
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'lookup', arguments: '' } }] } }],
+    }, streamState)
+
+    expect(events).toEqual([
+      {
+        type: 'message_start',
+        message: {
+          id: 'chat_6',
+          type: 'message',
+          role: 'assistant',
+          model: 'gpt',
+          content: [],
+          stop_reason: null,
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+      },
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_1', name: 'lookup', input: {} } },
+    ])
+  })
+
+  it('defers a tool block until a function name split across deltas is complete', () => {
+    const streamState = createOpenAiToAnthropicState()
+    const prefix = openAiChunkToAnthropicEvents({
+      id: 'chat_7',
+      model: 'gpt',
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_' } }] } }],
+    }, streamState)
+    const events = openAiChunkToAnthropicEvents({
+      choices: [{
+        delta: { tool_calls: [{ index: 0, function: { name: 'weather', arguments: '{}' } }] },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }, streamState)
+
+    expect(prefix).toEqual([])
+    const startAt = events.findIndex(event => event.type === 'content_block_start')
+    const deltaAt = events.findIndex(event => event.type === 'content_block_delta')
+    expect(events[startAt]).toEqual({
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'tool_use', id: 'call_1', name: 'get_weather', input: {} },
+    })
+    expect(events[deltaAt]).toEqual({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{}' },
+    })
+    expect(deltaAt).toBeGreaterThan(startAt)
+    expect(events.at(-1)).toEqual({ type: 'message_stop' })
+  })
+
+  it('uses the concatenated name when the stream finishes before arguments arrive', () => {
+    const streamState = createOpenAiToAnthropicState()
+    openAiChunkToAnthropicEvents({
+      id: 'chat_8',
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_' } }] } }],
+    }, streamState)
+    const events = openAiChunkToAnthropicEvents({
+      choices: [{
+        delta: { tool_calls: [{ index: 0, function: { name: 'weather' } }] },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }, streamState)
+
+    expect(events.find(event => event.type === 'content_block_start')).toEqual({
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'tool_use', id: 'call_1', name: 'get_weather', input: {} },
+    })
+  })
+
+  it('opens a pending tool before later text so the call stays ahead of that text', () => {
+    const streamState = createOpenAiToAnthropicState()
+    const held = [
+      ...openAiChunkToAnthropicEvents({
+        id: 'chat_9',
+        choices: [{
+          delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_' } }] },
+        }],
+      }, streamState),
+      ...openAiChunkToAnthropicEvents({
+        choices: [{
+          delta: { tool_calls: [{ index: 0, function: { name: 'weather' } }] },
+        }],
+      }, streamState),
+    ]
+    const text = openAiChunkToAnthropicEvents({
+      choices: [{ delta: { content: 'done' } }],
+    }, streamState)
+    const tail = openAiChunkToAnthropicEvents({
+      choices: [{
+        delta: { tool_calls: [{ index: 0, function: { arguments: '{"a":1}' } }] },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }, streamState)
+
+    expect(held).toEqual([])
+    expect(text.filter(event => event.type === 'content_block_start')).toEqual([
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_1', name: 'get_weather', input: {} } },
+      { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    ])
+    expect(text.at(-1)).toEqual({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'done' } })
+    expect(tail.filter(event => event.type === 'content_block_start')).toEqual([])
+    expect(tail.find(event => event.type === 'content_block_delta')).toEqual({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{"a":1}' },
+    })
+    expect(tail.filter(event => event.type === 'content_block_stop').map(event => (event as { index: number }).index)).toEqual([0, 1])
+  })
+
+  it('keeps a name fragment that shares a chunk with the text that opens the tool', () => {
+    const streamState = createOpenAiToAnthropicState()
+    openAiChunkToAnthropicEvents({
+      choices: [{
+        delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_' } }] },
+      }],
+    }, streamState)
+    const events = openAiChunkToAnthropicEvents({
+      choices: [{
+        delta: {
+          content: 'after',
+          tool_calls: [{ index: 0, function: { name: 'weather', arguments: '{}' } }],
+        },
+      }],
+    }, streamState)
+
+    expect(events.filter(event => event.type === 'content_block_start')).toEqual([
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_1', name: 'get_weather', input: {} } },
+      { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    ])
+    expect(events.filter(event => event.type === 'content_block_delta')).toEqual([
+      { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'after' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{}' } },
+    ])
+  })
+
+  it('opens the previous tool when the next call shows its split name is complete', () => {
+    const streamState = createOpenAiToAnthropicState()
+    const events = openAiChunkToAnthropicEvents({
+      choices: [{ delta: { tool_calls: [
+        { index: 0, id: 'call_1', function: { name: 'get_' } },
+        { index: 0, function: { name: 'weather' } },
+        { index: 1, id: 'call_2', function: { name: 'other', arguments: '{}' } },
+      ] } }],
+    }, streamState)
+
+    expect(events.filter(event => event.type === 'content_block_start')).toEqual([
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_1', name: 'get_weather', input: {} } },
+      { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'call_2', name: 'other', input: {} } },
+    ])
+    expect(events.at(-1)).toEqual({
+      type: 'content_block_delta',
+      index: 1,
+      delta: { type: 'input_json_delta', partial_json: '{}' },
+    })
   })
 
   it('merges cache usage reported only on the final chunk', () => {

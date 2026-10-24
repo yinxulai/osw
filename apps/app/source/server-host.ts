@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { utilityProcess } from 'electron'
 import { ServiceHost, type ServiceHostState, type ServiceHostOptions, type ServiceProcess, type LiveMetricsListener } from '@server/host/service-host'
+import type { RuntimeStartResult } from '@server/host/protocol'
 import type { Settings } from '@common/schemas'
 import type { ProxyServerStatus } from '@server/proxy/runtime/server'
 import type { ForwardedLogLine } from './log-forwarder'
@@ -93,8 +94,11 @@ export function onServerStateChanged(listener: (state: ServiceHostState) => void
  * 参数形状与从前的 `startServer()` 完全一致——**不要**以为可以少传：`secretStore`
  * 与 `systemProxyResolver` 是服务进程拿不到的东西（Electron 的 `safeStorage` 与
  * `session` 只存在于主进程），它们现在是一次反向调用，而不是一个共享模块。
+ *
+ * 返回值就是服务报上来的启动结果（监听地址 + 本次启动的管理 API 凭证）。调用方
+ * 需要它才能把凭证交给 preload：凭证由服务进程生成，主进程自己算不出来。
  */
-export async function startServer(options: StartServerOptions): Promise<void> {
+export async function startServer(options: StartServerOptions): Promise<RuntimeStartResult> {
   if (host !== null) throw new Error('The service host is already running')
   // 入口不在的时候提前报出来。`utilityProcess.fork` 面对一个不存在的路径不一定会立刻
   // 说清楚，而「产物没构建出来」是开发态最常见的启动失败，值得一句准确的错误。
@@ -119,8 +123,9 @@ export async function startServer(options: StartServerOptions): Promise<void> {
       listener(state)
     }
   })
+  let started: RuntimeStartResult
   try {
-    await next.start()
+    started = await next.start()
   } catch (error) {
     // 起不来就别把句柄留下：`stopServer()` 之后应该看到的是一个干净的状态。
     void next.stop()
@@ -128,6 +133,7 @@ export async function startServer(options: StartServerOptions): Promise<void> {
   }
   host = next
   console.info('[osw] server started successfully')
+  return started
 }
 
 export async function stopServer(): Promise<void> {

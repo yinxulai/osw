@@ -1,6 +1,7 @@
 export { modelRoutes, providerRoutes, providerModelRoutes, apiKeyRoutes } from './catalog'
 export { settingsRoutes, runtimeControlRoutes, telemetryRoutes, developmentRoutes, storageRoutes, clientConfigRoutes, cloudSyncRoutes } from './operations'
 export { logRoutes, requestLogRoutes, analyticsRoutes } from './observability'
-export { modelTestRoutes, outboundProxyTestRoutes, providerModelFetchRoutes } from './diagnostics'
+export { modelConnectivityRoutes, outboundProxyTestRoutes, providerModelFetchRoutes } from './diagnostics'
 export { routerGraphRoutes, routerRuleRoutes, routerRunRoutes } from './router'
 export { relationRoutes, requestRewriteRuleRoutes } from './relations'
+export { taskRoutes } from './tasks'

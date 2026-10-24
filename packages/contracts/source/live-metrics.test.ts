@@ -4,8 +4,12 @@ import {
   activeRequestCount,
   computeLiveMetrics,
   DEFAULT_LIVE_METRIC_TEMPLATE,
+  hasUnknownLiveMetricVariable,
+  liveMetricVariablesOf,
   liveTps,
   LIVE_METRIC_UNAVAILABLE,
+  LIVE_METRIC_VARIABLES,
+  MAX_LIVE_METRIC_LENGTH,
   renderLiveMetric,
 } from './live-metrics'
 
@@ -232,5 +236,83 @@ describe('renderLiveMetric', () => {
     // 最近开始的一条是 42（startedAt=1000），42 / 0 秒不可算 → 占位符。
     // 这里刻意让最近那条不可算，验证并发数照样渲染。
     expect(renderLiveMetric('{activeRequests} req · {liveTps} TPS', metrics)).toBe('2 req · -- TPS')
+  })
+})
+
+describe('liveMetricVariablesOf', () => {
+  // 这张清单同时是**设置界面的变量说明来源**，所以「引擎认识的变量」与「界面列出的变量」
+  // 只能是同一份，否则用户照文档写出来的模板会被原样吐回来。
+  it('把引擎认识的变量列成一张可穷尽的表', () => {
+    expect(LIVE_METRIC_VARIABLES.map(variable => variable.name)).toEqual(['liveTps', 'activeRequests'])
+    expect(LIVE_METRIC_VARIABLES.every(variable => variable.sample.length > 0)).toBe(true)
+  })
+
+  it('默认模板只用认识的变量，且它的取值示例就是变量清单里的那个', () => {
+    expect(hasUnknownLiveMetricVariable(DEFAULT_LIVE_METRIC_TEMPLATE)).toBe(false)
+    expect(liveMetricVariablesOf(DEFAULT_LIVE_METRIC_TEMPLATE)).toEqual(['liveTps'])
+  })
+
+  it('按出现顺序列出变量并去重', () => {
+    expect(liveMetricVariablesOf('{activeRequests} · {liveTps} · {activeRequests}')).toEqual(['activeRequests', 'liveTps'])
+  })
+
+  it('没有占位符时返回空数组', () => {
+    expect(liveMetricVariablesOf('')).toEqual([])
+    expect(liveMetricVariablesOf('没有变量')).toEqual([])
+    // `{}` 里没有名字，不算一个变量。
+    expect(liveMetricVariablesOf('{}')).toEqual([])
+  })
+
+  it('未知变量照样列出来，供界面提示用户拼错了', () => {
+    expect(liveMetricVariablesOf('{nope}')).toEqual(['nope'])
+    expect(hasUnknownLiveMetricVariable('{nope}')).toBe(true)
+  })
+
+  it('认识的变量不算未知，掺杂未知的才判为未知', () => {
+    expect(hasUnknownLiveMetricVariable('{liveTps} TPS')).toBe(false)
+    expect(hasUnknownLiveMetricVariable('{liveTps} {activeRequests}')).toBe(false)
+    expect(hasUnknownLiveMetricVariable('{liveTps} {liveTpsPerSecond}')).toBe(true)
+  })
+
+  // 判据只看 `{名字}` 的形状，不关心它出现在什么上下文里：模板是用户手写的自由文本。
+  it('花括号外的东西不参与判定', () => {
+    expect(hasUnknownLiveMetricVariable('TPS')).toBe(false)
+    expect(liveMetricVariablesOf('TPS')).toEqual([])
+  })
+})
+
+describe('renderLiveMetric 的收尾规则', () => {
+  const metrics = computeLiveMetrics([inFlight('pending', 'streaming', 42, 0)], 1000)
+
+  it('空模板与纯空白模板都返回空串（那是「不显示指标」）', () => {
+    expect(renderLiveMetric('', metrics)).toBe('')
+    expect(renderLiveMetric('   ', metrics)).toBe('')
+    expect(renderLiveMetric('\n\t', metrics)).toBe('')
+  })
+
+  it('结果首尾去空白，但不动中间的空格', () => {
+    expect(renderLiveMetric('  {liveTps} TPS  ', metrics)).toBe('42 TPS')
+    expect(renderLiveMetric('{liveTps}   TPS', metrics)).toBe('42   TPS')
+  })
+
+  // 菜单栏是系统共享的、窗口角标也只是一条窄带，超长文本会把旁边的状态挤走。
+  it('超过上限时直接截断，而不是把撑爆的字符串交给调用方', () => {
+    const long = 'x'.repeat(MAX_LIVE_METRIC_LENGTH + 20)
+    expect(renderLiveMetric(long, metrics)).toHaveLength(MAX_LIVE_METRIC_LENGTH)
+    const exact = 'y'.repeat(MAX_LIVE_METRIC_LENGTH)
+    expect(renderLiveMetric(exact, metrics)).toBe(exact)
+  })
+
+  // 顺序是「替换 → 去空白 → 截断」，三步都不能换：换一步就会切出不同的结果。
+  it('先去空白再截断：前导空白不会把真正的内容挤出上限之外', () => {
+    // 若先截断，前 64 个字符全是空格，去完空白剩空串。
+    expect(renderLiveMetric(`${' '.repeat(70)}abc`, metrics)).toBe('abc')
+  })
+
+  it('先替换再截断：占位符展开后的内容才算进长度', () => {
+    const rendered = renderLiveMetric(`{liveTps}${'b'.repeat(70)}`, metrics)
+    expect(rendered).toHaveLength(MAX_LIVE_METRIC_LENGTH)
+    // 若先截断，这里会是模板原文的 `{liveTps}...`。
+    expect(rendered.startsWith('42')).toBe(true)
   })
 })

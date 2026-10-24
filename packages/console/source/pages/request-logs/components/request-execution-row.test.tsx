@@ -162,7 +162,7 @@ describe('RequestExecutionRow', () => {
     expect(screen.getByText('Channel model')).toBeTruthy()
     // 落点和折叠行那一格说的是同一件事（两处都在，所以按多命中取）。
     expect(screen.getAllByText('Provider One/model-one').length).toBeGreaterThan(1)
-    // 只留两个此刻值得盯的数字，而不是一排八个指标格。
+    // 只留两个此刻值得盯的数字，而不是已结束详情那排指标格。
     expect(screen.getByText('Elapsed')).toBeTruthy()
     // 速度指标直接叫 TPS，不意译成 "Output speed"。
     expect(screen.getByText('TPS')).toBeTruthy()

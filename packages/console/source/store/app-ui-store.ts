@@ -1,7 +1,5 @@
-import { create } from 'zustand'
-import { persist, type PersistStorage } from 'zustand/middleware'
-import type { ThemeMode } from '@/components/app-sidebar'
-import { createLocalStorage } from '@/lib/persist-storage'
+import type { ThemeMode } from '@/lib/theme-mode'
+import { createPersistedStore } from './persisted-store'
 
 interface AppUiState {
   themeMode: ThemeMode
@@ -27,28 +25,51 @@ interface AppUiState {
    */
   sidebarPinned: boolean
   setSidebarPinned: (pinned: boolean) => void
+  /**
+   * 渠道诊断面板是否开着。
+   *
+   * 面板从「模型管理页里的一个局部弹窗」提成了**外壳级的非模态浮窗**：它挂在 `App`
+   * 上、跟着窗口走，所以开关也归外壳的 UI 状态，而不是某一页的 `useState`。
+   * 和侧栏一样存本机：它描述的是「这台机器上这个人怎么看这个界面」。
+   */
+  testPanelOpen: boolean
+  setTestPanelOpen: (open: boolean) => void
+  /**
+   * 面板是否收成了右下角那枚角标。
+   *
+   * **最小化 ≠ 关闭**：收起来只是少占地方，任务照跑、角标照报进度；关闭（`testPanelOpen`
+   * 为假）才会在确认之后取消这一批。
+   */
+  testPanelMinimized: boolean
+  setTestPanelMinimized: (minimized: boolean) => void
 }
 
-type PersistedAppUiState = Pick<AppUiState, 'themeMode' | 'onboardingComplete' | 'sidebarPinned'>
+type PersistedAppUiState = Pick<AppUiState, 'themeMode' | 'onboardingComplete' | 'sidebarPinned' | 'testPanelOpen' | 'testPanelMinimized'>
 
-const appUiStorage: PersistStorage<PersistedAppUiState> | undefined = createLocalStorage<PersistedAppUiState>()
-
-export const useAppUiStore = create<AppUiState>()(persist(
-  set => ({
+const appUi = createPersistedStore<AppUiState, PersistedAppUiState>({
+  key: 'osw-ui',
+  // 这台机器上这个人怎么看这个界面：关掉应用再打开还在，换台机器重新来一遍是对的。
+  scope: 'machine',
+  create: set => ({
     themeMode: 'system',
     setThemeMode: themeMode => set({ themeMode }),
     onboardingComplete: false,
     setOnboardingComplete: onboardingComplete => set({ onboardingComplete }),
     sidebarPinned: false,
     setSidebarPinned: sidebarPinned => set({ sidebarPinned }),
+    testPanelOpen: false,
+    setTestPanelOpen: testPanelOpen => set({ testPanelOpen }),
+    testPanelMinimized: false,
+    setTestPanelMinimized: testPanelMinimized => set({ testPanelMinimized }),
   }),
-  {
-    name: 'osw-ui',
-    storage: appUiStorage,
-    partialize: state => ({
-      themeMode: state.themeMode,
-      onboardingComplete: state.onboardingComplete,
-      sidebarPinned: state.sidebarPinned,
-    }),
-  },
-))
+  pick: state => ({
+    themeMode: state.themeMode,
+    onboardingComplete: state.onboardingComplete,
+    sidebarPinned: state.sidebarPinned,
+    testPanelOpen: state.testPanelOpen,
+    testPanelMinimized: state.testPanelMinimized,
+  }),
+  defaults: { themeMode: 'system', onboardingComplete: false, sidebarPinned: false, testPanelOpen: false, testPanelMinimized: false },
+})
+
+export const useAppUiStore = appUi.store

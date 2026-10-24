@@ -4,9 +4,13 @@ import {
   averageOutputTokensPerCall,
   averageOutputTokensPerSecond,
   cacheHitRate,
+  failoverDurationOf,
+  firstTokenShareOf,
   formatAverageOutput,
   formatMilliseconds,
   formatOutputSpeed,
+  formatTokenCount,
+  formatTokenCountParts,
   magnitudeDecimalPlaces,
   millisecondsDisplayParts,
   outputSpeedDecimalPlaces,
@@ -207,6 +211,37 @@ describe('output speed display', () => {
   })
 })
 
+describe('token count display', () => {
+  it('leaves four-digit counts alone and compacts from five digits up', () => {
+    expect(formatTokenCount(0)).toBe('0')
+    expect(formatTokenCount(1)).toBe('1')
+    expect(formatTokenCount(999)).toBe('999')
+    // 阈值取 10000：`9.7k` 与 `9700` 一样长，但前者多一次心算。
+    expect(formatTokenCount(9_700)).toBe('9700')
+    expect(formatTokenCount(9_999)).toBe('9999')
+    expect(formatTokenCount(10_000)).toBe('10.0k')
+    expect(formatTokenCount(12_345)).toBe('12.3k')
+  })
+
+  it('counts in thousands, not in binary units', () => {
+    // Token 是数的，不是存储量：这里没有 `formatBytes` 的 1024 换算。
+    expect(formatTokenCount(1024)).toBe('1024')
+    expect(formatTokenCount(102_400)).toBe('102.4k')
+  })
+
+  it('splits value from suffix so the suffix can be styled apart', () => {
+    expect(formatTokenCountParts(9700)).toEqual({ value: '9700', suffix: '' })
+    expect(formatTokenCountParts(12_345)).toEqual({ value: '12.3', suffix: 'k' })
+  })
+
+  it('writes a dash, not a zero, when the upstream reported no usage', () => {
+    expect(formatTokenCount(null)).toBe('—')
+    expect(formatTokenCount(undefined)).toBe('—')
+    expect(formatTokenCount(Number.NaN)).toBe('—')
+    expect(formatTokenCountParts(null)).toBeNull()
+  })
+})
+
 describe('average output per call', () => {
   it('divides total output tokens by the call count', () => {
     expect(averageOutputTokensPerCall(3400, 10)).toBeCloseTo(340, 6)
@@ -253,5 +288,77 @@ describe('cache hit rate', () => {
 
   it('returns null instead of zero when there was no input', () => {
     expect(cacheHitRate(0, 0)).toBeNull()
+  })
+})
+
+// 「等第一个字」占整条请求的比重：与速度分别堵住时间轴的两端。
+describe('first token share', () => {
+  it('divides the first-token wait by the request total duration', () => {
+    const log = logOf({ totalDurationMilliseconds: 2_000, ttftMilliseconds: 500 })
+
+    expect(firstTokenShareOf(log)).toBeCloseTo(0.25, 6)
+  })
+
+  it('uses the request total duration, not the serving attempt duration', () => {
+    // 客户端等的是整条链路：尝试只占 1000ms，前面还有被放弃的那段也在等。
+    const log = logOf({
+      totalDurationMilliseconds: 4_000,
+      ttftMilliseconds: 1_000,
+      attempts: [{ durationMilliseconds: 1_000, ttftMilliseconds: 1_000 }],
+    })
+
+    expect(firstTokenShareOf(log)).toBeCloseTo(0.25, 6)
+  })
+
+  it('returns null when there is no first-token sample', () => {
+    expect(firstTokenShareOf(logOf({ totalDurationMilliseconds: 1_000 }))).toBeNull()
+  })
+
+  it('returns null when the request has no measurable duration', () => {
+    expect(firstTokenShareOf(logOf({ totalDurationMilliseconds: 0, ttftMilliseconds: 0 }))).toBeNull()
+  })
+
+  it('returns null rather than a share above one when the wait exceeds the total', () => {
+    // 两侧计时起点不同会造出这种测量边界；它不能写成一个超过 100% 的比值。
+    const log = logOf({ totalDurationMilliseconds: 800, ttftMilliseconds: 900 })
+
+    expect(firstTokenShareOf(log)).toBeNull()
+  })
+
+  it('reports a genuinely immediate first token as zero', () => {
+    const log = logOf({ totalDurationMilliseconds: 2_000, ttftMilliseconds: 0 })
+
+    expect(firstTokenShareOf(log)).toBe(0)
+  })
+})
+
+// 被放弃的尝试吃掉的时间：同一个总耗时，「上游慢」与「重试在救」是两回事。
+describe('failover duration', () => {
+  it('sums the attempts that were abandoned before delivery', () => {
+    const log = logOf({
+      totalDurationMilliseconds: 8_000,
+      attempts: [
+        { durationMilliseconds: 2_500, ttftMilliseconds: null },
+        { durationMilliseconds: 3_500, ttftMilliseconds: null },
+        { durationMilliseconds: 2_000, ttftMilliseconds: 120 },
+      ],
+    })
+
+    // 只有前两条是被放弃的；服务请求的最后一条不属于「重试」。
+    expect(failoverDurationOf(log)).toBe(6_000)
+  })
+
+  it('returns zero when the first attempt delivered', () => {
+    const log = logOf({
+      totalDurationMilliseconds: 1_200,
+      attempts: [{ durationMilliseconds: 1_000, ttftMilliseconds: 120 }],
+    })
+
+    // 零不是「没测到」：一次就通是真实的测得零。
+    expect(failoverDurationOf(log)).toBe(0)
+  })
+
+  it('returns null when the request never reached an attempt', () => {
+    expect(failoverDurationOf(logOf({ totalDurationMilliseconds: 5 }))).toBeNull()
   })
 })

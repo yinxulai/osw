@@ -2,8 +2,22 @@ packages:
   - packages/*
   - apps/*
 
+# 不要再随手写出类似 `'app-builder-lib>@electron/get': ^3.1.0` 的 override。
+#
+# 背景（2026-10 正式版发布失败）：app-builder-lib@26.15.3 声明 `@electron/get: ^3.0.0`，
+# 代码里却无条件读 `ElectronDownloadCacheMode.ReadWrite`（`out/util/electronGet.js` 的
+# `resolveCacheMode`）。该枚举是 3.1.0 才引入的，3.0.0 满足 `^3.0.0` 却根本没有它 →
+# 打包时下载 Electron 产物抛 `TypeError: Cannot read properties of undefined (reading 'ReadWrite')`。
+#
+# 当时用 override 兜住了，但那是治标：真正的原因是 pnpm 11.8 在读取 npmmirror 的
+# abbreviated metadata 时，顶层 `time` 字段被截断（只剩 3 个 key，而 `versions` 有 44 个），
+# 于是 semver 挑最高版本时缺少发布时间信息，把 `^3.0.0` 解析成了 3.0.0 而不是 3.1.0。
+# 同一份锁文件在 registry.npmjs.org 下、或 pnpm >= 11.28 下都能正确得到 3.1.0；
+# 受影响的不止这一个包（同一镜像下 66 个包被 pnpm 11.8 钉在旧版本）。
+# 所以 `packageManager` 里的 pnpm 版本是这条链路的唯一保障，降级会静默复现。
 allowBuilds:
   electron: true
+  electron-winstaller: true
   esbuild: true
   # wrangler 的本地运行时。只在 `wrangler dev` / `deploy --dry-run` 时用到，
   # 但装不上它时 wrangler 的报错很绕（指向 approve-builds），不如直接放行。

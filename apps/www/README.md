@@ -141,7 +141,7 @@ apps/www/
 
 ## 视觉约定
 
-沿用 `apps/docs/specs/route-workbench.md` 的视觉下限：**不用阴影**，层级靠「底色明度阶梯 + 1px 发丝边框」表达，
+沿用 `apps/docs/specs/routing/route-workbench.md` 的视觉下限：**不用阴影**，层级靠「底色明度阶梯 + 1px 发丝边框」表达，
 字号下限 11px。具体到官网，多放开两件事：
 
 - **品牌渐变**：标志是一道彩虹斜切的闪电，`index.css` 把它的四个色相（金 → 橙 → 玫红 → 紫）取出来做点缀，

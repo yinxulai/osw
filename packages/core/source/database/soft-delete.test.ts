@@ -13,7 +13,7 @@ import {
   updateProviderModelRoute,
 } from './model-store'
 import { createLogicalModel, deleteSchedulingPolicy, listSchedulingPolicies, upsertSchedulingPolicy } from './logical-model-store'
-import { createProvider, createProviderEndpoint, deleteProviderEndpoint, getProviderEndpoint, listProviderEndpoints } from './provider-store'
+import { createProvider, createProviderEndpoint, deleteProvider, deleteProviderEndpoint, getProviderEndpoint, listProviderEndpoints } from './provider-store'
 
 let temporaryDirectory: string
 
@@ -197,5 +197,26 @@ describe('soft deletion', () => {
     const restored = await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: route.id, priority: 2, weight: 30, enabled: true })
     expect(restored).toMatchObject({ priority: 2, weight: 30, deletedTime: null })
     expect(schedulingPolicyRows(logicalModel.id)).toHaveLength(1)
+  })
+
+  it('soft-deletes scheduling policies when their provider is deleted', async () => {
+    const provider = await createTestProvider('Provider Cascade', 'key_provider_cascade')
+    const other = await createTestProvider('Other Provider', 'key_other_provider')
+    const logicalModel = await createLogicalModel({ modelId: 'provider-cascade-model', description: 'provider cascade' })
+    const route = await createRouteWithOpenAiEndpoint(provider.id, 'cascade-model')
+    const otherRoute = await createRouteWithOpenAiEndpoint(other.id, 'other-model')
+    await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: route.id, priority: 1, weight: 50, enabled: true })
+    await upsertSchedulingPolicy({ logicalModelId: logicalModel.id, providerModelId: otherRoute.id, priority: 2, weight: 50, enabled: true })
+
+    await deleteProvider(provider.id)
+
+    expect(await listSchedulingPolicies(logicalModel.id)).toEqual([
+      expect.objectContaining({ providerModelId: otherRoute.id, enabled: true, deletedTime: null }),
+    ])
+    expect(schedulingPolicyRows(logicalModel.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ providerModelId: route.id, enabled: false, deletedTime: expect.any(Number) }),
+      expect.objectContaining({ providerModelId: otherRoute.id, enabled: true, deletedTime: null }),
+    ]))
+    expect(schedulingPolicyRows(logicalModel.id)).toHaveLength(2)
   })
 })

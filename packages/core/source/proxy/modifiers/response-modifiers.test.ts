@@ -7,6 +7,7 @@ import { ToolNameRegistry } from '@server/proxy/protocols/shared/tool-name-regis
 import { ProtocolConversionError } from '@server/proxy/protocols/shared/conversion-error'
 import { pipeFrames } from '@server/proxy/kernel/frame-pipe'
 import { selectCandidates } from '@server/proxy/kernel/modifier-selection'
+import { AnthropicMessagesToOpenAiCompletionsAdapter } from '@server/proxy/protocols/anthropic-messages/adapters'
 import { createResponseModifiers, createResponseRewriteModifier } from './response-modifiers'
 
 const JSON_HEAD: HeadFrame = { kind: 'head', status: 200, headers: { 'content-type': 'application/json', 'content-length': '18' } }
@@ -18,7 +19,7 @@ const DELIVERED: DeliveryDecisionRef = { decision: { kind: 'deliver', successful
  * 执行器已经判定的 failover：这次响应一个字节都不交付。
  *
  * 「客户端要增量、上游回了整包」就落在这一档——它是**上游违约**，不是「改成整包交付」
- * （见 `apps/docs/specs/proxy-engine.md` §1.2）。因此这里的修改器必须原样透传，绝不能自己
+ * （见 `apps/docs/specs/proxy/proxy-engine.md` §1.2）。因此这里的修改器必须原样透传，绝不能自己
  * 攒一份整包再发出去。
  */
 const ABANDONED: DeliveryDecisionRef = { decision: { kind: 'discard', reason: 'status' } }
@@ -111,6 +112,27 @@ function responseRule(): RequestRewriteRule {
 
 function dataFrames(frames: readonly Frame[]): string[] {
   return frames.filter(frame => frame.kind === 'data').map(frame => (frame as { body: Buffer }).body.toString('utf8'))
+}
+
+/** 在 `character` 的第一个字节之后切开，模拟一个多字节字符跨了两帧。 */
+function splitAfterLeadingByte(text: string, character: string): [Buffer, Buffer] {
+  const encoded = Buffer.from(text)
+  const at = encoded.indexOf(Buffer.from(character))
+  if (at < 0) throw new Error(`character not found: ${character}`)
+  return [encoded.subarray(0, at + 1), encoded.subarray(at + 1)]
+}
+
+function textDeltas(sse: string): string[] {
+  const deltas: string[] = []
+  for (const block of sse.split('\n\n')) {
+    const dataLine = block.split('\n').find(line => line.startsWith('data:'))
+    if (!dataLine) continue
+    const raw = dataLine.slice(dataLine.indexOf(':') + 1).trim()
+    if (!raw.startsWith('{')) continue
+    const event = JSON.parse(raw) as { type?: string, delta?: { type?: string, text?: string } }
+    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && typeof event.delta.text === 'string') deltas.push(event.delta.text)
+  }
+  return deltas
 }
 
 function errorFrames(frames: readonly Frame[]): ProtocolConversionError[] {
@@ -210,6 +232,74 @@ describe('protocol conversion modifier', () => {
       to: 'openai-completions',
     })
     expect(result.error).toBe(failure)
+  })
+
+  it('跨帧切开的多字节字符在流式转换后仍是原文，且已经完整的帧不会被扣到结束', async () => {
+    const earlier = 'data: {"id":"c","model":"m","choices":[{"delta":{"content":"你"}}]}\n\n'
+    const [partial, rest] = splitAfterLeadingByte('data: {"choices":[{"delta":{"content":"好"}}]}\n\n', '好')
+    const { frames } = await run({
+      frames: [
+        SSE_HEAD,
+        { kind: 'data', body: Buffer.from(earlier) },
+        { kind: 'data', body: partial },
+        { kind: 'data', body: rest },
+        { kind: 'end' },
+      ],
+      adapter: new AnthropicMessagesToOpenAiCompletionsAdapter(),
+      delivery: DELIVERED,
+      context: createContext({ transport: 'http-stream' }),
+    })
+
+    const delivered = dataFrames(frames)
+    // 第一帧里的「你」已经是完整字符，必须马上交出去；后面的「好」被切在两帧之间。
+    expect(delivered[0]).toContain('你')
+    expect(delivered[0]).not.toContain('好')
+    expect(textDeltas(delivered.join('')).join('')).toBe('你好')
+    expect(delivered.join('')).not.toContain('\uFFFD')
+    expect(frames[frames.length - 1]?.kind).toBe('end')
+  })
+
+  it('流结束时把解码器里剩下的不完整字节交给转换器', async () => {
+    const pushed: string[] = []
+    const adapter = conversionAdapter()
+    adapter.createStreamConverter = () => ({
+      push(chunk) { pushed.push(chunk); return '' },
+      flush: () => '',
+    })
+    adapter.finishStream = () => ''
+    await run({
+      frames: [
+        SSE_HEAD,
+        { kind: 'data', body: Buffer.concat([Buffer.from('data: {"ok":true}\n\n'), Buffer.from([0xe5])]) },
+        { kind: 'end' },
+      ],
+      adapter,
+      delivery: DELIVERED,
+      context: createContext({ transport: 'http-stream' }),
+    })
+
+    // 0xE5 是「好」的首字节，单独一帧解不出来。逐帧 toString 会立刻变成 U+FFFD 并和前文粘在同一次 push 里；
+    // 流式解码器要把它留到结束再 flush，因此是两次 push。
+    expect(pushed).toEqual(['data: {"ok":true}\n\n', '\uFFFD'])
+  })
+
+  it('跨帧切开的多字节字符在整包转换后仍是原文', async () => {
+    const payload = JSON.stringify({
+      id: 'c',
+      model: 'm',
+      choices: [{ message: { role: 'assistant', content: '你好' }, finish_reason: 'stop' }],
+    })
+    const [partial, rest] = splitAfterLeadingByte(payload, '好')
+    const { frames } = await run({
+      frames: [JSON_HEAD, { kind: 'data', body: partial }, { kind: 'data', body: rest }, { kind: 'end' }],
+      adapter: new AnthropicMessagesToOpenAiCompletionsAdapter(),
+      delivery: DELIVERED,
+      context: createContext({ transport: 'http' }),
+    })
+
+    const parsed = JSON.parse(dataFrames(frames).join('')) as { content?: { text?: string }[] }
+    expect(parsed.content?.map(block => block.text).join('')).toBe('你好')
+    expect(dataFrames(frames).join('')).not.toContain('\uFFFD')
   })
 
   it('流式转换器抛错时立即终止并输出错误帧', async () => {

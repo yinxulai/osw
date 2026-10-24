@@ -56,7 +56,6 @@ export function useRequestLogsService() {
   const providers = useProviders()
   const logicalModels = useLogicalModels()
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
-  const providerOptions = useMemo(() => providers.map(p => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)), [providers])
   const providerNameById = useMemo(() => new Map(providers.map(provider => [provider.id, provider.name])), [providers])
   const providerModelOptions = useMemo(() => {
     const models = providerModelsQuery.data ?? []
@@ -80,7 +79,7 @@ export function useRequestLogsService() {
     rows, total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
     error, filtered,
-    page, expandedId, filter, providerOptions, providerModelOptions, getModelName, isModelDeleted,
+    page, expandedId, filter, providerModelOptions, getModelName, isModelDeleted,
     details: detailQuery.data && expandedId ? { [expandedId]: detailQuery.data } : {},
     // 只认「还没有数据」，不认后台重取：请求还挂着时详情每 1.5s 会被重取一次，
     // 那是为了拿到新的状态与用量，画面上的东西不该跟着闪一下。

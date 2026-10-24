@@ -71,6 +71,11 @@ describe('createJsonEnvelope', () => {
     expect(envelope.resolveTransport(envelopeInput('{'))).toBe('http')
   })
 
+  it('exposes the delivery-mode field as protocol metadata, not as a hardcoded engine rule', () => {
+    expect(envelope.deliveryModeFields).toEqual(['stream'])
+    expect(createJsonEnvelope({ streamingField: null }).deliveryModeFields).toEqual([])
+  })
+
   it('has no incremental transport when the field is null', () => {
     const embeddings = createJsonEnvelope({ streamingField: null })
     expect(embeddings.resolveTransport(envelopeInput(JSON.stringify({ stream: true })))).toBe('http')

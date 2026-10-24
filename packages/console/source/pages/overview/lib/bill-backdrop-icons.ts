@@ -1,7 +1,7 @@
 /**
  * 导出场景背景用的厂商图标。
  *
- * 不走 `providers/index.ts` 的 `iconUrls`（那是给 `<img src>` 用的构建产物 URL）：
+ * 不走 `catalog/providers/index.ts` 的 `iconUrls`（那是给 `<img src>` 用的构建产物 URL）：
  * `html-to-image` 在把 DOM 光栅化前会去 `fetch` 每个 `<img>` 的资源再转 data URL，
  * 而桌面端是 `file://` 加载的，那里的 `fetch` 会被浏览器直接拒绝，导出图里的图标会整片消失。
  *
@@ -10,8 +10,12 @@
  * 各家图标里同名（`mask0_1_*` 这种）的 `<mask>` / `<linearGradient>` id 也不会互相打架。
  *
  * 取的是 dark 变体：导出背景是深色半透明底板，light 变体里那些纯黑图形会糊成一团黑块。
+ *
+ * 路径是 `../../../catalog/providers/*`：图标在 `source/catalog/providers/` 下，不是 `source/providers/`。
+ * `import.meta.glob` 匹配不到时**不报错、不警告**，只返回空对象——导出图会安静地少一层肌理，
+ * 所以 `bill-backdrop-icons.test.ts` 专门盯着这里非空。
  */
-const iconSourceModules = import.meta.glob('../../../providers/*/icon.dark.svg', {
+const iconSourceModules = import.meta.glob('../../../catalog/providers/*/icon.dark.svg', {
   eager: true,
   query: '?raw',
   import: 'default',

@@ -17,6 +17,13 @@
   `llm-pi-ai.providers.<route>`。
 - **provider route 的形状**：`{ displayName, api, baseURL, models, headers }`。`api` 用
   `openai-completions`，`baseURL` 指向本机服务的 `/v1`，`models` 是 `{ id }` 组成的**数组**。
+- **模型必须自己声明推理档位**：内置 provider 的模型从内置目录继承档位，而**手写的模型一个都不声明**。
+  结果是两件事同时发生：模型选择菜单里不出现 Effort 一项；会话一旦带着档位请求（用户选过、或从
+  `agent-default-model.reasoningEffort` 继承下来）就会被拒为
+  `UNSUPPORTED_REASONING_EFFORT`——`provider "osw" model "default" does not support reasoning effort "high"`
+  就是这条。harness **不做钳位也不做别名**，所以只能在配方里用 `reasoningEfforts` 把档位显式接上：
+  每个键是菜单提供的一档，值是这一档发到线上的拼写（`reasoning_effort` 的值）；只有 `off` 可以是空值，
+  含义是「这一档支持、但请求里什么都不发」，把思考与否交还给端点自己的默认行为。
 - **为什么要写一个 `Authorization` 头**：pi-ai 的 OpenAI 兼容实现即使面对不校验密钥的本地服务，
   也要求带上一个凭证——官方说明里这是「无凭证 route 需要占位凭证」的两种写法之一（另一种是
   `apiKeyEnv`）。直接写 `headers.Authorization` 比 `apiKeyEnv` 少一份间接引用：本机服务本就不

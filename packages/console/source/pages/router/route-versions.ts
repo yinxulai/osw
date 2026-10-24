@@ -68,6 +68,16 @@ export function hasSavedVersion(version: number): boolean {
   return version > 0
 }
 
+/**
+ * 下一次保存会拿到的版本号。
+ *
+ * 取自列表的第一项（服务端按新的在前返回），而不是「当前生效的那一版」——
+ * 后者在一版都没保存过时是空的，取不到号。列表为空时就是首版。
+ */
+export function nextVersionNumber(versions: readonly RouteVersion[]): number {
+  return (versions[0]?.sequence ?? 0) + 1
+}
+
 /** `2026-09-11 22:41`，列表里按保存时间倒序展示。 */
 export function formatVersionTime(savedAt: string): string {
   const date = new Date(savedAt)

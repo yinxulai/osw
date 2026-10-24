@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { LOCALES, type Locale } from '@common/i18n'
 import { createAppTranslator } from '@common/i18n/catalogs'
 
@@ -43,6 +43,13 @@ export function currentShellPlatform(): ShellPlatform {
  * 拿它排优先级比扫一遍 PATH 更靠谱，也不会在测试里依赖真实环境。
  */
 export function shellProfileCandidates(platform: ShellPlatform, home: string, env: NodeJS.ProcessEnv): string[] {
+  // 路径必须按**入参指定的平台**拼，不能借宿主的 `path.join`：第二个参数是显式的 `platform`，
+  // 「在 Windows 上算 POSIX 启动文件」是这个函数的正常用法，而 `join` 只会给宿主的分隔符——
+  // 于是 `shellProfileCandidates('posix', '/Users/me', …)` 在 Windows 上产出 `\Users\me\.zshrc`，
+  // 一个在任何平台都不存在的路径。（这个函数的消费者 `defaultShellProfileCandidates` 传的是
+  // 当前平台，所以线上看不出来；但它的契约里 `platform` 是参数，就得按参数走。）
+  const join = platform === 'windows' ? win32.join : posix.join
+
   if (platform === 'windows') {
     // PowerShell 的 `$PROFILE` 默认落在 `我的文档` 下，分 PowerShell 7（PowerShell）与
     // 旧版 Windows PowerShell 两处；两个都列，优先用户实际存在的那个。

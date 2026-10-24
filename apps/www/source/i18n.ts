@@ -51,7 +51,7 @@ export const en = {
     title: 'A real request, start to finish',
     hop1: 'Client → local gateway',
     hop1Badge: 'detected',
-    hop2: 'Channel A · Volcengine',
+    hop2: 'Channel A · Anthropic',
     hop2Detail: '429 · rate limited',
     hop2Badge: 'rerouting',
     hop3: 'Channel B · OpenAI',
@@ -194,6 +194,7 @@ export const en = {
   },
   footer: 'Source-available under PolyForm Noncommercial · macOS · Windows · Linux',
   footerRepo: 'View the source on GitHub',
+  footerDiscord: 'Join the Discord community',
   footerDocs: 'Documentation',
 }
 

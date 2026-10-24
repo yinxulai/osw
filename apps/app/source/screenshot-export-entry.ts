@@ -25,6 +25,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 它不启动服务进程、不开主窗口、不碰数据目录：只开一个受控截图窗口去加载渲染层 dev server，
 // 页面照常从已经跑着的管理服务取数据。因此前提是 `pnpm dev`（或至少控制台 dev server）已经在跑。
 //
+// 本进程不向服务要凭证，也不需要从数据目录读 `management.token`：它连的是开发实例，
+// 而开发形态的管理服务不校验凭证（见 `@server/management/gateway/access.ts`）。
+//
 // - `VITE_DEV_SERVER_URL`：渲染层地址，默认 `http://localhost:5173`。
 // - `SCREENSHOT_SET`：拍哪一份编排（见 `source/screenshot-sets.ts`，如 `site` / `docs`）；
 //   不传就用默认 set。
@@ -79,7 +82,11 @@ app.on('window-all-closed', () => {
 //   - 应用级的东西（单实例锁、托盘、服务进程、数据目录）——本进程一概不碰。
 //     `app.setPath('userData', ...)` 尤其不能设：与正在跑的应用共用同一个数据目录会让
 //     Chromium 的 userData 单例锁撞在一起，两个 Electron 进程互相干扰。
-registerRuntimeConfigIpc(getRuntimeProfile('development').managementApiUrl)
+const developmentProfile = getRuntimeProfile('development')
+
+// 凭证 getter 一律回 `null`：开发形态的服务不校验凭证，页面照样能调通。
+// 仍然要注册这一面，因为 preload 的 `sendSync` 没有监听者时渲染进程会永久阻塞（见上）。
+registerRuntimeConfigIpc(developmentProfile.managementApiUrl, () => null)
 registerExternalLinkIpc()
 registerOpenDataDirectoryIpc()
 registerWindowThemeIpc()

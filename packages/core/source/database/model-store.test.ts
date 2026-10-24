@@ -12,6 +12,7 @@ import {
   listProviderModels,
   listProviderModelRoutesByProvider,
   listProviderModelsForLogicalModel,
+  listProviderModelsForLogicalModels,
   updateProviderModelEndpoint,
   updateProviderModelRoute,
 } from './model-store'
@@ -343,5 +344,123 @@ describe('model store', () => {
     await expect(getProviderModel(second.id)).resolves.toMatchObject({ modelName: 'reusable', deletedTime: null })
     // 删掉的那一行还在表里（软删除），只是不再出现于可用模型列表。
     await expect(getProviderModel(first.id)).resolves.toMatchObject({ deletedTime: expect.any(Number) })
+  })
+
+  describe('listProviderModelsForLogicalModels 批量读取', () => {
+    /**
+     * 一次典型的三落点场景：A 有两条可用绑定，B 只有一条且绑定被关掉，C 谁都没绑。
+     *
+     * 返回 Map 而不是扁平数组，因为调用方已经拿着「落点顺序」；这里要一并验的是
+     * **键就是传进来的记录 id**，以及「没绑定的落点根本不作为键出现」（而不是给个空数组）。
+     */
+    async function seedThreeLandings() {
+      const provider = await createProvider({ name: 'Batch Provider', apiKeyReference: 'key_batch', timeoutMilliseconds: 20_000, enabled: true })
+      const fast = await createProviderModelRoute({
+        providerId: provider.id,
+        modelName: 'fast',
+        priority: 2,
+        endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
+      })
+      const slow = await createProviderModelRoute({
+        providerId: provider.id,
+        modelName: 'slow',
+        priority: 1,
+        endpoints: [{ protocol: 'openai-completions', endpointUrl: 'https://example.com/v1/chat/completions', customAuthHeader: null, protocolConversionEnabled: false }],
+      })
+      const a = await createLogicalModel({ modelId: 'batch-a' })
+      const b = await createLogicalModel({ modelId: 'batch-b' })
+      const c = await createLogicalModel({ modelId: 'batch-c' })
+      // 故意先插 priority 大的：结果必须按 priority 排，不是按插入顺序。
+      await upsertSchedulingPolicy({ logicalModelId: a.id, providerModelId: fast.id, priority: 2, enabled: true })
+      await upsertSchedulingPolicy({ logicalModelId: a.id, providerModelId: slow.id, priority: 1, enabled: true })
+      await upsertSchedulingPolicy({ logicalModelId: b.id, providerModelId: fast.id, priority: 1, enabled: false })
+      return { a, b, c, fast, slow }
+    }
+
+    it('按落点分组并按优先级排序，未绑定的落点不出现在 Map 里', async () => {
+      const { a, b, c, fast, slow } = await seedThreeLandings()
+      const grouped = await listProviderModelsForLogicalModels([a.id, b.id, c.id])
+
+      expect([...grouped.keys()]).toEqual([a.id])
+      expect(grouped.get(a.id)?.map(model => model.id)).toEqual([slow.id, fast.id])
+      expect(grouped.get(a.id)?.map(model => model.priority)).toEqual([1, 2])
+      // 绑定被关掉 → 默认视图里不出现；C 谁都没绑 → 不占一个键。
+      expect(grouped.has(b.id)).toBe(false)
+      expect(grouped.has(c.id)).toBe(false)
+    })
+
+    // 两个开关是正交的：`includeDisabled` 放开绑定与模型开关，`includeDeleted` 才放开软删除的行。
+    it('includeDisabled 放开被关掉的绑定，但仍分别报出两个开关的真实值', async () => {
+      const { a, b, fast } = await seedThreeLandings()
+      const grouped = await listProviderModelsForLogicalModels([a.id, b.id], false, true)
+
+      // 键的顺序来自查询（按 logicalModelId 升序），不是入参顺序：入参在这里只用来限定范围。
+      expect([...grouped.keys()].sort()).toEqual([a.id, b.id].sort())
+      expect(grouped.get(b.id)).toEqual([expect.objectContaining({ id: fast.id, enabled: false, modelEnabled: true })])
+    })
+
+    /**
+     * 软删除一个模型时，`deleteProviderModelRoute` 会把挂在它下面的调度策略**一起打标**，
+     * 而批量读取的 join 条件带 `isNull(schedulingPolicies.deletedTime)`：
+     * 那条绑定行根本不会回到结果集里，所以 `includeDeleted` 也找不回它。
+     *
+     * 这是有意的——includeDeleted 管的是「模型本体的 deletedTime」，
+     * 而不是「把已经拆掉的绑定重新算进来」。
+     */
+    it('模型本体被软删除后，它的绑定不再出现在批量读取里（includeDeleted 也拿不回来）', async () => {
+      const { a, slow, fast } = await seedThreeLandings()
+      const { deleteProviderModelRoute } = await import('./model-store')
+      await deleteProviderModelRoute(slow.id)
+
+      const defaults = await listProviderModelsForLogicalModels([a.id])
+      expect(defaults.get(a.id)?.map(model => model.id)).not.toContain(slow.id)
+
+      // 只放开 includeDeleted：模型行虽然还在，但 `enabled: false`，依旧被 includeDisabled 挡住。
+      const deletedOnly = await listProviderModelsForLogicalModels([a.id], true)
+      expect(deletedOnly.get(a.id)?.map(model => model.id)).toEqual([fast.id])
+
+      // 两个开关都放开，被删的那个依然不在：绑定行本身已经打标，join 就不匹配了。
+      const allOpen = await listProviderModelsForLogicalModels([a.id], true, true)
+      expect(allOpen.get(a.id)?.map(model => model.id)).toEqual([fast.id])
+    })
+
+    // 空数组直接短路：这是调用方「一个落点都没有」的常见形态，不该往数据库发一句 `in ()`。
+    it('传空数组时立刻返回空 Map', async () => {
+      await seedThreeLandings()
+      const grouped = await listProviderModelsForLogicalModels([])
+      expect(grouped.size).toBe(0)
+    })
+
+    it('重复的落点 id 不会把同一批绑定算两遍', async () => {
+      const { a, slow, fast } = await seedThreeLandings()
+      const grouped = await listProviderModelsForLogicalModels([a.id, a.id])
+      expect(grouped.get(a.id)?.map(model => model.id)).toEqual([slow.id, fast.id])
+    })
+
+    // 缓存键把「哪些落点 + 两个开关」都编码进去了：不同的组合各存一份，不能互相串。
+    it('不同落点组合与不同开关各存一份缓存，不会串值', async () => {
+      const { a, b, fast } = await seedThreeLandings()
+
+      const onlyA = await listProviderModelsForLogicalModels([a.id])
+      const withB = await listProviderModelsForLogicalModels([a.id, b.id], false, true)
+      const aAgain = await listProviderModelsForLogicalModels([a.id])
+
+      expect(onlyA.has(b.id)).toBe(false)
+      expect(withB.get(b.id)).toEqual([expect.objectContaining({ id: fast.id })])
+      // 再读一次 A 不该被上一步那份「带 B」的结果污染。
+      expect([...aAgain.keys()]).toEqual([a.id])
+      expect(aAgain.get(a.id)).toEqual(onlyA.get(a.id))
+    })
+
+    // 缓存必须跟着配置写入失效，否则逻辑模型页打开着的时候改绑定，规划层还会按旧绑定发请求。
+    it('改绑定后缓存立刻失效，批量读取要反映新顺序', async () => {
+      const { a, slow, fast } = await seedThreeLandings()
+      expect((await listProviderModelsForLogicalModels([a.id])).get(a.id)?.map(model => model.id)).toEqual([slow.id, fast.id])
+
+      // 把 fast 提到 slow 前面。
+      await upsertSchedulingPolicy({ logicalModelId: a.id, providerModelId: fast.id, priority: 0 })
+
+      expect((await listProviderModelsForLogicalModels([a.id])).get(a.id)?.map(model => model.id)).toEqual([fast.id, slow.id])
+    })
   })
 })

@@ -128,7 +128,7 @@ const SOFT_DELETED_PROVIDER_MODEL_INDEX = PROVIDER_MODEL_FIXTURES.findIndex(fixt
 
 /**
  * 逻辑模型 fixture：除启动时内建的 `default` 之外，再建两条按用途分的队列，让逻辑模型页
- * 有多列可看。`default` 是兜底、永远在第一位（见 `docs/specs/route-workbench.md`），
+ * 有多列可看。`default` 是兜底、永远在第一位（见 `docs/specs/routing/route-workbench.md`），
  * 这里只补 `sortOrder` 比它大的展示顺序。
  */
 const LOGICAL_MODEL_FIXTURES = [

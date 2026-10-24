@@ -11,6 +11,22 @@
 <p align="center"><a href="./README.md">English</a> | 简体中文</p>
 
 <p align="center">
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/yinxulai/osw/ci.yml?branch=main&label=CI" alt="CI 构建状态" /></a>
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/yinxulai/osw/badges/coverage.json" alt="测试覆盖率" /></a>
+  <a href="https://github.com/yinxulai/osw/releases/latest"><img src="https://img.shields.io/github/v/release/yinxulai/osw?sort=semver" alt="最新版本" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue" alt="许可证：PolyForm Noncommercial 1.0.0" /></a>
+  <a href="https://github.com/yinxulai/osw/releases"><img src="https://img.shields.io/github/downloads/yinxulai/osw/total" alt="累计下载量" /></a>
+  <a href="https://github.com/yinxulai/osw/stargazers"><img src="https://img.shields.io/github/stars/yinxulai/osw" alt="GitHub 收藏数" /></a>
+  <a href="https://github.com/yinxulai/osw/commits/main"><img src="https://img.shields.io/github/last-commit/yinxulai/osw/main" alt="最近提交" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js >=22" />
+  <img src="https://img.shields.io/badge/pnpm-12.14.0-orange" alt="pnpm 12.14.0" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="支持平台：macOS、Windows、Linux" />
+</p>
+
+<p align="center">
   <img src="./apps/docs/assets/x-post/x-cover.zh-CN.png" alt="所有模型，一个地址：跨供应商自动故障转移" />
 </p>
 
@@ -29,7 +45,7 @@ OSW 在本机跑一个代理服务。你把能用的渠道都配进来（不同�
 - **默认透传。** 不解析协议、不改写、不转换，除非你明确要求。最安全也最快的请求，是代理几乎没碰过的那一个。
 - **每个请求都查得到真相。** 实际走了哪个供应商、哪个模型、第几次尝试才成功、耗时多少、首字多快、每秒多少 Token、缓存命中了多少 —— 全都落库可查。
 - **不同供应商的小脾气，不用写代码。** 需要补一个 `User-Agent`、删掉一个 Header、把某个字段固定成 `0.7`？用请求重写规则配出来就行，编辑器里还能直接对着用例验证。
-- **默认只在本地。** 只监听 `127.0.0.1`，密钥交给系统加密存储，请求只发往你配置的上游：没有账号体系、没有云同步、没有中转服务器。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容（口径见 [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md)）。
+- **默认只在本地。** 只监听 `127.0.0.1`，密钥交给系统加密存储，请求只发往你配置的上游：没有账号体系、没有云同步、没有中转服务器。唯一一处例外是默认开启的匿名使用统计，它不携带任何请求内容（口径见 [apps/docs/specs/operations/telemetry.md](./apps/docs/specs/operations/telemetry.md)）。
 - **中英文界面**，亮色 / 暗色 / 跟随系统随便切，常驻系统托盘，支持开机自启和自动更新。
 
 ---
@@ -246,7 +262,7 @@ curl http://127.0.0.1:9300/v1/models
 
 ## 本地开发
 
-需要 Node.js 22+ 和 pnpm 11：
+需要 Node.js 22+ 和 pnpm 12（确切版本由根 `package.json` 的 `packageManager` 钉住，`corepack` 会自动装好）：
 
 ```bash
 pnpm install
@@ -269,7 +285,7 @@ pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 
 仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/docs` 是面向使用者的手册与仓库文档根（Clarify 站点，`pnpm --filter @osw/docs dev`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
 
-设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/specs/`](./apps/docs/specs/README.md)，构建与打包细节见 [packaging.md](./apps/docs/specs/packaging.md)；上游 API 的逐字快照见 [`apps/docs/upstream/`](./apps/docs/upstream/)。`apps/docs` 自身的布局（`source/`、`specs/`、`upstream/`、`assets/` 各放什么）见 [`apps/docs/README.md`](./apps/docs/README.md)。
+设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/specs/`](./apps/docs/specs/README.md)，构建与打包细节见 [packaging.md](./apps/docs/specs/platform/packaging.md)；上游 API 的逐字快照见 [`apps/docs/upstream/`](./apps/docs/upstream/)。`apps/docs` 自身的布局（`source/`、`specs/`、`upstream/`、`assets/` 各放什么）见 [`apps/docs/README.md`](./apps/docs/README.md)。
 
 ## 赞助商
 
@@ -290,6 +306,8 @@ pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 ## 反馈
 
 有问题或想法欢迎开 [Issue](https://github.com/yinxulai/osw/issues)。附上版本号、操作系统、请求协议和脱敏后的运行日志会好定位很多 —— 但请**不要**贴 API Key、完整提示词或其他敏感内容。
+
+日常提问、想法交流欢迎加入我们的 [Discord 社区](https://discord.gg/7TcyC2Bmy)。
 
 ---
 

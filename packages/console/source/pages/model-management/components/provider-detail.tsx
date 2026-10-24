@@ -1,4 +1,3 @@
-import type { DragEndEvent } from '@dnd-kit/core'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProviderDetailHeader } from './provider-detail-header'
 import { ProviderModelList } from './provider-model-list'
@@ -17,11 +16,10 @@ interface ProviderDetailProps {
   onRemoveModel: (model: ProviderModelRoute) => void
   onRemoveModels: (models: ProviderModelRoute[]) => Promise<boolean>
   onDisableModels: (models: ProviderModelRoute[]) => Promise<boolean>
-  onDragEnd: (event: DragEndEvent) => void
 }
 
 export function ProviderDetail(props: ProviderDetailProps) {
-  const { provider, models, onToggleProviderEnabled, onEditProvider, onExportProvider, onRemoveProvider, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onRemoveModels, onDisableModels, onDragEnd } = props
+  const { provider, models, onToggleProviderEnabled, onEditProvider, onExportProvider, onRemoveProvider, onAddModel, onEditModel, onToggleModelEnabled, onRemoveModel, onRemoveModels, onDisableModels } = props
 
   return (
     <Card>
@@ -42,7 +40,6 @@ export function ProviderDetail(props: ProviderDetailProps) {
           onRemoveModel={onRemoveModel}
           onRemoveModels={onRemoveModels}
           onDisableModels={onDisableModels}
-          onDragEnd={onDragEnd}
         />
       </CardContent>
     </Card>

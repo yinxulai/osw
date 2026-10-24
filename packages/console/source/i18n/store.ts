@@ -8,10 +8,8 @@
  * - 设置页改动时由设置页直接写入，作为保存前的预览。
  */
 
-import { create } from 'zustand'
-import { persist, type PersistStorage } from 'zustand/middleware'
 import type { LanguagePreference } from '@common/i18n'
-import { createLocalStorage } from '@/lib/persist-storage'
+import { createPersistedStore } from '@/store/persisted-store'
 
 interface LanguageState {
   preference: LanguagePreference
@@ -20,19 +18,17 @@ interface LanguageState {
 
 type PersistedLanguageState = Pick<LanguageState, 'preference'>
 
-const languageStorage: PersistStorage<PersistedLanguageState> | undefined = createLocalStorage<PersistedLanguageState>()
-
-export const useLanguageStore = create<LanguageState>()(persist(
-  set => ({
+export const useLanguageStore = createPersistedStore<LanguageState, PersistedLanguageState>({
+  key: 'osw-language',
+  // 语言是这台机器上的偏好：换台机器重新按系统语言来一遍是对的。
+  scope: 'machine',
+  create: set => ({
     preference: 'system',
     setPreference: preference => set({ preference }),
   }),
-  {
-    name: 'osw-language',
-    storage: languageStorage,
-    partialize: state => ({ preference: state.preference }),
-  },
-))
+  pick: state => ({ preference: state.preference }),
+  defaults: { preference: 'system' },
+}).store
 
 /** 渲染进程能拿到的系统语言；Electron 会把应用 locale 透传到 `navigator.language`。 */
 export function getSystemLocale(): string | null {

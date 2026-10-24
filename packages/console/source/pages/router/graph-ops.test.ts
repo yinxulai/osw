@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runWorkflow } from '@common/router/engine'
-import { appendNode, cloneNode, connectEdge, insertNode, portKey, primarySourcePort, removeEdges, removeNode, resolveInsertAnchor } from './graph-ops'
+import { appendNode, cloneNode, connectEdge, insertNode, portKey, primarySourcePort, removeEdges, removeNode, resolveInsertAnchor, resolveInsertPosition } from './graph-ops'
 import { createBlankGraph, createDefaultPolicyGraph, createLlmComplexityGraph, createNodeByKind, createPresetModelPool, createUserAgentGraph, findPolicyPreset, resolveLandingModelIds, ROUTER_POLICY_PRESETS } from '@common/router/presets'
 import { APPENDABLE_KINDS } from './node-meta'
 import { WorkflowGraphSchema } from '@common/router/schemas'
@@ -433,5 +433,22 @@ describe('图操作与引擎的协同', () => {
     expect(result.stopReason).toBe('output')
     expect(result.trace.some(step => step.nodeId === 'model')).toBe(false)
     expect(result.trace[result.trace.length - 1].nodeId).toBe('output')
+  })
+})
+
+describe('resolveInsertPosition', () => {
+  const source = { position: { x: 100, y: 50 } } as WorkflowNodeModel
+  const target = { position: { x: 201, y: 151 } } as WorkflowNodeModel
+
+  it('连线上插入时取两端点的中点', () => {
+    expect(resolveInsertPosition(source, target)).toEqual({ x: 151, y: 101 })
+  })
+
+  it('只有来源时排在它右侧一个节点宽的位置', () => {
+    expect(resolveInsertPosition(source, null)).toEqual({ x: 420, y: 50 })
+  })
+
+  it('两端都没有时落在原点（调用方随后会把它挪到画布中心）', () => {
+    expect(resolveInsertPosition(null, null)).toEqual({ x: 0, y: 0 })
   })
 })

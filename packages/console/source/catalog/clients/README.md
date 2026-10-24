@@ -31,6 +31,7 @@ clients/                   # 本目录：表示层
   编辑器按 `shape` 解释，注册表不必知道文件里其实是补丁列表。
 - `files[].envVar` —— `{ name, replaces }`：该文件**目录**可被这个环境变量覆盖，
   并写清它替换的是哪段 `~/` 前缀（`DSH_HOME` → `~/.dsh`、`XDG_CONFIG_HOME` → `~/.config`）。
+  不同平台要换掉的前缀不是同一段时，写在 `platformPaths` 那一条自己的 `envVar` 上，只作用于那一条。
 - `fields[]` —— 该配置文件里需要识别/改写的键，即该工具的 schema 片段。
 
 ## 新增一个客户端

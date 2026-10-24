@@ -1,13 +1,9 @@
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatBillCount, formatBillTokens, formatPercent } from '../lib/format'
+import type { BillRow } from '../lib/bill-row'
 
-/** 账单里的一行用量：`usageTokens` / `cacheHitRate` 为 `null` 时按「无数据」占位，不隐藏整行。 */
-export type BillRow = {
-  id: string
-  name: string
-  usageTokens: number | null
-  cacheHitRate: number | null
-}
+/** 明细行的形状定义在 `lib/bill-row.ts`（领域层）；这里只把它转出去，调用方不必知道它住哪。 */
+export type { BillRow }
 
 export type BillContentProps = {
   projectName: string

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FlaskConical, ListFilter, LoaderCircle, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
-import { requestRewriteRuleApi, type RequestRewriteTestResult } from '@/api/models'
+import type { RequestRewriteTestResult } from '@/api/models'
 import { FormField } from '@/components/form-kit'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -19,11 +19,12 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { RuleEditor } from './rule-editor'
-import { toApiRuleAction, type RequestRewriteRule, type RuleTestCase } from '../types'
+import { runRuleTest } from '../lib/rule-test'
+import { type RequestRewriteRule, type RuleTestCase } from '../types'
 import { bodyDeliveryShape, isStageRunnable } from '@common/delivery-shape'
 import { ENABLED_RULE_STAGES } from '@common/features'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
-import type { RequestRewriteRule as ApiRequestRewriteRule, RuleStage, TransportKind } from '@common/schemas'
+import type { RuleStage, TransportKind } from '@common/schemas'
 
 /** 试跑结果直接沿用 API 的返回结构：字段只在一处声明，日后加 `skippedRules` 这类字段不会漏同步。 */
 type RuleTestResult = RequestRewriteTestResult
@@ -88,30 +89,20 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     })
   }
 
+  /*
+   * 试跑：本组件只负责「正在跑哪一个」与「结果收到没有」。
+   *
+   * 报文折算（`global` → `scope`、`actions` 逐条换形态）搬到 `../lib/rule-test.ts`
+   * 里去了。它和保存时用的是同一套折算，两处再各写一份迟早会说出两种规则。
+   */
   const runTest = (testCase: RuleTestCase) => {
     setTestingId(testCase.id)
-    const rule: ApiRequestRewriteRule = {
-      id: props.rule.id,
-      name: props.rule.name,
-      description: props.rule.description,
-      enabled: props.rule.enabled,
-      scope: props.rule.global ? 'global' : 'model',
-      schemaVersion: 1,
-      // 试跑用的临时报文：取值与保存时一致，免得两处对「这条规则是什么」说法不同。
-      source: props.rule.source,
-      match: { clientProtocols: props.rule.match.clientProtocols as ApiRequestRewriteRule['match']['clientProtocols'], upstreamProtocols: props.rule.match.upstreamProtocols as ApiRequestRewriteRule['match']['upstreamProtocols'] },
-      testCases: [],
-      actions: props.rule.actions.map(toApiRuleAction),
-      createdTime: 0,
-      updatedTime: 0,
-      deletedTime: null,
-    }
-    void requestRewriteRuleApi.test(rule, testCase).then(response => {
-      if (!response.success) toast.error(response.errorMessage)
-      else setTestResults(results => ({ ...results, [testCase.id]: response.data }))
-      setTestingId(undefined)
-    })
+    void runRuleTest(props.rule, testCase).then(
+      result => setTestResults(results => ({ ...results, [testCase.id]: result })),
+      (reason: unknown) => toast.error(reason instanceof Error ? reason.message : t('common.label.unknownError')),
+    ).finally(() => setTestingId(undefined))
   }
+
 
   const close = () => props.onOpenChange(false)
   const cancel = () => {
@@ -190,7 +181,7 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
                             <div className="grid gap-2 rounded-lg border border-module-border bg-inset p-2.5 system-2xs-regular">
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-text-tertiary">
                                 <span>{t('rules.tests.applied', { value: result.appliedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
-                                <span>{t('rules.tests.skipped', { value: result.skippedRuleIds.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
+                                <span>{t('rules.tests.skipped', { value: result.skippedRules.length ? t('rules.tests.currentRule') : t('rules.tests.none') })}</span>
                               </div>
                               {result.skippedRules.length > 0 && (
                                 <ul className="grid gap-0.5 text-text-tertiary" data-testid="rule-test-skip-reasons">

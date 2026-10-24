@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { win32 } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import { envFileHeader, hasManagedBlock, managedBlock, resolveShellProfilePath, shellProfileCandidates, stripEnvFileHeader, upsertManagedBlock } from './shell'
@@ -120,12 +120,13 @@ describe('shellProfileCandidates', () => {
   })
 
   it('Windows 指向 PowerShell profile 的两处默认位置', () => {
-    // 期望值也用 `join` 拼：模块内部就是 `join`，路径分隔符随平台走（Windows 上得到反斜杠）。
-    const home = join('C:', 'Users', 'me')
+    // 期望值按 Windows 的拼法算：模块内部走 `win32.join`，所以用例在哪台机器上跑（包括 CI 的 Linux）
+    // 拿到的都是反斜杠路径。用宿主的 `join` 拼会在 Linux 上拼出 `/`，把这条断言变成平台相关的。
+    const home = win32.join('C:', 'Users', 'me')
     const candidates = shellProfileCandidates(WINDOWS, home, {})
     expect(candidates).toEqual([
-      join(home, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
-      join(home, 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1'),
+      win32.join(home, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
+      win32.join(home, 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1'),
     ])
   })
 })

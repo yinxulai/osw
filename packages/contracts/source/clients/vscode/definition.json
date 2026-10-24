@@ -17,8 +17,20 @@
         "idField": "name"
       },
       "platformPaths": {
-        "linux": "~/.config/Code/User/chatLanguageModels.json",
-        "win32": "~/AppData/Roaming/Code/User/chatLanguageModels.json"
+        "linux": {
+          "path": "~/.config/Code/User/chatLanguageModels.json",
+          "envVar": {
+            "name": "XDG_CONFIG_HOME",
+            "replaces": "~/.config"
+          }
+        },
+        "win32": {
+          "path": "~/AppData/Roaming/Code/User/chatLanguageModels.json",
+          "envVar": {
+            "name": "APPDATA",
+            "replaces": "~/AppData/Roaming"
+          }
+        }
       },
       "purpose": "BYOK model providers shown in the chat model picker: a top-level array of provider entries, each declaring its own `models`."
     }

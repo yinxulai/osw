@@ -47,13 +47,26 @@ Once enabled, the endpoint can accept requests in other protocols and convert th
 
 See [Supported protocols](/getting-started/protocols) for details.
 
+### Test before saving
+
+When adding or editing a model there is a **Test connection** button between **Cancel** and **Save**. It uses the **unsaved values currently in the form**: after editing a protocol endpoint you can find out whether it works without saving first.
+
+- Only the **enabled** protocols are tested, one minimal request each; results are per protocol, so with two of three passing you can see which one failed.
+- The model ID goes into the request body verbatim — that is exactly the question "does the upstream recognize this name?".
+- A relative override (such as `/v1beta/messages`) is resolved against **that protocol's provider-level endpoint**.
+- Nothing is saved, and **nothing is written to request logs or provider health / cooldown**. It is a probe, not a real proxied request — see [Channel diagnostics](#channel-diagnostics), which tests the saved configuration and does account for it.
+
+<Callout title="Tests native protocol connectivity" type="info">
+This button does not go through protocol conversion: it sends one native request in the endpoint's **own** protocol. To validate a "client protocol → endpoint protocol" conversion path, use channel diagnostics below.
+</Callout>
+
 ## Queue order
 
 Both providers and models support **drag-to-reorder**. The order affects the try order during failover (the order inside a logical model is what ultimately decides — see [Logical models](/upstreams/logical-models)).
 
 ## Channel diagnostics
 
-To verify that a channel works, use **Connection test** (channel diagnostics): tick several channels and protocols to validate them concurrently, and pick a diagnostic mode:
+To verify that a channel works, use **Connection test** (channel diagnostics): tick several channels and protocols; targets are validated **one at a time** (only one request is in flight, so latency readings are not distorted). Then pick a diagnostic mode:
 
 | Mode | What it does |
 | --- | --- |

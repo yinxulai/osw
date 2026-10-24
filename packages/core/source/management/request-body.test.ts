@@ -38,6 +38,16 @@ describe('parseJsonBody', () => {
     await expect(parseJsonBody(request([{ type: 'error', value: new Error('socket failure') }, { type: 'end' }]))).rejects.toThrow('socket failure')
   })
 
+  it('ignores chunks that arrive after the request already settled', async () => {
+    // 中断之后还可能来分片（内核缓冲区里的残句）。这些分片没有接收方，丢掉即可——
+    // 真把它们拼上去，一条已经结算的请求会在解析时又抛一次错。
+    await expect(parseJsonBody(request([
+      { type: 'aborted' },
+      { type: 'data', value: Buffer.from('garbage') },
+      { type: 'end' },
+    ]))).rejects.toThrow('CLIENT_REQUEST_ABORTED')
+  })
+
   it('accepts a body whose declared length is far beyond any former limit', async () => {
     // 上限是有意去掉的，这条用例锁住的就是「不设限」本身：别让它以任何形式长回来。
     await expect(parseJsonBody(request(

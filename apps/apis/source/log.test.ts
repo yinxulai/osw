@@ -70,9 +70,9 @@ describe('日志行', () => {
   it('值为 null 的补充项整项不输出——比打出 detail=null 更接近「它没说话」', () => {
     const logs = capture()
     try {
-      logOutcome(502, 'upstream_rejected', { sink: 'aptabase', detail: null })
+      logOutcome(502, 'not_delivered', { sink: 'analytics-engine', events: null })
 
-      expect(logs.lines[0].line).toBe('[apis] status=502 error=upstream_rejected sink=aptabase')
+      expect(logs.lines[0].line).toBe('[apis] status=502 error=not_delivered sink=analytics-engine')
     } finally {
       logs.restore()
     }

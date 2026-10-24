@@ -1,19 +1,20 @@
 import type { Protocol, RequestRewriteRule, RequestRewriteRuleAction } from '@common/schemas'
 import type { BodyDeliveryShape } from '@server/proxy/contracts'
 import { stageShapeSupport } from '@server/proxy/contracts'
+import { getProtocolDescriptor } from '@server/proxy/protocols/registry'
 import { executeRewriteScript } from './rewrite-script-sandbox'
 
 const PROTECTED_HEADERS = new Set(['authorization', 'host', 'content-length', 'connection', 'transfer-encoding'])
-/**
- * 传输形态在正文里的落点。现行三个协议（openai-completions / anthropic-messages / openai-responses）
- * 都用根级 `stream` 表达「这一跳要增量还是整包」，因此它不是一个普通的业务字段。
- *
- * 改写规则**不许碰它**。形态在规划期就由客户端自己的声明定下来（§1.1），规则把它改掉
- * 等于替客户端改主意：代理会按「非流式」转发上游，却仍然按「流式」交付客户端——
- * 两边对「这一跳是什么形态」的认知当场分叉，而这正是代理最不该制造的状态。
- */
-const PROTECTED_BODY_FIELDS = new Set(['stream'])
 const MAX_ACTIONS = 50
+
+function protectedBodyFields(protocol: Protocol): ReadonlySet<string> {
+  const descriptor = getProtocolDescriptor(protocol)
+  const fields = new Set<string>()
+  for (const endpoint of descriptor?.endpoints ?? []) {
+    for (const field of endpoint.envelope.deliveryModeFields) fields.add(field)
+  }
+  return fields
+}
 
 export interface RequestRewriteContext {
   stage: 'request' | 'response'
@@ -52,14 +53,7 @@ export interface RequestRewriteResult {
   body: Buffer
   headers: Record<string, string | string[] | undefined>
   appliedRuleIds: string[]
-  /**
-   * 被跳过的规则 id。
-   *
-   * 保留这个扁平数组是为了兼容既有调用方与断言；它是 {@link skippedRules} 的派生视图，
-   * 两者永远同源。
-   */
-  skippedRuleIds: string[]
-  /** 与 `skippedRuleIds` 一一对应，但带上原因。诊断与试跑解释都读它。 */
+  /** 被跳过的规则，带上具名原因。诊断与试跑解释都读它。 */
   skippedRules: RewriteSkippedRule[]
   /** 本次执行里所有脚本动作回传的日志（`console.log / warn / error`），供规则试跑展示。 */
   scriptLogs: string[]
@@ -94,12 +88,12 @@ export function applyRequestRewriteRules(body: Buffer, headers: Record<string, s
     for (const action of actions) {
       if (action.type.startsWith('header-')) applyHeader(currentHeaders, action as HeaderAction, rule.id)
       else if (action.type === 'script') currentBody = Buffer.from(applyScript(currentBody, currentHeaders, action as ScriptAction, rule, context, scriptLogs))
-      else currentBody = Buffer.from(applyBody(currentBody, action as BodyAction, rule.id))
+      else currentBody = Buffer.from(applyBody(currentBody, action as BodyAction, rule.id, context.clientProtocol))
     }
     appliedRuleIds.push(rule.id)
   }
   if (currentBody.length > 0) currentHeaders['content-length'] = String(currentBody.length)
-  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRuleIds: skippedRules.map(item => item.ruleId), skippedRules, scriptLogs }
+  return { body: currentBody, headers: currentHeaders, appliedRuleIds, skippedRules, scriptLogs }
 }
 
 /**
@@ -167,7 +161,7 @@ function applyScript(body: Buffer, headers: Record<string, string | string[] | u
   if (result.body === undefined && result.headers === undefined) return body
   if (result.headers !== undefined) replaceScriptHeaders(headers, result.headers, rule.id)
   if (result.body === undefined) return body
-  assertDeliveryModeUnchanged(parsedBody, result.body, rule.id)
+  assertDeliveryModeUnchanged(parsedBody, result.body, rule.id, context.clientProtocol)
   return Buffer.from(JSON.stringify(result.body))
 }
 
@@ -177,14 +171,13 @@ function parseBodyLenient(body: Buffer): unknown {
 }
 
 /**
- * 脚本同样不许改动投递形态字段（`stream`）。
+ * 脚本同样不许改动封装层声明的投递形态字段：它属于协议封装，而不是普通业务字段。
  *
- * 结构化 body 动作靠 `parsePath` 拒绝对根级 `stream` 取值来做这件事；脚本改的是整份 body，
- * 没有「路径」可拦，因此改为**按改动结果判**：新旧 body 的 `stream` 取值不同即视为违规。
- * 逐字比对而不是「禁止出现 `stream` 键」——脚本原样带上一个 `stream` 不算「改主意」。
+ * 结构化 body 动作靠 `parsePath` 在协议描述里查出这些保护字段；脚本则改的是整份 body，
+ * 没有「路径」可拦，因此改为按改动结果判：新旧 body 的同名字段值若不同，即视为违规。
  */
-function assertDeliveryModeUnchanged(before: unknown, after: unknown, ruleId: string): void {
-  for (const field of PROTECTED_BODY_FIELDS) {
+function assertDeliveryModeUnchanged(before: unknown, after: unknown, ruleId: string, protocol: Protocol): void {
+  for (const field of protectedBodyFields(protocol)) {
     if (readOwnField(before, field) !== readOwnField(after, field)) {
       throw new RequestRewriteError(`Modifying a delivery-mode field is not allowed: ${field}`, ruleId)
     }
@@ -229,22 +222,22 @@ function readHeader(headers: Record<string, string | string[] | undefined>, name
   return key === undefined ? undefined : headers[key]
 }
 
-function applyBody(body: Buffer, action: BodyAction, ruleId: string): Buffer {
+function applyBody(body: Buffer, action: BodyAction, ruleId: string, protocol: Protocol): Buffer {
   let value: unknown
   try { value = JSON.parse(body.toString('utf8')) } catch { throw new RequestRewriteError('The body is not valid JSON', ruleId) }
   if (action.type === 'body-replace' && action.search.length === 0) throw new RequestRewriteError('The body replacement search string must not be empty', ruleId)
-  const segments = parsePath(action.path, ruleId)
+  const segments = parsePath(action.path, ruleId, protocol)
   if (action.type === 'body-set') setPath(value, segments, action.value, ruleId)
   else if (action.type === 'body-delete') deletePath(value, segments, ruleId)
   else replacePath(value, segments, action.search ?? '', action.replacement ?? '', action.regex ?? false, ruleId)
   return Buffer.from(JSON.stringify(value))
 }
 
-function parsePath(path: string, ruleId: string): string[] {
+function parsePath(path: string, ruleId: string, protocol: Protocol): string[] {
   if (!path.startsWith('$.')) throw new RequestRewriteError(`Invalid JSON path: ${path}`, ruleId)
   const segments = path.slice(2).split('.').filter(Boolean)
   if (!segments.length || segments.some(segment => !/^[A-Za-z0-9_-]+$/.test(segment))) throw new RequestRewriteError(`Invalid JSON path: ${path}`, ruleId)
-  if (segments.length === 1 && PROTECTED_BODY_FIELDS.has(segments[0])) throw new RequestRewriteError(`Modifying a delivery-mode field is not allowed: ${path}`, ruleId)
+  if (segments.length === 1 && protectedBodyFields(protocol).has(segments[0])) throw new RequestRewriteError(`Modifying a delivery-mode field is not allowed: ${path}`, ruleId)
   return segments
 }
 function setPath(root: unknown, segments: string[], value: unknown, ruleId: string): void {

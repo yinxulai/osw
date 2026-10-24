@@ -3,6 +3,51 @@ import { z } from 'zod'
 import { DEFAULT_CLOUD_BACKUP_KIND, CloudBackupKindSchema } from './cloud-backup'
 import { LANGUAGE_PREFERENCES } from './i18n'
 
+// ========== schema 组合 ==========
+
+/**
+ * 取字段的**不带默认值**形态：剥掉会「凭空造值」的包装（`ZodDefault`、`ZodCatch`），
+ * 包着它们的 `ZodOptional` 一并剥掉再包回来。
+ *
+ * 用 `unwrap()` 而不是读 `def.innerType`：它是这一族包装器**声明的**取值方式，返回的
+ * `T` 正是里面那层 schema 的类型；`def.innerType` 在类型上是 `$ZodType`，取出来就把
+ * 后续判断的类型信息全丢了。
+ *
+ * 参数类型只能是 `z.core.$ZodType`（core 里的那层）而不是 `z.ZodType`：`unwrap()` 的
+ * 上界、以及 `ZodObject.shape` 每一项的声明类型都是 core 的 `SomeType`，用 classic 的
+ * `ZodType` 会在 `unwrap()` 处报「缺 def / _output 等 44 个属性」。
+ */
+function undefaulted(field: z.core.$ZodType): z.core.$ZodType {
+  if (field instanceof z.ZodOptional) return z.optional(undefaulted(field.unwrap()))
+  if (field instanceof z.ZodDefault || field instanceof z.ZodCatch) return undefaulted(field.unwrap())
+  return field
+}
+
+/**
+ * 把对象 schema 的字段换成不带默认值的版本，**专供构造补丁 schema**（更新接口的入参）。
+ *
+ * ## 为什么补丁 schema 必须先过这一道
+ *
+ * zod v4 收紧了 `.partial()` 的语义：它只把字段变**可缺省**，缺省时照旧套用字段自己的
+ * `.default()` / `.catch()`。对「整份对象」这是对的——少了字段就补默认值；但对**补丁**
+ * 就反了：补丁的语义是「只改提到的字段」，而 `.partial()` 会让没提到的字段被悄悄写回默认值。
+ * 后果是**一次只改一个开关的保存会把整份对象按默认值重写一遍**，且不报错、不留痕。
+ * v3 的 `.partial()` 不套默认值，所以这是一处迁移时不会报错的语义变化：类型没变、测试没变，
+ * 只有运行期行为变了。
+ *
+ * ## 用法
+ *
+ * 固定是 `withoutDefaults(X).partial()`（`pick` / `required` 可前后自由组合）。返回类型
+ * 故意保持 `T`，调用方拿到的类型因此与改动前**完全一致**——这一处的修正只落在运行期语义上，
+ * 不需要读侧再加一轮 `??` 兜底。反过来说：**不要**拿它的返回值去解析一份完整对象，
+ * 它不再补齐缺省字段。
+ */
+export function withoutDefaults<T extends z.ZodObject>(schema: T): T {
+  return schema.extend(Object.fromEntries(
+    Object.entries(schema.shape).map(([key, field]) => [key, undefaulted(field)]),
+  )) as unknown as T
+}
+
 // ========== 枚举 ==========
 
 export const ProtocolSchema = z.enum([
@@ -15,19 +60,24 @@ export type Protocol = z.infer<typeof ProtocolSchema>
 /**
  * 渠道诊断要回答哪个问题。
  *
- * 三种模式问的是同一件事的不同侧面，所以它们是**互斥的一次运行**，不是三个页面：
- * - `connectivity`：这条链路通不通（等价于一次最小请求打穿到上游并拿到 2xx）；
+ * 两种模式问的是同一件事的不同侧面，所以它们是**互斥的一次运行**，不是两个页面：
  * - `streaming`：上游**真的**按 SSE 逐帧回吗——形态不符（回整包）在诊断里就是失败，
- *   而不是被悄悄当成「通」；
- * - `speed`：首字节等多久、出字多快。它必须走流式：整包响应里没有「首字节」这个时刻，
- *   出字速度也无从谈起。
+ *   而不是被悄悄当成「通」；提示词只有一个词，为的是尽快看到首字；
+ * - `speed`：喂一段长到足以连续生成的正文，让「输出 Token ÷ 耗时」接近稳态出字速度。
+ *   它比的不是「谁能量速度」——速度是派生值，两种模式都会算；它换的是**分母里首字
+ *   等待的占比**：正文太短，比值就主要描述第一帧等了多久。
+ *
+ * **没有「非流式」这一种。** 诊断只发流式请求：整包响应里既没有「首字节」这个时刻，
+ * 也拿不到上游的用量（用量挂在 SSE 的收尾帧上，见 `diagnostics/probe-request.ts`），
+ * 一次非流式诊断跑完，表里半列都是 `—`。与其留一个「能通但什么都量不到」的模式，
+ * 不如只保留真正能回答问题的形态。
  *
  * 词表放在 `@common` 的理由与 {@link TransportKindSchema} 相同：管理端与界面必须共用同一套，
  * 各写一份迟早漂移。
  */
-export const ModelTestModeSchema = z.enum(['connectivity', 'streaming', 'speed'])
+export const ModelTestModeSchema = z.enum(['streaming', 'speed'])
 export type ModelTestMode = z.infer<typeof ModelTestModeSchema>
-/** 界面要按固定顺序列出这三种模式；列表与枚举同源，避免两处各写一份顺序。 */
+/** 界面要按固定顺序列出这些模式；列表与枚举同源，避免两处各写一份顺序。 */
 export const ALL_MODEL_TEST_MODES: ModelTestMode[] = [...ModelTestModeSchema.options]
 
 /**
@@ -72,7 +122,7 @@ export const REWRITE_SCRIPT_CODE_LIMIT = 20_000
 export const REWRITE_SCRIPT_TIMEOUT_DEFAULT = 1_000
 /** 脚本动作超时上限。 */
 export const REWRITE_SCRIPT_TIMEOUT_LIMIT = 5_000
-const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]))
+const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([z.string(), z.number().finite(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(z.string(), JsonValueSchema)]))
 export const RequestRewriteRuleMatchSchema = z.object({
   clientProtocols: z.array(ProtocolSchema).max(3).default([]),
   upstreamProtocols: z.array(ProtocolSchema).max(3).default([]),
@@ -111,7 +161,7 @@ export const RequestRewriteRuleActionSchema = z.discriminatedUnion('type', [
 export type RequestRewriteRuleAction = z.infer<typeof RequestRewriteRuleActionSchema>
 export const RequestRewriteRuleSchema = z.object({
   id: z.string().min(1), name: z.string().min(1).max(100), description: z.string().max(1000).default(''), enabled: z.boolean().default(true),
-  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default({}),
+  scope: RuleScopeSchema, schemaVersion: z.number().int().positive().default(1), source: z.enum(['user', 'builtin', 'imported']).default('user'), match: RequestRewriteRuleMatchSchema.default(() => ({ clientProtocols: [], upstreamProtocols: [] })),
   actions: z.array(RequestRewriteRuleActionSchema).min(1).max(50),
   testCases: z.array(RequestRewriteRuleTestCaseSchema).max(50).default([]),
   createdTime: z.number().int(), updatedTime: z.number().int(), deletedTime: z.number().int().nullable(),
@@ -464,7 +514,7 @@ export const SettingsSchema = z.object({
    * 它最近一次成功的供应商模型上：首位供应商短暂故障进入冷却时，老会话留在已经
    * 热了缓存的继任供应商上，而不是在冷却到期后切回去再付一次全价 prefill。
    * 新会话不受影响，仍按调度顺序尝试——恢复的供应商靠新会话拿回流量，
-   * 不需要主动探测（见 `apps/docs/specs/proxy-engine.md` §缓存亲和）。
+   * 不需要主动探测（见 `apps/docs/specs/proxy/proxy-engine.md` §缓存亲和）。
    */
   cacheAffinityEnabled: z.boolean().default(false),
   /**
@@ -495,7 +545,7 @@ export const SettingsSchema = z.object({
    * 界面语言偏好。
    *
    * 放在服务端设置里而不是渲染进程的 `localStorage`：托盘菜单与原生对话框由主进程渲染，
-   * 主进程读不到渲染进程的存储（见 `apps/docs/specs/i18n.md` §3）。
+   * 主进程读不到渲染进程的存储（见 `apps/docs/specs/data/i18n.md` §3）。
    */
   language: LanguagePreferenceSchema.default('system'),
   /**
@@ -533,7 +583,7 @@ export const SettingsSchema = z.object({
   liveMetricWindowEnabled: z.boolean().default(true),
   /**
    * 匿名使用统计的开关。**默认开启**——它用来判断功能是否真的被用起来，是产品的既定行为；
-   * 界面上不提供任何入口，设置页也不做任何展示（见 `apps/docs/specs/telemetry.md` §13）。
+   * 界面上不提供任何入口，设置页也不做任何展示（见 `apps/docs/specs/operations/telemetry.md` §13）。
    *
    * 字段本身仍然保留：它是「采集是否被允许」的唯一判据（开发档另有一条独立短路）。
    * 关掉后不再采集任何事件，队列里压着的那一批会尽力发完，但**没有**一条「开关被改了」的事件——
@@ -584,7 +634,7 @@ export type Settings = z.infer<typeof SettingsSchema>
 
 // ========== Request Log ==========
 
-export const RawUsageSchema = z.record(z.unknown())
+export const RawUsageSchema = z.record(z.string(), z.unknown())
 export type RawUsage = z.infer<typeof RawUsageSchema>
 
 export const RequestLogSchema = z.object({
@@ -955,7 +1005,7 @@ export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
 export const ApiErrorSchema = z.object({
   success: z.literal(false),
   errorCode: z.string(),
-  /** 诊断消息，固定英文。界面**不要**直接展示它，按 `errorCode` 本地化（见 `apps/docs/specs/i18n.md` §5）。 */
+  /** 诊断消息，固定英文。界面**不要**直接展示它，按 `errorCode` 本地化（见 `apps/docs/specs/data/i18n.md` §5）。 */
   errorMessage: z.string(),
   /**
    * 消息里 `{name}` 占位符的取值。
@@ -1117,9 +1167,32 @@ export type RequestLogDetail = z.infer<typeof RequestLogDetailSchema>
 
 // ========== 运行日志条目 ==========
 
+/**
+ * 运行日志所属的**模块**。
+ *
+ * 写日志的地方按 `[module] 正文` 的约定给每行带一个前缀，"模块"就是把这个前缀收敛到
+ * 一颗产品能讲的树上：一个前缀对应哪个模块由写入侧解析（见
+ * `@server/management/infrastructure/log-scope`），这里只声明取值与展示顺序。
+ *
+ * - `proxy`：代理引擎（含 `proxy-lifecycle`）——请求经过时产生的绝大多数日志；
+ * - `management`：管理服务（含 `management-lifecycle`）；
+ * - `runtime`：服务运行时与宿主桥（`runtime` / `service-host` / `osw` / `rpc`）；
+ * - `database`：数据库（`database` / `store`）；
+ * - `desktop`：桌面宿主进程（`tray` / `updater` / `secrets` / `auto-launch` / `screenshots` / `cli`）；
+ * - `other`：没有归属或前缀没登记的日志。
+ *
+ * 词表放在 `@common` 的理由与其它枚举相同：管理端、落库、界面必须共用同一套。
+ */
+export const LogScopeSchema = z.enum(['proxy', 'management', 'runtime', 'database', 'desktop', 'other'])
+export type LogScope = z.infer<typeof LogScopeSchema>
+
+/** 界面要按固定顺序列出这些模块；列表与枚举同源，避免两处各写一份顺序。 */
+export const ALL_LOG_SCOPES: LogScope[] = [...LogScopeSchema.options]
+
 export const LogEntrySchema = z.object({
   id: z.number().int().positive(),
   level: z.enum(['log', 'warn', 'error', 'info', 'debug']),
+  scope: LogScopeSchema,
   message: z.string(),
   timestamp: z.number().int(),
 })

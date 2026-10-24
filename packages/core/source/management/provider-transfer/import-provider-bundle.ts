@@ -94,7 +94,7 @@ function parseImportRequest(body: unknown): ProviderBundleImportRequest {
   const parsed = ProviderBundleImportRequestSchema.safeParse(body)
   if (parsed.success) return parsed.data
 
-  const issues = parsed.error.errors.map(issue => `${issue.path.join('.') || 'bundle'} ${issue.message}`).join('；')
+  const issues = parsed.error.issues.map(issue => `${issue.path.join('.') || 'bundle'} ${issue.message}`).join('；')
   throw new AppError('VALIDATION_ERROR', 400, `Not a recognizable provider export file: ${issues}`)
 }
 
@@ -156,7 +156,7 @@ async function applyModels(providerId: string, models: ProviderBundleModel[]): P
       : existing.find(candidate => candidate.modelName === model.modelName && !claimedByLegacyName.has(candidate.id))
     if (matched) {
       claimedByLegacyName.add(matched.id)
-      await updateProviderModelRoute(matched.id, { enabled: model.enabled, endpoints })
+      await updateProviderModelRoute(matched.id, { modelName: model.modelName, enabled: model.enabled, endpoints })
     } else {
       // priority 属于调度策略（`scheduling_policies.priority`），不属于供应商包，这里只占位。
       // 绑定开关跟随模型本体的开关：包里带着停用模型时，不能顺手建一条打开的绑定。

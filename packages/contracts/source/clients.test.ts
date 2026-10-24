@@ -121,8 +121,18 @@ describe('agent client registry', () => {
 
         // 平台专有路径同样要守在主目录下：它们只是换一条 `~/` 路径，不是开一条绝对路径的后门。
         for (const platformPath of Object.values(file.platformPaths ?? {})) {
-          expect(platformPath).toMatch(/^~\//)
-          expect(platformPath.endsWith('/')).toBe(false)
+          const declared = typeof platformPath === 'string' ? platformPath : platformPath.path
+          expect(declared).toMatch(/^~\//)
+          expect(declared.endsWith('/')).toBe(false)
+
+          // 平台自己的覆盖要比对这一条路径，而不是规范路径：VS Code 的规范路径是 macOS 那份，
+          // `XDG_CONFIG_HOME` / `APPDATA` 对不上它。
+          const envVar = typeof platformPath === 'string' ? undefined : platformPath.envVar
+          if (!envVar) continue
+          expect(envVar.name).toMatch(/^[A-Z][A-Z0-9_]*$/)
+          expect(envVar.replaces).toMatch(/^~\//)
+          expect(envVar.replaces.endsWith('/')).toBe(false)
+          expect(declared.startsWith(`${envVar.replaces}/`)).toBe(true)
         }
       }
 

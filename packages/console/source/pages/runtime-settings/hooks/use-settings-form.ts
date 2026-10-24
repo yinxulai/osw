@@ -21,8 +21,14 @@ export function useSettingsForm() {
   const isDirty = useRuntimeSettingsUiStore(state => state.isDirty)
   const hydrate = useRuntimeSettingsUiStore(state => state.hydrate)
   const updateField = useRuntimeSettingsUiStore(state => state.updateField)
-  const resetSettings = useRuntimeSettingsUiStore(state => state.resetDraft)
+  const resetDraft = useRuntimeSettingsUiStore(state => state.resetDraft)
   const setSaved = useRuntimeSettingsUiStore(state => state.setSaved)
+  // 草稿退回基线并不收回语言预览（预览写在地址栏里）。把基线语言交还给页面，由它去改地址栏。
+  const resetSettings = useCallback(() => {
+    const language = useRuntimeSettingsUiStore.getState().baseline?.language
+    resetDraft()
+    return language
+  }, [resetDraft])
 
   useEffect(() => { if (!settings && globalSettings) hydrate(globalSettings) }, [globalSettings, hydrate, settings])
 

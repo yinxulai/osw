@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { SettingsCardHeader } from '@/components/settings-card-header'
 import { FormRow } from '@/components/form-kit'
 import { routeModeOption } from '@/components/route-mode/route-mode-options'
-import { openRouteModeDialog, useRouteMode } from '@/components/route-mode/use-route-mode'
+import { openRouteModeDialog, useRouteMode } from '@/hooks/use-route-mode'
 import { useTranslation } from '@/i18n/provider'
 
 /**

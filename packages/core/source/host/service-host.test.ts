@@ -37,7 +37,13 @@ parentPort.on('message', message => {
       kind: 'event',
       name: 'service.ready',
       payload: {
-        endpoints: { managementHost: '127.0.0.1', managementPort: 1, proxyHost: '127.0.0.1', proxyPort: 9300, webRoot: null },
+        endpoints: {
+          managementHost: '127.0.0.1',
+          managementPort: 1,
+          proxyHost: '127.0.0.1',
+          proxyPort: 9300,
+          webRoot: null,
+        },
         settings,
         requestedRuntimeConfig: runtimeConfig,
       },
@@ -58,7 +64,8 @@ parentPort.on('message', message => {
   const reply = value => send({ kind: 'result', id: message.id, value })
   switch (message.method) {
     case 'proxy.status':
-      return reply({ running: true, host: '127.0.0.1', port: 9300 })
+      // requestedToken 不属于真实载荷，只为断言「重启后的进程拿到的仍是同一份凭证」。
+      return reply({ running: true, host: '127.0.0.1', port: 9300, requestedToken: runtimeConfig?.managementToken })
     case 'proxy.start': {
       // 反向依赖走一遍：服务要宿主替它写密钥（Electron 的 safeStorage 只有宿主有）。
       pendingSecretReply = message.id
@@ -142,7 +149,14 @@ function createHost(overrides: Partial<ServiceHostOptions> = {}): Harness {
   const states: ServiceHostState[] = []
 
   const host = new ServiceHost({
-    runtimeConfig: createRuntimeConfig({ environment: 'development', appVersion: '0.0.0-test', runtime: 'desktop', dataDir: temporaryDirectory }),
+    runtimeConfig: createRuntimeConfig({
+      environment: 'development',
+      appVersion: '0.0.0-test',
+      runtime: 'desktop',
+      dataDir: temporaryDirectory,
+      // 凭证随宿主走：服务进程重启也发这同一份（见 `RuntimeConfig.managementToken`）。
+      managementToken: 'fixture-management-token',
+    }),
     secretStore,
     systemProxyResolver: async () => 'DIRECT',
     serviceEntry: 'fixture',
@@ -285,9 +299,29 @@ describe('service host crash handling', () => {
 
     // 第二次崩溃就没有预算了：宿主应该停下来把错误交出去，而不是无限重起。
     await expect(harness.host.stopProxy()).rejects.toThrow()
+
     await waitFor(() => harness.host.getState().kind === 'failed')
 
     expect(harness.spawned).toHaveLength(2)
+  })
+
+  it('hands the restarted process the same credential the host generated', async () => {
+    // 凭证与宿主同寿（见 `RuntimeConfig.managementToken`）：服务进程重启只是重跑一遍 core
+    // 的 `startServer`，不是一次新的应用启动。宿主那份配置必须原样再发一次——否则重启后的
+    // 服务会认一份新凭证，而主进程内存里的旧凭证从此每次请求都 401。
+    const harness = createHost({
+      restart: { maxAttempts: 3, delayMilliseconds: 5, stableUptimeMilliseconds: 60_000 },
+    })
+    await harness.host.start()
+
+    await expect(harness.host.stopProxy()).rejects.toThrow()
+    await waitFor(() => harness.host.getState().kind === 'running')
+
+    expect(harness.spawned).toHaveLength(2)
+    // 替身把每次拿到的 `runtime.config` 原样回报在 `proxy.status` 里（只为断言用）。
+    expect(await harness.host.getProxyStatus()).toMatchObject({
+      requestedToken: 'fixture-management-token',
+    })
   })
 
   it('stays failed when there is no restart policy', async () => {

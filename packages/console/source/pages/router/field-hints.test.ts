@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import { createBlankGraph, ROUTER_POLICY_PRESETS } from '@common/router/presets'
 import { requestShapeOf } from '@common/router/request-shape'
-import { resolveInputHints } from './field-hints'
+import { resolveInputHints, supportsFieldHints } from './field-hints'
 import { FIELD_READ_KINDS, readCandidates, type FieldReadKind } from './panel/field-candidates'
-import { ALL_WORKFLOW_PROTOCOLS, type RuntimeLogicalModel, type WorkflowGraph, type WorkflowNodeModel, type WorkflowProtocol } from '@common/router/types'
+import { ALL_WORKFLOW_PROTOCOLS, WORKFLOW_NODE_KINDS, type RuntimeLogicalModel, type WorkflowGraph, type WorkflowNodeModel, type WorkflowProtocol } from '@common/router/types'
 
 const t = createAppTranslator('zh-CN')
 const position = { x: 0, y: 0 }
@@ -346,5 +346,13 @@ describe('内置策略 × 字段候选表', () => {
       expect({ id, protocolSpecific, referencesProtocol })
         .toEqual({ id, protocolSpecific, referencesProtocol: true })
     }
+  })
+})
+
+describe('字段提示的适用节点', () => {
+  it('只在需要挑字段的节点上给提示，固定字段的节点不给', () => {
+    // 两侧一起钉住：多用一种节点会凭空多出一排候选，少用一种则候选在那里却选不到。
+    expect(WORKFLOW_NODE_KINDS.filter(supportsFieldHints))
+      .toEqual(['condition', 'model-select', 'iteration', 'script', 'prompt'])
   })
 })

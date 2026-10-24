@@ -304,6 +304,24 @@ describe('LLM 能力 · 调用编排', () => {
     expect(typeof capabilities.runPrompt).toBe('function')
   })
 
+  // 能力层的 `runScript` 必须真的把脚本交给沙箱跑，而不是自己再写一份执行逻辑：
+  // 引擎只认这个接口，一旦这里退化成空实现，脚本节点会静默变成「什么都没做」。
+  it('runScript 直接把脚本交给沙箱执行', async () => {
+    const capabilities = createRouteCapabilities()
+    const handle = capabilities.runScript
+    if (!handle) throw new Error('能力集合里必须有 runScript')
+
+    const result = await handle({
+      nodeId: 'script',
+      nodeName: '脚本',
+      code: 'console.log("hi"); return payload.request.body.model',
+      payload: { request: { body: { model: 'gpt-4o' } } },
+      timeoutMilliseconds: 500,
+    })
+
+    expect(result).toMatchObject({ success: true, value: 'gpt-4o', logs: ['[log] hi'] })
+  })
+
   it('计划里一个候选都没有时直接失败，连请求都不发', async () => {
     executorMocks.plan.mockResolvedValue({ targets: [], reason: 'no-available-provider', detail: '这个逻辑模型没有可用的上游' })
 

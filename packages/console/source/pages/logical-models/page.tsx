@@ -21,8 +21,7 @@ import { SortableLogicalModel } from './components/sortable-logical-model'
 import { AddProviderModelDialog } from './components/add-provider-model-dialog'
 import { CreateLogicalModelDialog } from './components/create-logical-model-dialog'
 import { EditLogicalModelDialog } from './components/edit-logical-model-dialog'
-import { logicalModelApi, schedulingPolicyApi } from '@/api/models'
-import { unwrap } from '@/api/unwrap'
+import { removeLogicalModel, removeProviderModelBinding } from './lib/logical-model-writes'
 import { providerModelProcessingCounts } from '@common/provider-model-status'
 import { isBuiltInDefaultLogicalModel, type LogicalModel, type LogicalModelProviderModel } from '@common/schemas'
 
@@ -55,7 +54,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
     })
     if (!confirmed) return
     try {
-      await unwrap(schedulingPolicyApi.remove(logicalModel.id, model.id))
+      await removeProviderModelBinding(logicalModel.id, model.id)
       await service.reload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('logicalModels.remove.failed'))
@@ -71,7 +70,7 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
     })
     if (!confirmed) return
     try {
-      await unwrap(logicalModelApi.remove(logicalModel.id))
+      await removeLogicalModel(logicalModel.id)
       toast.success(t('logicalModels.delete.deleted'))
       onChanged()
     } catch (error) {
@@ -106,7 +105,13 @@ function LogicalModelColumn(props: LogicalModelColumnProps) {
         dragging={dragging}
         processingCounts={processingCounts}
       />
-      <AddProviderModelDialog open={addModelOpen} logicalModelRecordId={logicalModel.id} onOpenChange={setAddModelOpen} onAdded={() => void service.reload()} />
+      <AddProviderModelDialog
+        open={addModelOpen}
+        logicalModelRecordId={logicalModel.id}
+        existingBindingCount={service.models.length}
+        onOpenChange={setAddModelOpen}
+        onAdded={() => void service.reload()}
+      />
       <EditLogicalModelDialog
         logicalModel={logicalModel}
         builtIn={builtIn}

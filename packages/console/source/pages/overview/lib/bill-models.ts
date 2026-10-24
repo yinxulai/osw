@@ -1,6 +1,6 @@
 import { cacheHitRate } from '@common/metrics'
 import type { ModelStat } from '@common/schemas'
-import type { BillRow } from '../components/bill-content'
+import type { BillRow } from './bill-row'
 
 /** 合并途中的累计量：`BillRow` 只留得下算完的两个派生值。 */
 type MergedBillModel = {

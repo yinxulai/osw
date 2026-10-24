@@ -24,16 +24,30 @@ export interface ManagementCallOptions {
   path: string
   body?: unknown
   timeoutMilliseconds?: number
+  /**
+   * 本次启动的管理 API 凭证。
+   *
+   * 管理 API **没有例外**：每一条 `/api/*` 请求都必须带着它（见 core 的
+   * `../management/gateway/access.ts`），所以 `stop` / `status` 也要传——它们从数据目录
+   * 里那个 `0600` 文件读（`@server/management/token-file`），服务自己写、自己删。
+   *
+   * 传了就带上，没传就不带——绝不能送一个空头，那会让服务端把「没有凭证」
+   * 和「凭证是空字符串」混成一件事。
+   */
+  token?: string | null
 }
 
 const DEFAULT_TIMEOUT_MILLISECONDS = 5_000
 
 export async function callManagementApi(options: ManagementCallOptions): Promise<ManagementCallResult> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (options.token) headers['x-osw-token'] = options.token
+
   let response: Response
   try {
     response = await fetch(formatUrl(options.host, options.port) + options.path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(options.body ?? {}),
       // 管理服务只监听回环，但端口被防火墙/代理占着时连接会挂很久。超时按「连不上」处理：
       // `stop` 卡住不返回，比报一句「没实例响应」难用得多。

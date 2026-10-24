@@ -4,7 +4,7 @@
  * `RuntimeProfile` 是**预设**（development / production 两档默认值），`RuntimeConfig`
  * 是宿主算完之后交给 core 的**完整配置**。core 只接受后者：它不需要知道默认端口是
  * 怎么来的，也不需要知道数据目录在哪个平台该长什么样——那些都是宿主适配的事
- * （见 `apps/docs/specs/packaging.md` §5.5）。
+ * （见 `apps/docs/specs/platform/packaging.md` §5.5）。
  *
  * 这个文件刻意不 import 任何 Node 内置模块：默认数据目录要用 `node:os` / `node:path`，
  * 那是宿主侧的活（App 用 `app.setPath('userData', ...)`，CLI 用
@@ -51,6 +51,19 @@ export interface RuntimeConfig {
   managementHost: string
   /** 管理服务的监听端口。同上，给的就是实际值。 */
   managementPort: number
+  /**
+   * 管理 API 的凭证，**由宿主在应用启动时生成一次**。
+   *
+   * 为什么不归 core 生成：core 的 `startServer` 不是「应用启动」。桌面形态的服务跑在
+   * 一个可能崩溃重启的独立进程里（见 `host/service-host.ts` 的重启预算），每重启一次
+   * core 就重新生成一份的话，主进程手里那份立刻作废，渲染层随后的每一次请求都会 401。
+   * 生成一次、在应用生命周期内不变，才与「这次启动的凭证」这个语义对得上。
+   *
+   * 生成函数在 `packages/core/source/management/token.ts`（`generateManagementToken`）；
+   * 契约包不能引 `node:`，所以这里只声明形状，不提供默认值。也**不能**有默认值：一份
+   * 被悄悄生成的凭证和宿主手里那份不是同一个，等于每次调用都 401。
+   */
+  managementToken: string
   /** 是否由管理服务托管控制台静态产物。 */
   serveWeb: boolean
   /** 控制台静态产物根目录；`serveWeb` 为真时必须给出。 */
@@ -70,6 +83,8 @@ export interface CreateRuntimeConfigInput {
   proxyPort?: number
   managementHost?: string
   managementPort?: number
+  /** 必填：见 {@link RuntimeConfig.managementToken}。宿主在应用启动时生成一次。 */
+  managementToken: string
 }
 
 /**
@@ -89,6 +104,7 @@ export function createRuntimeConfig(input: CreateRuntimeConfigInput): RuntimeCon
     proxyPort: input.proxyPort ?? profile.proxyPort,
     managementHost: input.managementHost ?? '127.0.0.1',
     managementPort: input.managementPort ?? profile.managementPort,
+    managementToken: input.managementToken,
     serveWeb: input.serveWeb ?? false,
     webRoot: input.webRoot ?? null,
   }

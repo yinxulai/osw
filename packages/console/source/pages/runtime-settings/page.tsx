@@ -17,11 +17,12 @@ import { LogRetentionCard } from './components/log-retention-card'
 import { RouteModeCard } from './components/route-mode-card'
 import { GeneralCard } from './components/general-card'
 import { DevelopmentCard } from './components/development-card'
+import { DeveloperCard } from './components/developer-card'
 import { LiveMetricCard } from './components/live-metric-card'
 import { UpdateCard } from './components/update-card'
 import { useAppearance } from '@/hooks/use-appearance'
 import { useTranslation } from '@/i18n/provider'
-import type { ThemeMode } from '@/components/app-sidebar'
+import type { ThemeMode } from '@/lib/theme-mode'
 
 interface SettingsSectionProps {
   title: string
@@ -40,7 +41,7 @@ function SettingsSection(props: SettingsSectionProps) {
 export function RuntimeSettingsPage() {
   const service = useRuntimeSettingsService()
   const t = useTranslation()
-  const { locale, themeMode: effectiveThemeMode, setLanguage, setThemeMode } = useAppearance()
+  const { themeMode: effectiveThemeMode, setLanguage, setThemeMode } = useAppearance()
 
   /**
    * 语言变更要立刻生效，不能等用户点保存：
@@ -60,6 +61,16 @@ export function RuntimeSettingsPage() {
     setThemeMode(mode)
   }
 
+  /**
+   * 重置不只要把草稿退回基线。语言预览是立刻写进地址栏的，`?lang=` 又优先于已保存的偏好；
+   * 只退草稿的话界面会停在预览语言，而保存按钮因为已经不脏而点不了。
+   * `setLanguage` 把偏好和地址栏一起收回已保存的值（`system` 仍写成解析后的具体语种，地址栏表达不了「跟随系统」）。
+   */
+  const handleReset = () => {
+    const language = service.resetSettings()
+    if (language) setLanguage(language)
+  }
+
   return (
     <PageLayout>
       <PageHeader
@@ -75,7 +86,7 @@ export function RuntimeSettingsPage() {
             <Button
               variant="ghost"
               disabled={service.saving || !service.isDirty}
-              onClick={service.resetSettings}
+              onClick={handleReset}
             >
               <RotateCcw />
               {t('settings.action.reset')}
@@ -90,7 +101,12 @@ export function RuntimeSettingsPage() {
           </div>
         ) : undefined}
       />
-      <PageContent dataScreenshot="settings-content" className="pb-5">
+      {/*
+        这里**不要**再补 `pb-5`（历史上曾经加过）。
+        页面底部的留白由 `AppLayout` 滚动容器内层统一的 `py-5` 负责；页面自己再加一层，
+        滚到底时就变成 20 + 20 = 40px，这一页的尾巴比别的页厚一倍。
+      */}
+      <PageContent dataScreenshot="settings-content">
         {service.loading || !service.settings ? (
           <div className="space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -109,7 +125,10 @@ export function RuntimeSettingsPage() {
                 onAutoLaunchChange={value => service.updateField('autoLaunch', value)}
                 themeMode={effectiveThemeMode}
                 onThemeModeChange={handleThemeModeChange}
-                language={locale ?? service.settings.language}
+                // 回显偏好本身（含「跟随系统」），不回显解析后的 `locale`。
+                // `locale` 只有具体语种且永远有值；地址栏同样写不下 `system`。
+                // 主题可以绑生效值，因为 `?theme=system` 是合法值。
+                language={service.settings.language}
                 onLanguageChange={handleLanguageChange}
               />
               <LiveMetricCard settings={service.settings} onUpdate={service.updateField} />
@@ -169,6 +188,10 @@ export function RuntimeSettingsPage() {
 
             <SettingsSection title={t('settings.section.sync')}>
               <CloudSyncCard />
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.section.developer')}>
+              <DeveloperCard />
             </SettingsSection>
           </>
         )}

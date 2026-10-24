@@ -11,6 +11,22 @@
 <p align="center">English | <a href="./README.zh-CN.md">简体中文</a></p>
 
 <p align="center">
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/yinxulai/osw/ci.yml?branch=main&label=CI" alt="CI status" /></a>
+  <a href="https://github.com/yinxulai/osw/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/yinxulai/osw/badges/coverage.json" alt="Test coverage" /></a>
+  <a href="https://github.com/yinxulai/osw/releases/latest"><img src="https://img.shields.io/github/v/release/yinxulai/osw?sort=semver" alt="Latest release" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue" alt="License: PolyForm Noncommercial 1.0.0" /></a>
+  <a href="https://github.com/yinxulai/osw/releases"><img src="https://img.shields.io/github/downloads/yinxulai/osw/total" alt="Total downloads" /></a>
+  <a href="https://github.com/yinxulai/osw/stargazers"><img src="https://img.shields.io/github/stars/yinxulai/osw" alt="GitHub stars" /></a>
+  <a href="https://github.com/yinxulai/osw/commits/main"><img src="https://img.shields.io/github/last-commit/yinxulai/osw/main" alt="Last commit" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js >=22" />
+  <img src="https://img.shields.io/badge/pnpm-12.14.0-orange" alt="pnpm 12.14.0" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux" />
+</p>
+
+<p align="center">
   <img src="./apps/docs/assets/x-post/x-cover.png" alt="Every model, one address: automatic failover across all your providers" />
 </p>
 
@@ -29,7 +45,7 @@ Your client only ever sees the attempt that succeeded.
 - **Pass through by default.** No protocol parsing, no rewriting, no conversion unless you explicitly ask for it. The safest and fastest request is the one the proxy barely touches.
 - **Every request tells you the truth.** Which provider and model actually served it, which attempt succeeded, how long it took, how fast the first token arrived, tokens per second, how much of the prompt was cached — all of it stored and queryable.
 - **Provider quirks without writing code.** Need to add a `User-Agent`, drop a header, or pin a field to `0.7`? Request rewrite rules do it, and the editor validates the change against a test case on the spot.
-- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS-encrypted store, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay — the one exception is the anonymous usage statistics, on by default and carrying no request content (see [apps/docs/specs/telemetry.md](./apps/docs/specs/telemetry.md)).
+- **Local by default.** It binds `127.0.0.1`, keeps keys in the OS-encrypted store, and sends requests to nobody but the upstreams you configured. No account, no cloud sync, no relay — the one exception is the anonymous usage statistics, on by default and carrying no request content (see [apps/docs/specs/operations/telemetry.md](./apps/docs/specs/operations/telemetry.md)).
 - **English and Chinese UI**, light / dark / follow-system themes, lives in the system tray, auto-launch at login, built-in updater.
 
 ---
@@ -244,7 +260,7 @@ Better to be clear about the edges than let you find them the hard way:
 
 ## Local development
 
-Node.js 22+ and pnpm 11 are required:
+Node.js 22+ and pnpm 12 are required (the exact version is pinned by `packageManager` in the root `package.json`, so `corepack` installs it for you):
 
 ```bash
 pnpm install
@@ -269,7 +285,7 @@ pnpm release:linux   # build Linux arm64 / x64 installers
 
 The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a bilingual Clarify site published to Cloudflare Workers; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
-Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
+Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/platform/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
 
 ## Sponsors
 
@@ -290,6 +306,8 @@ Thanks to [Qiniu Cloud](https://www.qiniu.com) for sponsoring OSW at the top tie
 ## Feedback
 
 Issues and ideas are welcome in [Issues](https://github.com/yinxulai/osw/issues). The version number, operating system, protocol and a redacted runtime log go a long way — but please **do not** paste API keys, full prompts or other sensitive content.
+
+For questions, ideas and day-to-day chat, join the community on [Discord](https://discord.gg/7TcyC2Bmy).
 
 ---
 

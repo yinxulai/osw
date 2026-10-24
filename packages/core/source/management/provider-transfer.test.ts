@@ -320,6 +320,28 @@ describe('provider bundle import', () => {
     expect(models[0]?.endpoints.map(endpoint => endpoint.protocol)).toEqual(['openai-completions'])
   })
 
+  it('overwrites the stored model name when the bundle matches the row by key', async () => {
+    const provider = await createProvider({
+      name: 'OpenAI',
+      description: '',
+      apiKeyReference: API_KEY_REFERENCE,
+      timeoutMilliseconds: 30_000,
+      enabled: true,
+    })
+    await createProviderModelRoute({ providerId: provider.id, modelName: 'gpt-4o', priority: 0, enabled: true, endpoints: [] })
+
+    const { bundle } = await exportProviderBundle({ includeApiKeys: false })
+    const exported = bundle.providers[0]?.models[0]
+    if (!exported?.key) throw new Error('exported model is missing its record key')
+    exported.modelName = 'gpt-4o-2024-11-20'
+
+    await importProviderBundle({ bundle })
+
+    // 按记录 id 命中走的是更新而不是新建。代理发给上游的名字取的是本地 modelName，
+    // 这里不覆盖的话，包里的新名字永远发不出去。
+    expect((await listProviderModels(false)).map(model => model.modelName)).toEqual(['gpt-4o-2024-11-20'])
+  })
+
   it('creates a missing provider and binds its models to the default logical model', async () => {
     const bundle = bundleWith([
       {
