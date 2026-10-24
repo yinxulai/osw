@@ -4,11 +4,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeDatabases, initDatabases } from './index'
 import {
-  apiKeyNameInUse,
   createApiKey,
   deleteApiKey,
   getApiKey,
-  getApiKeyByReference,
   listApiKeys,
   updateApiKey,
 } from './api-key-store'
@@ -33,11 +31,10 @@ describe('api key store', () => {
     expect(key).toMatchObject({ name: 'CI runner', keyReference: 'ref_ci', enabled: true, expiresTime: null, deletedTime: null })
   })
 
-  it('reads a key back by id and by its secret reference', async () => {
+  it('reads a key back by id', async () => {
     const created = await createApiKey({ name: 'laptop', keyReference: 'ref_laptop' })
 
     expect(await getApiKey(created.id)).toMatchObject({ id: created.id, name: 'laptop' })
-    expect(await getApiKeyByReference('ref_laptop')).toMatchObject({ id: created.id })
   })
 
   it('lists only the live keys in creation order', async () => {
@@ -57,7 +54,6 @@ describe('api key store', () => {
     const key = await createApiKey({ name: 'reusable', keyReference: 'ref_x' })
     await deleteApiKey(key.id)
 
-    expect(await apiKeyNameInUse('reusable')).toBe(false)
     // 同名重建必须成功——「不许重名」的主语是活着的那一行。
     const recreated = await createApiKey({ name: 'reusable', keyReference: 'ref_y' })
     expect(recreated.id).not.toBe(key.id)

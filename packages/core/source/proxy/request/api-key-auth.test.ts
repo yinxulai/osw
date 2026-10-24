@@ -103,9 +103,24 @@ describe('resolveApiKeyIdentity', () => {
     expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-late' }, true)).toEqual({ apiKeyId: null, authorized: false })
 
     const key = await seedKey('late', 'osw-late')
-    // 建库写操作会自动推进配置代，反查表随之作废——不需要手动清缓存。
+    // 建库的写路径会自己推进配置代（见 `database/index.ts` 的 `wrapConfigHandleWithInvalidation`），
+    // 反查表随之作废；这里显式再推一次只是为了让用例不依赖那条实现细节。
     invalidateConfigReadCache()
 
     expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-late' }, true)).toEqual({ apiKeyId: key.id, authorized: true })
+  })
+
+  it('一把 Key 的明文读不出来时只跳过它，其余 Key 照常放行', async () => {
+    const broken = await seedKey('broken', 'osw-broken')
+    const working = await seedKey('working', 'osw-working')
+    // 系统钥匙串被锁、被占住时的真实形态：`get` 直接抛。
+    secretStore.get = vi.fn(async (reference: string) => {
+      if (reference === broken.keyReference) throw new Error('keychain is locked')
+      return secrets.get(reference) ?? null
+    })
+
+    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-working' }, true)).resolves.toEqual({ apiKeyId: working.id, authorized: true })
+    // 读不出来的那把此刻验不过（它的客户端会收到 401），而不是把整台代理都变成 401。
+    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-broken' }, true)).resolves.toEqual({ apiKeyId: null, authorized: false })
   })
 })

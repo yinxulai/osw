@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, ne } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { ApiKeySchema } from '@common/schemas'
 import type { ApiKey } from '@common/schemas'
 import { generateId, now } from '@common/utils'
@@ -39,14 +39,6 @@ export async function getApiKey(id: string): Promise<ApiKey | undefined> {
 async function readApiKey(id: string): Promise<ApiKey | undefined> {
   const row = getConfigDb().select().from(apiKeys).where(eq(apiKeys.id, id)).get()
   return row ? mapApiKey(row) : undefined
-}
-
-/** 按密钥引用取 Key：代理侧拿到的是明文，需要反查它属于哪一把（见 `resolve-api-key.ts`）。 */
-export async function getApiKeyByReference(keyReference: string): Promise<ApiKey | undefined> {
-  return cachedConfigRead(`apiKeyByReference:${keyReference}`, async () => {
-    const row = getConfigDb().select().from(apiKeys).where(eq(apiKeys.keyReference, keyReference)).get()
-    return row ? mapApiKey(row) : undefined
-  })
 }
 
 /**
@@ -116,14 +108,6 @@ export async function deleteApiKey(id: string): Promise<void> {
     .set({ enabled: false, deletedTime: time, updatedTime: time })
     .where(and(eq(apiKeys.id, id), isNull(apiKeys.deletedTime)))
     .run()
-}
-
-/** 供重命名时的冲突探测：除自己以外，活跃行里是否已经有这个名字。 */
-export async function apiKeyNameInUse(name: string, excludeId?: string): Promise<boolean> {
-  const rows = getConfigDb().select({ id: apiKeys.id }).from(apiKeys)
-    .where(and(eq(apiKeys.name, name), isNull(apiKeys.deletedTime), excludeId ? ne(apiKeys.id, excludeId) : undefined))
-    .all()
-  return rows.length > 0
 }
 
 function mapApiKey(row: typeof apiKeys.$inferSelect): ApiKey {

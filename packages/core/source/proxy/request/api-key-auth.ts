@@ -68,6 +68,10 @@ let cachedIdentity: CachedIdentity | null = null
  *
  * 过期判断在这里做一次：过期的 Key 不进表，于是它自然校验不过——
  * 不需要在每次校验时再判断一遍时间，也避免「名单里有它、校验时说它过期」的两处口径。
+ *
+ * 单把 Key 读不出明文时**跳过它而不是整车失败**：反查表是「所有 Key 一起服务所有请求」的
+ * 公共资源，一次系统钥匙串抽风（锁定、被别的进程占住）不应该把整台代理变成 401。
+ * 跳过意味着那把 Key 此刻验不过（它的客户端会收到 401），其余 Key 照常工作。
  */
 async function loadIdentityMap(): Promise<Map<string, string>> {
   const generation = configReadCacheGeneration()
@@ -78,7 +82,14 @@ async function loadIdentityMap(): Promise<Map<string, string>> {
   for (const key of await listApiKeys()) {
     if (!key.enabled) continue
     if (key.expiresTime !== null && key.expiresTime <= time) continue
-    const secret = await secretStore.get(key.keyReference)
+    let secret: string | null
+    try {
+      secret = await secretStore.get(key.keyReference)
+    } catch (error) {
+      // 不让进缓存的那个决定也跟着抛：这一轮先跳过，下一轮会重新试。
+      console.warn(`[proxy] failed to read api key secret id=${key.id} reference=${key.keyReference}: ${error instanceof Error ? error.message : String(error)}`)
+      continue
+    }
     if (secret) bySecret.set(secret, key.id)
   }
   cachedIdentity = { generation, bySecret }

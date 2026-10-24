@@ -90,7 +90,10 @@ async function handleUpdate(_req: IncomingMessage, res: ServerResponse, body: un
 const DeleteApiKeySchema = z.object({ id: z.string().min(1) })
 async function handleDelete(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { id } = DeleteApiKeySchema.parse(body)
-  await deleteApiKeyAndSecret(id)
+  if (!(await deleteApiKeyAndSecret(id))) {
+    sendError(res, 'NOT_FOUND', `API key not found: ${id}`, 404, { apiKeyId: id })
+    return
+  }
   sendSuccess(res, { id })
 }
 
@@ -99,11 +102,16 @@ async function handleDelete(_req: IncomingMessage, res: ServerResponse, body: un
  *
  * 顺序不能反：先删明文会让「删到一半失败」留下一条指向不存在明文的活跃 Key，
  * 校验时它永远匹配不上、但又占着名字，用户看不出哪里坏了。
+ *
+ * 返回「这把 Key 此前是否存在」：不存在时什么都不做，由调用方回 404——
+ * 与轮换、查询的 404 保持同一口径，「删一个不存在的 id」不该看起来像成功。
  */
-export async function deleteApiKeyAndSecret(id: string): Promise<void> {
+async function deleteApiKeyAndSecret(id: string): Promise<boolean> {
   const key = await getApiKey(id)
+  if (!key || key.deletedTime !== null) return false
   await deleteApiKeyRecord(id)
-  if (key) await getSecretStore().delete(key.keyReference)
+  await getSecretStore().delete(key.keyReference)
+  return true
 }
 
 /**
