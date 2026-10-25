@@ -307,21 +307,12 @@ export function AppSidebar(props: AppSidebarProps) {
           <span className={revealClassName(expanded)}>{props.theme === 'dark' ? t('nav.theme.toLight') : t('nav.theme.toDark')}</span>
         </AnimatedThemeToggler>
         {/*
-         * 运行状态不单独圈框：它和上面的主题切换是同一族的脚注行，用一模一样的
-         * `h-9 / px-2.5 / gap-2.5` 外壳 + `size-4` 前导图标盒。折叠态下小圆点就落在这条轨道的
-         * 图标中线上（边框会额外吃掉 1px，圆点会整体右偏、和上面的图标错开）。
-         */}
-        <div className="flex h-9 w-full items-center gap-2.5 px-2.5">
-          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
-            <span className={cn('size-2 rounded-full', props.proxyRunning ? 'animate-pulse bg-success motion-reduce:animate-none' : 'bg-sidebar-foreground/30')} />
-          </span>
-          <span className={cn('system-2xs-regular text-sidebar-foreground/80', revealClassName(expanded))}>
-            {props.proxyRunning ? t('nav.status.running', { port: props.proxyPort ?? 0 }) : t('nav.status.stopped')}
-          </span>
-        </div>
-        {/*
          * 登出只在「这台服务要求登录」时才存在。桌面用户把开关关掉后，这一行必须跟着消失：
          * 一个没有会话可登出的按钮，点下去只会让人怀疑自己点错了东西。
+         *
+         * 它排在运行状态**之前**：脚注区最后一行固定是运行状态。那一行是「这台服务现在
+         * 是什么样」的常驻结论，位置固定才扫得到；登出是一个动作，跟着别的动作（钉住、
+         * 主题）待在一起，不要压在那条结论下面。
          *
          * 登出后要手动跳登录页：路由守卫只在**导航时**生效，而登出之后我们还在原地，
          * 不跳的话用户会看到满屏 401（下一轮请求才把人送走）。
@@ -342,6 +333,19 @@ export function AppSidebar(props: AppSidebarProps) {
             <span className={revealClassName(expanded)}>{t('nav.sidebar.logout')}</span>
           </button>
         )}
+        {/*
+         * 运行状态固定在脚注区最下面一行。它不单独圈框：和上面的主题切换是同一族的脚注行，
+         * 用一模一样的 `h-9 / px-2.5 / gap-2.5` 外壳 + `size-4` 前导图标盒。折叠态下小圆点就落在
+         * 这条轨道的图标中线上（边框会额外吃掉 1px，圆点会整体右偏、和上面的图标错开）。
+         */}
+        <div className="flex h-9 w-full items-center gap-2.5 px-2.5">
+          <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+            <span className={cn('size-2 rounded-full', props.proxyRunning ? 'animate-pulse bg-success motion-reduce:animate-none' : 'bg-sidebar-foreground/30')} />
+          </span>
+          <span className={cn('system-2xs-regular text-sidebar-foreground/80', revealClassName(expanded))}>
+            {props.proxyRunning ? t('nav.status.running', { port: props.proxyPort ?? 0 }) : t('nav.status.stopped')}
+          </span>
+        </div>
       </div>
     </div>
   )

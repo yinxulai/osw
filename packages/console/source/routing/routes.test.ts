@@ -11,7 +11,8 @@ import { routePaths } from './routes'
  */
 
 // 整屏页：没有侧栏，因此不进「一级页面 = 侧栏入口」这条约束。
-const FULL_SCREEN_PATHS = [routePaths.onboarding, routePaths.login]
+// 标注成 `string[]` 而不是让它推成两个字面量的元组：下面要拿它去 `includes` 任意一条路径。
+const FULL_SCREEN_PATHS: readonly string[] = [routePaths.onboarding, routePaths.login]
 
 describe('routePaths', () => {
   it('每个路径都是绝对的斜杠开头路径', () => {
