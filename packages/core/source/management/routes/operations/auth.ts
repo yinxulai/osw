@@ -86,8 +86,20 @@ async function handleLogin(req: IncomingMessage, res: ServerResponse, body: unkn
   }
 
   const remember = input.remember === true
-  setSessionCookie(req, res, createSession(account.id, account.username, remember), remember)
-  sendSuccess(res, AuthSessionSchema.parse(await describeSession(req)))
+  const session = createSession(account.id, account.username, remember)
+  setSessionCookie(req, res, session, remember)
+  // 应答体必须由**刚建好的那张票**拼出来，不能回头调 `describeSession(req)`：
+  // 那个函数读的是**请求**里的 `Cookie`，而这次登录的票是写进**响应**的 `Set-Cookie`，
+  // 请求里按定义不可能已经有它。于是刚登录成功的应答会自称 `authenticated: false`，
+  // 界面把它存进缓存后判定「没登上」，直接把人退回登录页——一个只在浏览器里出现、
+  // 服务端 curl 一路正常的故障（见 `useLogin` 的 `setQueryData`）。
+  sendSuccess(res, AuthSessionSchema.parse({
+    required: true,
+    authenticated: true,
+    hasUsers: true,
+    username: session.username,
+    expiresTime: session.expiresTime,
+  }))
 }
 
 /**

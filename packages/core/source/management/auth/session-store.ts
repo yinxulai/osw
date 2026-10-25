@@ -168,7 +168,9 @@ function isSecureRequest(req: IncomingMessage): boolean {
   const value = Array.isArray(forwarded) ? forwarded[0] : forwarded
   if (typeof value === 'string') return value.split(',')[0]?.trim() === 'https'
   // `socket.encrypted` 只有 TLS server 才有，标准 `IncomingMessage` 的类型里没有它。
-  return (req.socket as { encrypted?: boolean }).encrypted === true
+  // 可选链是必要的：单元测试里的请求替身没有 `socket`，读它会在 `Set-Cookie` 这条路径上
+  // 抛一个与 TLS 毫无关系的 TypeError，把真正要测的东西盖掉。
+  return (req.socket as { encrypted?: boolean } | undefined)?.encrypted === true
 }
 
 /**

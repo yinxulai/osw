@@ -61,7 +61,9 @@ describe('resolveApiBase', () => {
     const { resolveApiBase } = await loadClient()
 
     expect(resolveApiBase()).toBe(getRuntimeProfile('development').managementApiUrl)
-    expect(resolveApiBase()).toBe('http://127.0.0.1:19301/api')
+    // 必须是 `localhost`：页面在 `localhost:5173`，跨到 `127.0.0.1` 就是跨站，
+    // `SameSite=Lax` 的会话 cookie 会被浏览器丢掉，登录在浏览器里永远不成功。
+    expect(resolveApiBase()).toBe('http://localhost:19301/api')
   })
 
   // 宿主注入了就照办：Electron 从 `file://` 加载页面，靠 URL 推不出管理服务在哪儿。
