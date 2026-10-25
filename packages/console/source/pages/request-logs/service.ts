@@ -5,6 +5,7 @@ import { providerModelApi } from '@/api/models'
 import { useLiveRequests } from '@/data/live-requests'
 import { useApiKeys } from '@/data/api-keys'
 import { useSettings } from '@/data/settings'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
@@ -70,7 +71,7 @@ export function useRequestLogsService() {
   // 记录里只存 Key 的 id，名字在这里实时反查——与「按 Key 统计用量」同一口径。
   const apiKeys = useApiKeys()
   // Key 模块被关掉时，筛选器与详情里的「谁发的」一起收起（记录本身照旧保留）。
-  const showApiKey = useSettings()?.apiKeyFeatureEnabled ?? true
+  const showApiKey = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
   const providerNameById = useMemo(() => new Map(providers.map(provider => [provider.id, provider.name])), [providers])
   const providerModelOptions = useMemo(() => {

@@ -4,6 +4,7 @@ import type { ApiKey, ApiKeyUsageRecency } from '@common/schemas'
 import { apiKeyApi, type CreateApiKeyInput, type UpdateApiKeyInput } from '@/api/api-keys'
 import { analyticsApi } from '@/api/observability'
 import { unwrap } from '@/api/unwrap'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { useSettings } from '@/data/settings'
 
 export const apiKeyKeys = { all: ['api-keys'] as const, recency: ['api-keys', 'recency'] as const }
@@ -39,7 +40,7 @@ export function useApiKeysLoading(): boolean {
 const useApiKeyRecencyQuery = () => {
   // 模块关着时这份数据没有任何地方会渲染（页面跳走、统计卡不显示），
   // 就别让它继续挂着 15 秒一次的轮询；重新打开开关时 `enabled` 变化会自动拉一次。
-  const featureEnabled = useSettings()?.apiKeyFeatureEnabled ?? true
+  const featureEnabled = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   return useQuery({
     queryKey: apiKeyKeys.recency,
     queryFn: () => unwrap(analyticsApi.apiKeyRecency()),

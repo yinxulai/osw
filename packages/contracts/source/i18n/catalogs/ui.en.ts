@@ -1027,7 +1027,7 @@ export const uiEn = {
   'apiKeys.table.rotate': 'Rotate secret',
   'apiKeys.table.delete': 'Delete key',
   'apiKeys.empty.title': 'No API keys yet',
-  'apiKeys.empty.description': 'Create a key to identify local clients, then turn on validation in Settings to require it.',
+  'apiKeys.empty.description': 'Create a key to identify local clients. Until the first one exists the proxy lets requests through; once you have one, a valid key is required.',
   'apiKeys.label.anonymous': 'Unsigned',
   'apiKeys.label.unknown': 'Deleted key',
   'apiKeys.table.column.lastUsed': 'Last used',
@@ -2014,10 +2014,10 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.apiKeyAuth.title': 'Client authentication',
   'settings.apiKeyAuth.description': 'Identify local clients with an API key and see which one spends the budget',
   'settings.apiKeyAuth.feature': 'Enable the API key module',
-  'settings.apiKeyAuth.featureDescription': 'On by default. Turning it off hides the sidebar entry, the key management page, the key filter in request logs and the per-key section on the overview page, and the proxy stops validating presented keys. Issued keys are not deleted and come back when you re-enable it.',
-  'settings.apiKeyAuth.enabled': 'Require an API key',
-  'settings.apiKeyAuth.enabledDescription': 'Off by default: every request on the local port is forwarded as-is, so a fresh install works with no setup. When on, a request without a valid enabled key is rejected with 401 and never reaches an upstream.',
-  'settings.apiKeyAuth.manage': 'Manage keys',
+  'settings.apiKeyAuth.featureDescription': 'On by default. While on, requests to the local port must present a valid, enabled key or they are rejected with 401 and never reach an upstream. Turning it off hides the sidebar entry, the key management page, the key filter in request logs and the per-key section on the overview page, and the proxy stops validating presented keys. Issued keys are not deleted and come back when you re-enable it.',
+  'settings.apiKeyAuth.manage': 'API keys',
+  'settings.apiKeyAuth.manageDescription': 'Issue, disable, rotate and delete keys. Until a first key exists the proxy lets requests through so a fresh install works with no setup.',
+  'settings.apiKeyAuth.manageAction': 'Manage keys',
 
   // Live realtime metric (a standard metric; menu bar and app window are two surfaces)
   'settings.liveMetric.title': 'Realtime metric',

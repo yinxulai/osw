@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { useApiKeys } from '@/data/api-keys'
 import { useSettings } from '@/data/settings'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { cn } from '@/lib/utils'
 import { routePaths } from '@/routing/routes'
 import { useOverviewService, useProviderAnalyticsDetail } from './service'
@@ -48,7 +49,7 @@ export function OverviewPage() {
   // Key 名单只用来把 `apiKeyStats` 里的 id 换成名字；用量本体来自同一次分析请求，不额外取数。
   const apiKeys = useApiKeys()
   // 整个 Key 模块关掉时这张卡片一起消失：它的每一行都是一把已经不存在的 Key。
-  const showApiKeyUsage = useSettings()?.apiKeyFeatureEnabled ?? true
+  const showApiKeyUsage = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   const providerDetail = useProviderAnalyticsDetail(providerId ?? null, range)
   const locale = useLocale()
   const t = useTranslation()

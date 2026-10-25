@@ -10,22 +10,19 @@ import { useTranslation } from '@/i18n/provider'
 import { routePaths } from '@/routing/routes'
 
 interface ApiKeyAuthCardProps {
-  settings: Pick<Settings, 'apiKeyFeatureEnabled' | 'apiKeyAuthEnabled'>
+  settings: Pick<Settings, 'apiKeyFeatureEnabled'>
   onUpdate: <K extends keyof ApiKeyAuthCardProps['settings']>(key: K, value: Settings[K]) => void
 }
 
 /**
- * API Key 模块的两级开关。
+ * API Key 模块的开关。
  *
- * 两行分别是两个不同的问题，所以不合并成一行：
+ * 只有一行开关，因为只有**一个**问题要问：这个模块要不要存在。开着就意味着 `/v1/*` 要求携带
+ * 有效 Key——「有这个模块」与「认这个模块」是同一件事，拆成两个开关只会造出
+ * 「界面上在管 Key、代理侧却不认 Key」的状态。
  *
- * - **启用 API Key 功能**：这个模块要不要出现在界面上（侧边栏、管理页、请求日志的 Key 筛选、
- *   总览的按 Key 统计）。关掉等于「我用不到」，数据不会删除，重新打开就都在。
- * - **要求客户端携带 Key**：模块开着的前提下，`/v1/*` 要不要真的拦。默认关，
- *   全新安装不做任何配置就能用——这是「零配置可用」的一部分。
- *
- * 模块关闭时校验开关必须一起失效：模块都不在了还返回 401，等于把自己锁在门外。
- * 所以校验那行的控件在模块关闭时禁用并压暗，保存时由代理侧统一折算。
+ * 唯一的例外不在这里配置：库里一把 Key 都没有时代理放行（全新安装不必先建 Key），
+ * 建好第一把就自动进入强制。那是从「有没有 Key」推出来的，不是一个需要用户决定的选项。
  */
 export function ApiKeyAuthCard(props: ApiKeyAuthCardProps) {
   const { settings, onUpdate } = props
@@ -52,27 +49,19 @@ export function ApiKeyAuthCard(props: ApiKeyAuthCardProps) {
             />
           )}
         />
-        <FormRow
-          title={t('settings.apiKeyAuth.enabled')}
-          description={t('settings.apiKeyAuth.enabledDescription')}
-          control={(
-            <div className="flex items-center gap-2">
-              {/* 模块关着的时候没有 Key 可管，入口一起收起来，免得点进去是一片空表。 */}
-              {featureEnabled && (
-                <Button variant="outline" size="sm" onClick={() => void navigate({ to: routePaths.apiKeys })}>
-                  <KeyRound />
-                  {t('settings.apiKeyAuth.manage')}
-                </Button>
-              )}
-              <Switch
-                checked={featureEnabled && settings.apiKeyAuthEnabled}
-                disabled={!featureEnabled}
-                onCheckedChange={value => onUpdate('apiKeyAuthEnabled', value)}
-                aria-label={t('settings.apiKeyAuth.enabled')}
-              />
-            </div>
-          )}
-        />
+        {/* 模块关着的时候没有 Key 可管，入口一起收起来，免得点进去是一片空表。 */}
+        {featureEnabled && (
+          <FormRow
+            title={t('settings.apiKeyAuth.manage')}
+            description={t('settings.apiKeyAuth.manageDescription')}
+            control={(
+              <Button variant="outline" size="sm" onClick={() => void navigate({ to: routePaths.apiKeys })}>
+                <KeyRound />
+                {t('settings.apiKeyAuth.manageAction')}
+              </Button>
+            )}
+          />
+        )}
       </CardContent>
     </Card>
   )

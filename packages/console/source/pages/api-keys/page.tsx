@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import { useApiKeyRecency, useApiKeys, useApiKeysActions, useApiKeysError, useApiKeysLoading } from '@/data/api-keys'
 import { useSettings } from '@/data/settings'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { routePaths } from '@/routing/routes'
 import { ApiKeyStats } from './components/api-key-stats'
 import { ApiKeysTable } from './components/api-keys-table'
@@ -137,7 +138,8 @@ export function ApiKeysPage() {
 
   // 模块被关掉后这个地址不该还能直接打开（侧栏入口已经收起，但书签和后退还在）。
   // 不报错、不留空页：静默送回统计分析，与「关掉 = 我没有这个功能」一致。
-  if (settings && !settings.apiKeyFeatureEnabled) return <Navigate to={routePaths.overview} search={{ range: '7d' }} replace />
+  // 判定与侧栏入口共用 `isApiKeyModuleEnabled`——两处各写一份就是「入口看得见、点进去被弹回」。
+  if (settings && !isApiKeyModuleEnabled(settings.apiKeyFeatureEnabled)) return <Navigate to={routePaths.overview} search={{ range: '7d' }} replace />
 
   return (
     <PageLayout>

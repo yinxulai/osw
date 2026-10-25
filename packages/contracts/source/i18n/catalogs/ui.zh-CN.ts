@@ -1029,7 +1029,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'apiKeys.table.rotate': '轮换密钥',
   'apiKeys.table.delete': '删除 Key',
   'apiKeys.empty.title': '还没有 API Key',
-  'apiKeys.empty.description': '创建一把 Key 来标识本地客户端，再到设置里打开校验即可要求必须携带。',
+  'apiKeys.empty.description': '创建一把 Key 来标识本地客户端。建好第一把之前代理会放行请求，之后就必须携带有效 Key。',
   // 「未署名 / 已删除」这两个标签不只出现在 Key 管理页：请求日志的筛选器和详情行也用它，
   // 所以它们不叫 `apiKeys.usage.*`，而是按「标签」归类。
   'apiKeys.label.anonymous': '未署名',
@@ -2014,10 +2014,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.apiKeyAuth.title': '客户端鉴权',
   'settings.apiKeyAuth.description': '用 API Key 标识本地客户端，并按 Key 统计额度花在谁身上',
   'settings.apiKeyAuth.feature': '启用 API Key 功能',
-  'settings.apiKeyAuth.featureDescription': '默认开启。关闭后侧边栏入口、Key 管理页、请求日志里的 Key 筛选与总览的按 Key 统计都会一并收起，代理也不再校验携带的 Key。已签发的 Key 不会被删除，重新打开即恢复。',
-  'settings.apiKeyAuth.enabled': '要求携带 API Key',
-  'settings.apiKeyAuth.enabledDescription': '默认关闭：本地端口上的请求一律原样转发，全新安装无需任何配置即可使用。开启后，未携带有效且已启用 Key 的请求会被拒绝并返回 401，不会到达上游。',
-  'settings.apiKeyAuth.manage': '管理 Key',
+  'settings.apiKeyAuth.featureDescription': '默认开启。开启期间，本地端口上的请求必须携带有效且已启用的 Key，否则拒绝并返回 401，不会到达上游。关闭后侧边栏入口、Key 管理页、请求日志里的 Key 筛选与总览的按 Key 统计都会一并收起，代理也不再校验携带的 Key。已签发的 Key 不会被删除，重新打开即恢复。',
+  'settings.apiKeyAuth.manage': 'API Key 管理',
+  'settings.apiKeyAuth.manageDescription': '签发、停用、轮换与删除 Key。在建立第一把 Key 之前，代理会放行请求，全新安装无需任何配置即可使用。',
+  'settings.apiKeyAuth.manageAction': '管理 Key',
 
   // 菜单栏实时指标（仅 macOS）
   'settings.liveMetric.title': '实时指标',
