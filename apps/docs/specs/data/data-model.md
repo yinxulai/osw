@@ -723,7 +723,7 @@ CREATE INDEX idx_request_logs_api_key_time
 
 `clientProtocol` 与 `logicalModelId` 均可为空：请求可能在协议识别或模型解析之前就被拒掉，但它同样是用户真实发出的请求，必须留下记录。为空表达的是「还没走到那一步」，不是「没有这一列」。
 
-`apiKeyId` 是**解析出的客户端 API Key 记录 id**（`ak_*`，见 [security-privacy.md](../operations/security-privacy.md) §「客户端 API Key」），指向配置库 `api_keys` 表——但**不建跨库外键**（两个库不同文件，见 §2.1），也不建库内外键。为空是常态：校验关着时全部请求都是匿名；校验开着但请求在身份解析之前就被拒（协议识别失败等）也留空。`null` 因此是有意义的值（「未署名」），按它筛选不能当真值判断吞掉。键的历史引用不回填键的名字——名字是活的、可能被改，展示时按 id 现查当前名字，查不到就显示「已删除的 Key」。
+`apiKeyId` 是**解析出的客户端 API Key 记录 id**（`ak_*`，见 [security-privacy.md](../operations/security-privacy.md) §「客户端 API Key」），指向配置库 `api_keys` 表——但**不建跨库外键**（两个库不同文件，见 §2.1），也不建库内外键。为空是常态：校验关着时全部请求都是匿名；校验开着但请求在身份解析之前就被拒（协议识别失败等）也留空。`null` 因此是有意义的值（「未跟踪」），按它筛选不能当真值判断吞掉。键的历史引用不回填键的名字——名字是活的、可能被改，展示时按 id 现查当前名字，查不到就显示「已删除的 Key」。
 
 `transport` 是**请求进入代理时就已经定下的预期**（客户端要流式还是非流式，见 [proxy-engine.md](../proxy/proxy-engine.md) §1.1）——它是客户端跳的形态，取自入口对请求体的解析，因此属于请求级事实；上游跳实际是什么形态是**上游视角的事实**，写在 `request_attempts.upstreamTransport` 上。两者不相等不是「上游不配合」这种可容错的小事，而是「本次传输无法按声明兑现」——代理不自己攒出一份整包来弥合（见 [proxy-engine.md](../proxy/proxy-engine.md) §1.2）。`totalDurationMilliseconds` 是从收到请求到写完响应的总耗时，它无法由尝试耗时稳定推导（尝试之间还有调度与等待），因此落在日志主表。
 

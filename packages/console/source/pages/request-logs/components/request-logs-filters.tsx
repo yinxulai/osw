@@ -43,7 +43,7 @@ export function RequestLogsFilters(props: RequestLogsFiltersProps) {
         className="w-56"
       />
       {/*
-       * 「未署名」是一个真实选项而不是「全部」的同义词：没开校验时全部请求都在那一组，
+       * 「未跟踪」是一个真实选项而不是「全部」的同义词：没开校验时全部请求都在那一组，
        * 排查「到底是谁在花额度」时它和「全部]是两种问法。
        */}
       {props.showApiKeyFilter && (

@@ -152,7 +152,7 @@ describe('请求记录列表查询', () => {
     })
   })
 
-  it('筛「未署名」时发 null（null 是服务端真实的筛选值，不是「没筛」）', async () => {
+  it('筛「未跟踪」时发 null（null 是服务端真实的筛选值，不是「没筛」）', async () => {
     list.mockReset()
     list.mockResolvedValue(ok({ logs: [], total: 0 }))
     const { wrapper } = createQueryFixture()

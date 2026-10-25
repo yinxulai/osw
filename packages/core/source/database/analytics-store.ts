@@ -289,7 +289,7 @@ export async function getRequestSourceStats(sinceMs: number, limit = 20): Promis
  * 与 {@link getRequestSourceStats} 的差别只在分组键：这里是 `request_logs.apiKeyId` 这一**列**
  * （不是属性表），所以不必再折一次属性透视；用量仍要走 `request_usages` 的按请求聚合。
  *
- * `apiKeyId` 为 `null` 的那一组是匿名请求——功能关着时全部请求都在这里，界面据此显示「未署名」。
+ * `apiKeyId` 为 `null` 的那一组是匿名请求——功能关着时全部请求都在这里，界面据此显示「未跟踪」。
  * `limit` 只管有名有姓的那些：匿名那一组始终保留（它回答「有多少流量没署名」，不该被截掉）。
  */
 export async function getApiKeyStats(sinceMs: number, limit = 50): Promise<ApiKeyStat[]> {

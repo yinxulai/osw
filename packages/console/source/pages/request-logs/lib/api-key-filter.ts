@@ -16,7 +16,7 @@
  * 放在 `lib/` 而不是 `.tsx`：这是一段纯逻辑，配了不渲染 React 的单测。
  */
 
-/** 筛「未署名请求」时界面上的取值。不会与 Key 的 id（`ak_*`）撞。 */
+/** 筛「未跟踪请求」时界面上的取值。不会与 Key 的 id（`ak_*`）撞。 */
 export const ANONYMOUS_API_KEY = 'anonymous'
 
 /** 不按 Key 筛时界面上的取值。与其它筛选维度一致。 */
@@ -42,7 +42,7 @@ export function apiKeyIdParam(apiKeyId: string): { apiKeyId?: string | null } {
 /** 反查展示名时用的 Key 选项：只需要 id 与名字。 */
 export type ApiKeyLabelOption = { id: string; name: string; deletedTime?: number | null }
 
-/** 「未署名 / 已删除」两种特殊情况的文案，由调用方从翻译目录里取。 */
+/** 「未跟踪 / 已删除」两种特殊情况的文案，由调用方从翻译目录里取。 */
 export type ApiKeyLabelText = { anonymous: string; unknown: string }
 
 /** 反查结果：名字 + 它代表的那个 Key 现在还在不在。 */

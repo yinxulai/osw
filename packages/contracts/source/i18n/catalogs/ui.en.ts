@@ -1028,7 +1028,7 @@ export const uiEn = {
   'apiKeys.table.delete': 'Delete key',
   'apiKeys.empty.title': 'No API keys yet',
   'apiKeys.empty.description': 'Create a key to identify local clients. Until the first one exists the proxy lets requests through; once you have one, a valid key is required.',
-  'apiKeys.label.anonymous': 'Unsigned',
+  'apiKeys.label.anonymous': 'Untracked',
   'apiKeys.label.unknown': 'Deleted key',
   'apiKeys.table.column.lastUsed': 'Last used',
   'apiKeys.table.column.recentRequests': 'Requests (7d)',

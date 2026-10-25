@@ -1030,9 +1030,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'apiKeys.table.delete': '删除 Key',
   'apiKeys.empty.title': '还没有 API Key',
   'apiKeys.empty.description': '创建一把 Key 来标识本地客户端。建好第一把之前代理会放行请求，之后就必须携带有效 Key。',
-  // 「未署名 / 已删除」这两个标签不只出现在 Key 管理页：请求日志的筛选器和详情行也用它，
+  // 「未跟踪 / 已删除」这两个标签不只出现在 Key 管理页：请求日志的筛选器和详情行也用它，
   // 所以它们不叫 `apiKeys.usage.*`，而是按「标签」归类。
-  'apiKeys.label.anonymous': '未署名',
+  // 「未跟踪」而不是「未署名」：这类请求并不是「有身份但没写名字」，而是根本没有 Key 可归属。
+  'apiKeys.label.anonymous': '未跟踪',
   'apiKeys.label.unknown': '已删除的 Key',
   'apiKeys.table.column.lastUsed': '最近使用',
   'apiKeys.table.column.recentRequests': '近 7 天请求',

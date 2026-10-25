@@ -28,10 +28,10 @@ describe('apiKeyIdParam', () => {
 
 describe('apiKeyLabel', () => {
   const keys = [{ id: 'ak_1', name: '笔记本上的 Cursor', deletedTime: null }]
-  const labels = { anonymous: '未署名', unknown: '已删除的 Key' }
+  const labels = { anonymous: '未跟踪', unknown: '已删除的 Key' }
 
-  it('null 是「未署名」，不是在列表里找不到', () => {
-    expect(apiKeyLabel(null, keys, labels)).toEqual({ name: '未署名', deleted: false })
+  it('null 是「未跟踪」，不是在列表里找不到', () => {
+    expect(apiKeyLabel(null, keys, labels)).toEqual({ name: '未跟踪', deleted: false })
   })
 
   it('按 id 反查出当前名字（改名后历史记录跟着换标签）', () => {

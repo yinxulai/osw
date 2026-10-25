@@ -232,7 +232,7 @@ export type CreatedApiKey = z.infer<typeof CreatedApiKeySchema>
  * 按 API Key 的用量统计。
  *
  * `apiKeyId` 为 `null` 的那一行是**匿名请求**：没带 Key、或带了但没对上任何一把
- * （功能关闭时的全部请求都属于这一类）。界面把它显示成「未署名」，让「谁在花我的额度」
+ * （功能关闭时的全部请求都属于这一类）。界面把它显示成「未跟踪」，让「谁在花我的额度」
  * 这件事即使没开校验也能看见。
  *
  * 字段口径与 {@link RequestSourceStat} 一致：`requests` 是请求数（不是尝试数），
@@ -1451,7 +1451,7 @@ export const AnalyticsSummarySchema = z.object({
    *
    * 与 `sourceStats`（按 UA 识别的客户端）是两个不同的问题：那个回答「谁在调」，
    * 这个回答「哪把 Key 花了多少额度」。功能关着时也会有一行 `apiKeyId: null` 的匿名汇总，
-   * 让「未署名流量占多少」可见。
+   * 让「未跟踪流量占多少」可见。
    */
   apiKeyStats: z.array(ApiKeyStatSchema),
 })

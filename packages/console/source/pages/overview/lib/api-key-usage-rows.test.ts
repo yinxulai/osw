@@ -9,14 +9,14 @@ import { buildApiKeyUsageRows } from './api-key-usage-rows'
  * Key 是**软删除**：删掉之后行还在、名字也还在，统计里的历史用量依然指向它。
  * 所以这里最重要的是两条不能混为一谈的事：
  *
- * 1. 未署名（`apiKeyId === null`）—— 请求当时根本没带 Key，没有名字可言。
+ * 1. 未跟踪（`apiKeyId === null`）—— 请求当时根本没带 Key，没有名字可言。
  * 2. 已删除 —— 有名字，只是那把 Key 现在不在活跃列表里。
  *
  * 早期实现把第 2 种退化成了「已删除的 Key」这句占位文案，等于把历史事实丢掉了。
  */
 
 const labels: Record<string, string> = {
-  'apiKeys.label.anonymous': '未署名',
+  'apiKeys.label.anonymous': '未跟踪',
   'apiKeys.label.unknown': '已删除的 Key',
 }
 
@@ -47,9 +47,9 @@ function key(overrides: Partial<ApiKey> & Pick<ApiKey, 'id' | 'name'>): ApiKey {
 }
 
 describe('buildApiKeyUsageRows', () => {
-  it('未署名的行没有名字，也不带删除标记', () => {
+  it('未跟踪的行没有名字，也不带删除标记', () => {
     const [row] = buildApiKeyUsageRows([stat({ apiKeyId: null })], [], t)
-    expect(row.name).toBe('未署名')
+    expect(row.name).toBe('未跟踪')
     expect(row.deleted).toBe(false)
   })
 
