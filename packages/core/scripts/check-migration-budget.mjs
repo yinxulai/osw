@@ -3,16 +3,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { log } from '../../toolkit/scripts/lib/log.mjs'
 
-// 迁移「额度」检查：一次改动最多给每个库追加**一条**迁移。
+// 迁移「额度」检查：一个 PR 合计最多新增**一条**迁移。
 //
 // 为什么要有这条闸门：迁移目录名就是兼容性契约（运行时迁移器按目录名判定是否已应用），
 // 而链上每多一个节点，就多一份永久要维护、要解释、要被新库按顺序重放的历史。
 // 允许「一个 PR 随手拆三条」，等于允许把一次结构变化拆成三次半成品演进——评审要读的
-// DDL 变成三段互相依赖的片段，而其中任何一段单独存在都没有意义。一次改动 = 一条迁移，
+// DDL 变成三段互相依赖的片段，而其中任何一段单独存在都没有意义。一个 PR = 一条迁移，
 // 逼着作者把「这次到底改了什么」想清楚，再一次性写完整。
 //
-// 计数口径是**每个库各自一条**：`config` 与 `data` 是两条独立的链，跨库改动（例如新增
-// 一张配置表 + 在日志表上记它的 id）本来就必须两边各改一次，合计两条是正常的。
+// 额度是**整个 PR 合计一条**，两个库加起来算——不是每个库各一条，也不看改动范围有多大。
+// 跨库特性（既要建配置表、又要在日志表上记它的 id）本来就是两次结构变化，必须拆成两个 PR：
+// 先落地只含结构的那一半，再在它之上放功能代码。做不到就说明这次改动本该分期。
 //
 // 检查方式是对比 git 里的 base 分支，而不是读磁盘——「这条迁移是不是本次新增的」只有
 // 版本控制知道。这带来一个必然的退化路径：拿不到 base（浅克隆、tar 包分发、不在 git 仓库里）
@@ -28,7 +29,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 // 两个库各有自己的链：`drizzle/config` 与 `drizzle/data`。
 const roles = ['config', 'data']
 const migrationRoot = 'packages/core/drizzle'
-const maxNewMigrationsPerRole = 1
+const maxNewMigrations = 1
 
 // 显式环境变量优先：本地想对比别的分支，或者 CI 的 base 名字不是 main 时用它。
 // `GITHUB_BASE_REF` 只在 pull_request 事件里有值，接上它就不必假设 PR 一定开向 main。
@@ -173,17 +174,18 @@ function main() {
     }
   }
 
+  // 两个库合计计数：一条就是一条，不因为「落在不同的库」而多发额度。
+  const addedFolders = []
   for (const role of roles) {
     const folders = [...added[role].keys()].sort()
-    if (folders.length > maxNewMigrationsPerRole) {
-      violations.push(
-        `${migrationRoot}/${role}：本次新增了 ${folders.length} 条迁移（${folders.join('、')}）—— 每个库一次改动最多允许 ${maxNewMigrationsPerRole} 条`,
-      )
-    } else if (folders.length === 1) {
-      log.info(`${role}: +1 迁移（${folders[0]}）`)
-    } else {
-      log.info(`${role}: 无新增迁移`)
-    }
+    for (const folder of folders) addedFolders.push(`${role}/${folder}`)
+    log.info(`${role}: ${folders.length === 0 ? '无新增迁移' : `新增 ${folders.length} 条（${folders.join('、')}）`}`)
+  }
+
+  if (addedFolders.length > maxNewMigrations) {
+    violations.push(
+      `本次新增了 ${addedFolders.length} 条迁移（${addedFolders.join('、')}）—— 一个 PR 合计只准新增 ${maxNewMigrations} 条`,
+    )
   }
 
   if (violations.length > 0) {
@@ -192,9 +194,9 @@ function main() {
       console.log(`  ${violation}`)
     }
     console.log('')
-    console.log(`  口径：对比 ${base.ref}（${base.sha.slice(0, 7)}），config 与 data 各自最多新增 1 条。`)
-    console.log('  跨库改动本来就要两边各改一次，所以「合计 2 条」是正常的上限，不是违规。')
-    console.log('  如果需要多处结构变化，请合并成一条迁移，或拆成多个 PR。')
+    console.log(`  口径：对比 ${base.ref}（${base.sha.slice(0, 7)}），整个 PR 合计最多新增 ${maxNewMigrations} 条迁移。`)
+    console.log('  跨库改动要动两个库，就拆成两个 PR：先提只含结构的那一半，再在它之上放功能代码。')
+    console.log('  同一个库里有多处结构变化，请合并进同一条迁移。')
     process.exit(1)
   }
 
