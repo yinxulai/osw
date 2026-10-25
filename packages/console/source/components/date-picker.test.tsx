@@ -11,7 +11,7 @@ import { useLanguageStore } from '@/i18n/store'
  * 单日选择器。
  *
  * 守三件事：空值是「永不过期」这个占位而不是空白；选一天交出去的是 `YYYY-MM-DD` 本地日期串；
- * 清除把值打回空串。时刻口径（到期日取当天结束）不在这里测，那是调用方 `draft.ts` 的事。
+ * 底部那个动作把值打回空串。时刻口径（到期日取当天结束）不在这里测，那是调用方 `draft.ts` 的事。
  */
 
 vi.mock('@/data/settings', () => ({ useSettings: () => null }))
@@ -31,6 +31,7 @@ function Controlled(props: ControlledProps) {
       <DatePicker
         label="过期日期"
         placeholder="永不过期"
+        clearLabel="永不过期"
         value={value}
         onChange={next => {
           onChange(next)
@@ -86,20 +87,20 @@ describe('单日选择器', () => {
     expect(trigger().getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('「清空」把值打回空串', () => {
+  it('底部动作把值打回空串', () => {
     const onChange = wrap('2026-01-31')
 
     fireEvent.click(trigger())
-    fireEvent.click(screen.getByRole('button', { name: '清空' }))
+    fireEvent.click(screen.getByRole('button', { name: '永不过期' }))
 
     expect(onChange).toHaveBeenCalledWith('')
     expect(trigger().textContent).toContain('永不过期')
   })
 
-  it('空值时「清空」是禁用的', () => {
+  it('空值时底部动作是禁用的', () => {
     wrap()
 
     fireEvent.click(trigger())
-    expect((screen.getByRole('button', { name: '清空' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '永不过期' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

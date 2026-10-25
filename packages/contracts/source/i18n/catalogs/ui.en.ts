@@ -1042,7 +1042,7 @@ export const uiEn = {
   'apiKeys.form.enabledHint': 'A disabled key is rejected by the proxy even if the plaintext is correct.',
   'apiKeys.form.expires': 'Expiry date',
   'apiKeys.form.expiresHint': 'Leave empty for no expiry. The key stops working after the end of that day.',
-  'apiKeys.form.expiresPlaceholder': 'Never expires',
+  'apiKeys.form.expiresNever': 'Never expires',
   'apiKeys.action.save': 'Save key',
   'apiKeys.secret.title': '{name} created',
   'apiKeys.secret.rotatedTitle': '{name} rotated',

@@ -62,7 +62,8 @@ export function ApiKeyDialog(props: ApiKeyDialogProps) {
             <DatePicker
               id="api-key-expires"
               label={t('apiKeys.form.expires')}
-              placeholder={t('apiKeys.form.expiresPlaceholder')}
+              placeholder={t('apiKeys.form.expiresNever')}
+              clearLabel={t('apiKeys.form.expiresNever')}
               value={draft.expiresDate}
               onChange={expiresDate => onChange({ ...draft, expiresDate })}
               // 与上方的名称输入框同宽：表单字段里的控件一律占满整行。

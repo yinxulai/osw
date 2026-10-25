@@ -25,6 +25,13 @@ interface DatePickerProps {
   label: string
   /** 未选时按钮上的占位文案。 */
   placeholder: string
+  /**
+   * 弹层底部那个「把值打回空」的按钮文案。
+   *
+   * 必须由调用方给：「清空」对「时间范围」是自明的，对「过期日期」却看不懂——
+   * 用户要的是「永不过期」这个**结论**，而不是一个描述动作的动词。默认值只当作兜底。
+   */
+  clearLabel?: string
   id?: string
   className?: string
 }
@@ -75,10 +82,9 @@ export function DatePicker(props: DatePickerProps) {
           defaultMonth={selected}
           autoFocus
         />
-        <div className="flex items-center justify-between gap-3 border-t border-border/50 px-3 py-2">
-          <span className={cn('system-xs-regular', empty ? 'text-text-tertiary' : 'text-text-secondary')}>
-            {display ?? props.placeholder}
-          </span>
+        {/* 底部只留这一个动作，不放左侧的「当前选择」预览：区间选择器需要预览是因为两联日历
+            一眼看不出跨度，而单选时那个高亮格就是当前值，再写一遍只是重复。 */}
+        <div className="flex items-center justify-end border-t border-border/50 px-3 py-2">
           <Button
             type="button"
             variant="ghost"
@@ -89,7 +95,7 @@ export function DatePicker(props: DatePickerProps) {
             }}
             disabled={empty}
           >
-            {t('common.action.clear')}
+            {props.clearLabel ?? t('common.action.clear')}
           </Button>
         </div>
       </PopoverContent>

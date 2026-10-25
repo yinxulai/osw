@@ -1047,8 +1047,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'apiKeys.form.enabledHint': '停用后即便明文正确，代理服务也会拒绝它。',
   'apiKeys.form.expires': '过期日期',
   'apiKeys.form.expiresHint': '留空表示永不过期。到期当天结束后该 Key 即失效。',
-  // 空值不是「还没填」，而是一个有效取值，所以占位文案直接说结论，不写「请选择」。
-  'apiKeys.form.expiresPlaceholder': '永不过期',
+  // 空值不是「还没填」，而是一个有效取值：所以输入框和弹层里的按钮都用这句结论，
+  // 不用「清空」——「清空」只描述动作，用户看不出清空之后会变成什么。
+  'apiKeys.form.expiresNever': '永不过期',
   'apiKeys.action.save': '保存 Key',
   'apiKeys.secret.title': '{name} 已创建',
   'apiKeys.secret.rotatedTitle': '{name} 已轮换',
