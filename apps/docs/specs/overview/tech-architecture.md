@@ -155,6 +155,7 @@ osw/
 | `packages/core/source/management` | 配置管理与管理 API（含路由工作台、重写规则、诊断） | [server-architecture.md](./server-architecture.md) |
 | `packages/core/source/management/diagnostics` | 渠道诊断的领域模块：请求构造、流式读取、轮次汇总、目标规划（都不认识 HTTP） | [diagnostics.md](../operations/diagnostics.md) |
 | `packages/core/source/management/tasks` | 进程级通用任务队列：生命周期引擎、kind 注册（渠道诊断是第一个）、推送通道 | [task-queue.md](./task-queue.md) |
+| `packages/core/source/management/auth` | 管理面账号与会话：开关判据、会话存取、cookie 下发 | [security-privacy.md](../operations/security-privacy.md) |
 | `packages/core/source/proxy` | 代理请求链路：入口、路由、规划、执行、协议、修饰、观测 | [proxy-engine.md](../proxy/proxy-engine.md) |
 | `packages/core/source/database` | SQLite + Drizzle 持久化层与按域拆分的 `*-store.ts` | [data-model.md](../data/data-model.md) |
 | `packages/core/source/infrastructure`、`packages/core/source/security` | 密钥环适配 | [security-privacy.md](../operations/security-privacy.md) |
@@ -188,6 +189,7 @@ osw/
 | Provider / ProviderModel / 端点 / 调度关系 | `management/routes/catalog/` |
 | ProviderModel 绑定关系、请求重写规则 | `management/routes/relations/` |
 | 设置、代理生命周期、开发种子 | `management/routes/operations/` |
+| 登录、登出、会话、账号增删改口令 | `management/routes/operations/auth.ts` |
 | 运行日志、请求日志、统计分析 | `management/routes/observability/` |
 | 路由工作台（策略图与试跑） | `management/routes/router/` |
 | 模型测试、协议发现、出站代理测试 | `management/routes/diagnostics/` |
@@ -201,7 +203,7 @@ SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字�
 
 | 文件 | 角色 | Drizzle 定义 | 迁移链 |
 | --- | --- | --- | --- |
-| `config-<n>.db` | 用户配置（12 张表） | `packages/core/source/database/config-schema.ts` | `packages/core/drizzle/config/` |
+| `config-<n>.db` | 用户配置（13 张表） | `packages/core/source/database/config-schema.ts` | `packages/core/drizzle/config/` |
 | `data-<n>.db` | 系统观测数据（10 张表） | `packages/core/source/database/data-schema.ts` | `packages/core/drizzle/data/` |
 
 拆分的理由与两条边界见 [data-model.md](../data/data-model.md) §2.1；文件名里的版本号是两个**独立的 schema 版本**常量，不住在应用版本号上。

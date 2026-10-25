@@ -41,11 +41,11 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 
 ## 2. 数据库总览
 
-数据目录里有两个同代的文件，共 22 张核心表：
+数据目录里有两个同代的文件，共 23 张核心表：
 
 | 文件 | 角色 | 表数 | 谁写 | 丢了会怎样 |
 | --- | --- | --- | --- | --- |
-| `config-<v>.db` | 配置库 | 12 | 用户 | 供应商、模型、路由、改写规则全没了——**不可再生** |
+| `config-<v>.db` | 配置库 | 13 | 用户 | 供应商、模型、路由、改写规则、账号全没了——**不可再生** |
 | `data-<v>.db` | 数据库 | 10 | 系统 | 历史请求、日志与健康状态归零，代理照常工作——**可丢弃** |
 
 文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。它与本次改动动了多少结构无关——**日常改结构不换代**，直接改 schema 再把基线重画一遍即可（见下一段）。两个库的版本各自独立，可以停在不同的数字上。
@@ -78,7 +78,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 
 ### 2.2 表清单
 
-**配置库 `config-<v>.db`（12 张，全部是配置实体，用户资产）**：
+**配置库 `config-<v>.db`（13 张，全部是配置实体，用户资产）**：
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -94,6 +94,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `request_rewrite_rules` | 可复用的请求/响应改写规则 | 配置实体 |
 | `provider_model_request_rewrite_rules` | ProviderModel 与改写规则的启用关系 | 配置实体 |
 | `workflows` | 路由定义（工作流图与规则表） | 配置实体 |
+| `users` | 管理面账号（用户名 + 口令哈希） | 配置实体 |
 
 这个库里的外键全部指向自己。
 
@@ -1168,6 +1169,31 @@ CREATE INDEX idx_route_rule_sets_updated_time
 - `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](../routing/route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](../routing/workflow-engine.md)。
 - `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
 
+### 3.14 `users`
+
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  passwordHash TEXT NOT NULL,
+  createdTime INTEGER NOT NULL,
+  lastLoginTime INTEGER
+);
+
+CREATE UNIQUE INDEX idx_users_username
+  ON users(username);
+
+CREATE INDEX idx_users_created_time
+  ON users(createdTime);
+```
+
+- 这张表回答的是「**谁能进管理面**」，与供应商密钥同一个量级：它是需要备份的用户资产，不是可再生的运行状态。因此它在**配置库**里，跟 `settings` 一起被备份、一起被清点的就是这个。
+- `username` 有唯一索引：唯一性靠库来保证，不靠应用层的「先查再插」——那一步在并发下必然漏。用户名允许 `A-Z a-z 0-9 . _ -`，长度 1–64，比较保持大小写敏感（`Admin` 与 `admin` 是两个账号，避免出现「看起来一样却登不上」）。
+- `passwordHash` 是 scrypt 的产物（`scrypt$<N>$<r>$<p>$<salt>$<hash>`，算法参数随哈希一起存），**没有任何可逆加密**：口令没有「需要还原」的场景，哈希只需要能验。参数调大不迁移旧行——旧哈希里自带当归档的参数，验证时按行里的参数算即可。
+- `lastLoginTime` 可为 `NULL`：新建的账号还没登录过，界面上据此显示「尚未登录」，而不是伪造一个时间。
+- **不软删除**：删账号就是 `DELETE`。`deletedTime` 那套是为「用户可能会后悔」的配置实体准备的，而这里删错了的补救方式是重新建一个号，软删除只会让唯一索引与「还有几个账号」的判定一起变复杂。
+- **会话不建表**。会话是一次着陆的临时事实（`management/auth/session-store.ts` 用内存 Map + TTL），进程重启就该全部失效；把 cookie 落在表里，等于让重启后的一条旧 cookie 继续代表一个可能已经被改口令、甚至已经被删掉的账号。会话数只是「同时开着几个浏览器」，没有历史价值。
+
 ## 4. JSON 文档版本
 
 仅以下 JSON 文档需要 `schemaVersion`：设置中的数组/对象值、协议私有详情、正文 envelope。Provider、LogicalModel、ProviderModel 及端点不再拥有 config JSON，因此不适用 config 文档版本。
@@ -1298,7 +1324,7 @@ Store 层同时是**分库边界**：一个 store 只属于一个库，只从 `g
 
 | 库 | Store |
 | --- | --- |
-| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`route-rule-store.ts`、`router-graph-store.ts`、`request-rewrite-rule-store.ts` |
+| 配置 | `settings-store.ts`、`provider-store.ts`、`model-store.ts`、`logical-model-store.ts`、`workflow-store.ts`、`route-rule-store.ts`、`router-graph-store.ts`、`request-rewrite-rule-store.ts`、`user-store.ts` |
 | 观测 | `health-store.ts`、`request-log-store.ts`、`analytics-store.ts`、`runtime-log-store.ts` |
 
 **不许为了「读起来方便」合并出一个跨库 store**：需要同时看配置和观测的用例（比如供应商详情页）由调用方分别取，或者先把一个库的结果算成一个小集合，再拿去过滤另一个库。这个约束由 `packages/core/scripts/check-database-boundaries.mjs` 断言——它是最容易被一次「顺手重构」破坏、又最难在运行时发现的边界（跨库 join 不报错，只会静默退化成两次全表扫）。

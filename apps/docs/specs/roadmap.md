@@ -4,11 +4,11 @@
 
 ## 一、设计定稿（已完成）
 
-以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已按不兼容的新版本契约实施：22 张表数据库基线（现为配置库与观测库两个文件，见 [data-model.md](./data/data-model.md) §2.1）、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面已经完成；当前主要收尾协议转换补充验收、跨平台和正式发布包端到端验证。
+以下设计文档已评审定稿，是后续实施的唯一依据。v0.3 已按不兼容的新版本契约实施：23 张表数据库基线（现为配置库与观测库两个文件，见 [data-model.md](./data/data-model.md) §2.1）、公共 Schema、分域 Store、关系模型管理、核心路由、协议适配器、请求观测和管理界面已经完成；当前主要收尾协议转换补充验收、跨平台和正式发布包端到端验证。
 
 当前实现进度：Provider 默认端点已从 Provider JSON 完全迁移到 `provider_endpoints`；ProviderModel 通过端点绑定和 `scheduling_policies` 参与路由；Provider 与 ProviderModel 双层健康冷却已接入候选过滤和请求尝试。
 
-- [x] [data-model.md](./data/data-model.md)：22 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_rewrite_rules、provider_model_request_rewrite_rules、workflows、request_logs、request_attributes、request_usages、attempt_usages、request_attempts、request_contents、attempt_contents、runtime_logs；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
+- [x] [data-model.md](./data/data-model.md)：23 张核心表基线，含 provider_settings、provider_endpoints、provider_model_endpoints、provider_model_health、scheduling_policies、protocol_converters、request_rewrite_rules、provider_model_request_rewrite_rules、workflows、users、request_logs、request_attributes、request_usages、attempt_usages、request_attempts、request_contents、attempt_contents、runtime_logs；采用标准字段结构化列、多值关系表、受限 JSON 正文/协议详情、请求观测分层、软删除和 Unix 毫秒时间戳。
 - [x] [proxy.md](./proxy/proxy.md)（外部行为契约）、[proxy-engine.md](./proxy/proxy-engine.md)（分层引擎）：代理管线按入口 → 路由 → 尝试规划 → 尝试执行 → 协议/适配 → 传输 → 响应产出 → 观测分层。
 - [x] [protocol-conversion.md](./proxy/protocol-conversion.md)、[server-architecture.md](./overview/server-architecture.md)、[tech-architecture.md](./overview/tech-architecture.md)、[security-privacy.md](./operations/security-privacy.md)、[observability.md](./operations/observability.md)、[telemetry.md](./operations/telemetry.md)。
 
@@ -82,7 +82,8 @@
 
 - [x] 服务默认只监听 `127.0.0.1`
 - [x] 管理接口叠加独立的访问控制：每次应用启动随机生成的凭证 `x-osw-token`，`Host` 只在注入凭证那一刻判一次回环（挡 DNS rebinding 读走凭证）。凭证由宿主在应用启动时生成一次（`RuntimeConfig.managementToken`），服务进程崩溃重启不会换新，也和代理是否启动无关。**凭证没有例外**：每一条 `/api/*` 都必须带上它，不区分浏览器与本机进程——曾经按 `Origin` / `Sec-Fetch-Site` 只卡浏览器，而那两个头是调用方自己写的，任何本机 `curl` 不发它们就能调 `/api/provider/export` 拿走明文密钥。凭证由服务在 listen 成功后写到 `<dataDir>/management.token`（`0600`）、退出时删除，`stop` / `status` 从这读；不写进 `runtime.json`，因为那份快照会随 `status --json` 进 shell 历史。凭证之外不再有 `Host` 白名单与来源白名单：它们挡不住拿着凭证的调用方，只制造「用局域网 IP 打开就上不去」这类故障。**开发形态（`environment === 'development'`）不校验凭证**，让 Vite 页面与自动化脚本无需先读 `management.token`；开发形态使用独立数据目录，正式形态仍然 fail-closed。代理入口 `listenHost` 的可配置性不受影响，见 [security-privacy.md](./operations/security-privacy.md)（对应 [#76](https://github.com/yinxulai/osw/issues/76)）
-- [ ] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
+- [x] 本地 API Key（**代理入口向下签发的调用方凭证**）：**未实现**。当前代理不校验调用方身份，`/v1/*` 的能力边界只有「它监听在哪」这一条（见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」）。要不要做、做成什么形态（密钥环存储、开关、生成 / 轮换 / 失效测试）尚未定论，取舍见 [#27](https://github.com/yinxulai/osw/issues/27)
+- [x] 管理面账号与会话：`users` 表（scrypt，不可逆）、内存会话与 `osw_session` cookie、登录页、「访问控制」设置卡片、`osw user` 子命令。判据收敛为 `isAuthenticationRequired() = managementAuthEnabled && hasAnyAccount()`，缺省值只在 `runtime/server-runtime.ts` 由监听地址推导一次；**非回环 + 零账号拒绝启动**。开关对桌面形态同样开放，不是服务器形态专用。见 [security-privacy.md](./operations/security-privacy.md) 的「账号与会话」
 - [x] 导出供应商包时 API Key 默认脱敏（包含明文需显式勾选并提示）
 - [x] 本地日志中不出现明文密钥；正文记录关闭时不保存完整请求体和响应体
 - [x] 关闭应用后代理端口释放
@@ -208,6 +209,8 @@
 - 主动健康探测
 - 多配置 Profile
 - 本地 CLI 或无头模式（设计、包边界与阶段验收见 [packaging.md](./platform/packaging.md)，进度见下文「工程演进」）
+- 装到服务器上共享使用：管理面监听非回环 + 账号登录（见下文 S2.6，已落地）
+- 向下签发调用方 API Key（让代理入口也认人；当前 `/v1/*` 仍然不看调用方身份，见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」）
 
 ## 工程演进：包拆分与多形态分发（S0–S4）
 
@@ -221,6 +224,7 @@
 - [x] S2.3 数据落用户主目录 + 两库拆分：数据目录改为 `<用户主目录>/.osw`（开发档 `~/.osw-development`）；原先的单一数据库拆成 `config-<n>.db` / `data-<n>.db`，两份 schema、两条 Drizzle 链，跨库外键全部移除（健康行惰性创建 + 启动时清理孤儿行），文件名版本号改用各库自己的 schema 版本常量，新增库边界守卫 `check-database-boundaries.mjs`。**不考虑兼容与历史**：拆分当时不做数据搬迁，换代（换文件名）只用于大版本发布，日常结构变化就地重画基线。
 - [x] S2.4 宿主与实例身份收口：把只在某一个宿主/某一条路径上成立的保证收进 core——实例互斥移到 `packages/core/source/runtime/instance-lock.ts` 并由 `startServer` 在绑定端口前取锁（存活判定为「pid 活着且心跳新鲜」）；代理侧修失败归因（双向形态不符、流中途截断）、观察者隔离、下游背压、`accept-encoding` 协商与协议固定头丢失，并把请求头改成**默认转发**（只动鉴权头、逐跳头、与位置绑定的 `host`/`content-length` 和 `accept-encoding`，协议固定头分「该覆盖」与「只补缺」两半）；控制台修查询键撞车、监听器泄漏与加载失败静默。
 - [x] S2.5 管理接口去鉴权 + 拆掉专门加的校验：管理接口撤掉实例 Token（`runtime-identity.ts` 删除），边界只剩回环监听与来源白名单；`node:sqlite` 的产物级断言删除，`external` 固定为 `[...builtinModules, /^node:/]`；`typecheck.mjs` 的 `include` 前置检查删除。保留三个 `check-*` 边界守卫与 `version.mjs --check`（声明式规则表，验的是架构约束而非某次构建的输出）。**后续修正**：撤掉鉴权的前提是「回环 + CORS 就是访问控制」，而这两个都挡不住本机网页（简单请求不过预检、`Origin: null` 还在白名单里）。[#76](https://github.com/yinxulai/osw/issues/76) 之后以「每次启动随机生成的 `x-osw-token`」重新加回，`Host` 与来源名单不再参与访问控制，见 [security-privacy.md](./operations/security-privacy.md) 的「访问控制」。
+- [x] S2.6 装到服务器上：管理面可监听非回环（CLI `--management-host`），并补上真正回答「你是谁」的第二道门——配置库新增 `users` 表（scrypt，不可逆）、内存会话（12 小时 / 勾选保持登录 30 天）、`osw_session` cookie、控制台登录页与「访问控制」设置卡片、`osw user add|list|delete` 子命令。**推翻 S2.5 之前的「不做远程多用户、鉴权体系」**：装到服务器上共享给多个人用是真实需求。两条边界并存——`x-osw-token` 回答「是不是这次启动的宿主」，账号回答「你是谁」。缺省值只在 `runtime/server-runtime.ts` 算一次（非回环 → 要求登录），**非回环 + 零账号直接拒绝启动**（否则任人访问 `/api/settings/get` 就能读走全部密钥）。开关是普通设置，桌面形态也能开，不是服务器形态专用。见 [security-privacy.md](./operations/security-privacy.md) 的「账号与会话」。
 - [ ] S3 App 回归：`apps/app/source` 按 §4.1 拆出 `main/` 与 `preload/` 并复核构建产物映射（`electron-builder` 配置与打包脚本已归 `apps/app/`）；托盘 / 自动更新 / 开机自启 / 原生对话框保持。验收：桌面安装包端到端可用且升级路径不回归。
 - [ ] S4 分发与文档：CLI 以 npm 全局 bin 分发并声明 `engines`。**当前明确不发布**，`bin` 已就位但 `private: true` 未摘。
 

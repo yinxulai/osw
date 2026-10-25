@@ -34,9 +34,10 @@ packages/core/source/
 ├── management/
 │   ├── server.ts / router.ts / token.ts
 │   ├── token-file.ts                  # 凭证的交付通道：数据目录里的 0600 文件
+│   ├── auth/                          # 管理面账号与会话：开关判据、会话存取、cookie
 │   ├── gateway.ts                     # 管理端口的唯一入口：所有配置在这里读一次
 │   ├── gateway/                       # 网关的四段判据，互不知道对方
-│   │   ├── access.ts                  # CORS、预检、路径、方法、凭证
+│   │   ├── access.ts                  # CORS、预检、路径、方法、凭证 / 会话
 │   │   ├── console-host.ts            # 控制台静态托管 + 凭证注入
 │   │   ├── development.ts             # 开发形态专属路径（只剩造演示数据）
 │   │   └── loopback.ts                # `Host` 头是不是回环
@@ -44,7 +45,7 @@ packages/core/source/
 │   ├── routes/                         # 管理 API，按域分组后由 index.ts 合并注册
 │   │   ├── catalog/                    # Provider、ProviderModel、模型
 │   │   ├── relations/                  # 绑定关系、请求重写规则
-│   │   ├── operations/                 # 设置、代理生命周期、开发种子
+│   │   ├── operations/                 # 设置、代理生命周期、开发种子、登录与账号（auth.ts）
 │   │   ├── observability/              # 运行日志、请求日志、统计
 │   │   ├── router/                     # 路由工作台：工作流图 / 规则表与各自试跑
 │   │   └── diagnostics/                # 模型测试、协议发现、出站代理测试
@@ -61,10 +62,10 @@ packages/core/source/
 │   └── runtime/                        # 代理服务装配与生命周期
 ├── database/                         # SQLite + Drizzle 持久化层（两个库、两份 schema）
 │   ├── index.ts                      # 双句柄、两条迁移链、启动清理孤儿健康行
-│   ├── config-schema.ts              # 用户配置（12 张表）
+│   ├── config-schema.ts              # 用户配置（13 张表）
 │   ├── data-schema.ts                # 观测数据（10 张表）
 │   ├── provider-store.ts / model-store.ts / logical-model-store.ts
-│   ├── settings-store.ts / workflow-store.ts / route-rule-store.ts / request-rewrite-rule-store.ts
+│   ├── settings-store.ts / workflow-store.ts / route-rule-store.ts / request-rewrite-rule-store.ts / user-store.ts
 │   ├── health-store.ts / request-log-store.ts / analytics-store.ts / runtime-log-store.ts
 │   └── development-seed.ts
 ├── infrastructure/{secrets/,security/}
@@ -107,7 +108,7 @@ POST /api/provider/create
   -> management/server.ts                   # 只负责 listen / close / 日志分级
   -> management/gateway.ts                  # 顺序表：谁先接手
        1. gateway/console-host.ts           #   控制台静态产物（页面得能先加载）
-       2. gateway/access.ts                 #   CORS → 预检 → 路径 → 方法 → 凭证
+       2. gateway/access.ts                 #   CORS → 预检 → 路径 → 方法 → 凭证 / 会话
        3. gateway/development.ts            #   开发形态专属路径（生产形态下 404）
        4. management/router.ts              #   真正的业务路由
   -> management/routes/…
@@ -116,6 +117,8 @@ POST /api/provider/create
 这条链以前散在七个文件里，于是「这次启动开了哪些门」要跨文件拼出来。收敛成网关之后，`server.ts` 不知道静态托管、凭证、开发路径这些概念，它只知道一个网关对象和两个 `if`。
 
 凭证那一步在正式形态下**没有例外**：不区分浏览器与本机进程，也不存在开发形态的读取口。凭证本身由服务写在 `<dataDir>/management.token`（`management/token-file.ts`，`0600`），`stop` / `status` 从那读。
+
+凭证之后还有第二道门，但它只在开关打开时才拦：`isAuthenticationRequired() = settings.managementAuthEnabled && hasAnyAccount()`，未通过时要么接受 `osw_session` 会话 cookie，要么 `401 + MANAGEMENT_UNAUTHORIZED`。三道豁免写在 `PUBLIC_API_PATHS` 里（`/api/auth/session` / `login` / `logout`）——登录页连自己有没有登录都问不到的话，这个门就是死锁。判据与理由见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」。
 
 开发形态是唯一的例外：`environment === 'development'` 时跳过凭证检查（`gateway.ts` 传 `requireCredential: false`），让 Vite 页面、调试脚本与自动化脚本不必先去读凭证就能调接口。路径与方法判据不变，正式形态（含命令行 `osw start`）仍然 fail-closed。
 

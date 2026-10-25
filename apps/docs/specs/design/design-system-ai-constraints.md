@@ -65,7 +65,7 @@
 
 | 允许 | 说明 |
 | --- | --- |
-| 页面放 `packages/console/source/pages/<domain>/page.tsx` | 11 个域：`client-config` `logical-models` `logs` `model-management` `onboarding` `overview` `request-logs` `request-rewrite-rules` `router` `runtime-settings` `tray` |
+| 页面放 `packages/console/source/pages/<domain>/page.tsx` | 12 个域：`client-config` `login` `logical-models` `logs` `model-management` `onboarding` `overview` `request-logs` `request-rewrite-rules` `router` `runtime-settings` `tray` |
 | 页面私有组件放 `pages/<domain>/components/` | |
 | 页面私有逻辑放 `pages/<domain>/lib/` `hooks/` `store.ts` `service.ts` | |
 | 导航项加进 `routing/navigation.ts` 的 `appNavigationItems` | |
@@ -326,6 +326,7 @@ toast.error(t('errors.SAVE_FAILED', { name }))
 3. pages/<domain>/service.ts / store.ts / hooks/  ← 逻辑（不要写在 .tsx 里）
 4. routing/routes.ts 加路径常量
 5. routing/navigation.ts 的 appNavigationItems 加导航项（icon 从 lucide-react 取，labelKey 用 UiCatalogKey）
+   —— **整屏页不加**：`onboarding` 与 `login` 没有侧栏，它们的路径要同时进 `routing/routes.test.ts` 的 `FULL_SCREEN_PATHS`，那条不变式是「一级页 ⇔ 有侧栏入口」
 6. i18n 目录加 nav.page.<domain> 与页面文案
 7. 若页面有标题：<h1 className="system-xl-semibold text-text-primary">
 ```

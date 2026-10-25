@@ -299,8 +299,9 @@ interface RuntimeConfig {
 - 宿主只往 `core` 交一个完整的 `RuntimeConfig`：`startServer({ runtimeConfig, secretStore, systemProxyResolver?, shutdown? })`。`core` 不读环境变量、不猜默认值、不算地址，返回的是 `ServerEndpoints`（实际生效的地址与端口）。
 - 宿主负责构造：App 用 `app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))`（必须在 `app.whenReady()` 之前设，之后 `app.getPath('userData')` 与 `os.homedir()` 才是同一个答案），`shutdown` 传 `null`（它有自己的退出路径）；CLI 用参数 + `defaultDataDirectory()`，并传入一个退出握手对象（见 §6 的 `stop`）。
 - **两边都不算数据库文件名**：两个库各自带 schema 版本常量，文件名由 `@common/database-file` 从版本号推导。宿主少算一次文件名，就少一个两种形态可能算出不同结果的地方。
-- CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
-- `--host` **只作用于代理**，没有对应的 `--management-host`：管理服务固定监听回环，要远程访问就走 SSH 隧道（`--help` 末尾会直接写明这一点，免得有人翻遍选项去找那个旗标）。所以两个 `*Host` 字段不能合并成一个。
+- CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--management-host`、`--password-stdin`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
+- `--host` **只作用于代理**，管理面另有 `--management-host`。两者的缺省值也不同：`--host` 落到 `RuntimeConfig.proxyHost`，`--management-host` 缺省为 `null`（由 core 按回环处理）——把缺省写死成 `127.0.0.1` 会让「用户给了 `--management-port` 却在服务器上」这种组合变得无解。所以两个 `*Host` 字段不能合并成一个。
+- **`--management-host` 不是回环时会拒绝启动，直到有账号**：那种形态下端口本身就是边界（见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」）。建号走 `osw user add <username>`，口令用 `--password-stdin` 从管道读（不接受命令行参数：那会进 shell 历史）。也可以先在回环上起来，从界面里建。
 - `--host` 与 `proxyHost` 的关系要注意：`RuntimeConfig.proxyHost` 只是**默认值**，真正生效的监听地址是设置里的 `listenHost`（用户在界面上改过就以设置为准）。因此「命令行传了 `--host` 却没生效」在已有数据目录上是正常行为，而不是配置没被读到。
 
 数据目录的规则只有一条：**`<用户主目录>/<预设数据目录名>`**，两种形态共用这一条，三个平台也是同一条——不再有「先按平台算 appData 目录、再拼目录名」这一步。App 侧是 `app.setPath('userData', path.join(os.homedir(), profile.dataDirectoryName))`；CLI 侧是 `apps/cli/source/host.ts` 里的 `defaultDataDirectory()`（纯函数，`path.dirname()` 的结果就是 `os.homedir()`，能单测）：
@@ -441,6 +442,8 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 行为约定：
 
 - 前台运行，`Ctrl+C` 触发优雅退出（等价 `stopServer()`）；`--daemon` 不在首期范围内。`stop` 也走同一条关闭链路：向管理服务 `POST /api/runtime/shutdown`，然后**以「进程真的消失」为完成依据**，而不是相信 HTTP 响应——服务答应之后还可能死在关闭中途。
+- 账号由 `osw user` 子命令管理：`add` / `list` / `remove`（改口令在控制台的「访问控制」里做，命令行只负责「把服务起起来之前必须存在的那一步」）。`add` 的口令走 `--password-stdin` 从标准输入读，**不接受命令行参数**——那会原样进 shell 历史与进程列表，而这是唯一一处命令行的用法错误会留下长期后果的地方。**这条子命令不要求服务在跑**：它直接开配置库写一行，因为「第一次启动之前就要有账号」正是它的用途。
+- 监听非回环时，`start` 会在绑定端口**之前**检查账号；没有就报错退出并直接给出建号命令，而不是起一个谁都能进的服务。回环监听不检查：那是本机单用户形态，缺省也不要求登录（见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」）。
 - 端口被占用时给出明确错误并以非零码退出，不静默换端口。
 - 启动后打印访问地址、代理地址与数据目录，方便用户直接复制。`--no-web` 时打印同样的块，把「控制台」那一行换成「管理服务」地址、并补一行说明控制台托管已关闭——布局不因开关而变。
 - CLI 依赖 `node:sqlite`，启动时做能力探测；不可用时给出明确的 Node 版本升级提示后退出，不做降级。这条能力探测必须是动态 `import()`：静态引入 `core` 会让旧 Node 在解析阶段就报「不认识的模块」，用户看到的会是一段与 CLI 无关的堆栈，而不是那句升级提示。
@@ -468,6 +471,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 | 代理引擎与业务 | 一致 | 同一份 `packages/core`，命令行不写业务逻辑（包边界守卫强制） |
 | 设置与日志 | 一致 | 同一对 SQLite 文件（配置库 + 数据库），没有第二份配置 |
 | 单实例 | 一致（同一个 core 能力） | 两边都由 core 的 `runtime/instance-lock.ts` 在绑定端口前取锁；区别只在于桌面形态还多一层操作系统级的 `app.requestSingleInstanceLock()`，第二次启动会唤醒已有窗口而不是报错 |
+| 账号与会话 | 一致（同一个 core 能力，缺省不同） | 同一张 `users` 表、同一套会话与登录页；差别只有缺省开关：桌面监听回环 → 默认不要求登录，命令行监听非回环 → 默认要求。两边都能在界面里改（见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」） |
 | 密钥存储 | 能力差异 | 桌面形态有系统钥匙串（`safeStorage`），命令行只能文件加密，文件名因此分开（§5.1） |
 | 系统代理解析 | 能力差异 | 桌面形态用 `session.resolveProxy`（OS/Chromium）；命令行暂时不注入解析器，`system` 模式等价直连（见下） |
 | 控制台托管 | 形态差异 | 桌面形态用窗口 `loadFile`；命令行没有窗口，只能由管理服务托管（`--web`，默认开） |
@@ -482,7 +486,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 
 进度与验收状态以 [roadmap.md](../roadmap.md) 的「工程演进」为准；本节只写阶段划分与**还没做完的部分**。
 
-- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](../operations/security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](../roadmap.md)。
+- 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](../operations/security-privacy.md) 的「访问控制」。**S2.6「装到服务器上」** 在这之上补了第三件事：账号与会话（含 Web 登录页）、`--management-host`、以及「非回环 + 零账号拒绝启动」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](../roadmap.md)。
 - **S1「core 可独立运行」跳过**：CLI 在构建期用 Vite 别名直接打包 `core` / `contracts` 的**源码**，不消费它们的独立产物，因此没有驱动这一阶段的需求。代价是 `apps/cli/vite.config.ts` 必须自带一份完整的 `rolldownOptions`（外部化、`platform`、`define`，见 §5.8），不能复用 `vite.shared.ts`——那份外部化了 `electron`。等真有第三方单独消费 `core` 时再做。
 - **S3 App 回归（未开始）**：`apps/app/source` 按 §4.1 目标态拆出 `main/` 与 `preload/`，并复核构建产物映射（`electron-builder` 配置与打包脚本均归 `apps/app/`）。托盘、自动更新、开机自启、原生对话框保持。验收：桌面安装包端到端可用；升级路径（检查更新 → 下载 → 安装）不回归。
 - **S4 分发与文档（未开始）**：CLI 发布形态（npm 全局 bin）+ `engines` 声明 + 使用说明。**CLI 当前明确不发布**，所以 `apps/cli/package.json` 里 `bin` 已就位但 `private: true` 未摘。开工前要先办三件：定 `files`（至少含 `output/` 与 `packages/core/drizzle`，见 §5.7）、确定启动时如何提示 `node:sqlite` 不可用，以及确认 `bin` 入口的 shebang 与执行位在三个平台都成立。
@@ -496,8 +500,10 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 
 - 不引入 HTTP 框架（沿用原生 `http`，见 [tech-architecture.md](../overview/tech-architecture.md)）。
 - 不引入原生依赖（密钥走文件加密，不走系统钥匙串；`node:sqlite` 已满足持久化）。
-- 不做远程多用户、鉴权体系与 Docker 化镜像；CLI 仍是本机单用户形态。
+- 不做 Docker 化镜像：CLI 装的是本机单进程，容器化要额外回答「数据目录怎么挂、密钥怎么给、代理端口怎么映射」，这套问题在没有真实需求前不值得维护。
 - 不做 Electron 之外的第二种桌面壳，也不为 CLI 单独维护一套 UI。
+
+> **已撤销的条目**：本文件曾写着「不做远程多用户、鉴权体系」。装到服务器上共享给多个人用是真实需求，那一条因此被推翻。现在的形态是：管理面可以监听非回环，账号 + 会话是普通功能（桌面也能开），缺省值由监听地址推导。设计见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」，CLI 侧见 §6。
 
 ## 9. 决策记录
 

@@ -27,6 +27,7 @@ osw [command] [options]
 | `start` | Start the service (**the default when no command is given**). |
 | `stop` | Stop the instance started by this CLI. |
 | `status` | Print running status, listen address, data directory, and version. |
+| `user` | Manage login accounts: `list` / `add <username>` / `remove <username>`. |
 | `version` | Print the version number. |
 
 ## Options
@@ -35,16 +36,18 @@ osw [command] [options]
 | --- | --- |
 | `--data-dir` | Data directory. |
 | `--host` | Proxy listen address. |
+| `--management-host` | Management listen address. Defaults to loopback; `0.0.0.0` exposes the console to the network. |
 | `--proxy-port` | Proxy port. |
 | `--management-port` | Management port. |
+| `--password-stdin` | Read the password from stdin (**`user add` only**). |
 | `--web` | Serve the console from the management service (on by default). |
 | `--no-web` | Do not serve the console; provide the HTTP API only. |
 | `--json` | Output as JSON (**`status` only**). |
 | `--help` | Show help. |
 | `--version` | Print the version number. |
 
-<Callout title="The management service listens locally only" type="note">
-The management service always listens on `127.0.0.1` only: it has **no auth** of its own. To reach it from another machine, use an SSH tunnel.
+<Callout title="The management service listens locally by default" type="note">
+The management service binds to `127.0.0.1` by default and does not require a login — that is what a desktop or personal machine wants. To open the console from another machine, use `--management-host 0.0.0.0`: a non-loopback address **requires an account login by default** (the "require login" setting defaults to on there).
 </Callout>
 
 ## Start
@@ -52,7 +55,24 @@ The management service always listens on `127.0.0.1` only: it has **no auth** of
 After starting it prints the console address, proxy address, management service address, and data directory; press `Ctrl+C` to stop.
 
 <Callout title="--host exposes an unauthenticated proxy" type="warning">
-When the proxy listens on a non-loopback address, other devices on the same network can reach it directly, and it **carries no auth**. If you only want local use, don't pass `--host` (it defaults to listening on `127.0.0.1` only).
+When the proxy listens on a non-loopback address, other devices on the same network can reach it directly, and it **carries no auth** (the proxy does not authenticate callers; authentication belongs to the management side). If you only want local use, don't pass `--host` (it defaults to listening on `127.0.0.1` only).
+</Callout>
+
+## Accounts
+
+When you install the service on a server and share it with several people, create an account first:
+
+```bash
+osw user add admin            # interactive password prompt (not echoed)
+printf '%s' "$PASSWORD" | osw user add admin --password-stdin
+osw user list
+osw user remove admin
+```
+
+The password is **never taken as a command-line argument** — either interactively or via `--password-stdin`, because arguments linger in shell history and `ps` output. To change a password, use the "Access control" card in the console.
+
+<Callout title="An account is required before binding a non-loopback address" type="warning">
+`osw start --management-host 0.0.0.0` refuses to start when **no account exists**. That is deliberate: on a non-loopback address, "who can reach the port" is no longer a boundary, and an account-less service would let anyone on the network read every stored key. `osw user` does not need the service to be running — it writes the database directly, which is exactly what this step needs.
 </Callout>
 
 ## Status
