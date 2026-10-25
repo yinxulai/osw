@@ -145,7 +145,9 @@ export function AppSidebar(props: AppSidebarProps) {
       onPointerEnter={() => props.onHoverChange(true)}
       onPointerLeave={event => { if (!isSpuriousHoverLeave(event, rootRef.current)) props.onHoverChange(false) }}
       className={cn(
-        'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
+        // 侧栏是纯导航面：文字不可选中。否则鼠标在图标与文字之间划过、或点按后拖一下，
+        // 就会把「总览 / 供应商」拖成蓝色选区，看着像渲染出错。标题栏同理（见 `window-titlebar.tsx`）。
+        'absolute inset-y-0 left-0 flex min-h-0 w-12 select-none flex-col overflow-hidden text-sidebar-foreground',
         'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         expanded && 'w-56',
       )}
