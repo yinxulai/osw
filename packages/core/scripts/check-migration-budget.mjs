@@ -31,14 +31,17 @@ const roles = ['config', 'data']
 const migrationRoot = 'packages/core/drizzle'
 const maxNewMigrations = 1
 
-// 显式环境变量优先：本地想对比别的分支，或者 CI 的 base 名字不是 main 时用它。
-// `GITHUB_BASE_REF` 只在 pull_request 事件里有值，接上它就不必假设 PR 一定开向 main。
-const baseCandidates = [
+// 「显式指定」的 base：给了就必须能解析。堆叠 PR（base 不是 main）全靠它，
+// 静默回落到 main 会把「相对前置分支只新增一条」误判成「相对 main 新增两条」。
+//   - `OSW_MIGRATION_BASE_REF`：本地/CI 手动传，写法随意（`origin/x`、`x`、sha 都行）。
+//   - `GITHUB_BASE_REF`：GitHub 只在 `pull_request` 事件里注入，且是裸分支名。
+const explicitBaseCandidates = [
   process.env.OSW_MIGRATION_BASE_REF,
   process.env.GITHUB_BASE_REF && `origin/${process.env.GITHUB_BASE_REF}`,
-  'origin/main',
-  'main',
 ].filter(Boolean)
+
+// 没人指定时才用的兜底：常规 PR 就开向 main。
+const fallbackBaseCandidates = ['origin/main', 'main']
 
 function git(arguments_) {
   return execFileSync('git', arguments_, {
@@ -48,9 +51,9 @@ function git(arguments_) {
   })
 }
 
-/** 找出可以当作 base 的 ref；找不到时返回 null，让调用方跳过而不是失败。 */
-function resolveBase() {
-  for (const candidate of baseCandidates) {
+/** 在候选列表里逐个试，返回第一个能解析成 commit 的 ref。 */
+function firstResolvable(candidates) {
+  for (const candidate of candidates) {
     try {
       const sha = git(['rev-parse', '--verify', '--quiet', `${candidate}^{commit}`]).trim()
       if (sha) return { ref: candidate, sha }
@@ -59,6 +62,22 @@ function resolveBase() {
     }
   }
   return null
+}
+
+/**
+ * 找出 base。返回 `{ base }` 或 `{ error }`。
+ * 显式指定的 ref 解析不到一律算错——那说明调用方以为在跟 A 比，实际却没比成；
+ * 悄悄换成 main 只会让堆叠 PR 收到一条莫名其妙的「新增了 2 条迁移」。
+ */
+function resolveBase() {
+  const explicit = firstResolvable(explicitBaseCandidates)
+  if (explicit) return { base: explicit }
+  if (explicitBaseCandidates.length > 0) {
+    return { error: `指定的 base 无法解析（试过 ${explicitBaseCandidates.join(', ')}）` }
+  }
+  const fallback = firstResolvable(fallbackBaseCandidates)
+  if (fallback) return { base: fallback }
+  return { error: `无可用 base（试过 ${fallbackBaseCandidates.join(', ')}）` }
 }
 
 /** base 里某个角色下已有的迁移目录名。 */
@@ -115,18 +134,20 @@ function toMigrationFolder(file) {
 function main() {
   log.title('Migration budget check')
 
-  const base = resolveBase()
-  if (!base) {
-    const reason = `无可用 base（试过 ${baseCandidates.join(', ')}）`
-    // 本地浅克隆 / 非 git 目录里跳过是合理的；CI 里跳过等于这条闸门从来没装过，
-    // 所以那边必须红——否则一次 `fetch-depth` 回归就能让规则静默失效。
-    if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') {
-      log.error(`${reason} —— CI 里不允许跳过迁移额度检查（检查 checkout 的 fetch-depth）`)
+  const resolved = resolveBase()
+  if (resolved.error) {
+    // 没指定 base 时跳过是合理退化（本地浅克隆 / 非 git 目录）；
+    // 但「指定了却解析不到」永远算错，CI 里没有 base 更是等于闸门从来没装过。
+    const specifiedButMissing = explicitBaseCandidates.length > 0
+    const inCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true'
+    if (specifiedButMissing || inCi) {
+      log.error(`${resolved.error} —— 迁移额度检查必须对比一个真实的基线分支`)
       process.exit(1)
     }
-    log.warn(`${reason} —— 跳过迁移额度检查`)
+    log.warn(`${resolved.error} —— 跳过迁移额度检查`)
     return
   }
+  const base = resolved.base
 
   try {
     git(['rev-parse', '--verify', 'HEAD'])

@@ -38,7 +38,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
         with:
-          # 迁移额度检查要对比 `origin/main`，浅克隆里没有它。
+          # 迁移额度检查要对比基线分支，浅克隆里没有远端分支。
           fetch-depth: 0
 
       # `pnpm lint` 里的迁移额度检查（`check-migration-budget.mjs`）要对比基线分支
@@ -53,6 +53,11 @@ jobs:
 
       - name: Run lint
         run: pnpm lint
+        env:
+          # 必须显式传：`github.base_ref` 只在 `pull_request` 事件里有值，
+          # push 事件下为空；堆叠 PR 的 base 不是 main，不传就会被拿 main 当基线，
+          # 「相对前置分支只新增一条」会被误判成「相对 main 新增两条」。
+          OSW_MIGRATION_BASE_REF: origin/${{ github.event.pull_request.base.ref || 'main' }}
 
   test:
     name: Tests
