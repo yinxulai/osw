@@ -329,6 +329,10 @@ toast.error(t('errors.SAVE_FAILED', { name }))
    —— **整屏页不加**：`onboarding` 与 `login` 没有侧栏，它们的路径要同时进 `routing/routes.test.ts` 的 `FULL_SCREEN_PATHS`，那条不变式是「一级页 ⇔ 有侧栏入口」
 6. i18n 目录加 nav.page.<domain> 与页面文案
 7. 若页面有标题：<h1 className="system-xl-semibold text-text-primary">
+   —— **唯一例外**：整屏门面页（无侧栏、无页头，标题独立撑起整页重心，如 `onboarding` / `login`）
+   用 `<h1 className="system-display-semibold text-text-primary">`（20px/600/28px）。
+   这不是新增字阶，条件见 [`design-system-typography.md`](./design-system-typography.md) §1.2 规则 1，
+   **在有页头的页面里一律不许用**
 ```
 
 **注意**：`route-mode-switch.tsx:20` 的注释提到页头高度的对齐问题——

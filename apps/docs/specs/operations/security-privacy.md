@@ -33,6 +33,7 @@
   - 账号存在配置库的 `users` 表（`database/user-store.ts`）：用户名 + scrypt 哈希（`SCRYPT_N = 2^15`、`r = 8`、`p = 1`，`maxmem` 显式给到 64 MiB——Node 的 32 MiB 默认值恰好等于 `128 * r * N`，会随机抛错）。库里不存明文，也不存可逆加密：口令没有「需要还原」的场景。
   - 会话**存在内存里**（`management/auth/session-store.ts`，Map + TTL，12 小时，勾了「保持登录」30 天）：它是一次着陆的临时事实，不是需要持久化的数据。进程重启 = 全部登出，这比「重启后旧 cookie 还生效」更符合直觉。因此会话不是一张表。
   - 浏览器凭证是 `HttpOnly` 的 `osw_session` cookie（`SameSite=Lax`，非回环监听时加 `Secure`）。前端为此在每条请求上带 `credentials: 'include'`——`fetch` 默认不带跨源 cookie，漏了这一行就是「登录成功、下一条请求又 401」。
+  - **cookie 的域名必须和页面一致**：`SameSite=Lax` 下 `http://localhost:5173` 打不到 `http://127.0.0.1:9301` 的 cookie，两个名字在浏览器眼里是两个站点。所以开发形态的 `managementApiUrl` 用 `localhost`（与 Vite 同名字），正式形态由管理服务同源发页面（`${location.origin}/api`）；用局域网 IP 打开控制台时也必须用同一个 IP 访问接口，混用 `localhost` / IP 会静默丢会话（表现就是「登录成功但一直停在登录页」）。
   - **开关是一个普通设置**（`managementAuthEnabled`）。桌面形态可以开，命令行形态也可以关；它不是「服务器形态专用」。缺省值只在 `runtime/server-runtime.ts` 里算一次：管理面监听回环 → 关（桌面用户开箱即用），非回环 → 开（装到服务器上给别人用的形态）。用户写过的值始终优先。
   - **非回环 + 零账号 = 拒绝启动**，而不是先起来再说。判据用的是「这次要监听非回环地址」而不是「设置里开了没」：后者只表达意愿，而一个零账号的服务在局域网上一开，任何人访问 `/api/settings/get` 就能读到全部密钥。启动前用 `osw user add <username>` 建号，或者先在 `127.0.0.1` 上起来从界面里建。
   - 判据收敛在一处：`isAuthenticationRequired() = settings.managementAuthEnabled && hasAnyAccount()`。`hasAnyAccount()` 那一半保证「开关打开但一个号都没有」不会把用户永久锁在门外。
