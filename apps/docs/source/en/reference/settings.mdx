@@ -88,6 +88,8 @@ osw user add admin
 
 Passwords are stored as salted scrypt hashes in the config database, never in plaintext; login state lives in an in-memory session cookie, so a restart signs everyone out. The last account cannot be deleted — there would be no way back in.
 
+For installing the service on a server and sharing it, along with reverse proxying and process supervision, see "Running on a server (server mode)" in [Command line](/reference/cli).
+
 ## Routing
 
 ### Routing mode

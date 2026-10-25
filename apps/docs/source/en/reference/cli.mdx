@@ -58,22 +58,187 @@ After starting it prints the console address, proxy address, management service 
 When the proxy listens on a non-loopback address, other devices on the same network can reach it directly, and it **carries no auth** (the proxy does not authenticate callers; authentication belongs to the management side). If you only want local use, don't pass `--host` (it defaults to listening on `127.0.0.1` only).
 </Callout>
 
-## Accounts
+## Running on a server (server mode)
 
-When you install the service on a server and share it with several people, create an account first:
+The default shape is "for this machine only": both ports listen on loopback and the management side does not require a login. Installing it on a server so several people share it through a browser is **server mode** — not a separate switch, but a set of behaviours derived from **where the management side listens**.
+
+### The shape
+
+As soon as the management side listens on a non-loopback address, three things hold at once:
+
+| | Loopback (default) | Non-loopback (server mode) |
+| --- | --- | --- |
+| Default for "require login" | off | **on** |
+| When no account exists | starts normally | **refuses to start** |
+| Credential the browser gets | this launch's token, injected into the entry HTML | only the session cookie from a login |
+
+- "Require login" is an **ordinary setting** (Settings → Access control) and can be turned off in server mode; **refusing to start with zero accounts** is independent of it — it only looks at the listen address.
+- The proxy port (default `9300`) does **not authenticate callers** in either shape. The management login protects "who can change config and read secrets", not "who can spend quota".
+
+### First deployment
+
+Four commands, and the order matters (the third fails without an account):
 
 ```bash
-osw user add admin            # interactive password prompt (not echoed)
-printf '%s' "$PASSWORD" | osw user add admin --password-stdin
+# 1. Create the first account. The service does not need to be running — it writes the config DB directly.
+osw user add admin
+
+# 2. (optional) Confirm the account landed
 osw user list
-osw user remove admin
+
+# 3. Expose the management side to the network; the proxy still listens locally
+osw start --management-host 0.0.0.0
+
+# 4. Open http://<server-address>:9301/ in a browser and sign in
 ```
 
-The password is **never taken as a command-line argument** — either interactively or via `--password-stdin`, because arguments linger in shell history and `ps` output. To change a password, use the "Access control" card in the console.
+The password is **never taken as a command-line argument** — either interactive (not echoed) or via stdin, for scripts and container init:
 
-<Callout title="An account is required before binding a non-loopback address" type="warning">
-`osw start --management-host 0.0.0.0` refuses to start when **no account exists**. That is deliberate: on a non-loopback address, "who can reach the port" is no longer a boundary, and an account-less service would let anyone on the network read every stored key. `osw user` does not need the service to be running — it writes the database directly, which is exactly what this step needs.
+```bash
+printf '%s' "$PASSWORD" | osw user add admin --password-stdin
+```
+
+Arguments linger in shell history and the process list, and this is the server's management password, so there is deliberately no `--password <value>` form.
+
+<Callout title="An account is required before binding a non-loopback address" type="note">
+`osw start --management-host 0.0.0.0` **refuses to start** when no account exists, and the error names the command to run:
+
+```text
+Refusing to listen on 0.0.0.0: no management account exists yet.
+Create one first with `osw user add <username>`, or start once on 127.0.0.1
+and create it from the web UI.
+```
+
+This check happens **before the port is bound**: on a non-loopback address, "who can reach the port" is no longer a boundary, and an account-less service would let anyone on the network read every stored key from `/api/settings/get`. There is no "start it first and create the account from the UI" — that UI is exactly what you would not be able to reach.
 </Callout>
+
+### Accounts
+
+| Action | Where |
+| --- | --- |
+| Create | `osw user add <username>` (the service need not be running) |
+| List | `osw user list`, or Settings → Access control |
+| Change password | Only in the console's "Access control" card |
+| Delete | `osw user remove <username>`, or Settings → Access control |
+| Sign out | The console footer |
+
+Rules for both fields (same on the command line and in the console):
+
+| Field | Rule |
+| --- | --- |
+| Username | 1–64 characters; letters, digits, `.`, `_`, `-` only |
+| Password | At least 8 characters; no mixed-case or symbol requirement |
+
+Length only, no character classes, is deliberate: forcing "an uppercase letter and a symbol" in the real world produces `Password1!` — rules satisfied, still guessable.
+
+Things worth knowing:
+
+- **A new account only shows up in the panel after a restart**: `osw user add` writes the database, while the service read "are there any accounts" into memory at startup. The message says exactly that: "restart the service (`osw stop && osw start`) for the new account to take effect".
+- **The last account cannot be deleted**. Deleting it would lock everyone out, leaving `osw user add` on the server as the only way back.
+- **A login does not survive a restart**: sessions live in process memory (12 hours, 30 days with "keep me signed in"), so restarting the service signs everyone out. That is deliberate — a session is a temporary fact about one landing, not data.
+- Every account sees **all** config and **all** request logs. No roles, no permission split (see [Limitations](/reference/limitations)).
+
+### Listen addresses and ports
+
+| Option | Applies to | Default | Where it lives |
+| --- | --- | --- | --- |
+| `--management-host` | Management listen address | `127.0.0.1` | **This launch only**, not persisted |
+| `--management-port` | Management port | `9301` | Same |
+| `--host` | Proxy listen address | `127.0.0.1` | Written as the **setting's** default |
+| `--proxy-port` | Proxy port | `9300` | Same |
+
+<Callout title="--host / --proxy-port lose to the settings page" type="warning">
+The management address and port come only from the command line, every launch. The proxy's do not: `--host` / `--proxy-port` only fill settings that have **never been saved**. Once a listen address has been saved in Settings, passing `--host 0.0.0.0` on the next launch silently does nothing — the settings page wins, and the command line is no exception. To change the proxy's listen address, change it in Settings.
+</Callout>
+
+Two typical uses:
+
+```bash
+# Management only: several people manage config from browsers on the same LAN,
+# the proxy still serves local clients only
+osw start --management-host 0.0.0.0
+
+# Both: other machines on the LAN connect to the proxy directly
+osw start --management-host 0.0.0.0 --host 0.0.0.0
+```
+
+In the second case `start` prints two warnings to stderr (the proxy port carries no auth; any device on the network can read and write through it). The warnings mention **only** the proxy port: the management side has its own gate, and lumping it under a vague "no auth" would not solve anything.
+
+### Reverse proxy and HTTPS
+
+The service has **no built-in TLS**: it only listens on plain HTTP. For a public or team deployment, put nginx / Caddy / Cloudflare Tunnel in front and terminate TLS there.
+
+The reverse proxy only needs one upstream (the management port) — both the static console and `/api/*` live on it:
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name osw.example.com;
+
+  ssl_certificate     /etc/ssl/osw.crt;
+  ssl_certificate_key /etc/ssl/osw.key;
+
+  location / {
+    proxy_pass http://127.0.0.1:9301;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;   # omit this and the cookie never gets Secure
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  }
+}
+```
+
+Three things must line up, or the symptom is "the login succeeds but I stay on the login page":
+
+1. **`X-Forwarded-Proto`**: the session cookie's `Secure` attribute is decided by it (or by a real TLS socket). If the proxy terminates TLS without this header, the service thinks it is on plaintext and omits `Secure`; conversely, hitting the HTTP port directly while the cookie carries `Secure` makes the browser **drop it outright**, and the login silently fails.
+2. **The hostname must match**: a cookie's domain is the page's domain. If you open `https://osw.example.com`, keep using that domain (not `localhost:9301` one minute and the domain the next). Under `SameSite=Lax` those are different sites and the session disappears without a word.
+3. **Do not forward only page paths**: `/api/*` and the static assets share an origin, so forward everything; a separate upstream just for `/api` tends to miss the rest of the paths the frontend needs after signing in.
+
+<Callout title="Do not hang the management port straight on the internet" type="warning">
+Plain HTTP plus one password is the entire protection. There is no rate limiting, no second factor, and no account lockout. Before going public, make sure: TLS is terminated in front, the firewall only allows the reverse proxy's address, and `--management-host` binds the interface the proxy can reach rather than `0.0.0.0` (for example `--management-host 127.0.0.1` with a local proxy).
+</Callout>
+
+### Process supervision
+
+`osw start` is a **foreground process**; `Ctrl+C` shuts it down. There is no `--daemon` and no bundled systemd unit — let your init system hold it:
+
+```ini
+# /etc/systemd/system/osw.service
+[Unit]
+Description=OSW gateway
+After=network-online.target
+
+[Service]
+Type=simple
+User=osw
+ExecStart=/usr/local/bin/osw start --management-host 0.0.0.0
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`Restart=on-failure` with `Type=simple` works because the exit codes are fixed: `0` for a normal exit, `1` for a runtime failure, `2` for a usage error.
+
+<Callout title="osw stop must run as the same system user" type="note">
+`stop` locates the instance through `runtime.json` in the data directory and gets past the management gate with `management.token` (`0600`). A different system user cannot read either file, leaving `kill` as the only option — which skips the database and port cleanup. Likewise `--data-dir` must match the one used at start.
+</Callout>
+
+### Security checklist
+
+- **`management.token` is `0600`**: written on start, removed on exit. Any process that can read it can call the management API without logging in.
+- **The proxy port does not authenticate callers**: `--host 0.0.0.0` hands quota and rewrite rules to anyone on the subnet. If you only want people to manage config from a browser, leave `--host` off.
+- **A session is not a permanent login**: clearing browser data, restarting the service, or changing a password all invalidate it.
+- **Every account sees everything**: all providers, plainly-exported keys, and every request log. Think about that before giving someone an account.
+- **There are only two ways to create the first account**: `osw user add` on the server, or start once on `127.0.0.1` and create it from the UI. Remember to stop that and restart in server mode afterwards.
+
+### What this shape does not have
+
+- **No built-in TLS, no built-in reverse proxy**: put one in front.
+- **No multi-tenancy**: an account is only "may I enter the management side"; it does not isolate data.
+- **No Docker image**: it installs a single local process, and containerising it would first have to answer "how do I mount the data directory, hand over secrets, and map ports".
+- **`--no-web` is not much use in server mode**: without the console there is no login page, accounts exist only via `osw user add`, and config only via the API. Its purpose is machines that run the API only, not machines shared with people.
+- **`status` / `stop` only see instances started by the CLI**: the desktop app writes no runtime file; it belongs to its own window and tray.
 
 ## Status
 
