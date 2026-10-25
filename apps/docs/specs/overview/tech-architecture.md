@@ -206,9 +206,10 @@ SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字�
 
 拆分的理由与两条边界见 [data-model.md](../data/data-model.md) §2.1；文件名里的版本号是两个**独立的 schema 版本**常量，不住在应用版本号上。
 
-- 首发基线：两条链各自只保留一份由 schema 直接生成的首发基线迁移与快照，`pnpm db:generate` 按角色各生成一次（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）
+- 首发基线：两条链各自以一份由 schema 直接生成的首发基线迁移与快照开头，`pnpm db:generate` 按角色生成增量（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）
 - 基线随 `@osw/core` 包分发：开发期从模块目录逐级上溯找到 `packages/core/drizzle`，再按角色下钻一层；打包后则命中与入口同层的那份映射（`app.asar/output/command/` 上溯两层就是 asar 根），不存在第二套深度
-- 链上只有那条基线，不保留增量迁移：改结构 = 改 schema + 就地把基线重新生成一遍，目录名沿用原来那一个（运行时迁移器按目录名判定是否已应用，改名会被当成新迁移重放）
+- 只准追加，不改历史：改结构 = 改 schema + `pnpm db:generate` 在链尾写一条增量；已进入主干的迁移目录不改内容也不改名（运行时迁移器按目录名判定是否已应用，改名会被当成新迁移重放）
+- 一个 PR 合计最多一条迁移：`packages/core/scripts/check-migration-budget.mjs`（随 `pnpm lint`）对比基线分支强制，两个库加起来计数，并禁止修改/删除已进入基线的迁移
 - 换代（把 `DATABASE_SCHEMA_VERSIONS` 加一并换文件名）只发生在应用大版本发布时，用来甩掉磁盘上的旧文件；它与「本次改了多少结构」无关，日常结构变化不换文件名
 - 库边界由 `packages/core/scripts/check-database-boundaries.mjs` 在 `pnpm lint` 中强制：每个 store 只碰自己那个库，两份 schema 不互相引用
 - API Key 等敏感信息存在系统密钥环中，数据库只存引用 ID

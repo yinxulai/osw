@@ -6,7 +6,7 @@ import type { RequestLoggingInput, RequestLogger } from '@server/proxy/observabi
 /** 一次代理请求在生命周期内固定使用的设置快照。 */
 export type ProxyRequestSettings = Pick<
   Settings,
-  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds'
+  'captureRequestLogs' | 'captureRequestContent' | 'idleTimeoutMilliseconds' | 'apiKeyFeatureEnabled'
 >
 
 /**
@@ -40,6 +40,9 @@ export async function createProxyRequestSession(input: CreateProxyRequestSession
       captureRequestLogs: settings.captureRequestLogs,
       captureRequestContent: settings.captureRequestContent,
       idleTimeoutMilliseconds: settings.idleTimeoutMilliseconds,
+      // 「模块是否存在」原样带下去：它同时也是「要不要拦」——开着就必须携带有效 Key。
+      // 别在这里展开成两个布尔，它们没有分开配置的余地。
+      apiKeyFeatureEnabled: settings.apiKeyFeatureEnabled,
     },
     logger,
   }

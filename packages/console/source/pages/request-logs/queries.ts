@@ -1,6 +1,7 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { requestLogApi } from '@/api/observability'
 import type { RequestLogBodies, RequestLogDetail, RequestLogEntry } from '@common/schemas'
+import { apiKeyIdParam } from './lib/api-key-filter'
 import type { RequestLogFilter } from './service'
 
 export const PAGE_SIZE = 20
@@ -12,6 +13,7 @@ function toParams(filter: RequestLogFilter, page: number) {
     ...(filter.providerId !== 'all' ? { providerId: filter.providerId } : {}),
     ...(filter.providerModelId !== 'all' ? { providerModelId: filter.providerModelId } : {}),
     ...(filter.logicalModelId !== 'all' ? { logicalModelId: filter.logicalModelId } : {}),
+    ...apiKeyIdParam(filter.apiKeyId),
     ...(filter.clientProtocol !== 'all' ? { clientProtocol: filter.clientProtocol } : {}),
     ...(filter.status !== 'all' ? { status: filter.status as 'pending' | 'success' | 'failed' | 'cancelled' } : {}),
     ...(filter.createdTimeFrom !== null ? { createdTimeFrom: filter.createdTimeFrom } : {}),

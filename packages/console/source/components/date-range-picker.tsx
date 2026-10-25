@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { enUS, zhCN } from 'react-day-picker/locale'
 import type { DateRange } from 'react-day-picker'
 import { CalendarRange } from 'lucide-react'
+import { CALENDAR_LOCALES } from '@/lib/calendar-locale'
 import { shiftLocalCalendarDays } from '@/lib/calendar-day'
 import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
@@ -34,9 +34,6 @@ interface DateRangePickerProps {
   label: string
   className?: string
 }
-
-/** 语言 → 日历标签（月份、星期、翻页按钮的 aria 文案）。 */
-const CALENDAR_LOCALES = { en: enUS, 'zh-CN': zhCN } as const
 
 /** 到「当天本地零点」。用年月日构造而不是 `setHours(0,0,0,0)`，后者在夏令时切换当天会偏一小时。 */
 function startOfDay(timestamp: number): number {

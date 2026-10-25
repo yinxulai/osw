@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import type { ManagementHandler } from '../../core/response'
 import { sendError, sendSuccess } from '../../core/response'
-import { AnalyticsRangeSchema, type AnalyticsSummary, type ModelStat, type ProviderAnalyticsDetail } from '@common/schemas'
-import { resolveAnalyticsBuckets } from '@common/analytics-buckets'
+import { AnalyticsRangeSchema, API_KEY_RECENT_WINDOW_DAYS, type AnalyticsSummary, type ModelStat, type ProviderAnalyticsDetail } from '@common/schemas'
+import { DAY_MILLISECONDS, resolveAnalyticsBuckets } from '@common/analytics-buckets'
 import { averageOutputTokensPerCall, cacheHitRate, tokensPerSecondFromTotals } from '@common/metrics'
 import {
   getStatsSummary,
@@ -16,6 +16,8 @@ import {
   getLatencyDistribution,
   getFailureReasons,
   getRequestSourceStats,
+  getApiKeyStats,
+  getApiKeyUsageRecency,
   type ModelStat as DatabaseModelStat,
 } from '@server/database/analytics-store'
 import { HttpRouter } from '@server/http-router'
@@ -23,6 +25,7 @@ import { HttpRouter } from '@server/http-router'
 export const analyticsRoutes = new HttpRouter<ManagementHandler>()
   .post('/api/analytics/summary', handleAnalyticsSummary)
   .post('/api/analytics/provider-detail', handleProviderAnalyticsDetail)
+  .post('/api/analytics/api-key-recency', handleApiKeyRecency)
 
 const AnalyticsSummaryRequestSchema = z.object({
   range: AnalyticsRangeSchema.optional().default('7d'),
@@ -33,6 +36,9 @@ const ProviderAnalyticsRequestSchema = z.object({
   range: AnalyticsRangeSchema.optional().default('7d'),
 })
 
+/** 活跃度接口不收入参：口径是契约里的常量，不给调用方留一个能改它的口子。 */
+const ApiKeyRecencyRequestSchema = z.object({}).strict()
+
 async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
   const { range } = AnalyticsSummaryRequestSchema.parse(body ?? {})
   // 时间窗与粒度都从查询范围推导一次，后续所有查询共用同一份结论（`@common/analytics-buckets`）。
@@ -40,7 +46,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
   const buckets = resolveAnalyticsBuckets(range)
   const { sinceMs } = buckets
 
-  const [trend, heat, summary, providerStats, modelStats, latencyDistribution, failureReasons, sourceStats] = await Promise.all([
+  const [trend, heat, summary, providerStats, modelStats, latencyDistribution, failureReasons, sourceStats, apiKeyStats] = await Promise.all([
     getUsageTrend(buckets),
     getUsageHeat(buckets),
     getStatsSummary(sinceMs),
@@ -52,6 +58,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     getLatencyDistribution(sinceMs, buckets.latencyTargetBins),
     getFailureReasons(sinceMs),
     getRequestSourceStats(sinceMs),
+    getApiKeyStats(sinceMs),
   ])
 
   const totalProviderAttempts = providerStats.reduce((total, provider) => total + provider.attempts, 0)
@@ -88,6 +95,7 @@ async function handleAnalyticsSummary(_req: IncomingMessage, res: ServerResponse
     latencyDistribution: latencyWithPercent,
     failureReasons: failureWithPercent,
     sourceStats,
+    apiKeyStats,
   }
 
   sendSuccess(res, response)
@@ -132,6 +140,21 @@ async function handleProviderAnalyticsDetail(_req: IncomingMessage, res: ServerR
   }
   sendSuccess(res, response)
 }
+
+/**
+ * 每把 Key 的活跃度。
+ *
+ * 独立成一条接口而不是塞进 `AnalyticsSummary`：它**没有时间范围参数**。
+ * 列表页需要的是「这把 Key 上次被用是什么时候」，跟着统计页的范围跑会变成
+ * 「刚才还显示在用，切到『今天』就变成从未使用」——那是两个问题被塞进了一列。
+ */
+async function handleApiKeyRecency(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  // 没有任何入参：口径（最近 7 天）是契约里的常量，不由调用方决定。
+  ApiKeyRecencyRequestSchema.parse(body ?? {})
+  const sinceMs = Date.now() - API_KEY_RECENT_WINDOW_DAYS * DAY_MILLISECONDS
+  sendSuccess(res, await getApiKeyUsageRecency(sinceMs))
+}
+
 
 function mapModelStat(model: DatabaseModelStat): ModelStat {
   return {

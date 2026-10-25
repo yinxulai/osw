@@ -214,11 +214,17 @@ describe('观测接口', () => {
     await requestLogApi.list()
     expect(lastCall()).toEqual({ path: '/request-log/list', body: {} })
 
-    await requestLogApi.list({ limit: 20, offset: 40, status: 'failed', protocol: 'anthropic-messages', createdTimeFrom: 1, createdTimeTo: 2 })
+    // 协议这一维的服务端字段名是 `clientProtocol`（与 `ListRequestLogsSchema` 一致）。
+    await requestLogApi.list({ limit: 20, offset: 40, status: 'failed', clientProtocol: 'anthropic-messages', createdTimeFrom: 1, createdTimeTo: 2 })
     expect(lastCall()).toEqual({
       path: '/request-log/list',
-      body: { limit: 20, offset: 40, status: 'failed', protocol: 'anthropic-messages', createdTimeFrom: 1, createdTimeTo: 2 },
+      body: { limit: 20, offset: 40, status: 'failed', clientProtocol: 'anthropic-messages', createdTimeFrom: 1, createdTimeTo: 2 },
     })
+  })
+
+  it('按 Key 筛时 `null` 要照原样发出去（它是「只看匿名」而非「不筛」）', async () => {
+    await requestLogApi.list({ apiKeyId: null })
+    expect(lastCall()).toEqual({ path: '/request-log/list', body: { apiKeyId: null } })
   })
 
   it('请求详情与正文是两个请求：正文可能很大，列表页不必拉', async () => {

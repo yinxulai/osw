@@ -12,6 +12,9 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale, useTranslation } from '@/i18n/provider'
+import { useApiKeysIncludingDeleted } from '@/data/api-keys'
+import { useSettings } from '@/data/settings'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { cn } from '@/lib/utils'
 import { routePaths } from '@/routing/routes'
 import { useOverviewService, useProviderAnalyticsDetail } from './service'
@@ -20,6 +23,7 @@ import { UsageDistribution, type UsageDistributionMode } from './components/usag
 import { ProviderDistribution } from './components/provider-distribution'
 import { ProviderDetail } from './components/provider-detail'
 import { ModelRanking } from './components/model-ranking'
+import { ApiKeyUsage } from './components/api-key-usage'
 import { LatencyDistribution } from './components/latency-distribution'
 import { FailureReasons } from './components/failure-reasons'
 import { BillContent } from './components/bill-content'
@@ -42,6 +46,11 @@ export function OverviewPage() {
   // `from` 固定到父路由：切 range 时保持当前层级（列表页或某个供应商下钻页）。
   const navigate = useNavigate({ from: routePaths.overview })
   const { data, loading, refreshing, error, refresh } = useOverviewService(range)
+  // Key 名单只用来把 `apiKeyStats` 里的 id 换成名字；用量本体来自同一次分析请求，不额外取数。
+  // 必须**含软删除行**：删掉的 Key 在统计里还有历史用量，名字要照旧展示（只补「已删除」标签）。
+  const apiKeys = useApiKeysIncludingDeleted()
+  // 整个 Key 模块关掉时这张卡片一起消失：它的每一行都是一把已经不存在的 Key。
+  const showApiKeyUsage = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   const providerDetail = useProviderAnalyticsDetail(providerId ?? null, range)
   const locale = useLocale()
   const t = useTranslation()
@@ -267,6 +276,18 @@ export function OverviewPage() {
             ))}
           </div>
         </Card>
+        {/* 按 Key 用量：与供应商排行同形，多铺一张卡片，数据到位时不会多跳出一块高度。
+            模块关掉时这张卡绝不会出现，骨架也跟着不铺——否则加载完会凭空缩掉一块高度。 */}
+        {showApiKeyUsage && (
+          <Card className="p-4">
+            <Skeleton className="mb-4 h-4 w-24" />
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">
@@ -353,6 +374,7 @@ export function OverviewPage() {
           />
         </div>
         <ModelRanking stats={data.modelStats} />
+        {showApiKeyUsage && <ApiKeyUsage stats={data.apiKeyStats} keys={apiKeys} />}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <LatencyDistribution buckets={data.latencyDistribution} />
           <FailureReasons reasons={data.failureReasons} failedCount={data.summary.failedCount} totalRequests={data.summary.totalRequests} />

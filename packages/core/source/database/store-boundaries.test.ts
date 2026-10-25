@@ -51,6 +51,7 @@ describe('request log persistence boundaries', () => {
     // 用量、TTFT、缓存命中都不是建行时能知道的事实：它们由尝试决定。
     expect(await getRequestLog(log.id)).toEqual({
       id: log.id,
+      apiKeyId: null,
       logicalModelId: 'model_default',
       clientProtocol: 'openai-responses',
       transport: 'http-stream',

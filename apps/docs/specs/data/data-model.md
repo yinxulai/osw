@@ -2,7 +2,7 @@
 
 > 本文是新大版本的目标数据库结构。
 >
-> **发布策略：不保留增量迁移，结构变化就地重画基线。** 每条链只有**一条**基线（`packages/core/drizzle/<role>/` 下唯一那个目录），它由当前 schema 直接生成。改结构 = 改 `packages/core/source/database/<role>-schema.ts`，再把那条基线重新生成一遍、**沿用原来的目录名**；不追加迁移、不留历史目录。`DATABASE_SCHEMA_VERSIONS` 只在应用大版本发布时加一，用来甩掉磁盘上的旧文件——它与「这次改了多少结构」无关。
+> **发布策略：不重写已发布的迁移，结构变化一律在链尾追加。** 每条链以一份由 schema 直接生成的基线开头（`packages/core/drizzle/<role>/` 下第一个目录），此后每次改结构都在**尾部追加一条**迁移：改 `packages/core/source/database/<role>-schema.ts`，再跑 `pnpm db:generate` 让 drizzle-kit 算出增量。**已进入主干的迁移目录既不改内容也不改名**（运行时迁移器按目录名判定是否已应用，改名等于重放；改内容会让 `__drizzle_migrations` 里的 hash 与真正执行过的 DDL 对不上）。一次改动**整个 PR 合计最多追加一条**迁移（两个库加起来算），由 `check-migration-budget.mjs` 在 `pnpm lint` 里强制。`DATABASE_SCHEMA_VERSIONS` 只在应用大版本发布时加一，用来甩掉磁盘上的旧文件——它与「这次改了多少结构」无关。
 > 数据库由**两个**文件组成：用户写的配置和系统写的观测数据各自独立（理由见 §2.1）。
 
 ## 1. 设计目标
@@ -17,7 +17,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 6. **请求/响应正文与日志索引分离，正文按需记录并完整保留。**
 7. **历史日志不依赖可变配置，不为日志快照增加外键。**
 8. **配置文档使用 `schemaVersion`，配置结构变化通过文档升级解决。**
-9. **数据库结构以 Drizzle schema 为唯一代码定义；链上只保留一条从当前 schema 生成的基线，不提供兼容迁移。**
+9. **数据库结构以 Drizzle schema 为唯一代码定义；迁移链以基线开头、只准在链尾追加，不提供兼容迁移。**
 10. **所有时间戳字段均为 Unix 毫秒（`Date.now()`），不使用秒。**
 11. **数据库表名统一为 `settings`。**
 12. **领域前缀按对象边界使用：`provider*` 是配置身份，`client*` 是客户端一侧，`upstream*` 是实际远端 hop。**
@@ -48,13 +48,15 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `config-<v>.db` | 配置库 | 12 | 用户 | 供应商、模型、路由、改写规则全没了——**不可再生** |
 | `data-<v>.db` | 数据库 | 10 | 系统 | 历史请求、日志与健康状态归零，代理照常工作——**可丢弃** |
 
-文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。它与本次改动动了多少结构无关——**日常改结构不换代**，直接改 schema 再把基线重画一遍即可（见下一段）。两个库的版本各自独立，可以停在不同的数字上。
+文件名里的 `<v>` 是**该库自己的 schema 版本号**，不是应用版本号；两个数字各自独立地写在 `packages/contracts/source/database-file.ts`（`DATABASE_SCHEMA_VERSIONS`），该文件是这条规则的唯一实现。**它只在应用大版本发布时加一**：换名字就是换文件，新文件从干净基线建起，旧文件既不读取也不删除。它与本次改动动了多少结构无关——**日常改结构不换代**，改 schema 再在链尾追加一条迁移即可（见下一段）。两个库的版本各自独立，可以停在不同的数字上。
 
-**日常改结构：改 schema，重画基线，目录名不动。** 库里没有增量迁移这回事，链上永远只有一条由当前 schema 直接生成的基线；改完 schema 就用 `drizzle-kit generate` 把那条基线重新生成一遍，并把目录名**沿用原来那一个**。为什么必须沿用：运行时迁移器的判定依据是**目录名**，已有库的 `__drizzle_migrations` 里记的就是它——换个新名字，那条基线在已有库眼里就是一条从没跑过的新迁移，会被拿去对已经存在的表再跑一遍 `CREATE TABLE`。而重画**内容**是安全的：目录名没变，迁移器认为它已经应用过，不会重放。
+**日常改结构：改 schema，追加一条迁移，已有的迁移一个字节都不动。** 改完 `<role>-schema.ts` 就跑 `pnpm db:generate`（不带角色则两个库各算一次），drizzle-kit 拿链尾那份 `snapshot.json` 当 diff 基线，把增量写成新目录。**已进入主干的迁移目录既不改内容也不改名**：运行时迁移器按**目录名**判定是否已应用，改名会让它在已有库眼里变成一条从没跑过的新迁移、被拿去对已经存在的表再跑一遍 `CREATE TABLE`；改内容虽然不会被重放，但 `__drizzle_migrations` 里存的 hash 是执行当时算的，事后复盘会读到一份从未运行过的「历史」。这也是为什么「重新生成一遍基线」不成立——重跑 `db:generate` 得到的是**链尾的下一段增量**，不是被改写的基线。
 
-换代与改结构的代价完全不同，选错了会直接伤到用户：**重画基线**只在文件里重建表结构，用户已有的数据由基线自己那条 `CREATE TABLE` 链在新库上重建、旧数据不受影响；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布。
+**一个 PR，合计最多一条迁移。** 由 `packages/core/scripts/check-migration-budget.mjs` 在 `pnpm lint` 里对比基线分支强制：**两个库加起来**只准新增一条，同时禁止修改/删除已进入基线的迁移。额度是固定的，不随改动范围伸缩——一次改动落在两个库上，就拆成两个 PR（先提只含结构的那一半，功能代码叠在它之上），而不是因为「跨库」就多发一张额度。理由不是洁癖：链上每多一个节点，就多一份永久要维护、要解释、要被每个新库按顺序重放的历史；允许一次拆三条，等于允许把一次结构变化拆成三段互相依赖、单独看都没有意义的片段。同一个库里有多处结构变化，合并进同一条迁移。
 
-两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，这正是重画基线必须沿用旧目录名的原因；反过来说，目录名没变时改内容不会被重放，所以链上只留一条基线是安全的。`logical_models.default` 是应用 seed，不属于 schema migration。
+换代与改结构的代价完全不同，选错了会直接伤到用户：**追加迁移**只在新库上按顺序重放已有 DDL、在旧库上补跑新那一条，用户数据原样保留；**换代**则让配置库从空文件重新开始——用户自己写的供应商、模型、路由、规则不会跟过来，界面上只剩 seed 出来的默认逻辑模型，旧文件原地留着但不读。所以配置库加一只有一个正当理由：应用大版本发布。
+
+两个文件各有一条 Drizzle migration 链，分别落在 `packages/core/drizzle/config/` 与 `packages/core/drizzle/data/`（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）。链的形态是 drizzle-kit 1.0 的约定，与 0.x 不同：`drizzle/<role>/` 下**每个目录是一条迁移**，目录名以 14 位时间戳开头、按名字排序决定执行顺序；`migration.sql` 是内容（按 `--> statement-breakpoint` 切分），同目录里的 `snapshot.json` 只供 drizzle-kit 生成下一条迁移时算 diff、运行时不读；**没有** `meta/_journal.json`，rc 版的 migrator 见到它会直接报错。启动时由 Drizzle runtime migrator 跳过 `__drizzle_migrations` 里已记录目录名的那几条、按顺序执行剩下的——**判定依据是目录名，不是内容 hash**，这是「只准追加、不准改名」的全部原因。链的形状由 `migration-chain.test.ts` 守着：唯一基线、每个节点最多一个孩子、唯一叶子就是最后那条迁移。`logical_models.default` 是应用 seed，不属于 schema migration。
 
 两条链互相独立：一个库的演进不会牵扯另一个库，也不存在同时改两个库的事务。
 
@@ -78,7 +80,7 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 
 ### 2.2 表清单
 
-**配置库 `config-<v>.db`（12 张，全部是配置实体，用户资产）**：
+**配置库 `config-<v>.db`（15 张，全部是配置实体，用户资产）**：
 
 | 表 | 用途 | 数据性质 |
 | --- | --- | --- |
@@ -91,9 +93,12 @@ OSW 的配置内容会持续增加，尤其是供应商、模型端点、认证�
 | `protocol_converters` | ProviderModel 端点允许的客户端协议转换器 | 配置实体 |
 | `logical_models` | 对外暴露的逻辑模型 | 配置实体 |
 | `scheduling_policies` | 逻辑模型的调度策略 | 配置实体 |
+| `api_keys` | 客户端 API Key 元数据（明文在密钥存储） | 配置实体 |
 | `request_rewrite_rules` | 可复用的请求/响应改写规则 | 配置实体 |
 | `provider_model_request_rewrite_rules` | ProviderModel 与改写规则的启用关系 | 配置实体 |
-| `workflows` | 路由定义（工作流图与规则表） | 配置实体 |
+| `workflows` | 路由定义（工作流图） | 配置实体 |
+| `route_rule_sets` | 路由定义（规则表，与图各自独立版本化） | 配置实体 |
+| `client_config_versions` | 客户端配置版本内容哈希 | 配置实体 |
 
 这个库里的外键全部指向自己。
 
@@ -139,6 +144,7 @@ erDiagram
   provider_models ||--o{ provider_model_request_rewrite_rules : enables
   request_rewrite_rules ||--o{ provider_model_request_rewrite_rules : applied_by
   request_logs ||--o{ request_attributes : annotates
+  api_keys ||..o{ request_logs : attributes
 
   settings {
     text key PK
@@ -250,6 +256,7 @@ erDiagram
 
   request_logs {
     text id PK
+    text apiKeyId
     text logicalModelId
     text clientProtocol
     text transport
@@ -373,6 +380,17 @@ erDiagram
     integer version
     text name
     text definition
+    integer createdTime
+    integer updatedTime
+    integer deletedTime
+  }
+
+  api_keys {
+    text id PK
+    text name
+    text keyReference
+    boolean enabled
+    integer expiresTime
     integer createdTime
     integer updatedTime
     integer deletedTime
@@ -669,11 +687,12 @@ CREATE TABLE provider_model_health (
 
 ### 3.9 `request_logs`
 
-请求日志只保存请求身份、客户端协议、客户端声明的传输形态、状态、逻辑模型和总耗时。Token、缓存等可聚合数值不放入 `request_logs`，分别存入 `request_usages` 和 `attempt_usages`，避免持续修改日志主表。
+请求日志只保存请求身份（含客户端 API Key）、客户端协议、客户端声明的传输形态、状态、逻辑模型和总耗时。Token、缓存等可聚合数值不放入 `request_logs`，分别存入 `request_usages` 和 `attempt_usages`，避免持续修改日志主表。
 
 ```sql
 CREATE TABLE request_logs (
   id TEXT PRIMARY KEY,
+  apiKeyId TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'success', 'failed', 'cancelled')),
   clientProtocol TEXT,
   transport TEXT NOT NULL DEFAULT 'http',
@@ -696,9 +715,15 @@ CREATE INDEX idx_request_logs_logical_model
 
 CREATE INDEX idx_request_logs_client_protocol
   ON request_logs(clientProtocol);
+
+-- 按 Key 拆分用量是这个索引唯一的用途：分组键在前、时间窗在后。
+CREATE INDEX idx_request_logs_api_key_time
+  ON request_logs(apiKeyId, createdTime);
 ```
 
 `clientProtocol` 与 `logicalModelId` 均可为空：请求可能在协议识别或模型解析之前就被拒掉，但它同样是用户真实发出的请求，必须留下记录。为空表达的是「还没走到那一步」，不是「没有这一列」。
+
+`apiKeyId` 是**解析出的客户端 API Key 记录 id**（`ak_*`，见 [security-privacy.md](../operations/security-privacy.md) §「客户端 API Key」），指向配置库 `api_keys` 表——但**不建跨库外键**（两个库不同文件，见 §2.1），也不建库内外键。为空是常态：校验关着时全部请求都是匿名；校验开着但请求在身份解析之前就被拒（协议识别失败等）也留空。`null` 因此是有意义的值（「未跟踪」），按它筛选不能当真值判断吞掉。键的历史引用不回填键的名字——名字是活的、可能被改，展示时按 id 现查当前名字，查不到就显示「已删除的 Key」。
 
 `transport` 是**请求进入代理时就已经定下的预期**（客户端要流式还是非流式，见 [proxy-engine.md](../proxy/proxy-engine.md) §1.1）——它是客户端跳的形态，取自入口对请求体的解析，因此属于请求级事实；上游跳实际是什么形态是**上游视角的事实**，写在 `request_attempts.upstreamTransport` 上。两者不相等不是「上游不配合」这种可容错的小事，而是「本次传输无法按声明兑现」——代理不自己攒出一份整包来弥合（见 [proxy-engine.md](../proxy/proxy-engine.md) §1.2）。`totalDurationMilliseconds` 是从收到请求到写完响应的总耗时，它无法由尝试耗时稳定推导（尝试之间还有调度与等待），因此落在日志主表。
 
@@ -1027,7 +1052,7 @@ CREATE INDEX idx_request_attempts_created_time
 - `errorCode`；
 - `createdTime`。
 
-### 3.13 `request_attributes`、`runtime_logs`、`request_rewrite_rules`、`provider_model_request_rewrite_rules` 与 `workflows`
+### 3.13 `request_attributes`、`runtime_logs`、`request_rewrite_rules`、`provider_model_request_rewrite_rules`、`workflows` 与 `api_keys`
 
 ```sql
 CREATE TABLE request_attributes (
@@ -1160,6 +1185,25 @@ CREATE INDEX idx_route_rule_sets_version
 
 CREATE INDEX idx_route_rule_sets_updated_time
   ON route_rule_sets(updatedTime);
+
+-- 客户端 API Key 元数据。明文不在这里：落在宿主密钥存储里，
+-- 本表只保存指向它的 keyReference，见 security-privacy.md §「客户端 API Key」。
+CREATE TABLE api_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  keyReference TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  expiresTime INTEGER,
+  createdTime INTEGER NOT NULL,
+  updatedTime INTEGER NOT NULL,
+  deletedTime INTEGER
+);
+
+CREATE INDEX idx_api_keys_enabled
+  ON api_keys(enabled);
+
+CREATE INDEX idx_api_keys_deleted_time
+  ON api_keys(deletedTime);
 ```
 
 - `request_attributes` 保存请求的客户端/网络属性（来源 UA、入口地址等）。值一律是字符串——采集侧只产出字符串，因此没有「值类型」维度。
@@ -1167,6 +1211,7 @@ CREATE INDEX idx_route_rule_sets_updated_time
 - `request_rewrite_rules` 是可复用的规则定义，`match` 与 `actions` 是 JSON 文本；`provider_model_request_rewrite_rules` 把规则绑定到 ProviderModel，生效顺序由 `priority` 表达。「同一模型下优先级不重复」是应用层规则，不做成部分唯一索引：违反它的输入是一个请求体里填了两个相同优先级，那是输入问题，该收到一句能照做的 409，而不是从 SQLite 消息里抠出来的列名。匹配条件、动作语义与四阶段执行次序见 [request-rewrite-rules.md](../proxy/request-rewrite-rules.md)。
 - `workflows` 只装路由图（`type = 'router'`），`definition` 是图文档的 JSON 文本，一行一版。**行的身份是记录 id（`id`，`workflow_` 前缀）**，`version` 是给人看的展示编号（「本次最大 + 1」），`name` 与 `description` 是保存时写的人类注记，可以留空（落库即空串，不会自动填成 `Version N`），同名多版完全正常。版本列表只展示最近若干版，**更旧的行不删**：每一版都是用户可以回滚回去的历史。模式划分与规则表语义见 [route-design.md](../routing/route-design.md) §2.11，图的节点与端口语义见同文 §4，执行模型见 [workflow-engine.md](../routing/workflow-engine.md)。
 - `route_rule_sets` 装规则模式的规则表，**每次保存一行**、版本号各自从 1 单调递增（展示上限 `MAX_ROUTE_RULE_VERSIONS`，同样只截断列表、不删行），身份规则与 `workflows` 相同（id 是身份、version 只是展示编号）。它**不再与图共用 `workflows` 表**：两种定义挤在一个行空间里，`id` 就没法自证是图还是表，读一行要先问「它是谁」；分开之后每张表各管各的，行里的 `id` 就是它的身份，云模式里单独分享一张规则表也只是搬几行出去的事。
+- `api_keys` 保存**客户端 API Key 的元数据**（名称、启用开关、可选过期时间），明文存在宿主密钥存储里、只在本表留一个 `keyReference`。名称唯一性由应用层把关（不做成索引），删除是软删、行保留供请求日志的 `apiKeyId` 历史引用解析。校验方向是「拿客户端递来的明文反查属于哪把 Key」而非「从库里取明文比对」，因此库里没有明文可读。完整语义见 [security-privacy.md](../operations/security-privacy.md) §「客户端 API Key」。
 
 ## 4. JSON 文档版本
 

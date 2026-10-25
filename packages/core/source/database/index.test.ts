@@ -154,6 +154,7 @@ describe('schema split', () => {
 
     expect(tableNames(getConfigDb().$client)).toEqual([
       '__drizzle_migrations',
+      'api_keys',
       'client_config_versions',
       'logical_models',
       'protocol_converters',
@@ -276,6 +277,8 @@ describe('schema split', () => {
     // 而且只会在运行期以写入失败的形式暴露。这里把配置库的索引逐个列全，
     // 少一个多一个都要在评审时被看见。
     expect(indexNames(config).filter(name => name.startsWith('idx_')).sort()).toEqual([
+      'idx_api_keys_deleted_time',
+      'idx_api_keys_enabled',
       'idx_client_config_versions_file',
       'idx_client_config_versions_hash',
       'idx_logical_models_deleted_time',

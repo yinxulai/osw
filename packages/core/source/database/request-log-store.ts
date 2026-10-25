@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import type {
   AttemptContent,
   AttemptContentSummary,
@@ -28,6 +28,13 @@ import { attemptContents, attemptUsages, requestAttributes, requestAttempts, req
  */
 interface CreateRequestLogInput {
   id?: string
+  /**
+   * 解析出的客户端 API Key 记录 id（`ak_*`）；`null` 表示无身份。
+   *
+   * 入口接受请求时 Key 往往还没解析出来（要先读 body、认路径），所以这里允许先落 `null`，
+   * 随后用 {@link updateRequestLogContext} 补上——与 `logicalModelId` 同一节奏。
+   */
+  apiKeyId?: string | null
   logicalModelId: string | null
   clientProtocol: Protocol | null
   /** 客户端跳声明的传输形态（预期）。 */
@@ -38,6 +45,7 @@ interface CreateRequestLogInput {
 }
 
 interface RequestLogContextUpdate {
+  apiKeyId?: string | null
   logicalModelId: string | null
   clientProtocol: Protocol | null
   transport: TransportKind
@@ -128,6 +136,8 @@ export interface RequestLogFilter {
   providerId?: string
   providerModelId?: string
   logicalModelId?: string
+  /** 按客户端 API Key 记录 id 过滤；`null` 表示只看无身份的请求。 */
+  apiKeyId?: string | null
   clientProtocol?: string
   status?: RequestStatus
   createdTimeFrom?: number
@@ -140,6 +150,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
   const totalDurationMilliseconds = input.totalDurationMilliseconds ?? 0
   getDataDb().insert(requestLogs).values({
     id,
+    apiKeyId: input.apiKeyId ?? null,
     logicalModelId: input.logicalModelId,
     clientProtocol: input.clientProtocol,
     transport: input.transport,
@@ -152,6 +163,7 @@ export async function createRequestLog(input: CreateRequestLogInput): Promise<Re
   }
   return {
     id,
+    apiKeyId: input.apiKeyId ?? null,
     logicalModelId: input.logicalModelId,
     clientProtocol: input.clientProtocol,
     transport: input.transport,
@@ -233,6 +245,9 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
 /** 请求仍在解析或执行时补齐路由身份；状态与耗时仍只由 {@link updateRequestLogStatus} 收尾。 */
 export async function updateRequestLogContext(id: string, update: RequestLogContextUpdate): Promise<void> {
   getDataDb().update(requestLogs).set({
+    // 只有显式传了 `apiKeyId` 才写：请求创建时已落过一次 `null`，此后身份解析发生在 body 读完之后，
+    // 这次 UPDATE 才是把它补上的地方；不传则保持原值，避免把已解析好的身份又冲回 `null`。
+    ...(update.apiKeyId === undefined ? {} : { apiKeyId: update.apiKeyId }),
     logicalModelId: update.logicalModelId,
     clientProtocol: update.clientProtocol,
     transport: update.transport,
@@ -457,6 +472,8 @@ function requestLogFilterConditions(filter?: RequestLogFilter) {
   if (filter.providerId) conditions.push(sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerId = ${filter.providerId})`)
   if (filter.providerModelId) conditions.push(sql`EXISTS (SELECT 1 FROM ${requestAttempts} a WHERE a.requestId = ${requestLogs.id} AND a.providerModelId = ${filter.providerModelId})`)
   if (filter.logicalModelId) conditions.push(eq(requestLogs.logicalModelId, filter.logicalModelId))
+  // `apiKeyId === null` 是有意义的值（筛「匿名请求」），不能用真值判断吞掉。
+  if (filter.apiKeyId !== undefined) conditions.push(filter.apiKeyId === null ? isNull(requestLogs.apiKeyId) : eq(requestLogs.apiKeyId, filter.apiKeyId))
   if (filter.clientProtocol) conditions.push(eq(requestLogs.clientProtocol, filter.clientProtocol))
   if (filter.status) conditions.push(eq(requestLogs.status, filter.status))
   if (filter.createdTimeFrom !== undefined) conditions.push(gte(requestLogs.createdTime, filter.createdTimeFrom))
@@ -577,6 +594,7 @@ function mapRequestLogs(rows: Array<typeof requestLogs.$inferSelect>): RequestLo
     const usage = usageByRequest.get(row.id) ?? EMPTY_USAGE_VALUES
     return {
       id: row.id,
+      apiKeyId: row.apiKeyId,
       logicalModelId: row.logicalModelId,
       clientProtocol: parseProtocol(row.clientProtocol),
       transport: parseTransportKind(row.transport) ?? 'http',

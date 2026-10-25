@@ -48,14 +48,14 @@ describe('routePaths', () => {
     expect(new Set(values).size).toBe(values.length)
   })
 
-  it('12 个页面：1 个引导页 + 9 个一级页 + 2 个下钻', () => {
+  it('13 个页面：1 个引导页 + 10 个一级页 + 2 个下钻', () => {
     const values = Object.values(routePaths)
     const drillDowns = values.filter(value => value.includes('$'))
     const firstLevel = values.filter(value => !value.includes('$') && value !== routePaths.onboarding)
 
-    expect(values).toHaveLength(12)
+    expect(values).toHaveLength(13)
     expect(drillDowns).toHaveLength(2)
-    expect(firstLevel).toHaveLength(9)
+    expect(firstLevel).toHaveLength(10)
     // 一级页面的数量必须与侧栏一致，否则会出现「路由有、点不到」的页面。
     expect(firstLevel).toHaveLength(appNavigationItems.length)
   })

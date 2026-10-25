@@ -6,7 +6,9 @@ import type { Theme } from '@/lib/theme-mode'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
-import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
+import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
+import { useSettings } from '@/data/settings'
+import { findCurrentNavigationItem, resolveNavigationItems, type AppNavigationItem } from '@/routing/navigation'
 import { type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 
@@ -86,7 +88,11 @@ export function AppSidebar(props: AppSidebarProps) {
   const navRef = useRef<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef(new Map<AppNavPath, HTMLAnchorElement>())
-  const navSections = appNavigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
+  // Key 模块被关掉时入口一起收起。判定与 Key 管理页、统计页共用 `isApiKeyModuleEnabled`：
+  // 各写一份 `?? true` / `!flag` 会让侧栏显示入口、路由却把用户弹回去。
+  const settings = useSettings()
+  const navigationItems = resolveNavigationItems(isApiKeyModuleEnabled(settings?.apiKeyFeatureEnabled))
+  const navSections = navigationItems.reduce<Array<{ key: UiCatalogKey; items: AppNavigationItem[] }>>((sections, item) => {
     const currentSection = sections.at(-1)
     if (currentSection?.key === item.sectionKey) {
       currentSection.items.push(item)
@@ -95,7 +101,7 @@ export function AppSidebar(props: AppSidebarProps) {
     }
     return sections
   }, [])
-  const activeKey = appNavigationItems.find(item => pathname === item.to || pathname.startsWith(`${item.to}/`))?.to ?? null
+  const activeKey = findCurrentNavigationItem(pathname)?.to ?? null
 
   useLayoutEffect(() => {
     const measureItem = (key: AppNavPath): IndicatorRect | null => {
@@ -141,7 +147,9 @@ export function AppSidebar(props: AppSidebarProps) {
       onPointerEnter={() => props.onHoverChange(true)}
       onPointerLeave={event => { if (!isSpuriousHoverLeave(event, rootRef.current)) props.onHoverChange(false) }}
       className={cn(
-        'absolute inset-y-0 left-0 flex min-h-0 w-12 flex-col overflow-hidden text-sidebar-foreground',
+        // 侧栏是纯导航面：文字不可选中。否则鼠标在图标与文字之间划过、或点按后拖一下，
+        // 就会把「总览 / 供应商」拖成蓝色选区，看着像渲染出错。标题栏同理（见 `window-titlebar.tsx`）。
+        'absolute inset-y-0 left-0 flex min-h-0 w-12 select-none flex-col overflow-hidden text-sidebar-foreground',
         'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         expanded && 'w-56',
       )}

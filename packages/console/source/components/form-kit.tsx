@@ -15,8 +15,15 @@ export type FormOption = {
   disabled?: boolean
 }
 
-/** 表单类弹窗正文的滚动容器，统一最大高度与内边距。 */
-export const FORM_DIALOG_BODY_CLASSNAME = 'max-h-[65vh] space-y-4 overflow-y-auto px-1 py-2'
+/**
+ * 表单类弹窗正文的滚动容器，统一最大高度与内边距。
+ *
+ * `overflow-x-hidden` 不是摆设：按 CSS 规范，只要一个方向不是 `visible`，另一个方向就会
+ * 被算成 `auto`，所以光写 `overflow-y-auto` 就已经悄悄开了横向滚动。正文里偏偏有会探出
+ * 容器的元素（如 `Switch` 用 `after:-inset-x-3` 给自己加宽点击热区），于是弹窗底部平白
+ * 多出一条横向滚动条。正文本来也只该竖向滚，这里直接锁死横向。
+ */
+export const FORM_DIALOG_BODY_CLASSNAME = 'max-h-[65vh] overflow-x-hidden space-y-4 overflow-y-auto px-1 py-2'
 
 type FormHintProps = {
   children: ReactNode

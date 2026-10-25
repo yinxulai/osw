@@ -251,5 +251,8 @@ describe('受控下拉', () => {
   it('弹窗正文容器的高度约定是导出常量（各处弹窗共用同一个值）', () => {
     expect(FORM_DIALOG_BODY_CLASSNAME).toContain('max-h-[65vh]')
     expect(FORM_DIALOG_BODY_CLASSNAME).toContain('overflow-y-auto')
+    // `overflow-y-auto` 会把 `overflow-x` 连带算成 `auto`，探出容器的子元素（如 Switch 的
+    // 点击热区伪元素）就会撑出一条横向滚动条，所以必须显式锁掉横向。
+    expect(FORM_DIALOG_BODY_CLASSNAME).toContain('overflow-x-hidden')
   })
 })
