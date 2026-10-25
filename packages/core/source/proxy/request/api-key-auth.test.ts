@@ -58,69 +58,67 @@ describe('extractPresentedApiKey', () => {
 })
 
 describe('resolveApiKeyIdentity', () => {
-  /** 模块开着、只认身份不拦请求——默认形态。 */
-  const IDENTIFY_ONLY = { tracked: true, enforced: false }
-  /** 模块开着、还拦请求。 */
-  const ENFORCED = { tracked: true, enforced: true }
-  /** 整个模块关掉。 */
-  const DISABLED = { tracked: false, enforced: false }
-
-  it('identifies a matching key even when enforcement is off', async () => {
-    // 默认形态：不拦，但必须认出身份——否则按 Key 的用量、最近使用时间全都没有数据。
+  it('identifies a matching key', async () => {
     const key = await seedKey('present', 'osw-present')
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-present' }, IDENTIFY_ONLY)).toEqual({ apiKeyId: key.id, authorized: true })
-    expect(await resolveApiKeyIdentity({}, IDENTIFY_ONLY)).toEqual({ apiKeyId: null, authorized: true })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-present' }, true)).toEqual({ apiKeyId: key.id, authorized: true })
   })
 
-  it('binds a matching key to its record id while enforcement is on', async () => {
-    const key = await seedKey('bound', 'osw-bound')
-
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-bound' }, ENFORCED)).toEqual({ apiKeyId: key.id, authorized: true })
-  })
-
-  it('stays anonymous when the whole module is off, even with a valid key', async () => {
+  it('lets everything through when the whole module is off, even with a valid key', async () => {
     await seedKey('present', 'osw-present')
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-present' }, DISABLED)).toEqual({ apiKeyId: null, authorized: true })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-present' }, false)).toEqual({ apiKeyId: null, authorized: true })
   })
 
-  it('rejects a missing or unknown key while enforcement is on', async () => {
+  it('lets an unkeyed request through while no usable key exists at all', async () => {
+    // 全新安装 / Key 全删光：无从携带，继续拒绝就没人能用这个代理了。
+    expect(await resolveApiKeyIdentity({}, true)).toEqual({ apiKeyId: null, authorized: true })
+    // 带着一把对不上的 Key 也照旧放行：这一档只关心「有没有 Key 可用」，不关心带的是什么。
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-stranger' }, true)).toEqual({ apiKeyId: null, authorized: true })
+  })
+
+  it('rejects a missing or unknown key once at least one usable key exists', async () => {
     await seedKey('known', 'osw-known')
 
-    expect(await resolveApiKeyIdentity({}, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-stranger' }, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
+    expect(await resolveApiKeyIdentity({}, true)).toEqual({ apiKeyId: null, authorized: false })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-stranger' }, true)).toEqual({ apiKeyId: null, authorized: false })
   })
 
   it('rejects a disabled key', async () => {
     const key = await seedKey('off', 'osw-off')
     await updateApiKey(key.id, { enabled: false })
+    // 另一把可用的 Key 存在，所以「表里有东西」这一档已经生效。
+    await seedKey('on', 'osw-on')
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-off' }, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-off' }, true)).toEqual({ apiKeyId: null, authorized: false })
   })
 
   it('rejects an expired key', async () => {
     await seedKey('stale', 'osw-stale', { expiresTime: Date.now() - 1000 })
+    await seedKey('fresh', 'osw-fresh')
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-stale' }, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-stale' }, true)).toEqual({ apiKeyId: null, authorized: false })
   })
 
   it('rejects a deleted key', async () => {
     const key = await seedKey('gone', 'osw-gone')
     await deleteApiKey(key.id)
+    await seedKey('kept', 'osw-kept')
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-gone' }, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-gone' }, true)).toEqual({ apiKeyId: null, authorized: false })
   })
 
   it('picks up a newly created key after the config cache generation advances', async () => {
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-late' }, ENFORCED)).toEqual({ apiKeyId: null, authorized: false })
+    // 表为空时没人需要 Key；建了第一把之后，缺失 / 错误立刻变成 401。
+    expect(await resolveApiKeyIdentity({}, true)).toEqual({ apiKeyId: null, authorized: true })
 
     const key = await seedKey('late', 'osw-late')
     // 建库的写路径会自己推进配置代（见 `database/index.ts` 的 `wrapConfigHandleWithInvalidation`），
     // 反查表随之作废；这里显式再推一次只是为了让用例不依赖那条实现细节。
     invalidateConfigReadCache()
 
-    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-late' }, ENFORCED)).toEqual({ apiKeyId: key.id, authorized: true })
+    expect(await resolveApiKeyIdentity({ 'x-api-key': 'osw-late' }, true)).toEqual({ apiKeyId: key.id, authorized: true })
+    expect(await resolveApiKeyIdentity({}, true)).toEqual({ apiKeyId: null, authorized: false })
   })
 
   it('一把 Key 的明文读不出来时只跳过它，其余 Key 照常放行', async () => {
@@ -132,8 +130,8 @@ describe('resolveApiKeyIdentity', () => {
       return secrets.get(reference) ?? null
     })
 
-    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-working' }, ENFORCED)).resolves.toEqual({ apiKeyId: working.id, authorized: true })
+    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-working' }, true)).resolves.toEqual({ apiKeyId: working.id, authorized: true })
     // 读不出来的那把此刻验不过（它的客户端会收到 401），而不是把整台代理都变成 401。
-    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-broken' }, ENFORCED)).resolves.toEqual({ apiKeyId: null, authorized: false })
+    await expect(resolveApiKeyIdentity({ 'x-api-key': 'osw-broken' }, true)).resolves.toEqual({ apiKeyId: null, authorized: false })
   })
 })

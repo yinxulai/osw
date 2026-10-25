@@ -19,14 +19,16 @@ import { configReadCacheGeneration } from '@server/database/config-read-cache'
  *
  * ## 什么时候才做这件事
  *
- * 两个开关分开看（见 `ApiKeyIdentityPolicy`）：
+ * 只有模块开着（`apiKeyFeatureEnabled`）才做。模块关着时读完像这个功能从未实现：一律匿名、
+ * 不读密钥存储、不拒绝任何请求。
  *
- * - **认身份**：模块开着（`apiKeyFeatureEnabled`）就做——请求带的 Key 对上了就记下它属于哪一把。
- *   「按 Key 统计用量」「最近使用时间」全靠这一步，所以它**不能**只在拦截打开时才跑。
- * - **拦请求**：还要 `apiKeyAuthEnabled` 也打开。没带 / 带错的请求立刻 401（issue #27 的威胁模型）。
+ * 模块开着就意味着**必须携带 Key**，没有「只认不拦」那么一档：认出来就记下身份（按 Key 统计
+ * 用量、最近使用时间靠它），没带 / 对不上就 401。这两件事本就是同一个开关的两半，拆开只会
+ * 造出「界面上在管 Key、代理侧却不认 Key」的自相矛盾状态。
  *
- * 这是**运行期设置**而不是编译期特性开关：默认保持零配置可用（新用户不必先建 Key），
- * 但一旦打开拦截，没带 Key / 带错 Key 的请求立刻被挡住。
+ * 唯一的例外是**库里一把可用 Key 都没有**（全新安装、或用户把 Key 全删了）：此时无从携带，
+ * 请求放行并记成匿名，否则装好的第一天永远跑不通。这个例外不需要额外开关，它是从「有没有 Key」
+ * 直接推出来的——建好第一把就自动生效。
  */
 
 /** 客户端可能用来递 Key 的头，与转发侧脱敏用的 `CLIENT_AUTH_HEADERS` 保持一致。 */
@@ -101,49 +103,32 @@ async function loadIdentityMap(): Promise<Map<string, string>> {
   return bySecret
 }
 
-/** 拿明文去反查表里找一把可用的 Key；找不到返回 `null`。 */
-async function matchApiKey(presented: string): Promise<string | null> {
-  const bySecret = await loadIdentityMap()
-  for (const [secret, id] of bySecret) {
-    if (secretsEqual(secret, presented)) return id
-  }
-  return null
-}
-
 export interface ApiKeyIdentity {
   /** 认出来的那把 Key 的记录 id；没带、对不上、或模块关着时为 `null`。 */
   apiKeyId: string | null
-  /** 这次请求是否被允许继续。仅在「拦截」打开且没认出来时为 `false`。 */
+  /** 这次请求是否被允许继续。仅在模块开着、且认不出传来的 Key 时为 `false`。 */
   authorized: boolean
-}
-
-/**
- * 这次请求按哪套规则处理身份。
- *
- * 「认身份」与「拦请求」是**两件不同的事**，这里把它们分开，因为默认配置下两者恰好相反：
- * 默认「认身份但不拦」（零配置可用，同时按 Key 的用量有数据可看）。
- */
-export interface ApiKeyIdentityPolicy {
-  /** Key 模块是否存在。关掉时整条按 Key 的路径不存在，一律匿名、且不读密钥存储。 */
-  tracked: boolean
-  /** 是否拒绝没带 / 带错 Key 的请求。 */
-  enforced: boolean
 }
 
 /**
  * 解析这次请求的 API Key 身份。
  *
  * - 模块关着：一律放行且不带身份（等价于这个功能从没实现过，也免得白读一遍密钥存储）。
- * - 模块开着：带了能对上号的 Key 就**记下身份**——不论要不要拦。这是「按 Key 统计用量」
- *   与「最近使用时间」的数据来源；只认不拦不会让任何请求被多拒一次。
- * - 拦截也开着：没带 / 对不上（含已停用、已过期）一律不放行。
+ * - 模块开着：带了能对上号的 Key 就**记下身份**——这是「按 Key 统计用量」与「最近使用时间」
+ *   的数据来源。没带、对不上（含已停用、已过期）一律不放行（issue #27 的威胁模型）。
+ * - 库里的可用 Key 表为空：放行并记成匿名。此时「携带一把 Key」这个要求根本无法满足，
+ *   继续拒绝只会让全新安装的第一条请求就撞上 401——建好第一把之后这个分支自然不再进。
  */
-export async function resolveApiKeyIdentity(headers: IncomingHttpHeaders, policy: ApiKeyIdentityPolicy): Promise<ApiKeyIdentity> {
-  if (!policy.tracked) return { apiKeyId: null, authorized: true }
+export async function resolveApiKeyIdentity(headers: IncomingHttpHeaders, enabled: boolean): Promise<ApiKeyIdentity> {
+  if (!enabled) return { apiKeyId: null, authorized: true }
+  const bySecret = await loadIdentityMap()
+  if (bySecret.size === 0) return { apiKeyId: null, authorized: true }
   const presented = extractPresentedApiKey(headers)
-  if (!presented) return { apiKeyId: null, authorized: !policy.enforced }
-  const apiKeyId = await matchApiKey(presented)
-  return { apiKeyId, authorized: !policy.enforced || apiKeyId !== null }
+  if (!presented) return { apiKeyId: null, authorized: false }
+  for (const [secret, id] of bySecret) {
+    if (secretsEqual(secret, presented)) return { apiKeyId: id, authorized: true }
+  }
+  return { apiKeyId: null, authorized: false }
 }
 
 /** 仅供测试：清空反查表缓存。 */

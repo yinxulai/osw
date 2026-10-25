@@ -151,18 +151,14 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
 
   // 身份闸门放在**认路径之前**：一个带着错 Key 打错地址的客户端，也该被记成「未授权」
   // 而不是「路径不认识」——前者是它在攻击/配置错了，后者只是我们没这个接口。
-  // 两个开关取自这次请求固定的设置快照，入口不另读一遍设置：模块开着就认身份（用量要有数据），
-  // 拦截则是第二个开关的事。
-  const identityResult = await resolveApiKeyIdentity(req.headers, {
-    tracked: session.settings.apiKeyFeatureEnabled,
-    enforced: session.settings.apiKeyAuthEnabled,
-  })
+  // 开关取自这次请求固定的设置快照，入口不另读一遍设置：模块开着就必须携带有效 Key。
+  const identityResult = await resolveApiKeyIdentity(req.headers, session.settings.apiKeyFeatureEnabled)
   if (!identityResult.authorized) {
     console.warn(`[proxy] unauthorized request requestId=${requestId} method=${method} path=${path}`)
     await reject({ statusCode: 401, errorCode: 'UNAUTHORIZED', errorMessage: 'A valid API key is required' }, { apiKeyId: null, logicalModelId: null, clientProtocol: null, requestBody: NO_REQUEST_BODY, transport: 'http' })
     return
   }
-  // 模块关着 / 没带 Key 时恒为 `null`；认出是哪把 Key 时是它的记录 id——与是否拦截无关。
+  // 模块关着 / 库里还没有任何 Key 时恒为 `null`；认出是哪把 Key 时是它的记录 id。
   // 此后每个拒绝/中断分支都带上它。
   const apiKeyId = identityResult.apiKeyId
 
