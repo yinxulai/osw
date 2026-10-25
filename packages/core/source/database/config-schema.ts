@@ -392,6 +392,40 @@ export const schedulingPolicies = sqliteTable(
   ],
 )
 
+/**
+ * 管理面账号。
+ *
+ * 放在配置库里，理由是这张表和供应商、模型是同一类东西：**用户在界面上建出来的、
+ * 丢了就得重建一遍**。它一行也不是「每次请求都要写」的——登录写在下面的会话层，
+ * 而会话刻意**不落库**（见 `management/auth/session-store.ts` 的说明）。
+ *
+ * 身份是 `id`（`user_` 前缀），不是 `username`：文件头第 4 条说了「不许重名」只写在
+ * 应用层，所以这里没有对 `username` 的唯一索引。删账号走的是真删（`deleteUser`），
+ * 不软删——一个被删掉的账号名字让出来是正常的，让位逻辑只有一处冲突检查。
+ *
+ * `passwordHash` 存的是**自描述的编码串**（`scrypt$N$r$p$salt$hash`，见
+ * `management/auth/password.ts`），不是裸摘要：参数跟着每一行走，将来换成本、换算法
+ * 时老账号仍然能被验证，不需要一次全表迁移。
+ */
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    username: text('username').notNull(),
+    /** 自描述的口令哈希串，含算法与参数。 */
+    passwordHash: text('passwordHash').notNull(),
+    /** 最近一次成功登录的时间；从未登录为 `null`。 */
+    lastLoginTime: integer('lastLoginTime'),
+    createdTime: integer('createdTime').notNull(),
+    updatedTime: integer('updatedTime').notNull(),
+  },
+  table => [
+    // 非唯一索引：查账号只按用户名找，但「不许重名」的判断在 store 里做（文件头第 4 条）。
+    index('idx_users_username').on(table.username),
+    index('idx_users_created_time').on(table.createdTime),
+  ],
+)
+
 export type ProviderRow = typeof providers.$inferSelect
 export type ProviderSettingRow = typeof providerSettings.$inferSelect
 export type ProviderEndpointRow = typeof providerEndpoints.$inferSelect
@@ -401,5 +435,6 @@ export type ProtocolConverterRow = typeof protocolConverters.$inferSelect
 export type LogicalModelRow = typeof logicalModels.$inferSelect
 export type SchedulingPolicyRow = typeof schedulingPolicies.$inferSelect
 export type SettingsRow = typeof settings.$inferSelect
+export type UserRow = typeof users.$inferSelect
 export type WorkflowRow = typeof workflows.$inferSelect
 export type RouteRuleSetRow = typeof routeRuleSets.$inferSelect

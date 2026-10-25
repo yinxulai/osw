@@ -4,11 +4,12 @@
  * 这一类判断只有**一个**调用方（`../gateway.ts`），所以它不发日志、不回状态码以外的信息，
  * 只回一个 `ApiAccess`：过了还是没过、没过是因为什么。日志与文档语气归网关，判据归这里。
  *
- * ## 只有一道门：本次启动的凭证
+ * ## 只有一道门：凭证
  *
- * 管理 API 只监听回环，但「只监听回环」不是访问控制：本机浏览器里任意一个网页都能向
- * `127.0.0.1` 发请求，同源策略只挡「读响应」、不挡「发请求」。所以这里只认**本次启动的
- * 凭证**（`x-osw-token`，见 `../token.ts`），页面猜不到，也就发不出被接受的请求。
+ * 管理 API 只监听回环时，「只监听回环」也不是访问控制：本机浏览器里任意一个网页都能向
+ * `127.0.0.1` 发请求，同源策略只挡「读响应」、不挡「发请求」。所以这里只认**凭证**。
+ * 凭证有两种形态，任一有效即通过（见 `hasValidCredential`）：本次启动的 `x-osw-token`
+ * （给本机进程），与登录换来的会话 cookie（给浏览器——真实服务器上浏览器拿不到 token）。
  *
  * 曾经这里还叠着 `Host` 白名单与 CORS 来源白名单。凭证到位之后它们的防御价值归零：
  *
@@ -61,6 +62,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { MANAGEMENT_TOKEN_HEADER } from '../token'
 import { sendError } from '../core/response'
+import { getRequestSession } from '../auth/session-store'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /** 被挡下的四种情形。网关只把它当日志字段用，不改行为。 */
@@ -73,6 +75,17 @@ export interface ApiAccessOptions {
    * 缺省必须是严的那个：忘了传不该顺手把门打开。
    */
   requireCredential?: boolean
+  /**
+   * **不需要凭证**的路径。只放「门本身」：登录、查会话、登出，以及首装时创建第一个账号。
+   *
+   * 这几条路必须能在没有凭证的情况下到达，否则就是「要进这扇门，先出这扇门」——服务器
+   * 形态第一次打开时，用户手上既没有 token（浏览器拿不到，见 `./loopback.ts`）也没有
+   * 会话（还没登录过）。
+   *
+   * 名单由网关传入而不是在这里写死：这几条路径与路由表属于同一份知识，网关是唯一同时
+   * 看得见路由与访问控制的地方。这里只负责按名单短路，名单本身留在 `../gateway.ts`。
+   */
+  publicPaths?: ReadonlySet<string>
 }
 
 export type ApiAccess =
@@ -112,12 +125,31 @@ export function checkApiAccess(req: IncomingMessage, res: ServerResponse, token:
     return { accepted: false, reason: 'method' }
   }
   // `requireCredential: false` 只由开发形态传下来，见文件头的「开发形态的旁路」。
-  if (options.requireCredential !== false && !hasValidToken(req, token)) {
-    sendError(res, 'UNAUTHORIZED', 'Missing or invalid management token', 401)
+  // 公开路径（登录、查会话、登出、首装建号）是第二条例外：它们是门本身。
+  if (options.requireCredential !== false && !options.publicPaths?.has(pathname) && !hasValidCredential(req, token)) {
+    sendError(res, 'UNAUTHORIZED', 'Missing or invalid management credential', 401)
     return { accepted: false, reason: 'credential' }
   }
 
   return { accepted: true }
+}
+
+/**
+ * 这条请求带来的凭证是否有效。
+ *
+ * **两种凭证是并列的**，任一有效即通过：
+ *
+ *   - `x-osw-token`：本次启动的凭证，给本机进程用（`osw stop`、桌面主进程、注入进入口
+ *     HTML 的前端）。
+ *   - 会话 cookie：给**浏览器**用。真实服务器上浏览器拿不到 token（`Host` 不是回环地址时
+ *     入口 HTML 刻意不注入，见 `../gateway/loopback.ts`），它是唯一可行的机制。
+ *
+ * 会话在这里不看 `managementAuthEnabled`：一张会话只可能来自一次成功的登录，也就是
+ * 一次真实的口令证明。那个开关管的是「界面要不要拦人」，不是「这张票算不算数」——
+ * 把两件事混在一起，会让「先建了账号、后来关掉登录」的机器上，已登录的人反而被踢出去。
+ */
+function hasValidCredential(req: IncomingMessage, token: string | null): boolean {
+  return hasValidToken(req, token) || getRequestSession(req) !== null
 }
 
 /**
@@ -161,7 +193,15 @@ function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
   if (typeof origin === 'string' && origin.length > 0) {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
+    // 会话 cookie 是跨源带过来的（开发期控制台在 5173、管理服务在 9301），
+    // 没有这个头浏览器既不会把 `Set-Cookie` 存下来，也不会随请求发出去。
+    // 它只能与**具体来源**配对：`*` 与 credentials 互斥，浏览器会把整条响应判为
+    // 不合格，于是「开发期换了个端口」这种正常场景反而彻底连不上。
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
   } else {
+    // 没有 `Origin` 说明不是浏览器发的（`osw stop`、脚本、服务端转发）。这类调用方
+    // 本来就不存在「要不要带 cookie」的问题，于是这里只回 `*` 不声明 credentials——
+    // 与上面那句互斥关系一一对应。
     res.setHeader('Access-Control-Allow-Origin', '*')
   }
   res.setHeader('Access-Control-Allow-Headers', requestedHeaders(req))

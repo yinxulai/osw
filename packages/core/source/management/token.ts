@@ -27,7 +27,7 @@
  * 都会 401。所以「一次应用启动」= 一份凭证。
  */
 
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 
 /** 凭证请求头。名字带前缀，避免与将来可能出现的其他 `X-*` 头撞在一起。 */
 export const MANAGEMENT_TOKEN_HEADER = 'x-osw-token'
@@ -44,4 +44,51 @@ export const MANAGEMENT_TOKEN_HEADER = 'x-osw-token'
  */
 export function generateManagementToken(): string {
   return randomBytes(32).toString('base64url')
+}
+
+/**
+ * 本次启动的凭证，供**校验侧**读取。
+ *
+ * 网关从自己的 `options.token` 拿（那是最直接的一条路），但账号管理路由
+ * （`routes/operations/auth.ts`）也要回答「你有没有资格改账号」，而它离网关有好几层。
+ * 与其让每一层都把凭证当参数传下去，不如在启动时灌进这个模块一次——
+ * 和 `configureSettingsDefaults` 是同一种做法：把启动期的**事实**交给模块，
+ * 而不是让它自己去猜。
+ *
+ * 只存校验用的那一份，仍然不落盘、不打印：凭证的交付通道只有 `./token-file.ts`。
+ */
+let configuredToken: string | null = null
+
+export function configureManagementToken(token: string | null): void {
+  configuredToken = token
+}
+
+/**
+ * 只取 `headers` 的请求形状。
+ *
+ * 不直接用 `IncomingMessage`：账号管理路由给自己的判据只需要请求头，而凭证的校验
+ * 与「这是一次真实的 HTTP 请求」无关，测试里可以直接递一个字面量。
+ */
+export interface TokenRequestLike {
+  headers: Record<string, string | string[] | undefined>
+}
+
+/**
+ * 请求是否带着本次启动的有效凭证。
+ *
+ * 与 `./gateway/access.ts` 的 `hasValidToken` 同一条比较规则（定长比较、数组头一律不认、
+ * 未配置时 fail-closed）。这里独立实现一份而不是导出那边那个：那个函数的语义是「管理面
+ * 的门」，它变了（比如改成也接受别的头）不该连带改变账号管理的授权判据。
+ */
+export function hasValidStartupToken(req: TokenRequestLike): boolean {
+  const expected = configuredToken
+  if (expected === null) return false
+  const provided = req.headers[MANAGEMENT_TOKEN_HEADER]
+  if (Array.isArray(provided)) return false
+  if (typeof provided !== 'string' || provided.length === 0) return false
+
+  const expectedBytes = Buffer.from(expected, 'utf8')
+  const providedBytes = Buffer.from(provided, 'utf8')
+  if (expectedBytes.length !== providedBytes.length) return false
+  return timingSafeEqual(expectedBytes, providedBytes)
 }

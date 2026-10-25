@@ -184,8 +184,11 @@ function cliArguments(overrides: Partial<CliArguments> = {}): CliArguments {
     host: null,
     proxyPort: null,
     managementPort: null,
+    managementHost: null,
     serveWeb: true,
     json: false,
+    positionals: [],
+    passwordStdin: false,
     ...overrides,
   }
 }

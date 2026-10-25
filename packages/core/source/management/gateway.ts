@@ -14,6 +14,7 @@
  * | 2 | 静态文件命中 | 控制台产物 | SPA 回退要拿到**未被改写过的**请求，所以它在所有门之前 |
  * | 3 | `OPTIONS` | CORS 预检 204 | 预检是浏览器自己发的，不该被要求带凭证 |
  * | 4 | 非 `/api/`、非 `POST` | 404 / 405 | 对不存在的路径回 `401` 等于用状态码确认「凭证不对」，语义倒置 |
+ * | 4.5 | 公开路径（登录/会话/登出/首装建号） | 谁都不应答 → 往下走 | 它们是**门本身**，要求凭证进来就成了「要进这扇门先出这扇门」 |
  * | 5 | 凭证不对（正式形态） | 401 | 唯一的门，**没有例外**，见 `./gateway/access.ts` |
  * | 6 | 正式形态的 `/api/development/seed` | 404 | 开发路径在正式形态必须**不存在**，不能靠路由自己记得判 |
  * | 7 | 其它 `/api/*` | 路由 | 到这里请求一定合规，剩下的是业务 |
@@ -43,6 +44,26 @@ import { isDevelopmentOnlyPath, rejectDevelopmentOnlyPath } from './gateway/deve
 import { handleApiRequest } from './router'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RuntimeEnvironment } from '@common/runtime-profile'
+
+/**
+ * 不需要凭证就能到达的路径。
+ *
+ * 只放**门本身**：
+ *
+ *   - `login` / `session` / `logout`：没有它们就没有办法拿到会话；
+ *   - `account/create`：首装时库里一个账号都没有，此时没有任何人能持有会话，而「建第一个
+ *     账号」必须能做——服务器形态尤其如此，它启动时甚至会要求先有账号。
+ *     路由自己会判「已有账号则必须带凭证」，把这条授权规则留在它该在的地方。
+ *
+ * 其余一切 `/api/*` 都必须带凭证。加一条进来之前先回答：这条请求拿不到会话的用户，
+ * 凭什么能调它？
+ */
+const PUBLIC_API_PATHS: ReadonlySet<string> = new Set([
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/session',
+  '/api/auth/account/create',
+])
 
 export interface ManagementGatewayOptions {
   /**
@@ -104,7 +125,7 @@ export function createManagementGateway(options: ManagementGatewayOptions = {}):
 
       // 3 + 4 + 5：CORS、预检、路径、方法、凭证。开发形态不要求凭证，
       // 其它判据在两种形态下完全一致（见 `./gateway/access.ts`）。
-      const access = checkApiAccess(req, res, token, { requireCredential: !isDevelopment })
+      const access = checkApiAccess(req, res, token, { requireCredential: !isDevelopment, publicPaths: PUBLIC_API_PATHS })
       if (!access.accepted) return 'rejected'
 
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname

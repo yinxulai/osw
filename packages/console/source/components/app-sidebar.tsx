@@ -1,11 +1,13 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
-import { Pin, PinOff } from 'lucide-react'
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { LogOut, Pin, PinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Theme } from '@/lib/theme-mode'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTranslation } from '@/i18n/provider'
+import { useAuthSession, useLogout } from '@/data/auth'
+import { routePaths } from '@/routing/routes'
 import { appNavigationItems, type AppNavigationItem } from '@/routing/navigation'
 import { type AppNavPath } from '@/routing/routes'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
@@ -78,6 +80,12 @@ export function isSpuriousHoverLeave(event: PointerLike, element: Element | null
 export function AppSidebar(props: AppSidebarProps) {
   const t = useTranslation()
   const expanded = props.expanded
+  const navigate = useNavigate()
+  // 会话与登出都在这里取，而不是由 `App.tsx` 传 prop：侧栏是唯一用到它们的地方，
+  // 而这一行只在服务要求登录时才渲染，桌面用户根本看不到它。
+  const session = useAuthSession()
+  const logout = useLogout()
+  const hasSession = session?.required === true && session.authenticated
   const pathname = useRouterState({ select: state => state.location.pathname })
   const [focusedKey, setFocusedKey] = useState<AppNavPath | null>(null)
   const [hoveredKey, setHoveredKey] = useState<AppNavPath | null>(null)
@@ -311,6 +319,29 @@ export function AppSidebar(props: AppSidebarProps) {
             {props.proxyRunning ? t('nav.status.running', { port: props.proxyPort ?? 0 }) : t('nav.status.stopped')}
           </span>
         </div>
+        {/*
+         * 登出只在「这台服务要求登录」时才存在。桌面用户把开关关掉后，这一行必须跟着消失：
+         * 一个没有会话可登出的按钮，点下去只会让人怀疑自己点错了东西。
+         *
+         * 登出后要手动跳登录页：路由守卫只在**导航时**生效，而登出之后我们还在原地，
+         * 不跳的话用户会看到满屏 401（下一轮请求才把人送走）。
+         */}
+        {hasSession && (
+          <button
+            type="button"
+            aria-label={t('nav.sidebar.logout')}
+            disabled={logout.isPending}
+            onClick={() => logout.mutate(undefined, { onSuccess: () => void navigate({ to: routePaths.login, replace: true }) })}
+            className={cn(
+              'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
+              'system-xs-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+              'focus-visible:ring-2 focus-visible:ring-state-accent-solid disabled:opacity-60',
+            )}
+          >
+            <LogOut aria-hidden="true" />
+            <span className={revealClassName(expanded)}>{t('nav.sidebar.logout')}</span>
+          </button>
+        )}
       </div>
     </div>
   )

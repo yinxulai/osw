@@ -4,6 +4,9 @@ import type { SecretStore } from '@common/secret-store'
 import type { TelemetryServiceFailureReason } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
+import { hasAnyAccount } from '@server/database/user-store'
+import { configureManagementToken } from '../management/token'
+import { isLoopbackHost } from '../management/gateway/loopback'
 import { configureClientConfigEnvironment } from '../client-config/environment'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { configureCoreNetworkConnector, resetCoreNetworkConnector } from '../infrastructure/network/core-network'
@@ -73,7 +76,25 @@ export class ServerRuntime {
     try {
       resetManualModels()
       configureSecretStore(this.options.secretStore)
-      configureSettingsDefaults({ listenHost: config.proxyHost, listenPort: config.proxyPort })
+      // `managementAuthEnabled` 的缺省值只在这里算**一次**：
+      //
+      //   回环 → 关。旧行为，本机用户开箱即用，不折腾他登录。
+      //   非回环 → 开。这是「装到服务器上给别人用」的形态，不设防等于把明文密钥的导出
+      //            接口挂到局域上。
+      //
+      // 宿主（App / CLI）不必各自判一遍，网关也不回头读设置——三者都只认这一处的结论
+      // （见 `../management/auth/service.ts` 文件头）。用户写过的值始终优先，
+      // 所以这一行不会把已经关掉的桌面用户顶掉。
+      const managementAuthRequired = !isLoopbackHost(config.managementHost)
+      configureSettingsDefaults({
+        listenHost: config.proxyHost,
+        listenPort: config.proxyPort,
+        managementAuthEnabled: managementAuthRequired,
+      })
+      // 账号管理路由（`../management/routes/operations/auth.ts`）也要判「你有没有资格
+      // 改账号」，而那层离网关有好几层。把凭证交给模块一次，比让每一层都把它当参数
+      // 传下去干净：它和上一行的 `configureSettingsDefaults` 是同一种做法。
+      configureManagementToken(config.managementToken)
       // 开发实例与正式实例跑在同一台机器上，写的是**同一份**客户端配置文件（`~/.codex/config.toml`…）。
       // 所以「写进客户端配置的 provider 叫什么」必须随环境变，否则开发时点一下「生成配置」就把
       // 用户正在用的正式配置改掉了（见 `../client-config/environment.ts`）。与 POD 无关，只是把
@@ -86,6 +107,19 @@ export class ServerRuntime {
       // 而不是某个宿主的（见 `./instance-lock.ts`）。
       await this.acquireInstanceLock(config.dataDir)
       await initDatabases(config.dataDir)
+      // 服务器形态的底线：没有账号就不允许起来。
+      //
+      // 判断依据是「这次要监听非回环地址」而不是「设置里开了没」：后者只表达意愿，而一个
+      // 一个账号都没有的服务在公网上打开，任何人访问 `/api/settings/get` 就能读到全部密钥。
+      //
+      // 这一步必须排在 `startManagementServer` 之前：端口一旦开，裸奔就发生了，没有
+      // 「先开起来再检查」这种余地。用户看到的是启动失败 + 怎么修，而不是一个能进的面板。
+      if (managementAuthRequired && !(await hasAnyAccount())) {
+        throw new Error(
+          `Refusing to listen on ${config.managementHost}: no management account exists yet. ` +
+            'Create one first with `osw user add <username>`, or start once on 127.0.0.1 and create it from the web UI.',
+        )
+      }
       const outboundConnector = createOutboundConnector(getSettings, this.options.systemProxyResolver)
       await outboundConnector.initialize()
       configureOutboundConnector(outboundConnector, this.options.systemProxyResolver)

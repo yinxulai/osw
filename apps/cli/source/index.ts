@@ -20,6 +20,7 @@ import { renderHelp } from './commands/help'
 import { runStart } from './commands/start'
 import { runStatus } from './commands/status'
 import { runStop } from './commands/stop'
+import { runUser } from './commands/user'
 
 const USAGE_ERROR_EXIT_CODE = 2
 
@@ -62,6 +63,8 @@ async function main(argv: readonly string[]): Promise<number> {
       return runStop(values)
     case 'status':
       return runStatus(values)
+    case 'user':
+      return runUser(values)
     case 'version':
       // 只有版本号，没有前缀：它要能被脚本直接取用。
       process.stdout.write(`${__CLI_VERSION__}\n`)

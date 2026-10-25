@@ -14,6 +14,8 @@
  */
 
 export const routePaths = {
+  /** 登录（全屏特殊页，不参与侧边栏导航） */
+  login: '/login',
   /** 新用户引导（全屏特殊页，不参与侧边栏导航） */
   onboarding: '/onboarding',
   /** 智能路由（路由工作台） */
@@ -43,10 +45,13 @@ export const routePaths = {
 /**
  * 不含路径参数的页面路径：侧边栏一级导航只在这些页面之间切换。
  *
- * 引导页是 `App.tsx` 里整屏覆盖的特殊层（没有侧边栏），因此从一级导航的取值里排除，
- * 免得以后有人顺手把它塞进 `baseNavItems`。
+ * 引导页与登录页是 `App.tsx` 里整屏覆盖的特殊层（没有侧边栏），因此从一级导航的取值里排除，
+ * 免得以后有人顺手把它们塞进 `baseNavItems`。
  */
 export type AppNavPath = Exclude<
   (typeof routePaths)[keyof typeof routePaths],
-  typeof routePaths.overviewProvider | typeof routePaths.clientConfigDetail | typeof routePaths.onboarding
+  | typeof routePaths.overviewProvider
+  | typeof routePaths.clientConfigDetail
+  | typeof routePaths.onboarding
+  | typeof routePaths.login
 >

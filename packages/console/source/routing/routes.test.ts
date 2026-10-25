@@ -10,6 +10,9 @@ import { routePaths } from './routes'
  * 拼接与匹配只有一套规则（没有可选段、没有模板占位符以外的花样）。
  */
 
+// 整屏页：没有侧栏，因此不进「一级页面 = 侧栏入口」这条约束。
+const FULL_SCREEN_PATHS = [routePaths.onboarding, routePaths.login]
+
 describe('routePaths', () => {
   it('每个路径都是绝对的斜杠开头路径', () => {
     for (const value of Object.values(routePaths)) {
@@ -48,12 +51,12 @@ describe('routePaths', () => {
     expect(new Set(values).size).toBe(values.length)
   })
 
-  it('12 个页面：1 个引导页 + 9 个一级页 + 2 个下钻', () => {
+  it('13 个页面：2 个整屏页 + 9 个一级页 + 2 个下钻', () => {
     const values = Object.values(routePaths)
     const drillDowns = values.filter(value => value.includes('$'))
-    const firstLevel = values.filter(value => !value.includes('$') && value !== routePaths.onboarding)
+    const firstLevel = values.filter(value => !value.includes('$') && !FULL_SCREEN_PATHS.includes(value))
 
-    expect(values).toHaveLength(12)
+    expect(values).toHaveLength(13)
     expect(drillDowns).toHaveLength(2)
     expect(firstLevel).toHaveLength(9)
     // 一级页面的数量必须与侧栏一致，否则会出现「路由有、点不到」的页面。
@@ -62,7 +65,7 @@ describe('routePaths', () => {
 
   it('每个一级页面都在侧栏里有一个入口，路径与文案一一对应', () => {
     const navPaths = appNavigationItems.map(item => item.to)
-    const firstLevel = Object.values(routePaths).filter(value => !value.includes('$') && value !== routePaths.onboarding)
+    const firstLevel = Object.values(routePaths).filter(value => !value.includes('$') && !FULL_SCREEN_PATHS.includes(value))
 
     expect(new Set(navPaths)).toEqual(new Set(firstLevel))
   })

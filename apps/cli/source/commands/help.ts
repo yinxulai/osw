@@ -22,6 +22,7 @@ const COMMAND_KEYS: Record<CliCommand, UiCatalogKey> = {
   start: 'native.cli.command.start',
   stop: 'native.cli.command.stop',
   status: 'native.cli.command.status',
+  user: 'native.cli.command.user',
   version: 'native.cli.command.version',
 }
 
@@ -41,6 +42,11 @@ export function renderHelp(): string {
     { flag: '-v, --version', key: 'native.cli.option.version' },
     { flag: '--data-dir <path>', key: 'native.cli.option.dataDir', params: { default: defaultDataDirectory() } },
     { flag: '--host <host>', key: 'native.cli.option.host', params: { default: defaultHost } },
+    {
+      flag: '--management-host <host>',
+      key: 'native.cli.option.managementHost',
+      params: { default: defaultHost },
+    },
     { flag: '--proxy-port <port>', key: 'native.cli.option.proxyPort', params: { default: profile.proxyPort } },
     {
       flag: '--management-port <port>',
@@ -50,6 +56,7 @@ export function renderHelp(): string {
     { flag: '--web', key: 'native.cli.option.web' },
     { flag: '--no-web', key: 'native.cli.option.noWeb' },
     { flag: '--json', key: 'native.cli.option.json' },
+    { flag: '--password-stdin', key: 'native.cli.option.passwordStdin' },
   ]
 
   const lines: string[] = [
@@ -63,9 +70,10 @@ export function renderHelp(): string {
     t('native.cli.options'),
     ...optionRows.map(row => `  ${row.flag.padEnd(OPTION_COLUMN_WIDTH)}${t(row.key, row.params)}`),
     '',
-    // 没有 `--management-host`：管理服务不带鉴权，只监听回环。写在这里，
-    // 免得有人翻遍选项去找那个不存在的旗标。
-    `  ${t('native.cli.managementLoopback')}`,
+    // 管理面以前固定只监听回环、也没有鉴权，那时这里写的是「想远程访问请走 SSH 隧道」。
+    // 现在管理面可以监听别的地址，但**默认要求登录**——把这条说在明处，比让人
+    // 开了 `--management-host 0.0.0.0` 之后才发现要账号好得多。
+    `  ${t('native.cli.managementAuthHint')}`,
   ]
 
   return lines.join('\n')

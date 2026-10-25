@@ -130,7 +130,10 @@ describe('request', () => {
     const result = await request<{ id: string }>('/provider/get', { id: 'prov_1' })
 
     expect(result).toEqual({ success: true, data: { id: 'prov_1' } })
+    // `credentials: 'include'` 是会话 cookie 能带上的唯一原因：浏览器、`fetch` 的
+    // 缺省值都不带它，漏了就变成「登录成功、下一条请求又 401」。
     expect(fetchMock).toHaveBeenCalledWith(`${resolveApiBase()}/provider/get`, {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: 'prov_1' }),
@@ -263,7 +266,9 @@ describe('openStream', () => {
     const { openStream, resolveApiBase } = await loadClient()
 
     await expect(openStream('/live-request/stream')).resolves.toBe(body)
+    // 推送流同样走会话 cookie：它也是 `/api/*`，也过同一道鉴权。
     expect(fetchMock).toHaveBeenCalledWith(`${resolveApiBase()}/live-request/stream`, {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',

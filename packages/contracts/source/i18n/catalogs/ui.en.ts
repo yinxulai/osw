@@ -35,6 +35,7 @@ export const uiEn = {
   // 后缀 `sidebar` 是必须的 —— 单说 `Pin` 读不出钉的是谁。
   'nav.sidebar.pin': 'Pin sidebar',
   'nav.sidebar.unpin': 'Unpin sidebar',
+  'nav.sidebar.logout': 'Sign out',
   'nav.breadcrumb': 'Breadcrumb',
 
   // ========== 通用 ==========
@@ -1730,6 +1731,13 @@ Score request size in a sandbox script, then route by score band to different lo
   'errors.DUPLICATE_RESOURCE': 'A resource with the same name already exists',
   'errors.RESOURCE_CONFLICT': 'Resource conflict',
   'errors.METHOD_NOT_ALLOWED': 'Unsupported request method',
+  'errors.MANAGEMENT_LOGIN_REQUIRED': 'Sign in to continue',
+  'errors.MANAGEMENT_ACCOUNT_MISSING': 'This service has no management account yet. Create one first.',
+  'errors.MANAGEMENT_INVALID_CREDENTIALS': 'Incorrect username or password',
+  'errors.MANAGEMENT_ACCOUNT_EXISTS': 'The username {username} is already taken',
+  'errors.MANAGEMENT_ACCOUNT_NOT_FOUND': 'The account does not exist or was deleted',
+  'errors.MANAGEMENT_LAST_ACCOUNT': 'The last management account cannot be deleted, otherwise nobody could sign in again',
+  'errors.MANAGEMENT_WEAK_PASSWORD': 'The password must be at least {minimum} characters',
   'errors.INVALID_JSON': 'Request body is not valid JSON',
   'errors.UNKNOWN_API_PATH': 'Unrecognized API path',
   'errors.UPSTREAM_ERROR': 'Upstream request failed',
@@ -1768,6 +1776,21 @@ Score request size in a sandbox script, then route by score band to different lo
   'errors.CLOUD_SYNC_REMOTE_FILE_MISSING': 'The remote location does not contain {fileName} yet: upload from the machine that already has the configuration',
   'errors.CLOUD_SYNC_REMOTE_FILE_INVALID': '{fileName} at the remote location is not valid JSON: it may have been edited by hand, upload a new snapshot to overwrite it',
 
+  // ========== 登录 ==========
+  // 只在「这台服务要求登录」时出现，所以文案里不解释「为什么要登录」，只说眼下该做什么。
+  // `noAccount*` 三条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
+  'login.eyebrow': 'Management console',
+  'login.title': 'Sign in',
+  'login.username': 'Username',
+  'login.password': 'Password',
+  'login.remember': 'Keep me signed in',
+  'login.rememberHint': 'When this is off, closing the browser signs you out.',
+  'login.submit': 'Sign in',
+  'login.submitting': 'Signing in…',
+  'login.noAccount': 'This service has no management account yet.',
+  'login.noAccountDetail': 'Run osw user add <username> on the server to create one (at least {minimum} characters), then reload this page.',
+  'login.noAccountHint': 'If the service runs in Docker or under a system service manager, run that command in the environment that actually runs it.',
+
   // ========== 新用户引导 ==========
   // 引导是一条两步直线：拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
   // 选路不单独成步：内建默认已经在下，新手先跑起来，路由细节去「路由」页再调。
@@ -1802,6 +1825,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.section.reliability': 'Reliability',
   'settings.section.data': 'Data',
   'settings.section.sync': 'Cloud sync',
+  'settings.section.access': 'Access control',
   'settings.section.developer': 'Developer',
   'settings.footer.allSaved': 'All settings saved',
   'settings.footer.dirty': 'You have unsaved changes',
@@ -2050,6 +2074,30 @@ Score request size in a sandbox script, then route by score band to different lo
   'settings.development.screenshotsDone': 'Exported {count} screenshots to {path}',
   'settings.development.screenshotsFailed': 'Screenshot export failed: {message}',
 
+  // 访问控制
+  // 开关与账号列表同卡片、不同保存方式：开关进草稿（跟保存按钮走），
+  // 建号/改口令/删号一按即写（理由见 `access-control-card.tsx` 文件头）。
+  'settings.auth.title': 'Access control',
+  'settings.auth.description': 'Require signing in before this console opens (proxy traffic is unaffected)',
+  'settings.auth.enabled': 'Require sign-in',
+  'settings.auth.enabledDescription': 'When on, every page except the sign-in page requires a session. This console can change configuration and export plaintext keys, so turn it on for shared machines.',
+  'settings.auth.accounts': 'Accounts',
+  'settings.auth.empty': 'No accounts yet. The switch above only takes effect once the first account exists.',
+  'settings.auth.neverLoggedIn': 'Never signed in',
+  'settings.auth.lastLogin': 'Last signed in: {time}',
+  'settings.auth.changePassword': 'Change password',
+  'settings.auth.remove': 'Delete account',
+  'settings.auth.removeTitle': 'Delete account {username}?',
+  'settings.auth.removeDescription': 'Browsers signed in with this account are signed out immediately. The last account cannot be deleted: nobody would be able to sign in afterwards.',
+  'settings.auth.addTitle': 'New account',
+  'settings.auth.addDescription': 'Usernames use letters, digits, dot, underscore and hyphen; passwords are at least {minimum} characters.',
+  'settings.auth.usernamePlaceholder': 'Username',
+  'settings.auth.passwordPlaceholder': 'Password',
+  'settings.auth.addAction': 'Create',
+  'settings.auth.created': 'Account created',
+  'settings.auth.removed': 'Account deleted',
+  'settings.auth.passwordChanged': 'Password updated',
+
   // 开发者
   'settings.developer.title': 'Developer',
   'settings.developer.description': 'Source code, community and the people behind OSW',
@@ -2119,18 +2167,36 @@ Score request size in a sandbox script, then route by score band to different lo
   'native.cli.command.start': 'Start the service (default when no command is given)',
   'native.cli.command.stop': 'Stop the instance started by this CLI',
   'native.cli.command.status': 'Show state, listen addresses, data directory and version',
+  'native.cli.command.user': 'Manage sign-in accounts (list, add, remove)',
   'native.cli.command.version': 'Print the version',
   'native.cli.options': 'Options:',
   'native.cli.option.help': 'Show this help',
   'native.cli.option.version': 'Print the version',
   'native.cli.option.dataDir': 'Data directory (default: {default})',
   'native.cli.option.host': 'Proxy listen host (default: {default})',
+  'native.cli.option.managementHost': 'Management listen host (default: {default}; any other value requires sign-in)',
   'native.cli.option.proxyPort': 'Proxy port (default: {default})',
   'native.cli.option.managementPort': 'Management port (default: {default})',
   'native.cli.option.web': 'Serve the console from the management service (default: on)',
   'native.cli.option.noWeb': 'Do not serve the console; only the HTTP API is available',
   'native.cli.option.json': 'Print JSON instead of text (status only)',
-  'native.cli.managementLoopback': 'The management service always listens on 127.0.0.1: it has no authentication, so remote access has to go through an SSH tunnel.',
+  'native.cli.option.passwordStdin': 'Read the password from stdin (user add)',
+  'native.cli.managementAuthHint': 'The management service listens on 127.0.0.1 by default. Pass --management-host to expose it, and create an account first with osw user add: a service listening on a non-loopback address requires sign-in and refuses to start without an account.',
+
+  'native.cli.user.missingUsername': 'user add / user remove need a username: osw user add <username>',
+  'native.cli.user.unknownAction': 'Unknown user action: {action} (expected list, add or remove)',
+  'native.cli.user.databaseFailed': 'Cannot open the database: {message}',
+  'native.cli.user.empty': 'No management account yet in {dataDir}. Add one with osw user add <username>.',
+  'native.cli.user.listTitle': 'Accounts (username, last sign-in):',
+  'native.cli.user.listHint': 'Data dir: {dataDir}',
+  'native.cli.user.added': 'Added account {username} in {dataDir}.',
+  'native.cli.user.addedHint': 'Restart the service (osw stop && osw start) for the new account to take effect.',
+  'native.cli.user.removed': 'Removed account {username} from {dataDir}.',
+  'native.cli.user.notFound': 'No such account: {username}',
+  'native.cli.user.addFailed': 'Cannot add the account: {message}',
+  'native.cli.user.removeFailed': 'Cannot remove the account: {message}',
+  'native.cli.user.passwordPrompt': 'Password: ',
+  'native.cli.user.passwordMissing': 'No password was provided.',
 
   'native.cli.start.title': 'OSW {version} ({environment})',
   'native.cli.start.console': 'Console: {url}',

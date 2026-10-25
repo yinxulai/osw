@@ -167,6 +167,9 @@ describe('schema split', () => {
       'route_rule_sets',
       'scheduling_policies',
       'settings',
+      // 管理账号落在配置库而不是观测库：它是「谁能进门」的配置，跟请求日志没有关系，
+      // 而且它必须跟设置一起备份——丢掉这张表就等于把所有登录能力一起丢掉。
+      'users',
       'workflows',
     ].sort())
   })
@@ -304,6 +307,8 @@ describe('schema split', () => {
       'idx_scheduling_policies_deleted_time',
       'idx_scheduling_policies_route',
       'idx_settings_updated_time',
+      'idx_users_created_time',
+      'idx_users_username',
       'idx_workflows_deleted_time',
       'idx_workflows_type',
       'idx_workflows_type_version',

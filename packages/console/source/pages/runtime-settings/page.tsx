@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { useRuntimeSettingsService } from './service'
 import { ListenConfigCard } from './components/listen-config-card'
+import { AccessControlCard } from './components/access-control-card'
 import { OutboundProxyCard } from './components/outbound-proxy-card'
 import { CloudSyncCard } from './components/cloud-sync-card'
 import { FailoverCard } from './components/failover-card'
@@ -149,6 +150,13 @@ export function RuntimeSettingsPage() {
                 onModeChange={value => service.updateField('outboundProxyMode', value)}
                 onProxyUrlChange={value => service.updateField('outboundProxyUrl', value)}
                 onBypassChange={value => service.updateField('outboundProxyBypass', value)}
+              />
+            </SettingsSection>
+
+            <SettingsSection title={t('settings.section.access')}>
+              <AccessControlCard
+                enabled={service.settings.managementAuthEnabled}
+                onEnabledChange={value => service.updateField('managementAuthEnabled', value)}
               />
             </SettingsSection>
 

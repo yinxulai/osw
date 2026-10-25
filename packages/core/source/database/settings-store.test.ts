@@ -10,7 +10,7 @@ let temporaryDirectory: string
 beforeEach(async () => {
   temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'osw-settings-store-'))
   await initDatabases(temporaryDirectory)
-  configureSettingsDefaults({ listenHost: '127.0.0.1', listenPort: 9300 })
+  configureSettingsDefaults({ listenHost: '127.0.0.1', listenPort: 9300, managementAuthEnabled: false })
 })
 
 afterEach(async () => {
@@ -56,9 +56,12 @@ describe('settings store', () => {
   })
 
   it('falls back to configured defaults when a key is absent', async () => {
-    configureSettingsDefaults({ listenHost: '127.0.0.1', listenPort: 9500 })
+    // 三个字段都要给：默认值是「这次启动的缺省」，`managementAuthEnabled` 由监听地址决定，
+    // 所以它不是一个可以省略的常量。
+    configureSettingsDefaults({ listenHost: '127.0.0.1', listenPort: 9500, managementAuthEnabled: true })
 
     const settings = await getSettings()
     expect(settings.listenPort).toBe(9500)
+    expect(settings.managementAuthEnabled).toBe(true)
   })
 })
