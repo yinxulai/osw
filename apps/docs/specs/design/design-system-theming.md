@@ -16,7 +16,7 @@
 | --- | --- |
 | 类名 | `dark`，加在 **`<html>`**（`document.documentElement`）上 |
 | Tailwind 变体 | `@custom-variant dark (&:is(.dark *))`（`styles/index.css:8`）——**后代选择器**，所以类必须在 `<html>` 或更高的祖先上 |
-| 原生控件 | `html { color-scheme: light }`（`:658`）/ `html.dark { color-scheme: dark }`（`:661`）——滚动条、原生下拉、日期选择器跟着走 |
+| 原生控件 | `html { color-scheme: light }`（`:658`）/ `html.dark { color-scheme: dark }`（`:661`）——滚动条、原生下拉跟着走。**日期选择器不在此列**：应用用的是自己的 `DatePicker` / `DateRangePicker`（popover + 日历），外观由 token 控制，与 `color-scheme` 无关 |
 | 测试 | `shell/document-theme.test.tsx`（覆盖亮/暗切换与"从暗切回亮时 `<html>` 上不应残留"） |
 
 ### 0.2 状态：偏好是三相，生效值是两相
@@ -229,7 +229,7 @@ rg -n 'dark:(bg|text|border|ring)-(slate|gray|zinc|red|orange|amber|yellow|green
 | --- | --- | --- | --- |
 | 1 | **第一帧不闪** | 依赖 `boot.js` 与 React 的时序 | 冷启动时把系统主题切到暗，观察是否闪白光。**这是 `boot.js` 存在的唯一理由** |
 | 2 | **滚动条** | 由 `color-scheme` 决定 | `::-webkit-scrollbar` 是自定义的（`index.css:687-695`），轨道色走 `hsl(var(--border))`；原生滚动条部分靠 `color-scheme` |
-| 3 | **原生控件**：`<select>` 下拉、日期选择器、`input[type=date]` | 由 `color-scheme` 决定，不在 CSS 里 | 暗色下打开原生下拉，应为深色 |
+| 3 | **原生控件**：`<select>` 下拉 | 由 `color-scheme` 决定，不在 CSS 里 | 暗色下打开原生下拉，应为深色 |
 | 4 | **表单控件的禁用态** | `disabled:opacity-50` 是 alpha 压暗（[`design-system-accessibility.md`](./design-system-accessibility.md) §1.4） | 暗色下压暗后可能"看不见"——不是"看不太清"，是**没有对比度** |
 | 5 | **焦点环** | 5 种颜色写法（[`design-system-accessibility.md`](./design-system-accessibility.md) §3.2），其中 `ring-white/35` 在亮色下必然不可见 | 暗色下 `Tab` 一遍，看环是否都在 |
 | 6 | **sticky 表头** | 用了 `bg-card/95 backdrop-blur-sm`（`logs-table.tsx:109`）或 `bg-inset`（`request-logs-table.tsx:98`） | 半透明 + 模糊的底色在暗色下若与表体接近，滚动时会"糊成一片" |

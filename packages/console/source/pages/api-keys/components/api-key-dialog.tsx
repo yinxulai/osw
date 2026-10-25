@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/date-picker'
 import { FORM_DIALOG_BODY_CLASSNAME, FormField, FormSwitchRow } from '@/components/form-kit'
 import { useTranslation } from '@/i18n/provider'
 import type { ApiKeyDraft } from '../lib/draft'
@@ -53,11 +54,19 @@ export function ApiKeyDialog(props: ApiKeyDialogProps) {
           </FormField>
 
           <FormField label={t('apiKeys.form.expires')} htmlFor="api-key-expires" hint={t('apiKeys.form.expiresHint')}>
-            <Input
+            {/*
+              用应用自己的日期选择器，而不是原生 `type="date"`：原生框的外观由操作系统决定，
+              暗色下、不同系统上各不相同，和旁边同样是「选一天」的筛选项对不上。
+              值是本地日期串，空串就是「永不过期」。
+            */}
+            <DatePicker
               id="api-key-expires"
-              type="date"
+              label={t('apiKeys.form.expires')}
+              placeholder={t('apiKeys.form.expiresPlaceholder')}
               value={draft.expiresDate}
-              onChange={event => onChange({ ...draft, expiresDate: event.target.value })}
+              onChange={expiresDate => onChange({ ...draft, expiresDate })}
+              // 与上方的名称输入框同宽：表单字段里的控件一律占满整行。
+              className="w-full"
             />
           </FormField>
 

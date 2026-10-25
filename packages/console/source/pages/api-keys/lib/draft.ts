@@ -1,4 +1,5 @@
 import type { ApiKeyRow } from '../types'
+import { formatLocalDate } from '@/lib/local-date'
 
 /**
  * 对话框草稿与库字段之间的换算。
@@ -9,7 +10,7 @@ import type { ApiKeyRow } from '../types'
 export interface ApiKeyDraft {
   name: string
   enabled: boolean
-  /** 过期日期（本地日期输入框的值，形如 `2026-01-31`）；空串表示永不过期。 */
+  /** 过期日期（本地日期串，形如 `2026-01-31`）；空串表示永不过期。 */
   expiresDate: string
 }
 
@@ -19,12 +20,10 @@ export function draftExpiresTime(expiresDate: string): number | null {
   return new Date(`${expiresDate}T00:00:00`).getTime() + 24 * 60 * 60 * 1000 - 1
 }
 
-/** 反向：毫秒时间戳 → 日期输入框的值。 */
+/** 反向：毫秒时间戳 → 日期串。 */
 export function toDateInput(expiresTime: number | null): string {
   if (expiresTime === null) return ''
-  const date = new Date(expiresTime)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+  return formatLocalDate(new Date(expiresTime))
 }
 
 export function emptyApiKeyDraft(): ApiKeyDraft {
