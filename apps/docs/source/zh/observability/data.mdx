@@ -36,8 +36,6 @@ OSW 的所有本地状态都放在一个**数据目录**里，默认 `~/.osw`。
 
 在**设置 → 数据 → 数据目录**里可以改数据目录；重启后生效。开发版固定用 `~/.osw-development`，不会碰到你的真实数据。
 
-命令行形态不在设置里改，而是启动时指定：`--data-dir /srv/osw`，或者设环境变量 `OSW_DATA_DIR=/srv/osw`（装在服务器上、启动命令写进 systemd unit 时更好用）。两者同时给出时以命令行参数为准。见[命令行](/reference/cli)。
-
 ## 保留与清理
 
 ![OSW「设置 → 数据 → 请求日志」卡片：请求日志与正文各自的保留天数，以及清理历史日志。](/screenshots/zh-CN/light/settings-log-retention.png)

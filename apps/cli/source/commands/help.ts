@@ -12,7 +12,7 @@ import type { TranslateParams } from '@common/i18n'
 import { getRuntimeProfile } from '@common/runtime-profile'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { cliTranslator } from '../native-i18n'
-import { CLI_RUNTIME_ENVIRONMENT, effectiveDefaultDataDirectory } from '../host'
+import { CLI_RUNTIME_ENVIRONMENT, defaultDataDirectory } from '../host'
 import { CLI_COMMANDS, type CliCommand } from '../options'
 
 const OPTION_COLUMN_WIDTH = 26
@@ -40,7 +40,7 @@ export function renderHelp(): string {
   const optionRows: OptionRow[] = [
     { flag: '-h, --help', key: 'native.cli.option.help' },
     { flag: '-v, --version', key: 'native.cli.option.version' },
-    { flag: '--data-dir <path>', key: 'native.cli.option.dataDir', params: { default: effectiveDefaultDataDirectory() } },
+    { flag: '--data-dir <path>', key: 'native.cli.option.dataDir', params: { default: defaultDataDirectory() } },
     { flag: '--host <host>', key: 'native.cli.option.host', params: { default: defaultHost } },
     {
       flag: '--management-host <host>',

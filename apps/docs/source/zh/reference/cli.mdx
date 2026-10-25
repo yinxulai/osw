@@ -34,7 +34,7 @@ osw [命令] [选项]
 
 | 选项 | 说明 |
 | --- | --- |
-| `--data-dir` | 数据目录。等价的环境变量是 `OSW_DATA_DIR`。 |
+| `--data-dir` | 数据目录。 |
 | `--host` | 代理监听地址。 |
 | `--management-host` | 管理面监听地址。缺省跟随回环；填 `0.0.0.0` 就是把控制台开放给网络。 |
 | `--proxy-port` | 代理端口。 |
@@ -218,8 +218,6 @@ WantedBy=multi-user.target
 ```
 
 `Restart=on-failure` 与 `Type=simple` 都成立：进程正常退出时退出码是 `0`，崩溃是 `1`，用法错误是 `2`。
-
-数据目录位置可以由环境变量指定：在 unit 里加一行 `Environment=OSW_DATA_DIR=/srv/osw`，就不用把 `--data-dir` 写进 `ExecStart`。空值等于没设；同时给了环境变量和 `--data-dir` 时，以**命令行参数**为准。
 
 <Callout title="osw stop 必须用同一个系统用户跑" type="note">
 `stop` 靠数据目录下的 `runtime.json` 定位实例、靠 `management.token`（`0600`）过管理面的门。换个系统用户跑，读不到这两个文件，就只能 `kill`——那会跳过数据库与端口的收尾。同理，`--data-dir` 也必须与启动时一致。

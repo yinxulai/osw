@@ -299,7 +299,7 @@ interface RuntimeConfig {
 - 宿主只往 `core` 交一个完整的 `RuntimeConfig`：`startServer({ runtimeConfig, secretStore, systemProxyResolver?, shutdown? })`。`core` 不读环境变量、不猜默认值、不算地址，返回的是 `ServerEndpoints`（实际生效的地址与端口）。
 - 宿主负责构造：App 用 `app.setPath('userData', path.join(os.homedir(), runtimeProfile.dataDirectoryName))`（必须在 `app.whenReady()` 之前设，之后 `app.getPath('userData')` 与 `os.homedir()` 才是同一个答案），`shutdown` 传 `null`（它有自己的退出路径）；CLI 用参数 + `defaultDataDirectory()`，并传入一个退出握手对象（见 §6 的 `stop`）。
 - **两边都不算数据库文件名**：两个库各自带 schema 版本常量，文件名由 `@common/database-file` 从版本号推导。宿主少算一次文件名，就少一个两种形态可能算出不同结果的地方。
-- CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--management-host`、`--password-stdin`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。`--data-dir` 不是唯一的改法：环境变量 `OSW_DATA_DIR` 也能改，优先级是显式参数 > 环境 > 平台默认（见 §5.5）。
+- CLI 参数覆盖：`--data-dir`、`--proxy-port`、`--management-port`、`--host`、`--management-host`、`--password-stdin`、`--web` / `--no-web`。端口与数据目录名的缺省值来自 `getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT)`，不另存一份写死的副本。
 - `--host` **只作用于代理**，管理面另有 `--management-host`。两者的缺省值也不同：`--host` 落到 `RuntimeConfig.proxyHost`，`--management-host` 缺省为 `null`（由 core 按回环处理）——把缺省写死成 `127.0.0.1` 会让「用户给了 `--management-port` 却在服务器上」这种组合变得无解。所以两个 `*Host` 字段不能合并成一个。
 - **`--management-host` 不是回环时会拒绝启动，直到有账号**：那种形态下端口本身就是边界（见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」）。建号走 `osw user add <username>`，口令用 `--password-stdin` 从管道读（不接受命令行参数：那会进 shell 历史）。也可以先在回环上起来，从界面里建。
 - `--host` 与 `proxyHost` 的关系要注意：`RuntimeConfig.proxyHost` 只是**默认值**，真正生效的监听地址是设置里的 `listenHost`（用户在界面上改过就以设置为准）。因此「命令行传了 `--host` 却没生效」在已有数据目录上是正常行为，而不是配置没被读到。
@@ -313,7 +313,7 @@ interface RuntimeConfig {
 
 选主目录而不是平台 appData 目录，两个原因。一是 Windows 的 `%APPDATA%` 是**漫游配置目录**：会持续增长的请求日志与正文进去后，在有域控的机器上会被同步到服务器，这是实打实的缺陷。二是主目录把平台差异从结构上抹掉了：只要还按平台算目录，两个宿主就必须各写一份实现，任何一侧写错都会让同一个用户拿到半个数据目录（数据库、设置、日志、历史统计全部对不上），而两边都「看起来正常」。
 
-三个平台都不新增**平台专属**的环境变量（`%APPDATA%` / `$XDG_CONFIG_HOME` 之类不参与判断）：数据目录只有三条取值路径，优先级从高到低是 `--data-dir`、`OSW_DATA_DIR`、`<用户主目录>/<预设数据目录名>`。环境变量是给「启动命令不由人手输」的形态准备的（systemd unit、`docker run`、supervisor 配置），那些地方更习惯用环境变量传位置；显式参数仍然压过环境，因为 `OSW_DATA_DIR` 常是全局设的，而 `osw start --data-dir /tmp/x` 是「就这一次」的意思。空白值一律当成没设——`OSW_DATA_DIR=` 这种写法在 unit 文件里很常见，若被 `path.resolve('')` 成当前目录，服务就会在启动目录下建库。实现落在 `apps/cli/source/host.ts` 的 `resolveDataDirectory()`；`options.ts` 保持纯函数（不读环境变量），`--help` 显示的默认值走 `effectiveDefaultDataDirectory()`，与环境变量实际生效的结果一致。
+三个平台都不新增环境变量：用户改位置只能靠 `--data-dir`。
 
 目录名只允许来自 `getRuntimeProfile(environment).dataDirectoryName`，不许在宿主里写字面量，也不许自己判断平台。CLI 恒定跑 `production` 档（`CLI_RUNTIME_ENVIRONMENT`，`host.ts` 里**唯一**一处选择）：命令行没有「开发服务器」这个输入，所以 `OSW Development` 只属于 `pnpm dev` 下的桌面形态。
 
@@ -438,8 +438,6 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 | `osw config` | 读取或写入设置（与设置页同一份数据）——**未实现**（见 §7） |
 
 参数解析在 `apps/cli/source/options.ts`（纯函数，不碰进程与文件系统，便于单测）：无子命令时默认 `start`，`--opt=value` 与 `--opt value` 两种写法都接受，出现第二个位置参数即报错而不是默默丢掉。`--help` / `--version` 是全局开关，即使与子命令同时出现也优先输出后退出。`--json` 只对 `status` 有意义，出现在别的命令上直接按用法错误退出（退出码 `2`），而不是静默忽略——「参数被吞掉」比「参数被拒绝」难查得多。
-
-数据目录可以由 `OSW_DATA_DIR` 指定，优先级是 `--data-dir` > `OSW_DATA_DIR` > `<用户主目录>/<预设数据目录名>`（规则与取舍见 §5.5）。环境变量的读取**只发生在 `host.ts`**，`options.ts` 的「纯函数不读环境变量」这条契约不变；`--help` 里显示的默认值走 `effectiveDefaultDataDirectory()`，所以设了环境变量之后帮助里印的就是实际会用的目录。
 
 行为约定：
 

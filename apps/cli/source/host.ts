@@ -24,19 +24,6 @@ import { getRuntimeProfile, type RuntimeEnvironment } from '@common/runtime-prof
 export const CLI_RUNTIME_ENVIRONMENT: RuntimeEnvironment = 'production'
 
 /**
- * 指定数据目录的环境变量。
- *
- * 为什么需要它：`--data-dir` 得写在下一次启动的命令行里，而「装到服务器上」这种形态
- * 下启动命令往往不由人手输——它落在 systemd unit、docker run、supervisor 配置里，
- * 那些地方更习惯用环境变量传位置。两种情况又不能让用户二选一：`--data-dir` 是显式
- * 参数，环境变量是环境（优先级见 `resolveDataDirectory`）。
- *
- * 命名与 `OSW_SECRET_KEY`（`secret-store.ts`）对齐：同属「用环境替代落盘文件」的一类
- * 逃逸口，供容器/CI 使用。
- */
-export const DATA_DIRECTORY_ENVIRONMENT_VARIABLE = 'OSW_DATA_DIR'
-
-/**
  * 平台默认数据目录：`<用户主目录>/<预设数据目录名>`。
  *
  * 与桌面形态**同名同址**（`apps/docs/specs/platform/packaging.md` §5.5）：两种形态默认共用同一份配置与
@@ -48,44 +35,15 @@ export const DATA_DIRECTORY_ENVIRONMENT_VARIABLE = 'OSW_DATA_DIR'
  * 曾经因此分叉成 `osw`（小写，看着更像 XDG 惯例）与桌面形态的 `OSW`，
  * 两个目录各自有半份数据。
  *
- * 三个平台都不新增**平台专属**的环境变量（`%APPDATA%` / `$XDG_CONFIG_HOME` 之类不参与判断）：
- * 改位置只有两条路——`--data-dir` 与 `OSW_DATA_DIR`。后者是为「启动命令不由人手输」的
- * 形态准备的（systemd unit、docker run、supervisor），见 `DATA_DIRECTORY_ENVIRONMENT_VARIABLE`。
+ * 三个平台都不新增环境变量：用户改位置只能靠 `--data-dir`。
  */
 export function defaultDataDirectory(): string {
   return path.join(os.homedir(), getRuntimeProfile(CLI_RUNTIME_ENVIRONMENT).dataDirectoryName)
 }
 
-/**
- * 环境变量给的目录；没设或只给了空白时返回 `null`（当作没设）。
- *
- * 空白串必须当成「没设」而不是「当前目录」：`OSW_DATA_DIR=` 这种写法在
- * systemd 与 shell 里都很常见，把它 `path.resolve('')` 成 `process.cwd()` 会让服务
- * 悄悄在根目录或 `/` 下建库。
- */
-function dataDirectoryFromEnvironment(): string | null {
-  const fromEnvironment = process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE]?.trim()
-  return fromEnvironment ? path.resolve(fromEnvironment) : null
-}
-
-/** 用户在帮助里看到的默认值：环境变量优先，否则平台默认目录。 */
-export function effectiveDefaultDataDirectory(): string {
-  return dataDirectoryFromEnvironment() ?? defaultDataDirectory()
-}
-
-/**
- * 数据目录的最终取值，优先级从高到低：
- *
- * 1. `--data-dir`（显式参数，转成绝对路径）
- * 2. `OSW_DATA_DIR`（环境，同样转成绝对路径）
- * 3. `<用户主目录>/<预设数据目录名>`
- *
- * 显式参数压过环境：同一台机器上 `OSW_DATA_DIR` 常常是全局设的，而
- * `osw start --data-dir /tmp/x` 是「就这一次」的意思，后者才该赢。
- */
+/** 用户显式传的 `--data-dir` 一律转成绝对路径：之后的日志与运行时文件都按绝对路径说话。 */
 export function resolveDataDirectory(input: string | null): string {
-  if (input !== null) return path.resolve(input)
-  return effectiveDefaultDataDirectory()
+  return input === null ? defaultDataDirectory() : path.resolve(input)
 }
 
 /**
