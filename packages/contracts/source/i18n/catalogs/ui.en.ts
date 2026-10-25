@@ -2176,7 +2176,7 @@ Score request size in a sandbox script, then route by score band to different lo
   'native.cli.options': 'Options:',
   'native.cli.option.help': 'Show this help',
   'native.cli.option.version': 'Print the version',
-  'native.cli.option.dataDir': 'Data directory (default: {default})',
+  'native.cli.option.dataDir': 'Data directory (default: {default}; the OSW_DATA_DIR environment variable works too)',
   'native.cli.option.host': 'Proxy listen host (default: {default})',
   'native.cli.option.managementHost': 'Management listen host (default: {default}; any other value requires sign-in)',
   'native.cli.option.proxyPort': 'Proxy port (default: {default})',

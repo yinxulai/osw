@@ -2169,7 +2169,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'native.cli.options': '选项：',
   'native.cli.option.help': '显示本帮助',
   'native.cli.option.version': '输出版本号',
-  'native.cli.option.dataDir': '数据目录（默认：{default}）',
+  'native.cli.option.dataDir': '数据目录（默认：{default}；也可以用环境变量 OSW_DATA_DIR 指定）',
   'native.cli.option.host': '代理监听地址（默认：{default}）',
   'native.cli.option.managementHost': '管理服务监听地址（默认：{default}；改成别的地址就会默认要求登录）',
   'native.cli.option.proxyPort': '代理端口（默认：{default}）',

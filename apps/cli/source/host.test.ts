@@ -4,12 +4,15 @@ import { describe, expect, it } from 'vitest'
 import { getRuntimeProfile } from '@common/runtime-profile'
 import {
   CLI_RUNTIME_ENVIRONMENT,
+  DATA_DIRECTORY_ENVIRONMENT_VARIABLE,
   connectHost,
   defaultDataDirectory,
+  effectiveDefaultDataDirectory,
   formatEndpoint,
   formatHostForDisplay,
   formatUrl,
   isLoopbackHost,
+  resolveDataDirectory,
 } from './host'
 
 // 地址归一化是「看着对但容易写反」的一类逻辑：`0.0.0.0` 归一化成回环之后看着像本机，
@@ -100,5 +103,59 @@ describe('defaultDataDirectory', () => {
 
   it('is an absolute path', () => {
     expect(path.isAbsolute(defaultDataDirectory())).toBe(true)
+  })
+})
+
+// 环境变量是给「启动命令不由人手输」的形态准备的（systemd unit、docker run），
+// 所以它的优先级必须钉死：显式参数 > 环境 > 平台默认。
+describe('resolveDataDirectory', () => {
+  const withEnvironment = (value: string | undefined, run: () => void): void => {
+    const previous = process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE]
+    if (value === undefined) delete process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE]
+    else process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE] = value
+    try {
+      run()
+    } finally {
+      if (previous === undefined) delete process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE]
+      else process.env[DATA_DIRECTORY_ENVIRONMENT_VARIABLE] = previous
+    }
+  }
+
+  it('falls back to the platform default when nothing is configured', () => {
+    withEnvironment(undefined, () => {
+      expect(resolveDataDirectory(null)).toBe(defaultDataDirectory())
+      expect(effectiveDefaultDataDirectory()).toBe(defaultDataDirectory())
+    })
+  })
+
+  it('uses the environment variable when --data-dir is absent', () => {
+    withEnvironment(path.join(os.tmpdir(), 'osw-from-environment'), () => {
+      expect(resolveDataDirectory(null)).toBe(path.join(os.tmpdir(), 'osw-from-environment'))
+      expect(effectiveDefaultDataDirectory()).toBe(path.join(os.tmpdir(), 'osw-from-environment'))
+    })
+  })
+
+  it('lets --data-dir win over the environment variable', () => {
+    // 环境变量常是全局设的，而显式参数是「就这一次」的意思。
+    withEnvironment(path.join(os.tmpdir(), 'osw-from-environment'), () => {
+      expect(resolveDataDirectory(path.join(os.tmpdir(), 'osw-from-flag'))).toBe(
+        path.join(os.tmpdir(), 'osw-from-flag'),
+      )
+    })
+  })
+
+  it('treats a blank environment variable as unset', () => {
+    // `OSW_DATA_DIR=` 在 systemd 与 shell 里都很常见；把它当成空路径会
+    // `path.resolve('')` 成当前目录，服务就会在启动目录下建库。
+    withEnvironment('   ', () => {
+      expect(resolveDataDirectory(null)).toBe(defaultDataDirectory())
+    })
+  })
+
+  it('resolves a relative environment value to an absolute path', () => {
+    withEnvironment('relative-osw-dir', () => {
+      expect(path.isAbsolute(resolveDataDirectory(null))).toBe(true)
+      expect(resolveDataDirectory(null)).toBe(path.resolve('relative-osw-dir'))
+    })
   })
 })

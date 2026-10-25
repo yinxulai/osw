@@ -34,7 +34,7 @@ osw [command] [options]
 
 | Option | Description |
 | --- | --- |
-| `--data-dir` | Data directory. |
+| `--data-dir` | Data directory. The equivalent environment variable is `OSW_DATA_DIR`. |
 | `--host` | Proxy listen address. |
 | `--management-host` | Management listen address. Defaults to loopback; `0.0.0.0` exposes the console to the network. |
 | `--proxy-port` | Proxy port. |
@@ -219,6 +219,8 @@ WantedBy=multi-user.target
 ```
 
 `Restart=on-failure` with `Type=simple` works because the exit codes are fixed: `0` for a normal exit, `1` for a runtime failure, `2` for a usage error.
+
+The data directory can also come from an environment variable: add `Environment=OSW_DATA_DIR=/srv/osw` to the unit and keep `--data-dir` out of `ExecStart`. An empty value counts as unset, and when both are present the **command-line flag** wins.
 
 <Callout title="osw stop must run as the same system user" type="note">
 `stop` locates the instance through `runtime.json` in the data directory and gets past the management gate with `management.token` (`0600`). A different system user cannot read either file, leaving `kill` as the only option — which skips the database and port cleanup. Likewise `--data-dir` must match the one used at start.
