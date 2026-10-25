@@ -1,13 +1,10 @@
-import { KeyRound, ShieldCheck } from 'lucide-react'
-import { useNavigate } from '@tanstack/react-router'
+import { ShieldCheck } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsCardHeader } from '@/components/settings-card-header'
-import { Button } from '@/components/ui/button'
 import { FormRow } from '@/components/form-kit'
 import { Switch } from '@/components/ui/switch'
 import type { Settings } from '@common/schemas'
 import { useTranslation } from '@/i18n/provider'
-import { routePaths } from '@/routing/routes'
 
 interface ApiKeyAuthCardProps {
   settings: Pick<Settings, 'apiKeyFeatureEnabled'>
@@ -23,11 +20,12 @@ interface ApiKeyAuthCardProps {
  *
  * 唯一的例外不在这里配置：库里一把 Key 都没有时代理放行（全新安装不必先建 Key），
  * 建好第一把就自动进入强制。那是从「有没有 Key」推出来的，不是一个需要用户决定的选项。
+ *
+ * 卡片里不再放「管理 Key」的跳转：侧边栏已经有同一个入口，设置里再放一个是重复的。
  */
 export function ApiKeyAuthCard(props: ApiKeyAuthCardProps) {
   const { settings, onUpdate } = props
   const t = useTranslation()
-  const navigate = useNavigate()
   const featureEnabled = settings.apiKeyFeatureEnabled
 
   return (
@@ -49,19 +47,6 @@ export function ApiKeyAuthCard(props: ApiKeyAuthCardProps) {
             />
           )}
         />
-        {/* 模块关着的时候没有 Key 可管，入口一起收起来，免得点进去是一片空表。 */}
-        {featureEnabled && (
-          <FormRow
-            title={t('settings.apiKeyAuth.manage')}
-            description={t('settings.apiKeyAuth.manageDescription')}
-            control={(
-              <Button variant="outline" size="sm" onClick={() => void navigate({ to: routePaths.apiKeys })}>
-                <KeyRound />
-                {t('settings.apiKeyAuth.manageAction')}
-              </Button>
-            )}
-          />
-        )}
       </CardContent>
     </Card>
   )

@@ -2016,9 +2016,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.apiKeyAuth.description': '用 API Key 标识本地客户端，并按 Key 统计额度花在谁身上',
   'settings.apiKeyAuth.feature': '启用 API Key 功能',
   'settings.apiKeyAuth.featureDescription': '默认开启。开启期间，本地端口上的请求必须携带有效且已启用的 Key，否则拒绝并返回 401，不会到达上游。关闭后侧边栏入口、Key 管理页、请求日志里的 Key 筛选与总览的按 Key 统计都会一并收起，代理也不再校验携带的 Key。已签发的 Key 不会被删除，重新打开即恢复。',
-  'settings.apiKeyAuth.manage': 'API Key 管理',
-  'settings.apiKeyAuth.manageDescription': '签发、停用、轮换与删除 Key。在建立第一把 Key 之前，代理会放行请求，全新安装无需任何配置即可使用。',
-  'settings.apiKeyAuth.manageAction': '管理 Key',
 
   // 菜单栏实时指标（仅 macOS）
   'settings.liveMetric.title': '实时指标',
