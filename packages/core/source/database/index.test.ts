@@ -244,7 +244,7 @@ describe('schema split', () => {
     // `PRAGMA table_info` 返回的是物理列顺序；两个库各由一个首发基线建表，物理顺序等于
     // schema 声明顺序。这里仍然比较集合，避免测试在有人重排 schema 时无意义地变红。
     expect(columnNames(data, 'request_logs').sort()).toEqual([
-      'clientProtocol', 'createdTime', 'id', 'logicalModelId', 'status', 'totalDurationMilliseconds', 'transport',
+      'apiKeyId', 'clientProtocol', 'createdTime', 'id', 'logicalModelId', 'status', 'totalDurationMilliseconds', 'transport',
     ])
     // 正文列存的是压缩后落库、读取时还原的字节，但列亲和性仍是 `text`：压缩是列定义里的
     // 细节，不产生 schema 变更，所以这两张表的物理列与首发基线完全一致。这里断言的是
