@@ -1,11 +1,14 @@
-import { KeyRound } from 'lucide-react'
 import type { ApiKey, ApiKeyStat } from '@common/schemas'
-import { tableHeaderClass, tableRowClass } from '@/components/table-primitives'
-import { TableStateRow } from '@/components/table-state'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useTranslation } from '@/i18n/provider'
-import { formatNumber } from '@/pages/request-logs/lib/format'
+import { SortableHeader, tableCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
+import { CardSectionHeader } from '@/components/card-section-header'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatMilliseconds } from '@common/metrics'
+import { useLocale, useTranslation } from '@/i18n/provider'
+import { useTableSort } from '@/hooks/use-table-sort'
+import { cn } from '@/lib/utils'
+import { formatCount, formatPercent } from '../lib/format'
+import { buildApiKeyUsageRows } from '../lib/api-key-usage-rows'
+import { API_KEY_USAGE_SORT_ACCESSOR, API_KEY_USAGE_SORT_DEFAULT, API_KEY_USAGE_SORT_DIRECTIONS } from '../lib/api-key-usage-sort'
 
 interface ApiKeyUsageProps {
   stats: ApiKeyStat[]
@@ -18,53 +21,56 @@ interface ApiKeyUsageProps {
  * 放在总览而不是 Key 管理页：它回答的是「额度花在谁身上」，与「这把 Key 还能不能用」
  * 是两个问题。Key 管理页只负责签发 / 停用 / 轮换，用量归统计分析。
  *
- * `apiKeyId === null` 的行是**未署名**：功能没开时的全部请求都在这里，界面如实显示，
- * 让「谁在花我的额度」即使没开校验也看得见。名字从当前 Key 列表实时反查
- * （请求日志只存 id，不存名字），查不到说明这把 Key 已被删除。
+ * 排版与「模型使用排行」严格同构（`model-ranking.tsx`）：同屏两张表用同一套表头、同一套
+ * 内边距、同一套右对齐的数字列。以前这里是 shadcn `Table` 套一层带边框的卡片头，
+ * 与旁边的排行挨着看就像两个页面出来的。
+ *
+ * `apiKeyId === null` 的行是**未署名**：一把 Key 都还没建时的请求都落在这里，界面如实显示。
  */
 export function ApiKeyUsage(props: ApiKeyUsageProps) {
+  const { stats, keys } = props
   const t = useTranslation()
-  const nameOf = (id: string | null): string => {
-    if (id === null) return t('apiKeys.label.anonymous')
-    return props.keys.find(key => key.id === id)?.name ?? t('apiKeys.label.unknown')
-  }
+  const locale = useLocale()
+  const rows = buildApiKeyUsageRows(stats, keys, t)
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, API_KEY_USAGE_SORT_DEFAULT, API_KEY_USAGE_SORT_ACCESSOR, API_KEY_USAGE_SORT_DIRECTIONS)
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <div className="border-b border-border/50 px-4 py-3">
-        <CardTitle>{t('overview.apiKeys.title')}</CardTitle>
-        <CardDescription>{t('overview.apiKeys.description')}</CardDescription>
-      </div>
-      <div className="overflow-x-auto">
-        <Table className="w-full text-left text-xs">
-          <TableHeader className={tableHeaderClass}>
-            <TableRow>
-              <TableHead className="px-4 py-2">{t('overview.apiKeys.column.key')}</TableHead>
-              <TableHead className="w-24 px-3 py-2 text-right">{t('overview.apiKeys.column.requests')}</TableHead>
-              <TableHead className="w-28 px-3 py-2 text-right">{t('overview.apiKeys.column.tokens')}</TableHead>
-              <TableHead className="w-24 px-3 py-2 text-right">{t('overview.apiKeys.column.successRate')}</TableHead>
-              <TableHead className="w-28 px-4 py-2 text-right">{t('overview.apiKeys.column.avgLatency')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {props.stats.length === 0
-              ? <TableStateRow colSpan={5} icon={KeyRound} title={t('overview.apiKeys.empty')} />
-              : props.stats.map(stat => (
-                <TableRow key={stat.apiKeyId ?? 'anonymous'} className={tableRowClass}>
-                  <TableCell className="px-4 py-2.5 system-xs-medium text-text-primary">{nameOf(stat.apiKeyId)}</TableCell>
-                  <TableCell className="px-3 py-2.5 text-right tabular-nums">{formatNumber(stat.requests)}</TableCell>
-                  <TableCell className="px-3 py-2.5 text-right tabular-nums">{formatNumber(stat.totalTokens)}</TableCell>
-                  <TableCell className="px-3 py-2.5 text-right tabular-nums">
-                    {stat.requests > 0 ? `${Math.round((stat.success / stat.requests) * 100)}%` : '—'}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-right tabular-nums">
-                    {stat.requests > 0 ? `${Math.round(stat.avgLatencyMs)} ms` : '—'}
-                  </TableCell>
-                </TableRow>
+    <Card className="w-full">
+      <CardSectionHeader title={t('overview.apiKeys.title')} description={t('overview.apiKeys.description')} compact />
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className={tableHeaderClass}>
+              <tr>
+                <SortableHeader label={t('overview.apiKeys.column.key')} active={sort.key === 'name'} direction={sort.direction} onSort={() => toggleSort('name')} contentClassName="px-4" />
+                <SortableHeader label={t('overview.apiKeys.column.requests')} active={sort.key === 'requests'} direction={sort.direction} onSort={() => toggleSort('requests')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.apiKeys.column.tokens')} active={sort.key === 'totalTokens'} direction={sort.direction} onSort={() => toggleSort('totalTokens')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.apiKeys.column.successRate')} active={sort.key === 'successRate'} direction={sort.direction} onSort={() => toggleSort('successRate')} className="text-right" align="end" />
+                <SortableHeader label={t('overview.apiKeys.column.avgLatency')} active={sort.key === 'avgLatencyMs'} direction={sort.direction} onSort={() => toggleSort('avgLatencyMs')} className="text-right" contentClassName="px-4" align="end" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center system-xs-regular text-text-tertiary">
+                    {t('overview.apiKeys.empty')}
+                  </td>
+                </tr>
+              ) : sortedRows.map(row => (
+                <tr key={row.apiKeyId ?? 'anonymous'} className={tableRowClass}>
+                  <td className={cn(tableCellClass, 'px-4 system-xs-medium text-text-primary')}>
+                    <span className="block min-w-0 truncate">{row.name}</span>
+                  </td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatCount(locale, row.requests)}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatCount(locale, row.totalTokens)}</td>
+                  <td className={cn(tableCellClass, 'text-right tabular-nums')}>{row.successRate == null ? '—' : formatPercent(row.successRate)}</td>
+                  <td className={cn(tableCellClass, 'px-4 text-right tabular-nums')}>{row.avgLatencyMs == null ? '—' : formatMilliseconds(row.avgLatencyMs)}</td>
+                </tr>
               ))}
-          </TableBody>
-        </Table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
     </Card>
   )
 }
