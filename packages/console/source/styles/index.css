@@ -532,6 +532,17 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
   line-height: 24px;
 }
 
+/* 整屏门面页（登录、新手引导）的主标题专用档，20px/28px。
+   界面上唯一一处 16px 以上的字号，所以它必须带条件使用：
+   只有「这一屏没有侧栏、没有页头，标题要独自撑起整页重心」时才可以拿它。
+   卡片里、抽屉里、设置行里的任何标题都仍然封顶 `system-xl-*`——
+   在有页头的页面里放大标题只会和页头抢同一件事。 */
+@utility system-display-semibold {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
 @utility system-kbd {
   font-size: 12px;
   font-weight: 500;

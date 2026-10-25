@@ -1776,17 +1776,21 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
 
   // ========== 登录 ==========
   // 只在「这台服务要求登录」时出现，所以文案里不解释「为什么要登录」，只说眼下该做什么。
-  // `noAccount*` 三条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
-  'login.eyebrow': '管理控制台',
+  // 页头那句是 `description` / `descriptionNoAccount` 二选一（按 `hasUsers` 切），
+  // 不再单独设分类标签：左栏品牌已经说明了这是哪个应用。
+  // `noAccount*` 两条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
   'login.title': '登录',
+  'login.description': '用管理账号登录这台服务。',
+  'login.descriptionNoAccount': '这台服务还没有管理账号。',
   'login.username': '用户名',
   'login.password': '密码',
+  'login.showPassword': '显示密码',
+  'login.hidePassword': '隐藏密码',
   'login.remember': '保持登录',
   'login.rememberHint': '关掉时，关闭浏览器就要重新登录。',
   'login.submit': '登录',
   'login.submitting': '正在登录…',
-  'login.noAccount': '这台服务还没有管理账号。',
-  'login.noAccountDetail': '在服务器上运行 osw user add <用户名> 建一个（密码至少 {minimum} 位），然后刷新这一页。',
+  'login.noAccountDetail': '在服务器上运行下面这条命令建一个（密码至少 {minimum} 位），然后刷新这一页。',
   'login.noAccountHint': '如果服务是通过 Docker 或系统服务运行的，请在实际运行服务的那个环境里执行这条命令。',
 
   // ========== 新用户引导 ==========

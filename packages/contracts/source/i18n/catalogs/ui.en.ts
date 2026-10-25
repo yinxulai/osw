@@ -1778,17 +1778,21 @@ Score request size in a sandbox script, then route by score band to different lo
 
   // ========== 登录 ==========
   // 只在「这台服务要求登录」时出现，所以文案里不解释「为什么要登录」，只说眼下该做什么。
-  // `noAccount*` 三条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
-  'login.eyebrow': 'Management console',
+  // 页头那句是 `description` / `descriptionNoAccount` 二选一（按 `hasUsers` 切），
+  // 不再单独设分类标签：左栏品牌已经说明了这是哪个应用。
+  // `noAccount*` 两条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
   'login.title': 'Sign in',
+  'login.description': 'Sign in to this service with a management account.',
+  'login.descriptionNoAccount': 'This service has no management account yet.',
   'login.username': 'Username',
   'login.password': 'Password',
+  'login.showPassword': 'Show password',
+  'login.hidePassword': 'Hide password',
   'login.remember': 'Keep me signed in',
   'login.rememberHint': 'When this is off, closing the browser signs you out.',
   'login.submit': 'Sign in',
   'login.submitting': 'Signing in…',
-  'login.noAccount': 'This service has no management account yet.',
-  'login.noAccountDetail': 'Run osw user add <username> on the server to create one (at least {minimum} characters), then reload this page.',
+  'login.noAccountDetail': 'Run the command below on the server to create one (at least {minimum} characters), then reload this page.',
   'login.noAccountHint': 'If the service runs in Docker or under a system service manager, run that command in the environment that actually runs it.',
 
   // ========== 新用户引导 ==========
