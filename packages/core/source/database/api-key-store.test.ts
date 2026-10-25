@@ -68,6 +68,21 @@ describe('api key store', () => {
     expect(await getApiKey(key.id)).toMatchObject({ id: key.id, enabled: false, deletedTime: expect.any(Number) })
   })
 
+  it('includeDeleted returns the soft-deleted rows with their name intact', async () => {
+    const kept = await createApiKey({ name: 'still here', keyReference: 'ref_keep' })
+    const removed = await createApiKey({ name: 'gone but named', keyReference: 'ref_gone' })
+    await deleteApiKey(removed.id)
+
+    // 名字必须还在：统计与历史日志靠 id 反查出这个名字，再补一枚「已删除」标签。
+    // 缺了它，界面只能显示「已删除的 Key」这种占位文案，历史就无从解释了。
+    const all = await listApiKeys(true)
+    expect(all.map(key => key.id)).toEqual([kept.id, removed.id])
+    expect(all.find(key => key.id === removed.id)).toMatchObject({
+      name: 'gone but named',
+      deletedTime: expect.any(Number),
+    })
+  })
+
   it('ignores its own name when checking availability during an update', async () => {
     const key = await createApiKey({ name: 'rename me', keyReference: 'ref_r' })
 

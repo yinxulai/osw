@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale, useTranslation } from '@/i18n/provider'
-import { useApiKeys } from '@/data/api-keys'
+import { useApiKeysIncludingDeleted } from '@/data/api-keys'
 import { useSettings } from '@/data/settings'
 import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { cn } from '@/lib/utils'
@@ -47,7 +47,8 @@ export function OverviewPage() {
   const navigate = useNavigate({ from: routePaths.overview })
   const { data, loading, refreshing, error, refresh } = useOverviewService(range)
   // Key 名单只用来把 `apiKeyStats` 里的 id 换成名字；用量本体来自同一次分析请求，不额外取数。
-  const apiKeys = useApiKeys()
+  // 必须**含软删除行**：删掉的 Key 在统计里还有历史用量，名字要照旧展示（只补「已删除」标签）。
+  const apiKeys = useApiKeysIncludingDeleted()
   // 整个 Key 模块关掉时这张卡片一起消失：它的每一行都是一把已经不存在的 Key。
   const showApiKeyUsage = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   const providerDetail = useProviderAnalyticsDetail(providerId ?? null, range)

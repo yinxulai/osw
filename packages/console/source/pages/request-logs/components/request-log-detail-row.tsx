@@ -505,17 +505,21 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                   value={protocolText}
                   tone={converted ? 'warning' : 'default'}
                 />
-                {/* 谁发的：记录只存 id，名字从当前 Key 列表实时反查（删了也照旧展示）。 */}
-                {props.showApiKey && (
-                  <MetaFact
-                    label={t('requestLogs.detail.apiKey')}
-                    value={apiKeyLabel(log.apiKeyId, props.apiKeys, {
-                      anonymous: t('apiKeys.label.anonymous'),
-                      unknown: t('apiKeys.label.unknown'),
-                    })}
-                    mono={log.apiKeyId !== null && !props.apiKeys.some(key => key.id === log.apiKeyId)}
-                  />
-                )}
+                {/* 谁发的：记录只存 id，名字从当前 Key 列表实时反查（删了也照旧展示，只补标签）。 */}
+                {props.showApiKey && (() => {
+                  const apiKey = apiKeyLabel(log.apiKeyId, props.apiKeys, {
+                    anonymous: t('apiKeys.label.anonymous'),
+                    unknown: t('apiKeys.label.unknown'),
+                  })
+                  return (
+                    <MetaFact
+                      label={t('requestLogs.detail.apiKey')}
+                      value={apiKey.name}
+                      tag={apiKey.deleted ? <DeletedTag /> : null}
+                      mono={log.apiKeyId !== null && !props.apiKeys.some(key => key.id === log.apiKeyId)}
+                    />
+                  )
+                })()}
                 {/* 传输形态是客户端跳声明的预期，与上游跳实际怎么回无关。 */}
                 <MetaFact label={t('requestLogs.detail.transport')} value={formatTransport(t, log.transport)} />
                 <MetaFact label={t('common.label.time')} value={formatTime(locale, log.createdTime)} />

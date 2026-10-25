@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { unwrap } from '@/api/unwrap'
 import { providerModelApi } from '@/api/models'
 import { useLiveRequests } from '@/data/live-requests'
-import { useApiKeys } from '@/data/api-keys'
+import { useApiKeysIncludingDeleted } from '@/data/api-keys'
 import { useSettings } from '@/data/settings'
 import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
@@ -69,7 +69,10 @@ export function useRequestLogsService() {
   const providers = useProviders()
   const logicalModels = useLogicalModels()
   // 记录里只存 Key 的 id，名字在这里实时反查——与「按 Key 统计用量」同一口径。
-  const apiKeys = useApiKeys()
+  // 取的是**含软删除**的那一份：Key 删了之后历史记录依然指向它，名字照旧展示，
+  // 只另补一枚「已删除」标签。筛选下拉只用活跃的那些，所以单独派生一份。
+  const apiKeys = useApiKeysIncludingDeleted()
+  const activeApiKeys = useMemo(() => apiKeys.filter(key => key.deletedTime === null), [apiKeys])
   // Key 模块被关掉时，筛选器与详情里的「谁发的」一起收起（记录本身照旧保留）。
   const showApiKey = isApiKeyModuleEnabled(useSettings()?.apiKeyFeatureEnabled)
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
@@ -96,7 +99,7 @@ export function useRequestLogsService() {
     rows, total: logsQuery.data?.total ?? 0,
     loading: logsQuery.isPending, refreshing: logsQuery.isFetching && !logsQuery.isPending,
     error, filtered,
-    page, expandedId, filter, providerModelOptions, apiKeys, showApiKey, getModelName, isModelDeleted,
+    page, expandedId, filter, providerModelOptions, apiKeys, activeApiKeys, showApiKey, getModelName, isModelDeleted,
     details: detailQuery.data && expandedId ? { [expandedId]: detailQuery.data } : {},
     // 只认「还没有数据」，不认后台重取：请求还挂着时详情每 1.5s 会被重取一次，
     // 那是为了拿到新的状态与用量，画面上的东西不该跟着闪一下。

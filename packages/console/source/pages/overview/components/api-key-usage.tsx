@@ -1,6 +1,7 @@
 import type { ApiKey, ApiKeyStat } from '@common/schemas'
 import { SortableHeader, tableCellClass, tableHeaderClass, tableRowClass } from '@/components/table-primitives'
 import { CardSectionHeader } from '@/components/card-section-header'
+import { DeletedTag } from '@/components/deleted-tag'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatMilliseconds } from '@common/metrics'
 import { useLocale, useTranslation } from '@/i18n/provider'
@@ -12,6 +13,7 @@ import { API_KEY_USAGE_SORT_ACCESSOR, API_KEY_USAGE_SORT_DEFAULT, API_KEY_USAGE_
 
 interface ApiKeyUsageProps {
   stats: ApiKeyStat[]
+  /** 必须含软删除行：历史用量的名字要能反查到，删掉了才补「已删除」标签。 */
   keys: ApiKey[]
 }
 
@@ -25,7 +27,10 @@ interface ApiKeyUsageProps {
  * 内边距、同一套右对齐的数字列。以前这里是 shadcn `Table` 套一层带边框的卡片头，
  * 与旁边的排行挨着看就像两个页面出来的。
  *
- * `apiKeyId === null` 的行是**未署名**：一把 Key 都还没建时的请求都落在这里，界面如实显示。
+ * `apiKeyId === null` 的行是**未署名**：没带 Key 的请求都落在这里，界面如实显示。
+ *
+ * 已软删除的 Key 与未署名是两件事：前者有名字、只是不在活跃列表里，所以名字照旧展示
+ * 并在后面补一枚「已删除」标签；后者根本没有名字。把两者合并成一句「未署名」会把历史丢掉。
  */
 export function ApiKeyUsage(props: ApiKeyUsageProps) {
   const { stats, keys } = props
@@ -59,7 +64,11 @@ export function ApiKeyUsage(props: ApiKeyUsageProps) {
               ) : sortedRows.map(row => (
                 <tr key={row.apiKeyId ?? 'anonymous'} className={tableRowClass}>
                   <td className={cn(tableCellClass, 'px-4 system-xs-medium text-text-primary')}>
-                    <span className="block min-w-0 truncate">{row.name}</span>
+                    {/* 名字照旧展示（历史事实），已软删除的只在后面补一枚标签。 */}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate">{row.name}</span>
+                      {row.deleted && <DeletedTag />}
+                    </span>
                   </td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatCount(locale, row.requests)}</td>
                   <td className={cn(tableCellClass, 'text-right tabular-nums')}>{formatCount(locale, row.totalTokens)}</td>

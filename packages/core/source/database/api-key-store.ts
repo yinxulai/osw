@@ -19,14 +19,22 @@ import { apiKeys } from './config-schema'
  * 写成 DB 约束就会逼删除路径改名腾位（见 `config-schema.ts` 头部的第 4 条不变量）。
  */
 
-/** 列出所有活跃（未删除）的 Key。走常驻读缓存：界面、日志回填、分析页都会反复读它。 */
-export async function listApiKeys(): Promise<ApiKey[]> {
-  return cachedConfigRead('apiKeys', readApiKeys)
+/**
+ * 列出 Key。默认只回活跃（未删除）的行；`includeDeleted` 连软删除的行一起回。
+ *
+ * 走常驻读缓存：界面、日志回填、分析页都会反复读它。两个变体各自一份缓存键
+ * （与 `listProviders` 一致）：只读软删除行的场景（历史请求 / 统计按 id 反查名字）
+ * 不该去共享活跃列表的那份结果。
+ *
+ * 代理鉴权走的是默认分支——软删除的 Key 必须已经失效，不能因为「还查得到」而被放行。
+ */
+export async function listApiKeys(includeDeleted = false): Promise<ApiKey[]> {
+  return cachedConfigRead(`apiKeys:${includeDeleted}`, () => readApiKeys(includeDeleted))
 }
 
-async function readApiKeys(): Promise<ApiKey[]> {
-  return getConfigDb().select().from(apiKeys)
-    .where(isNull(apiKeys.deletedTime))
+async function readApiKeys(includeDeleted: boolean): Promise<ApiKey[]> {
+  const query = getConfigDb().select().from(apiKeys)
+  return (includeDeleted ? query : query.where(isNull(apiKeys.deletedTime)))
     .orderBy(asc(apiKeys.createdTime))
     .all()
     .map(mapApiKey)

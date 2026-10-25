@@ -38,8 +38,18 @@ function generateApiKeySecret(): string {
   return `osw-${randomBytes(32).toString('hex')}`
 }
 
-async function handleList(_req: IncomingMessage, res: ServerResponse): Promise<void> {
-  sendSuccess(res, await listApiKeys())
+/**
+ * 列表默认只回活跃行；`includeDeleted` 连软删除的行一起回。
+ *
+ * 软删除的 Key 仍需被读回：历史请求记录存的是 Key 的 **id**，统计分析要把它映回
+ * 当年那个名字并补一枚「已删除」标签。名字是历史事实，不能因为行被删了就换成占位文案
+ * （与供应商 / 逻辑模型完全一致，见 `providers.ts`）。
+ */
+const ListApiKeysSchema = z.object({ includeDeleted: z.boolean().optional() }).default({})
+
+async function handleList(_req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
+  const input = ListApiKeysSchema.parse(body)
+  sendSuccess(res, await listApiKeys(input.includeDeleted ?? false))
 }
 
 const GetApiKeySchema = z.object({ id: z.string().min(1) })

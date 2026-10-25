@@ -7,7 +7,11 @@ import { unwrap } from '@/api/unwrap'
 import { isApiKeyModuleEnabled } from '@/lib/api-key-module'
 import { useSettings } from '@/data/settings'
 
-export const apiKeyKeys = { all: ['api-keys'] as const, recency: ['api-keys', 'recency'] as const }
+export const apiKeyKeys = {
+  all: ['api-keys'] as const,
+  withDeleted: ['api-keys', 'with-deleted'] as const,
+  recency: ['api-keys', 'recency'] as const,
+}
 
 /** 更新入参：id 与要改的字段分开，避免把 id 也当成可改字段。 */
 export type UpdateApiKeyMutationInput = { id: string; updates: UpdateApiKeyInput }
@@ -22,6 +26,32 @@ const useApiKeysQuery = () => useQuery({ queryKey: apiKeyKeys.all, queryFn: () =
 
 export function useApiKeys(): ApiKey[] {
   return useApiKeysQuery().data ?? []
+}
+
+/**
+ * 连软删除的行一起拿的 Key 列表。
+ *
+ * 与供应商 / 逻辑模型同一套做法（见 `data/providers.ts`）：请求记录与统计分析里存的是
+ * Key 的 **id**，名字要按 id 实时反查。只查活跃列表的话，一把已经删掉的 Key 会当场退回
+ * 「已删除的 Key」这种占位文案——把历史事实丢掉了。所以这里单独取一份含删除行的列表，
+ * 单独缓存，不与编辑器里的 `['api-keys']` 共用。
+ *
+ * 刷新节奏跟供应商一份（30 秒）：删除是低频动作，没必要更快。
+ */
+const useApiKeysIncludingDeletedQuery = () => useQuery({
+  queryKey: apiKeyKeys.withDeleted,
+  queryFn: () => unwrap(apiKeyApi.listIncludingDeleted()),
+  refetchInterval: 30_000,
+})
+
+export function useApiKeysIncludingDeleted(): ApiKey[] {
+  return useApiKeysIncludingDeletedQuery().data ?? []
+}
+
+/** 被软删除的 Key id。用来给历史记录 / 统计里的名字补一枚「已删除」标签。 */
+export function useDeletedApiKeyIds(): ReadonlySet<string> {
+  const keys = useApiKeysIncludingDeletedQuery().data
+  return useMemo(() => new Set((keys ?? []).filter(key => key.deletedTime !== null).map(key => key.id)), [keys])
 }
 
 export function useApiKeysLoading(): boolean {

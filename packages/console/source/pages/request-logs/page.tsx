@@ -11,7 +11,7 @@ import { useRequestLogsService } from './service'
 
 export function RequestLogsPage() {
   const t = useTranslation()
-  const { rows, total, providerModelOptions, apiKeys, showApiKey, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, isModelDeleted, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
+  const { rows, total, providerModelOptions, apiKeys, activeApiKeys, showApiKey, loading, refreshing, error, filtered, details, detailLoadingIds, detailErrors, getModelName, isModelDeleted, loadDetail, refresh, setFilter, filter, expandedId, goToPage, page } = useRequestLogsService()
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -41,7 +41,7 @@ export function RequestLogsPage() {
         <RequestLogsFilters
           filter={filter}
           providerModelOptions={providerModelOptions}
-          apiKeys={apiKeys}
+          apiKeys={activeApiKeys}
           showApiKeyFilter={showApiKey}
           total={total}
           applyFilter={setFilter}

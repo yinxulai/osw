@@ -13,6 +13,8 @@ export type UpdateApiKeyInput = Partial<Pick<ApiKey, 'name' | 'enabled' | 'expir
 
 export const apiKeyApi = {
   list: () => request<ApiKey[]>('/api-key/list'),
+  /** 连软删除的行一起取：历史记录与统计要按 id 反查「当年那个名字」。 */
+  listIncludingDeleted: () => request<ApiKey[]>('/api-key/list', { includeDeleted: true }),
   create: (input: CreateApiKeyInput) => request<CreatedApiKey>('/api-key/create', input),
   update: (id: string, updates: UpdateApiKeyInput) => request<ApiKey>('/api-key/update', { id, ...updates }),
   remove: (id: string) => request<{ id: string }>('/api-key/delete', { id }),

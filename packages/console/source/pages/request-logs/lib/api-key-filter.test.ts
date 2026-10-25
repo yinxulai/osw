@@ -27,22 +27,27 @@ describe('apiKeyIdParam', () => {
 })
 
 describe('apiKeyLabel', () => {
-  const keys = [{ id: 'ak_1', name: '笔记本上的 Cursor' }]
+  const keys = [{ id: 'ak_1', name: '笔记本上的 Cursor', deletedTime: null }]
   const labels = { anonymous: '未署名', unknown: '已删除的 Key' }
 
   it('null 是「未署名」，不是在列表里找不到', () => {
-    expect(apiKeyLabel(null, keys, labels)).toBe('未署名')
+    expect(apiKeyLabel(null, keys, labels)).toEqual({ name: '未署名', deleted: false })
   })
 
   it('按 id 反查出当前名字（改名后历史记录跟着换标签）', () => {
-    expect(apiKeyLabel('ak_1', keys, labels)).toBe('笔记本上的 Cursor')
+    expect(apiKeyLabel('ak_1', keys, labels)).toEqual({ name: '笔记本上的 Cursor', deleted: false })
   })
 
-  it('查不到说明 Key 已被删除，但记录仍然展示', () => {
-    expect(apiKeyLabel('ak_gone', keys, labels)).toBe('已删除的 Key')
+  it('软删除的 Key 名字照旧展示，只标出它已删除', () => {
+    const softDeleted = [{ id: 'ak_gone', name: '旧笔记本', deletedTime: 1_700_000_000_000 }]
+    expect(apiKeyLabel('ak_gone', softDeleted, labels)).toEqual({ name: '旧笔记本', deleted: true })
+  })
+
+  it('记录指向的配置真的不存在时才退回占位文案', () => {
+    expect(apiKeyLabel('ak_missing', keys, labels)).toEqual({ name: '已删除的 Key', deleted: false })
   })
 
   it('没有 Key 列表时也不会把 id 当成名字', () => {
-    expect(apiKeyLabel('ak_1', [], labels)).toBe('已删除的 Key')
+    expect(apiKeyLabel('ak_1', [], labels)).toEqual({ name: '已删除的 Key', deleted: false })
   })
 })
