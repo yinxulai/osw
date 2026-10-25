@@ -37,7 +37,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          # 迁移额度检查要对比 `origin/main`，浅克隆里没有它。
+          fetch-depth: 0
 
+      # `pnpm lint` 里的迁移额度检查（`check-migration-budget.mjs`）要对比基线分支
+      # 数「这次新增了哪几条迁移」，浅克隆里没有 `origin/main`，那条检查会跳过——
+      # 于是唯一会真正拦人的地方变成空跑。只有这个 job 需要完整历史。
       # 同 typecheck：ESLint 从仓库根一次跑完，不经过 turbo。
       - name: Set up environment
         uses: ./.github/actions/setup
