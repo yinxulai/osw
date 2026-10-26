@@ -1,51 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { createDownstreamHeaders, createUpstreamRequestHeaders, redactHeaders } from '@server/proxy/response/headers'
+import {
+  CREDENTIAL_HEADERS,
+  CUSTOM_AUTH_HEADER_NAMES,
+  CUSTOM_AUTH_HEADERS,
+  REDACTED_CREDENTIAL_HEADERS,
+  REDACTED_CUSTOM_AUTH_HEADERS,
+  UPSTREAM_AUTH,
+  UPSTREAM_CLIENT_HEADERS,
+  UPSTREAM_CONTENT_LENGTH,
+  UPSTREAM_FORWARDED_HEADERS,
+} from './test-support'
 
 describe('proxy headers', () => {
   it('redacts credentials and cookies before persistence', () => {
-    expect(redactHeaders({
-      authorization: 'Bearer client-token',
-      'x-api-key': 'provider-key',
-      cookie: 'session=secret',
-      'set-cookie': ['session=secret'],
-      'content-type': 'application/json',
-    })).toEqual({
-      authorization: '[REDACTED]',
-      'x-api-key': '[REDACTED]',
-      cookie: '[REDACTED]',
-      'set-cookie': '[REDACTED]',
-      'content-type': 'application/json',
-    })
+    expect(redactHeaders(CREDENTIAL_HEADERS)).toEqual(REDACTED_CREDENTIAL_HEADERS)
   })
 
   it('redacts a configured custom authentication header case-insensitively', () => {
-    expect(redactHeaders({ 'X-Custom-Key': 'provider-key', accept: 'application/json' }, ['x-custom-key'])).toEqual({
-      'X-Custom-Key': '[REDACTED]',
-      accept: 'application/json',
-    })
+    expect(redactHeaders(CUSTOM_AUTH_HEADERS, CUSTOM_AUTH_HEADER_NAMES)).toEqual(REDACTED_CUSTOM_AUTH_HEADERS)
   })
 
   it('preserves end-to-end request headers and replaces authentication', () => {
-    const result = createUpstreamRequestHeaders({
-      accept: 'text/event-stream',
-      'content-type': 'application/json',
-      'x-goog-user-project': 'billing-project',
-      'x-goog-api-client': 'genai-js/1.0',
-      authorization: 'Bearer client-token',
-      'x-goog-api-key': 'client-key',
-      connection: 'keep-alive, x-remove-me',
-      'x-remove-me': 'private',
-      'transfer-encoding': 'chunked',
-    }, { replace: { 'x-goog-api-key': 'provider-key' }, fill: {} }, 42)
+    const result = createUpstreamRequestHeaders(UPSTREAM_CLIENT_HEADERS, UPSTREAM_AUTH, UPSTREAM_CONTENT_LENGTH)
 
-    expect(result).toEqual({
-      accept: 'text/event-stream',
-      'content-type': 'application/json',
-      'x-goog-user-project': 'billing-project',
-      'x-goog-api-client': 'genai-js/1.0',
-      'x-goog-api-key': 'provider-key',
-      'content-length': '42',
-    })
+    expect(result).toEqual(UPSTREAM_FORWARDED_HEADERS)
   })
 
   it('forwards unknown custom headers verbatim, including their casing', () => {
