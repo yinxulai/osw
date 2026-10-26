@@ -26,8 +26,13 @@ describe('parseArguments', () => {
       host: null,
       proxyPort: null,
       managementPort: null,
+      // 管理面监听地址缺省是 `null`（= 跟随 `--host` 那套默认），不是 `127.0.0.1`：
+      // 写死一个回环地址会把「用户给了 --management-port 却在服务器上」这种组合变得无解。
+      managementHost: null,
       serveWeb: true,
       json: false,
+      positionals: [],
+      passwordStdin: false,
     })
   })
 

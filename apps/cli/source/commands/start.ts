@@ -131,6 +131,10 @@ export async function runStart(values: CliArguments): Promise<number> {
     managementToken: generateManagementToken(),
     proxyHost: values.host ?? undefined,
     proxyPort: values.proxyPort ?? undefined,
+    // 管理面监听地址可配了：给了非回环地址就是「装到服务器上给别人用」的形态，
+    // 此时 core 会让管理面默认要求登录（见 `packages/core/source/runtime/server-runtime.ts`），
+    // 并且在没有账号时**拒绝启动**——那条判断只看这个地址，命令行不重复判一遍。
+    managementHost: values.managementHost ?? undefined,
     managementPort: values.managementPort ?? undefined,
     serveWeb: webRoot !== null,
     webRoot,

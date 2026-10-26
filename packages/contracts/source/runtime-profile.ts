@@ -41,7 +41,24 @@ const PROFILES: Record<RuntimeEnvironment, RuntimeProfile> = {
     dataDirectoryName: '.osw-development',
     proxyPort: 19300,
     managementPort: 19301,
-    managementApiUrl: 'http://127.0.0.1:19301/api',
+    /**
+     * 开发期用 `localhost` 而不是 `127.0.0.1`，这一处**不是**风格问题。
+     *
+     * 开发期控制台由 Vite dev server 从 `http://localhost:5173` 提供（见
+     * `packages/console/vite.config.ts` 与 `apps/app/scripts/lib/console-dev-server.mjs`），
+     * 而管理服务听在 `127.0.0.1:19301`。`localhost` 与 `127.0.0.1` 在浏览器的**站点**划分里
+     * 是两个不同的站点（同源策略看的是「协议 + 主机名 + 端口」，SameSite 看的是「可注册域」），
+     * 于是登录应答里的 `Set-Cookie: osw_session=...; SameSite=Lax` 属于**跨站子资源响应**，
+     * 浏览器会直接把它丢掉。表现是：登录接口 200、但下一条 `/api/auth/session` 仍然
+     * `authenticated: false`，界面判定没登上，把人退回登录页——一个只在浏览器里出现、
+     * 用 curl（不执行 SameSite 规则）怎么试都正常的故障。
+     *
+     * 生产形态不存在这个问题：页面本来就是管理服务自己发出的（`${location.origin}/api`），
+     * 天生同源（见 `packages/console/source/api/client.ts` 的 `resolveApiBaseFromEnvironment`）。
+     * 所以这个主机名只对开发形态有意义，也别把它改成 `127.0.0.1` 去「统一」——那等于
+     * 把开发期的登录重新弄坏一次。
+     */
+    managementApiUrl: 'http://localhost:19301/api',
   },
   production: {
     environment: 'production',

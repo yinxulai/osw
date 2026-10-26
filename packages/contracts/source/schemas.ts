@@ -423,6 +423,18 @@ export const SettingsSchema = z.object({
   listenHost: z.string().default('127.0.0.1'),
   listenPort: z.number().int().min(1).max(65535).default(9300),
   /**
+   * 管理面（`/api/*` 与控制台）是否要求登录。
+   *
+   * **默认值由宿主按监听地址算，不是一个写死的常量**：管理服务只听回环时默认关
+   * （不登录就能用，与旧版本行为一致），监听非回环地址时默认**开**（那是「装到服务器上
+   * 给别人用」的形态，不设防等于把明文密钥的导出接口挂到公网上）。这条判断只写在 core
+   * 启动时的一处（`ServerRuntime` 交给 `configureSettingsDefaults`），不是每个宿主各判一遍。
+   *
+   * 字段本身是可持久化的：用户在设置里显式关掉或打开，写进去的值永远优先于默认值。
+   * 关掉之后账号与会话都还在，重新打开不需要重建账号。
+   */
+  managementAuthEnabled: z.boolean().default(false),
+  /**
    * 是否记录请求日志（请求身份、逐次尝试、用量与指标）。
    *
    * 关掉之后新请求只走代理链路、不落库；正文记录随之失效——没有请求行，正文行无处归属。
@@ -969,6 +981,14 @@ export const ApiErrorCodeSchema = z.enum([
   'FORBIDDEN',
   'INVALID_JSON',
   'METHOD_NOT_ALLOWED',
+  // 管理面登录：三种「进不去」的原因必须分开，否则界面只能给一句「登录失败」
+  'MANAGEMENT_LOGIN_REQUIRED',
+  'MANAGEMENT_ACCOUNT_MISSING',
+  'MANAGEMENT_INVALID_CREDENTIALS',
+  'MANAGEMENT_ACCOUNT_EXISTS',
+  'MANAGEMENT_ACCOUNT_NOT_FOUND',
+  'MANAGEMENT_LAST_ACCOUNT',
+  'MANAGEMENT_WEAK_PASSWORD',
   // 资源
   'RESOURCE_NOT_FOUND',
   'DUPLICATE_RESOURCE',

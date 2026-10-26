@@ -14,8 +14,8 @@ OSW is a **local LLM proxy** with clear boundaries. The following are **delibera
 ## Network & access
 
 - **No system-level proxy**: OSW does not take over global traffic; it serves only clients that explicitly point their Base URL at it.
-- **No remote access**: it is designed to run on this machine, listening on `127.0.0.1` by default. Exposing it to a LAN is a risk you take on yourself (it carries no auth).
-- **The management service listens locally only**: the management API always binds to `127.0.0.1`; to access it from another machine, use an SSH tunnel.
+- **No remote access (unless you opt in)**: it is designed to run on this machine, listening on `127.0.0.1` by default. Exposing it to a LAN is a risk you take on yourself — the proxy entry point **does not authenticate callers**.
+- **The management side can be exposed, but it needs an account**: `--management-host 0.0.0.0` makes the console reachable from other machines; that mode requires an account login by default and **refuses to start when no account exists**.
 
 ## Protocol
 
@@ -29,8 +29,8 @@ OSW is a **local LLM proxy** with clear boundaries. The following are **delibera
 
 ## Collaboration & sync
 
-- **No team collaboration / multi-user permissions**: this is a single-machine tool.
-- **No account system**: no login; cloud sync uses your own credentials.
+- **No team collaboration**: no members, roles, or permissions. Sharing means either one account everybody uses or one account per person — and every account sees the same full configuration and request history.
+- **Accounts only answer "may I enter the console"**: it is not an identity system — no third-party login, no email, no password recovery. Cloud sync uses your own credentials and is unrelated to the login account.
 - **Cloud sync only encodes, never encrypts**: base64 keeps the file from being readable at a glance, but is not a means of secrecy (see [Config cloud sync](/observability/cloud-sync)).
 - **No automatic / scheduled sync**: upload and pull are one-shot actions you trigger manually, and there is no conflict merging.
 

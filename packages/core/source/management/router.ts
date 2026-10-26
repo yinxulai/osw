@@ -14,6 +14,7 @@ import type { ManagementHandler } from './core/response'
 import { sendError } from './core/response'
 import {
   analyticsRoutes,
+  authRoutes,
   clientConfigRoutes,
   cloudSyncRoutes,
   developmentRoutes,
@@ -41,6 +42,8 @@ import { handleApiError } from './core/error-handler'
 import { HttpRouter } from '@server/http-router'
 
 const router = new HttpRouter<ManagementHandler>()
+  // 登录排在最前：它不属于任何一个管理模块，而是所有管理模块的前置条件。
+  .mount(authRoutes)
   .mount(providerRoutes)
   .mount(modelRoutes)
   .mount(providerModelRoutes)

@@ -172,11 +172,36 @@ Windows / Linux 的托盘底色随系统主题变化，彩色图标在浅色底�
 ### 设置页
 
 - 监听地址与端口
+- 访问控制（要求登录 + 账号列表：新建、改口令、删除；判据与默认值见 [security-privacy.md](../operations/security-privacy.md) 的「账号与会话」）
 - 开机自启
 - 上游出站代理（三态模式、绕过规则与连接测试见 [outbound-proxy.md](../proxy/outbound-proxy.md)）
 - 数据目录位置与「用系统文件管理器打开」（目录本身不在界面上显示：它按运行环境算，桌面端与命令行共用同一处，见 [packaging.md](./packaging.md) §5.5）
 - 日志保留天数与「按天数立即清理」
 - 关于
+
+### 登录页
+
+整屏页（`/login`，与引导页同级：都不进 `AppLayout`，没有侧栏）。`lg`（1024px）以上是两栏：
+
+- **左栏（46% 宽，上限 520px）**：品牌栏——顶部是品牌标 + 应用名 + 一句副标题，中间居中一枚大号品牌图形，底部是 `font-mono` 的版本号。底色用 `bg-inset`（不是 `bg-sidebar`：后者的计算值和 `document.body` 一模一样，整条竖栏会看不见边界），右边界一条 `border-border/50`。
+- **右栏**：表单列，内容宽 `max-w-sm`。窄屏时左栏整个隐藏（`hidden lg:flex`），品牌标退成表单上方的一小行（`lg:hidden` 的同一个 lockup）。
+
+页头只有两行、**没有分类标签**（以前那句 11px 大写的「管理控制台」已经删掉：左栏品牌已经说明了这是哪个应用，重复一遍只是让标题看起来像是内页页头）：
+
+```
+<h1 className="system-display-semibold text-text-primary">登录</h1>
+<p  className="system-sm-regular text-text-secondary">用管理账号登录这台服务。</p>
+```
+
+20px 的 `system-display-semibold` 是整屏门面页专用档，条件与依据见 [design-system-typography.md](../design/design-system-typography.md) §1.2 规则 1。第二行是按 `hasUsers` 二选一的状态说明（有账号 → `login.description`，零账号 → `login.descriptionNoAccount`），不再是分类标签。
+
+三种状态各有一套正文：
+
+- **第一次进来**（有账号、未登录）：用户名 + 口令（口令右侧一个眼睛按钮切换明文，`aria-label` 跟着切）+「保持登录」+ 登录按钮，出错时错误文案落在表单下方，输入值不清空；
+- **还没账号**（`hasUsers === false`）：直接给出建号命令，而不是先显示一个进不去的登录框——标题下的说明句已经写了「这台服务还没有管理账号」，正文只从 `login.noAccountDetail` 开始，接一段可整段选中的 `osw user add <username>` 代码块，再加一句提示。服务端在非回环 + 零账号时根本不会起来，能走到这一页说明是回环形态；
+- **不需要登录**（开关关着）：这一页不该被看到，路由守卫会直接放行到 `/`。
+
+已登录时的登出入口不在页面里，在侧栏页脚：`session.required && session.authenticated` 才渲染那一行（见 [console-architecture.md](../overview/console-architecture.md)）。页脚自上而下是 pinned 项 → 明暗切换 → 登出（有会话时）→ **运行状态永远在最后一行**。
 
 ### 智能路由（路由工作台）
 

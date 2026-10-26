@@ -2,12 +2,15 @@ import { createRootRoute, createRoute, createRouter, Navigate, Outlet, redirect,
 import type { AnalyticsRange } from '@common/schemas'
 import App from '@/App'
 import { ErrorFallback } from '@/components/error-boundary'
+import { setUnauthorizedHandler } from '@/api/client'
+import { loadAuthSession } from '@/data/auth'
 import { routePaths } from './routes'
 import { getHistory } from './history'
 import { navigationBreadcrumb } from './route-breadcrumbs'
 import { isThemeParam, LANG_PARAM, THEME_PARAM, type ThemeParam } from './url-overrides'
 import { normalizeLocale, type Locale } from '@common/i18n'
 import { useTranslation } from '@/i18n/provider'
+import { LoginPage } from '@/pages/login/page'
 import { OnboardingPage } from '@/pages/onboarding/page'
 import { useAppUiStore } from '@/store/app-ui-store'
 import { LogicalModelsPage } from '@/pages/logical-models/page'
@@ -51,6 +54,26 @@ const rootRoute = createRootRoute({
   component: App,
   errorComponent: RootErrorComponent,
   /**
+   * 登录守卫。
+   *
+   * 它只能挂在**根**路由上：需要登录的是「除登录页以外的每一页」，而一张逐页重复的
+   * `beforeLoad` 只要漏写一页就等于漏写全部，新人加页面时也不会想起来补。
+   *
+   * 跳登录页的那条判断看的是 `required && !authenticated`——两个字段是两个问题
+   * （见 `@common/auth` 的 `AuthSessionSchema`），只判 `authenticated` 会把「本来就不要
+   * 登录的桌面用户」永远挡在登录页上。
+   *
+   * 问不出会话（`null`）时放行：那时页面里的业务请求会 401，由 `api/client.ts` 的失效
+   * 回调把人送回来。在两个都连不上服务的页面之间来回跳，只会把真正的问题藏起来。
+   */
+  beforeLoad: async ({ location }) => {
+    if (location.pathname === routePaths.login) return
+    const session = await loadAuthSession()
+    if (session?.required && !session.authenticated) {
+      throw redirect({ to: routePaths.login, replace: true })
+    }
+  },
+  /**
    * 语言与主题都在查询串里（`?lang=zh-CN&theme=dark`），而不是一项当路径段、一项当查询参数。
    * 这样这两件事在下游就只有一套规则：都参加同一个 `validateSearch`、都被同一条中间件留住、
    * 都不影响路径匹配。「语言放路径段」那套的代价是每个页面路径都得带上一个模板段
@@ -82,6 +105,12 @@ const indexRoute = createRoute({
 
 // 引导页由 `App.tsx` 渲染成整屏覆盖层（无侧边栏），但结构上仍与其他页面同级。
 const onboardingRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.onboarding, component: OnboardingPage })
+
+// 登录页也是整屏特殊层（没有侧边栏），结构上与引导页同级。
+//
+// 它要有自己的一条 `beforeLoad` 之外的保障：会话失效可能发生在**任何一页**，
+// 而那边只能由 `api/client.ts` 发现。回调注册在这里，全局只此一处。
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: routePaths.login, component: LoginPage })
 
 const logicalModelsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -164,6 +193,7 @@ const logsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  loginRoute,
   onboardingRoute,
   logicalModelsRoute,
   modelManagementRoute,
@@ -181,6 +211,16 @@ export const router = createRouter({
   history: getHistory(),
   defaultPreload: 'intent',
   defaultNotFoundComponent: () => <Navigate to={routePaths.router} replace />,
+})
+
+/**
+ * 会话失效时把人送回登录页。
+ *
+ * 用 `navigate` 而不是 `<Navigate>`：回调发生在**请求回来的时候**，不在渲染期，那时没有
+ * 组件可以渲染。`replace` 是必要的——让后退键回到一个已经 401 的页面毫无意义。
+ */
+setUnauthorizedHandler(() => {
+  void router.navigate({ to: routePaths.login, replace: true })
 })
 
 declare module '@tanstack/react-router' {

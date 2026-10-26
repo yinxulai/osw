@@ -1,11 +1,23 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { router } from '@/routing/router'
 import { appNavigationItems } from '@/routing/navigation'
 import { routeBreadcrumbMetadata } from '@/routing/route-breadcrumbs'
 import { routePaths } from '@/routing/routes'
 import { isThemeParam, parseOverrides } from '@/routing/url-overrides'
+
+/**
+ * 根路由的登录守卫会真的发一条 `/auth/session` 请求。
+ *
+ * 不在这里钉住它，这组用例的结论就取决于「跑测试的这台机器上有没有一个活着、且已经
+ * 建过账号的管理服务」——服务恰好在跑、账号恰好存在时，`required: true` +
+ * `authenticated: false` 会把每一次导航重定向到 `/login`，看起来像是路由坏了。
+ *
+ * 返回 `null` 是守卫文档里明确写过的分支：问不出会话就放行，不拦人。这正是这批
+ * 「路径契约 / 地址栏行为」用例想测的前提——它们要验证的是路径解析与查询参数保留。
+ */
+vi.mock('@/data/auth', () => ({ loadAuthSession: () => Promise.resolve(null) }))
 
 // 这些用例只钉住「路径契约」，不渲染任何页面：
 // 路径字符串集中在 `./routes.ts`，这里负责证明它们真的能在路由表里解析出来，

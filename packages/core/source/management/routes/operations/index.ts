@@ -1,4 +1,5 @@
 export { settingsRoutes } from './settings'
+export { authRoutes } from './auth'
 export { runtimeControlRoutes } from './runtime-control'
 export { telemetryRoutes } from './telemetry'
 export { developmentRoutes } from './development'

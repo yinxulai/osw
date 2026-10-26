@@ -84,6 +84,10 @@ function App() {
   // 用 `matchRoute` 而不是比较 `pathname`：`routePaths` 里是干净的路径，语言与主题在查询串里，
   // 于是 `/onboarding?lang=zh-CN` 也能被认出来，`matchRoute` 已经处理了这一点。
   const isOnboarding = Boolean(matchRoute({ to: routePaths.onboarding }))
+  // 登录页与引导页同类：整屏、无侧边栏。两页共用下面那一个 `isFullScreen` 分支，
+  // 因为「没有导航」是它们的共同点，而不是各自的特例。
+  const isLogin = Boolean(matchRoute({ to: routePaths.login }))
+  const isFullScreen = isOnboarding || isLogin
   const needsLiveRequests = pathname === routePaths.logicalModels || pathname === routePaths.requestLogs
 
   return (
@@ -106,11 +110,18 @@ function App() {
                 />
               )}
               <div className="relative min-h-0 flex-1">
-                {isOnboarding ? (
+                {isFullScreen ? (
                   <div className="h-full overflow-auto bg-background text-foreground">
-                    <div className={isElectron ? 'fixed right-4 top-13 z-50' : 'fixed right-4 top-4 z-50'}>
-                      <OnboardingTopbar theme={theme} onToggleTheme={toggleTheme} />
-                    </div>
+                    {/*
+                     * 右上角那组开关只给引导页。登录页不挂：语言与主题已经由 `boot.js` 与
+                     * 偏好算好，一个连门都还没进的人不需要在门口调这两项；真要调，
+                     * 进来之后侧边栏脚注里就有。
+                     */}
+                    {isOnboarding && (
+                      <div className={isElectron ? 'fixed right-4 top-13 z-50' : 'fixed right-4 top-4 z-50'}>
+                        <OnboardingTopbar theme={theme} onToggleTheme={toggleTheme} />
+                      </div>
+                    )}
                     <RouteOutlet pathname={pathname} />
                   </div>
                 ) : (

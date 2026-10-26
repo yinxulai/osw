@@ -35,6 +35,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'nav.theme.toDark': '深色模式',
   'nav.sidebar.pin': '固定侧边栏',
   'nav.sidebar.unpin': '取消固定',
+  'nav.sidebar.logout': '退出登录',
   'nav.breadcrumb': '面包屑导航',
 
   // ========== 通用 ==========
@@ -1728,6 +1729,13 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'errors.DUPLICATE_RESOURCE': '同名资源已存在',
   'errors.RESOURCE_CONFLICT': '资源冲突',
   'errors.METHOD_NOT_ALLOWED': '不支持的请求方法',
+  'errors.MANAGEMENT_LOGIN_REQUIRED': '需要登录后才能继续',
+  'errors.MANAGEMENT_ACCOUNT_MISSING': '这台服务还没有管理账号，请先创建一个',
+  'errors.MANAGEMENT_INVALID_CREDENTIALS': '用户名或密码不正确',
+  'errors.MANAGEMENT_ACCOUNT_EXISTS': '用户名 {username} 已被占用',
+  'errors.MANAGEMENT_ACCOUNT_NOT_FOUND': '账号不存在或已被删除',
+  'errors.MANAGEMENT_LAST_ACCOUNT': '不能删除最后一个管理账号，否则再也无法登录',
+  'errors.MANAGEMENT_WEAK_PASSWORD': '密码至少需要 {minimum} 个字符',
   'errors.INVALID_JSON': '请求体不是有效 JSON',
   'errors.UNKNOWN_API_PATH': '无法识别的 API 路径',
   'errors.UPSTREAM_ERROR': '上游请求失败',
@@ -1766,6 +1774,25 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'errors.CLOUD_SYNC_REMOTE_FILE_MISSING': '远端还没有 {fileName}：请先在已有配置的机器上上传一次',
   'errors.CLOUD_SYNC_REMOTE_FILE_INVALID': '远端的 {fileName} 不是合法的 JSON：它可能被手改坏了，重新上传一次就能覆盖',
 
+  // ========== 登录 ==========
+  // 只在「这台服务要求登录」时出现，所以文案里不解释「为什么要登录」，只说眼下该做什么。
+  // 页头那句是 `description` / `descriptionNoAccount` 二选一（按 `hasUsers` 切），
+  // 不再单独设分类标签：左栏品牌已经说明了这是哪个应用。
+  // `noAccount*` 两条是首装态：那时表单一个字也不显示，否则就是一个永远登不进去的表单。
+  'login.title': '登录',
+  'login.description': '用管理账号登录这台服务。',
+  'login.descriptionNoAccount': '这台服务还没有管理账号。',
+  'login.username': '用户名',
+  'login.password': '密码',
+  'login.showPassword': '显示密码',
+  'login.hidePassword': '隐藏密码',
+  'login.remember': '保持登录',
+  'login.rememberHint': '关掉时，关闭浏览器就要重新登录。',
+  'login.submit': '登录',
+  'login.submitting': '正在登录…',
+  'login.noAccountDetail': '在服务器上运行下面这条命令建一个（密码至少 {minimum} 位），然后刷新这一页。',
+  'login.noAccountHint': '如果服务是通过 Docker 或系统服务运行的，请在实际运行服务的那个环境里执行这条命令。',
+
   // ========== 新用户引导 ==========
   // 引导是一条两步直线：拿什么跑 → 填到哪里，顺序不可换（前一步的产物是后一步的前提）。
   // 选路不单独成步：内建默认已经在下，新手先跑起来，路由细节去「路由」页再调。
@@ -1800,6 +1827,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.section.reliability': '可靠性',
   'settings.section.data': '数据',
   'settings.section.sync': '云同步',
+  'settings.section.access': '访问控制',
   'settings.section.developer': '开发者',
   'settings.footer.allSaved': '所有设置已保存',
   'settings.footer.dirty': '有尚未保存的更改',
@@ -2048,6 +2076,30 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'settings.development.screenshotsDone': '已导出 {count} 张截图到 {path}',
   'settings.development.screenshotsFailed': '截图导出失败：{message}',
 
+  // 访问控制
+  // 开关与账号列表同卡片、不同保存方式：开关进草稿（跟保存按钮走），
+  // 建号/改口令/删号一按即写（理由见 `access-control-card.tsx` 文件头）。
+  'settings.auth.title': '访问控制',
+  'settings.auth.description': '要求先登录才能打开这个管理面板（代理接口不受影响）',
+  'settings.auth.enabled': '要求登录',
+  'settings.auth.enabledDescription': '打开后，除登录页以外的每一页都要先登录。管理面板能改配置、能导出明文密钥，在共享的机器上建议打开。',
+  'settings.auth.accounts': '管理账号',
+  'settings.auth.empty': '还没有账号。下面建第一个账号之后，打开开关才能真正生效。',
+  'settings.auth.neverLoggedIn': '从未登录',
+  'settings.auth.lastLogin': '最近登录：{time}',
+  'settings.auth.changePassword': '改口令',
+  'settings.auth.remove': '删除账号',
+  'settings.auth.removeTitle': '删除账号 {username}？',
+  'settings.auth.removeDescription': '该账号已登录的浏览器会立即失效。最后一个账号删不掉——删完就没人能登进来了。',
+  'settings.auth.addTitle': '新建账号',
+  'settings.auth.addDescription': '用户名只能用字母、数字、点、下划线和连字符；口令至少 {minimum} 位。',
+  'settings.auth.usernamePlaceholder': '用户名',
+  'settings.auth.passwordPlaceholder': '口令',
+  'settings.auth.addAction': '新建',
+  'settings.auth.created': '账号已创建',
+  'settings.auth.removed': '账号已删除',
+  'settings.auth.passwordChanged': '口令已更新',
+
   // 开发者
   'settings.developer.title': '开发者',
   'settings.developer.description': '源码、社区，以及 OSW 背后的人',
@@ -2112,18 +2164,36 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'native.cli.command.start': '启动服务（不写命令时的默认行为）',
   'native.cli.command.stop': '停止由本 CLI 启动的实例',
   'native.cli.command.status': '输出运行状态、监听地址、数据目录与版本',
+  'native.cli.command.user': '管理登录账号（list / add / remove）',
   'native.cli.command.version': '输出版本号',
   'native.cli.options': '选项：',
   'native.cli.option.help': '显示本帮助',
   'native.cli.option.version': '输出版本号',
   'native.cli.option.dataDir': '数据目录（默认：{default}）',
   'native.cli.option.host': '代理监听地址（默认：{default}）',
+  'native.cli.option.managementHost': '管理服务监听地址（默认：{default}；改成别的地址就会默认要求登录）',
   'native.cli.option.proxyPort': '代理端口（默认：{default}）',
   'native.cli.option.managementPort': '管理端口（默认：{default}）',
   'native.cli.option.web': '由管理服务托管控制台（默认开启）',
   'native.cli.option.noWeb': '不托管控制台，只提供 HTTP API',
   'native.cli.option.json': '以 JSON 输出（仅 status）',
-  'native.cli.managementLoopback': '管理服务固定只监听 127.0.0.1：它本身没有鉴权，需要在别的机器上访问时请走 SSH 隧道。',
+  'native.cli.option.passwordStdin': '从标准输入读密码（user add）',
+  'native.cli.managementAuthHint': '管理服务默认只监听 127.0.0.1。要装到服务器上给别人用，就用 --management-host 换个地址；换之前先用 osw user add 建一个账号——监听非回环地址时服务要求登录，没有账号会直接拒绝启动。',
+
+  'native.cli.user.missingUsername': 'user add / user remove 需要用户名：osw user add <用户名>',
+  'native.cli.user.unknownAction': '未知的 user 动作：{action}（可用：list、add、remove）',
+  'native.cli.user.databaseFailed': '无法打开数据库：{message}',
+  'native.cli.user.empty': '{dataDir} 里还没有管理账号。用 osw user add <用户名> 建一个。',
+  'native.cli.user.listTitle': '账号（用户名、最近登录）：',
+  'native.cli.user.listHint': '数据目录：{dataDir}',
+  'native.cli.user.added': '已在 {dataDir} 中添加账号 {username}。',
+  'native.cli.user.addedHint': '重启服务（osw stop && osw start）后新账号才会生效。',
+  'native.cli.user.removed': '已从 {dataDir} 删除账号 {username}。',
+  'native.cli.user.notFound': '没有这个账号：{username}',
+  'native.cli.user.addFailed': '添加账号失败：{message}',
+  'native.cli.user.removeFailed': '删除账号失败：{message}',
+  'native.cli.user.passwordPrompt': '密码：',
+  'native.cli.user.passwordMissing': '没有读到密码。',
 
   'native.cli.start.title': 'OSW {version}（{environment}）',
   'native.cli.start.console': '控制台：{url}',

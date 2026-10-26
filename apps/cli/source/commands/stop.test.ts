@@ -79,8 +79,11 @@ const values: CliArguments = {
   host: null,
   proxyPort: null,
   managementPort: null,
+  managementHost: null,
   serveWeb: true,
   json: false,
+  positionals: [],
+  passwordStdin: false,
 }
 
 function stateOf(pid: number): RuntimeFileState {

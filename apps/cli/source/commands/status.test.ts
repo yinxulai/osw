@@ -96,7 +96,10 @@ async function run(options: RunOptions = {}) {
     host: null,
     proxyPort: null,
     managementPort: null,
+    managementHost: null,
     serveWeb: true,
+    positionals: [],
+    passwordStdin: false,
     json: options.json ?? false,
   })
   return { code, text: stdout.join(''), errors: stderr.join('') }

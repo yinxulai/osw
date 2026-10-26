@@ -59,6 +59,33 @@ function buildHeaders(): Record<string, string> {
 }
 
 /**
+ * 每条请求都要带上 cookie。
+ *
+ * 真实服务器上浏览器拿不到 `window.__OSW__.apiToken`（`Host` 不是回环时入口 HTML 刻意
+ * 不注入），会话 cookie 是它唯一的凭证。而 `fetch` 默认**不带**跨源 cookie，于是
+ * 「登录成功了、下一条请求又 401」——这行就是那条坑的盖子。
+ *
+ * 桌面（`file://`）与 Vite dev（同源）形态下它不产生任何行为：没有 cookie 可带。
+ */
+const REQUEST_INIT: RequestInit = { credentials: 'include' }
+
+/**
+ * 会话失效时的回调（401 + `UNAUTHORIZED`）。
+ *
+ * 模块级而不是挂在某个组件上：失效可能发生在任意一个页面、任意一条请求上，只有一条
+ * 处理路径才能保证「该回登录页的都回去了」。路由在启动时注册一次（见 `routing/router.tsx`）。
+ *
+ * 只认 `UNAUTHORIZED`：登录接口自己失败回的是 `MANAGEMENT_INVALID_CREDENTIALS`（也是 401），
+ * 那种「口令错了」不该把页面跳走——用户正要在这一页重试。
+ */
+type UnauthorizedHandler = () => void
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler
+}
+
+/**
  * 打开一条管理 API 的推送流。
  *
  * 与 `request()` 的唯一区别是它**不读完整份响应**：管理服务会一直往里写，直到任一侧断开。
@@ -70,6 +97,7 @@ function buildHeaders(): Record<string, string> {
  */
 export async function openStream(path: string, options: RequestOptions = {}): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch(`${resolveApiBase()}${path}`, {
+    ...REQUEST_INIT,
     method: 'POST',
     headers: buildHeaders(),
     body: JSON.stringify({}),
@@ -84,6 +112,7 @@ export async function openStream(path: string, options: RequestOptions = {}): Pr
 export async function request<T>(path: string, body: unknown = {}, options: RequestOptions = {}): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`${resolveApiBase()}${path}`, {
+      ...REQUEST_INIT,
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify(body),
@@ -98,6 +127,9 @@ export async function request<T>(path: string, body: unknown = {}, options: Requ
     if (!response.ok && result.success) {
       return { success: false, errorCode: 'HTTP_ERROR', errorMessage: `management service request failed (HTTP ${response.status})` }
     }
+    // 会话没了（过时、被吊销、服务重启过）：这是**唯一**会把人送回登录页的信号。
+    // 判断放在这里而不放在各个调用方：漏掉一处就等于漏掉一页。
+    if (!result.success && result.errorCode === 'UNAUTHORIZED') unauthorizedHandler?.()
     return result
   } catch (error) {
     return { success: false, errorCode: 'NETWORK_ERROR', errorMessage: (error as Error).message }

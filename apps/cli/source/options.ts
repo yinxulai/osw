@@ -9,7 +9,7 @@
 import type { TranslateParams } from '@common/i18n'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 
-export const CLI_COMMANDS = ['start', 'stop', 'status', 'version'] as const
+export const CLI_COMMANDS = ['start', 'stop', 'status', 'version', 'user'] as const
 
 export type CliCommand = (typeof CLI_COMMANDS)[number]
 
@@ -22,14 +22,26 @@ export interface CliArguments {
   version: boolean
   /** `null` 表示没传，由 `host.ts` 用平台默认数据目录补。 */
   dataDir: string | null
-  /** 代理监听地址。管理服务的地址固定回环，不可配（见 `native.cli.managementLoopback`）。 */
+  /** 代理监听地址。 */
   host: string | null
+  /**
+   * 管理服务监听地址。
+   *
+   * 默认 `127.0.0.1`（只本机可达）。给成别的地址就是「装到服务器上给别人用」的形态，
+   * 此时管理面默认要求登录——那条缺省由 core 按监听地址算出来（见
+   * `packages/core/source/runtime/server-runtime.ts`），命令行不重复判一遍。
+   */
+  managementHost: string | null
   proxyPort: number | null
   managementPort: number | null
   /** 是否托管控制台产物，默认开；`--web` / `--no-web` 覆盖。 */
   serveWeb: boolean
   /** `--json`：机器可读输出。只对 `status` 有意义，由入口校验（见 `index.ts`）。 */
   json: boolean
+  /** `user` 命令的位置参数：`['add', 'alice']`。其它命令一定为空。 */
+  positionals: string[]
+  /** `user add` 的口令从标准输入读，不交互、不回显。适合脚本与容器初始化。 */
+  passwordStdin: boolean
 }
 
 export interface ArgumentError {
@@ -46,10 +58,13 @@ export function parseArguments(argv: readonly string[]): ParseResult {
     version: false,
     dataDir: null,
     host: null,
+    managementHost: null,
     proxyPort: null,
     managementPort: null,
     serveWeb: true,
     json: false,
+    positionals: [],
+    passwordStdin: false,
   }
 
   const fail = (key: UiCatalogKey, params: TranslateParams): ParseResult => ({ ok: false, error: { key, params } })
@@ -67,10 +82,15 @@ export function parseArguments(argv: readonly string[]): ParseResult {
     if (token === '--') continue
 
     if (!token.startsWith('-')) {
-      // 第二个位置参数一律报未知命令：本 CLI 没有子命令层级，多出来的位置参数
-      // 通常是 `osw start extra` 这类手误，静默忽略会让人以为参数生效了。
-      if (command !== null || !isCommand(token)) return fail('native.cli.error.unknownCommand', { command: token })
-      command = token
+      // `user` 是本 CLI 唯带子命令的命令（`user add alice`），它的位置参数由命令自己解释；
+      // 其余命令多出来的位置参数通常是 `osw start extra` 这类手误，静默忽略会让人以为生效了。
+      if (command === null) {
+        if (!isCommand(token)) return fail('native.cli.error.unknownCommand', { command: token })
+        command = token
+        continue
+      }
+      if (command !== 'user') return fail('native.cli.error.unknownCommand', { command: token })
+      values.positionals.push(token)
       continue
     }
 
@@ -98,7 +118,13 @@ export function parseArguments(argv: readonly string[]): ParseResult {
       continue
     }
 
-    if (name !== '--data-dir' && name !== '--host' && name !== '--proxy-port' && name !== '--management-port') {
+    if (name === '--password-stdin') {
+      if (inlineValue !== null) return fail('native.cli.error.unknownOption', { option: token })
+      values.passwordStdin = true
+      continue
+    }
+
+    if (name !== '--data-dir' && name !== '--host' && name !== '--management-host' && name !== '--proxy-port' && name !== '--management-port') {
       return fail('native.cli.error.unknownOption', { option: name })
     }
 
@@ -112,6 +138,10 @@ export function parseArguments(argv: readonly string[]): ParseResult {
     }
     if (name === '--host') {
       values.host = raw
+      continue
+    }
+    if (name === '--management-host') {
+      values.managementHost = raw
       continue
     }
 

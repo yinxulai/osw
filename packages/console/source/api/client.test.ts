@@ -61,7 +61,9 @@ describe('resolveApiBase', () => {
     const { resolveApiBase } = await loadClient()
 
     expect(resolveApiBase()).toBe(getRuntimeProfile('development').managementApiUrl)
-    expect(resolveApiBase()).toBe('http://127.0.0.1:19301/api')
+    // 必须是 `localhost`：页面在 `localhost:5173`，跨到 `127.0.0.1` 就是跨站，
+    // `SameSite=Lax` 的会话 cookie 会被浏览器丢掉，登录在浏览器里永远不成功。
+    expect(resolveApiBase()).toBe('http://localhost:19301/api')
   })
 
   // 宿主注入了就照办：Electron 从 `file://` 加载页面，靠 URL 推不出管理服务在哪儿。
@@ -130,7 +132,10 @@ describe('request', () => {
     const result = await request<{ id: string }>('/provider/get', { id: 'prov_1' })
 
     expect(result).toEqual({ success: true, data: { id: 'prov_1' } })
+    // `credentials: 'include'` 是会话 cookie 能带上的唯一原因：浏览器、`fetch` 的
+    // 缺省值都不带它，漏了就变成「登录成功、下一条请求又 401」。
     expect(fetchMock).toHaveBeenCalledWith(`${resolveApiBase()}/provider/get`, {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: 'prov_1' }),
@@ -263,7 +268,9 @@ describe('openStream', () => {
     const { openStream, resolveApiBase } = await loadClient()
 
     await expect(openStream('/live-request/stream')).resolves.toBe(body)
+    // 推送流同样走会话 cookie：它也是 `/api/*`，也过同一道鉴权。
     expect(fetchMock).toHaveBeenCalledWith(`${resolveApiBase()}/live-request/stream`, {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',

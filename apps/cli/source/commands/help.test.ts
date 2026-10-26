@@ -17,16 +17,17 @@ describe('renderHelp', () => {
 
   it('documents every flag the parser understands', () => {
     const help = renderHelp()
-    for (const flag of ['-h, --help', '-v, --version', '--data-dir', '--host', '--proxy-port', '--management-port', '--web', '--no-web', '--json']) {
+    for (const flag of ['-h, --help', '-v, --version', '--data-dir', '--host', '--proxy-port', '--management-host', '--management-port', '--password-stdin', '--web', '--no-web', '--json']) {
       expect(help, `帮助里没有 ${flag}`).toContain(flag)
     }
   })
 
-  it('makes clear the management service is loopback only', () => {
-    // 没有 `--management-host` 这个旗标：写清楚比让人翻遍选项去找更省事。
+  it('spells out where the management service listens and what that implies', () => {
+    // 监听地址现在可配了，于是「管理面只在本机」这句话不再成立。帮助里必须同时给出
+    // 旗标与后果（绑定到非回环地址就要登录），否则用户会照着旧提示把面板戳到公网上。
     const help = renderHelp()
-    expect(help).not.toContain('--management-host')
-    expect(help).toContain(createAppTranslator('en')('native.cli.managementLoopback'))
+    expect(help).toContain('--management-host')
+    expect(help).toContain(createAppTranslator('en')('native.cli.managementAuthHint'))
   })
 
   it('renders the whole thing from the catalog, with no untranslated placeholder left', () => {

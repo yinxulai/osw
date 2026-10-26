@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: The six sections of the Settings page and every configuration item.
+description: The eight sections of the Settings page and every configuration item.
 keywords:
   - settings
   - configuration
@@ -9,7 +9,7 @@ keywords:
 
 # Settings
 
-The **Settings** page manages app behavior, network connections, failover, and local data, organized into seven sections: **App / Network / Routing / Reliability / Data / Cloud sync / Developer**. Changes take effect on save, and the bottom shows the sync and save status.
+The **Settings** page manages app behavior, network connections, failover, and local data, organized into eight sections: **App / Network / Access control / Routing / Reliability / Data / Cloud sync / Developer**. Changes take effect on save, and the bottom shows the sync and save status.
 
 ![OSW Settings page top: the App section's appearance & startup, live metric, version updates, and re-run onboarding.](/screenshots/en/light/settings-overview.png)
 
@@ -70,6 +70,25 @@ Decides OSW's network path to model services:
 | Custom proxy | Use a specified HTTP / HTTPS / SOCKS proxy. |
 
 In custom mode you can fill in a **proxy URL** (credentials are stored locally; use only trusted proxies) and **bypass addresses** (comma-separated, supporting `*.example.com` and `<local>`). You can also **test the connection**: make one lightweight request with the current config to verify the proxy works. See [Outbound proxy](/upstreams/outbound-proxy).
+
+## Access control
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| Require login | Off on loopback, on otherwise | When on, every page except the login page requires a login first. |
+| Accounts | — | Lists accounts, changes passwords, removes accounts. Has no effect until an account exists. |
+
+This switch governs the **management console**; the proxy API is unaffected (`/v1/*` still does not authenticate callers). The console can change configuration and export plaintext keys, so turning this on is recommended on a shared machine.
+
+The default is computed once, when the service starts, from the management listen address: off for loopback, on otherwise. If you bind the management plane to a non-loopback address (`--management-host 0.0.0.0`) with no account in the database, the service **refuses to start** — at that point "who can reach the port" is no longer a boundary. Create one first:
+
+```bash
+osw user add admin
+```
+
+Passwords are stored as salted scrypt hashes in the config database, never in plaintext; login state lives in an in-memory session cookie, so a restart signs everyone out. The last account cannot be deleted — there would be no way back in.
+
+For installing the service on a server and sharing it, along with reverse proxying and process supervision, see "Running on a server (server mode)" in [Command line](/reference/cli).
 
 ## Routing
 

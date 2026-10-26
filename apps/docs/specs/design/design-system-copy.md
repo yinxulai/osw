@@ -16,7 +16,7 @@
 | 中文目录 | `packages/contracts/source/i18n/catalogs/ui.zh-CN.ts`（**2159 行**） |
 | 英文目录 | `ui.en.ts`（**2166 行**，**结构真相源**；中文声明为 `Record<keyof typeof uiEn, string>`，缺 key 编译失败） |
 | 词条数 | **1931** 条（`[源码]`：`rg -o "'[^']+': '[^']+'," \| wc -l`） |
-| 顶层域 | `access` `app` `clientConfig` `common` `errors` `failureReason` `logicalModels` `logs` `models` `modelTest` `native` `nav` `onboarding` `overview` `protocol` `providers` `proxy` `requestLogs` `router` `rules` `settings` `tray` |
+| 顶层域 | `access` `app` `clientConfig` `common` `errors` `failureReason` `login` `logicalModels` `logs` `models` `modelTest` `native` `nav` `onboarding` `overview` `protocol` `providers` `proxy` `requestLogs` `router` `rules` `settings` `tray` |
 
 **长度分布**（中文，按字符数）：
 
