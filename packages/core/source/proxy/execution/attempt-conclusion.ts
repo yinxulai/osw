@@ -4,10 +4,9 @@ import type { HttpResponseSink } from '@server/proxy/adapters/http-response-sink
 import type { AttemptObserver } from '@server/proxy/observers/attempt-observer'
 import type { AttemptLogger, UpstreamContentInput } from '@server/proxy/observability/logging-types'
 import { serializeCapturedHeaders } from '@server/proxy/response/headers'
-import type { UpstreamStatusDisposition } from '@server/proxy/response/response'
 import { ProtocolConversionError, terminalWholeBodyConversion } from '@server/proxy/protocols/shared/conversion-error'
 import { RecordedAttemptError } from './attempt-errors'
-import { type ClientResponseCapture, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
+import { type AttemptDisposition, type ClientResponseCapture, type DeliveredAttemptOutcome, type DiscardedAttemptOutcome } from './attempt-outcome'
 import { extractRequestIdFromBody } from './request-id'
 
 /**
@@ -30,7 +29,7 @@ export interface AttemptConclusionInput {
    */
   readonly sink: HttpResponseSink
   readonly statusCode: number
-  readonly disposition: UpstreamStatusDisposition
+  readonly disposition: AttemptDisposition
   /** 上游跳实际是什么形态。**纯上游事实**，与客户端跳的要求无关。 */
   readonly upstreamTransport: TransportKind | null
   /** 上游跳没有兼现客户端跳要求的形态（2xx 但要 `http-stream` 却回了非 SSE，或反之）。 */

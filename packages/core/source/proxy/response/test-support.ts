@@ -1,24 +1,29 @@
 /**
  * 故障切换和凭据处理这两类单测共用的夹具。
  *
- * 第一层是 `response.test.ts` 与 `headers.test.ts`。它们用这里的状态码表和请求头夹具
+ * 第一层是 `response.test.ts` 与 `headers.test.ts`。它们用这里的**状态码区间**和请求头夹具
  * 锁定三件最高风险的事：非 2xx 要换通道、报文错误才归到客户端、密钥不能进日志也不能原样转给上游。
  *
- * `audit*` 把这些断言收成可复用的检查：表还在不在，生产函数还能不能过。
+ * `audit*` 把这些断言收成可复用的检查：生产函数能不能过，夹具还在不在。
  * `evaluate*` 是第二层：检查本身必须放行健康主体，并且拦住故意写坏的主体或夹具。
  * 第三层在 `test-support.meta.test.ts`，确认 `evaluate*` 不会把写坏的检查判成健康。
+ *
+ * 「测试有没有接线」不在这里：那由覆盖率回答，不用正则读回测试源码——那种检查格式化一下就误报、
+ * 加一行 `.skip` 却照样放行（见 PR 说明）。
  */
 
-import { readFileSync } from 'node:fs'
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http'
 import type { ProtocolAuthHeaders } from '@common/protocols'
 import { createUpstreamRequestHeaders, redactHeaders } from './headers'
 import { classifyUpstreamStatus, isClientAttributableStatus } from './response'
 
-export const SUCCESS_STATUS_CODES: readonly number[] = [200, 201, 204]
-export const FAILOVER_STATUS_CODES: readonly number[] = [300, 301, 399, 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503, 599]
+/**
+ * `isClientAttributableStatus` 的白名单：仅有的「报文格式不成立」类状态码。
+ *
+ * 它与 `response.ts` 里那份私有 `Set` 是同一件事实的两处声明；`response.test.ts` 拿它
+ * 逐码比对生产函数，并单独钉住这四个字面量——「白名单和实现一起被改错」因此不可能变绿。
+ */
 export const CLIENT_ATTRIBUTABLE_STATUS_CODES: readonly number[] = [400, 413, 414, 422]
-export const NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES: readonly number[] = [200, 300, 401, 403, 404, 405, 408, 409, 429, 500, 502, 503]
 
 export const CREDENTIAL_HEADERS: OutgoingHttpHeaders = {
   authorization: 'Bearer client-token',
@@ -99,13 +104,6 @@ export interface StatusClassifier {
   isClientAttributableStatus: (statusCode: number) => boolean
 }
 
-export interface FailoverCases {
-  readonly success: readonly number[]
-  readonly failover: readonly number[]
-  readonly clientAttributable: readonly number[]
-  readonly notClientAttributable: readonly number[]
-}
-
 export type HeaderRedactor = (
   source: IncomingHttpHeaders | OutgoingHttpHeaders,
   additionalSensitiveHeaders?: string[],
@@ -132,33 +130,13 @@ export interface UpstreamCases {
   readonly forwarded: Record<string, string>
 }
 
-export interface Layer1Sources {
-  readonly responseTest: string
-  readonly headersTest: string
-}
-
-export type FailoverAudit = (subject: StatusClassifier, cases?: FailoverCases) => AuditReport
+export type FailoverAudit = (subject: StatusClassifier) => AuditReport
 export type RedactionAudit = (redact: HeaderRedactor, cases?: RedactionCases) => AuditReport
 export type UpstreamAudit = (build: UpstreamHeaderBuilder, cases?: UpstreamCases) => AuditReport
-export type WiringAudit = (sources: Layer1Sources) => AuditReport
 
 interface ProbeResult {
   readonly id: string
   readonly caught: boolean
-}
-
-interface StatusTableRule {
-  readonly label: string
-  readonly actual: readonly number[]
-  readonly required: readonly number[]
-  readonly forbidden: readonly number[]
-  readonly size: number
-}
-
-interface OverlapRule {
-  readonly label: string
-  readonly left: readonly number[]
-  readonly right: readonly number[]
 }
 
 function report(failures: readonly string[]): AuditReport {
@@ -184,15 +162,6 @@ function verdictFrom(healthy: AuditReport, probes: readonly ProbeResult[]): Harn
   }
 }
 
-function defaultFailoverCases(): FailoverCases {
-  return {
-    success: SUCCESS_STATUS_CODES,
-    failover: FAILOVER_STATUS_CODES,
-    clientAttributable: CLIENT_ATTRIBUTABLE_STATUS_CODES,
-    notClientAttributable: NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES,
-  }
-}
-
 function defaultRedactionCases(): RedactionCases {
   return {
     headers: CREDENTIAL_HEADERS,
@@ -212,23 +181,6 @@ function defaultUpstreamCases(): UpstreamCases {
   }
 }
 
-function requireStatuses(failures: string[], rule: StatusTableRule): void {
-  if (rule.actual.length !== rule.size) failures.push(`${rule.label} case table changed size`)
-  for (const status of rule.required) {
-    if (!rule.actual.includes(status)) failures.push(`${rule.label} case table dropped ${status}`)
-  }
-  for (const status of rule.forbidden) {
-    if (rule.actual.includes(status)) failures.push(`${rule.label} case table includes ${status}`)
-  }
-}
-
-function rejectOverlap(failures: string[], rule: OverlapRule): void {
-  const right = new Set(rule.right)
-  for (const status of rule.left) {
-    if (right.has(status)) failures.push(`${rule.label} overlap on ${status}`)
-  }
-}
-
 function containsText(value: string | string[] | number | undefined, needle: string): boolean {
   if (typeof value === 'string') return value.includes(needle)
   if (Array.isArray(value)) return value.some(item => item.includes(needle))
@@ -240,9 +192,8 @@ function serialized(value: unknown): string {
 }
 
 function sameRecord(left: Record<string, string | string[] | undefined>, right: Record<string, string | string[] | undefined>): boolean {
-  const leftKeys = Object.keys(left).filter(key => left[key] !== undefined)
   const rightKeys = Object.keys(right).filter(key => right[key] !== undefined)
-  if (leftKeys.length !== rightKeys.length) return false
+  if (Object.keys(left).filter(key => left[key] !== undefined).length !== rightKeys.length) return false
   return rightKeys.every(key => JSON.stringify(left[key]) === JSON.stringify(right[key]))
 }
 
@@ -254,71 +205,20 @@ function headerEntries(source: IncomingHttpHeaders | OutgoingHttpHeaders): Array
   return entries
 }
 
-function codeOf(source: string): string {
-  return source.split('\n').map(line => line.replace(/\/\/.*$/, '')).join('\n')
-}
-
-function hasCode(source: string, needle: string): boolean {
-  return codeOf(source).includes(needle)
-}
-
-function mutate(source: string, needle: string, replacement: string): string | null {
-  const lines = source.split('\n')
-  const index = lines.findIndex(line => line.replace(/\/\/.*$/, '').includes(needle))
-  if (index < 0) return null
-  const next = lines.slice()
-  next[index] = next[index].replace(needle, replacement)
-  return next.join('\n')
-}
-
-export function auditFailoverClassifier(subject: StatusClassifier, cases: FailoverCases = defaultFailoverCases()): AuditReport {
+export function auditFailoverClassifier(subject: StatusClassifier): AuditReport {
   const failures: string[] = []
-  requireStatuses(failures, {
-    label: 'success',
-    actual: cases.success,
-    required: [200, 201, 204],
-    forbidden: [400, 401, 429, 500],
-    size: 3,
-  })
-  requireStatuses(failures, {
-    label: 'failover',
-    actual: cases.failover,
-    required: [300, 301, 399, 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503, 599],
-    forbidden: [200, 201, 204],
-    size: 16,
-  })
-  requireStatuses(failures, {
-    label: 'client-attributable',
-    actual: cases.clientAttributable,
-    required: [400, 413, 414, 422],
-    forbidden: [200, 401, 403, 404, 408, 409, 429, 500],
-    size: 4,
-  })
-  requireStatuses(failures, {
-    label: 'not-client-attributable',
-    actual: cases.notClientAttributable,
-    required: [200, 300, 401, 403, 404, 405, 408, 409, 429, 500, 502, 503],
-    forbidden: [400, 413, 414, 422],
-    size: 12,
-  })
-  rejectOverlap(failures, { label: 'success/failover', left: cases.success, right: cases.failover })
-  rejectOverlap(failures, { label: 'client-fault/retryable', left: cases.clientAttributable, right: cases.notClientAttributable })
-
-  // 行为对照用的是导出的整张表，而不是调用方传来的那一份。
-  // 表被偷换成更短的版本时，上面的成员检查会失败；分类器被写坏时，这里仍按完整表验收。
-  for (const status of SUCCESS_STATUS_CODES) {
-    const disposition = subject.classifyUpstreamStatus(status)
-    if (disposition !== 'success') failures.push(`status ${status} classified as ${disposition}, want success`)
+  // 穷举 100..599，而不是抽查几个点：把 `statusCode < 300` 误写成 `< 250` 这类
+  // 区间漂移，抽样表照不到，穷举一条都跑不掉。
+  for (let status = 100; status <= 599; status++) {
+    const expected = status >= 200 && status < 300 ? 'success' : 'failover'
+    const actual = subject.classifyUpstreamStatus(status)
+    if (actual !== expected) failures.push(`status ${status} classified as ${actual}, want ${expected}`)
   }
-  for (const status of FAILOVER_STATUS_CODES) {
-    const disposition = subject.classifyUpstreamStatus(status)
-    if (disposition !== 'failover') failures.push(`status ${status} classified as ${disposition}, want failover`)
-  }
-  for (const status of CLIENT_ATTRIBUTABLE_STATUS_CODES) {
-    if (!subject.isClientAttributableStatus(status)) failures.push(`status ${status} must be client-attributable`)
-  }
-  for (const status of NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES) {
-    if (subject.isClientAttributableStatus(status)) failures.push(`status ${status} must stay retryable across channels`)
+  const attributable = new Set(CLIENT_ATTRIBUTABLE_STATUS_CODES)
+  for (let status = 100; status <= 599; status++) {
+    const expected = attributable.has(status)
+    const actual = subject.isClientAttributableStatus(status)
+    if (actual !== expected) failures.push(`status ${status} client-attributable=${actual}, want ${expected}`)
   }
   return report(failures)
 }
@@ -380,46 +280,6 @@ export function auditUpstreamCredentialSwap(build: UpstreamHeaderBuilder, cases:
   return report(failures)
 }
 
-const RESPONSE_TEST_NEEDLES = [
-  "from './test-support'",
-  'it.each(SUCCESS_STATUS_CODES)',
-  'it.each(FAILOVER_STATUS_CODES)',
-  'it.each(CLIENT_ATTRIBUTABLE_STATUS_CODES)',
-  'it.each(NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES)',
-  ".toBe('success')",
-  ".toBe('failover')",
-  '.toBe(true)',
-  '.toBe(false)',
-]
-
-const HEADERS_TEST_NEEDLES = [
-  "from './test-support'",
-  'redactHeaders(CREDENTIAL_HEADERS)',
-  'toEqual(REDACTED_CREDENTIAL_HEADERS)',
-  'redactHeaders(CUSTOM_AUTH_HEADERS, CUSTOM_AUTH_HEADER_NAMES)',
-  'toEqual(REDACTED_CUSTOM_AUTH_HEADERS)',
-  'createUpstreamRequestHeaders(UPSTREAM_CLIENT_HEADERS, UPSTREAM_AUTH, UPSTREAM_CONTENT_LENGTH)',
-  'toEqual(UPSTREAM_FORWARDED_HEADERS)',
-]
-
-export function auditLayer1Wiring(sources: Layer1Sources): AuditReport {
-  const failures: string[] = []
-  for (const needle of RESPONSE_TEST_NEEDLES) {
-    if (!hasCode(sources.responseTest, needle)) failures.push(`response tests missing ${needle}`)
-  }
-  for (const needle of HEADERS_TEST_NEEDLES) {
-    if (!hasCode(sources.headersTest, needle)) failures.push(`header tests missing ${needle}`)
-  }
-  return report(failures)
-}
-
-export function loadLayer1Sources(): Layer1Sources {
-  return {
-    responseTest: readFileSync(new URL('./response.test.ts', import.meta.url), 'utf8'),
-    headersTest: readFileSync(new URL('./headers.test.ts', import.meta.url), 'utf8'),
-  }
-}
-
 function classifyWithOverride(statusOverride: number, disposition: string): StatusClassifier {
   return {
     classifyUpstreamStatus: status => status === statusOverride ? disposition : classifyUpstreamStatus(status),
@@ -434,16 +294,13 @@ function attributeWithOverride(statusOverride: number, attributable: boolean): S
   }
 }
 
-function swapNumbers(values: readonly number[], from: number, to: number): readonly number[] {
-  return values.map(status => status === from ? to : status)
-}
-
-function swapFailoverStatus(cases: FailoverCases, from: number, to: number): FailoverCases {
-  return { ...cases, failover: swapNumbers(cases.failover, from, to) }
-}
-
-function swapClientStatus(cases: FailoverCases, from: number, to: number): FailoverCases {
-  return { ...cases, clientAttributable: swapNumbers(cases.clientAttributable, from, to) }
+function classifyWithShrunkenSuccessInterval(upperBound: number): StatusClassifier {
+  // 把「200<=s<300 成功」的上界写窄（如 `< 250`）。区间穷举应该在这个点上失败，
+  // 而只抽 200 / 299 / 300 几个点的表是发现不了的。
+  return {
+    classifyUpstreamStatus: status => status >= 200 && status < upperBound ? 'success' : 'failover',
+    isClientAttributableStatus,
+  }
 }
 
 function echoHeaders(source: IncomingHttpHeaders | OutgoingHttpHeaders): Record<string, string | string[]> {
@@ -505,64 +362,73 @@ function forwardedKeepsBearer(): UpstreamCases {
   return { ...defaultUpstreamCases(), forwarded: { ...UPSTREAM_FORWARDED_HEADERS, authorization: CLIENT_BEARER } }
 }
 
-function wiringProbe(id: string, audit: WiringAudit, sources: Layer1Sources, responseNeedle: string, responseReplacement: string, headersNeedle: string, headersReplacement: string): ProbeResult {
-  const responseTest = responseNeedle === '' ? sources.responseTest : mutate(sources.responseTest, responseNeedle, responseReplacement)
-  const headersTest = headersNeedle === '' ? sources.headersTest : mutate(sources.headersTest, headersNeedle, headersReplacement)
-  if (responseTest === null || headersTest === null) return { id, caught: false }
-  return caught(id, audit({ responseTest, headersTest }))
-}
+/**
+ * 每一类探针的编号。
+ *
+ * 第二层生成探针、第三层断言行空都从这几组常量取，两边不可能各写一份编号。
+ */
+export const FAILOVER_PROBE_IDS = [
+  'five-hundred-counted-as-success',
+  'shrunken-success-interval',
+  'two-hundred-counted-as-failover',
+  'auth-failure-blamed-on-client',
+  'rate-limit-blamed-on-client',
+  'malformed-request-treated-as-retryable',
+] as const
 
 export function evaluateFailoverHarness(audit: FailoverAudit): HarnessVerdict {
+  const [fiveHundredAsSuccess, shrunkenInterval, twoHundredAsFailover, authBlamedOnClient, rateLimitBlamedOnClient, malformedTreatedAsRetryable] = FAILOVER_PROBE_IDS
   const classifier: StatusClassifier = { classifyUpstreamStatus, isClientAttributableStatus }
-  const cases = defaultFailoverCases()
   return verdictFrom(audit(classifier), [
-    caught('five-hundred-counted-as-success', audit(classifyWithOverride(500, 'success'))),
-    caught('two-hundred-counted-as-failover', audit(classifyWithOverride(200, 'failover'))),
-    caught('auth-failure-blamed-on-client', audit(attributeWithOverride(401, true))),
-    caught('rate-limit-blamed-on-client', audit(attributeWithOverride(429, true))),
-    caught('malformed-request-treated-as-retryable', audit(attributeWithOverride(422, false))),
-    caught('failover-table-swaps-401-for-418', audit(classifier, swapFailoverStatus(cases, 401, 418))),
-    caught('failover-table-swaps-429-for-418', audit(classifier, swapFailoverStatus(cases, 429, 418))),
-    caught('client-table-swaps-422-for-401', audit(classifier, swapClientStatus(cases, 422, 401))),
+    caught(fiveHundredAsSuccess, audit(classifyWithOverride(500, 'success'))),
+    caught(shrunkenInterval, audit(classifyWithShrunkenSuccessInterval(250))),
+    caught(twoHundredAsFailover, audit(classifyWithOverride(200, 'failover'))),
+    caught(authBlamedOnClient, audit(attributeWithOverride(401, true))),
+    caught(rateLimitBlamedOnClient, audit(attributeWithOverride(429, true))),
+    caught(malformedTreatedAsRetryable, audit(attributeWithOverride(422, false))),
   ])
 }
+
+export const CREDENTIAL_PROBE_IDS = [
+  'echoes-secrets',
+  'leaks-api-key',
+  'redacts-content-type',
+  'ignores-custom-auth-header',
+  'fixture-drops-bearer-secret',
+  'expectation-stores-bearer',
+  'custom-expectation-keeps-key',
+] as const
 
 export function evaluateCredentialHarness(audit: RedactionAudit): HarnessVerdict {
+  const [echoesSecrets, leaksApiKey, redactsContentType, ignoresCustomAuthHeader, fixtureDropsBearer, expectationStoresBearerProbe, customExpectationKeepsKeyProbe] = CREDENTIAL_PROBE_IDS
   return verdictFrom(audit(redactHeaders), [
-    caught('echoes-secrets', audit(echoHeaders)),
-    caught('leaks-api-key', audit(redactExceptApiKey)),
-    caught('redacts-content-type', audit(redactAllHeaders)),
-    caught('ignores-custom-auth-header', audit(redactWithoutExtraNames)),
-    caught('fixture-drops-bearer-secret', audit(redactHeaders, credentialFixtureWithoutBearer())),
-    caught('expectation-stores-bearer', audit(redactHeaders, expectationStoresBearer())),
-    caught('custom-expectation-keeps-key', audit(redactHeaders, customExpectationKeepsKey())),
+    caught(echoesSecrets, audit(echoHeaders)),
+    caught(leaksApiKey, audit(redactExceptApiKey)),
+    caught(redactsContentType, audit(redactAllHeaders)),
+    caught(ignoresCustomAuthHeader, audit(redactWithoutExtraNames)),
+    caught(fixtureDropsBearer, audit(redactHeaders, credentialFixtureWithoutBearer())),
+    caught(expectationStoresBearerProbe, audit(redactHeaders, expectationStoresBearer())),
+    caught(customExpectationKeepsKeyProbe, audit(redactHeaders, customExpectationKeepsKey())),
   ])
 }
+
+export const UPSTREAM_PROBE_IDS = [
+  'forwards-client-bearer',
+  'drops-provider-key',
+  'drops-accept',
+  'forwards-hop-by-hop',
+  'fixture-drops-client-bearer',
+  'forwarded-expectation-keeps-bearer',
+] as const
 
 export function evaluateUpstreamHarness(audit: UpstreamAudit): HarnessVerdict {
+  const [forwardsClientBearer, dropsProviderKey, dropsAccept, forwardsHopByHop, fixtureDropsClientBearer, forwardedExpectationKeepsBearer] = UPSTREAM_PROBE_IDS
   return verdictFrom(audit(createUpstreamRequestHeaders), [
-    caught('forwards-client-bearer', audit(forwardClientHeaders)),
-    caught('drops-provider-key', audit(dropProviderKey)),
-    caught('drops-accept', audit(dropAccept)),
-    caught('forwards-hop-by-hop', audit(keepHopByHop)),
-    caught('fixture-drops-client-bearer', audit(createUpstreamRequestHeaders, upstreamFixtureWithoutBearer())),
-    caught('forwarded-expectation-keeps-bearer', audit(createUpstreamRequestHeaders, forwardedKeepsBearer())),
-  ])
-}
-
-export function evaluateLayer1Wiring(audit: WiringAudit, sources: Layer1Sources): HarnessVerdict {
-  return verdictFrom(audit(sources), [
-    wiringProbe('response-test-drops-failover-table', audit, sources, 'it.each(FAILOVER_STATUS_CODES)', 'it.each([500])', '', ''),
-    wiringProbe('response-test-drops-harness-import', audit, sources, "from './test-support'", "from './not-the-harness'", '', ''),
-    wiringProbe('headers-test-drops-credential-fixture', audit, sources, '', '', 'redactHeaders(CREDENTIAL_HEADERS)', 'redactHeaders(CREDENTIAL_HEADERS_INLINE)'),
-    wiringProbe(
-      'headers-test-drops-upstream-swap',
-      audit,
-      sources,
-      '',
-      '',
-      'createUpstreamRequestHeaders(UPSTREAM_CLIENT_HEADERS, UPSTREAM_AUTH, UPSTREAM_CONTENT_LENGTH)',
-      'createUpstreamRequestHeaders(UPSTREAM_CLIENT_HEADERS, { replace: {}, fill: {} }, 0)',
-    ),
+    caught(forwardsClientBearer, audit(forwardClientHeaders)),
+    caught(dropsProviderKey, audit(dropProviderKey)),
+    caught(dropsAccept, audit(dropAccept)),
+    caught(forwardsHopByHop, audit(keepHopByHop)),
+    caught(fixtureDropsClientBearer, audit(createUpstreamRequestHeaders, upstreamFixtureWithoutBearer())),
+    caught(forwardedExpectationKeepsBearer, audit(createUpstreamRequestHeaders, forwardedKeepsBearer())),
   ])
 }

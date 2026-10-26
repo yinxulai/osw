@@ -6,6 +6,15 @@ import type { UpstreamTarget } from '@server/proxy/contracts'
 import type { RequestContentOutcome } from '@server/proxy/observability/logging-types'
 
 /**
+ * 一次尝试在编排层的去向：三态。
+ *
+ * `UpstreamStatusDisposition` 只描述「状态码说了什么」（成功 / 换一家）。`'terminal'`
+ * 是尝试层自己的第三种去向——上游已经产出正文但整包协议转换失败，再换一家也救不回这段
+ * 数据，因此收尾层直接回 502 停下。它不由状态码得出，所以只定义在这一层。
+ */
+export type AttemptDisposition = UpstreamStatusDisposition | 'terminal'
+
+/**
  * 一次尝试的结果。
  *
  * 这里同时装了「上游视角」与「客户端视角」两份正文，因为它们经常不是同一份东西：
@@ -57,7 +66,7 @@ interface AttemptOutcomeBase {
  */
 export interface DeliveredAttemptOutcome extends AttemptOutcomeBase {
   readonly delivery: 'delivered'
-  readonly disposition: UpstreamStatusDisposition
+  readonly disposition: AttemptDisposition
   /**
    * 客户端视角的最终响应。写入客户端正文时必须使用它。
    */

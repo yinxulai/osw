@@ -8,10 +8,10 @@ import type { LiveRequestHandle } from '@server/proxy/observability/live-request
 import type { RequestContext } from '@server/proxy/request/request-context'
 import { createProxyRequestSession, type ProxyRequestSession } from '@server/proxy/request/request-session'
 import type { ProxyResponse } from '@server/proxy/response/proxy-response'
-import { classifyUpstreamStatus, type UpstreamStatusDisposition } from '@server/proxy/response/response'
+import { classifyUpstreamStatus } from '@server/proxy/response/response'
 import { ClientRequestCancelledError, isClientRequestCancelled, LocalAttemptError } from './attempt-errors'
 import { concludeDeliveredAttempt, concludeInterruptedAttempt, concludeUndeliverableAttempt, type AttemptConclusionInput } from './attempt-conclusion'
-import type { AttemptOutcome } from './attempt-outcome'
+import type { AttemptOutcome, AttemptDisposition } from './attempt-outcome'
 import { formatTarget } from './attempt-outcome'
 import { prepareAttempt, type PreparedAttempt } from './attempt-preparation'
 import { createRequestFinalizer } from './request-finalizer-handlers'
@@ -72,7 +72,7 @@ interface AttemptRequestOptions {
 interface AttemptExecution {
   readonly relay: RelayAttemptResult
   readonly statusCode: number
-  readonly disposition: UpstreamStatusDisposition
+  readonly disposition: AttemptDisposition
   readonly upstreamTransport: TransportKind | null
   readonly transportMismatch: boolean
   readonly upstreamRequestId: string | null
@@ -140,7 +140,7 @@ async function executeRelay(prepared: PreparedAttempt): Promise<AttemptExecution
   const { context, target, attemptIndex, exchange, attempt, transport, sink, responseModifiers, observers, delivery, live, liveAttempt } = prepared
   const { requestId } = context
   let statusCode = 502
-  let disposition: UpstreamStatusDisposition = 'terminal'
+  let disposition: AttemptDisposition = 'terminal'
   let upstreamTransport: TransportKind | null = null
   let transportMismatch = false
   let upstreamRequestId: string | null = null

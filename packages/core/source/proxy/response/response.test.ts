@@ -1,35 +1,45 @@
 import { describe, expect, it } from 'vitest'
 import { classifyHealthFailure, classifyUpstreamStatus, isClientAttributableStatus } from '@server/proxy/response/response'
-import {
-  CLIENT_ATTRIBUTABLE_STATUS_CODES,
-  FAILOVER_STATUS_CODES,
-  NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES,
-  SUCCESS_STATUS_CODES,
-} from './test-support'
+import { CLIENT_ATTRIBUTABLE_STATUS_CODES } from './test-support'
+
+// 状态码分类是**区间**，不是一张点表：生产实现说的是「2xx 成功，其余换一家」。
+// 因此这里穷举 100..599 逐码验收，而不是抽查几个代表点——把 `< 300` 写成 `< 250`
+// 这类区间漂移，抽样表照不到，穷举一条都跑不掉。
+const ALL_STATUS_CODES = Array.from({ length: 500 }, (_, index) => 100 + index)
 
 describe('classifyUpstreamStatus', () => {
-  it.each(SUCCESS_STATUS_CODES)('treats %i as a successful upstream response', status => {
-    expect(classifyUpstreamStatus(status)).toBe('success')
-  })
-
-  it.each(FAILOVER_STATUS_CODES)('allows failover for %i', status => {
-    // 上游 4xx 最常见的来源是「这家不支持这个参数」：状态码不能证明换一家也无效，
-    // 因此包括 400/422 在内的非 2xx 一律优先切换候选（见 `request-entry.test.ts` 的用例）。
-    expect(classifyUpstreamStatus(status)).toBe('failover')
+  it('treats every 2xx as success and everything else as failover, across 100..599', () => {
+    const mismatches: string[] = []
+    for (const status of ALL_STATUS_CODES) {
+      // 上游 4xx 最常见的来源是「这家不支持这个参数」：状态码不能证明换一家也无效，
+      // 因此包括 400/422 在内的非 2xx 一律优先切换候选（见 `request-entry.test.ts` 的用例）。
+      const expected = status >= 200 && status < 300 ? 'success' : 'failover'
+      const actual = classifyUpstreamStatus(status)
+      if (actual !== expected) mismatches.push(`${status}: ${actual} !== ${expected}`)
+    }
+    expect(mismatches).toEqual([])
   })
 })
 
 describe('isClientAttributableStatus', () => {
-  it.each(CLIENT_ATTRIBUTABLE_STATUS_CODES)('reports %i as a request the upstream itself rejected', status => {
+  it('matches the client-attributable whitelist across 100..599', () => {
     // 这一组是仅有的「报文格式不成立」类：换多少家上游都一样，因此全部候选告罄时
-    // 客户端应该收到这个状态码，而不是「可重试」的 502。
-    expect(isClientAttributableStatus(status)).toBe(true)
+    // 客户端应该收到这个状态码，而不是「可重试」的 502。其余状态码一律不得判真：
+    // 401/403（凭证）、404（模型或路径）、408（上游等待超时）、429（限流）都可能换一家就成立。
+    const attributable = new Set(CLIENT_ATTRIBUTABLE_STATUS_CODES)
+    const mismatches: string[] = []
+    for (const status of ALL_STATUS_CODES) {
+      const expected = attributable.has(status)
+      const actual = isClientAttributableStatus(status)
+      if (actual !== expected) mismatches.push(`${status}: ${actual} !== ${expected}`)
+    }
+    expect(mismatches).toEqual([])
   })
 
-  it.each(NOT_CLIENT_ATTRIBUTABLE_STATUS_CODES)('keeps %i out of the client-attributable set', status => {
-    // 401/403（凭证）、404（模型或路径）、408（上游等待超时）、429（限流）都可能换一家就成立，
-    // 客户端重试也确实合理，因此不能让它们把最终状态码改写成 4xx。
-    expect(isClientAttributableStatus(status)).toBe(false)
+  it('keeps the whitelist to the four malformed-request status codes', () => {
+    // 上一条拿这份白名单逐码比对生产实现；这一条钉住白名单本身，
+    // 「白名单和它比对的那份实现一起被改错」因此仍然会被抓住。
+    expect([...CLIENT_ATTRIBUTABLE_STATUS_CODES].sort((left, right) => left - right)).toEqual([400, 413, 414, 422])
   })
 })
 

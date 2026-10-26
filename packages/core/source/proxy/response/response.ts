@@ -1,4 +1,11 @@
-export type UpstreamStatusDisposition = 'success' | 'failover' | 'terminal'
+/**
+ * 状态码能得出的两种去向：成功交付，或优先换一家候选。
+ *
+ * 取值域里**没有** `'terminal'`：那是「上游已产出正文、协议转换失败、不该再切换」的结局，
+ * 状态码证明不了它，因此它属于尝试层（见 `attempt-outcome.ts` 的 `AttemptDisposition`），
+ * 不属于响应层。
+ */
+export type UpstreamStatusDisposition = 'success' | 'failover'
 export type HealthFailureScope = 'provider' | 'provider-model' | 'none'
 
 export interface HealthFailureInput {
