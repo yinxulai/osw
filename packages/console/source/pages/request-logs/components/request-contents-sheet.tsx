@@ -3,9 +3,8 @@ import type { AppliedRequestRewriteRule, AttemptContent, AttemptContentSummary, 
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useTranslation } from '@/i18n/provider'
 import { useRequestLogBodiesQuery } from '../queries'
-import { searchBlocks } from '../lib/content-search'
 import { buildContentStages, type ContentStage } from '../lib/contents'
-import { formatContent } from '../lib/format-content'
+import { useContentsSearch } from '../hooks/use-contents-search'
 import { RequestContentsBody } from './request-contents-body'
 import { RequestContentsHeader } from './request-contents-header'
 import { RequestContentsToolbar } from './request-contents-toolbar'
@@ -69,11 +68,6 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     requestBody: clientBody?.requestBody ?? null,
     responseBody: clientBody?.responseBody ?? null,
   }
-  const [search, setSearch] = React.useState('')
-  const [stageStates, setStageStates] = React.useState<Record<string, boolean>>({})
-  const [sectionStates, setSectionStates] = React.useState<Record<string, boolean>>({})
-  const [activeMatchIndex, setActiveMatchIndex] = React.useState(0)
-  const contentRef = React.useRef<HTMLDivElement | null>(null)
 
   // 「发生过协议转换」不是独立事实：客户端协议与本次尝试的上游协议不同即为转换。
   const clientProtocol = props.clientProtocol
@@ -100,135 +94,47 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
     ])].map(id => ({ key: id, name: namesById.get(id) ?? id }))
   }, [props.requestRewriteRules, selectedAttempt])
 
-  const sections = React.useMemo(
-    () => stages.flatMap(stage => stage.sections).filter(section => section.value !== null),
-    [stages],
-  )
+  const nav = useContentsSearch({ selectedAttemptId: props.selectedAttemptId, stages })
 
-  // 搜索的是「界面上真正展示的那段文本」，而 JSON 展开、流式拼回都会改变正文，
-  // 所以先过一遍 formatContent，确保高亮位置和渲染出来的字符一一对应。
-  const searchResult = React.useMemo(
-    () => searchBlocks(sections.map(section => ({ id: section.id, text: formatContent(t, section.value!).value })), search),
-    [t, sections, search],
-  )
-  const totalMatches = searchResult.matches.length
-  const searchQuery = search.trim()
-
-  React.useEffect(() => {
-    // 切换 attempt 就清空搜索与展开态。两个 setter 都先比对再写：
-    // 写 `{}` 这种新对象即使内容一样也会被判定为新 state，白白多一轮重渲染。
-    setSearch(current => (current === '' ? current : ''))
-    setStageStates(current => (Object.keys(current).length === 0 ? current : {}))
-    setSectionStates(current => (Object.keys(current).length === 0 ? current : {}))
-  }, [props.selectedAttemptId])
-
-  // 换一个搜索词就回到第一条命中，并把有命中的块展开；
-  // 否则高亮会藏在折叠标题底下，而用户看不到任何反应。
-  React.useEffect(() => {
-    setActiveMatchIndex(current => (current === 0 ? current : 0))
-    const matchedIds = new Set(searchResult.matches.map(match => match.sectionId))
-    if (matchedIds.size === 0) return
-    const matchedStageIds = new Set(stages
-      .filter(stage => stage.sections.some(section => matchedIds.has(section.id)))
-      .map(stage => stage.id))
-    setStageStates(current => {
-      let changed = false
-      const next = { ...current }
-      matchedStageIds.forEach(id => {
-        if (!next[id]) {
-          next[id] = true
-          changed = true
-        }
-      })
-      return changed ? next : current
-    })
-    setSectionStates(current => {
-      let changed = false
-      const next = { ...current }
-      matchedIds.forEach(id => {
-        if (!next[id]) {
-          next[id] = true
-          changed = true
-        }
-      })
-      return changed ? next : current
-    })
-  }, [searchResult, stages])
-
-  // 命中所在的块可能刚刚被展开才挂到 DOM 上，因此 sectionStates 变化也要重新定位。
-  React.useEffect(() => {
-    if (totalMatches === 0) return
-    contentRef.current
-      ?.querySelector<HTMLElement>(`[data-search-match="${activeMatchIndex}"]`)
-      ?.scrollIntoView({ block: 'center' })
-  }, [activeMatchIndex, totalMatches, sectionStates, stageStates])
-
-  const jumpToMatch = (delta: number) => {
-    if (totalMatches === 0) return
-    const next = (activeMatchIndex + delta + totalMatches) % totalMatches
-    const sectionId = searchResult.matches[next]?.sectionId
-    // 手动折叠过的块，定位到它时要先展开。
-    if (sectionId) {
-      const stageId = stages.find(stage => stage.sections.some(section => section.id === sectionId))?.id
-      if (stageId) setStageStates(current => (current[stageId] ? current : { ...current, [stageId]: true }))
-      setSectionStates(current => (current[sectionId] ? current : { ...current, [sectionId]: true }))
-    }
-    setActiveMatchIndex(next)
-  }
-
-  // 展开/折叠覆盖阶段与分节；正文没到时也保留同一批稳定 id，按钮不会因加载而失效。
-  const visibleStageIds = stages.map(stage => stage.id)
-  const visibleSectionIds = stages.flatMap(stage => stage.sections).map(section => section.id)
   // 一条正文都没有：被保留策略清掉了，或采集正文的开关一直是关的。
   // 这两种情况在数据上无法区分（都是「没有行」），因此只说事实、不猜原因。
   // 加载中（还可能取到）、取正文失败（取不到）、详情失败（压根不知道有没有）都不是「没有」，
   // 不能混进这条结论。
-  const bodiesMissing = props.error === null && !contentsLoading && bodiesError === null && sections.length === 0
-  const expandable = visibleStageIds.length > 0
-  // 「全部展开 / 收起」直接写这批 id 的布尔表。一条正文都没有时按钮是禁用的（见 `expandable`），
-  // 因此这里不需要考虑空表。
-  const expandAll = () => {
-    setStageStates(Object.fromEntries(visibleStageIds.map(id => [id, true])))
-    setSectionStates(Object.fromEntries(visibleSectionIds.map(id => [id, true])))
-  }
-  const collapseAll = () => {
-    setStageStates(Object.fromEntries(visibleStageIds.map(id => [id, false])))
-    setSectionStates(Object.fromEntries(visibleSectionIds.map(id => [id, false])))
-  }
+  const bodiesMissing = props.error === null && !contentsLoading && bodiesError === null && nav.sections.length === 0
 
   let state: React.ReactNode
   if (selectedAttempt || clientContent || props.loading) {
     state = (
       <div className="flex h-full min-h-0 flex-col">
         <RequestContentsToolbar
-          search={search}
-          onSearchChange={setSearch}
-          onJump={jumpToMatch}
-          searchQuery={searchQuery}
-          activeMatchIndex={activeMatchIndex}
-          totalMatches={totalMatches}
+          search={nav.search}
+          onSearchChange={nav.setSearch}
+          onJump={nav.jumpToMatch}
+          searchQuery={nav.searchQuery}
+          activeMatchIndex={nav.activeMatchIndex}
+          totalMatches={nav.totalMatches}
           loading={contentsLoading}
-          expandable={expandable}
-          onExpandAll={expandAll}
-          onCollapseAll={collapseAll}
+          expandable={nav.expandable}
+          onExpandAll={nav.expandAll}
+          onCollapseAll={nav.collapseAll}
         />
         <RequestContentsBody
-          scrollRef={contentRef}
+          scrollRef={nav.contentRef}
           error={props.error}
           selectedAttempt={selectedAttempt}
           appliedRules={appliedRules}
           loading={contentsLoading}
           bodiesError={bodiesError}
           onRetryBodies={() => void bodiesQuery.refetch()}
-          noMatchQuery={searchQuery && !contentsLoading && !bodiesError && totalMatches === 0 ? searchQuery : null}
+          noMatchQuery={nav.searchQuery && !contentsLoading && !bodiesError && nav.totalMatches === 0 ? nav.searchQuery : null}
           pruned={bodiesMissing}
           stages={stages}
-          stageStates={stageStates}
-          onStageOpenChange={(id, open) => setStageStates(current => ({ ...current, [id]: open }))}
-          sectionStates={sectionStates}
-          onSectionOpenChange={(id, open) => setSectionStates(current => ({ ...current, [id]: open }))}
-          search={searchResult}
-          activeMatchIndex={searchQuery && totalMatches > 0 ? activeMatchIndex : null}
+          stageStates={nav.stageStates}
+          onStageOpenChange={nav.setStageOpen}
+          sectionStates={nav.sectionStates}
+          onSectionOpenChange={nav.setSectionOpen}
+          search={nav.searchResult}
+          activeMatchIndex={nav.searchQuery && nav.totalMatches > 0 ? nav.activeMatchIndex : null}
           showNotDelivered={Boolean(selectedAttempt && !servesClient && !contentsLoading)}
         />
       </div>
