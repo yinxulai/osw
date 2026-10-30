@@ -37,4 +37,7 @@ apps/apis/.dev.vars
 apps/apis/.wrangler
 apps/apis/worker-configuration.d.ts
 apps/www/.wrangler
+
+# CLI 打包时把迁移基线搬进包内的中转目录（`prepack` 生成，只在 npm tarball 里存在）
+apps/cli/packages
                                                                                   

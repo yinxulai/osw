@@ -357,7 +357,7 @@ CLI 的 native 层需要一套独立文案（启动横幅、端口占用、数�
 
 要求：
 
-- `drizzle/` 必须随包分发（App 的 `files`、CLI 的 `files` 都要包含）。CLI 当前**不发布**、没有 `files` 字段，上溯查找在仓库内从 `apps/cli/output/` 向上到仓库根命中 `packages/core/drizzle`；一旦开始打包分发，这条就从「恰好成立」变成「必须显式声明」。
+- `drizzle/` 必须随包分发（App 的 `files`、CLI 的 `files` 都要包含）。CLI 侧的具体做法是：`files` 只写 `output` 与 `packages/core/drizzle`，后者由 `prepack`（`apps/cli/scripts/prepack.mjs`）在打包前从仓库的 `packages/core/drizzle` 拷进 `apps/cli/packages/core/drizzle`。原因是**层级不能改**：安装后的模块目录是 `<prefix>/node_modules/osw-cli/output/`，往上只有包目录本身，而 npm 的 `files` 不允许引用包目录之外的文件。中转目录已 gitignore，只在 tarball 里存在。
 - 不依赖 `process.cwd()`：CLI 可以在任意目录启动，cwd 探测只是开发期便利，不是唯一来源；打包后必须靠模块相对路径命中。
 - **不要把这一类路径经 `process.env` 传入**：宿主构建会用 Vite，而 Vite 默认把 `process.env` 静态替换为 `{}`，传入的值读出来永远是 `undefined`（详见 §5.8）。
 
@@ -413,6 +413,14 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 `ci.yml` **有** build job（`needs: [typecheck, test]`，跑 `pnpm build`，产物作为 `osw-build` 上传）。它与 `release.yml` 回答的是两个不同的问题：**CI 要回答的是「这次改动还能不能构建」**，而 `release.yml` 回答的是「发布产物对不对」。前者只有每次 push 都跑才有意义，后者只在发版时跑；产物路径、`entryFileNames`、`index.html` 里的模块引用这类错误，typecheck / lint / test 全绿也照样漏过去，只有真的跑一次 `pnpm build` 才看得见。上传的 `osw-build` 是打包的**输入**（`packages/console/output` + `apps/app/output` + `apps/cli/output`），不是可直接运行的安装包；要一个可下载、可运行的测试包走 `.github/workflows/test-build.yml`——手动触发，命令与 `release.yml` 完全相同，只是不创建 Release、不改版本号、不打标签。Worker 那边仍由 Cloudflare Workers Builds 里的 build 命令（与线上部署同参数）覆盖。
 
 缓存一个命令根本不会创建的目录比不缓存更糟：`actions/cache` 在保存阶段报 `Path Validation Error`，job 白跑一趟，还占着日志让人以为缓存生效了——`typecheck` / `lint` / `test` 三个 job 的 `.turbo` 就属于这种情况，因此显式关掉。另一点是收益只出现在第二次运行（首次要写盘，约 15 s），所以 key 不能高频变化，否则等于每次都在付写入成本。本地冷热对照（同机、同一份工作树）：`tsc -p packages/toolkit/tsconfig.check.json` 16.7 s → 6.9 s；`eslint .` 6.1 s → 2.5 s（`pnpm lint` 整体只快一点，守卫脚本与 turbo/pnpm 启动占了大头）。electron-builder 的 Electron 二进制缓存（Windows 的 `%LOCALAPPDATA%\electron\Cache`、macOS 的 `~/Library/Caches/electron*`，每系统约 1.3 GB）**没有**纳入本次改动：Electron 压缩包从 CDN 下载是秒级的，而 Windows 87 s / macOS 91 s 的打包耗时主要在解压与封装本身，为它占掉一个可观份额的 10 GB 缓存配额不划算（未实测，只按量级判断）。
+
+**CLI 的 npm 发布**走独立的 `.github/workflows/publish-cli.yml`，不并进 `release.yml`：npm 的 Trusted Publisher 把信任绑定到**具体的 workflow 文件名**（区分大小写、必须带扩展名），混在发行流程里会让「打 tag / 写 Release」和「发 npm」共用同一套权限，而后者只需要 `id-token: write`（换 OIDC token 并自动签发 provenance）加 `contents: read`。
+
+- 触发方式是 `workflow_dispatch`（带一个 `dry_run` 开关）与 `v*` tag push。发布前先 `npm view <name>@<version>` 探测，已存在就打印一行并跳过，所以 tag 与手动重跑都不会红。
+- `setup-node` 必须带 `registry-url: https://registry.npmjs.org` 与 `package-manager-cache: false`，并且要单独把 npm 升到 `>=11.5.1`（Node 22 自带 npm 10）。本 workflow 不复用 `.github/actions/setup/action.yml`——那个 composite 没有 `registry-url`，而 Trusted Publisher 的认证读写在那份 `.npmrc` 上。
+- 发布命令在 `apps/cli` 内直接跑 `npm publish --access public`，不指定 `--provenance`：OIDC 下它是自动的。仓库根的 `.npmrc` 指向 npmmirror 镜像（只读，不能发），靠 `NPM_CONFIG_REGISTRY` 环境变量覆盖——环境变量优先级高于任何 `.npmrc`。
+
+人工做第一次发布（v1）时，本地 `.npmrc` 的镜像源会让 `npm publish` 打到只读镜像上，所以根 `package.json` 提供了 `pnpm publish:cli`，它显式带上 `--registry=https://registry.npmjs.org/`。顺序是：`pnpm publish:cli` 发 v1 → 到 npmjs.com 的包设置里加 Trusted Publisher（GitHub Actions，user `yinxulai`、repo `osw`、workflow 文件名 `publish-cli.yml`）→ 之后都由 CI 发。两点容易踩：**package.json 的 `repository.url` 必须是 `git+https://github.com/yinxulai/osw.git`**（`one-switch` 是重定向后的旧名，与之不匹配会直接判定失败）；**首次配置后必须在两天内成功发布一次**，否则配置失效。
 
 发布说明由 `apps/app/scripts/release-notes.mjs` 从提交记录生成，不手工维护（本地用 `pnpm release:notes` 预览；`release.yml` 的 publish job 不装依赖直接 `node` 跑它，因为它只 import `node:` 内建模块与 `electron-builder.config.cjs`）：
 
@@ -485,7 +493,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 - 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](../operations/security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](../roadmap.md)。
 - **S1「core 可独立运行」跳过**：CLI 在构建期用 Vite 别名直接打包 `core` / `contracts` 的**源码**，不消费它们的独立产物，因此没有驱动这一阶段的需求。代价是 `apps/cli/vite.config.ts` 必须自带一份完整的 `rolldownOptions`（外部化、`platform`、`define`，见 §5.8），不能复用 `vite.shared.ts`——那份外部化了 `electron`。等真有第三方单独消费 `core` 时再做。
 - **S3 App 回归（未开始）**：`apps/app/source` 按 §4.1 目标态拆出 `main/` 与 `preload/`，并复核构建产物映射（`electron-builder` 配置与打包脚本均归 `apps/app/`）。托盘、自动更新、开机自启、原生对话框保持。验收：桌面安装包端到端可用；升级路径（检查更新 → 下载 → 安装）不回归。
-- **S4 分发与文档（未开始）**：CLI 发布形态（npm 全局 bin）+ `engines` 声明 + 使用说明。**CLI 当前明确不发布**，所以 `apps/cli/package.json` 里 `name` 已定为 `osw-cli`、`bin` 已就位，但 `private: true` 未摘。开工前要先办三件：定 `files`（至少含 `output/` 与 `packages/core/drizzle`，见 §5.7）、确定启动时如何提示 `node:sqlite` 不可用，以及确认 `bin` 入口的 shebang 与执行位在三个平台都成立。
+- **S4 分发与文档（已完成）**：CLI 以 npm 全局 bin 分发（`osw-cli`，bin 为 `osw`）。manifest 已摘掉 `private`，补齐 `files`（`output` + `packages/core/drizzle`）、`engines.node >=22`、`repository`（指向 `yinxulai/osw` 的 `apps/cli` 子目录）与 `publishConfig`（`access: public` + 官方 registry）。三个前置都已确认：`files` 见 §5.7；`node:sqlite` 不可用时的提示是 `apps/cli/source/index.ts` 的动态 `import()` 能力探测；`output/index.js` 首行自带 shebang，npm 在安装时负责加执行位。
 
 长期有效的工程约定：
 

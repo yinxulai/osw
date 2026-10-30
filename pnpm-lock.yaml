@@ -378,17 +378,16 @@ importers:
         version: 0.35.5(@types/node@26.6.5)
 
   apps/cli:
-    dependencies:
+    devDependencies:
+      '@osw/console':
+        specifier: workspace:*
+        version: link:../../packages/console
       '@osw/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@osw/core':
         specifier: workspace:*
         version: link:../../packages/core
-    devDependencies:
-      '@osw/console':
-        specifier: workspace:*
-        version: link:../../packages/console
 
   apps/docs:
     devDependencies:

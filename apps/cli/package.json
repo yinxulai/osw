@@ -1,23 +1,49 @@
 {
   "name": "osw-cli",
   "version": "1.3.1",
-  "private": true,
-  "license": "PolyForm-Noncommercial-1.0.0",
-  "type": "module",
   "description": "命令行宿主：参数解析与宿主适配，把核心能力跑成前台进程并托管控制台产物。",
+  "keywords": [
+    "llm",
+    "proxy",
+    "gateway",
+    "openai",
+    "anthropic",
+    "cli"
+  ],
+  "homepage": "https://osw.yinxulai.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yinxulai/osw.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/yinxulai/osw/issues"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "yinxulai <yinxulai@hotmail.com>",
+  "type": "module",
   "bin": {
     "osw": "output/index.js"
   },
+  "files": [
+    "output",
+    "packages/core/drizzle"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "prepack": "node scripts/prepack.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
-  "dependencies": {
+  "devDependencies": {
+    "@osw/console": "workspace:*",
     "@osw/contracts": "workspace:*",
     "@osw/core": "workspace:*"
   },
-  "devDependencies": {
-    "@osw/console": "workspace:*"
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

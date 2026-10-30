@@ -1,0 +1,105 @@
+name: Publish CLI
+
+# 发布 `osw-cli` 到 npm。
+#
+# 为什么是一个独立 workflow、而不是 `release.yml` 里的一个 job：npm 的 Trusted Publisher
+# 把信任绑定到**具体的 workflow 文件名**（区分大小写、要带 `.yml`）。它必须是仓库里稳定存在
+# 的一份文件，且不能和发行流程（要 `contents: write` 打 tag）混在同一个权限块里——发布 npm
+# 只需要 `id-token: write` + `contents: read`。
+#
+# 首次发布由人工在本地完成（见 `apps/docs/specs/platform/packaging.md` §7），之后在这里
+# 配 Trusted Publisher 即可改用 OIDC，无需 `NPM_TOKEN`。
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and pack only, do not publish
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  # 换 OIDC token 用。npm 用它签发 provenance，同时也是 Trusted Publisher 的认证方式。
+  id-token: write
+
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # Trusted Publisher 要求 npm >= 11.5.1；Node 22 自带的是 npm 10，下一步会升级。
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Upgrade npm
+        run: npm install --global npm@^11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, test
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test:server
+
+      - name: Build CLI
+        run: pnpm build:cli
+
+      - name: Read package metadata
+        id: meta
+        run: |
+          node -e "
+            const manifest = require('./apps/cli/package.json')
+            console.log('name=' + manifest.name)
+            console.log('version=' + manifest.version)
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Check registry
+        id: registry
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: |
+          # 已经在 npm 上的版本不再重复发布。这既让 tag 触发安全（一次 tag 可能对应一个已发布
+          # 的版本），也让手动重跑不会红。
+          if npm view "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is already on npm, skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.registry.outputs.published == 'false' && inputs.dry_run != true
+        working-directory: apps/cli
+        env:
+          # 仓库根的 `.npmrc` 指向 npmmirror 镜像（只读，不能发布）。环境变量优先级高于任何
+          # `.npmrc`，这条是唯一可靠的覆盖方式。
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: |
+          # `prepack` 会把迁移基线搬进包内的 `packages/core/drizzle`。
+          # provenance 在 OIDC 下自动签发，不需要 `--provenance`。
+          npm publish --access public
+
+      - name: Dry run
+        if: inputs.dry_run == true
+        working-directory: apps/cli
+        run: npm pack --dry-run
