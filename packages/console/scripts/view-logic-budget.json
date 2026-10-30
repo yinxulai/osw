@@ -26,7 +26,7 @@
   "pages/router/components/workflow-edge.tsx": 1,
   "pages/router/nodes/note-node.tsx": 1,
   "pages/router/page.tsx": 0,
-  "pages/router/panel/panel-code-editor.tsx": 7,
+  "pages/router/panel/panel-code-editor.tsx": 0,
   "pages/router/rules/rules-run-drawer.tsx": 1,
   "pages/runtime-settings/components/cloud-sync-card.tsx": 1,
   "pages/runtime-settings/components/log-retention-card.tsx": 1,
