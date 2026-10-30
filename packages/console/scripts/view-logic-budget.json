@@ -30,5 +30,5 @@
   "pages/router/rules/rules-run-drawer.tsx": 1,
   "pages/runtime-settings/components/cloud-sync-card.tsx": 1,
   "pages/runtime-settings/components/log-retention-card.tsx": 1,
-  "pages/runtime-settings/components/update-card.tsx": 3
+  "pages/runtime-settings/components/update-card.tsx": 1
 }

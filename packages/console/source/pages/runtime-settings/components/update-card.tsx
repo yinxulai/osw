@@ -1,4 +1,3 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import { Download, ExternalLink, Package, RefreshCw, Rocket } from 'lucide-react'
 import { SettingsCardHeader } from '@/components/settings-card-header'
@@ -6,39 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { FormRow } from '@/components/form-kit'
-import { useToast } from '@/components/ui/toast'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { formatBytes } from '@/lib/format-bytes'
-import { REPOSITORY_RELEASES_URL } from '@/lib/external-links'
-import { getPlatformCapabilities } from '@/platform/capabilities'
+import { useUpdater } from '../hooks/use-updater'
 
 type StatusBadgeProps = {
   status: UpdateCheckStatus
-}
-
-/**
- * 更新器是 contextBridge 暴露出来的跨进程对象，只能经 `getPlatformCapabilities()` 取——
- * 惰性探测一次并缓存整个对象，引用恒定。
- *
- * 引用必须恒定，且不能直接读 `window.electronAPI`：浏览器形态下根本没有这个 API，而跨进程
- * 对象的引用不保证稳定。一旦引用不稳定，下面的 effect 就会反复执行
- * 「refresh() → setState → 重渲染 → 引用又变了 → 再 refresh()」，形成无终止的同步更新链。
- */
-function getUpdater(): UpdaterAPI | undefined {
-  return getPlatformCapabilities().updater ?? undefined
-}
-
-/**
- * 跨进程传回来的状态对象每次都是新实例，值没变就不该触发重渲染。
- * 字段不多但 `info.assets` 是数组，逐字段比容易漏，直接序列化比。
- */
-function isSameState(a: UpdateState, b: UpdateState): boolean {
-  if (a === b) return true
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return false
-  }
 }
 
 /** 日期按当前界面语言格式化，不再写死 zh-CN。 */
@@ -223,99 +195,13 @@ function UpdateActions(props: UpdateActionsProps) {
 }
 
 export function UpdateCard() {
-  const toast = useToast()
   const t = useTranslation()
-  const [state, setState] = useState<UpdateState>({
-    status: 'idle',
-    info: null,
-    errorMessage: null,
-    downloadProgress: null,
-    downloadedFile: null,
-  })
-  // 已下载时主进程故意不进入 checking，否则「立即安装」会先消失。
-  // 检查按钮自己记这一次调用：转圈到 promise 结束为止，不能等一个不会来的 checking。
-  const checkInFlight = useRef(false)
-  const [isCheckPending, setIsCheckPending] = useState(false)
+  const { available, isMacOS, state, check, download, install, openReleases } = useUpdater()
 
-  // 浏览器预览模式（VITE_PREVIEW_ONLY）下没有 preload 注入的 API
-  const updater = getUpdater()
+  if (!available) return <PreviewCard />
 
-  /** 值没变时返回原对象，不让 React 重渲染。 */
-  const applyState = useCallback((next: UpdateState) => {
-    setState(current => (isSameState(current, next) ? current : next))
-  }, [])
-
-  const refresh = useCallback(async () => {
-    if (!updater) return
-    applyState(await updater.getState())
-  }, [applyState, updater])
-
-  useEffect(() => {
-    if (!updater) return
-    void refresh()
-    return updater.onStateChanged(applyState)
-  }, [applyState, refresh, updater])
-
-  const handleCheck = async () => {
-    if (!updater || checkInFlight.current) return
-    checkInFlight.current = true
-    setIsCheckPending(true)
-    try {
-      const next = await updater.check()
-      applyState(next)
-      if (next.status === 'up-to-date') {
-        toast.success(t('settings.update.upToDateToast'))
-      } else if (next.status === 'update-available') {
-        toast.success(t('settings.update.availableToast', { version: next.info?.latestVersion ?? '' }))
-      } else if (next.status === 'downloaded') {
-        if (next.errorMessage) toast.error(next.errorMessage)
-        else toast.success(t('settings.update.readyToInstallToast', { version: next.info?.latestVersion ?? '' }))
-      } else if (next.status === 'error') {
-        toast.error(next.errorMessage ?? t('settings.update.checkFailed'))
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('settings.update.checkFailed'))
-    } finally {
-      checkInFlight.current = false
-      setIsCheckPending(false)
-    }
-  }
-
-  const handleDownload = async () => {
-    if (!updater) return
-    const result = await updater.download()
-    if (result === 'failed') {
-      toast.error(state.errorMessage ?? t('settings.update.downloadFailed'))
-    } else if (result === 'download-complete') {
-      toast.success(t('settings.update.downloadedToast'))
-    }
-    // 'downloading'：已经在下，重复点击不该再报一句话；
-    // 'manual-download'：已经替用户打开了下载页，界面上的按钮本来就是「前往下载 DMG」。
-  }
-
-  const handleInstall = async () => {
-    if (!updater) return
-    try {
-      await updater.install()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('settings.update.installFailed'))
-    }
-  }
-
-  const capabilities = getPlatformCapabilities()
-  const handleOpenReleases = async () => {
-    if (!updater) {
-      capabilities.openExternal(REPOSITORY_RELEASES_URL)
-      return
-    }
-    await updater.openReleases()
-  }
-
-  if (!updater) return <PreviewCard />
-
-  const { status, info, errorMessage, downloadProgress } = state
-  const isMacOS = capabilities.os === 'darwin'
-  const isChecking = status === 'checking' || (isCheckPending && status === 'downloaded')
+  const { status, info, errorMessage, downloadProgress, checkPending } = state
+  const isChecking = status === 'checking' || (checkPending && status === 'downloaded')
   const isDownloading = status === 'downloading'
   const hasUpdate = status === 'update-available' || status === 'downloading' || status === 'downloaded'
 
@@ -337,7 +223,7 @@ export function UpdateCard() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={handleCheck}
+                  onClick={check}
                   disabled={isChecking}
                 >
                   <RefreshCw className={isChecking ? 'animate-spin' : ''} />
@@ -349,9 +235,9 @@ export function UpdateCard() {
                   hasPreferredAsset={Boolean(info?.preferredAsset)}
                   isMacOS={isMacOS}
                   requiresManualUpdate={Boolean(info?.requiresManualUpdate)}
-                  onDownload={handleDownload}
-                  onInstall={handleInstall}
-                  onOpenReleases={handleOpenReleases}
+                  onDownload={download}
+                  onInstall={install}
+                  onOpenReleases={openReleases}
                 />
               </div>
             )}
