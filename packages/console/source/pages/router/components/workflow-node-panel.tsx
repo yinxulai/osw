@@ -10,6 +10,7 @@ import { useTranslation } from '@/i18n/provider'
 import { PANEL_COMPONENT_MAP } from '../panel'
 import { NodePanelHint } from '../panel/panel-fields'
 import { isProtectedNode, nodePanelHint } from '../node-meta'
+import { startPointerDrag, type PointerDrag } from '../pointer-drag'
 import type { NodePanelUpdate, NodePanelProps as NodePanelBodyProps } from '../node-data'
 import type { WorkflowNodeModel } from '@common/router/types'
 import { BlockIcon } from './block-icon'
@@ -79,7 +80,7 @@ export function WorkflowNodePanel(props: WorkflowNodePanelProps) {
   const [dragging, setDragging] = useState(false)
   const widthRef = useRef(width)
   widthRef.current = width
-  const detachOnUnmount = useRef<(() => void) | null>(null)
+  const dragRef = useRef<PointerDrag | null>(null)
 
   const maxWidth = computeMaxPanelWidth(canvasWidth)
   const boundedWidth = Math.min(Math.max(width, MIN_PANEL_WIDTH), maxWidth)
@@ -100,35 +101,17 @@ export function WorkflowNodePanel(props: WorkflowNodePanelProps) {
     event.stopPropagation()
     const startX = event.clientX
     const startWidth = widthRef.current
-    let frame: number | null = null
-    let pending = startWidth
 
-    const handleMove = (moveEvent: PointerEvent) => {
-      pending = startWidth + (startX - moveEvent.clientX)
-      if (frame !== null) return
-      frame = requestAnimationFrame(() => {
-        frame = null
-        onWidthChange(pending)
-      })
-    }
-
-    const cleanup = () => {
-      if (frame !== null) cancelAnimationFrame(frame)
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      detachOnUnmount.current = null
-    }
-
-    const handleUp = () => {
-      cleanup()
-      onWidthChange(pending)
-      setDragging(false)
-    }
-
-    detachOnUnmount.current = cleanup
     setDragging(true)
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
+    dragRef.current = startPointerDrag({
+      // 拖宽每帧只需最后一个值：合并起来，别让每个 pointermove 都触发一次布局。
+      coalesce: true,
+      onMove: position => onWidthChange(startWidth + (startX - position.x)),
+      onEnd: () => {
+        dragRef.current = null
+        setDragging(false)
+      },
+    })
   }, [onWidthChange])
 
   /**
@@ -137,7 +120,7 @@ export function WorkflowNodePanel(props: WorkflowNodePanelProps) {
    * 不收的话它们会继续按着那次拖拽的旧闭包调 `onWidthChange`：指针早就抬起来了，
    * 画布宽度却还在被一次已经结束的拖动推着走。
    */
-  useEffect(() => () => { detachOnUnmount.current?.() }, [])
+  useEffect(() => () => { dragRef.current?.stop() }, [])
 
   const Body = PANEL_COMPONENT_MAP[model.kind]
   const protectedNode = isProtectedNode(model)

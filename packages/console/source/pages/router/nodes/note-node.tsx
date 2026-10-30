@@ -11,6 +11,7 @@ import {
 } from '@common/router/types'
 import { renderNoteMarkdown } from '../markdown'
 import { resolveNoteNodeSize } from '../node-meta'
+import { startPointerDrag, type PointerDrag } from '../pointer-drag'
 import type { RouteNodeProps } from '../node-data'
 
 /** 把拖出来的长度夹到便签允许的区间里，并取整避免半像素抖出模糊文字。 */
@@ -30,7 +31,7 @@ export function NoteNodeView(props: RouteNodeProps) {
   const model = data.model
   const flow = useReactFlow()
   const t = useTranslation()
-  const detachRef = useRef<(() => void) | null>(null)
+  const dragRef = useRef<PointerDrag | null>(null)
 
   const size = useMemo(() => (model.kind === 'note' ? resolveNoteNodeSize(model) : null), [model])
   const html = useMemo(() => (model.kind === 'note' ? renderNoteMarkdown(model.text) : ''), [model])
@@ -39,7 +40,7 @@ export function NoteNodeView(props: RouteNodeProps) {
    * 拖拽中途卸载（节点被删掉）时把挂在 `window` 上的监听器收回来，
    * 理由与右侧面板的拖宽手柄一致：不收的话它们会继续按那次拖拽的旧闭包写回尺寸。
    */
-  useEffect(() => () => { detachRef.current?.() }, [])
+  useEffect(() => () => { dragRef.current?.stop() }, [])
 
   const handleResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (!size) return
@@ -53,22 +54,15 @@ export function NoteNodeView(props: RouteNodeProps) {
     // 指针走的是屏幕距离，卡片尺寸是画布单位：画布缩放后两者不再一一对应，得除以 zoom。
     const zoom = flow.getZoom() || 1
 
-    const handleMove = (moveEvent: PointerEvent) => {
-      data.onResizeNode(id, {
-        width: clampSize(startWidth + (moveEvent.clientX - startX) / zoom, NOTE_MIN_WIDTH, NOTE_MAX_WIDTH),
-        height: clampSize(startHeight + (moveEvent.clientY - startY) / zoom, NOTE_MIN_HEIGHT, NOTE_MAX_HEIGHT),
-      })
-    }
-
-    const cleanup = () => {
-      detachRef.current = null
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', cleanup)
-    }
-
-    detachRef.current = cleanup
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', cleanup)
+    dragRef.current = startPointerDrag({
+      onMove: position => {
+        data.onResizeNode(id, {
+          width: clampSize(startWidth + (position.x - startX) / zoom, NOTE_MIN_WIDTH, NOTE_MAX_WIDTH),
+          height: clampSize(startHeight + (position.y - startY) / zoom, NOTE_MIN_HEIGHT, NOTE_MAX_HEIGHT),
+        })
+      },
+      onEnd: () => { dragRef.current = null },
+    })
   }, [data, flow, id, size])
 
   return (
