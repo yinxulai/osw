@@ -115,17 +115,56 @@ export function stripEnvFileHeader(content: string): string {
   return content
 }
 
+/** 一条要进进程环境的键值。名字就是环境变量名（`.env` 里 `KEY=VALUE` 的 `KEY`）。 */
+export interface ManagedEnvEntry {
+  name: string
+  value: string
+}
+
 /**
  * 生成哨兵区段的内容。
  *
  * POSIX 用 `.`（点命令）而不是 `source`：`.zshrc`/`.bashrc`/`.profile` 都可能是被 `sh` 读到的，
- * 而 `.` 在两个 shell 里都可用。Windows 侧是 PowerShell 的 `.`（点源），语法与 POSIX 不同。
+ * 而 `.` 在两个 shell 里都可用；POSIX 的 `.` 按**内容**解析文件，与扩展名无关，所以直接点源
+ * `osw.env` 是安全的。
+ *
+ * Windows 则**不能**点源：Windows PowerShell 的 `.` 只对 `.ps1` 这类脚本文件有效，其余扩展名会被
+ * 转交 ShellExecute「用默认程序打开文件」。`osw.env` 在装了 VS Code 的机器上关联到 `Code.exe`，
+ * 于是每开一个终端就多拉起一个编辑器窗口（继承当前控制台，把主进程日志刷满终端），
+ * 而 `KEY=VALUE` 本身也不是合法 PowerShell 语法，变量一个都没设上。
+ *
+ * 所以 Windows 侧**不走文件**：要设的键就是客户端定义里那几个（Copilot CLI 的三个
+ * `COPILOT_PROVIDER_*` / `COPILOT_MODEL`），值在写入时就已经知道，直接一行一个
+ * `SetEnvironmentVariable` 内联进 profile ——比让 PowerShell 去读文件、拆 `KEY=VALUE`、
+ * 反解引号简单得多，也少一整类解析失败的可能。
  */
-export function managedBlock(platform: ShellPlatform, envPath: string): string {
-  if (platform === 'windows') {
-    return [BLOCK_START, `if (Test-Path "${envPath}") { . "${envPath}" }`, BLOCK_END].join('\n')
-  }
-  return [BLOCK_START, `[ -f "${envPath}" ] && . "${envPath}"`, BLOCK_END].join('\n')
+export function managedBlock(platform: ShellPlatform, envPaths: readonly string[], entries: readonly ManagedEnvEntry[]): string {
+  return platform === 'windows' ? windowsManagedBlock(entries) : posixManagedBlock(envPaths)
+}
+
+function posixManagedBlock(envPaths: readonly string[]): string {
+  const lines = envPaths.map(envPath => `[ -f "${envPath}" ] && . "${envPath}"`)
+  return [BLOCK_START, ...lines, BLOCK_END].join('\n')
+}
+
+/**
+ * PowerShell 侧的加载：每个变量一行，值用单引号字面量写死。
+ *
+ * 为什么不做「读文件再解析」：键是注册表里固定的那几个，值是写入时现成的，没有必要让
+ * profile 每次开终端都去读一遍文件、拆 `KEY=VALUE`、再反解转义——那是把自己写出的格式
+ * 又当成外部输入来解析（多一层可能出错的地方，也多一屏看不懂的代码）。
+ *
+ * 代价是值（含 API Key）会落在 profile 里；它已经是同一份明文，且 env 文件仍在原处由
+ * 别处读取，两者由同一次写入维护，不会各说各话。
+ */
+function windowsManagedBlock(entries: readonly ManagedEnvEntry[]): string {
+  const lines = entries.map(entry => `[Environment]::SetEnvironmentVariable(${powerShellLiteral(entry.name)}, ${powerShellLiteral(entry.value)}, 'Process')`)
+  return [BLOCK_START, ...lines, BLOCK_END].join('\n')
+}
+
+/** PowerShell 单引号字符串里唯一的转义是 `''`——其余字符（含 `$`、`"`、`\`）都是字面量。 */
+function powerShellLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 /**

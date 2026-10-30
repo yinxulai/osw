@@ -18,6 +18,7 @@ import {
   previewClientConfigOverrides,
   readClientConfigFile,
   readClientConfigVersion,
+  reconcileShellIntegration,
   resolveClientConfigTarget,
   restoreClientConfigVersion,
   saveClientConfigContent,
@@ -600,6 +601,18 @@ describe('applyClientConfigOverrides', () => {
     expect(fs.existsSync(first!)).toBe(false)
   })
 
+  it('never dot-sources the env file into a PowerShell profile', async () => {
+    // 点源非 `.ps1` 文件会被 Windows PowerShell 交给 ShellExecute「用默认程序打开」：
+    // 装了 VS Code 的机器上 `.env` 关联到 Code.exe，于是每开一个终端都多一个编辑器窗口，
+    // 而变量一个都没设上。这条断言把「写出的块里不许出现点源」钉死在服务层。
+    await applyClientConfigDefaults(COPILOT)
+
+    const profile = readFile(firstShellProfilePath())
+    expect(profile).not.toMatch(/^\s*\.\s+"/m)
+    expect(profile).toContain('>>> osw managed env >>>')
+    expect(profile).toContain(fullPath(COPILOT_ENV_FILE))
+  })
+
   it('refuses to overwrite a file it cannot parse', async () => {
     writeFile(CLAUDE_FILE, '{"model":')
 
@@ -607,6 +620,48 @@ describe('applyClientConfigOverrides', () => {
     // 没有解析成功就不能动文件，也不该留下一个「改动前」的版本。
     expect(readFile(CLAUDE_FILE)).toBe('{"model":')
     expect(await listClientConfigFileVersions(CLAUDE, CLAUDE_FILE)).toEqual([])
+  })
+})
+
+describe('reconcileShellIntegration', () => {
+  /**
+   * 老版本在托管块里点源 `.env`：Windows PowerShell 不把非 `.ps1` 当脚本，而是交给 ShellExecute，
+   * 于是每开一个终端就多一个编辑器窗口，变量一个都没设上。哨兵没变，所以必须主动对账，
+   * 否则只有用户再点一次「应用」才会被改写。
+   */
+  const LEGACY_BLOCK = [
+    '# >>> osw managed env >>>',
+    'if (Test-Path "/old/.copilot/osw.env") { . "/old/.copilot/osw.env" }',
+    '# <<< osw managed env <<<',
+  ].join('\n')
+
+  it('rewrites a block left by an older version in place', async () => {
+    writeFile(firstShellProfilePath(), `alias ll="ls -l"\n\n${LEGACY_BLOCK}\n`)
+
+    await reconcileShellIntegration()
+
+    const profile = readFile(firstShellProfilePath())
+    // 块外的手写内容一字不动，块只有一段，且指向当前平台的 env 文件。
+    expect(profile).toContain('alias ll="ls -l"')
+    expect(profile.split('>>> osw managed env >>>').length - 1).toBe(1)
+    expect(profile).toContain(fullPath(COPILOT_ENV_FILE))
+    expect(profile).not.toContain('/old/.copilot/osw.env')
+  })
+
+  it('creates nothing when the profile has no managed block yet', async () => {
+    // 对账只修「已经有块」的情况：首次安装是「应用」的职责，不该凭候选路径凭空造启动文件。
+    await reconcileShellIntegration()
+
+    expect(fs.existsSync(fullPath(firstShellProfilePath()))).toBe(false)
+  })
+
+  it('leaves an already-current block untouched', async () => {
+    await applyClientConfigDefaults(COPILOT)
+    const before = readFile(firstShellProfilePath())
+
+    await reconcileShellIntegration()
+
+    expect(readFile(firstShellProfilePath())).toBe(before)
   })
 })
 

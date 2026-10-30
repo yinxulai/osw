@@ -27,11 +27,22 @@ describe('managedBlock', () => {
     expect(last).toContain('<<< osw managed env <<<')
   })
 
-  it('Windows 区段用 PowerShell 点源，并在文件存在时才加载', () => {
+  it('Windows 区段解析 env 文件，绝不点源 .env（否则会拉起默认编辑器）', () => {
     const block = managedBlock(WINDOWS, 'C:\\Users\\me\\.copilot\\osw.env')
-    expect(block).toContain('Test-Path "C:\\Users\\me\\.copilot\\osw.env"')
-    expect(block).toContain('. "C:\\Users\\me\\.copilot\\osw.env"')
+    // 点源非 `.ps1` 文件会被 Windows PowerShell 交给 ShellExecute「打开」，装了 VS Code 的机器上
+    // `.env` 关联到 Code.exe，于是每开一个终端都多一个编辑器窗口、而变量一个都没设上。
+    expect(block).not.toMatch(/^\s*\.\s+"/m)
+    expect(block).toContain("Test-Path -LiteralPath $oswEnvFile")
+    expect(block).toContain("'C:\\Users\\me\\.copilot\\osw.env'")
+    // 逐行解析 `KEY=VALUE` 并写进进程环境——这才是「加载」在这个平台上的正确含义。
+    expect(block).toContain("[Environment]::SetEnvironmentVariable($oswKey, $oswValue, 'Process')")
     expect(hasManagedBlock(block)).toBe(true)
+  })
+
+  it('Windows 区段里的路径是单引号字面量，路径带单引号也不会破句', () => {
+    const block = managedBlock(WINDOWS, "C:\\Users\\o'brien\\.copilot\\osw.env")
+    // PowerShell 单引号字符串里的转义只有 `''`。
+    expect(block).toContain("'C:\\Users\\o''brien\\.copilot\\osw.env'")
   })
 })
 

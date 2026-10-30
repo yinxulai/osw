@@ -31,7 +31,7 @@ import { ConfigParseError, createConfigEditor, supportsAutoFill, type ConfigEdit
 import { clientSupportsCurrentEnvironment, currentLocalProviderIdentity } from './environment'
 import { resolveClientConfigPath } from './paths'
 import { concreteProviderEntryPath, getClientApplyRule, resolveFieldValue, type ClientApplyContext, type ClientApplyRule } from './rules'
-import { currentShellPlatform, defaultShellProfileCandidates, envFileHeader, managedBlock, resolveShellProfilePath, stripEnvFileHeader, upsertManagedBlock, type ShellPlatform } from './shell'
+import { currentShellPlatform, defaultShellProfileCandidates, envFileHeader, hasManagedBlock, managedBlock, resolveShellProfilePath, stripEnvFileHeader, upsertManagedBlock } from './shell'
 import { diffClientConfigContent } from './version-diff'
 
 export interface ClientConfigTarget {
@@ -210,6 +210,33 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 /**
+ * 从一份 `load` 文件的**内容**里取出要进进程环境的键值。
+ *
+ * 值不由调用方另给一份：env 文件是唯一记录，从它自己读回来才不会出现「profile 里是旧值、
+ * 文件里是新值」。读用同一套格式编辑器（`get` 会按 `formatEnvValue` 的编码解码回来），
+ * 所以不需要再写一个 `.env` 解析器。
+ *
+ * 只取注册表在这个文件里声明的字段——文件里可能有用户手加的别的键，那不是我们的。
+ */
+function managedEnvEntries(target: ClientConfigTarget, content: string): ManagedEnvEntry[] {
+  const client = findAgentClient(target.clientKey)
+  if (!client) return []
+  let editor: ConfigEditor
+  try {
+    editor = createConfigEditor(target.file.format, content, target.file.shape)
+  } catch {
+    // 读不出来就当没有：profile 里少设几个变量，好过整次写入失败。
+    return []
+  }
+  const entries: ManagedEnvEntry[] = []
+  for (const field of agentClientFieldsOfFile(client, target.filePath)) {
+    const value = editor.get(field.path)
+    if (value !== null) entries.push({ name: field.path, value })
+  }
+  return entries
+}
+
+/**
  * 让登录 shell 加载这个 `load` 文件。
  *
  * 只有 `file.load` 的文件会走到这里：它承载的是客户端**只从进程环境读**的键（Copilot CLI 的
@@ -222,17 +249,15 @@ async function pathExists(path: string): Promise<boolean> {
  * `source` 一下；把它判负反而连这份值也一并回滚掉。
  */
 async function syncLoadFileShellIntegration(target: ClientConfigTarget): Promise<void> {
-  const platform: ShellPlatform = currentShellPlatform()
-  const candidates = defaultShellProfileCandidates()
+  const profilePath = await resolveExistingShellProfilePath()
 
-  const existingPaths: string[] = []
-  for (const candidate of candidates) {
-    if (await pathExists(candidate)) existingPaths.push(candidate)
-  }
-  const profilePath = resolveShellProfilePath(existingPaths, candidates)
-
+  // 走刚写下的内容：`commitClientConfig` 先落盘再调这里，读回磁盘拿到的就是最终形态。
+  const env = await readRaw(target.resolvedPath)
   const current = await readRaw(profilePath)
-  const next = upsertManagedBlock(current.content, managedBlock(platform, target.resolvedPath))
+  const next = upsertManagedBlock(
+    current.content,
+    managedBlock(currentShellPlatform(), [target.resolvedPath], managedEnvEntries(target, env.content)),
+  )
   if (next === current.content) return
 
   try {
@@ -242,10 +267,70 @@ async function syncLoadFileShellIntegration(target: ClientConfigTarget): Promise
   }
 }
 
-/** 手动保存（用户在下方直接编辑内容）。 */
+/**
+ * 选出要改写的启动文件：候选里**已存在**的优先，一个都没有时落到第一候选（新建）。
+ *
+ * 「存在哪个就改哪个」是关键——用户实际在用的那份启动文件才是唯一有效的落点；
+ * 我们按自己的偏好另造一个，写进去的内容永远不会被读到。
+ */
+async function resolveExistingShellProfilePath(): Promise<string> {
+  const candidates = defaultShellProfileCandidates()
+  const existingPaths: string[] = []
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) existingPaths.push(candidate)
+  }
+  return resolveShellProfilePath(existingPaths, candidates)
+}
+
+/**
+ * 手动保存（用户在下方直接编辑内容）。
+ */
 export async function saveClientConfigContent(clientKey: string, filePath: string, content: string, note?: string): Promise<ClientConfigWriteResult> {
   const target = resolveClientConfigTarget(clientKey, filePath)
   return commitClientConfig(target, content, 'manual', note)
+}
+
+/**
+ * 启动时对账：把启动文件里的托管块刷新成本版应该写入的形态。
+ *
+ * 为什么需要单独一步：托管块的内容**不随设置变化**，只在 OSW 升级换写法时才会变。老版本写的是
+ * Windows 点源 `.env` 那一版（每开一个终端就拉起一个 VS Code 窗口、变量一个都没设上，见
+ * `./shell.ts` 的 `windowsManagedBlock`），而那个块的哨兵和现在一样——不主动对账的话，
+ * 只有用户再点一次「应用」才会被改写，在那之前一直受害。
+ *
+ * 只碰「已经有块」的情况：没有任何 `load` 文件被写过时，不该凭一个候选路径凭空造出启动文件。
+ * 写失败一律吞掉：这是后台修复，不该让程序起不来。
+ */
+export async function reconcileShellIntegration(): Promise<void> {
+  const loadFiles = AGENT_CLIENT_DEFINITIONS.flatMap(client =>
+    client.files.filter(file => file.load).map(file => ({ clientKey: client.key, filePath: file.path })),
+  )
+  if (loadFiles.length === 0) return
+
+  const profilePath = await resolveExistingShellProfilePath()
+  const current = await readRaw(profilePath)
+  // 没有块就不动：这块只由「应用」建立，对账不负责首次安装。
+  if (!hasManagedBlock(current.content)) return
+
+  let next = current.content
+  for (const entry of loadFiles) {
+    let target: ClientConfigTarget
+    try {
+      target = resolveClientConfigTarget(entry.clientKey, entry.filePath)
+    } catch {
+      continue
+    }
+    // 多个 `load` 文件共用同一对哨兵（见 `./shell.ts` 的 `BLOCK_START`），
+    // 所以连续 upsert 只会留下最后一个——当前只有一个，未来若变多要改成按文件分包。
+    next = upsertManagedBlock(next, managedBlock(currentShellPlatform(), target.resolvedPath))
+  }
+  if (next === current.content) return
+
+  try {
+    await writeAtomic(profilePath, next)
+  } catch {
+    // 见上：后台修复失败不影响启动。
+  }
 }
 
 function assertHttpBaseUrl(baseUrl: string): void {

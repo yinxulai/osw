@@ -29,7 +29,7 @@ OSW 内置一份可自动配置的客户端清单。对每个客户端，它都�
 | DeepSeek Harness | OpenAI Chat Completions | `~/.dsh/settings.yaml` | `agent-default-model`，以及 `llm-pi-ai.providers.osw` 路由 |
 
 <Callout title="Copilot CLI 通过环境变量配置" type="note">
-Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）provider，所以 OSW 用一份独立的 env 文件交付它的地址、密钥与模型，并从你的登录 shell 加载它。
+Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）provider，所以 OSW 用一份独立的 env 文件交付它的地址、密钥与模型，并由你的登录 shell 在启动时加载它（Windows 下的托管块会逐行解析该文件再设置变量——Windows PowerShell 不会把 `.env` 当脚本，而是交给它的默认程序打开）。
 </Callout>
 
 ## 自动填充

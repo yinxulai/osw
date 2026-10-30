@@ -29,7 +29,7 @@ OSW keeps a built-in registry of the AI clients it can configure. For each one i
 | DeepSeek Harness | OpenAI Chat Completions | `~/.dsh/settings.yaml` | `agent-default-model`, and the `llm-pi-ai.providers.osw` route |
 
 <Callout title="Copilot CLI is configured through the environment" type="note">
-Copilot CLI points at a custom (BYOK) provider only through `COPILOT_PROVIDER_*` environment variables, so OSW delivers its address, key and model through a dedicated env file and sources it from your login shell.
+Copilot CLI points at a custom (BYOK) provider only through `COPILOT_PROVIDER_*` environment variables, so OSW delivers its address, key and model through a dedicated env file, and your login shell profile loads it at startup (on Windows the profile block parses the file and sets each variable, because Windows PowerShell would otherwise hand a `.env` file to its default application).
 </Callout>
 
 ## Auto-fill
