@@ -120,7 +120,7 @@ jobs:
       # 所以这一步通常只要几秒。只在 Linux 上跑：跨平台差异不在这条检查的范围内，
       # 三个平台的真实产物仍由 release.yml 的矩阵负责。
       - name: Smoke-package the app
-        run: pnpm --filter osw-app exec electron-builder --config electron-builder.config.cjs --publish never --linux --dir
+        run: pnpm --filter @one-switch/app exec electron-builder --config electron-builder.config.cjs --publish never --linux --dir
 
       - name: Upload build output
         uses: actions/upload-artifact@v6

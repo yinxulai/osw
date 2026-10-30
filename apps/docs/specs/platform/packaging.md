@@ -50,8 +50,8 @@ flowchart LR
 | `packages/contracts` | `@osw/contracts` | Zod schema、协议表、错误码、i18n 语言目录与核心、`SecretStore` 接口、运行时配置类型、供应商包格式、路由契约类型 | 只描述形状；不依赖 Node 内置模块、不依赖 DOM、不依赖任何其它包 |
 | `packages/core` | `@osw/core` | runtime / management / proxy / database / infrastructure / security | 纯 Node；**禁止 import `electron`**；不感知 Web 托管与桌面能力 |
 | `packages/console` | `@osw/console` | React 控制台，构建为静态产物 | 不直接读 `window.electronAPI`；宿主能力统一走平台抽象层 |
-| `apps/cli` | `@yinxulai/osw-cli` | 命令行入口、Node 密钥实现、静态托管 | 只做宿主适配与参数解析，不写业务逻辑 |
-| `apps/app` | `osw-app` | Electron 主进程与 preload | 只做宿主适配，不写业务逻辑 |
+| `apps/cli` | `@one-switch/cli` | 命令行入口、Node 密钥实现、静态托管 | 只做宿主适配与参数解析，不写业务逻辑 |
+| `apps/app` | `@one-switch/app` | Electron 主进程与 preload | 只做宿主适配，不写业务逻辑 |
 
 依赖方向严格单向：`core` 与 `console` **互不依赖**，二者之间只通过管理 API 通信。
 
@@ -357,7 +357,7 @@ CLI 的 native 层需要一套独立文案（启动横幅、端口占用、数�
 
 要求：
 
-- `drizzle/` 必须随包分发（App 的 `files`、CLI 的 `files` 都要包含）。CLI 侧的具体做法是：`files` 只写 `output` 与 `packages/core/drizzle`，后者由 `prepack`（`apps/cli/scripts/prepack.mjs`）在打包前从仓库的 `packages/core/drizzle` 拷进 `apps/cli/packages/core/drizzle`。原因是**层级不能改**：安装后的模块目录是 `<prefix>/node_modules/@yinxulai/osw-cli/output/`，往上只有包目录本身，而 npm 的 `files` 不允许引用包目录之外的文件。中转目录已 gitignore，只在 tarball 里存在。
+- `drizzle/` 必须随包分发（App 的 `files`、CLI 的 `files` 都要包含）。CLI 侧的具体做法是：`files` 只写 `output` 与 `packages/core/drizzle`，后者由 `prepack`（`apps/cli/scripts/prepack.mjs`）在打包前从仓库的 `packages/core/drizzle` 拷进 `apps/cli/packages/core/drizzle`。原因是**层级不能改**：安装后的模块目录是 `<prefix>/node_modules/@one-switch/cli/output/`，往上只有包目录本身，而 npm 的 `files` 不允许引用包目录之外的文件。中转目录已 gitignore，只在 tarball 里存在。
 - 不依赖 `process.cwd()`：CLI 可以在任意目录启动，cwd 探测只是开发期便利，不是唯一来源；打包后必须靠模块相对路径命中。
 - **不要把这一类路径经 `process.env` 传入**：宿主构建会用 Vite，而 Vite 默认把 `process.env` 静态替换为 `{}`，传入的值读出来永远是 `undefined`（详见 §5.8）。
 
@@ -493,7 +493,7 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 - 已完成：S0 骨架平移，以及 S2–S2.5（CLI 成型与 §5.1–§5.5 五项宿主适配、生产级细节、两种形态一致性、数据落用户主目录 + 两库拆分、宿主与实例身份收口）。S2.5 曾把管理接口的实例 Token 撤掉（边界只剩回环监听与来源名单），#76 之后又以「每次应用启动随机生成的凭证」重新加回（`Host` 只在注入凭证那一刻判断回环），理由与形态见 [security-privacy.md](../operations/security-privacy.md) 的「访问控制」。这些阶段的结论就是本文件 §4–§6 的现状描述，逐阶段验收记录见 [roadmap.md](../roadmap.md)。
 - **S1「core 可独立运行」跳过**：CLI 在构建期用 Vite 别名直接打包 `core` / `contracts` 的**源码**，不消费它们的独立产物，因此没有驱动这一阶段的需求。代价是 `apps/cli/vite.config.ts` 必须自带一份完整的 `rolldownOptions`（外部化、`platform`、`define`，见 §5.8），不能复用 `vite.shared.ts`——那份外部化了 `electron`。等真有第三方单独消费 `core` 时再做。
 - **S3 App 回归（未开始）**：`apps/app/source` 按 §4.1 目标态拆出 `main/` 与 `preload/`，并复核构建产物映射（`electron-builder` 配置与打包脚本均归 `apps/app/`）。托盘、自动更新、开机自启、原生对话框保持。验收：桌面安装包端到端可用；升级路径（检查更新 → 下载 → 安装）不回归。
-- **S4 分发与文档（已完成）**：CLI 以 npm 全局 bin 分发（`@yinxulai/osw-cli`，bin 为 `osw`）。manifest 已摘掉 `private`，补齐 `files`（`output` + `packages/core/drizzle`）、`engines.node >=22`、`repository`（指向 `yinxulai/osw` 的 `apps/cli` 子目录）与 `publishConfig`（`access: public` + 官方 registry）。三个前置都已确认：`files` 见 §5.7；`node:sqlite` 不可用时的提示是 `apps/cli/source/index.ts` 的动态 `import()` 能力探测；`output/index.js` 首行自带 shebang，npm 在安装时负责加执行位。
+- **S4 分发与文档（已完成）**：CLI 以 npm 全局 bin 分发（`@one-switch/cli`，bin 为 `osw`）。manifest 已摘掉 `private`，补齐 `files`（`output` + `packages/core/drizzle`）、`engines.node >=22`、`repository`（指向 `yinxulai/osw` 的 `apps/cli` 子目录）与 `publishConfig`（`access: public` + 官方 registry）。三个前置都已确认：`files` 见 §5.7；`node:sqlite` 不可用时的提示是 `apps/cli/source/index.ts` 的动态 `import()` 能力探测；`output/index.js` 首行自带 shebang，npm 在安装时负责加执行位。
 
 长期有效的工程约定：
 
@@ -512,9 +512,9 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 | 决策 | 选择 | 备选与理由 |
 | --- | --- | --- |
 | 包结构 | pnpm workspace 多包 | 单包多入口无法用编译期/lint 强制边界，也没法让 core 被第三方单独消费 |
-| 包命名 | 库包用 `@osw/*`，宿主壳用 `osw-*`（CLI 例外，见下一行） | `packages/*` 需要 npm org；`apps/*` 是宿主壳、不被任何包依赖，它们的 `name` 会直接出现在 npm 与分发渠道上，所以取 `osw-app`。CLI 原取无 scope 的 `osw-cli`，因 npm 相似度规则被迫加 scope（下一行） |
+| 包命名 | 库包用 `@osw/*`，宿主壳用 `@one-switch/*` | `packages/*` 是内部库，保留 `@osw/*` 不动（它们从不出现在 npm 上）；`apps/*` 是宿主壳、不被任何包依赖，它们的 `name` 会直接出现在 npm、分发渠道与安装路径上，所以统一收到自家 org `one-switch` 下。注意 `@osw` 这个 npm org **并不存在**，`@osw/*` 只在 workspace 内部有意义 |
 | CLI 分发 | npm 全局 bin / `npx` | 单文件可执行（Node SEA）作为后续增量，首期不阻塞 |
-| CLI 包名 | `@yinxulai/osw-cli`（bin 仍为 `osw`） | 原定 `osw-cli`：npm 上 `osw` 已被他人占用且其 bin 也叫 `osw`（`npx osw` 会装到别人的包）；`@osw/cli` 需先建 org `osw`，建不建得成不受控。**实际首版发布被 npm 的相似度防抢注规则拦下**（`403 Package name too similar to existing package opn-cli`，编辑距离只有 2），而该规则对 **scoped 包不生效**，于是改用自家账号 scope `@yinxulai`——无需建 org，包名文字仍是 `osw-cli`，`npx @yinxulai/osw-cli` 给出的命令仍是 `osw` |
+| CLI 包名 | `@one-switch/cli`（bin 仍为 `osw`） | 命名经过三次变化，每次都是被 npm 的硬规则推着走：① 原定无 scope 的 `osw-cli`，被 npm 服务端的相似度防抢注规则拦下（`403 Package name too similar to existing package opn-cli`），该规则**只对 unscoped 名生效**，且无法通过重试绕过；② 于是改用个人账号 scope `@yinxulai/osw-cli` 并已发布，但随后该包在整个 registry 上消失（所有端点 404、`scope:yinxulai` 搜索结果为空，原因不明）；③ 最终收到自己的 org `one-switch` 下，并把冗余的 `osw-` 前缀去掉——scope 已经表达了品牌，`@one-switch/cli` 更短且 bin 仍是 `osw`。`osw` 这个无 scope 名已被他人占用且其 bin 也叫 `osw`（`npx osw` 会装到别人的包），所以无 scope 方案不可行 |
 | 拆分顺序 | 先搬目录与配置，后改逻辑 | 现有代码已事实上分层，搬迁零行为风险，却能立刻把边界变成约束 |
 | 目录分层 | `packages/` 放库、`apps/` 放宿主壳 | 「可被第三方消费」与「可直接执行」是两件事，宿主壳不该被当作库发布 |
 | 导入写法 | 别名重指向，不改 specifier | 直接换成 `@osw/*` 是一次上千处的高风险改动，无法分批验证（见 §4.2） |
