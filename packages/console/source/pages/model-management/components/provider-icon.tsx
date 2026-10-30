@@ -2,7 +2,8 @@ import { findPresetByName } from '../lib/provider-presets'
 import type { ProviderIconTheme } from '../../../catalog/providers'
 import { PROVIDER_ICON_URL_BY_KEY } from '../../../catalog/providers'
 import { cn } from '@/lib/utils'
-import { useEffect, useId, useState } from 'react'
+import { useId } from 'react'
+import { useAppliedTheme } from '@/hooks/use-applied-theme'
 
 interface ProviderIconProps {
   name: string
@@ -63,14 +64,6 @@ function BrandMark(props: BrandMarkProps) {
   )
 }
 
-function getThemeFromDocument(): ProviderIconTheme {
-  if (typeof document === 'undefined') {
-    return 'light'
-  }
-
-  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-}
-
 function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): string | null {
   const iconVariants = PROVIDER_ICON_URL_BY_KEY[providerKey]
   if (!iconVariants) {
@@ -84,29 +77,14 @@ function resolveProviderIconUrl(providerKey: string, theme: ProviderIconTheme): 
  * 供应商品牌图标。
  * 取 `packages/console/source/catalog/providers/<key>/` 下的 icon.light.svg / icon.dark.svg
  * （按当前主题选一张）；该供应商没有图标时回退到应用标志（`packages/console/public/icon.svg` 里那道彩虹闪电）。
+ *
+ * 主题跟着**生效**的 `<html class="dark">` 走，经共享的 `useAppliedTheme` 外部存储订阅——
+ * 组件自己不再各建一个 `MutationObserver`。
  */
 export function ProviderIcon(props: ProviderIconProps) {
   const { name, size = 17, className } = props
   const preset = findPresetByName(name)
-  const [theme, setTheme] = useState<ProviderIconTheme>(() => getThemeFromDocument())
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return
-    }
-
-    const root = document.documentElement
-    const observer = new MutationObserver(() => {
-      setTheme(getThemeFromDocument())
-    })
-
-    observer.observe(root, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
-
-    return () => observer.disconnect()
-  }, [])
+  const theme = useAppliedTheme()
 
   if (preset) {
     const iconUrl = resolveProviderIconUrl(preset.key, theme)
