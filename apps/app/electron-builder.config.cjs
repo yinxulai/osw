@@ -68,13 +68,15 @@ module.exports = {
     icon: 'build/icon.png',
     target: ['AppImage'],
     category: 'Development',
-    // `package.json#name` 是 `@osw/app`，electron-builder 默认拿它当 Linux 可执行名，
-    // 清洗成 `@oswapp` 后仍含 `@` → AppImage 构建直接报
+    // `package.json#name` 现在是 `osw-app`（曾经是 `@osw/app`），electron-builder 默认拿它当
+    // Linux 可执行名。带 scope 的旧名会被清洗成 `@oswapp`，`@` 仍留在里面 → AppImage 构建报
     // `executableName contains characters that cannot be safely used in file paths`。
     // （`app-builder-lib` 的 `LinuxPackager` 在不配这一项时回退到
     // `appInfo.sanitizedName.toLowerCase()`；写 AppRun 前会用 `/^[\p{L}\p{N}._\- ]+$/u`
     // 再校验一次，`@` 不在白名单里。只有 AppImage 会走到那段校验——`--dir` 不产出 AppRun，
     // 所以 `ci.yml` 的 `--dir` 冒烟一直是绿的，只有发布时打包 AppImage 才炸。）
+    // 改名后默认值已经合法，但这里仍显式固定为 `osw`：二进制名与 `.desktop` 里的
+    // `Name` / 图标名属于对外约定，不该随包名摆动。
     // 这一项同时决定 AppDir 里的二进制名与图标文件名（`Icon=` 键），取小写纯字母。
     executableName: 'osw',
     // `.desktop` 文件名默认取 `executableName`，但 Electron 侧的 app_id / WM_CLASS 只认

@@ -67,7 +67,7 @@ const runtimeProfile = getRuntimeProfile(isDevelopment ? 'development' : 'produc
 // 它由运行档决定：生产 `OSW`，开发 `OSW Development`——两条环境各占一个命名空间，
 // 互不干扰。必须在任何一次 `safeStorage` 调用之前设好；`setName` 之后已有密钥
 // 仍按各自的名字存取，所以开发态反复重置数据目录不会碰到生产态的密文。
-// 历史上 `app.name` 曾随包名（`@osw/app`）漂移，旧命名空间的残留在钥匙串里，
+// 历史上 `app.name` 曾随包名（当时的 `@osw/app`）漂移，旧命名空间的残留在钥匙串里，
 // 见 `apps/docs/specs/platform/packaging.md` §5.1。
 app.setName(runtimeProfile.applicationName)
 

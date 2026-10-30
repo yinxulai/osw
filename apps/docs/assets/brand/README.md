@@ -6,7 +6,7 @@
 pnpm icons
 ```
 
-脚本：`apps/app/scripts/generate-icons.mjs`（依赖 `@osw/app` 的 `sharp` devDependency）。
+脚本：`apps/app/scripts/generate-icons.mjs`（依赖 `osw-app` 的 `sharp` devDependency）。
 
 ## 单一矢量源
 
