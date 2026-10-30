@@ -16,6 +16,7 @@ import { ENABLED_RULE_STAGES } from '@common/features'
 import type { RuleStage } from '@common/schemas'
 import type { SchemaFieldDescriptor } from '@common/router/types'
 import { defaultRewriteScript, rewriteScriptSamplesForStage, shouldReseedScript } from '../rewrite-script-samples'
+import { normalizeScriptTimeout } from '../lib/script-timeout'
 import type { RuleAction, RuleActionOperation, RuleActionTarget } from '../types'
 
 const OPERATION_LABEL_KEY: Record<RuleActionOperation, UiCatalogKey> = {
@@ -108,8 +109,7 @@ function ScriptTimeoutInput(props: ScriptTimeoutInputProps) {
   const value = draft ?? String(action.timeoutMilliseconds ?? REWRITE_SCRIPT_TIMEOUT_DEFAULT)
   const commit = () => {
     if (draft === undefined) return
-    const parsed = Number(draft)
-    onChange({ timeoutMilliseconds: Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.round(parsed), REWRITE_SCRIPT_TIMEOUT_LIMIT) : REWRITE_SCRIPT_TIMEOUT_DEFAULT })
+    onChange({ timeoutMilliseconds: normalizeScriptTimeout(draft) })
     setDraft(undefined)
   }
   return (
