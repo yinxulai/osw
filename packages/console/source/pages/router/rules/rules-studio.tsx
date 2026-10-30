@@ -9,7 +9,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 
 import { routerRulesApi } from '@/api/router-rules'
 import { unwrap } from '@/api/unwrap'
@@ -29,13 +29,14 @@ import {
   type RouteRuleSet,
 } from '@common/router/route-rules'
 import { ROUTER_RULE_PRESETS, type RouterRulePreset } from '@common/router/rule-presets'
-import { createId, samplePayload } from '@common/router/presets'
+import { samplePayload } from '@common/router/presets'
 import { RouteModeSwitch } from '../components/route-mode-switch'
 import { SaveVersionDialog, type VersionDraft } from '../components/save-version-dialog'
 import { VersionMenu } from '../components/version-menu'
 import { WorkflowButton } from '../components/workflow-button'
 import { hasSavedVersion, toRouteRuleSetVersion, toRouteRuleSetVersions, type RouteVersion } from '../route-versions'
 import { builtinRouteRuleName } from './builtin-rule-name'
+import { appendRule, duplicateRuleInSet, patchRuleInSet, removeRuleFromSet, reorderRules, toggleFallbackModelInSet } from './rule-ops'
 import { RulesList } from './rules-list'
 import { RulesPresetMenu } from './rules-preset-menu'
 import { rulePresetTextKeys } from './rules-preset-text'
@@ -254,10 +255,7 @@ export function RouteRulesStudio() {
   )
 
   const patchRule = useCallback((ruleId: string, patch: Partial<RouteRule>) => {
-    setRuleSet(current => ({
-      ...current,
-      rules: current.rules.map(rule => (rule.id === ruleId ? { ...rule, ...patch } : rule)),
-    }))
+    setRuleSet(current => patchRuleInSet(current, ruleId, patch))
   }, [])
 
   /**
@@ -269,7 +267,7 @@ export function RouteRulesStudio() {
    */
   const createRule = useCallback(() => {
     const rule = createRouteRule()
-    setRuleSet(current => ({ ...current, rules: [...current.rules, rule] }))
+    setRuleSet(current => appendRule(current, rule))
     setExpandedRuleId(rule.id)
     setFreshRuleId(rule.id)
   }, [])
@@ -281,21 +279,7 @@ export function RouteRulesStudio() {
 
   /** 复制出一条紧跟在原规则后面的副本：排在原处最容易看出「这两条是一对」。 */
   const duplicateRule = useCallback((ruleId: string) => {
-    setRuleSet(current => {
-      const index = current.rules.findIndex(rule => rule.id === ruleId)
-      if (index < 0) return current
-
-      const source = current.rules[index]
-      const copy: RouteRule = {
-        ...source,
-        id: createId('rule'),
-        conditions: source.conditions.map(condition => ({ ...condition })),
-        landing: { ...source.landing, logicalModelIds: [...source.landing.logicalModelIds] },
-      }
-      const rules = [...current.rules]
-      rules.splice(index + 1, 0, copy)
-      return { ...current, rules }
-    })
+    setRuleSet(current => duplicateRuleInSet(current, ruleId))
   }, [])
 
   const toggleRuleEnabled = useCallback((ruleId: string, enabled: boolean) => {
@@ -305,29 +289,18 @@ export function RouteRulesStudio() {
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
-    setRuleSet(current => {
-      const from = current.rules.findIndex(rule => rule.id === active.id)
-      const to = current.rules.findIndex(rule => rule.id === over.id)
-      if (from < 0 || to < 0) return current
-      return { ...current, rules: arrayMove(current.rules, from, to) }
-    })
+    setRuleSet(current => reorderRules(current, active.id, over.id))
   }, [])
 
   const toggleFallbackModel = useCallback((modelId: string, checked: boolean) => {
-    setRuleSet(current => ({
-      ...current,
-      fallbackModelIds: checked
-        ? [...current.fallbackModelIds.filter(id => id !== modelId), modelId]
-        : current.fallbackModelIds.filter(id => id !== modelId),
-    }))
+    setRuleSet(current => toggleFallbackModelInSet(current, modelId, checked))
   }, [])
 
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) return
 
     const ruleId = deleteTarget.id
-    setRuleSet(current => ({ ...current, rules: current.rules.filter(rule => rule.id !== ruleId) }))
+    setRuleSet(current => removeRuleFromSet(current, ruleId))
     setExpandedRuleId(current => (current === ruleId ? null : current))
     setDeleteTarget(null)
   }, [deleteTarget])
