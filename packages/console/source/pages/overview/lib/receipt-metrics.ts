@@ -1,4 +1,18 @@
-import { receiptOffsetMin, receiptPixelsPerMeter, receiptPullMax } from './constants'
+/**
+ * 小票纸条的纯几何：偏移夹取、平移量、长度换算。
+ *
+ * 这些是零 React 的物理常量与算术，渲染层（`components/receipt-printer-preview`）与交互控制器
+ * （`./bill-receipt`）共用同一份，避免「拉到哪算到头」这类边界在两处各写一遍、各漂一半。
+ */
+
+/** 负值是「往机器里塞回去」（把小票卷进机器），-260 是常规上限。 */
+export const receiptOffsetMin = -260
+/** 纸条刻度：100px 记作 1 米，只用来把「拉了多少」印在纸上。 */
+export const receiptPixelsPerMeter = 100
+/**
+ * 彩蛋：可以一直往下拉。上限只是防呆——DOM 高度按这个值生长，正常拉出彩蛋远远用不到。
+ */
+export const receiptPullMax = 6000
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))

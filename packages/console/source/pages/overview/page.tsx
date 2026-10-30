@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, ReceiptText, RefreshCw } from 'lucide-react'
-import { toPng } from 'html-to-image'
-import QRCode from 'qrcode'
 import type { AnalyticsRange } from '@common/schemas'
 import { getRouteApi, useNavigate, useParams } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,9 +23,10 @@ import { FailureReasons } from './components/failure-reasons'
 import { BillContent } from './components/bill-content'
 import { BillExportScene } from './components/bill-export-scene'
 import { ReceiptControls, ReceiptPullHint } from './components/receipt-controls'
-import { ReceiptPrinterPreview, type ReceiptPrinterStage, clampReceiptOffset, receiptMeters } from './components/receipt-printer-preview'
+import { ReceiptPrinterPreview, receiptMeters } from './components/receipt-printer-preview'
 import { buildBillRows } from './lib/bill-models'
 import { formatBillRangeLabel } from './lib/format'
+import { useBillReceipt } from './hooks/use-bill-receipt'
 
 /**
  * 索引页与供应商下钻页共用同一个组件，两者的 search schema 定义在 `/overview` 父路由上。
@@ -49,122 +48,9 @@ export function OverviewPage() {
   // 卡片本身会被卸载，状态留在里面会被打回默认值（用户切到柱状图再换范围就丢了）。
   const [distributionMode, setDistributionMode] = useState<UsageDistributionMode>('heatmap')
   const [billOpen, setBillOpen] = useState(false)
-  const [billStage, setBillStage] = useState<ReceiptPrinterStage>('processing')
-  const [receiptOffsetY, setReceiptOffsetY] = useState(0)
-  const [receiptTouched, setReceiptTouched] = useState(false)
-  const [draggingReceipt, setDraggingReceipt] = useState(false)
-  const [downloadingBill, setDownloadingBill] = useState(false)
-  const [receiptQrDataUrl, setReceiptQrDataUrl] = useState('')
-  const [billPrintedAt, setBillPrintedAt] = useState<Date>(() => new Date())
-  const billExportRef = useRef<HTMLDivElement | null>(null)
-  const billTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
-  const dragRef = useRef<{ active: boolean; startY: number; startOffset: number }>({ active: false, startY: 0, startOffset: 0 })
+  const receipt = useBillReceipt({ open: billOpen, range })
   const selectedProviderName = providerDetail.data?.summary.providerName
     ?? data?.providerStats.find(provider => provider.providerId === providerId)?.providerName
-
-  const clearBillTimers = useCallback(() => {
-    for (const timeout of billTimersRef.current) {
-      clearTimeout(timeout)
-    }
-    billTimersRef.current = []
-  }, [])
-
-  const runBill = useCallback(() => {
-    clearBillTimers()
-    setBillPrintedAt(new Date())
-    setReceiptOffsetY(0)
-    setReceiptTouched(false)
-    setDraggingReceipt(false)
-    dragRef.current.active = false
-    setBillStage('processing')
-    billTimersRef.current = [
-      setTimeout(() => setBillStage('printing'), 1400),
-      setTimeout(() => setBillStage('complete'), 3300),
-    ]
-  }, [clearBillTimers])
-
-  useEffect(() => {
-    if (billOpen) runBill()
-    return clearBillTimers
-  }, [billOpen, clearBillTimers, runBill])
-
-  // 对话框一关就把纸条归位，免得下次打开还带着上次拉出来的那一大截空白。
-  useEffect(() => {
-    if (billOpen) return
-    setReceiptOffsetY(0)
-    setReceiptTouched(false)
-    setDraggingReceipt(false)
-    dragRef.current.active = false
-  }, [billOpen])
-
-  useEffect(() => {
-    let cancelled = false
-    void QRCode.toDataURL('https://osw.yinxulai.com/', {
-      margin: 1,
-      width: 132,
-      color: { dark: '#20252f', light: '#fffefc' },
-    }).then((url: string) => {
-      if (!cancelled) setReceiptQrDataUrl(url)
-    }).catch(() => {
-      if (!cancelled) setReceiptQrDataUrl('')
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const handleReceiptPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (billStage !== 'complete') return
-    setReceiptTouched(true)
-    dragRef.current = { active: true, startY: event.clientY, startOffset: receiptOffsetY }
-    setDraggingReceipt(true)
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  const handleReceiptPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.active || billStage !== 'complete') return
-    const delta = event.clientY - dragRef.current.startY
-    setReceiptOffsetY(clampReceiptOffset(dragRef.current.startOffset + delta))
-  }
-
-  const handleReceiptPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current.active && event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    dragRef.current.active = false
-    setDraggingReceipt(false)
-  }
-
-  const handleReceiptWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (billStage !== 'complete') return
-    event.preventDefault()
-    event.stopPropagation()
-    setReceiptTouched(true)
-    setReceiptOffsetY(value => clampReceiptOffset(value + event.deltaY * 0.22))
-  }
-
-  const handleDownloadBill = useCallback(async () => {
-    const root = billExportRef.current
-    if (!root || downloadingBill) return
-
-    setDownloadingBill(true)
-    try {
-      // 不传 `backgroundColor`：导出图保留 alpha，半透明底板才能露出使用方的底色。
-      // 渲染的是**离屏的完整场景**（`billExportRef`），不是对话框里那个被视口裁过的预览。
-      const dataUrl = await toPng(root, {
-        cacheBust: true,
-        pixelRatio: 2.5,
-        skipFonts: false,
-      })
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `osw-bill-${range}-${Date.now()}.png`
-      link.click()
-    } finally {
-      setDownloadingBill(false)
-    }
-  }, [downloadingBill, range])
 
   const billModels = useMemo(() => {
     if (providerId) return providerDetail.data?.models ?? []
@@ -184,9 +70,9 @@ export function OverviewPage() {
   )
 
   const billSummary = providerId ? providerDetail.data?.summary : data?.summary
-  const billStatusLabel = billStage === 'complete'
+  const billStatusLabel = receipt.stage === 'complete'
     ? t('overview.bill.status.complete')
-    : billStage === 'printing'
+    : receipt.stage === 'printing'
       ? t('overview.bill.status.printing')
       : t('overview.bill.status.processing')
   const billFailedCount = providerId
@@ -199,7 +85,7 @@ export function OverviewPage() {
     : (data?.summary.totalRequests ?? 0)
   const billProjectName = providerId ? (selectedProviderName ?? t('overview.bill.scope.provider')) : t('overview.bill.scope.global')
   const billCashierName = 'OSW-AUTO'
-  const billDataRangeLabel = formatBillRangeLabel(locale, range, billPrintedAt)
+  const billDataRangeLabel = formatBillRangeLabel(locale, range, receipt.printedAt)
 
   // 对话框里的预览与离屏的导出场景共用同一份账单内容（见 `BillContent` 注释）。
   const billContentProps = {
@@ -213,7 +99,7 @@ export function OverviewPage() {
     attempts: billAttempts,
     failedCount: billFailedCount,
     totalTokens: billSummary?.totalTokens ?? 0,
-    qrDataUrl: receiptQrDataUrl,
+    qrDataUrl: receipt.qrDataUrl,
   }
 
   const renderLoading = () => (
@@ -407,25 +293,22 @@ export function OverviewPage() {
             <DialogTitle className="sr-only">{t('overview.bill.title')}</DialogTitle>
             <div className="relative flex h-full w-full items-start justify-center overflow-hidden px-4 pt-4 sm:px-8 sm:pt-6">
               <ReceiptControls
-                stage={billStage}
-                downloading={downloadingBill}
-                onPrint={runBill}
-                onDownload={() => void handleDownloadBill()}
+                stage={receipt.stage}
+                downloading={receipt.downloading}
+                onPrint={receipt.print}
+                onDownload={() => void receipt.download()}
                 onClose={() => setBillOpen(false)}
               />
-              <ReceiptPullHint stage={billStage} touched={receiptTouched} meters={receiptMeters(receiptOffsetY)} />
+              <ReceiptPullHint stage={receipt.stage} touched={receipt.touched} meters={receiptMeters(receipt.offsetY)} />
 
               <div className="relative flex h-full w-full items-center justify-center overflow-hidden p-1 sm:p-2">
                 <div className="relative z-10 flex h-full w-full max-w-140 items-center justify-center overflow-hidden">
                   <ReceiptPrinterPreview
-                    stage={billStage}
+                    stage={receipt.stage}
                     statusLabel={billStatusLabel}
-                    receiptOffsetY={receiptOffsetY}
-                    onPointerDown={handleReceiptPointerDown}
-                    onPointerMove={handleReceiptPointerMove}
-                    onPointerUp={handleReceiptPointerUp}
-                    onWheel={handleReceiptWheel}
-                    dragging={draggingReceipt}
+                    receiptOffsetY={receipt.offsetY}
+                    {...receipt.pointerHandlers}
+                    dragging={receipt.dragging}
                   >
                     <BillContent {...billContentProps} />
                   </ReceiptPrinterPreview>
@@ -442,7 +325,7 @@ export function OverviewPage() {
         */}
         {billOpen ? (
           <div aria-hidden="true" className="pointer-events-none fixed top-0 left-[-20000px]">
-            <div ref={billExportRef}>
+            <div ref={receipt.exportRef}>
               <BillExportScene statusLabel={billStatusLabel}>
                 <BillContent {...billContentProps} />
               </BillExportScene>

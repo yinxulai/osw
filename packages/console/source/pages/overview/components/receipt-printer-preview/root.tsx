@@ -4,7 +4,7 @@ import { ReceiptPrinterMachine } from './machine'
 import { ReceiptOutput } from './output'
 import { ReceiptPaper } from './paper'
 import type { ReceiptPrinterPreviewProps } from './types'
-import { clampReceiptOffset, clampReceiptTranslate } from './utils'
+import { clampReceiptOffset, clampReceiptTranslate } from '../../lib/receipt-metrics'
 
 export function ReceiptPrinterPreview(params: ReceiptPrinterPreviewProps) {
   const {

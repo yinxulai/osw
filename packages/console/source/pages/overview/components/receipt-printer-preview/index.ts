@@ -1,5 +1,5 @@
 export { ReceiptPrinterPreview } from './root'
 export { ReceiptPrinterStatic } from './static'
-export { clampReceiptOffset, receiptMeters } from './utils'
+export { clampReceiptOffset, receiptMeters } from '../../lib/receipt-metrics'
 export type { ReceiptPrinterStaticProps } from './static'
 export type { ReceiptPrinterStage, ReceiptPrinterPreviewProps } from './types'
