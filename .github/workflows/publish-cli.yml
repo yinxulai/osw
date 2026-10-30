@@ -1,6 +1,6 @@
 name: Publish CLI
 
-# 发布 `osw-cli` 到 npm。
+# 发布 `@yinxulai/osw-cli` 到 npm。
 #
 # 为什么是一个独立 workflow、而不是 `release.yml` 里的一个 job：npm 的 Trusted Publisher
 # 把信任绑定到**具体的 workflow 文件名**（区分大小写、要带 `.yml`）。它必须是仓库里稳定存在

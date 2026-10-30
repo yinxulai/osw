@@ -1,4 +1,4 @@
-# osw-cli
+# @yinxulai/osw-cli
 
 Run [OSW](https://github.com/yinxulai/osw) from a terminal: a local proxy that puts every LLM channel you own behind one address, with ordering, failover and request logs.
 
@@ -11,8 +11,8 @@ Node.js **>= 22**. The CLI stores data in SQLite via the built-in `node:sqlite` 
 ## Usage
 
 ```sh
-npx osw-cli            # same as `osw start`
-npm install -g osw-cli # installs the `osw` command
+npx @yinxulai/osw-cli            # same as `osw start`
+npm install -g @yinxulai/osw-cli # installs the `osw` command
 ```
 
 | Command | Description |
