@@ -22,7 +22,7 @@
   "pages/request-logs/components/request-log-detail-row.tsx": 3,
   "pages/request-logs/components/request-logs-table.tsx": 1,
   "pages/request-rewrite-rules/components/action-editor.tsx": 1,
-  "pages/request-rewrite-rules/page.tsx": 2,
+  "pages/request-rewrite-rules/page.tsx": 0,
   "pages/router/components/workflow-edge.tsx": 1,
   "pages/router/nodes/note-node.tsx": 1,
   "pages/router/page.tsx": 0,
