@@ -1,5 +1,5 @@
 {
-  "name": "@yinxulai/osw-cli",
+  "name": "osw-cli",
   "version": "1.3.1",
   "description": "命令行宿主：参数解析与宿主适配，把核心能力跑成前台进程并托管控制台产物。",
   "keywords": [
