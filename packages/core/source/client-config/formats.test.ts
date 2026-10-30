@@ -14,7 +14,6 @@ describe('format support', () => {
   it('autofills every format that has a structured writer', () => {
     expect(supportsAutoFill('json')).toBe(true)
     expect(supportsAutoFill('jsonc')).toBe(true)
-    expect(supportsAutoFill('env')).toBe(true)
     expect(supportsAutoFill('toml')).toBe(true)
     expect(supportsAutoFill('yaml')).toBe(true)
   })
@@ -419,128 +418,6 @@ describe('json entry-list editor', () => {
     editor.setObject('osw', { name: 'osw', apiKey: 'sk-new', vendor: 'customendpoint' })
 
     expect(JSON.parse(editor.serialize())).toEqual([{ name: 'osw', apiKey: 'sk-new', timeout: 120000, vendor: 'customendpoint' }])
-  })
-})
-
-describe('env editor', () => {
-  const text = '# loaded by the CLI\nOSW_BASE_URL=https://example.com\nexport OSW_API_KEY="sk-1"\n'
-
-  it('reads plain, exported and quoted values', () => {
-    const editor = createConfigEditor('env', text)
-
-    expect(editor.get('OSW_BASE_URL')).toBe('https://example.com')
-    expect(editor.get('OSW_API_KEY')).toBe('sk-1')
-    expect(editor.get('MISSING')).toBeNull()
-  })
-
-  it('replaces the matching line without disturbing the rest', () => {
-    const editor = createConfigEditor('env', text)
-
-    editor.set('OSW_API_KEY', 'sk-2')
-
-    expect(editor.serialize()).toBe('# loaded by the CLI\nOSW_BASE_URL=https://example.com\nOSW_API_KEY=sk-2\n')
-  })
-
-  it('appends a missing key after a blank line, quoting values that need it', () => {
-    const editor = createConfigEditor('env', text)
-
-    editor.set('OSW_NOTE', 'has space')
-
-    expect(editor.serialize()).toBe(`${text}\nOSW_NOTE="has space"\n`)
-  })
-
-  it('quotes empty values so the key stays readable', () => {
-    const editor = createConfigEditor('env', 'A=1\n')
-    editor.set('B', '')
-    expect(editor.serialize()).toBe('A=1\n\nB=""\n')
-  })
-
-  it('refuses to write a nested object', () => {
-    const editor = createConfigEditor('env', 'A=1\n')
-    expect(() => editor.setObject('B', { nested: 'x' })).toThrow(ConfigParseError)
-  })
-
-  it('starts a blank file with a single line', () => {
-    const editor = createConfigEditor('env', '\n  \n')
-
-    editor.set('OSW_BASE_URL', 'https://example.com')
-
-    // 空文件里没有「原有内容」可言，不需要那个分隔空行。
-    expect(editor.serialize()).toBe('OSW_BASE_URL=https://example.com\n')
-  })
-
-  it('rewrites an exported line and keeps the other lines untouched', () => {
-    const editor = createConfigEditor('env', 'export OSW_API_KEY=sk-1\nOTHER=1\n')
-
-    const before = editor.set('OSW_API_KEY', 'sk-2')
-
-    // `export` 只是行的前缀；我们只替换命中的那一行，其余行原样交还。
-    expect(before).toBe('sk-1')
-    expect(editor.serialize()).toBe('OSW_API_KEY=sk-2\nOTHER=1\n')
-  })
-
-  it('quotes values that would otherwise be split or expanded by the shell', () => {
-    const editor = createConfigEditor('env', 'A=1\n')
-
-    editor.set('HASH', 'a#b')
-    editor.set('QUOTE', 'say "hi"')
-    editor.set('DOLLAR', '$HOME/x')
-    editor.set('BACKSLASH', 'a\\ b')
-    editor.set('PLAIN', 'https://example.com')
-
-    const serialized = editor.serialize()
-    expect(serialized).toContain('HASH="a#b"')
-    // 引号在引号里要转义，否则写出来的值从 `say "hi"` 变成 `say "`。
-    expect(serialized).toContain('QUOTE="say \\"hi\\""')
-    // `$` 与 `#` 不引就会被 shell 展开或当成注释。
-    expect(serialized).toContain('DOLLAR="$HOME/x"')
-    expect(serialized).toContain('BACKSLASH="a\\\\ b"')
-    // 普通地址不加引号：多一个引号就多一个用户要读的字符。
-    expect(serialized).toContain('PLAIN=https://example.com')
-  })
-
-  it('handles a file whose last line has no newline', () => {
-    // 手工编辑出来的 `.env` 常常末行不带换行符：读得到、改得动，我们补上换行。
-    const editor = createConfigEditor('env', 'A=1')
-
-    expect(editor.get('A')).toBe('1')
-
-    const before = editor.set('A', '2')
-
-    expect(before).toBe('1')
-    expect(editor.serialize()).toBe('A=2\n')
-  })
-
-  it('does not add a second blank line when the file already ends with one', () => {
-    const editor = createConfigEditor('env', 'A=1\n\n')
-
-    editor.set('B', '2')
-
-    expect(editor.serialize()).toBe('A=1\n\nB=2\n')
-  })
-
-  it('keeps one blank line between the old content and a batch of new keys', () => {
-    const editor = createConfigEditor('env', 'A=1\n')
-
-    editor.set('B', '2')
-    editor.set('C', '3')
-
-    // 同一批追加出来的键之间不插空行：它们是「新加的那一段」，不是两段。
-    expect(editor.serialize()).toBe('A=1\n\nB=2\nC=3\n')
-  })
-
-  it('writes a non-string scalar as its text form', () => {
-    const editor = createConfigEditor('env', '')
-
-    editor.set('OSW_DEBUG', true)
-
-    expect(editor.serialize()).toBe('OSW_DEBUG=true\n')
-  })
-
-  it('reads a single-quoted value as well as a double-quoted one', () => {
-    const editor = createConfigEditor('env', "A='raw #1'\n")
-
-    expect(editor.get('A')).toBe('raw #1')
   })
 })
 

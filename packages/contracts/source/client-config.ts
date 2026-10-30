@@ -20,7 +20,7 @@ import { z } from 'zod'
  */
 export const CLIENT_CONFIG_SAMPLE_API_KEY = 'sk-osw'
 
-export const ClientConfigFormatSchema = z.enum(['json', 'jsonc', 'toml', 'yaml', 'env'])
+export const ClientConfigFormatSchema = z.enum(['json', 'jsonc', 'toml', 'yaml'])
 export type ClientConfigFormat = z.infer<typeof ClientConfigFormatSchema>
 
 /**

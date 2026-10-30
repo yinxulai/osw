@@ -25,7 +25,7 @@ import {
  * 由 `packages/console/source/catalog/clients/agent-clients.test.ts` 断言。
  */
 
-const CONFIG_FORMATS = ['json', 'jsonc', 'toml', 'yaml', 'env']
+const CONFIG_FORMATS = ['json', 'jsonc', 'toml', 'yaml']
 const PROTOCOLS = ['anthropic-messages', 'openai-responses', 'openai-completions']
 
 describe('agent client registry', () => {
@@ -148,18 +148,6 @@ describe('agent client registry', () => {
     }
   })
 
-  it('marks a shell-loaded file as env and nothing else', () => {
-    // `load` 的文件由 OSW 维护、登录 shell 加载，所以只能是 `KEY=VALUE` 的 env 文件。
-    // 别的格式挂上 `load` 没有加载机制可用，等于写了也不会生效。
-    for (const client of AGENT_CLIENT_DEFINITIONS) {
-      for (const file of client.files) {
-        if (file.load === undefined) continue
-        expect(file.load).toBe(true)
-        expect(file.format).toBe('env')
-      }
-    }
-  })
-
   it('describes each config field with an addressable path', () => {
     for (const client of AGENT_CLIENT_DEFINITIONS) {
       expect(client.fields.length).toBeGreaterThan(0)
@@ -263,9 +251,9 @@ describe('provider identity', () => {
     const single = AGENT_CLIENT_DEFINITIONS.filter(client => !agentClientSupportsLocalProviderEntry(client.key)).map(client => client.key)
 
     expect(holders.sort()).toEqual(['codex', 'deepseek-harness', 'opencode', 'pi', 'vscode'])
-    // 这两个的文件里没有任何地方能挂两套身份（Claude Code 的 `ANTHROPIC_*`、Copilot CLI 的 BYOK 变量），
-    // 所以开发实例只能忽略它们。
-    expect(single.sort()).toEqual(['claude-code', 'copilot-cli'])
+    // Claude Code 的文件里没有任何地方能挂两套身份（只有一组 `ANTHROPIC_*`），
+    // 所以开发实例只能忽略它。
+    expect(single.sort()).toEqual(['claude-code'])
   })
 
   it('answers false for an unknown client instead of throwing', () => {

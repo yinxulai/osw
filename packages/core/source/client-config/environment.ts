@@ -49,9 +49,9 @@ export function currentLocalProviderIdentity(): LocalProviderIdentity {
  * 唯一的拦路条件就是「支持多 provider」：一份配置里能并排放两条 provider 表项的客户端，
  * 开发环境写进去的是**另一条**表项，与正式那条共存，互不覆盖。
  *
- * 不支持的客户端（Claude Code 的 `ANTHROPIC_*`、Copilot CLI 的 `COPILOT_PROVIDER_*`）一份配置里
- * 只装得下唯一一套地址与模型，而这两个文件里也没有任何地方能挂两套身份——开发环境写进去就是
- * 直接抢正式环境的位置。这种情况按用户要求**忽略**：宁可不写，也不能把用户正在用的正式配置改掉。
+ * 不支持的客户端（Claude Code 的 `ANTHROPIC_*`）一份配置里只装得下唯一一套地址与模型，
+ * 而那个文件里也没有任何地方能挂两套身份——开发环境写进去就是直接抢正式环境的位置。
+ * 这种情况按用户要求**忽略**：宁可不写，也不能把用户正在用的正式配置改掉。
  * 正式环境下这条判断恒为真，不受影响。
  */
 export function clientSupportsCurrentEnvironment(clientKey: string): boolean {

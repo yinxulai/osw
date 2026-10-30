@@ -5,7 +5,6 @@ import type { TelemetryServiceFailureReason } from '@common/telemetry'
 import { closeDatabases, initDatabases } from '../database'
 import { configureSettingsDefaults, getSettings } from '@server/database/settings-store'
 import { configureClientConfigEnvironment } from '../client-config/environment'
-import { reconcileShellIntegration } from '../client-config/service'
 import { configureSecretStore } from '@server/infrastructure/secrets/secret-store'
 import { configureCoreNetworkConnector, resetCoreNetworkConnector } from '../infrastructure/network/core-network'
 import { configureOutboundConnector, createOutboundConnector, destroyOutboundConnector, type SystemProxyResolver } from '../infrastructure/network/outbound-connector'
@@ -93,12 +92,6 @@ export class ServerRuntime {
       configureCoreNetworkConnector(outboundConnector)
       const settings = await getSettings()
       console.debug(`[runtime] proxy endpoint resolved host=${settings.listenHost} port=${settings.listenPort}`)
-      // 启动文件里的托管块只在 OSW 换写法时才需要改（当前是 Windows 从「点源 .env」改成解析）。
-      // 哨兵没变，所以老版本留下的块不会自己更新——用户不点「应用」就会一直受害（每开一个终端
-      // 多一个编辑器窗口）。这里在后台对账一次，失败不阻断启动。
-      await reconcileShellIntegration().catch(error => {
-        console.warn(`[runtime] shell integration reconcile failed: ${(error as Error).message}`)
-      })
       // 凭证由宿主在**应用启动**时生成一次并随配置传进来，这里只把它交给管理服务去强制校验。
       // 校验**没有例外**：每一条 `/api/*` 都要带它，所以管理服务会把它写成数据目录里的一个
       // `0600` 文件（见 `../management/token-file.ts`），退出时删掉——放在这里而不是宿主里，

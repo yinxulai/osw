@@ -23,7 +23,7 @@ export type AgentClientProtocol = 'anthropic-messages' | 'openai-responses' | 'o
 export type AgentClientPlatform = 'darwin' | 'linux' | 'win32'
 
 /** 配置文件的格式，决定读写时用哪套解析/序列化。 */
-export type AgentClientConfigFormat = 'json' | 'jsonc' | 'toml' | 'yaml' | 'env'
+export type AgentClientConfigFormat = 'json' | 'jsonc' | 'toml' | 'yaml'
 
 /**
  * 文件内部的**存储形状**——字段声明识别出来的键，落到字节上是怎么摆的。
@@ -225,19 +225,6 @@ export interface AgentClientFileDefinition {
   shape?: AgentClientFileShape
   /** 该文件的**目录**可被这个环境变量覆盖（如 `DSH_HOME`、`XDG_CONFIG_HOME`）。 */
   envVar?: AgentClientEnvOverride
-  /**
-   * 这个文件要**由 OSW 自己加载进登录 shell**（缺省不加载）。
-   *
-   * 专门给「只能靠环境变量配置的客户端」用——那些客户端把地址/凭证读自进程环境，
-   * 没有任何配置文件能承载它们（Copilot CLI 走 `COPILOT_PROVIDER_*`）。这类客户端
-   * 由 OSW 维护一份 `env` 文件（`KEY=VALUE` 行），并在登录 shell 的启动文件里留一个
-   * 带哨兵标记的 `source` 块来加载它；Windows 下改写成 PowerShell `$PROFILE` 里的对应片段。
-   *
-   * 带这个标记的文件**不是**工具自己的配置文件，是 OSW 的投递产物：工具不读它，是登录
-   * shell 把它加载进进程环境后工具才看到那些变量。所以它由 OSW 全权维护（写入时会在文件
-   * 顶部加一句「由 OSW 生成」的注释），不受 `files[].envVar` 改道。
-   */
-  load?: boolean
   /** 该文件在工具里的作用。 */
   purpose: string
 }

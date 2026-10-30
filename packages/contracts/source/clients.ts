@@ -31,7 +31,6 @@
 
 import claudeCodeDefinition from './clients/claude-code/definition.json'
 import codexDefinition from './clients/codex/definition.json'
-import copilotCliDefinition from './clients/copilot-cli/definition.json'
 import deepseekHarnessDefinition from './clients/deepseek-harness/definition.json'
 import opencodeDefinition from './clients/opencode/definition.json'
 import piDefinition from './clients/pi/definition.json'
@@ -134,7 +133,6 @@ const AGENT_CLIENT_DEFINITIONS_UNSORTED: AgentClientDefinition[] = [
   defineClient(codexDefinition),
   defineClient(vscodeDefinition),
   defineClient(opencodeDefinition),
-  defineClient(copilotCliDefinition),
   defineClient(piDefinition),
   defineClient(deepseekHarnessDefinition),
 ]
@@ -193,10 +191,10 @@ export function agentClientApplyConfigKeys(): string[] {
  * 这就是「支持多 provider」的判据：配方里有 `providerEntry` 的客户端，开发环境的身份会落成
  * 另一条表项（`model_providers.osw-dev`），与正式那一条并排存在，两边互不覆盖。
  *
- * 没有 `providerEntry` 的客户端（Claude Code 的 `ANTHROPIC_*`、Copilot CLI 的
- * `COPILOT_PROVIDER_*`）在一份配置里只装得下**唯一一套**地址与模型：开发环境写进去就是抢
- * 正式环境的位置，而这两个文件里也没有任何地方能用来区分两套身份。所以它们在开发环境里
- * 被跳过（见 core 的 `client-config/environment.ts`）——宁可不写，也不能把用户正在用的正式配置改掉。
+ * 没有 `providerEntry` 的客户端（Claude Code 的 `ANTHROPIC_*`）在一份配置里只装得下
+ * **唯一一套**地址与模型：开发环境写进去就是抢正式环境的位置，而这个文件里也没有任何地方
+ * 能用来区分两套身份。所以它们在开发环境里被跳过（见 core 的 `client-config/environment.ts`）
+ * ——宁可不写，也不能把用户正在用的正式配置改掉。
  */
 export function agentClientSupportsLocalProviderEntry(clientKey: string): boolean {
   return findAgentClientApplyConfig(clientKey)?.providerEntry !== undefined

@@ -24,13 +24,8 @@ OSW 内置一份可自动配置的客户端清单。对每个客户端，它都�
 | Codex | OpenAI Responses | `~/.codex/config.toml` | `model`、`model_provider`，以及 `[model_providers.osw]` 表 |
 | VS Code | OpenAI Chat Completions | `chatLanguageModels.json` | 一条名为 `OSW` 的 `Custom Endpoint` provider 条目及其模型 |
 | OpenCode | OpenAI Chat Completions | `~/.config/opencode/opencode.json` | `model`、`small_model`，以及 `osw` provider 条目 |
-| Copilot CLI | OpenAI Chat Completions（BYOK） | `~/.copilot/osw.env` | `COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_API_KEY` 与 `COPILOT_MODEL` |
 | Pi | OpenAI Chat Completions | `~/.pi/agent/settings.json`、`~/.pi/agent/models.json` | `defaultProvider`、`defaultModel`，以及 `osw` provider 条目 |
 | DeepSeek Harness | OpenAI Chat Completions | `~/.dsh/settings.yaml` | `agent-default-model`，以及 `llm-pi-ai.providers.osw` 路由 |
-
-<Callout title="Copilot CLI 通过环境变量配置" type="note">
-Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）provider，所以 OSW 用一份独立的 env 文件交付它的地址、密钥与模型，并由你的登录 shell 在启动时加载它（Windows 下的托管块会逐行解析该文件再设置变量——Windows PowerShell 不会把 `.env` 当脚本，而是交给它的默认程序打开）。
-</Callout>
 
 ## 自动填充
 
@@ -43,7 +38,7 @@ Copilot CLI 只通过 `COPILOT_PROVIDER_*` 环境变量指向自定义（BYOK）
 <Callout title="开发版写的是另一个 provider 名" type="note">
 客户端配置文件在本机只有一份，所以**开发版**（`pnpm dev` 起的那套）写进去的 provider 名与正式版不同：正式写 `osw` / `OSW`，开发写 `osw-dev` / `OSW Development`。这样两套环境可以并存，开发时点「生成配置」不会把你正在用的正式配置改到开发端口上去。
 
-一份配置里能并排放两条 provider 表项的客户端（Codex、OpenCode、VS Code、Pi、DeepSeek Harness）开发版写的是**另一条**表项；装不下第二套的（Claude Code、Copilot CLI）在开发版里会被**直接跳过**——这些客户端没有地方放第二套地址与模型，写进去只会覆盖正式的配置。被跳过时列表会标出「当前环境不支持」，你也可以在下方手动编辑。
+一份配置里能并排放两条 provider 表项的客户端（Codex、OpenCode、VS Code、Pi、DeepSeek Harness）开发版写的是**另一条**表项；装不下第二套的 Claude Code（文件里只有一组 `ANTHROPIC_*`）在开发版里会被**直接跳过**——它没有地方放第二套地址与模型，写进去只会覆盖正式的配置。被跳过时列表会标出「当前环境不支持」，你也可以在下方手动编辑。
 </Callout>
 
 ## 全部生成配置并应用

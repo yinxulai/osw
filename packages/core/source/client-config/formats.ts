@@ -12,8 +12,7 @@ import type { ClientConfigFormat } from '@common/client-config'
  *
  *   - JSON 在原对象上原地读，改动落到**文本层**——命中已有键就替换那个值的字符区间，
  *     没有这个键就按原文自己的缩进风格插一行（见 `JsonConfigEditor`）；
- *   - TOML 是纯行操作，未触及的行原样保留（注释也在内）；
- *   - `.env` 只替换命中的那一行。
+ *   - TOML 是纯行操作，未触及的行原样保留（注释也在内）。
  *
  * 写入**只动目标值占的那几个字符**，连形状也跟着原文：原来写在一行的小对象，写回去
  * 仍在一行。这条规则不是为好看——一键生效会被算两遍（预览 + 落盘），如果第一次写入
@@ -35,7 +34,7 @@ export class ConfigParseError extends Error {
  * 可以写进配置的标量。
  *
  * 布尔值必须是真的布尔而不是字串：JSON 里 `"true"` 与 `true` 是两回事，写错了客户端会把
- * 字符串当成 truthy 从而行为完全不对。`.env` 与 TOML 那边没有布尔类型，由各自的编辑器降级成文本。
+ * 字符串当成 truthy 从而行为完全不对。TOML 那边没有布尔类型，由它的编辑器降级成文本。
  */
 export type ConfigScalar = string | number | boolean
 
@@ -63,7 +62,7 @@ export interface ConfigEditor {
   /**
    * 写一个对象（如 provider 表项），返回它被改写之前的**整段文本**（原本没有时是 `null`）。
    *
-   * 值允许嵌套（JSON 的 provider 表项里就有 `options`），但 TOML 与 `.env` 都只有一层，
+   * 值允许嵌套（JSON 的 provider 表项里就有 `options`），但 TOML 只有一层，
    * 遇到嵌套会明确报错而不是写出一份语法坏掉的文件。
    *
    * 命中已有对象时只更新 `value` 里声明的键，用户自己加的键留在原处。JSON 与 YAML 的嵌套对象
@@ -82,8 +81,6 @@ export function createConfigEditor(format: ClientConfigFormat, text: string, sha
       // 根是对象还是数组由存储形状说了算：`entryList` 的根是一个条目对象数组，
       // 其余情况仍按一棵嵌套映射来读。
       return shape?.kind === 'entryList' ? new JsonEntryListConfigEditor(text, shape.idField ?? 'name') : new JsonConfigEditor(text)
-    case 'env':
-      return new EnvConfigEditor(text)
     case 'toml':
       return new TomlConfigEditor(text)
     case 'yaml':
@@ -93,7 +90,7 @@ export function createConfigEditor(format: ClientConfigFormat, text: string, sha
 
 /** 支持自动填充的格式。 */
 export function supportsAutoFill(format: ClientConfigFormat): boolean {
-  return format === 'json' || format === 'jsonc' || format === 'env' || format === 'toml' || format === 'yaml'
+  return format === 'json' || format === 'jsonc' || format === 'toml' || format === 'yaml'
 }
 
 // ========== JSON / JSONC ==========
@@ -921,80 +918,6 @@ function isJsonSpace(character: string): boolean {
 
 function isJsonValueTerminator(character: string): boolean {
   return character === ',' || character === '}' || character === ']'
-}
-
-// ========== .env ==========
-
-/**
- * `KEY=VALUE` 行编辑。
- *
- * 只认最简单的形态：允许 `export ` 前缀、允许 `#` 注释行、允许值被单双引号包着。
- * 多行值、变量插值这些一律**原样保留不动**——我们只替换命中的那一行。
- */
-class EnvConfigEditor implements ConfigEditor {
-  private lines: string[]
-  /** 本次编辑是否已经追加过新键——决定还要不要为新块补那个分隔空行。 */
-  private appended = false
-
-  constructor(text: string) {
-    if (text.trim() === '') {
-      this.lines = []
-      return
-    }
-    this.lines = text.split('\n')
-    if (text.endsWith('\n')) this.lines.pop()
-  }
-
-  get(path: string): string | null {
-    const index = this.findLineIndex(path)
-    if (index < 0) return null
-    return parseEnvValue(this.lines[index]!)
-  }
-
-  set(path: string, value: ConfigScalar): string | null {
-    const line = `${path}=${formatEnvValue(typeof value === 'string' ? value : String(value))}`
-    const index = this.findLineIndex(path)
-    if (index >= 0) {
-      const before = parseEnvValue(this.lines[index]!)
-      this.lines[index] = line
-      return before
-    }
-    // 追加在末尾；与原有内容之间留一个空行，但同一批追加出来的键之间不插空行。
-    if (!this.appended && this.lines.length > 0 && this.lines[this.lines.length - 1] !== '') this.lines.push('')
-    this.lines.push(line)
-    this.appended = true
-    return null
-  }
-
-  setObject(): null {
-    throw new ConfigParseError('.env files cannot hold nested objects')
-  }
-
-  serialize(): string {
-    return `${this.lines.join('\n')}\n`
-  }
-
-  private findLineIndex(key: string): number {
-    return this.lines.findIndex((line) => {
-      const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)
-      return match?.[1] === key
-    })
-  }
-}
-
-function parseEnvValue(line: string): string {
-  const raw = line.slice(line.indexOf('=') + 1).trim()
-  if (raw.length >= 2 && ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")))) {
-    return raw.slice(1, -1)
-  }
-  return raw
-}
-
-function formatEnvValue(value: string): string {
-  if (value === '' || /[\s#'"$]/.test(value)) {
-    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-  }
-  return value
 }
 
 // ========== TOML（行级最小实现） ==========

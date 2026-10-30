@@ -41,14 +41,10 @@ clients/                   # 本目录：表示层
    - `definition.json`：照抄现有客户端目录里那份的形状（字段见
      `packages/contracts/source/clients.test.ts` 的断言）。
      - 必填：`key` `name` `order` `description` `configDir` `files[]` `fields[]`
-     - 可选：`aliases` `websiteUrl` `protocol`、`files[].envVar`、`files[].shape`、`files[].load`、`apply`
-     - `configDir` 与 `files[].path` 一律以 `~/` 开头（`~` 由消费者展开为真实主目录）。
+     - 可选：`aliases` `websiteUrl` `protocol`、`files[].envVar`、`files[].shape`、`apply`
+     - `configDir` 与 `files[].path` 一律以 `~/` 开头（`~` 由消费者展开为主目录）。
      - `order` 数值大的排前面，且各客户端之间必须唯一。能自动写入（有 `apply`）的客户端
        一律排在只能手改的之前——这是一条要守住的次序，不是权重碰巧。
-     - `files[].load`：给「只能靠环境变量配置」的客户端用（如 Copilot CLI 的
-       `COPILOT_PROVIDER_*`）。带这个标记的文件必须是 `format: "env"`，并由 OSW 维护、
-       注入登录 shell 启动文件（Windows 走 PowerShell `$PROFILE`）——见
-       `packages/core/source/client-config/shell.ts`。
    - 图标：自带品牌色的标志给一张 `icon.svg`（两套主题共用）；单色标志必须给 `icon.svg`
      （深色，亮色主题用）+ `icon.dark.svg`（浅色，暗色主题用）。这两份就是纯黑白两色，
      别指望 `fill="currentColor"` 跟着主题走。
@@ -70,19 +66,18 @@ clients/                   # 本目录：表示层
 | `codex` | <https://usemagpie.ai/icons/codex-color.svg> |
 | `opencode` | <https://usemagpie.ai/icons/opencode.svg> |
 | `pi` | <https://usemagpie.ai/icons/pi.svg> |
-| `copilot-cli` | <https://usemagpie.ai/icons/githubcopilot.svg> |
 | `deepseek-harness` | <https://usemagpie.ai/icons/deepseek-color.svg> |
 
 `vscode` 不在这份名录里，用的是 VS Code 官方标志（品牌色 `#007ACC`）。
 
 抓取时是逐字节拷贝，只规整了文件名，各 SVG 保持原本 `viewBox="0 0 24 24"`。
-其中 `pi` / `opencode` / `copilot-cli` 用 `fill="currentColor"`，
+其中 `pi` / `opencode` 用 `fill="currentColor"`，
 其余自带品牌色。
 
 ⚠️ **`currentColor` 在 `client-icon.tsx` 的 `<img>` 里不会继承页面文字色**：
 `<img>` 里的 SVG 是独立文档，没有可继承的 `color`，浏览器按初始值解析成**纯黑**。
-亮色主题下正好，暗色主题下就是黑底黑图（实测这四个图标的像素恒为 `rgb(0,0,0)`）。
-所以这三个客户端各带了一份 `icon.dark.svg`：几何逐字节相同，只把根节点的
+亮色主题下正好，暗色主题下就是黑底黑图（实测这两个图标的像素恒为 `rgb(0,0,0)`）。
+所以这两个客户端各带了一份 `icon.dark.svg`：几何逐字节相同，只把根节点的
 `fill="currentColor"` 换成 `fill="#ffffff"`。想改单色图标的形状，两份要一起改。
-（`opencode` 的图是方形外框、`pi` 是块状 P、`copilot-cli` 是幽灵剪影，
-三个都是实心剪影，白底/黑底上都读得清。）
+（`opencode` 的图是方形外框、`pi` 是块状 P，
+两个都是实心剪影，白底/黑底上都读得清。）
