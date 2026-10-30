@@ -66,7 +66,7 @@ export function AppLayout(props: AppLayoutProps) {
           换成 `flex-1` 后：内容不足一屏时撑满一屏（路由画布靠它拿到确定高度，`h-full`
           才解析得出来），内容超高时盒子随内容长高，`py-5` 始终是真正的尾部留白。
         */}
-        <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-card shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
+        <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-canvas shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
           <div className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-6 py-5">{children}</div>
         </div>
       </main>
@@ -88,7 +88,7 @@ export function PageHeader(props: PageHeaderProps) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-20 -mx-6 -mt-5 flex flex-col gap-2 border-b border-border/50 bg-card/95 px-6 pt-5 pb-3 backdrop-blur-sm',
+        'sticky top-0 z-20 -mx-6 -mt-5 flex flex-col gap-2 border-b border-border/50 bg-canvas/95 px-6 pt-5 pb-3 backdrop-blur-sm',
         'sm:flex-row sm:items-center sm:justify-between',
         className
       )}

@@ -76,6 +76,12 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  /* 内容区的「画布」层：比卡片低一档的凹陷底色，专门用来托住卡片。
+     卡片（`bg-card`）原本直接铺在同为 `bg-card` 的内容面板上，两者同色，
+     只能靠 1px 边框区分——这正是「卡片和背景只有一条线」的根因。
+     画布层让面板后退半档，卡片便靠明度差自己浮起来，边框回到次要收边的位置。
+     明暗都保持「画布 < 卡片」：亮色 97% 托 100%，暗色 8% 托 12%。 */
+  --color-canvas: hsl(var(--canvas));
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
   --color-primary: hsl(var(--primary));
@@ -139,6 +145,18 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
      本应用把 2xs 抬到 11px：10px 的中文在亮色下笔画会互相糊住，
      11px 是这套界面的**字号下限**，不要再往下压。 */
   --text-2xs: 0.6875rem;
+
+  /* 卡片高度（elevation）：画布层把卡片托起一档明度，阴影再补一点「浮起来」的物理感。
+     亮色下阴影承担主要分离感（白卡 100% 浮在 97% 画布上，柔和短投影即可读出高度）；
+     暗色下阴影几乎不可见，分离主要靠明度台阶，这里的投影只做极轻的收边。
+     `--shadow-card` 是静置态，`--shadow-card-hover` 给可交互卡片的悬浮反馈。
+     用非 inline 的 `@theme` 声明，才能在 `.dark` 里整体替换成暗色投影。 */
+  --shadow-card:
+    0 1px 2px -1px rgb(16 24 40 / 0.08),
+    0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-card-hover:
+    0 2px 4px -2px rgb(16 24 40 / 0.10),
+    0 6px 12px -4px rgb(16 24 40 / 0.12);
 
   /* 文本 */
   --color-text-primary: #101828;
@@ -546,6 +564,10 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
     --foreground: 0 0% 9%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 9%;
+    /* 画布层：内容面板的凹陷底色，托住 100% 的白卡。
+       取 97%（介于 sidebar 96% 与 card 100% 之间）：既和卡片拉开一档明度，
+       让白卡靠自身浮起来、边框退居次要，又不至于把面板压得比侧栏还暗。 */
+    --canvas: 0 0% 97%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 9%;
     --primary: 0 0% 9%;
@@ -601,6 +623,18 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
     --foreground: 0 0% 98%;
     --card: 0 0% 12%;
     --card-foreground: 0 0% 98%;
+    /* 画布层（暗色）：内容面板后退到 8%，把 12% 的卡片托起来。
+       暗色下阴影几乎读不出来，卡片与背景的分离几乎全靠这一档明度差：
+       画布 8% ↔ 卡片 12% 是 4 个点，和 sidebar 5% / background 7% 也都分得开。 */
+    --canvas: 0 0% 8%;
+    /* 卡片投影（暗色）：改成贴近黑的深色短投影，只做极轻的高度暗示，
+       真正的分离交给上面的明度台阶，避免暗色下出现发灰的「光晕」。 */
+    --shadow-card:
+      0 1px 2px -1px rgb(0 0 0 / 0.55),
+      0 2px 4px -2px rgb(0 0 0 / 0.4);
+    --shadow-card-hover:
+      0 2px 4px -2px rgb(0 0 0 / 0.55),
+      0 6px 12px -4px rgb(0 0 0 / 0.45);
     --popover: 0 0% 19%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
