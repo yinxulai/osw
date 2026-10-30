@@ -23,7 +23,7 @@ export function MetricGrid(props: MetricGridProps) {
   return (
     <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-4', props.className)}>
       {props.items.map(item => (
-        <div key={item.label} className="min-w-35 rounded-lg border border-module-border bg-card p-3">
+        <div key={item.label} className="min-w-35 rounded-lg border border-module-border bg-card p-3 shadow-card">
           <div className="mb-1 flex items-center gap-1.5 system-xs-regular text-text-tertiary">
             {item.Icon && <item.Icon size={13} aria-hidden />}
             {item.label}

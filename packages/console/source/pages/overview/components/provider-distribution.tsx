@@ -40,7 +40,7 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
               <button
                 key={p.providerId}
                 type="button"
-                className="group w-full text-left"
+                className="group w-full rounded-md py-1.5 text-left transition-colors hover:bg-state-base-hover disabled:hover:bg-transparent"
                 onClick={() => props.onSelectProvider?.(p)}
                 disabled={!props.onSelectProvider}
                 aria-label={props.onSelectProvider ? t('logicalModels.row.viewAnalytics', { provider: p.providerName }) : undefined}
