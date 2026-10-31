@@ -10,7 +10,7 @@
   "pages/client-config/components/content-module.tsx": 1,
   "pages/client-config/components/version-menu.tsx": 1,
   "pages/logical-models/components/provider-model-row.tsx": 2,
-  "pages/logs/components/logs-table.tsx": 5,
+  "pages/logs/components/logs-table.tsx": 4,
   "pages/model-management/components/provider-icon.tsx": 1,
   "pages/model-management/components/provider-website-link.tsx": 1,
   "pages/overview/components/bill-export-scene.tsx": 1,
