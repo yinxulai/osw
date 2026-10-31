@@ -121,16 +121,6 @@ export function TrayPanelPage() {
         </header>
 
         <div className="flex min-w-0 flex-col">
-          {/* 分区头与控制台卡片头同口径：标题用 `system-sm-medium`（排版阶梯里真实存在的那一档，
-              和控制台 `CardTitle` 的层级对齐），右侧是计数。注意不要写 `system-2xs-semibold`——
-              那一档只有 `regular` / `medium` / `semibold-uppercase`，拼错的类名不会报错，元素会
-              静静退回 `<h2>` 的浏览器默认字号，标题反而比正文更大。 */}
-          <div className="flex items-baseline justify-between gap-3 px-3.5 pt-3 pb-2.5">
-            <h2 className="font-heading system-sm-medium text-text-primary">{t('logicalModels.title')}</h2>
-            <span className="shrink-0 system-2xs-regular text-text-quaternary">
-              {t('tray.panel.logicalModelsCount', { count: logicalModels.length })}
-            </span>
-          </div>
           {activeLogicalModelId === null ? (
             // 首次拉取与「真的一个都没有」是两件事：前者显示空状态就是在报一个还不成立的结论。
             logicalModelsLoading
@@ -143,12 +133,14 @@ export function TrayPanelPage() {
                 )
           ) : (
             <Tabs value={activeLogicalModelId} onValueChange={setSelectedLogicalModelId} className="gap-2.5">
-              {/* 标签行与标题同一条左内边距（`px-3.5`），列表本体则通栏——与控制台卡片一样，
-                  行不再套第二层边框，只靠发丝线分格。两处默认值要收回来：列表自带
+              {/* 不再单列一行「逻辑模型」分区标题：标签本身就是各逻辑模型，标题只是把同一件事
+                  又说一遍，和已经收紧成单行的 header / footer 相比显得松。于是标签与计数并到同一行——
+                  标签占主轴（可横向滚动），计数退到右端做轻量上下文。两处默认值要收回来：列表自带
                   `justify-center`、标签自带 `flex-1`，单个逻辑模型时那个标签会被居中并抻满整行，
-                  像没画完的占位。收回后单个贴左缘、多个依次排开，名字再长也只截断自己。 */}
-              <div className="px-3.5">
-                <TabsList className="w-full justify-start overflow-x-auto" aria-label={t('tray.panel.logicalModelTabs')}>
+                  像没画完的占位；收回后单个贴左缘、多个依次排开，名字再长也只截断自己。
+                  这一行与模型行同一条左内边距（`px-3.5`），列表本体则通栏，只靠发丝线分格。 */}
+              <div className="flex items-center gap-2 px-3.5 pt-3">
+                <TabsList className="min-w-0 flex-1 justify-start overflow-x-auto" aria-label={t('tray.panel.logicalModelTabs')}>
                   {logicalModels.map(model => (
                     <TabsTrigger
                       key={model.id}
@@ -163,6 +155,9 @@ export function TrayPanelPage() {
                     </TabsTrigger>
                   ))}
                 </TabsList>
+                <span className="shrink-0 system-2xs-regular text-text-quaternary">
+                  {t('tray.panel.logicalModelsCount', { count: logicalModels.length })}
+                </span>
               </div>
               {/* 一个逻辑模型一个面板，Radix 只挂载当前选中的那个：因此同时只有一个
                   `useLogicalModelControlService` 在跑，切标签不产生 N 份轮询。
