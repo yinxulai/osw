@@ -21,6 +21,7 @@ import type { NodeInsertRequest, RouteFlowNode } from './node-data'
 import { displayWorkflowNode, isProtectedNode, localizeNewNode } from './node-meta'
 import { buildRunStatusByNode, groupNodeOutputs, type NodeOutputGroup } from './node-output'
 import { useGraphVersioning } from './use-graph-versioning'
+import { useCanvasViewport } from './use-canvas-viewport'
 import type { RouteVersion } from './route-versions'
 import { initialPayloadText, parseRunPayload, payloadRowsFor } from './run-payload'
 
@@ -102,8 +103,6 @@ export interface WorkflowStudioState {
 /** 这些元素自身消费删除键，画布的键盘删除需要跳过。 */
 const EDITABLE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
-const WORKFLOW_FIT_VIEW_OPTIONS = { padding: 0.04, minZoom: 0.66, maxZoom: 1 }
-
 export function useWorkflowStudio(): WorkflowStudioState {
   const flow = useReactFlow<RouteFlowNode, WorkflowFlowEdge>()
   const t = useTranslation()
@@ -149,11 +148,9 @@ export function useWorkflowStudio(): WorkflowStudioState {
     [displayNodes],
   )
 
-  const [dockMode, setDockMode] = useState<'select' | 'pan'>('select')
-  const [dragEnabled, setDragEnabled] = useState(true)
+  const viewport = useCanvasViewport()
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
-  const [panelWidth, setPanelWidth] = useState(420)
   const [testDrawerOpen, setTestDrawerOpen] = useState(false)
   const [payloadText, setPayloadText] = useState(initialPayloadText)
   const [payloadError, setPayloadError] = useState('')
@@ -172,30 +169,6 @@ export function useWorkflowStudio(): WorkflowStudioState {
   const versioning = useGraphVersioning({ graph, graphRef, runtimeLogicalModels, loadGraph, clearRunResult })
 
   const payloadRows = useMemo(() => payloadRowsFor(payloadText), [payloadText])
-
-  const canvasRef = useRef<HTMLDivElement | null>(null)
-  const [canvasWidth, setCanvasWidth] = useState(0)
-
-  useEffect(() => {
-    const element = canvasRef.current
-    if (!element) return
-
-    const update = () => {
-      const nextWidth = element.clientWidth
-      // 高度由 flex 容器决定，这里只记录宽度供节点面板限制拖动范围。
-      setCanvasWidth(current => current === nextWidth ? current : nextWidth)
-    }
-
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(element)
-    window.addEventListener('resize', update)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [])
 
   // ---- 图数据操作 ----------------------------------------------------------
 
@@ -237,7 +210,7 @@ export function useWorkflowStudio(): WorkflowStudioState {
   }, [handleRequestInsert])
 
   const appendAtCanvasCenter = useCallback((kind: AppendableKind) => {
-    const rect = canvasRef.current?.getBoundingClientRect()
+    const rect = viewport.canvasRef.current?.getBoundingClientRect()
     const position = rect
       ? flow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
       : { x: 0, y: 0 }
@@ -391,7 +364,7 @@ export function useWorkflowStudio(): WorkflowStudioState {
       nodes: displayNodes,
       edges: graph.edges,
       selectedNodeId,
-      draggable: dragEnabled && dockMode === 'select',
+      draggable: viewport.draggable,
       runStatusByNode,
       measure: nodeId => flow.getInternalNode(nodeId)?.measured,
       cache: nodeCacheRef.current,
@@ -407,8 +380,7 @@ export function useWorkflowStudio(): WorkflowStudioState {
     nodeCacheRef.current = built.cache
     return built.nodes
   }, [
-    dragEnabled,
-    dockMode,
+    viewport.draggable,
     flow,
     displayNodes,
     graph.edges,
@@ -426,16 +398,6 @@ export function useWorkflowStudio(): WorkflowStudioState {
     () => buildFlowEdges(graph, { onInsert: handleInsertOnEdge, runStatusByNode, hoveredNodeId }),
     [graph, handleInsertOnEdge, hoveredNodeId, runStatusByNode],
   )
-
-  const hasFitViewRef = useRef(false)
-  useEffect(() => {
-    if (hasFitViewRef.current) return
-    const frame = requestAnimationFrame(() => {
-      hasFitViewRef.current = true
-      void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [flow])
 
   // ---- 选中节点与字段提示 --------------------------------------------------
 
@@ -462,8 +424,6 @@ export function useWorkflowStudio(): WorkflowStudioState {
     }
   }, [graph, runtimeLogicalModels, payloadText, t])
 
-  const draggable = dragEnabled && dockMode === 'select'
-
   return {
     activePolicyId: versioning.activePolicyId,
     canSave: versioning.canSave,
@@ -473,15 +433,15 @@ export function useWorkflowStudio(): WorkflowStudioState {
     onOpenRun: () => setTestDrawerOpen(true),
     onOpenSave: () => versioning.setSaveDialogOpen(true),
 
-    canvasRef,
+    canvasRef: viewport.canvasRef,
     flowNodes,
     flowEdges,
-    draggable,
-    dockMode,
-    onModeChange: setDockMode,
-    dragEnabled,
-    onToggleDrag: () => setDragEnabled(value => !value),
-    onFitView: () => void flow.fitView(WORKFLOW_FIT_VIEW_OPTIONS),
+    draggable: viewport.draggable,
+    dockMode: viewport.dockMode,
+    onModeChange: viewport.setDockMode,
+    dragEnabled: viewport.dragEnabled,
+    onToggleDrag: viewport.toggleDrag,
+    onFitView: viewport.fitView,
     onAppendNode: appendAtCanvasCenter,
     onNodeClick: (_event, node) => setSelectedNodeId(node.id),
     onPaneClick: () => setSelectedNodeId(null),
@@ -494,9 +454,9 @@ export function useWorkflowStudio(): WorkflowStudioState {
     onNodeMouseLeave: handleNodeMouseLeave,
 
     selectedNode,
-    canvasWidth,
-    panelWidth,
-    onPanelWidthChange: setPanelWidth,
+    canvasWidth: viewport.canvasWidth,
+    panelWidth: viewport.panelWidth,
+    onPanelWidthChange: viewport.setPanelWidth,
     nodeModels: displayNodes,
     logicalModels,
     conditionFieldHints,
