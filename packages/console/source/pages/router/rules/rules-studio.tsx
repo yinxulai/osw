@@ -29,12 +29,13 @@ import {
   type RouteRuleSet,
 } from '@common/router/route-rules'
 import { ROUTER_RULE_PRESETS, type RouterRulePreset } from '@common/router/rule-presets'
-import { samplePayload } from '@common/router/presets'
+
 import { RouteModeSwitch } from '../components/route-mode-switch'
 import { SaveVersionDialog, type VersionDraft } from '../components/save-version-dialog'
 import { VersionMenu } from '../components/version-menu'
 import { WorkflowButton } from '../components/workflow-button'
 import { hasSavedVersion, toRouteRuleSetVersion, toRouteRuleSetVersions, type RouteVersion } from '../route-versions'
+import { initialPayloadText, parseRunPayload, payloadRowsFor } from '../run-payload'
 import { builtinRouteRuleName } from './builtin-rule-name'
 import { appendRule, duplicateRuleInSet, patchRuleInSet, removeRuleFromSet, reorderRules, toggleFallbackModelInSet } from './rule-ops'
 import { RulesList } from './rules-list'
@@ -115,7 +116,7 @@ export function RouteRulesStudio() {
   const [deleteTarget, setDeleteTarget] = useState<RouteRule | null>(null)
 
   const [testDrawerOpen, setTestDrawerOpen] = useState(false)
-  const [payloadText, setPayloadText] = useState(() => JSON.stringify(samplePayload, null, 2))
+  const [payloadText, setPayloadText] = useState(initialPayloadText)
   const [payloadError, setPayloadError] = useState('')
   const [runResult, setRunResult] = useState<RouteRuleRunResult | null>(null)
 
@@ -305,10 +306,7 @@ export function RouteRulesStudio() {
     setDeleteTarget(null)
   }, [deleteTarget])
 
-  const payloadRows = useMemo(
-    () => Math.min(28, Math.max(8, payloadText.split('\n').length + 1)),
-    [payloadText],
-  )
+  const payloadRows = useMemo(() => payloadRowsFor(payloadText), [payloadText])
 
   /**
    * 试跑走服务端。
@@ -317,18 +315,15 @@ export function RouteRulesStudio() {
    * 前端再实现一遍「差不多」的匹配，迟早会出现「试跑命中、线上没命中」。
    */
   const runLocalTest = useCallback(async () => {
-    let payload: unknown
+    let normalizedPayload: Record<string, unknown>
     try {
-      payload = JSON.parse(payloadText)
+      // 逻辑模型列表由控制台注入：它是本地配置，请求体里本来没有。
+      normalizedPayload = parseRunPayload(payloadText, runtimeLogicalModels)
     } catch {
       setRunResult(null)
       setPayloadError(t('router.error.invalidPayload'))
       return
     }
-
-    const normalizedPayload = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
-    // 逻辑模型列表由控制台注入：它是本地配置，请求体里本来没有。
-    normalizedPayload.logicalModels = runtimeLogicalModels
 
     try {
       setPayloadError('')
