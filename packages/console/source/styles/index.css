@@ -781,6 +781,29 @@ html[data-magicui-theme-vt="active"] [data-slot="app-sidebar"][data-expanded="tr
   }
 }
 
+/* 实时流里新到的一行进来时闪一下，给「刚刚到达」一个落点；静止行不带任何底色。
+   用 background-color 过渡到透明、且不 `forwards`，所以动画结束后行会退回它本来的样子
+   （hover、左侧强调条都不受影响）。 */
+.log-row-enter {
+  animation: log-row-enter 1100ms ease-out 1;
+}
+
+@keyframes log-row-enter {
+  from {
+    background-color: hsl(var(--primary) / 0.12);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .log-row-enter {
+    animation: none;
+  }
+}
+
 .workflow-reactflow .react-flow__node {
   will-change: transform;
 }
