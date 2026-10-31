@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import { PROTOCOL_LABEL, formatNumber, formatTime, formatTransport } from '../lib/format'
+import { PROTOCOL_LABEL, formatNumber, formatStatus, formatTime, formatTransport } from '../lib/format'
 import type { RequestLogsRow } from '../lib/rows'
 import { RequestExecutionRow } from './request-execution-row'
-import { RequestLogDetailRow, RequestStatusBadge } from './request-log-detail-row'
+import { RequestLogDetailRow } from './request-log-detail-row'
+import { StatusBadge } from './status-badge'
 
 interface CachedTokensCellProps {
   value: number | null
@@ -92,7 +93,11 @@ function CachedTokensCell(props: CachedTokensCellProps) {
   return <span className="system-2xs-medium text-text-quaternary">MISS</span>
 }
 
-function RequestLogsTableHeader() {
+/**
+ * 表头。导出是为了让「执行中的行」能被单独渲染成一模一样的表：
+ * 预览（开发期）与生产用同一个表头，列宽与列序不会分叉。
+ */
+export function RequestLogsTableHeader() {
   const t = useTranslation()
   return (
     <thead className={cn(tableHeaderClass, 'sticky top-0 z-10 bg-inset')}>
@@ -188,7 +193,7 @@ function RequestLogTableRow(props: RequestLogTableRowProps) {
           {props.expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         </td>
         <td className={tableCellClass}>
-          <RequestStatusBadge status={props.log.status} />
+          <StatusBadge status={props.log.status} label={formatStatus(t, props.log.status)} />
         </td>
         <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-text-tertiary')}>
           {formatTime(locale, props.log.createdTime)}

@@ -34,6 +34,7 @@ function attemptOf(overrides: Partial<LiveRequestAttempt> = {}): LiveRequestAtte
     state: 'streaming',
     httpStatus: 200,
     upstreamTransport: 'http-stream',
+    upstreamRequestId: null,
     requestBytes: 1_024,
     requestRewriteRuleNames: [],
     upstreamBytes: 4_096,
@@ -180,7 +181,9 @@ describe('RequestExecutionRow', () => {
     // 每一家候选独占一行，带序号；每一格带供应商名，避免同名模型分不清要发往哪家。
     // 这个名字在折叠行、头部事实对与候选行三处都在，所以按多命中取。
     expect(screen.getAllByText('Provider One/model-one').length).toBeGreaterThanOrEqual(3)
-    expect(screen.getByText('Sent to model-one · attempt 1')).toBeTruthy()
+    // 每一次尝试现在是一个分段：`attempt.start` 被提成了段头（序号 + 落点 + 耗时），
+    // 事件退回段内当细节，所以这里读的是段头而不是原来那条事件文案。
+    expect(screen.getByText('model-one')).toBeTruthy()
     expect(screen.getByText('model-one responded 200')).toBeTruthy()
     // 偏移量比绝对时间有用：两次事件之间隔了多久才是这条线上的刻度。
     expect(screen.getByText('+20ms')).toBeTruthy()
@@ -273,8 +276,41 @@ describe('RequestExecutionRow', () => {
 
     // 已用时读的是台账冻结下来的 `endedAt`，不再走本地秒表。
     expect(screen.getAllByText('2.0s').length).toBeGreaterThan(0)
-    // 落定之后标题行报的是结局，阶段徽标报的是「已结束」。
-    expect(screen.getByText('Success')).toBeTruthy()
-    expect(screen.getByText('Settled')).toBeTruthy()
+    // 落定之后这一格报的是结局，不再是「已结束」这个中间态。
+    expect(screen.queryByText('Settled')).toBeNull()
+    expect(screen.getAllByText('Success').length).toBeGreaterThan(0)
+  })
+
+  it('shows only the outcome after settling, with no step ruler', () => {
+    // 落定在「等响应头」：上游始终没回头。状态格只该写结局，不再画「走到第几格」——
+    // 那把尺子在列表里读不出来，真正回答「卡在哪」的是展开区的时间轴。
+    const failed = liveRequestOf({
+      status: 'failed',
+      phase: 'settled',
+      endedAt: 4_000,
+      attempts: [attemptOf({ state: 'failed', httpStatus: null, ttftMilliseconds: null, endedAt: 4_000 })],
+    })
+    const { container } = render(
+      <table>
+        <tbody>
+          <RequestExecutionRow
+            live={failed}
+            expanded={false}
+            modelName="Default model"
+            modelDeleted={false}
+            toggleExpand={() => {}}
+          />
+        </tbody>
+      </table>,
+      { wrapper: Wrapper },
+    )
+
+    const statusCell = container.querySelector('tr:first-child td:nth-child(2)')
+    expect(statusCell?.textContent).toBe('Failed')
+    // 一格都不留：没有 `aria-hidden` 的分段容器，也没有透明度递减的方块。
+    expect(statusCell?.querySelector('[aria-hidden]')).toBeNull()
+    expect(statusCell?.querySelector('.opacity-15')).toBeNull()
+    // 也不该再出现「第 n / 5 步」这类进度文案。
+    expect(screen.queryByTitle(/Step \d+ of \d+/)).toBeNull()
   })
 })

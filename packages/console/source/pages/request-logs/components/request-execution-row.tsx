@@ -3,16 +3,14 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import type { LiveRequest, LiveRequestPhase } from '@common/schemas'
-import { ActivityPulse } from '@/components/activity-pulse'
 import { tableCellClass } from '@/components/table-primitives'
-import { Badge } from '@/components/ui/badge'
-import type { LiveActivity } from '@/lib/live-activity'
 import { liveRequestActivity } from '@/data/live-request-selectors'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { executionSnapshotOf } from '../lib/execution'
-import { PROTOCOL_LABEL, formatNumber, formatTime, formatTransport } from '../lib/format'
+import { PROTOCOL_LABEL, formatNumber, formatStatus, formatTime, formatTransport } from '../lib/format'
 import { RequestExecutionDetailRow } from './request-execution-detail'
+import { StatusBadge } from './status-badge'
 
 /**
  * 「正在执行」的请求在这张列表里的样子。
@@ -90,10 +88,22 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
           {props.expanded ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         </td>
         <td className={tableCellClass}>
-          <PhaseBadge phase={live.phase} activity={activity} />
+          <PhaseBadge live={live} />
         </td>
-        <td className={cn(tableCellClass, 'whitespace-nowrap font-mono text-text-tertiary')}>
-          {formatTime(locale, live.startedAt)}
+        <td className={cn(tableCellClass, 'whitespace-nowrap font-mono')}>
+          <span className="text-text-quaternary">{formatTime(locale, live.startedAt)}</span>
+          {/* 已用时写在时刻旁边而不是另占一列：它每秒都在变，是「还在跑」唯一的连续读数；
+              而时刻是它属于哪一行。两者同一格里读，不必为了一个走秒的数字再开一列。
+              它比时刻更亮一档——列表里真正会被反复扫的是「多久了」，不是「几点开始」。
+              落定后这一格只剩时刻：那时耗时归详情，列表不必再留着它。 */}
+          {running && (
+            <span
+              className="ml-2 tabular-nums text-text-secondary"
+              title={t('requestLogs.execution.elapsed')}
+            >
+              {formatMilliseconds(snapshot.elapsedMilliseconds)}
+            </span>
+          )}
         </td>
         {/* 这一格与已结束的行逐字对齐：同样只写「最终落在谁身上」，多试几次时同样补一个 `+n`。 */}
         {/* 第一次尝试开始之前没有「落点」可写，但队列里已经有下一个候选了——那时写它，
@@ -163,26 +173,24 @@ export function RequestExecutionRow(props: RequestExecutionRowProps) {
 }
 
 interface PhaseBadgeProps {
-  phase: LiveRequestPhase
-  activity: LiveActivity | null
+  live: LiveRequest
 }
 
 /**
- * 进行中那一格报的是「走到哪一步」，而不是「成功还是失败」。
+ * 状态那一格：进行中写阶段名，落定后写结局名。
  *
- * 已结束的请求用状态徽标（成功/失败/已取消），因为它只需要回答结果；而一条还在路上的请求
- * 唯一有价值的答案是它现在卡在哪——是还在挑上游、已经发出去了、还是已经在往客户端写了。
- * 实心圆点表达「仍在进行」，事件到达时才扩散一次，让「刚刚推进了一步」也能被看见。
+ * 落定之后不能用 `phase` 之外的东西去猜结局——这里直接读 `status`，与已落库的行
+ * 走同一个 `formatStatus`，所以一条请求落定那一刻只是文字变一下，位置与形状不动。
  */
 function PhaseBadge(props: PhaseBadgeProps) {
   const t = useTranslation()
+  const { live } = props
+  const settled = live.phase === 'settled'
+
   return (
-    <Badge variant={props.activity === null ? 'muted' : 'info'} className="gap-1.5 font-normal">
-      <span className="relative flex size-1.5 items-center justify-center">
-        <ActivityPulse activity={props.activity} />
-        <span className="relative size-1.5 rounded-full bg-current" />
-      </span>
-      {t(PHASE_LABEL_KEY[props.phase])}
-    </Badge>
+    <StatusBadge
+      status={live.status}
+      label={settled ? formatStatus(t, live.status) : t(PHASE_LABEL_KEY[live.phase])}
+    />
   )
 }
