@@ -8,10 +8,12 @@ import { isRequestExecuting } from './execution'
  * 五格尺子。它只在请求还没结束时存在，请求一落定就被换成结果本身；而最想读它的时刻，
  * 恰恰是刚跑完、用户回头核对「它死在第几步」的时候。
  *
- * 所以落定后再留一段时间：刻度停住、颜色换成结局的颜色，让人有十秒钟把
+ * 所以落定后再留一段时间：刻度停住、颜色换成结局的颜色，让人有两秒钟把
  * 「失败在第 3 格，连响应头都没拿到」这件事读进去。
+ *
+ * 窗口刻意短：它只是在「落库详情到来之前」垫一下，留太久反而让列表看起来卡住了。
  */
-export const LIVE_HOLD_MILLISECONDS = 10_000
+export const LIVE_HOLD_MILLISECONDS = 2_000
 
 /** 这口时钟只为「该收起了没有」而走，一秒精度足够，不必跟着推送的节奏跳。 */
 export const LIVE_HOLD_TICK_MILLISECONDS = 1_000
@@ -54,7 +56,7 @@ export function liveHoldDeadlineOf(input: LiveHoldInput): number | null {
  * 还停在 `pending`，就用实时形态——落库比推送慢最多 1.5s，这段时间里两边说法打架，
  * 界面挑「还没结束」，否则一条刚跑完的请求会先塌成一张几乎全空的详情卡再跳回来。
  *
- * 后半句才是这里新增的：两边都说落定了，再多留一个窗口。
+ * 后半句才是这里新增的：两边都说落定了，再留一个短窗口（两秒）等历史详情补上。
  *
  * 期限**天然不会超过台账的保留期**（`SETTLED_TTL_MILLISECONDS`，60s）：过了那一刻台账里
  * 没有这一条了，`live` 变 `undefined`，这一行自动交回落库形态——没有「一直展开着所以数据
