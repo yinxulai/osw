@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Braces, Check, ChevronRight, Copy, LoaderCircle, Route, ScrollText } from 'lucide-react'
+import { Braces, Check, ChevronDown, ChevronRight, Code, Copy, Download, LoaderCircle, Route, ScrollText, Terminal } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { resolveProxyOrigin } from '@common/proxy-origin'
@@ -14,6 +14,13 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeletedTag } from '@/components/deleted-tag'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/toast'
 import { useProxyStatus } from '@/data/proxy'
 import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
@@ -22,6 +29,9 @@ import { cn } from '@/lib/utils'
 import { routePaths } from '@/routing/routes'
 import { fetchRequestLogBodies } from '../queries'
 import { buildCurl } from '../lib/build-curl'
+import { buildFetch } from '../lib/build-fetch'
+import { requestIdentityOf } from '../lib/request-identity'
+import { requestBodyDownload, saveTextFile } from '../lib/request-body-download'
 import {
   PROTOCOL_LABEL,
   distinctAttemptErrorCode,
@@ -161,18 +171,22 @@ function RequestLogIdLink(props: RequestLogIdLinkProps) {
 }
 
 /**
- * 「复制请求」：把客户端那次请求还原成一条可以直接粘进终端跑的 cURL。
+ * 「复制请求」：把客户端那次请求还原成可直接粘贴执行的代码。
  *
- * 正文可能有几百 KB 且包含任意字符，所以转义全部交给 `buildCurl`；
- * 这里只负责把记录的路径接上代理地址，以及与「查看日志」保持同一行、同一尺寸。
- * 没有正文记录时按钮照常占位（禁用 + 说明原因），避免详情卡头部随数据有无而跳动。
+ * 主按钮仍然是「复制为 cURL」——这是最常用的一档，保持一键可用；
+ * 右侧的小三角把另外两种形态（fetch、下载完整请求体）收进菜单，
+ * 免得为了一个偶发需求把按钮本身拆成三颗。
+ *
+ * 正文可能有几百 KB 且包含任意字符，所以转义全部交给 `buildCurl` / `buildFetch`；
+ * 这里只负责把记录的路径接上代理地址、现取正文，以及与「查看日志」保持同一行、同一尺寸。
+ * 没有报文记录时按钮照常占位（禁用 + 说明原因），避免详情卡头部随数据有无而跳动。
  */
 function CopyRequestButton(props: CopyRequestButtonProps) {
   const t = useTranslation()
   const toast = useToast()
   const queryClient = useQueryClient()
   const [copied, setCopied] = React.useState(false)
-  const [copying, setCopying] = React.useState(false)
+  const [pending, setPending] = React.useState<'curl' | 'fetch' | 'download' | null>(null)
   const timerRef = React.useRef<number | null>(null)
 
   React.useEffect(() => () => {
@@ -180,48 +194,120 @@ function CopyRequestButton(props: CopyRequestButtonProps) {
   }, [])
 
   const content = props.content
-  // 命令本身来自摘要（方法、路径、头），只有请求体要现取，因此没有报文行时才不可用。
+  // 两种复制都要把记录的路径拼成绝对 URL，因此地址缺失时整组都不成立；
+  // 下载只要正文，与地址无关，由它自己判可用性。
   const available = content !== null && props.origin !== null
+  const busy = !available || pending !== null
   const label = copied ? t('common.action.copied') : t('requestLogs.detail.copyRequest')
   const title = available ? t('requestLogs.detail.copyRequestTitle') : t('requestLogs.detail.copyRequestUnavailable')
 
+  // 请求体不在详情里（正文按需取）。三种动作都要它，因此统一在这里取一次，
+  // 取回来的那份同时进缓存，正文面板直接命中。
+  const loadRequestBody = async (target: RequestContentSummary): Promise<string | null> => {
+    const bodies = await fetchRequestLogBodies(target.requestId, queryClient)
+    return bodies.contents.find(item => item.id === target.id)?.requestBody ?? null
+  }
+
+  const fail = (error: unknown) => {
+    toast.error(error instanceof Error ? error.message : t('common.action.copyFailed'))
+  }
+
+  const copyAs = async (mode: 'curl' | 'fetch') => {
+    if (content === null || props.origin === null) return
+    setPending(mode)
+    try {
+      const input = {
+        url: `${props.origin}${content.requestPath}`,
+        method: content.requestMethod,
+        headers: content.requestHeaders,
+        body: await loadRequestBody(content),
+      }
+      await navigator.clipboard.writeText(mode === 'curl' ? buildCurl(input) : buildFetch(input))
+      setCopied(true)
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => setCopied(false), 1500)
+    } catch (error) {
+      fail(error)
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const download = async () => {
+    if (content === null) return
+    setPending('download')
+    try {
+      const file = requestBodyDownload({
+        requestId: content.requestId,
+        method: content.requestMethod,
+        body: await loadRequestBody(content),
+      })
+      // 「没采到正文」不是操作失败，而是这次请求本来就没有可下载的东西：
+      // 说清事实即可，不冒充成错误。
+      if (file === null) {
+        toast.error(t('requestLogs.detail.downloadBodyEmpty'))
+        return
+      }
+      saveTextFile(file)
+    } catch (error) {
+      fail(error)
+    } finally {
+      setPending(null)
+    }
+  }
+
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className={cn('shrink-0', copied && 'text-text-success')}
-      disabled={!available || copying}
-      title={title}
-      aria-label={title}
-      onClick={async event => {
-        event.stopPropagation()
-        if (!available) return
-        setCopying(true)
-        try {
-          // 请求体不在详情里（正文按需取）。点这个按钮就是在要正文，所以就地取一次，
-          // 而不是让按钮一直灰着；取回来的那份同时进缓存，正文面板直接命中。
-          const bodies = await fetchRequestLogBodies(content.requestId, queryClient)
-          const body = bodies.contents.find(item => item.id === content.id)?.requestBody ?? null
-          const curl = buildCurl({
-            url: `${props.origin}${content.requestPath}`,
-            method: content.requestMethod,
-            headers: content.requestHeaders,
-            body,
-          })
-          await navigator.clipboard.writeText(curl)
-          setCopied(true)
-          if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-          timerRef.current = window.setTimeout(() => setCopied(false), 1500)
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : t('common.action.copyFailed'))
-        } finally {
-          setCopying(false)
-        }
-      }}
-    >
-      {copying ? <LoaderCircle size={13} className="animate-spin" aria-hidden /> : copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
-      {label}
-    </Button>
+    <div className="flex shrink-0 items-stretch">
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn('rounded-r-none', copied && 'text-text-success')}
+        disabled={busy}
+        title={title}
+        aria-label={title}
+        onClick={event => {
+          event.stopPropagation()
+          void copyAs('curl')
+        }}
+      >
+        {pending === 'curl' ? <LoaderCircle size={13} className="animate-spin" aria-hidden /> : copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
+        {label}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-l-none px-1.5"
+            disabled={busy}
+            title={t('requestLogs.detail.copyRequestMenuTitle')}
+            aria-label={t('requestLogs.detail.copyRequestMenuTitle')}
+            onClick={event => event.stopPropagation()}
+          >
+            {pending === null ? <ChevronDown size={13} aria-hidden /> : <LoaderCircle size={13} className="animate-spin" aria-hidden />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={6} className="w-56">
+          <DropdownMenuItem onSelect={() => void copyAs('curl')} className="gap-2">
+            <Terminal size={14} aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsCurl')}</span>
+            {/* cURL 是主按钮那一档，菜单里要写明，否则会让人以为两个入口做的事不一样。 */}
+            <span className="shrink-0 font-mono system-2xs-regular text-text-quaternary">
+              {t('requestLogs.detail.copyAsDefault')}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copyAs('fetch')} className="gap-2">
+            <Code size={14} aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsFetch')}</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-components-panel-border" />
+          <DropdownMenuItem onSelect={() => void download()} disabled={content === null} className="gap-2">
+            <Download size={14} aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.downloadBody')}</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }
 
@@ -444,6 +530,9 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
   // 服务该请求的那次尝试恒为最后一次：故障转移一旦交付就停止，被放弃的尝试不会排在它后面。
   // 它是这张详情卡片全部尝试级口径的来源，也是「有成功记录时必然是那一条」的原因。
   const servingAttempt = servingAttemptOf(log)
+  // 头部那串编号优先用上游发的那个：本地 `req_` 只在本进程有意义，用户拿它去问上游没人认。
+  // 拿不到（上游没回这个头、或只把它写在响应体里而这次尝试没到收尾）才回退本地 id。
+  const identity = requestIdentityOf(servingAttempt ?? null, log.id)
   // 上游协议是尝试级事实：故障转移的请求可能先后朝不同协议发出过请求，
   // 头部只标出真正交付那次尝试用的是哪个上游协议，与客户端拿到什么形态的响应无关
   // （那是请求级 `transport` 与尝试级 `upstreamTransport` 说的事）。
@@ -502,7 +591,13 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                 {/* 传输形态是客户端跳声明的预期，与上游跳实际怎么回无关。 */}
                 <MetaFact label={t('requestLogs.detail.transport')} value={formatTransport(t, log.transport)} />
                 <MetaFact label={t('common.label.time')} value={formatTime(locale, log.createdTime)} />
-                <MetaFact label={t('requestLogs.detail.requestId')} value={log.id} mono copyValue={log.id} />
+                {/* 标签跟着来源走：展示的是上游那串时就说清楚，免得读者把它当成我方流水号去查。 */}
+                <MetaFact
+                  label={t(identity.fromUpstream ? 'requestLogs.contents.fact.upstreamRequestId' : 'requestLogs.detail.requestId')}
+                  value={identity.value}
+                  mono
+                  copyValue={identity.value}
+                />
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">

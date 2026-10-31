@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
+import type { RequestContentSummary, RequestLogDetail, RequestLogEntry, RequestLogEntryAttempt } from '@common/schemas'
 import { I18nProvider } from '@/i18n/provider'
 import { useLanguageStore } from '@/i18n/store'
 import { ToastProvider } from '@/components/ui/toast'
@@ -23,8 +23,9 @@ vi.mock('@tanstack/react-router', async importOriginal => ({
   Link: (props: LinkStubProps) => <a>{props.children}</a>,
 }))
 
-// 代理地址只用来拼 cURL；拿不到就是空，测试不覆盖那条路径。
-vi.mock('@/data/proxy', () => ({ useProxyStatus: () => null }))
+// 代理地址只用来拼 cURL。给一个固定监听地址：没有它时整组导出按钮都是禁用的，
+// 那样就测不到菜单里的三项了。
+vi.mock('@/data/proxy', () => ({ useProxyStatus: () => ({ host: '0.0.0.0', port: 19300 }) }))
 
 // 正文面板自己持有查询（正文是库里最大的列，点开才取），整块默认关着。
 vi.mock('../queries', () => ({
@@ -99,14 +100,41 @@ function logOf(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
   }
 }
 
+/** 客户端视角的报文摘要。正文不在这里（详情只带摘要），所以字段到 `requestHeaders` 为止。 */
+function contentOf(overrides: Partial<RequestContentSummary> = {}): RequestContentSummary {
+  return {
+    id: 'content_1',
+    requestId: 'req_1',
+    captureStatus: 'captured',
+    requestMethod: 'post',
+    requestPath: '/v1/responses',
+    requestHeaders: JSON.stringify({ 'content-type': 'application/json', host: 'example.com' }),
+    responseStatus: 200,
+    responseHeaders: null,
+    createdTime: 1_720_000_000_000,
+    updatedTime: 1_720_000_000_000,
+    ...overrides,
+  }
+}
+
+function detailOf(overrides: Partial<RequestLogDetail> = {}): RequestLogDetail {
+  return {
+    ...logOf(),
+    contents: [contentOf()],
+    attemptContents: [],
+    requestRewriteRules: [],
+    ...overrides,
+  }
+}
+
 /** 行是 `<tr>`，必须待在真正的表体里渲染，否则 React 会抱怨 DOM 嵌套。 */
-function renderRow(log: RequestLogEntry) {
+function renderRow(log: RequestLogEntry, detail: RequestLogDetail | null = null) {
   return render(
     <table>
       <tbody>
         <RequestLogDetailRow
           log={log}
-          detail={null}
+          detail={detail}
           modelName="Default model"
           modelDeleted={false}
           detailLoading={false}
@@ -234,5 +262,80 @@ describe('RequestLogDetailRow metric grid', () => {
 
     const cards = [...container.querySelectorAll('[data-slot="metric-card"]')]
     expect(cards[3].lastElementChild?.textContent).toBe('—')
+  })
+})
+
+/**
+ * 「复制请求」现在是主按钮 + 下拉：主按钮直接复制 cURL，
+ * 菜单里另给 fetch 与「下载完整请求体」。
+ *
+ * 这里只固定**菜单里有哪些项**，不测剪贴板/下载本身——`buildFetch`、`buildCurl`
+ * 和下载纯函数各自有单测，重复断言只会让改文案时改两处。
+ */
+describe('RequestLogDetailRow export menu', () => {
+  it('keeps the three export shapes in the dropdown, cURL marked as the default', async () => {
+    renderRow(logOf(), detailOf())
+
+    // Radix 的触发器在方向键上开菜单（jsdom 里比 pointerdown 稳）。
+    fireEvent.keyDown(screen.getByRole('button', { name: 'More ways to export this request' }), { key: 'ArrowDown' })
+
+    await waitFor(() => expect(screen.getAllByRole('menuitem')).toHaveLength(3))
+    const [curl, fetch, download] = screen.getAllByRole('menuitem')
+
+    expect(curl.textContent).toContain('Copy as cURL')
+    // 主按钮做的是同一件事，菜单里要写明「默认」，否则会像两个不同入口。
+    expect(curl.textContent).toContain('Default')
+    expect(fetch.textContent).toContain('Copy as fetch')
+    expect(download.textContent).toContain('Download request body (JSON)')
+    expect(download.getAttribute('aria-disabled')).not.toBe('true')
+  })
+
+  it('disables the whole control when the request has no captured content', () => {
+    renderRow(logOf(), detailOf({ contents: [] }))
+
+    // 没有报文时按钮照常占位（禁用 + 说明原因），头部不会随数据有无而跳动。
+    const trigger = screen.getByRole('button', { name: 'More ways to export this request' })
+    expect(trigger).toHaveProperty('disabled', true)
+    expect(screen.getByText('Copy request')).toBeTruthy()
+  })
+})
+
+/**
+ * 头部那串编号要说的是「拿什么去问上游」。
+ *
+ * 本地 `req_` 只在本进程内存在，供应商的日志与控制台都不认它；真正能对上账的是上游
+ * 自己发回来的那个标识。所以有一串展示一串，没有才回退本地 id——回退是为了保住
+ * 「查看运行日志」的关联键，不是为了好看。
+ */
+describe('RequestLogDetailRow request identity', () => {
+  it('shows the id the upstream assigned', () => {
+    renderRow(logOf({ attempts: [attemptOf({ upstreamRequestId: 'chatcmpl-abc123' })] }))
+
+    expect(screen.getByText('Upstream request ID')).toBeTruthy()
+    expect(screen.getByText('chatcmpl-abc123')).toBeTruthy()
+    // 标签换了来源，值也得跟着换：本地 id 不该同时出现在这一行。
+    expect(screen.queryByText('req_1')).toBeNull()
+    expect(screen.queryByText('Request ID')).toBeNull()
+  })
+
+  it('falls back to the local id when the upstream sent none', () => {
+    renderRow(logOf())
+
+    expect(screen.getByText('Request ID')).toBeTruthy()
+    expect(screen.getByText('req_1')).toBeTruthy()
+  })
+
+  it('ignores the id of an abandoned attempt', () => {
+    // 故障转移：第一家回了标识但没交付，第二家交付。要展示的是第二家的，
+    // 拿第一家的去搜只会搜到那条已经放弃的上游请求。
+    renderRow(logOf({
+      attempts: [
+        attemptOf({ id: 'att_1', attemptIndex: 0, status: 'failed', upstreamRequestId: 'chatcmpl-abandoned' }),
+        attemptOf({ id: 'att_2', attemptIndex: 1, status: 'success', upstreamRequestId: 'chatcmpl-served' }),
+      ],
+    }))
+
+    expect(screen.getByText('chatcmpl-served')).toBeTruthy()
+    expect(screen.queryByText('chatcmpl-abandoned')).toBeNull()
   })
 })

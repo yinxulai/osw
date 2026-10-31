@@ -1,5 +1,5 @@
 import { Activity } from 'lucide-react'
-import { useMemo, type ReactNode } from 'react'
+import { Fragment, useMemo, type ReactNode } from 'react'
 import type { UiCatalogKey } from '@common/i18n/catalogs'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import type { LiveRequest, LiveRequestPhase, RequestStatus } from '@common/schemas'
@@ -17,6 +17,7 @@ import {
   type TimelineNode,
   type TimelineTone,
 } from '../lib/timeline'
+import { groupTimeline, type AttemptOutcome, type TimelineGroup } from '../lib/timeline-groups'
 import { AppliedRules, DetailSection, MetaFact } from './request-detail-primitives'
 
 /**
@@ -43,8 +44,8 @@ import { AppliedRules, DetailSection, MetaFact } from './request-detail-primitiv
  *    读起来是三段有因果的尝试，而不是三个并列的结论。
  *
  * 有意省掉的东西：协议、传输形态、方法、路径、发起时刻都留在折叠行上（那里已经写着，
- * 且与历史行同一套列）；请求 ID 在落定后的历史详情里可以复制。展开一条还在跑的请求时，
- * 这些字段一个都不帮读者判断「要不要继续等」，挤进来只会把上面两件事冲淡。
+ * 且与历史行同一套列）；请求 ID 也不在这里——它要等上游回了响应头才存在，
+ * 那之后用户直接展开落定的历史详情就能拿到并复制。
  */
 
 /**
@@ -170,6 +171,9 @@ function ExecutionHeadline(props: ExecutionHeadlineProps) {
   const headline = props.running ? t(NOW_LABEL_KEY[live.phase]) : formatStatus(t, live.status)
   const modelLabel = live.logicalModelId === null ? t('requestLogs.detail.unresolved') : props.modelName
   const targetLabel = attempt === null ? null : `${attempt.providerName}/${attempt.providerModelName}`
+  // 上游回了响应头就有上游自己的请求标识，那是唯一能拿去问对方的编号；
+  // 还没回、或对方不回这个头时整条不占位——本地 `req_` 只在本进程有意义，不拿出来充数。
+  const upstreamRequestId = attempt?.upstreamRequestId?.trim() || null
 
   return (
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-border/50 pb-3">
@@ -210,6 +214,14 @@ function ExecutionHeadline(props: ExecutionHeadlineProps) {
           )}
           <MetaFact label={t('requestLogs.execution.elapsed')} value={formatMilliseconds(snapshot.elapsedMilliseconds)} />
           <MetaFact label={t('requestLogs.metric.outputSpeed')} value={formatOutputSpeed(snapshot.outputTokensPerSecond)} />
+          {upstreamRequestId !== null && (
+            <MetaFact
+              label={t('requestLogs.contents.fact.upstreamRequestId')}
+              value={upstreamRequestId}
+              mono
+              copyValue={upstreamRequestId}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -225,19 +237,43 @@ interface ExecutionTimelineProps {
 function ExecutionTimeline(props: ExecutionTimelineProps) {
   const t = useTranslation()
   const nodes = useMemo(() => timelineOf(props.live), [props.live])
+  const groups = useMemo(() => groupTimeline(nodes), [nodes])
 
   return (
     <DetailSection icon={Activity} title={t('requestLogs.execution.timeline')}>
       <ol className="py-1.5">
-        {nodes.map((node, index) => (
-          <TimelineEvent
-            key={node.key}
-            node={node}
-            /* 「此刻」排在最后，所以只有它不是尾节点时中间的竖线才画到底。 */
-            last={!props.running && index === nodes.length - 1}
-          />
-        ))}
-        {props.running && <TimelineTail snapshot={props.snapshot} />}
+        {groups.map((group, groupIndex) => {
+          /**
+           * `attempt.start` 被提成了段头，留在段内就是同一句话说两遍。
+           * 请求级那段（`attemptNumber === 0`）没有段头，它的节点原样铺开。
+           */
+          const items = group.attemptNumber === 0
+            ? group.nodes
+            : group.nodes.filter(node => node.message.kind !== 'attemptStart')
+          const isLastGroup = groupIndex === groups.length - 1
+          const carriesTail = props.running && isLastGroup
+
+          return (
+            <Fragment key={group.key}>
+              {group.attemptNumber > 0 && (
+                <AttemptHeader
+                  group={group}
+                  nowMilliseconds={props.snapshot.elapsedMilliseconds}
+                  ongoing={props.running && isLastGroup}
+                />
+              )}
+              {items.map((node, index) => (
+                <TimelineEvent
+                  key={node.key}
+                  node={node}
+                  /* 整条轴的最后一格不画竖线；「此刻」排在它后面时，它就不是最后一格。 */
+                  last={!props.running && isLastGroup && index === items.length - 1}
+                />
+              ))}
+              {carriesTail && <TimelineTail snapshot={props.snapshot} />}
+            </Fragment>
+          )
+        })}
       </ol>
     </DetailSection>
   )
@@ -264,6 +300,77 @@ function TimelineEvent(props: TimelineEventProps) {
         <CandidateLines candidates={description.candidates} />
       )}
     </TimelineItem>
+  )
+}
+
+interface AttemptHeaderProps {
+  group: TimelineGroup
+  /** 当前累计耗时，让还在跑的那一次尝试的时长跟着时钟走。 */
+  nowMilliseconds: number
+  /** 这段是否还要接着跑下去（整条请求未落定且就是最后一段）。 */
+  ongoing: boolean
+}
+
+/** 段头那枚序号圈的成色：结局决定颜色，跑着用强调色。 */
+const OUTCOME_GROUP_CLASS: Record<AttemptOutcome, string> = {
+  running: 'border-info/40 bg-info/10 text-info',
+  succeeded: 'border-success/40 bg-success/10 text-text-success',
+  failed: 'border-destructive/40 bg-destructive/10 text-text-destructive',
+  cancelled: 'border-border bg-inset text-text-quaternary',
+}
+
+/**
+ * 一次尝试的分段头。
+ *
+ * 它不是事件，是**归纳**：把「发往 X」这条 `attempt.start` 提成标题，再把该段首尾的
+ * 时间差算成耗时。这两件事恰好就是读者沿线扫读时真正在找的东西——试了几家、某一家多久
+ * 被放弃——而平铺的事件流只能回答「发生过什么」。
+ *
+ * 序号圈的成色报告这次尝试的结局：一条试过三家才成功的请求，第一段是红的、第二段是红的、
+ * 第三段是绿的，「哪家出过事」不用读字就看得见。已成定局的那一段给的是经历过的第一个结局，
+ * 不会被整条请求的最后成功改写（见 `timeline-groups.ts`）。
+ */
+function AttemptHeader(props: AttemptHeaderProps) {
+  const t = useTranslation()
+  const { group } = props
+  // 还在跑的那一段没有结尾事件，只能拿此刻减去开头，否则它会一直停在上一个事件上。
+  // 其余段一律取首尾事件之差：那才是这次尝试真正花了多久。
+  const duration = props.ongoing
+    ? props.nowMilliseconds - group.startMilliseconds
+    : group.endMilliseconds - group.startMilliseconds
+
+  return (
+    <li
+      className="grid grid-cols-[3rem_1rem_minmax(0,1fr)] items-start gap-x-3 px-3 pt-2.5 pb-1"
+      title={t('requestLogs.execution.timeline.attempt', { index: group.attemptNumber })}
+    >
+      <span className="text-right font-mono system-2xs-regular tabular-nums text-text-quaternary">
+        +{formatMilliseconds(group.startMilliseconds)}
+      </span>
+      <span className="relative flex flex-col items-center self-stretch">
+        {/* 序号圈用一条 h-4 的槽子居中，而不是给容器加 pt：槽高与正文行盒（16px）等高，
+            圈的视觉中心就永远落在第一行的中线上，跟字号、跟圈的大小都不再有关。 */}
+        <span className="flex h-4 shrink-0 items-center justify-center">
+          <span
+            className={cn(
+              'relative flex size-4 shrink-0 items-center justify-center rounded-[5px] border font-mono system-2xs-medium tabular-nums',
+              OUTCOME_GROUP_CLASS[group.outcome],
+            )}
+          >
+            {group.attemptNumber}
+          </span>
+        </span>
+        <span aria-hidden className="mt-1 w-px flex-1 bg-border" />
+      </span>
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 truncate font-mono system-xs-medium text-text-primary">
+          {providerLabel(group.target, t)}
+        </span>
+        <span className="ml-auto shrink-0 font-mono system-2xs-regular tabular-nums text-text-quaternary">
+          {formatMilliseconds(duration)}
+        </span>
+      </div>
+    </li>
   )
 }
 
@@ -384,19 +491,23 @@ interface TimelineItemProps {
  */
 function TimelineItem(props: TimelineItemProps) {
   return (
-    <li className="grid grid-cols-[3rem_auto_minmax(0,1fr)] items-start gap-x-3 px-3 py-2">
+    <li className="grid grid-cols-[3rem_1rem_minmax(0,1fr)] items-start gap-x-3 px-3 py-2">
       <span className="text-right font-mono system-2xs-regular tabular-nums text-text-quaternary">
         +{formatMilliseconds(props.offsetMilliseconds)}
       </span>
       {/* 竖线要撑到这一行下沿，所以这一列得忽略 `items-start` 自己去拉伸。 */}
-      <span className="relative flex flex-col items-center self-stretch pt-1">
-        <span
-          className={cn('relative flex size-1.5 shrink-0 items-center justify-center', TONE_MARKER_CLASS[props.tone])}
-        >
-          {props.active && (
-            <span className="absolute size-1.5 rounded-full bg-current opacity-60 motion-safe:animate-ping" />
-          )}
-          <span className="relative size-1.5 rounded-full bg-current" />
+      <span className="relative flex flex-col items-center self-stretch">
+        {/* 与段头同一条规矩：圆点装进一条 h-4 的槽子里居中，而不是给容器加 pt，
+            这样 6px 的点与 16px 的序号圈落在同一条中线上。 */}
+        <span className="flex h-4 shrink-0 items-center justify-center">
+          <span
+            className={cn('relative flex size-1.5 shrink-0 items-center justify-center', TONE_MARKER_CLASS[props.tone])}
+          >
+            {props.active && (
+              <span className="absolute size-1.5 rounded-full bg-current opacity-60 motion-safe:animate-ping" />
+            )}
+            <span className="relative size-1.5 rounded-full bg-current" />
+          </span>
         </span>
         {!props.last && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </span>
@@ -447,6 +558,8 @@ function describeNode(message: TimelineMessage, t: AppTranslator): DescriptionOf
       }
     }
 
+    // 分段视图把这条事件提成了段头（见 `AttemptHeader`），段内不再重复渲染它；
+    // 保留这个分支是为了让 `describeNode` 对事件种类仍然完整——漏一种就得靠默认值去装。
     case 'attemptStart':
       return {
         title: t('requestLogs.execution.node.attemptStart', {

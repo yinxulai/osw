@@ -30,6 +30,7 @@ function attemptOf(overrides: Partial<LiveRequestAttempt> = {}): LiveRequestAtte
     state: 'streaming',
     httpStatus: 200,
     upstreamTransport: 'http-stream',
+    upstreamRequestId: null,
     requestBytes: 1_024,
     requestRewriteRuleNames: [],
     upstreamBytes: 4_096,
