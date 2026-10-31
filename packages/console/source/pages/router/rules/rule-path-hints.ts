@@ -55,3 +55,16 @@ export const RULE_PATH_HINTS: readonly RulePathHint[] = composeRulePathHints()
 export const RULE_VARIABLE_PATH_HINTS: readonly RulePathHint[] = RULE_PATH_HINTS.filter(
   hint => hint.valueType === 'string' || hint.valueType === 'array',
 )
+
+/**
+ * 按关键词过滤候选路径——匹配**行里看得见的两样**：路径与它的说明。
+ *
+ * 说明文案要本地化，因此说明取值由 `noteOf` 注入（调用方用 `t(hint.noteKey)` 拼好传进来），
+ * 过滤本身保持零 React、可单测。关键词空白时原样返回。
+ */
+export function filterPathHints(hints: readonly RulePathHint[], keyword: string, noteOf: (hint: RulePathHint) => string): readonly RulePathHint[] {
+  const normalized = keyword.trim().toLowerCase()
+  if (!normalized) return hints
+  return hints.filter(hint => hint.path.toLowerCase().includes(normalized) || noteOf(hint).toLowerCase().includes(normalized))
+}
+

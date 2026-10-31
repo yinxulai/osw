@@ -9,6 +9,7 @@ import { useTranslation } from '@/i18n/provider'
 import type { RouteRuleLanding } from '@common/router/route-rules'
 import type { LogicalModel } from '@common/schemas'
 import { FieldPathInput } from './field-path-input'
+import { filterModelsByKeyword, orderModelsBySelection } from './logical-model-picker'
 import { RULE_VARIABLE_PATH_HINTS } from './rule-path-hints'
 
 interface RuleFieldLabelProps {
@@ -66,21 +67,11 @@ export function LogicalModelPicker(props: LogicalModelPickerProps) {
     if (!next) setKeyword('')
   }
 
-  const normalizedKeyword = keyword.trim().toLowerCase()
   // 已选在前（维持勾选顺序 = 优先级），其余按名字排在后面：打开面板第一眼就是当前的优先级顺序。
-  const ordered = [...logicalModels].sort((left, right) => {
-    const leftIndex = selectedIds.indexOf(left.modelId)
-    const rightIndex = selectedIds.indexOf(right.modelId)
-    if (leftIndex >= 0 && rightIndex >= 0) return leftIndex - rightIndex
-    if (leftIndex >= 0) return -1
-    if (rightIndex >= 0) return 1
-    return left.modelId.localeCompare(right.modelId)
-  })
-  const visible = normalizedKeyword
-    // 筛的就是行里看得见的那两样：模型 id 与描述。少筛一样，列表就会跟搜索框互相打脸 ——
-    // 明明眼前写着 fallback，打进去却说没有匹配。
-    ? ordered.filter(model => [model.modelId, model.description].some(field => field.toLowerCase().includes(normalizedKeyword)))
-    : ordered
+  const ordered = orderModelsBySelection(logicalModels, selectedIds)
+  // 筛的就是行里看得见的那两样：模型 id 与描述。少筛一样，列表就会跟搜索框互相打脸 ——
+  // 明明眼前写着 fallback，打进去却说没有匹配。
+  const visible = filterModelsByKeyword(ordered, keyword)
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n/provider'
-import { RULE_PATH_HINTS, type RulePathHint } from './rule-path-hints'
+import { RULE_PATH_HINTS, filterPathHints, type RulePathHint } from './rule-path-hints'
 
 interface FieldPathInputProps {
   value: string
@@ -43,11 +43,8 @@ export function FieldPathInput(props: FieldPathInputProps) {
   const listId = useId()
 
   const noteOf = (hint: RulePathHint): string => (hint.noteKey ? t(hint.noteKey) : '')
-  const keyword = value.trim().toLowerCase()
   // 筛的是行里看得见的两样：路径与它读到的东西。少筛一样，列表就会跟框里打的字互相打脸。
-  const visible = keyword
-    ? hints.filter(hint => hint.path.toLowerCase().includes(keyword) || noteOf(hint).toLowerCase().includes(keyword))
-    : hints
+  const visible = filterPathHints(hints, value, noteOf)
 
   const pick = (path: string) => {
     onChange(path)

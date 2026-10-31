@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CATALOGS } from '@common/i18n/catalogs'
 import { PROTOCOL_REQUEST_SHAPES } from '@common/router/request-shape'
 import { ROUTE_RULE_FIELD_KINDS } from '@common/router/route-rules'
-import { RULE_PATH_HINTS, RULE_VARIABLE_PATH_HINTS } from './rule-path-hints'
+import { RULE_PATH_HINTS, RULE_VARIABLE_PATH_HINTS, filterPathHints, type RulePathHint } from './rule-path-hints'
 
 /** 来源表里那些本身就是**完整路径**的来源 —— 候选表只由它们拼成。 */
 const declaredHints = ROUTE_RULE_FIELD_KINDS
@@ -55,5 +55,26 @@ describe('RULE_VARIABLE_PATH_HINTS', () => {
     const variablePaths = RULE_VARIABLE_PATH_HINTS.map(hint => hint.path)
     expect(variablePaths).toContain('request.body.model')
     expect(variablePaths).toContain('logicalModels[*].modelId')
+  })
+})
+
+describe('filterPathHints', () => {
+  const hints: RulePathHint[] = [
+    { path: 'request.headers', valueType: 'string' },
+    { path: 'request.method', valueType: 'string' },
+    { path: 'logicalModels[*].modelId', valueType: 'array' },
+  ]
+  const noteOf = (hint: RulePathHint): string => (hint.path === 'request.method' ? 'HTTP 动词' : '')
+
+  it('returns every hint when the keyword is blank', () => {
+    expect(filterPathHints(hints, '  ', noteOf)).toHaveLength(3)
+  })
+
+  it('matches the path case-insensitively', () => {
+    expect(filterPathHints(hints, 'HEADER', noteOf).map(h => h.path)).toEqual(['request.headers'])
+  })
+
+  it('matches the resolved note as well as the path', () => {
+    expect(filterPathHints(hints, '动词', noteOf).map(h => h.path)).toEqual(['request.method'])
   })
 })
