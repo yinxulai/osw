@@ -32,3 +32,22 @@ export function requestIdentityOf(servingAttempt: RequestIdentityAttempt | null,
   }
   return { value: localId, fromUpstream: false }
 }
+
+/** 省略展示时首尾各留几位。两头都留才对得上：前几位用来认厂商，后几位用来分辨同一批。 */
+const ID_HEAD_LENGTH = 8
+const ID_TAIL_LENGTH = 8
+
+/**
+ * 太长的编号压成「前八位…后八位」。
+ *
+ * 上游标识长短不一：`msg_01ABC` 这种短串原样显示，而 `021793429283122f3d3e58bfdffea9769710a7767b276c34eec1a`
+ * 这种会把详情头部那一行撑开，把旁边的复制按钮挤出去。所以显示时中间省略，**复制值仍然是完整的那串**——
+ * 省略号只是排版，拿去做对账的必须是原文。
+ *
+ * 阀值取「首+尾+省略号」再加一点余量：刚好等于首尾之和时省不出多少，不值得为它加一个省略号。
+ */
+export function abbreviateIdentifier(value: string): string {
+  const limit = ID_HEAD_LENGTH + ID_TAIL_LENGTH + 4
+  if (value.length <= limit) return value
+  return `${value.slice(0, ID_HEAD_LENGTH)}…${value.slice(-ID_TAIL_LENGTH)}`
+}

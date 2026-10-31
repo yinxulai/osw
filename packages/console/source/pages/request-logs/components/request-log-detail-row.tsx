@@ -30,7 +30,7 @@ import { routePaths } from '@/routing/routes'
 import { fetchRequestLogBodies } from '../queries'
 import { buildCurl } from '../lib/build-curl'
 import { buildFetch } from '../lib/build-fetch'
-import { requestIdentityOf } from '../lib/request-identity'
+import { abbreviateIdentifier, requestIdentityOf } from '../lib/request-identity'
 import { requestBodyDownload, saveTextFile } from '../lib/request-body-download'
 import {
   PROTOCOL_LABEL,
@@ -594,7 +594,8 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
                 {/* 标签跟着来源走：展示的是上游那串时就说清楚，免得读者把它当成我方流水号去查。 */}
                 <MetaFact
                   label={t(identity.fromUpstream ? 'requestLogs.contents.fact.upstreamRequestId' : 'requestLogs.detail.requestId')}
-                  value={identity.value}
+                  value={abbreviateIdentifier(identity.value)}
+                  title={identity.value}
                   mono
                   copyValue={identity.value}
                 />

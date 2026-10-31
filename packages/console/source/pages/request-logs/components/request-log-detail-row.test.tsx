@@ -338,4 +338,15 @@ describe('RequestLogDetailRow request identity', () => {
     expect(screen.getByText('chatcmpl-served')).toBeTruthy()
     expect(screen.queryByText('chatcmpl-abandoned')).toBeNull()
   })
+
+  it('abbreviates a long id for display but keeps the full one on hover', () => {
+    // 上游有的标识长达几十位，原样铺开会把这一行撑开，把旁边的复制按钮挤出去。
+    // 所以只显示首尾两段；悬停能看全文，复制拿到的仍是原文。
+    const long = '021793429283122f3d3e58bfdffea9769710a7767b276c34eec1a'
+    renderRow(logOf({ attempts: [attemptOf({ upstreamRequestId: long })] }))
+
+    const shown = screen.getByText('02179342…c34eec1a')
+    expect(shown.getAttribute('title')).toBe(long)
+    expect(screen.queryByText(long)).toBeNull()
+  })
 })

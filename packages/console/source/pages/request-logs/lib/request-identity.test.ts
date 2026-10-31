@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { requestIdentityOf } from './request-identity'
+import { abbreviateIdentifier, requestIdentityOf } from './request-identity'
 
 /**
  * 「这条请求的编号」写谁。
@@ -38,5 +38,29 @@ describe('requestIdentityOf', () => {
 
   it('trims what the upstream sent', () => {
     expect(requestIdentityOf({ upstreamRequestId: ' abc-1 ' }, 'req_local').value).toBe('abc-1')
+  })
+})
+
+/**
+ * 长编号的省略展示。
+ *
+ * 只影响「看到的」，不影响「复制的」：复制值始终是原文，省略号纯粹为了排版。
+ */
+describe('abbreviateIdentifier', () => {
+  it('leaves short ids untouched', () => {
+    expect(abbreviateIdentifier('msg_01ABC')).toBe('msg_01ABC')
+    expect(abbreviateIdentifier('req_2f1c8a9d')).toBe('req_2f1c8a9d')
+  })
+
+  it('keeps the head and the tail once it overflows', () => {
+    const long = '021793429283122f3d3e58bfdffea9769710a7767b276c34eec1a'
+    expect(abbreviateIdentifier(long)).toBe('02179342…c34eec1a')
+  })
+
+  it('does not abbreviate at the threshold', () => {
+    // 刚好装得下时省不出几个字符，加个省略号只是多一处噪声。
+    const atLimit = 'a'.repeat(20)
+    expect(abbreviateIdentifier(atLimit)).toBe(atLimit)
+    expect(abbreviateIdentifier(`${atLimit}a`)).toBe(`${'a'.repeat(8)}…${'a'.repeat(8)}`)
   })
 })

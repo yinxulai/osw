@@ -151,6 +151,8 @@ export interface MetaFactProps {
   tone?: 'default' | 'warning'
   /** 提供后在该事实右侧显示复制按钮。 */
   copyValue?: string
+  /** 值是省略过的形式时，把原文挂在这里当悬停提示。 */
+  title?: string
   /** 值旁边的一枚小标签（例如「已删除」），说明这个事实此刻的状态。 */
   tag?: React.ReactNode
 }
@@ -167,6 +169,7 @@ export function MetaFact(props: MetaFactProps) {
           props.mono && 'font-mono',
           props.tone === 'warning' ? 'text-text-warning' : 'text-text-secondary',
         )}
+        title={props.title}
       >
         {props.value}
       </span>

@@ -10,6 +10,7 @@ import { useTranslation, type AppTranslator } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
 import { executionSnapshotOf, type ExecutionSnapshot } from '../lib/execution'
 import { formatBytes, formatNumber, formatStatus, formatTransport } from '../lib/format'
+import { abbreviateIdentifier } from '../lib/request-identity'
 import {
   timelineOf,
   type HealthFailureScope,
@@ -217,7 +218,8 @@ function ExecutionHeadline(props: ExecutionHeadlineProps) {
           {upstreamRequestId !== null && (
             <MetaFact
               label={t('requestLogs.contents.fact.upstreamRequestId')}
-              value={upstreamRequestId}
+              value={abbreviateIdentifier(upstreamRequestId)}
+              title={upstreamRequestId}
               mono
               copyValue={upstreamRequestId}
             />
