@@ -2089,7 +2089,6 @@ Score request size in a sandbox script, then route by score band to different lo
   // 托盘**面板**由渲染层画（与控制台同一份产物，见 `packages/console/source/tray.tsx`），
   // 所以它归 `tray.` 而不是 `native.`：`native.` 那一组是主进程构建的原生菜单文案，
   // 语言跟着 Electron 的 locale 走，与这里由持久化偏好决定的语言是两件事。
-  'tray.panel.subtitle': 'Local proxy',
   'tray.panel.openApp': 'Open the main window',
   'tray.panel.quit': 'Quit',
   'tray.panel.startProxy': 'Start proxy',

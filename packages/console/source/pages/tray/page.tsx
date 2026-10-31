@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { AppWindow, Power, Timer, X, Zap } from 'lucide-react'
+import { AppWindow, LogOut, Power, Timer, Zap } from 'lucide-react'
 import type { LogicalModel, LogicalModelProviderModel, Provider } from '@common/schemas'
 import { formatMilliseconds, formatOutputSpeed } from '@common/metrics'
 import { providerModelMetricKey, type ProviderModelMetrics } from '@common/provider-model-metrics'
@@ -83,22 +83,34 @@ export function TrayPanelPage() {
     // 留白不够就会被窗口边界裁掉一条边。数值来自 `@common/tray-panel`，主进程摆放窗口时
     // 用的是同一个常量，两边不会各留一个数。
     <div style={{ padding: TRAY_PANEL_GUTTER }}>
+      {/* 面板是悬浮在桌面上的卡片，所以表面、描边、排版都沿用控制台的卡片令牌
+          （`bg-card` / `border-module-border` / `text-card-foreground`），只有阴影是例外：
+          控制台卡片坐在画布上，`shadow-card` 那档极轻投影就够；这里浮在桌面之上，要用
+          悬浮级（popover）的投影才读得出高度，故保留这一处手写值。 */}
       <div
         ref={panelRef}
-        className="flex flex-col overflow-hidden rounded-xl border border-components-panel-border bg-components-panel-bg shadow-[0_8px_24px_rgb(0_0_0/0.12),0_1px_4px_rgb(0_0_0/0.06)]"
+        className="flex flex-col overflow-hidden rounded-xl border border-module-border bg-card text-card-foreground shadow-[0_8px_24px_rgb(0_0_0/0.12),0_1px_4px_rgb(0_0_0/0.06)]"
       >
-        <header className="flex min-h-14 shrink-0 items-center gap-2.5 border-b border-components-panel-border px-3.5">
-          <img src="icon.svg" alt="" className="size-7 shrink-0 rounded-[7px]" />
-          <span className="min-w-0 flex-1">
-            <strong className="block system-sm-semibold">OSW</strong>
-            <span className="block truncate system-2xs-regular text-text-tertiary">{t('tray.panel.subtitle')}</span>
+        {/* Header 走控制台顶栏那套紧凑密度：单行、`h-10`、`size-5` 标识 + `system-xs-semibold`。
+            身份与实时运行状态（圆点 + `nav.status.running`，带端口）压到同一行右端，再接启停开关。
+            不再用两行把头部撑到 56px——面板是浮层，头越矮，下面的模型列表能一次露出的行越多。 */}
+        <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/50 px-3">
+          <img src="icon.svg" alt="" className="size-5 shrink-0 rounded-[5px]" />
+          <strong className="font-heading system-xs-semibold text-text-primary">OSW</strong>
+          <span className="ml-auto flex min-w-0 items-center gap-1.5" aria-live="polite">
+            <span
+              aria-hidden
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                running ? 'bg-success motion-safe:animate-pulse' : 'bg-text-quaternary',
+              )}
+            />
+            <span className="min-w-0 truncate system-2xs-regular text-text-tertiary">
+              {running ? t('nav.status.running', { port: proxyStatus?.port ?? 0 }) : t('nav.status.stopped')}
+            </span>
           </span>
-          <Badge variant={running ? 'success' : 'muted'} aria-live="polite">
-            <span className="size-1.5 rounded-full bg-current" aria-hidden />
-            {running ? t('common.state.running') : t('common.state.stopped')}
-          </Badge>
           <Button
-            variant="secondary"
+            variant={running ? 'secondary' : 'default'}
             size="icon-sm"
             onClick={() => { void toggleProxy() }}
             aria-label={running ? t('tray.panel.stopProxy') : t('tray.panel.startProxy')}
@@ -108,33 +120,34 @@ export function TrayPanelPage() {
           </Button>
         </header>
 
-        <div className="flex flex-col px-3.5 py-3">
-          <section className="min-w-0">
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-              {/* 排版阶梯里 `2xs` 一族只有 `regular` / `medium` / `semibold-uppercase`；
-                  写一个不存在的 `system-2xs-semibold` 不会报错，元素会静静退回 `<h2>` 的
-                  浏览器默认字号，标题于是比正文大一整圈。 */}
-              <h2 className="system-2xs-medium">{t('logicalModels.title')}</h2>
-              <span className="shrink-0 system-2xs-regular text-text-quaternary">
-                {t('tray.panel.logicalModelsCount', { count: logicalModels.length })}
-              </span>
-            </div>
-            {activeLogicalModelId === null ? (
-              // 首次拉取与「真的一个都没有」是两件事：前者显示空状态就是在报一个还不成立的结论。
-              logicalModelsLoading
-                ? <div className="min-h-24" />
-                : (
-                    <TrayEmptyState
-                      title={t('tray.panel.logicalModelsEmpty')}
-                      description={t('tray.panel.logicalModelsEmptyHint')}
-                    />
-                  )
-            ) : (
-              <Tabs value={activeLogicalModelId} onValueChange={setSelectedLogicalModelId}>
-                {/* 标准标签行为：列表铺满整行当作分割线，标签按内容宽度**从左往右**排。
-                    两处默认值要收回来——列表自带 `justify-center`、标签自带 `flex-1`，
-                    单个逻辑模型时那个标签会被居中并抻满整行，像没画完的占位。
-                    收回后单个贴左缘、多个依次排开，名字再长也只截断自己，溢出交给横向滚动。 */}
+        <div className="flex min-w-0 flex-col">
+          {/* 分区头与控制台卡片头同口径：标题用 `system-sm-medium`（排版阶梯里真实存在的那一档，
+              和控制台 `CardTitle` 的层级对齐），右侧是计数。注意不要写 `system-2xs-semibold`——
+              那一档只有 `regular` / `medium` / `semibold-uppercase`，拼错的类名不会报错，元素会
+              静静退回 `<h2>` 的浏览器默认字号，标题反而比正文更大。 */}
+          <div className="flex items-baseline justify-between gap-3 px-3.5 pt-3 pb-2.5">
+            <h2 className="font-heading system-sm-medium text-text-primary">{t('logicalModels.title')}</h2>
+            <span className="shrink-0 system-2xs-regular text-text-quaternary">
+              {t('tray.panel.logicalModelsCount', { count: logicalModels.length })}
+            </span>
+          </div>
+          {activeLogicalModelId === null ? (
+            // 首次拉取与「真的一个都没有」是两件事：前者显示空状态就是在报一个还不成立的结论。
+            logicalModelsLoading
+              ? <div className="min-h-24" />
+              : (
+                  <TrayEmptyState
+                    title={t('tray.panel.logicalModelsEmpty')}
+                    description={t('tray.panel.logicalModelsEmptyHint')}
+                  />
+                )
+          ) : (
+            <Tabs value={activeLogicalModelId} onValueChange={setSelectedLogicalModelId} className="gap-2.5">
+              {/* 标签行与标题同一条左内边距（`px-3.5`），列表本体则通栏——与控制台卡片一样，
+                  行不再套第二层边框，只靠发丝线分格。两处默认值要收回来：列表自带
+                  `justify-center`、标签自带 `flex-1`，单个逻辑模型时那个标签会被居中并抻满整行，
+                  像没画完的占位。收回后单个贴左缘、多个依次排开，名字再长也只截断自己。 */}
+              <div className="px-3.5">
                 <TabsList className="w-full justify-start overflow-x-auto" aria-label={t('tray.panel.logicalModelTabs')}>
                   {logicalModels.map(model => (
                     <TabsTrigger
@@ -150,34 +163,40 @@ export function TrayPanelPage() {
                     </TabsTrigger>
                   ))}
                 </TabsList>
-                {/* 一个逻辑模型一个面板，Radix 只挂载当前选中的那个：因此同时只有一个
-                    `useLogicalModelControlService` 在跑，切标签不产生 N 份轮询。 */}
-                {logicalModels.map(model => (
-                  <TabsContent key={model.id} value={model.id} className="mt-0">
-                    <TrayProviderModelList
-                      logicalModel={model}
-                      processingCounts={processingCounts}
-                    />
-                  </TabsContent>
-                ))}
-              </Tabs>
-            )}
-          </section>
+              </div>
+              {/* 一个逻辑模型一个面板，Radix 只挂载当前选中的那个：因此同时只有一个
+                  `useLogicalModelControlService` 在跑，切标签不产生 N 份轮询。
+                  内容区带一条上发丝线，等价于控制台卡片头与表格之间的那条线。 */}
+              {logicalModels.map(model => (
+                <TabsContent key={model.id} value={model.id} className="mt-0 border-t border-border/50">
+                  <TrayProviderModelList
+                    logicalModel={model}
+                    processingCounts={processingCounts}
+                  />
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
+        </div>
 
-          <div className="mt-3.5 grid grid-cols-[1fr_auto] gap-2">
-            <Button onClick={openMainWindow}>
-              <AppWindow size={15} />
-              {t('tray.panel.openApp')}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => host?.quit()}
-              aria-label={t('tray.panel.quit')}
-              title={t('tray.panel.quit')}
-            >
-              <X size={15} />
-            </Button>
-          </div>
+        {/* 页脚沿用控制台 `CardFooter` 的做法：通栏、上发丝线、底色退到 `bg-inset`，让操作区
+            与数据区分层。尺寸压到 `sm`（h-7）+ `py-2`，与 mini header 同一档密度；两个动作都带文字，
+            「退出」用 `LogOut` 而非 `X`——`X` 容易被当成「关掉这个浮层」，而这里是退出整个应用。 */}
+        <div className="flex items-center gap-2 border-t border-border/50 bg-inset px-3 py-2">
+          <Button size="sm" className="flex-1" onClick={openMainWindow}>
+            <AppWindow size={14} />
+            {t('tray.panel.openApp')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => host?.quit()}
+            aria-label={t('tray.panel.quit')}
+            title={t('tray.panel.quit')}
+          >
+            <LogOut size={14} />
+            {t('tray.panel.quit')}
+          </Button>
         </div>
       </div>
     </div>
@@ -220,7 +239,7 @@ function TrayProviderModelList(props: TrayProviderModelListProps) {
   }
 
   return (
-    <div className={cn('overflow-y-auto overscroll-contain rounded-xl border border-module-border bg-components-panel-bg', MODEL_LIST_MAX_HEIGHT)}>
+    <div className={cn('overflow-y-auto overscroll-contain', MODEL_LIST_MAX_HEIGHT)}>
       {service.models.map(model => (
         <TrayProviderModelRow
           key={model.id}
@@ -264,7 +283,7 @@ function TrayProviderModelRow(props: TrayProviderModelRowProps) {
   })
 
   return (
-    <div className="flex min-h-14 items-center gap-2 border-b border-border/50 px-3 py-2 last:border-b-0">
+    <div className="flex min-h-14 items-center gap-2 border-b border-border/50 px-3.5 py-2 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-0.5 system-xs-medium">
           <span className={cn('min-w-0 truncate', props.provider ? 'text-text-primary' : 'text-text-tertiary')}>

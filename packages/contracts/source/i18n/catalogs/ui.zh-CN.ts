@@ -2086,7 +2086,6 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // 托盘**面板**由渲染层画（与控制台同一份产物，见 `packages/console/source/tray.tsx`），
   // 所以它归 `tray.` 而不是 `native.`：`native.` 那一组是主进程构建的原生菜单文案，
   // 语言跟着 Electron 的 locale 走，与这里由持久化偏好决定的语言是两件事。
-  'tray.panel.subtitle': '本地代理',
   'tray.panel.openApp': '打开主界面',
   'tray.panel.quit': '退出',
   'tray.panel.startProxy': '启动代理',
