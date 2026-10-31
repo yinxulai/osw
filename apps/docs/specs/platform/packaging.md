@@ -414,13 +414,18 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 
 缓存一个命令根本不会创建的目录比不缓存更糟：`actions/cache` 在保存阶段报 `Path Validation Error`，job 白跑一趟，还占着日志让人以为缓存生效了——`typecheck` / `lint` / `test` 三个 job 的 `.turbo` 就属于这种情况，因此显式关掉。另一点是收益只出现在第二次运行（首次要写盘，约 15 s），所以 key 不能高频变化，否则等于每次都在付写入成本。本地冷热对照（同机、同一份工作树）：`tsc -p packages/toolkit/tsconfig.check.json` 16.7 s → 6.9 s；`eslint .` 6.1 s → 2.5 s（`pnpm lint` 整体只快一点，守卫脚本与 turbo/pnpm 启动占了大头）。electron-builder 的 Electron 二进制缓存（Windows 的 `%LOCALAPPDATA%\electron\Cache`、macOS 的 `~/Library/Caches/electron*`，每系统约 1.3 GB）**没有**纳入本次改动：Electron 压缩包从 CDN 下载是秒级的，而 Windows 87 s / macOS 91 s 的打包耗时主要在解压与封装本身，为它占掉一个可观份额的 10 GB 缓存配额不划算（未实测，只按量级判断）。
 
-**CLI 的 npm 发布**走独立的 `.github/workflows/publish-cli.yml`，不并进 `release.yml`：npm 的 Trusted Publisher 把信任绑定到**具体的 workflow 文件名**（区分大小写、必须带扩展名），混在发行流程里会让「打 tag / 写 Release」和「发 npm」共用同一套权限，而后者只需要 `id-token: write`（换 OIDC token 并自动签发 provenance）加 `contents: read`。
+**CLI 的 npm 发布**是 `release.yml` 里的 `publish-cli` job（`needs: [prepare, publish]`），与桌面安装包同一个版本号、同一次发布。
 
-- 触发方式是 `workflow_dispatch`（带一个 `dry_run` 开关）与 `v*` tag push。发布前先 `npm view <name>@<version>` 探测，已存在就打印一行并跳过，所以 tag 与手动重跑都不会红。
-- `setup-node` 必须带 `registry-url: https://registry.npmjs.org` 与 `package-manager-cache: false`，并且要单独把 npm 升到 `>=11.5.1`（Node 22 自带 npm 10）。本 workflow 不复用 `.github/actions/setup/action.yml`——那个 composite 没有 `registry-url`，而 Trusted Publisher 的认证读写在那份 `.npmrc` 上。
-- 发布命令在 `apps/cli` 内直接跑 `npm publish --access public`，不指定 `--provenance`：OIDC 下它是自动的。仓库根的 `.npmrc` 指向 npmmirror 镜像（只读，不能发），靠 `NPM_CONFIG_REGISTRY` 环境变量覆盖——环境变量优先级高于任何 `.npmrc`。
+> 它曾经是独立的 `.github/workflows/publish-cli.yml`，靠 `push: tags: v*` 触发——那是错的。标签是本文件用 `GITHUB_TOKEN` 推的，而 GitHub 规定**由 `GITHUB_TOKEN` 造成的 push 不会触发其他 workflow**。结果那条通道一次都没跑过：`v1.3.1` 靠本地 `pnpm publish:cli` 手动发，`v1.3.2` 发完 npm 上仍停在 `1.3.1`，`gh run list --workflow=publish-cli.yml` 是空的。写进同一个 workflow 才没有这个断层。
 
-人工做第一次发布（v1）时，本地 `.npmrc` 的镜像源会让 `npm publish` 打到只读镜像上，所以根 `package.json` 提供了 `pnpm publish:cli`，它显式带上 `--registry=https://registry.npmjs.org/`。顺序是：`pnpm publish:cli` 发 v1 → 到 npmjs.com 的包设置里加 Trusted Publisher（GitHub Actions，user `yinxulai`、repo `osw`、workflow 文件名 `publish-cli.yml`）→ 之后都由 CI 发。两点容易踩：**package.json 的 `repository.url` 必须是 `git+https://github.com/yinxulai/osw.git`**（`one-switch` 是重定向后的旧名，与之不匹配会直接判定失败）；**首次配置后必须在两天内成功发布一次**，否则配置失效。
+- **job 级 `permissions` 必须独立声明**：发 npm 只要 `id-token: write`（换 OIDC token，provenance 由 npm 自动签发，不需要 `--provenance`）加 `contents: read`，而 workflow 级是 `contents: write`（要打 tag）。job 级 permissions 会整体覆盖 workflow 级，正好把「能写仓库」和「能发 npm」隔离在两个 job 里。
+- **npm 的 Trusted Publisher 绑的仍是 workflow 文件名**（区分大小写、必须带 `.yml`）：npmjs.com 上那条配置要指向 `release.yml`。已存在的 `publish-cli.yml` 连接改不了，只能删掉重建；重建后必须在两天内成功发布一次，否则失效。
+- 发布前先 `npm view <name>@<version>` 探测，已存在就打印一行并跳过，所以整条 release 重跑不会 409。
+- `setup-node` 必须带 `registry-url: https://registry.npmjs.org` 与 `package-manager-cache: false`，并且要单独把 npm 升到 `>=11.5.1`（Node 22 自带 npm 10）。这个 job 不复用 `.github/actions/setup/action.yml`——那个 composite 没有 `registry-url`，而 Trusted Publisher 的认证读写在那份 `.npmrc` 上。
+- `lint` / `typecheck` / `test` 由 `prepare` 对同一棵树跑过，这个 job 只补 `pnpm build:cli`（只构建 console + cli 两个包，不跑整个 turbo 图）。
+- 发布命令在 `apps/cli` 内直接跑 `npm publish --access public`。仓库根的 `.npmrc` 指向 npmmirror 镜像（只读，不能发），靠 `NPM_CONFIG_REGISTRY` 环境变量覆盖——环境变量优先级高于任何 `.npmrc`。带 `-` 的版本走 `--tag next`，不占 `latest`（`npx @one-switch/cli` 装到 beta 是事故）。
+
+人工做第一次发布（v1）时，本地 `.npmrc` 的镜像源会让 `npm publish` 打到只读镜像上，所以根 `package.json` 提供了 `pnpm publish:cli`，它显式带上 `--registry=https://registry.npmjs.org/`。顺序是：`pnpm publish:cli` 发 v1 → 到 npmjs.com 的包设置里加 Trusted Publisher（GitHub Actions，user `yinxulai`、repo `osw`、workflow 文件名 `release.yml`）→ 之后都由 CI 发。两点容易踩：**package.json 的 `repository.url` 必须是 `git+https://github.com/yinxulai/osw.git`**（`one-switch` 是重定向后的旧名，与之不匹配会直接判定失败）；**首次配置后必须在两天内成功发布一次**，否则配置失效。
 
 发布说明由 `apps/app/scripts/release-notes.mjs` 从提交记录生成，不手工维护（本地用 `pnpm release:notes` 预览；`release.yml` 的 publish job 不装依赖直接 `node` 跑它，因为它只 import `node:` 内建模块与 `electron-builder.config.cjs`）：
 

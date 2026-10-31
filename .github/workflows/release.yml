@@ -227,3 +227,98 @@ jobs:
           fail_on_unmatched_files: true
           overwrite_files: true
           files: artifacts/**/*
+
+  # CLI 上 npm 与桌面安装包是同一个版本号，所以它必须跟着这一版走，而不是被标签「顺带撞见」。
+  # 以前它是独立的 `.github/workflows/publish-cli.yml`、靠 `push: tags: v*` 触发，而标签是
+  # 本文件用 `GITHUB_TOKEN` 推的——GitHub 规定：用 `GITHUB_TOKEN` 造成的 push **不会**再触发
+  # 其他 workflow。于是那条通道一次都没跑过（`v1.3.2` 发布后 npm 上仍然停在 `1.3.1`，
+  # `gh run list --workflow=publish-cli.yml` 是空的）。写进同一个 workflow 就没有这个断层。
+  #
+  # 两个仍然成立的约束：
+  # ① 权限必须独立写在 job 上。发 npm 只要 `id-token: write`（换 OIDC token，provenance
+  #    由 npm 自动签发，不需要 `--provenance`）与 `contents: read`，而 workflow 级是
+  #    `contents: write`（要打 tag）。job 级 permissions 会整体覆盖 workflow 级，正好隔离。
+  # ② npm 的 Trusted Publisher 绑定的是 **workflow 文件名**，所以 npmjs.com 上的配置必须
+  #    指向 `release.yml`。已有的 `publish-cli.yml` 那条连接改不了，只能删掉重建；
+  #    新建的配置要在两天内成功发布一次，否则失效（见 packaging.md §5.8）。
+  publish-cli:
+    name: Publish CLI to npm
+    # 排在 `publish` 之后：先有 GitHub Release（可追踪的那一版），再往 npm 上架。
+    # 反过来会让 npm 上出现一个「说不清是谁」的版本。
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      # 不复用 `.github/actions/setup`：那个 composite 没有 `registry-url`，而 Trusted
+      # Publisher 的认证读写在那份 `.npmrc` 上；它还会开 pnpm 缓存，而 release 构建不该
+      # 用缓存（`package-manager-cache: false` 是 npm 官方对发布流程的要求）。
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # Trusted Publisher 要求 npm >= 11.5.1；Node 22 自带的是 npm 10，下一步会升级。
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Upgrade npm
+        run: npm install --global npm@^11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # lint / typecheck / test 已经在 `prepare` 里对同一份树跑过，这里只补它没做的
+      # 那一步：CLI 产物。`build:cli` 只构建 console 与 cli 两个包，不跑整个 turbo 图。
+      - name: Build CLI
+        run: pnpm build:cli
+
+      - name: Read package metadata
+        id: meta
+        run: |
+          node -e "
+            const manifest = require('./apps/cli/package.json')
+            console.log('name=' + manifest.name)
+            console.log('version=' + manifest.version)
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Check registry
+        id: registry
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: |
+          # 已经在 npm 上的版本不再重复发布：重跑一次 release（比如某个构建重试）不会 409。
+          if npm view "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is already on npm, skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.registry.outputs.published == 'false'
+        working-directory: apps/cli
+        env:
+          # 仓库根的 `.npmrc` 指向 npmmirror 镜像（只读，不能发布）。环境变量优先级高于
+          # 任何 `.npmrc`（包括 setup-node 写的那份 userconfig 与仓库里的 project .npmrc），
+          # 这是唯一可靠的覆盖方式。
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # 预发布版不能占 `latest`：`npx @one-switch/cli` 装到一个 beta 是事故。
+          # 正式版用默认的 `latest`。
+          case "$VERSION" in
+            *-*) TAG=next ;;
+            *)   TAG=latest ;;
+          esac
+          # `prepack`（apps/cli/scripts/prepack.mjs）会把迁移基线搬进包内的
+          # `packages/core/drizzle`，这一步由 npm 自动触发。
+          npm publish --access public --tag "$TAG"
