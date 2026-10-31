@@ -25,6 +25,7 @@ function attempt(overrides: Partial<LiveRequestAttempt> = {}): LiveRequestAttemp
     state: 'streaming',
     httpStatus: 200,
     upstreamTransport: 'http-stream',
+    upstreamRequestId: null,
     requestBytes: 0,
     requestRewriteRuleNames: [],
     upstreamBytes: 0,

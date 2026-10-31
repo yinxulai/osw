@@ -841,6 +841,16 @@ export const LiveRequestAttemptSchema = z.object({
   state: LiveRequestAttemptStateSchema,
   httpStatus: z.number().int().nullable(),
   upstreamTransport: TransportKindSchema.nullable(),
+  /**
+   * 上游为这次尝试分配的请求标识；还没拿到响应头、或上游压根不回这个头时为 `null`。
+   *
+   * 它与 `httpStatus` 是同一刻知道的两件事，因此一起由观察者写入。只取**响应头**里的那一个：
+   * 有些上游只把它放在响应体里，那要等这次尝试收尾才读得出来，而收尾时它已经随尝试行落库了。
+   *
+   * 界面优先展示它而不是本地 `req_` 那个标识——本地 id 只在本进程内有意义，
+   * 拿去找上游时对方只认自己发的那个。
+   */
+  upstreamRequestId: z.string().nullable(),
   /** 发往上游的请求体字节数。 */
   requestBytes: z.number().int().nonnegative(),
   /**

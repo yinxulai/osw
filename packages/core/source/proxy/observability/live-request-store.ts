@@ -273,6 +273,8 @@ export class LiveRequestStore {
           state: 'connecting',
           httpStatus: null,
           upstreamTransport: null,
+          // 上游请求标识要等响应头回来才知道，与状态、形态同一刻写入。
+          upstreamRequestId: null,
           // 真实字节数要等请求修改器跑完，由执行器随状态一起补齐；命中的修改器名字也一起补。
           requestBytes: 0,
           requestRewriteRuleNames: [],

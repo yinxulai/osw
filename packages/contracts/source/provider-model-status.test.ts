@@ -38,6 +38,7 @@ function attempt(providerModelId: string, state: LiveRequestAttemptState): LiveR
     state,
     httpStatus: null,
     upstreamTransport: null,
+    upstreamRequestId: null,
     requestBytes: 0,
     requestRewriteRuleNames: [],
     upstreamBytes: 0,

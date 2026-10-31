@@ -173,7 +173,12 @@ async function executeRelay(prepared: PreparedAttempt): Promise<AttemptExecution
         const deliverable = delivery.decision.kind === 'deliver'
         if (!deliverable) sink.discard()
         upstreamRequestId = extractUpstreamRequestId(head.headers)
-        liveAttempt?.patch({ httpStatus: statusCode, upstreamTransport, state: deliverable ? 'streaming' : 'failed' })
+        liveAttempt?.patch({
+          httpStatus: statusCode,
+          upstreamTransport,
+          upstreamRequestId,
+          state: deliverable ? 'streaming' : 'failed',
+        })
         if (deliverable) live?.setPhase('awaiting-first-byte')
         live?.pushEvent('upstream.head', disposition === 'success' ? 'success' : 'warn', {
           attempt: attemptIndex + 1,
