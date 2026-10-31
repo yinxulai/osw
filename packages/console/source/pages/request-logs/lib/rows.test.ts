@@ -128,4 +128,30 @@ describe('buildRequestLogRows', () => {
 
     expect(rows).toEqual([])
   })
+
+  it('honours a caller that wants to hold a settled row a bit longer', () => {
+    // 落定后的保留窗口（见 `live-hold.ts`）：库里的行已经说结束了，但调用方还想让实时形态再留一会儿
+    // ——那把五格尺子读的是「走到了哪一步」，而这句话恰恰要等它跑完才有人细看。
+    const rows = buildRequestLogRows({
+      logs: [log({ status: 'success' })],
+      liveRequests: [live({ status: 'success', phase: 'settled', endedAt: 2_000 })],
+      injectLive: false,
+      keepLive: () => true,
+    })
+
+    expect(rows[0]?.kind).toBe('execution')
+  })
+
+  it('still refuses to inject a settled request that has no row on this page', () => {
+    // 保留窗口只影响「库里这一行换成谁」，不影响补入：落定过的请求马上就有自己的记录，
+    // 先插到最前面再挪到它该在的位置，等于让它跳两次。
+    const rows = buildRequestLogRows({
+      logs: [],
+      liveRequests: [live({ id: 'req_done', status: 'success', phase: 'settled', endedAt: 2_000 })],
+      injectLive: true,
+      keepLive: () => true,
+    })
+
+    expect(rows).toEqual([])
+  })
 })

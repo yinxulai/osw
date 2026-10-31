@@ -1,4 +1,4 @@
-import type { LiveRequest, RequestLogEntry } from '@common/schemas'
+import type { LiveRequest, RequestLogEntry, RequestStatus } from '@common/schemas'
 import { isRequestExecuting } from './execution'
 
 /**
@@ -23,6 +23,14 @@ interface BuildRequestLogRowsInput {
   liveRequests: LiveRequest[]
   /** 是否允许补入「台账里有、这一页却没有」的请求；筛选与翻页会把它关掉。 */
   injectLive: boolean
+  /**
+   * 这一行此刻还该不该用实时形态。
+   *
+   * 不传时退回 `isRequestExecuting`，也就是「还在跑才用实时形态」。传进来的是
+   * {@link isLiveRowAlive} 时，请求落定之后还会多留一个窗口（见 `live-hold.ts`）：
+   * 那把五格尺子读的是「走到了哪一步」，而这句话恰恰要等它跑完才有人细看。
+   */
+  keepLive?: (live: LiveRequest | undefined, logStatus: RequestStatus | undefined) => boolean
 }
 
 /**
@@ -40,15 +48,18 @@ interface BuildRequestLogRowsInput {
  * 补进去的行会绕过它们（比如按「失败」筛选却冒出几条进行中的请求）。
  */
 export function buildRequestLogRows(input: BuildRequestLogRowsInput): RequestLogsRow[] {
+  const keepLive = input.keepLive ?? isRequestExecuting
   const liveById = new Map(input.liveRequests.map(request => [request.id, request]))
   const rows = input.logs.map((log): RequestLogsRow => {
     const live = liveById.get(log.id)
-    if (isRequestExecuting(live, log.status)) return { kind: 'execution', live }
+    if (live !== undefined && keepLive(live, log.status)) return { kind: 'execution', live }
     return { kind: 'log', log }
   })
 
   if (!input.injectLive) return rows
   const known = new Set(input.logs.map(log => log.id))
+  // 补入这一支**不走** `keepLive`：补的是「库里还没有它」的请求，而落定过的请求马上就会有
+  // 自己的记录，此时先插到最前面、等记录到了再挪到它该在的位置，等于让它跳两次。
   const injected = input.liveRequests
     .filter(request => request.status === 'pending' && !known.has(request.id))
     .map((request): RequestLogsRow => ({ kind: 'execution', live: request }))

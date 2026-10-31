@@ -6,8 +6,8 @@ import { useLiveRequests } from '@/data/live-requests'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
-import { isRequestExecuting } from './lib/execution'
 import { buildRequestLogRows, type RequestLogsRow } from './lib/rows'
+import { useLiveRowHold } from './hooks/use-live-row-hold'
 import { useRequestLogsUiStore } from './store'
 
 export interface RequestLogFilter { providerId: string; providerModelId: string; logicalModelId: string; clientProtocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
@@ -37,10 +37,20 @@ export function useRequestLogsService() {
   const liveById = useMemo(() => new Map(liveRequests.map(request => [request.id, request])), [liveRequests])
   const statusById = useMemo(() => new Map(logs.map(log => [log.id, log.status])), [logs])
   const filterApplied = Object.values(filter).some(value => value !== 'all' && value !== null)
-  /** 被展开的那一条还在不在跑；在跑就不去读落库的详情（见 `useRequestLogDetailQuery`）。 */
+  /**
+   * 这一行此刻还该不该用实时形态——含「落定之后再多留十秒」。
+   *
+   * 判定规则在 `lib/live-hold.ts`：还在跑、或者刚跑完但还在窗口内、或者用户正展开着它。
+   * 展开着就一直留着：用户盯着这把尺子看，把内容换掉等于从他手里抢走。
+   */
+  const keepLive = useLiveRowHold(liveRequests, expandedId)
+  /** 被展开的那一条还用不用实时视图；用就不去读落库的详情（见 `useRequestLogDetailQuery`）。 */
   const expandedExecuting = expandedId === null
     ? false
-    : isRequestExecuting(liveById.get(expandedId), statusById.get(expandedId))
+    : (() => {
+      const live = liveById.get(expandedId)
+      return live !== undefined && keepLive(live, statusById.get(expandedId))
+    })()
   const detailQuery = useRequestLogDetailQuery(expandedId, !expandedExecuting)
   /**
    * 合并后的行。
@@ -52,7 +62,8 @@ export function useRequestLogsService() {
     logs,
     liveRequests,
     injectLive: page === 1 && !filterApplied,
-  }), [logs, liveRequests, page, filterApplied])
+    keepLive,
+  }), [logs, liveRequests, page, filterApplied, keepLive])
   const providers = useProviders()
   const logicalModels = useLogicalModels()
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })

@@ -138,11 +138,21 @@ describe('行的合成', () => {
 
   it('已经落定的行换回落库那一份（台账里的残影不能盖住最终事实）', async () => {
     list.mockResolvedValue(ok({ logs: [logEntry({ id: 'log_1', status: 'success' })], total: 1 }))
-    live.requests = [liveRequest({ id: 'log_1', status: 'success' })]
+    // `startedAt`/`endedAt` 都停在远古：甫一定保留窗口早就过去了。
+    live.requests = [liveRequest({ id: 'log_1', status: 'success', phase: 'settled', endedAt: 2 })]
     const { result } = mount()
 
     await waitFor(() => expect(result.current.rows).toHaveLength(1))
     expect(result.current.rows[0].kind).toBe('log')
+  })
+
+  it('刚落定的行先留着实时形态（那把五格尺子要等它跑完才有人细看）', async () => {
+    list.mockResolvedValue(ok({ logs: [logEntry({ id: 'log_1', status: 'failed' })], total: 1 }))
+    live.requests = [liveRequest({ id: 'log_1', status: 'failed', phase: 'settled', endedAt: Date.now() })]
+    const { result } = mount()
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(1))
+    expect(result.current.rows[0].kind).toBe('execution')
   })
 
   it('筛过之后不再补入台账（按「失败」筛选却冒出进行中的请求是绕过筛选）', async () => {
