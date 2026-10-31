@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import { useReactFlow, type Connection } from '@xyflow/react'
 import { routerApi } from '@/api/router'
 import { unwrap } from '@/api/unwrap'
-import { useToast } from '@/components/ui/toast'
 import { useLogicalModels } from '@/data/logical-models'
 import { useTranslation } from '@/i18n/provider'
 import type { LogicalModel } from '@common/schemas'
 import {
-  ROUTER_POLICY_PRESETS,
   createDefaultPolicyGraph,
   createNodeByKind,
-  isSameGraph,
   withFixedNodeCopy,
   type RouterPolicyPreset,
   type RouterPolicyPresetId,
@@ -18,13 +15,13 @@ import {
 import type { AppendableKind, NodePosition, NoteNodeSize, WorkflowGraph, WorkflowNodeModel, WorkflowRunResult } from '@common/router/types'
 import type { VersionDraft } from './components/save-version-dialog'
 import { resolveInputHints, supportsFieldHints } from './field-hints'
-import { buildFlowEdges, buildFlowNodes, toCanvasGraph, type FlowNodeCache, type WorkflowFlowEdge } from './flow-projection'
+import { buildFlowEdges, buildFlowNodes, type FlowNodeCache, type WorkflowFlowEdge } from './flow-projection'
 import { appendNode, cloneNode, connectEdge, insertNode, removeEdges, removeNode, resolveInsertAnchor, resolveInsertPosition } from './graph-ops'
 import type { NodeInsertRequest, RouteFlowNode } from './node-data'
 import { displayWorkflowNode, isProtectedNode, localizeNewNode } from './node-meta'
 import { buildRunStatusByNode, groupNodeOutputs, type NodeOutputGroup } from './node-output'
-import { policyPresetTextKeys } from './policy-preset-text'
-import { hasSavedVersion, nextVersionNumber, toRouterGraphVersion, toRouterGraphVersions, type RouteVersion } from './route-versions'
+import { useGraphVersioning } from './use-graph-versioning'
+import type { RouteVersion } from './route-versions'
 import { initialPayloadText, parseRunPayload, payloadRowsFor } from './run-payload'
 
 /**
@@ -105,16 +102,10 @@ export interface WorkflowStudioState {
 /** 这些元素自身消费删除键，画布的键盘删除需要跳过。 */
 const EDITABLE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
-/** 画布内容没有来源版本（内建默认策略、套用预设）时，保存弹窗的输入初值。 */
-const EMPTY_VERSION_DRAFT: VersionDraft = { name: '', description: '' }
-
-/** 内建默认策略的 id：一版都没保存过时，代理跑的就是它，画布铺的也是这张图。 */
-const DEFAULT_POLICY_PRESET_ID = ROUTER_POLICY_PRESETS.find(preset => preset.isDefault)?.id
 const WORKFLOW_FIT_VIEW_OPTIONS = { padding: 0.04, minZoom: 0.66, maxZoom: 1 }
 
 export function useWorkflowStudio(): WorkflowStudioState {
   const flow = useReactFlow<RouteFlowNode, WorkflowFlowEdge>()
-  const toast = useToast()
   const t = useTranslation()
   const logicalModels = useLogicalModels()
   /**
@@ -167,80 +158,18 @@ export function useWorkflowStudio(): WorkflowStudioState {
   const [payloadText, setPayloadText] = useState(initialPayloadText)
   const [payloadError, setPayloadError] = useState('')
   const [runResult, setRunResult] = useState<WorkflowRunResult | null>(null)
-  const [versions, setVersions] = useState<RouteVersion[]>([])
-  /**
-   * 服务端当前生效的那张图 —— 「有没有可保存的改动」以它为基线。
-   *
-   * `null` 表示画布上这份内容不对应任何已保存版本（一版都没存过时的内建默认策略、或刚套用的预设），
-   * 此时它本身就等于一个「有改动」的状态。
-   * 载入完成后才允许保存，避免首屏闪一下可点。
-   */
-  const [activeGraph, setActiveGraph] = useState<WorkflowGraph | null>(null)
-  const [graphLoaded, setGraphLoaded] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
-  /**
-   * 保存弹窗的输入初值 —— 「画布上这份内容改自哪一版」的名字与说明。
-   *
-   * 只跟着画布的来源走：首屏载入是当前生效的那一版，载入历史版本就是载入的那一版，
-   * 套用预设则清空（预设不是从任何一版改来的）。
-   */
-  const [versionDraftDefaults, setVersionDraftDefaults] = useState<VersionDraft>(EMPTY_VERSION_DRAFT)
 
-  /**
-   * 预设自带的名字与说明，作为保存弹窗的初值。
-   *
-   * 预设不是从任何一版改来的，沿用上一版的注记只会误导；但「名字留空」同样不好用：
-   * 套用「UA 分流」改完直接保存时，本来就白拿一个说得清的名字与说明。
-   */
-  const presetDraftDefaults = useCallback((presetId: string | undefined): VersionDraft => {
-    const textKeys = presetId ? policyPresetTextKeys(presetId) : undefined
-    return textKeys
-      ? { name: t(textKeys.name), description: t(textKeys.description) }
-      : EMPTY_VERSION_DRAFT
-  }, [t])
+  /** 整图替换：铺到画布的同时清掉选中态（首屏载入 / 回滚 / 套预设统一经它）。 */
+  const loadGraph = useCallback((next: WorkflowGraph) => {
+    setGraph(next)
+    setSelectedNodeId(null)
+  }, [])
 
-  /**
-   * 首屏从服务端拉一次「当前生效的图」与版本列表。
-   *
-   * 图只有服务端一份：画布打开时看到的，就是代理此刻正在执行的那张；
-   * 一版都没保存过时它给的是内建默认策略（版本号 `UNSAVED_ROUTER_GRAPH_VERSION`），
-   * 画布因此默认落在「逻辑模型命中」这条规则上，而不是一张空白图。
-   */
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const [snapshot, summaries] = await Promise.all([
-          unwrap(routerApi.getGraph()),
-          unwrap(routerApi.getGraphVersions()),
-        ])
-        if (cancelled) return
-        const canvasGraph = toCanvasGraph(snapshot.graph)
-        setGraph(canvasGraph)
-        // 内建默认策略（版本号 0）不是已保存版本：基线留空，画布内容一律算未保存。
-        setActiveGraph(hasSavedVersion(snapshot.version) ? canvasGraph : null)
-        const loadedVersions = toRouterGraphVersions(summaries)
-        setVersions(loadedVersions)
-        const baseline = loadedVersions[0]
-        // 画布铺的就是最新保存的那一版；一版都没保存过时铺的是内建默认策略，
-        // 初值就跟着这张默认策略走 —— 于是打开应用直接保存，拿到的是有名字的「逻辑模型命中」这一版。
-        setVersionDraftDefaults(
-          hasSavedVersion(snapshot.version) && baseline
-            ? { name: baseline.name, description: baseline.description }
-            : presetDraftDefaults(DEFAULT_POLICY_PRESET_ID),
-        )
-      } catch (error) {
-        if (cancelled) return
-        toast.error(error instanceof Error ? error.message : t('router.error.loadGraph'))
-      } finally {
-        if (!cancelled) setGraphLoaded(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [presetDraftDefaults, toast, t])
+  const clearRunResult = useCallback(() => setRunResult(null), [])
+
+  // 版本生命周期（载入 / 保存 / 回滚 / 套策略）拆到 `useGraphVersioning`——与规则模式同一套结构。
+  // 它只通过 `loadGraph` / `clearRunResult` 两个回调回写编辑核心，自身状态不参与画布投影。
+  const versioning = useGraphVersioning({ graph, graphRef, runtimeLogicalModels, loadGraph, clearRunResult })
 
   const payloadRows = useMemo(() => payloadRowsFor(payloadText), [payloadText])
 
@@ -520,7 +449,7 @@ export function useWorkflowStudio(): WorkflowStudioState {
     return resolveInputHints(t, graph, selectedNode.id).fields
   }, [graph, selectedNode, t])
 
-  // ---- 运行与保存 ----------------------------------------------------------
+  // ---- 运行 ----------------------------------------------------------------
 
   const runLocalTest = useCallback(async () => {
     try {
@@ -533,104 +462,16 @@ export function useWorkflowStudio(): WorkflowStudioState {
     }
   }, [graph, runtimeLogicalModels, payloadText, t])
 
-  /**
-   * 保存 = 发布一个新版本。
-   * 服务端把这一版落库并让它立刻对代理生效（没保存过时代理跑的是内建默认策略）；
-   * 内容与最新版本一致时不会重复生成，避免连点保存堆出一串重复版本。
-   *
-   * 名字与说明是这一次保存的注记，只在真的生成新版本时才会落库（内容没变时一并丢弃）。
-   * 出错时故意不关弹窗：用户刚敲进去的东西不能因为一次网络失败就没地方找回来。
-   */
-  const saveWorkflow = useCallback(async (draft: VersionDraft) => {
-    const graphToSave = graphRef.current
-    setSaving(true)
-    try {
-      const result = await unwrap(routerApi.saveGraph(graphToSave, draft.name, draft.description))
-      // 存下去的这一版立刻对代理生效，它同时成为「有无改动」的新基线。
-      setActiveGraph(graphToSave)
-      setSaveDialogOpen(false)
-      // 画布的来源换成了刚存的这一版，下次打开弹窗要带出来的就是它。
-      const savedVersion = toRouterGraphVersion(result)
-      setVersionDraftDefaults({ name: savedVersion.name, description: savedVersion.description })
-      if (!result.created) {
-        toast.info(t('router.toast.identicalToLatest', { version: result.version }))
-        return
-      }
-      setVersions(current => [savedVersion, ...current])
-      toast.success(t('router.toast.versionSaved', { version: result.version }))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('router.error.saveFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }, [toast, t])
-
-  /**
-   * 把历史某一版载入画布。
-   *
-   * 载入只是「拿到编辑起点」：代理仍然跑着当前生效的那一版，直到这里再点一次「保存」。
-   * 因此不会像从前那样改了本地副本就等于改了线上行为。
-   */
-  const restoreVersion = useCallback(async (version: RouteVersion) => {
-    try {
-      const snapshot = await unwrap(routerApi.getGraphVersion(version.id))
-      if (!snapshot) {
-        toast.error(t('router.error.versionMissing', { sequence: version.sequence }))
-        return
-      }
-      setGraph(toCanvasGraph(snapshot.graph))
-      setSelectedNodeId(null)
-      setRunResult(null)
-      // 画布换成这一版了，保存时默认接着用它的名字与说明。
-      setVersionDraftDefaults({ name: version.name, description: version.description })
-      toast.success(t('router.toast.versionLoaded', { sequence: version.sequence }))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('router.error.restoreFailed'))
-    }
-  }, [toast, t])
-
-  /**
-   * 套用内置策略：整张画布换成预设内容。
-   * 预设里没有用户的改动，所以不需要额外确认，但会清掉选中态与上次运行结果；
-   * 保存弹窗的初值换成这张预设自己的名字与说明：用户改完直接存，就能得到
-   * 「逻辑模型命中」这样的注记，而不是一个没有名字的版本。
-   */
-  const applyPolicy = useCallback((preset: RouterPolicyPreset) => {
-    setGraph(preset.createGraph(runtimeLogicalModels))
-    setSelectedNodeId(null)
-    setRunResult(null)
-    setVersionDraftDefaults(presetDraftDefaults(preset.id))
-    const textKeys = policyPresetTextKeys(preset.id)
-    toast.success(t('router.toast.policyApplied', { name: textKeys ? t(textKeys.name) : preset.id }))
-  }, [presetDraftDefaults, runtimeLogicalModels, toast, t])
-
-  /** 当前画布与哪个预设一致（不一致时为 null）。 */
-  const activePolicyId = useMemo(
-    () => ROUTER_POLICY_PRESETS.find(preset => isSameGraph(preset.createGraph(runtimeLogicalModels), graph))?.id ?? null,
-    [graph, runtimeLogicalModels],
-  )
-
-  /**
-   * 画布相对「当前生效的那一版」有改动才允许保存。
-   *
-   * 内容一致时后端本来就不会生成新版本，但按钮常亮会让人以为随时有东西要存；
-   * 这里把「有没有可保存的改动」直接做成可用状态，就是保存按钮的语义本身。
-   */
-  const canSaveWorkflow = graphLoaded && !saving && (activeGraph === null || !isSameGraph(activeGraph, graph))
-
-  // 它也是保存弹窗初值所属的那一版：两者都以「最新保存的一版」为准（见 `nextVersionNumber`）。
-  const nextVersion = nextVersionNumber(versions)
-
   const draggable = dragEnabled && dockMode === 'select'
 
   return {
-    activePolicyId,
-    canSave: canSaveWorkflow,
-    versions,
-    onApplyPolicy: applyPolicy,
-    onRestoreVersion: restoreVersion,
+    activePolicyId: versioning.activePolicyId,
+    canSave: versioning.canSave,
+    versions: versioning.versions,
+    onApplyPolicy: versioning.applyPolicy,
+    onRestoreVersion: versioning.restoreVersion,
     onOpenRun: () => setTestDrawerOpen(true),
-    onOpenSave: () => setSaveDialogOpen(true),
+    onOpenSave: () => versioning.setSaveDialogOpen(true),
 
     canvasRef,
     flowNodes,
@@ -673,13 +514,13 @@ export function useWorkflowStudio(): WorkflowStudioState {
     nodeOutputGroups,
     onRun: runLocalTest,
 
-    saveOpen: saveDialogOpen,
+    saveOpen: versioning.saveDialogOpen,
     saveDescription: t('router.saveDialog.description'),
-    nextVersion,
-    saveInitialName: versionDraftDefaults.name,
-    saveInitialDescription: versionDraftDefaults.description,
-    saving,
-    onSaveOpenChange: setSaveDialogOpen,
-    onSaveConfirm: draft => void saveWorkflow(draft),
+    nextVersion: versioning.nextVersion,
+    saveInitialName: versioning.versionDraftDefaults.name,
+    saveInitialDescription: versioning.versionDraftDefaults.description,
+    saving: versioning.saving,
+    onSaveOpenChange: versioning.setSaveDialogOpen,
+    onSaveConfirm: draft => void versioning.saveWorkflow(draft),
   }
 }
