@@ -52,6 +52,10 @@ export function useRequestLogDetailQuery(id: string | null, enabled = true) {
     queryKey: ['request-log-detail', id],
     queryFn: () => fetchDetail(id!),
     enabled: enabled && Boolean(id),
+    // `enabled` 会随「这一行还是不是实时形态」翻转：请求落定那一刻它从 `false` 变 `true`，
+    // 而缓存里此时往往还是空的。留着上一份（这里是「没有」）会让展开区先塌成加载态再
+    // 重新长出来——读起来就是「详情被关掉又开了一次」。有值就沿用，没有才进 `isPending`。
+    placeholderData: (previous) => previous,
     staleTime: 1_000,
     refetchInterval: query => query.state.data?.status === 'pending' ? 1_500 : false,
   })

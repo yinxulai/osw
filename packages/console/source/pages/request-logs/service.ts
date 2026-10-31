@@ -38,7 +38,7 @@ export function useRequestLogsService() {
   const statusById = useMemo(() => new Map(logs.map(log => [log.id, log.status])), [logs])
   const filterApplied = Object.values(filter).some(value => value !== 'all' && value !== null)
   /**
-   * 这一行此刻还该不该用实时形态——含「落定之后再多留十秒」。
+   * 这一行此刻还该不该用实时形态——含「落定之后再多留两秒」。
    *
    * 判定规则在 `lib/live-hold.ts`：还在跑、或者刚跑完但还在窗口内、或者用户正展开着它。
    * 展开着就一直留着：用户盯着这把尺子看，把内容换掉等于从他手里抢走。

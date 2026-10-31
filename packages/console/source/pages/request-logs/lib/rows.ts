@@ -58,10 +58,15 @@ export function buildRequestLogRows(input: BuildRequestLogRowsInput): RequestLog
 
   if (!input.injectLive) return rows
   const known = new Set(input.logs.map(log => log.id))
-  // 补入这一支**不走** `keepLive`：补的是「库里还没有它」的请求，而落定过的请求马上就会有
-  // 自己的记录，此时先插到最前面、等记录到了再挪到它该在的位置，等于让它跳两次。
+  // 补入这一支同样走 `keepLive`，只是把库里的状态当作「不知道」（`undefined`）——这些请求
+  // **恰恰**没有落库记录，谈不上「库里说它结束了」。
+  //
+  // 早先这里写死 `status === 'pending'`，理由是「落定过的请求马上就会有自己的一份记录」。
+  // 那前提只在日志采集开着、且那一次写入顺利时成立：采集关掉或写入失败时库里永远不会有
+  // 它，于是请求一落定整行就消失——连带用户正展开的详情一起。展开是用户主动说出来的意图，
+  // 不该由背后有没有落库来否决；2s 的保留窗口同理（见 `live-hold.ts`）。
   const injected = input.liveRequests
-    .filter(request => request.status === 'pending' && !known.has(request.id))
+    .filter(request => !known.has(request.id) && keepLive(request, undefined))
     .map((request): RequestLogsRow => ({ kind: 'execution', live: request }))
   return [...injected, ...rows]
 }

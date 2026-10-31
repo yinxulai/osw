@@ -118,8 +118,8 @@ describe('buildRequestLogRows', () => {
     expect(rows).toHaveLength(1)
   })
 
-  it('keeps the settled ledger entries out of the injected batch', () => {
-    // 台账里会留一段时间的已落定记录（60s），它们已经被库里的行代表了，不能再补一遍。
+  it('keeps the long-settled ledger entries out of the injected batch', () => {
+    // 台账里会留一段时间的已落定记录（60s），保留窗口之外的它们已经被库里的行代表了，不能再补一遍。
     const rows = buildRequestLogRows({
       logs: [],
       liveRequests: [live({ id: 'req_done', status: 'failed', phase: 'settled', endedAt: 2_000 })],
@@ -142,14 +142,29 @@ describe('buildRequestLogRows', () => {
     expect(rows[0]?.kind).toBe('execution')
   })
 
-  it('still refuses to inject a settled request that has no row on this page', () => {
-    // 保留窗口只影响「库里这一行换成谁」，不影响补入：落定过的请求马上就有自己的记录，
-    // 先插到最前面再挪到它该在的位置，等于让它跳两次。
+  it('keeps injecting a request that the caller still wants to hold', () => {
+    // 库里根本没有它（日志采集关掉、写入失败、或轮询还没回来），而调用方说「还该用实时形态」
+    // ——通常是「用户正展开着，别去动他手里的东西」（见 `live-hold.ts`）。
+    // 这时补入是**唯一**的显示途径：把它挡在门外，请求一落定整行就消失，
+    // 连带用户正展开的详情一起。
     const rows = buildRequestLogRows({
       logs: [],
       liveRequests: [live({ id: 'req_done', status: 'success', phase: 'settled', endedAt: 2_000 })],
       injectLive: true,
       keepLive: () => true,
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.kind).toBe('execution')
+  })
+
+  it('drops a settled request it can no longer show anywhere', () => {
+    // 落定过、库里的行没来、调用方也不再留着它：没有可显示的一边，整行消失。
+    const rows = buildRequestLogRows({
+      logs: [],
+      liveRequests: [live({ id: 'req_done', status: 'success', phase: 'settled', endedAt: 2_000 })],
+      injectLive: true,
+      keepLive: () => false,
     })
 
     expect(rows).toEqual([])
