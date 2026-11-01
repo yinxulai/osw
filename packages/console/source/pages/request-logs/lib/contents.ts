@@ -22,6 +22,13 @@ export interface FactItem {
   value: string
   /** 上游请求 ID、URL 这类只在回头查库时才看的，默认收进「更多事实」。 */
   advanced?: boolean
+  /**
+   * 占满整行。
+   *
+   * URL 这类值天生很长：挤在两列里只能折成两行小字，还把它旁边那一项也顶得歪歪扭扭，
+   * 不如自己独占一行、把宽度用满。
+   */
+  wide?: boolean
 }
 
 /** 时间戳是事实本身，展示时才变成可读时间；格式化跟随界面语言。 */
@@ -60,7 +67,7 @@ export function factsOf(t: AppTranslator, locale: string, attempt: RequestLogEnt
     ...(errorCode ? [{ label: t('requestLogs.contents.fact.errorCode'), value: errorCode, advanced: true }] : []),
     ...(errorMessage ? [{ label: t('requestLogs.contents.fact.errorMessage'), value: errorMessage, advanced: true }] : []),
     { label: t('requestLogs.contents.fact.upstreamRequestId'), value: attempt.upstreamRequestId ?? t('common.state.none'), advanced: true },
-    { label: t('requestLogs.contents.fact.upstreamUrl'), value: attempt.url, advanced: true },
+    { label: t('requestLogs.contents.fact.upstreamUrl'), value: attempt.url, advanced: true, wide: true },
     { label: t('requestLogs.contents.fact.createdTime'), value: formatCreatedTime(locale, attempt.createdTime), advanced: true },
   ]
 }

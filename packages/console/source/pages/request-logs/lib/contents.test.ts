@@ -129,6 +129,13 @@ describe('attempt facts', () => {
     expect(values).not.toContain('rule_2')
   })
 
+  it('gives the upstream URL a row of its own, because a URL is always long', () => {
+    const facts = factsOf(t, 'en', attemptOf())
+
+    // 挤在两列里只能折成两行小字，连带把旁边那一项也顶歪。
+    expect(facts.filter(fact => fact.wide).map(fact => fact.label)).toEqual([t('requestLogs.contents.fact.upstreamUrl')])
+  })
+
   it('drops an error code that only restates the HTTP status', () => {
     const attempt = attemptOf({ httpStatus: 503, errorCode: 'Status_503', errorMessage: 'provider unavailable' })
     const advanced = factLabels(attempt, true)

@@ -41,7 +41,7 @@ export function AttemptFacts(props: AttemptFactsProps) {
       </div>
       <dl className="grid gap-x-4 gap-y-1.5 px-3 py-3 md:grid-cols-2">
         {visible.map(fact => (
-          <div key={fact.label} className="flex min-w-0 items-baseline gap-2 system-2xs-regular">
+          <div key={fact.label} className={cn('flex min-w-0 items-baseline gap-2 system-2xs-regular', fact.wide && 'md:col-span-2')}>
             <dt className="shrink-0 text-text-tertiary">{fact.label}</dt>
             <dd className="min-w-0 wrap-break-word font-mono text-text-secondary">{fact.value}</dd>
           </div>

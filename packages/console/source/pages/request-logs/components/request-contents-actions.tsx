@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { Check, ChevronDown, Code, Copy, Download, LoaderCircle, Terminal } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +10,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
-import { cn } from '@/lib/utils'
 import { buildCurl } from '../lib/build-curl'
 import { buildFetch } from '../lib/build-fetch'
 import type { RequestCommandInput } from '../lib/request-command'
@@ -71,32 +72,35 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
   const available = props.upstreamInput !== null
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-end gap-1.5">
-      <div className="inline-flex items-stretch">
-        {/* 主按钮就是最常用的一档，点一次就拿到命令；fetch 收在右侧菜单里。 */}
-        <MenuButton
-          onClick={() => void copyAs('curl')}
-          disabled={!available || pending}
+    <div className="flex w-full flex-wrap items-center justify-end gap-2">
+      {/* 分裂按钮交给 `ButtonGroup`：它负责把两片的接缝收掉、圆角只留在最外侧，
+          而不是像以前那样靠手写 `border-r-0` 去碰两个各自带描边的盒子。 */}
+      <ButtonGroup>
+        <Button
+          variant="outline"
+          size="sm"
+          className={copied ? 'text-text-success' : undefined}
           title={available ? t('requestLogs.contents.copyRequestTitle') : t('requestLogs.contents.copyRequestUnavailable')}
-          className="rounded-r-none border-r-0"
+          disabled={!available || pending}
+          onClick={() => void copyAs('curl')}
         >
           {pending
-            ? <LoaderCircle size={12} aria-hidden className="animate-spin" />
+            ? <LoaderCircle aria-hidden className="animate-spin" />
             : copied
-              ? <Check size={12} aria-hidden />
-              : <Copy size={12} aria-hidden />}
+              ? <Check aria-hidden />
+              : <Copy aria-hidden />}
           {copied ? t('common.action.copied') : t('requestLogs.detail.copyRequest')}
-        </MenuButton>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="icon-sm"
               aria-label={t('requestLogs.detail.copyRequestMenuTitle')}
               title={t('requestLogs.detail.copyRequestMenuTitle')}
-              className="inline-flex items-center justify-center rounded-r-md border border-module-border px-1 py-1 text-text-tertiary transition-colors hover:bg-state-base-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid"
             >
-              <ChevronDown size={12} aria-hidden />
-            </button>
+              <ChevronDown aria-hidden />
+            </Button>
           </DropdownMenuTrigger>
           {/* 动作组固定在面板底部，菜单往上开：往下会盖住正文的工具栏与搜索框。 */}
           <DropdownMenuContent align="end" side="top" sideOffset={6} className="w-56">
@@ -114,47 +118,23 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </ButtonGroup>
       {props.onDownloadReport && (
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           title={t('requestLogs.detail.downloadErrorReportTitle')}
           disabled={props.reportPending}
-          className="inline-flex w-fit items-center gap-1.5 rounded-md border border-module-border px-2 py-1 system-2xs-medium text-text-secondary transition-colors hover:bg-state-base-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid disabled:opacity-50"
           onClick={props.onDownloadReport}
         >
           {props.reportPending
-            ? <LoaderCircle size={12} aria-hidden className="animate-spin" />
-            : <Download size={12} aria-hidden />}
+            ? <LoaderCircle aria-hidden className="animate-spin" />
+            : <Download aria-hidden />}
           {t('requestLogs.detail.downloadErrorReport')}
-        </button>
+        </Button>
       )}
     </div>
   )
 }
 
-interface MenuButtonProps {
-  disabled: boolean
-  title: string
-  className?: string
-  onClick: () => void
-  children: React.ReactNode
-}
 
-/** 与标题栏其它按钮同一套尺寸与描边；只有圆角被拆成左半边，因为右边接菜单触发器。 */
-function MenuButton(props: MenuButtonProps) {
-  return (
-    <button
-      type="button"
-      title={props.title}
-      disabled={props.disabled}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border border-module-border px-2 py-1 system-2xs-medium text-text-secondary transition-colors hover:bg-state-base-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-state-accent-solid disabled:opacity-50',
-        props.className,
-      )}
-      onClick={props.onClick}
-    >
-      {props.children}
-    </button>
-  )
-}
