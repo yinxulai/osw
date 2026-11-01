@@ -241,7 +241,9 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 - preload（CJS）：`apps/app/vite.preload.config.ts`，输出 `apps/app/output/command/preload.js`；必须与主进程分成两次构建，因为 Vite 一份配置只能产出一个格式
 - 服务进程（ESM）：`apps/app/vite.server.config.ts`，输出 `apps/app/output/command/service-main.mjs`（外加按 hash 命名的共享 chunk）；它必须是**独立的一次构建**，因为主进程与服务进程的外部化边界不同：`node:sqlite` 允许进服务进程的 chunk 图，却**不得**被拉进主进程
 - 三份配置共用 `apps/app/vite.shared.ts` 里的别名、Node 内置模块外部化与 `target: node22`
-- 开发时 `pnpm dev` 由 turbo 启动各包 `dev` 任务，宿主侧的实际编排在 `apps/app/scripts/dev.mjs`：先等控制台 dev server 起来，再起三份 `vite build --watch`，等首轮构建落定后拉起 Electron，之后监听产物目录做整应用重启；渲染层热更新由 Vite HMR 提供
+- 开发时 `pnpm dev` 由 turbo 启动各包 `dev` 任务，宿主侧的实际编排在 `apps/app/scripts/dev.mjs`：先等控制台 dev server 起来，再起五份 `vite build --watch`（主进程、两个 preload、服务进程、截图补拍入口），**等每一份的首轮构建真正宣告完成**后拉起 Electron，之后监听产物目录做整应用重启；渲染层热更新由 Vite HMR 提供
+  - 就绪信号是 vite 打完一轮构建后打的 `built in NNms.` 那一行，**不是**「产物文件存在」：`output/command` 跨会话留存，上一次的 `index.js` / `service-main.mjs` 还在，用文件存在性当条件会在开跑那一瞬就成立，Electron 于是先拿旧包起来、等下首轮构建落盘再被当成「人改了代码」重启一次，用户看到的就是窗口先出现、被杀死、再出现
+  - 顺带一提，因为要读子进程 stdout，`stdio` 从 `inherit` 改成了管道转发，vite 检测不到 TTY 就不再上色
 - 生产构建由 Vite 直接产出静态产物，不再依赖开发期插件
 
 ### electron-builder

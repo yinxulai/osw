@@ -37,57 +37,21 @@ let watcher = null
 let restartTimer = null
 let shuttingDown = false
 
-const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
-
-/** 本包四份产物的就绪信号。缺一个就不用起 Electron 了。 */
-async function waitForBundles() {
-  const required = [mainBundlePath, preloadBundlePath, trayPanelPreloadBundlePath, serviceBundlePath]
-  for (let attempt = 1; attempt <= 1200; attempt += 1) {
-    if (required.every(bundle => fs.existsSync(bundle))) return
-    await sleep(100)
-  }
-  const missing = required.filter(bundle => !fs.existsSync(bundle))
-  throw new Error(`Host bundles were not produced: ${missing.join(', ')}`)
-}
-
-/** 输出目录里最新的写入时间。没有产物时返回 null。 */
-function latestWriteTime() {
-  let latest = null
-  for (const entry of fs.readdirSync(outputDirectory, { withFileTypes: true })) {
-    if (!entry.isFile()) continue
-    const { mtimeMs } = fs.statSync(path.join(outputDirectory, entry.name))
-    if (latest === null || mtimeMs > latest) latest = mtimeMs
-  }
-  return latest
-}
-
 /**
- * 等首轮构建安稳下来。
- *
- * 产物目录里可能还留着上一次会话的文件（Electron 一看就绪会立刻启动），所以除了等
- * 「文件存在」，还得等「它不再变」：两次采样之间没有新写入，才算这一轮构建写完。
+ * 首轮构建的等待上限。服务进程那一份约 1.6s，留足两个数量级的余量；
+ * 冷启动装依赖或杀毒软件实时扫描时可能慢上几十秒，超时只是报警，不是失败退出。
  */
-async function waitForFirstBuildSettle() {
-  for (let attempt = 1; attempt <= 300; attempt += 1) {
-    const before = latestWriteTime()
-    if (before === null) {
-      await sleep(200)
-      continue
-    }
-    await sleep(400)
-    if (latestWriteTime() === before) return
-  }
-}
+const FIRST_BUILD_TIMEOUT_MILLIS = 120_000
 
 /**
  * 监听产物改动并重启 Electron。
  *
- * 挂上之后的头两秒丢弃事件：preload 与服务进程的首次构建比主进程晚落盘，而监听器只能在 Electron
- * 起来之后才挂，紧贴着挂就会把它们的首次写入当成「人改了代码」，凭空重启一次。这个窗口
- * 只影响启动那一瞬，之后的改动照常触发重启。
+ * 现在只留一个很短的丢弃窗口：调用它时五份首轮构建都已经宣告完成，理论上不会再有
+ * 「自己人」的写入，但 `fs.watch` 在 Windows 上挂载瞬间仍可能把注册之前发生的事件
+ * 延迟投递过来，半秒足够吸收这点抖动，又不至于吞掉人手改代码。
  */
 function watchOutputDirectory() {
-  const ignoreEventsUntil = Date.now() + 2000
+  const ignoreEventsUntil = Date.now() + 500
   watcher = fs.watch(outputDirectory, { recursive: true }, () => {
     if (Date.now() < ignoreEventsUntil) return
     scheduleRestart()
@@ -95,21 +59,57 @@ function watchOutputDirectory() {
 }
 
 /**
- * 五个监听器：主进程、两个 preload、服务进程、截图补拍入口是五份配置、五次构建，但写入同一个目录。
- * `shell: true` 而不是自己拼 `cmd.exe /c`：这里只需要长驻子进程，
- * 不需要 `packages/toolkit/scripts/lib/run.mjs` 那套退出码与信号转发。
+ * 启动一个 vite 构建监听，并在它的**首轮构建真的跑完**时兑现。
+ *
+ * 这里不用「产物文件存在」当就绪信号：`output/command` 会跨会话留存，上一次的
+ * `index.js`、`service-main.mjs` 还在，于是「文件都在」在开跑那一瞬就成立，Electron
+ * 会先拿旧包起来，等首轮构建落盘后再被当成「人改了代码」重启一次——用户看到的就是
+ * 窗口闪一下、先出现又被杀死再出现。
+ *
+ * vite 在 `build --watch` 下每轮构建结束都会打一行 `built in NNms.`，那是真正的完成
+ * 信号，拿它当就绪条件，顺序就变成确定的：先构建完，再起窗口，一次都不重启。
+ *
+ * 代价是要自己转发子进程输出（`stdio: 'inherit'` 拿不到可读管道）。副作用是 vite
+ * 检测不到 TTY 就不再上色，日志进文件时反而干净了。
  */
-function startViteWatchers() {
-  const commands = [
-    'pnpm exec vite build --watch',
-    'pnpm exec vite build --watch --config vite.preload.config.ts',
-    'pnpm exec vite build --watch --config vite.tray-panel.config.ts',
-    'pnpm exec vite build --watch --config vite.server.config.ts',
-    'pnpm exec vite build --watch --config vite.screenshot.config.ts',
-  ]
-  for (const command of commands) {
-    const child = spawn(command, { cwd: appDirectory, stdio: 'inherit', shell: true })
+function startViteWatcher(command) {
+  return new Promise(resolve => {
+    const child = spawn(command, { cwd: appDirectory, stdio: ['ignore', 'pipe', 'pipe'], shell: true })
     viteProcesses.push(child)
+
+    let firstBuildSettled = false
+    let pending = ''
+    const settleFirstBuild = () => {
+      if (firstBuildSettled) return
+      firstBuildSettled = true
+      clearTimeout(timeout)
+      resolve()
+    }
+    const timeout = setTimeout(() => {
+      log.warn(`First build is taking unusually long (>${FIRST_BUILD_TIMEOUT_MILLIS / 1000}s): ${command}`)
+      settleFirstBuild()
+    }, FIRST_BUILD_TIMEOUT_MILLIS)
+
+    // 按行扫描而不是整块匹配：`built in` 可能被 chunk 边界切成两半。
+    for (const stream of [child.stdout, child.stderr]) {
+      stream.setEncoding('utf8')
+      stream.on('data', chunk => {
+        process.stdout.write(chunk)
+        if (firstBuildSettled) return
+        pending += chunk
+        let newlineIndex = pending.indexOf('\n')
+        while (newlineIndex !== -1) {
+          const line = pending.slice(0, newlineIndex)
+          pending = pending.slice(newlineIndex + 1)
+          if (line.includes('built in ')) {
+            settleFirstBuild()
+            return
+          }
+          newlineIndex = pending.indexOf('\n')
+        }
+      })
+    }
+
     child.on('exit', code => {
       viteProcesses.splice(viteProcesses.indexOf(child), 1)
       if (!shuttingDown) {
@@ -117,7 +117,31 @@ function startViteWatchers() {
         shutdown(1)
       }
     })
-  }
+  })
+}
+
+/**
+ * 五个监听器：主进程、两个 preload、服务进程、截图补拍入口是五份配置、五次构建，但写入同一个目录。
+ * `shell: true` 而不是自己拼 `cmd.exe /c`：这里只需要长驻子进程，
+ * 不需要 `packages/toolkit/scripts/lib/run.mjs` 那套退出码与信号转发。
+ *
+ * 返回的 promise 在**全部五份**首轮构建完成后兑现：Electron 缺任何一份都起不来，
+ * 少等一份只是把闪一下推迟到那一份落盘的时候。
+ */
+async function startViteWatchers() {
+  const commands = [
+    'pnpm exec vite build --watch',
+    'pnpm exec vite build --watch --config vite.preload.config.ts',
+    'pnpm exec vite build --watch --config vite.tray-panel.config.ts',
+    'pnpm exec vite build --watch --config vite.server.config.ts',
+    'pnpm exec vite build --watch --config vite.screenshot.config.ts',
+  ]
+  await Promise.all(commands.map(startViteWatcher))
+  // 构建说自己成功，产物却不在，说明配置里的 outDir 或文件名漂了。宁可现在报错，
+  // 也不要让 Electron 打开一张 `did-fail-load` 的错误页。
+  const required = [mainBundlePath, preloadBundlePath, trayPanelPreloadBundlePath, serviceBundlePath]
+  const missing = required.filter(bundle => !fs.existsSync(bundle))
+  if (missing.length > 0) throw new Error(`Host bundles were not produced: ${missing.join(', ')}`)
 }
 
 function stopElectron() {
@@ -174,9 +198,11 @@ async function main() {
   await waitForConsoleServer({ consoleDevUrl })
   log.info('console dev server is ready')
 
-  startViteWatchers()
-  await waitForBundles()
-  await waitForFirstBuildSettle()
+  // 顺序写死成「先等五份产物都构建完，再开窗」：反过来会先用上一次的旧包把窗口拉起来，
+  // 首轮构建落盘后再重启一次，那就是「闪一下」。
+  log.info('building host bundles ...')
+  await startViteWatchers()
+  log.info('host bundles are ready')
   startElectron()
   watchOutputDirectory()
 }
