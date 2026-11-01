@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
+import type { AttemptContent, RequestContent, RequestLogBodies, RequestLogEntryAttempt } from '@common/schemas'
 import { createAppTranslator } from '@common/i18n/catalogs'
 import { PROTOCOL_LABEL } from './format'
-import { buildContentStages, factsOf, formatCreatedTime, protocolLabel, type ContentStageInput } from './contents'
+import { buildContentStages, factsOf, formatCreatedTime, mergeAttemptContent, mergeClientContent, protocolLabel, type ContentStageInput } from './contents'
 
 const t = createAppTranslator('en')
 
@@ -205,5 +205,63 @@ describe('content stages', () => {
     const header = stages[1]?.sections.find(section => section.id === 'upstream-request.headers')
 
     expect(header?.label).toBe(t('requestLogs.contents.section.requestHeader', { protocol: PROTOCOL_LABEL['anthropic-messages'] }))
+  })
+})
+
+/**
+ * 摘要在详情里，正文在另一份请求里，两者按行 id 对齐后才是一整条。
+ *
+ * 对齐不上只有一种含义：「正文还没取到」。因此正文列落 `null`（画骨架），
+ * 而不是把「还没取到」写成「没采到」——后者是对数据的断言，由 `captureStatus` 说。
+ */
+describe('merging summary with bodies', () => {
+  /** 默认正文与上面那份摘要同 id，即「已经取到了」。 */
+  const bodiesOf = (overrides: Partial<RequestLogBodies> = {}): RequestLogBodies => ({
+    contents: [clientContentOf()],
+    attemptContents: [attemptContentOf()],
+    ...overrides,
+  })
+
+  it('takes the body columns from the matching attempt row', () => {
+    const merged = mergeAttemptContent(attemptContentOf(), bodiesOf({
+      attemptContents: [attemptContentOf({ requestBody: '{"x":1}', responseBody: 'ok' })],
+    }))
+
+    expect(merged?.requestBody).toBe('{"x":1}')
+    expect(merged?.responseBody).toBe('ok')
+    // 摘要里的头与状态必须原样保留：去掉正文不该顺带丢掉报文身份。
+    expect(merged?.requestHeaders).toBe('{}')
+    expect(merged?.responseStatus).toBe(200)
+  })
+
+  it('matches by row id, not by attempt id or array position', () => {
+    const summary = attemptContentOf({ id: 'attempt_content_2', attemptId: 'att_2' })
+    const bodies = bodiesOf({
+      attemptContents: [
+        attemptContentOf({ id: 'attempt_content_1', requestBody: '{"wrong":true}' }),
+        attemptContentOf({ id: 'attempt_content_2', requestBody: '{"right":true}' }),
+      ],
+    })
+
+    expect(mergeAttemptContent(summary, bodies)?.requestBody).toBe('{"right":true}')
+  })
+
+  it('leaves the body columns empty while the bodies are still on the way', () => {
+    // 正文还没到 → 画骨架；不能画成一条「已确认没采到」的行。
+    expect(mergeAttemptContent(attemptContentOf(), null)).toMatchObject({ requestBody: null, responseBody: null })
+    expect(mergeAttemptContent(attemptContentOf(), bodiesOf({ attemptContents: [] }))?.requestBody).toBeNull()
+  })
+
+  it('yields nothing when there is no summary for this attempt', () => {
+    expect(mergeAttemptContent(null, bodiesOf())).toBeNull()
+  })
+
+  it('merges the single client row the same way', () => {
+    const merged = mergeClientContent(clientContentOf(), bodiesOf({
+      contents: [clientContentOf({ requestBody: '{"client":1}' })],
+    }))
+
+    expect(merged?.requestBody).toBe('{"client":1}')
+    expect(mergeClientContent(null, bodiesOf())).toBeNull()
   })
 })

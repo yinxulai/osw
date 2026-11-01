@@ -631,6 +631,7 @@ export function RequestLogDetailRow(props: RequestLogDetailRowProps) {
             attempts={log.attempts}
             requestRewriteRules={requestRewriteRules}
             clientProtocol={log.clientProtocol}
+            origin={origin}
             loading={props.detailLoading}
             error={props.detailError}
             selectedAttemptId={selectedAttemptId}

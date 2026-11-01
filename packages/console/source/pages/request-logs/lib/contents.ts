@@ -1,4 +1,4 @@
-import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
+import type { AttemptContent, AttemptContentSummary, RequestContent, RequestContentSummary, RequestLogBodies, RequestLogEntryAttempt } from '@common/schemas'
 import type { AppTranslator } from '@/i18n/provider'
 import { PROTOCOL_LABEL, distinctAttemptErrorCode, distinctAttemptErrorMessage, formatTransport } from './format'
 import { isLocalFailureBody } from './format-content'
@@ -65,9 +65,36 @@ export function factsOf(t: AppTranslator, locale: string, attempt: RequestLogEnt
   ]
 }
 
+/**
+ * 摘要 + 正文 = 渲染用的一整行。
+ *
+ * 摘要先到、正文后到，两段各自有自己的加载态；合并只在两边都有对应行时成立。
+ * 正文没到（还在取）与没采到（`bodies` 里没有这一行）在这里都落 `null`——
+ * 「没采到」这件事由 `captureStatus` 与 `pruned` 说，不由这里的 `null` 说。
+ */
+export function mergeAttemptContent(summary: AttemptContentSummary | null, bodies: RequestLogBodies | null): AttemptContent | null {
+  if (summary === null) return null
+  const body = bodies?.attemptContents.find(content => content.id === summary.id) ?? null
+  return {
+    ...summary,
+    requestBody: body?.requestBody ?? null,
+    responseBody: body?.responseBody ?? null,
+  }
+}
+
+/** 客户端视角每个请求只有一行，合并规则同上。 */
+export function mergeClientContent(summary: RequestContentSummary | null, bodies: RequestLogBodies | null): RequestContent | null {
+  if (summary === null) return null
+  const body = bodies?.contents.find(content => content.id === summary.id) ?? null
+  return {
+    ...summary,
+    requestBody: body?.requestBody ?? null,
+    responseBody: body?.responseBody ?? null,
+  }
+}
+
 /** 一个正文块：标题之外只有「有没有正文」，取值与展示都由组件决定。 */
-export interface ContentStageSection {
-  id: string
+export interface ContentStageSection {  id: string
   label: string
   value: string | null
 }

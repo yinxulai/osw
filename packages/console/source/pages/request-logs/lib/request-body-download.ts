@@ -19,6 +19,17 @@ export interface RequestBodyDownload {
   text: string
 }
 
+/**
+ * 把任意字符串压成一段可以安全放进文件名的片段。
+ *
+ * 下载的文件名由记录里的值拼出来（请求 ID、方法），而它们来自采集到的报文——
+ * 不能假设只含 ASCII 安全字符。空串退回 `fallback`，否则会出现 `error-report--att1.md` 这种半截名字。
+ */
+export function sanitizeFileSegment(value: string, fallback: string): string {
+  const safe = value.replace(UNSAFE_FILENAME_CHARS, '-').replace(/^-+|-+$/g, '')
+  return safe || fallback
+}
+
 /** 请求体按 JSON 重排；解析不了就原样返回。 */
 export function prettyRequestBody(body: string): string {
   const trimmed = body.trim()
@@ -31,7 +42,7 @@ export function prettyRequestBody(body: string): string {
 }
 
 export function requestBodyFileName(requestId: string, method: string): string {
-  const safeId = requestId.replace(UNSAFE_FILENAME_CHARS, '-').replace(/^-+|-+$/g, '') || 'request'
+  const safeId = sanitizeFileSegment(requestId, 'request')
   const safeMethod = method.replace(UNSAFE_FILENAME_CHARS, '').toUpperCase() || 'REQ'
   return `${safeMethod}-${safeId}.json`
 }
@@ -56,9 +67,13 @@ export function requestBodyDownload(input: RequestBodyDownloadInput): RequestBod
   }
 }
 
-/** 触发浏览器下载。用临时 `<a>` + object URL：不依赖服务端，也不留常驻节点。 */
-export function saveTextFile(file: RequestBodyDownload): void {
-  const url = URL.createObjectURL(new Blob([file.text], { type: 'application/json' }))
+/**
+ * 触发浏览器下载。用临时 `<a>` + object URL：不依赖服务端，也不留常驻节点。
+ *
+ * `mimeType` 只影响系统给的默认打开方式（`.md` 报告不该被当 JSON），文件内容原样落盘。
+ */
+export function saveTextFile(file: RequestBodyDownload, mimeType = 'application/json'): void {
+  const url = URL.createObjectURL(new Blob([file.text], { type: `${mimeType};charset=utf-8` }))
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = file.name

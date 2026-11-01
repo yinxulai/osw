@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
@@ -118,6 +118,8 @@ interface RenderInput {
   bodiesLoading?: boolean
   /** 取正文失败时的错误信息。 */
   bodiesError?: string
+  /** 代理监听地址；传 `null` 模拟地址未知（复制客户端请求应禁用）。 */
+  origin?: string | null
 }
 
 /**
@@ -153,6 +155,7 @@ function renderSheet(input: RenderInput = {}) {
       attempts={attempts}
       requestRewriteRules={[]}
       clientProtocol="openai-responses"
+      origin={input.origin === undefined ? 'http://127.0.0.1:9300' : input.origin}
       loading={false}
       error={null}
       selectedAttemptId={selectedAttemptId}
@@ -243,6 +246,68 @@ describe('capture status hint', () => {
 
     const chip = screen.getByText('Partial capture')
     expect(chip.closest('section')?.textContent).toContain('Response from the real channel')
+  })
+})
+
+/**
+ * 面板自己的导出入口：复制请求（客户端 / 发往供应商）与下载错误报告。
+ *
+ * 这里只固定**入口在不在、能不能点、指的是哪一份报文**，不测剪贴板与文件本身：
+ * `buildCurl` / `buildFetch` / `buildErrorReport` 各自有单测，重复断言只会让改文案时改两处。
+ */
+describe('request actions', () => {
+  beforeEach(() => {
+    useLanguageStore.setState({ preference: 'en' })
+  })
+
+  it('offers the client request as a copyable command', () => {
+    renderSheet()
+
+    const button = screen.getByRole('button', { name: 'Copy request' })
+    expect(button).toHaveProperty('disabled', false)
+    expect(screen.getByText('Copy request')).toBeTruthy()
+  })
+
+  it('keeps the client copy disabled when the proxy origin is unknown', () => {
+    // 记录的只是路径，没有代理地址就拼不出可执行 URL；禁用并说明原因，
+    // 而不是复制出一条指向 localhost 的半截命令。
+    renderSheet({ origin: null })
+
+    const button = screen.getByRole('button', { name: 'Copy request' })
+    expect(button).toHaveProperty('disabled', true)
+    // 报文在、地址不在：说的是「还原不了」，而不是「没有正文」。
+    expect(button.getAttribute('title')).toBe('The proxy address is unknown, so this request cannot be rebuilt')
+  })
+
+  it('puts the request that went to the provider in the copy menu', async () => {
+    renderSheet()
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'More ways to export this request' }), { key: 'ArrowDown' })
+
+    await waitFor(() => expect(screen.getByText('Copy request to provider')).toBeTruthy())
+  })
+
+  it('disables the provider entry when this attempt captured nothing upstream', async () => {
+    renderSheet({ attemptContents: [] })
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'More ways to export this request' }), { key: 'ArrowDown' })
+
+    await waitFor(() => expect(screen.getByText('Copy request to provider')).toBeTruthy())
+    const trigger = screen.getByText('Copy request to provider').closest('[role="menuitem"]')
+    expect(trigger?.getAttribute('data-disabled')).not.toBeNull()
+  })
+
+  it('offers the error report even on a successful attempt', () => {
+    // 成功但内容不对同样是要供应商跟进的事故；按状态决定入口有无会让标题栏高度跳动。
+    renderSheet({ attempt: { status: 'success', httpStatus: 200 } })
+
+    expect(screen.getByText('Download error report')).toBeTruthy()
+  })
+
+  it('hides the error report when no attempt is selected', () => {
+    renderSheet({ selectedAttemptId: null })
+
+    expect(screen.queryByText('Download error report')).toBeNull()
   })
 })
 
