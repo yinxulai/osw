@@ -71,7 +71,7 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
   const available = props.upstreamInput !== null
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex w-full flex-wrap items-center justify-end gap-1.5">
       <div className="inline-flex items-stretch">
         {/* 主按钮就是最常用的一档，点一次就拿到命令；fetch 收在右侧菜单里。 */}
         <MenuButton
@@ -98,7 +98,8 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
               <ChevronDown size={12} aria-hidden />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={6} className="w-56">
+          {/* 动作组固定在面板底部，菜单往上开：往下会盖住正文的工具栏与搜索框。 */}
+          <DropdownMenuContent align="end" side="top" sideOffset={6} className="w-56">
             <DropdownMenuItem disabled={!available} onSelect={() => void copyAs('curl')} className="gap-2">
               <Terminal size={14} aria-hidden />
               <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsCurl')}</span>

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import type { RequestLogEntryAttempt } from '@common/schemas'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTranslation } from '@/i18n/provider'
@@ -10,13 +9,6 @@ export interface RequestContentsHeaderProps {
   selectedAttempt: RequestLogEntryAttempt | null
   /** 这次请求总共有几次尝试，用于「第 n / m 次」。 */
   attemptCount: number
-  /**
-   * 标题栏右侧的动作组（复制请求、下载错误报告）。
-   *
-   * 由面板组装后传进来，而不是在这里现算：这些动作都要正文，而正文只有面板取得到。
-   * 标题栏只管排版，不关心动作从哪来。
-   */
-  actions: ReactNode
 }
 
 /**
@@ -49,7 +41,6 @@ export function RequestContentsHeader(props: RequestContentsHeaderProps) {
           ? `${selectedAttempt.providerName} / ${selectedAttempt.providerModelName}`
           : t('requestLogs.contents.description')}
       </SheetDescription>
-      {props.actions}
     </SheetHeader>
   )
 }

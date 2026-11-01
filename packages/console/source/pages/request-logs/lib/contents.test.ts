@@ -106,15 +106,27 @@ describe('created time', () => {
 })
 
 describe('attempt facts', () => {
-  it('keeps the first-glance conclusions in the primary list and the lookup-only ids in the advanced one', () => {
+  it('keeps the first-glance conclusions in the primary list and the lookup-only upstream ids in the advanced one', () => {
     const primary = factLabels(attemptOf(), false)
     const advanced = factLabels(attemptOf(), true)
 
     expect(primary).toContain(t('requestLogs.contents.fact.provider'))
     expect(primary).toContain(t('requestLogs.contents.fact.duration'))
-    expect(primary).not.toContain(t('requestLogs.contents.fact.attemptId'))
-    expect(advanced).toContain(t('requestLogs.contents.fact.attemptId'))
+    expect(primary).not.toContain(t('requestLogs.contents.fact.upstreamUrl'))
+    expect(advanced).toContain(t('requestLogs.contents.fact.upstreamRequestId'))
     expect(advanced).toContain(t('requestLogs.contents.fact.upstreamUrl'))
+  })
+
+  it('leaves our own local ids out of both lists', () => {
+    const facts = factsOf(t, 'en', attemptOf({ requestRewriteRuleIds: ['rule_1'], responseRewriteRuleIds: ['rule_2'] }))
+    const values = facts.map(fact => fact.value)
+
+    // 这些 id 在界面上既不能点也不能查，列出来只占位。
+    expect(values).not.toContain('att_1')
+    expect(values).not.toContain('prov_1')
+    expect(values).not.toContain('model_1')
+    expect(values).not.toContain('rule_1')
+    expect(values).not.toContain('rule_2')
   })
 
   it('drops an error code that only restates the HTTP status', () => {

@@ -18,10 +18,6 @@ const FACT = {
   provider: t('requestLogs.contents.fact.provider'),
   providerModel: t('requestLogs.contents.fact.providerModel'),
   upstreamRequestId: t('requestLogs.contents.fact.upstreamRequestId'),
-  attemptId: t('requestLogs.contents.fact.attemptId'),
-  providerId: t('requestLogs.contents.fact.providerId'),
-  providerModelId: t('requestLogs.contents.fact.providerModelId'),
-  requestRewriteRules: t('requestLogs.contents.fact.requestRewriteRules'),
   upstreamUrl: t('requestLogs.contents.fact.upstreamUrl'),
   requestId: t('requestLogs.detail.requestId'),
   generatedAt: t('requestLogs.contents.errorReport.generatedAt'),
@@ -155,14 +151,10 @@ describe('buildErrorReport', () => {
     expect(report.text).not.toContain('rule_dev_probe_header')
   })
 
-  it('事实清单里不重复写地址与各类 id 标签', () => {
+  it('事实清单里不重复写地址', () => {
     const facts = sectionOf(buildErrorReport(inputOf()).text, TITLE.facts) ?? ''
 
     expect(facts).not.toContain(FACT.upstreamUrl)
-    expect(facts).not.toContain(FACT.attemptId)
-    expect(facts).not.toContain(FACT.providerId)
-    expect(facts).not.toContain(FACT.providerModelId)
-    expect(facts).not.toContain(FACT.requestRewriteRules)
   })
 
   it('上游地址只在一个地方出现：请求段的元信息', () => {

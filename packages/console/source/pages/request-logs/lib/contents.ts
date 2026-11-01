@@ -20,7 +20,7 @@ export function protocolLabel(t: AppTranslator, protocol: string | null): string
 export interface FactItem {
   label: string
   value: string
-  /** 内部 id、URL、规则 id 这类只在深挖时才看的事实，默认收进「更多事实」。 */
+  /** 上游请求 ID、URL 这类只在回头查库时才看的，默认收进「更多事实」。 */
   advanced?: boolean
 }
 
@@ -33,9 +33,15 @@ export function formatCreatedTime(locale: string, time: number): string {
 /**
  * 尝试级事实。
  *
- * 前面几项是排障第一眼就要看的结论与性能；内部 id、URL、规则 id 是回头查库才用到的，
- * 列为「更多事实」，默认收起。错误码/错误信息也放在收起区：它们已经由顶部横幅预告过一次，
- * 这里只是为了让「复制本次尝试事实」拿到完整记录。
+ * 只列「能据此去查、去判断」的东西：排障第一眼要看的结论与性能，加上回头对账时才用到的
+ * 上游请求 ID、上游 URL 与时间。
+ *
+ * 我们自己的流水号一律不列：尝试 ID、Provider ID、上游模型 ID、命中的改写规则 ID
+ * 在界面上既不能点也不能查，只会在清单里占位。尝试序号也不列——标题里就写着「第 n / m 次」。
+ * 规则命中已经由「命中的改写规则」区块说清楚，比一串 id 有用。
+ *
+ * 错误码/错误信息放进收起区：它们已经由顶部横幅预告过一次，这里只是为了让
+ * 「复制本次尝试事实」拿到完整记录。
  *
  * 不再列「结果」：`SheetTitle` 里的结果 chip 就紧挨在上面，写两遍只是同义反复。
  */
@@ -53,14 +59,8 @@ export function factsOf(t: AppTranslator, locale: string, attempt: RequestLogEnt
     { label: t('requestLogs.contents.fact.retryable'), value: attempt.retryable ? t('common.state.yes') : t('common.state.no') },
     ...(errorCode ? [{ label: t('requestLogs.contents.fact.errorCode'), value: errorCode, advanced: true }] : []),
     ...(errorMessage ? [{ label: t('requestLogs.contents.fact.errorMessage'), value: errorMessage, advanced: true }] : []),
-    { label: t('requestLogs.contents.fact.attemptIndex'), value: String(attempt.attemptIndex + 1), advanced: true },
-    { label: t('requestLogs.contents.fact.attemptId'), value: attempt.id, advanced: true },
-    { label: t('requestLogs.contents.fact.providerId'), value: attempt.providerId, advanced: true },
-    { label: t('requestLogs.contents.fact.providerModelId'), value: attempt.providerModelId, advanced: true },
     { label: t('requestLogs.contents.fact.upstreamRequestId'), value: attempt.upstreamRequestId ?? t('common.state.none'), advanced: true },
     { label: t('requestLogs.contents.fact.upstreamUrl'), value: attempt.url, advanced: true },
-    { label: t('requestLogs.contents.fact.requestRewriteRules'), value: attempt.requestRewriteRuleIds.join(', ') || t('common.state.none'), advanced: true },
-    { label: t('requestLogs.contents.fact.responseRewriteRules'), value: attempt.responseRewriteRuleIds.join(', ') || t('common.state.none'), advanced: true },
     { label: t('requestLogs.contents.fact.createdTime'), value: formatCreatedTime(locale, attempt.createdTime), advanced: true },
   ]
 }

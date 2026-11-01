@@ -188,18 +188,21 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   return (
     <Sheet open={Boolean(props.selectedAttemptId)} onOpenChange={open => !open && props.onClose()}>
       <SheetContent side="right" className="flex h-full w-full max-w-3xl! flex-col gap-0 border-0 bg-background p-0 shadow-none" onOpenAutoFocus={event => event.preventDefault()}>
-        <RequestContentsHeader
-          selectedAttempt={selectedAttempt}
-          attemptCount={props.attempts.length}
-          actions={(
+        <RequestContentsHeader selectedAttempt={selectedAttempt} attemptCount={props.attempts.length} />
+        <div className="flex-1 overflow-hidden">{state}</div>
+        {/*
+          动作组条固定在底部：两个入口一直在同一个位置，不随正文长短上下浮动。
+          只在有尝试可选时才画——没有尝试就没有可导出、可复制的现场。
+        */}
+        {state !== null && (
+          <footer className="shrink-0 border-t border-border/50 px-4 py-2">
             <RequestContentsActions
               upstreamInput={upstreamInput}
               onDownloadReport={downloadReport === null ? null : () => void downloadReport()}
               reportPending={reportPending}
             />
-          )}
-        />
-        <div className="flex-1 overflow-hidden">{state}</div>
+          </footer>
+        )}
       </SheetContent>
     </Sheet>
   )
