@@ -43,6 +43,9 @@ export interface ReportFile {
   text: string
 }
 
+/** 官网地址。报告要离开这台机器，只写域名不写任何内部地址。 */
+const HOMEPAGE = 'https://osw.yinxulai.com'
+
 interface ReportBlock {
   label: string
   value: string | null
@@ -142,6 +145,13 @@ export function buildRequestReport(input: RequestReportInput): ReportFile {
     { label: t('requestLogs.contents.section.responseHeader', { protocol: upstreamLabel }), value: attemptContent?.responseHeaders ?? null },
     { label: t('requestLogs.contents.section.responseBody', { protocol: upstreamLabel }), value: attemptContent?.responseBody ?? null },
   ])
+
+  // 署名放在最末：供应商先读完自己要的内容，这条不挡路。
+  // 报告本来就要发给外面，顺便让对方知道这份东西是谁整理的——收件人第一次看到这类文件，
+  // 一个名字加一个地址就够他找过来，不必在正文里夹带货。
+  lines.push('---', '')
+  lines.push(t('requestLogs.contents.requestReport.generatedBy', { version: __APP_VERSION__ }), '')
+  lines.push(HOMEPAGE, '')
 
   return { name: reportFileName(attempt), text: `${lines.join('\n').trimEnd()}\n` }
 }

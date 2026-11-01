@@ -511,6 +511,7 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'requestLogs.contents.requestReport.title': '请求报告',
   'requestLogs.contents.requestReport.generatedAt': '生成时间',
   'requestLogs.contents.requestReport.notCaptured': '（未采集）',
+  'requestLogs.contents.requestReport.generatedBy': '本报告由 OSW {version} 生成。OSW 是一个本地 AI 网关，这次请求就是经由它转发到你这里的。',
   'requestLogs.contents.unknownReason': '原因未知',
   'requestLogs.contents.localFailureWithMessage': '上游没有返回任何响应：{message}{code}',
   'requestLogs.contents.errorCodeSuffix': '（{code}）',

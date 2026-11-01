@@ -226,4 +226,21 @@ describe('buildRequestReport', () => {
     expect(report.text.endsWith('\n')).toBe(true)
     expect(report.text.endsWith('\n\n')).toBe(false)
   })
+
+  it('末尾署名写清是 OSW 的哪个版本生成的，并给出官网地址', () => {
+    const report = buildRequestReport(inputOf())
+
+    // 报告要离开这台机器：供应商第一次看到这份文件，得知道它出自哪里。
+    expect(report.text).toContain(t('requestLogs.contents.requestReport.generatedBy', { version: __APP_VERSION__ }))
+    expect(report.text).toContain('https://osw.yinxulai.com')
+  })
+
+  it('署名排在最后，不挡在供应商要看的内容前面', () => {
+    const report = buildRequestReport(inputOf())
+
+    const signature = report.text.indexOf('https://osw.yinxulai.com')
+    expect(signature).toBeGreaterThan(report.text.indexOf(`## ${TITLE.upstreamResponse}`))
+    // 分隔线之后就是署名，正文里不再出现第二处地址推广。
+    expect(report.text.slice(0, signature)).not.toContain('https://osw.yinxulai.com')
+  })
 })
