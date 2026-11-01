@@ -29,7 +29,7 @@ export type ModelConnectivityInput = ModelConnectivityRequest
 /**
  * 模型对话框里的「连接测试」。
  *
- * 与服务端草稿探测一一对应（见 `@osw/core` 的 `routes/diagnostics/model-connectivity.ts`）：
+ * 与服务端草稿探测一一对应（见 `@one-switch/core` 的 `routes/diagnostics/model-connectivity.ts`）：
  * 它测的是**表单里还没保存的那一份**，而且只发真实请求、不写任何库
  * （请求日志、用量、健康冷却都不动），所以它不是「渠道诊断」的轻量版，
  * 而是另一件事——那一边测的是已保存的配置，并且照实记账。

@@ -50,7 +50,7 @@ export async function waitForConsoleServer(params = {}) {
         throw new Error(
           `Console dev server at ${consoleDevUrl} accepted the connection but never responded. `
           + 'It is most likely running without a controlling TTY (started as a background job). '
-          + 'Restart it in the foreground, or with: nohup pnpm --filter @osw/console run dev > /tmp/osw-console.log 2>&1 &',
+          + 'Restart it in the foreground, or with: nohup pnpm --filter @one-switch/console run dev > /tmp/osw-console.log 2>&1 &',
         )
       }
 

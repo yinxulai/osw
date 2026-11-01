@@ -135,7 +135,7 @@
 
 ### MVP（P0）：正式发布验收
 
-- [x] `pnpm typecheck`、`pnpm test:server`、`pnpm lint` 和 Vite bundling 已通过
+- [x] `pnpm typecheck`、`pnpm test`、`pnpm lint` 和 Vite bundling 已通过
 - [x] 发布包已在 macOS（arm64）生成 DMG/zip 并通过 ad-hoc 签名校验；三平台打包由 release workflow 的构建矩阵覆盖，本机 Windows 直接跑 electron-builder 仍受符号链接权限限制（需开发者模式或管理员终端）
 - [ ] 使用全新用户数据目录完成发布包首次启动和空数据库初始化
 - [ ] 在发布包内完成 Provider 配置、OpenAI/Anthropic 请求、故障转移、日志与正文查看端到端验收

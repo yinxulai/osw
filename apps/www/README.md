@@ -15,11 +15,11 @@ logo、名字、功能与下载入口的纯净态落地页。**Vite + React + Ty
 ## 本地
 
 ```bash
-pnpm --filter @osw/www dev        # Vite dev server（端口 5174）
-pnpm --filter @osw/www build      # 构建静态产物到 output/
-pnpm --filter @osw/www preview    # 本地预览构建产物
-pnpm --filter @osw/www deploy:dry-run   # wrangler 干跑（校验 assets 配置）
-pnpm --filter @osw/www dev:worker # 本地起静态资源服务（wrangler dev）
+pnpm dev:www                     # Vite dev server（端口 5174）
+pnpm build:www                   # 构建静态产物到 output/
+pnpm --filter @one-switch/www preview      # 本地预览构建产物
+pnpm --filter @one-switch/www deploy:dry-run   # wrangler 干跑（校验 assets 配置）
+pnpm --filter @one-switch/www dev:worker  # 本地起静态资源服务（wrangler dev）
 ```
 
 ## 多语言（i18next）
@@ -76,7 +76,7 @@ i18next 会把点号解析成嵌套路径，找不到就回落。顶层单段 ke
 - **自定义域名**：`wrangler.toml` 的 `routes` 已声明绑定。前提是该 zone 在同一账号下；否则删掉 `routes`，
   改到 Workers → Settings → Domains & Routes 手动绑定。
 
-本地想手动部署一次：`pnpm --filter @osw/www deploy`（需先 `wrangler login` 或配 `CLOUDFLARE_API_TOKEN`）。
+本地想手动部署一次：`pnpm deploy:www`（需先 `wrangler login` 或配 `CLOUDFLARE_API_TOKEN`）。
 
 ## 下载（一个按钮，跳 GitHub Releases）
 

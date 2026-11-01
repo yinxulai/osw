@@ -16,7 +16,7 @@
 
 | 形态 | 组成 | 入口 | 分发方式 |
 | --- | --- | --- | --- |
-| 库 | `core` + `contracts` | `import { startServer } from '@osw/core'` | npm |
+| 库 | `core` + `contracts` | `import { startServer } from '@one-switch/core'` | npm |
 | CLI | `core` + `contracts` + `console` 静态产物 + Node 密钥实现 + 静态托管 | `osw start` | npm 全局 bin / `npx` |
 | App | `core` + `contracts` + `console` + Electron 壳 | 桌面图标 / 安装包 | electron-builder |
 
@@ -47,9 +47,9 @@ flowchart LR
 
 | 位置 | 包 | 职责 | 硬约束 |
 | --- | --- | --- | --- |
-| `packages/contracts` | `@osw/contracts` | Zod schema、协议表、错误码、i18n 语言目录与核心、`SecretStore` 接口、运行时配置类型、供应商包格式、路由契约类型 | 只描述形状；不依赖 Node 内置模块、不依赖 DOM、不依赖任何其它包 |
-| `packages/core` | `@osw/core` | runtime / management / proxy / database / infrastructure / security | 纯 Node；**禁止 import `electron`**；不感知 Web 托管与桌面能力 |
-| `packages/console` | `@osw/console` | React 控制台，构建为静态产物 | 不直接读 `window.electronAPI`；宿主能力统一走平台抽象层 |
+| `packages/contracts` | `@one-switch/contracts` | Zod schema、协议表、错误码、i18n 语言目录与核心、`SecretStore` 接口、运行时配置类型、供应商包格式、路由契约类型 | 只描述形状；不依赖 Node 内置模块、不依赖 DOM、不依赖任何其它包 |
+| `packages/core` | `@one-switch/core` | runtime / management / proxy / database / infrastructure / security | 纯 Node；**禁止 import `electron`**；不感知 Web 托管与桌面能力 |
+| `packages/console` | `@one-switch/console` | React 控制台，构建为静态产物 | 不直接读 `window.electronAPI`；宿主能力统一走平台抽象层 |
 | `apps/cli` | `@one-switch/cli` | 命令行入口、Node 密钥实现、静态托管 | 只做宿主适配与参数解析，不写业务逻辑 |
 | `apps/app` | `@one-switch/app` | Electron 主进程与 preload | 只做宿主适配，不写业务逻辑 |
 
@@ -155,7 +155,7 @@ osw/
 | Electron 与 electron-builder | `apps/app/package.json` 的 devDependencies | 宿主包自己声明。electron-builder 只在 `<projectDir>/node_modules` 里找 Electron（见坑 4），把依赖留在仓库根等于「开发全通、只在打包时失败」 |
 | 控制台静态资源 | `packages/console/public/` | Vite 的 `publicDir`，随渲染层构建拷贝进 `packages/console/output` |
 | 各包脚本 | `apps/app/scripts/`、`packages/core/scripts/`、`packages/console/scripts/` | 根 `package.json` 的 scripts 指向包内路径（`apps/app/scripts/{build,dev,version}.mjs`、`packages/core/scripts/{db,check-proxy-layers}.mjs`、`packages/console/scripts/{eslint-plugin-i18n.mjs,vitest.setup.ts}`） |
-| 跨包脚本 | `packages/toolkit/scripts/` | 私有工作区包（`@osw/toolkit`，无运行时代码）：任务编排（lint / test / typecheck）、版本写入与校验、包边界守卫与脚本运行库。它们不属于任何单一业务包，所以独立成包而不是堆在根目录。同样只被这些脚本读取的 `vitest.config.ts` 与 `tsconfig.check.json` 也住在这里 |
+| 跨包脚本 | `packages/toolkit/scripts/` | 私有工作区包（`@one-switch/toolkit`，无运行时代码）：任务编排（lint / test / typecheck）、版本写入与校验、包边界守卫与脚本运行库。它们不属于任何单一业务包，所以独立成包而不是堆在根目录。同样只被这些脚本读取的 `vitest.config.ts` 与 `tsconfig.check.json` 也住在这里 |
 | 打包产物 | `release/<version>/` | 仍在仓库根：它是构建**输出**，不属于任何包的源码 |
 
 挪动这些资产时必须同步核对的四处：
@@ -351,7 +351,7 @@ CLI 的 native 层需要一套独立文案（启动横幅、端口占用、数�
 
 服务进程是 Electron 的 `utilityProcess`，不能是 `worker_threads`：后者读不了 asar（Electron 只给主进程的 `fs` 装了 asar 解析，worker 线程没有这层补丁），用它就只能把服务代码与一份迁移基线摊到 `app.asar.unpacked/` 下，既多一层路径假设，又让产物分成两截。
 
-`files` 里那两条排除模式（`!output/**/*.map`、`!node_modules`）**必须紧跟在 `output` 后面**：electron-builder 把连续的字符串项归一化成同一个 file set 的 `filter`，而每个 `{ from, to }` 项各自独立成一个 set；一旦排除项被 `{ from, to }` 隔开，它就退化成「只含排除项」的 set，而 `minimatchAll` 是逐个模式累进判定的，没有前置正向模式时排除项会静默失效。`!node_modules` 排除的是 `@osw/*` 那几包：它们以 `exports: "./source/*.ts"` 形态被 electron-builder 整包拷进 asar，里面只有 TS 源码与 `*.test.ts`，而 Vite 已经把要用的代码全部 bundle 进 `output/`（实测打包产物里 `@osw/` 的出现次数为 0），白白占掉约 3 MB / 29% 的 asar 体积。
+`files` 里那两条排除模式（`!output/**/*.map`、`!node_modules`）**必须紧跟在 `output` 后面**：electron-builder 把连续的字符串项归一化成同一个 file set 的 `filter`，而每个 `{ from, to }` 项各自独立成一个 set；一旦排除项被 `{ from, to }` 隔开，它就退化成「只含排除项」的 set，而 `minimatchAll` 是逐个模式累进判定的，没有前置正向模式时排除项会静默失效。`!node_modules` 排除的是 `@one-switch/*` 那几包：它们以 `exports: "./source/*.ts"` 形态被 electron-builder 整包拷进 asar，里面只有 TS 源码与 `*.test.ts`，而 Vite 已经把要用的代码全部 bundle 进 `output/`（实测打包产物里 `@one-switch/` 的出现次数为 0），白白占掉约 3 MB / 29% 的 asar 体积。
 
 固定层数必然在某一侧失效，且失效是运行期才报的。上溯查找对两端同时成立，产物布局再变也不会静默失配。
 
@@ -517,12 +517,12 @@ CI（`.github/workflows/ci.yml`）与发布（`release.yml`）共用 `.github/ac
 | 决策 | 选择 | 备选与理由 |
 | --- | --- | --- |
 | 包结构 | pnpm workspace 多包 | 单包多入口无法用编译期/lint 强制边界，也没法让 core 被第三方单独消费 |
-| 包命名 | 库包用 `@osw/*`，宿主壳用 `@one-switch/*` | `packages/*` 是内部库，保留 `@osw/*` 不动（它们从不出现在 npm 上）；`apps/*` 是宿主壳、不被任何包依赖，它们的 `name` 会直接出现在 npm、分发渠道与安装路径上，所以统一收到自家 org `one-switch` 下。注意 `@osw` 这个 npm org **并不存在**，`@osw/*` 只在 workspace 内部有意义 |
+| 包命名 | 全部收到自家 org：`@one-switch/*` | 早期库包用 `@osw/*`、宿主壳用 `@one-switch/*`，两套 scope 混在一个 workspace 里，看 import 无法判断该包能否发布。现已统一：`@osw` 这个 npm org 本就**不存在**，`@osw/*` 只在 workspace 内部有意义，既然都不可发布，就不该与可发布的 `@one-switch/*` 并列成两个命名体系 |
 | CLI 分发 | npm 全局 bin / `npx` | 单文件可执行（Node SEA）作为后续增量，首期不阻塞 |
 | CLI 包名 | `@one-switch/cli`（bin 仍为 `osw`） | 命名经过三次变化，每次都是被 npm 的硬规则推着走：① 原定无 scope 的 `osw-cli`，被 npm 服务端的相似度防抢注规则拦下（`403 Package name too similar to existing package opn-cli`），该规则**只对 unscoped 名生效**，且无法通过重试绕过；② 于是改用个人账号 scope `@yinxulai/osw-cli` 并已发布，但随后该包在整个 registry 上消失（所有端点 404、`scope:yinxulai` 搜索结果为空，原因不明）；③ 最终收到自己的 org `one-switch` 下，并把冗余的 `osw-` 前缀去掉——scope 已经表达了品牌，`@one-switch/cli` 更短且 bin 仍是 `osw`。`osw` 这个无 scope 名已被他人占用且其 bin 也叫 `osw`（`npx osw` 会装到别人的包），所以无 scope 方案不可行 |
 | 拆分顺序 | 先搬目录与配置，后改逻辑 | 现有代码已事实上分层，搬迁零行为风险，却能立刻把边界变成约束 |
 | 目录分层 | `packages/` 放库、`apps/` 放宿主壳 | 「可被第三方消费」与「可直接执行」是两件事，宿主壳不该被当作库发布 |
-| 导入写法 | 别名重指向，不改 specifier | 直接换成 `@osw/*` 是一次上千处的高风险改动，无法分批验证（见 §4.2） |
+| 导入写法 | 历史上用别名重指向；现已改为直接写真实包名 | 早期为避免上千处 specifier 改动而用别名，代价是（`@`、`@server`、`@common` 等）别名让 import 看不出真实依赖。改名时一并把真实包名写明，守卫脚本仍保留别名映射以兼容遗留写法 |
 | `build/` 与打包配置 | 归 `apps/app/` | 按「谁用谁持有」；搬动只需同步改源码引用与 `__dirname` 推导（见 §4.3） |
 | 目录名 | 统一用 `source/` 而非 `src/` | 仓库内只有一种写法，glob、别名与守卫脚本少一类例外 |
 | 任务编排 | Turborepo 接管 | 自己写依赖排序会在每新增一个包时重写一次；turbo 的顺序由依赖图决定，且自带 `dev` 长驻任务语义 |

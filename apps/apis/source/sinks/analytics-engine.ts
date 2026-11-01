@@ -183,7 +183,7 @@ export const ANALYTICS_ENGINE_MAX_BLOB_BYTES = 16 * 1024
 /**
  * Analytics Engine 数据点里我们会填的两项（`indexes` / `blobs`）。
  *
- * **自己声明而不去引一个全局类型**：这个 Worker 只依赖 `@osw/contracts`，没有装
+ * **自己声明而不去引一个全局类型**：这个 Worker 只依赖 `@one-switch/contracts`，没有装
  * `@cloudflare/workers-types`（那个包会带来一整套运行时环境类型，而这里只需要一个方法的形状）。
  * 类型写得比平台更窄也有好处——`readonly string[]` 让测试可以直接递冻结的数组，
  * 而 `ArrayBuffer` 那一支我们这个用例永远用不到。

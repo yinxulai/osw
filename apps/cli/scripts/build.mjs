@@ -11,7 +11,7 @@ import { run } from '../../../packages/toolkit/scripts/lib/run.mjs'
 //
 // 第 2 步是「拷别人的产物」而不是「构建前端」：控制台只编一份，两种宿主共用
 // （见 apps/docs/specs/platform/packaging.md §2）。所以构建顺序有依赖——`package.json` 把
-// `@osw/console` 放在 devDependencies 里，让 Turbo 的 `^build` 先把它构建出来；
+// `@one-switch/console` 放在 devDependencies 里，让 Turbo 的 `^build` 先把它构建出来；
 // 这个依赖**只是产物依赖，不是 import**，包边界检查管的是后者。
 
 const cliDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -27,7 +27,7 @@ const main = async () => {
   log.info('cli entry built')
 
   // 缺产物就报错停下，不产出一个「能启动但打开是空白页」的 CLI——那种失败要到用户
-  // 打开浏览器时才看得见。开发期单独跑 CLI 构建时，先 `pnpm --filter @osw/console run build`。
+  // 打开浏览器时才看得见。开发期单独跑 CLI 构建时，先 `pnpm --filter @one-switch/console run build`。
   const consoleIndex = path.join(consoleOutputDirectory, 'index.html')
   if (!fs.existsSync(consoleIndex)) {
     log.error(`console artifacts not found at ${consoleIndex}; build packages/console first`)

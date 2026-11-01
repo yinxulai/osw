@@ -72,7 +72,7 @@ jobs:
         run: |
           pnpm lint
           pnpm typecheck
-          pnpm test:server
+          pnpm test
 
       - name: Commit version
         id: commit

@@ -1,6 +1,6 @@
 # 匿名使用统计的上报端点。
 #
-# 部署：`pnpm --filter @osw/api deploy`（云端由 Workers Builds 关联仓库自动跑，本地手动部署
+# 部署：`pnpm --filter @one-switch/api deploy`（云端由 Workers Builds 关联仓库自动跑，本地手动部署
 # 就这一条命令）。**没有密钥要配**——存储是同一个账号里的一个 Analytics Engine 数据集，
 # 它靠下面那段绑定拿到，不经 `wrangler secret put`。
 #

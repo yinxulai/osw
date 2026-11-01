@@ -30,10 +30,10 @@ module.exports = {
     'output',
     '!output/**/*.map',
     // `node_modules` 整棵树都是死的：`vite.shared.ts` 的 `nodeExternals` 只外部化
-    // `node:` 内置模块与 `electron`，工作区包（`@osw/*`）全部被 Vite 打进
+    // `node:` 内置模块与 `electron`，工作区包（`@one-switch/*`）全部被 Vite 打进
     // `output/command/*.mjs`。但工作区包同时写在 `dependencies` 里（turbo 靠它排序构建），
     // electron-builder 于是照单收下——实测 asar 里这棵树有 3.0 MB、全是 TypeScript 源码
-    // 与 `*.test.ts`，占整个 asar 的 29%。产物里没有任何一处 `import '@osw/...'`
+    // 与 `*.test.ts`，占整个 asar 的 29%。产物里没有任何一处 `import '@one-switch/...'`
     // 会活到运行期，所以整棵排掉。
     // 将来若真的引入一个必须留在外部的运行期依赖，要同时改 `nodeExternals` 和这里。
     '!node_modules',

@@ -1,5 +1,5 @@
 {
-  "name": "@osw/core",
+  "name": "@one-switch/core",
   "version": "1.3.2",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -10,11 +10,10 @@
     "./*": "./source/*.ts"
   },
   "scripts": {
-    "db:generate": "node scripts/db.mjs generate",
-    "lint:layers": "node scripts/check-proxy-layers.mjs"
+    "db:generate": "node scripts/db.mjs generate"
   },
   "dependencies": {
-    "@osw/contracts": "workspace:*",
+    "@one-switch/contracts": "workspace:*",
     "yaml": "2.9.1"
   }
 }

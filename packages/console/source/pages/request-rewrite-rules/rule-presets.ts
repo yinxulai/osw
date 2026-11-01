@@ -106,7 +106,7 @@ export const RULE_PRESETS: readonly RulePreset[] = [
       path: '',
       // 脚本里的注释与标识符保持英文：这段代码会直接进代码编辑器。
       // 代码本体住在 `@common/rewrite-script-samples`：它会被真正执行，因此必须与
-      // `@osw/core` 的测试共用同一份字符串，而不是在渲染层另抄一段。
+      // `@one-switch/core` 的测试共用同一份字符串，而不是在渲染层另抄一段。
       code: PRESET_CONDITIONAL_SCRIPT_CODE,
     }],
     testCase: {

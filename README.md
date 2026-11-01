@@ -270,8 +270,11 @@ pnpm dev
 Useful commands:
 
 ```bash
-pnpm dev             # dev session: console dev server + Electron
+pnpm dev             # dev session: Electron + the console dev server it loads
+pnpm dev:all         # everything: the app plus the website and the docs site
 pnpm dev:preview     # console only, for looking at the UI in a browser
+pnpm dev:www         # marketing site only
+pnpm dev:docs        # docs site only
 pnpm typecheck       # TypeScript
 pnpm lint            # ESLint plus the layering and package-boundary guards
 pnpm test            # the whole test suite
@@ -283,7 +286,7 @@ pnpm release:win     # build Windows arm64 / x64 installers
 pnpm release:linux   # build Linux arm64 / x64 installers
 ```
 
-The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a bilingual Clarify site published to Cloudflare Workers; `pnpm --filter @osw/docs dev` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
+The repository is a pnpm workspace: `packages/{contracts,core,console}` are libraries that can be consumed on their own, `packages/toolkit` holds the cross-package development scripts, `apps/app` is the desktop host, `apps/docs` is the end-user handbook (a bilingual Clarify site published to Cloudflare Workers; `pnpm dev:docs` to preview), and Turborepo runs the tasks. The stack is Electron + React + TypeScript + Vite + Drizzle ORM + SQLite.
 
 Design goals, behaviour contracts and acceptance criteria have a single authority in [`apps/docs/specs/`](./apps/docs/specs/README.md); build and packaging details live in [packaging.md](./apps/docs/specs/platform/packaging.md). Verbatim upstream API references are kept in [`apps/docs/upstream/`](./apps/docs/upstream/). The layout of `apps/docs` itself (what each of `source/`, `specs/`, `upstream/` and `assets/` is for) is described in [`apps/docs/README.md`](./apps/docs/README.md).
 

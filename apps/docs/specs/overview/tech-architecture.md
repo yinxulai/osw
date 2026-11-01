@@ -207,7 +207,7 @@ SQLite（`node:sqlite` + Drizzle ORM）承载配置与日志，表结构与字�
 拆分的理由与两条边界见 [data-model.md](../data/data-model.md) §2.1；文件名里的版本号是两个**独立的 schema 版本**常量，不住在应用版本号上。
 
 - 首发基线：两条链各自只保留一份由 schema 直接生成的首发基线迁移与快照，`pnpm db:generate` 按角色各生成一次（drizzle-kit 一份配置只能喂一条链，所以是两份 `drizzle.config.<role>.ts`）
-- 基线随 `@osw/core` 包分发：开发期从模块目录逐级上溯找到 `packages/core/drizzle`，再按角色下钻一层；打包后则命中与入口同层的那份映射（`app.asar/output/command/` 上溯两层就是 asar 根），不存在第二套深度
+- 基线随 `@one-switch/core` 包分发：开发期从模块目录逐级上溯找到 `packages/core/drizzle`，再按角色下钻一层；打包后则命中与入口同层的那份映射（`app.asar/output/command/` 上溯两层就是 asar 根），不存在第二套深度
 - 链上只有那条基线，不保留增量迁移：改结构 = 改 schema + 就地把基线重新生成一遍，目录名沿用原来那一个（运行时迁移器按目录名判定是否已应用，改名会被当成新迁移重放）
 - 换代（把 `DATABASE_SCHEMA_VERSIONS` 加一并换文件名）只发生在应用大版本发布时，用来甩掉磁盘上的旧文件；它与「本次改了多少结构」无关，日常结构变化不换文件名
 - 库边界由 `packages/core/scripts/check-database-boundaries.mjs` 在 `pnpm lint` 中强制：每个 store 只碰自己那个库，两份 schema 不互相引用
@@ -241,7 +241,7 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 - preload（CJS）：`apps/app/vite.preload.config.ts`，输出 `apps/app/output/command/preload.js`；必须与主进程分成两次构建，因为 Vite 一份配置只能产出一个格式
 - 服务进程（ESM）：`apps/app/vite.server.config.ts`，输出 `apps/app/output/command/service-main.mjs`（外加按 hash 命名的共享 chunk）；它必须是**独立的一次构建**，因为主进程与服务进程的外部化边界不同：`node:sqlite` 允许进服务进程的 chunk 图，却**不得**被拉进主进程
 - 三份配置共用 `apps/app/vite.shared.ts` 里的别名、Node 内置模块外部化与 `target: node22`
-- 开发时 `pnpm dev` 由 turbo 启动各包 `dev` 任务，宿主侧的实际编排在 `apps/app/scripts/dev.mjs`：先等控制台 dev server 起来，再起五份 `vite build --watch`（主进程、两个 preload、服务进程、截图补拍入口），**等每一份的首轮构建真正宣告完成**后拉起 Electron，之后监听产物目录做整应用重启；渲染层热更新由 Vite HMR 提供
+- 开发时默认 `pnpm dev` 只起**桌面应用这一条链路**（`turbo run dev --filter=@one-switch/app --filter=@one-switch/console`）：控制台 dev server 与宿主进程，官网 `@one-switch/www`、文档站 `@one-switch/docs` 不参与；要看全部四份用 `pnpm dev:all`，单独看某个站点用 `pnpm dev:www` / `pnpm dev:docs`。宿主侧的实际编排在 `apps/app/scripts/dev.mjs`：先等控制台 dev server 起来，再起五份 `vite build --watch`（主进程、两个 preload、服务进程、截图补拍入口），**等每一份的首轮构建真正宣告完成**后拉起 Electron，之后监听产物目录做整应用重启；渲染层热更新由 Vite HMR 提供
   - 就绪信号是 vite 打完一轮构建后打的 `built in NNms.` 那一行，**不是**「产物文件存在」：`output/command` 跨会话留存，上一次的 `index.js` / `service-main.mjs` 还在，用文件存在性当条件会在开跑那一瞬就成立，Electron 于是先拿旧包起来、等下首轮构建落盘再被当成「人改了代码」重启一次，用户看到的就是窗口先出现、被杀死、再出现
   - 顺带一提，因为要读子进程 stdout，`stdio` 从 `inherit` 改成了管道转发，vite 检测不到 TTY 就不再上色
 - 生产构建由 Vite 直接产出静态产物，不再依赖开发期插件
@@ -249,7 +249,7 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 ### electron-builder
 
 - 打包成 macOS `.dmg` / `.app`、Windows `.exe`、Linux `.AppImage` / `.deb`
-- 所有东西都在 `app.asar` 一个文件里：`output/command/` 的 `index.js`、`preload.js`、`service-main.mjs` 与全部 chunk，`output/render/`，以及迁移基线 `packages/core/drizzle`。`node_modules` 被 `files` 里的 `!node_modules` 排除（里面只有 `@osw/*` 的 TS 源码与测试，运行时无人引用），细节与坑见 [packaging.md](../platform/packaging.md) §5.7
+- 所有东西都在 `app.asar` 一个文件里：`output/command/` 的 `index.js`、`preload.js`、`service-main.mjs` 与全部 chunk，`output/render/`，以及迁移基线 `packages/core/drizzle`。`node_modules` 被 `files` 里的 `!node_modules` 排除（里面只有 `@one-switch/*` 的 TS 源码与测试，运行时无人引用），细节与坑见 [packaging.md](../platform/packaging.md) §5.7
 - macOS 无付费证书阶段使用显式 ad-hoc 签名；`afterPack` 必须对完整 `.app` 执行严格签名校验
 - ad-hoc 签名只保证应用包内部完整性，不提供开发者身份信任，也不能提交 Apple 公证
 - GitHub Release 必须附带 DMG 的 SHA-256 文件和“隐私与安全 > 仍要打开”的首次安装说明
@@ -266,11 +266,13 @@ React 18 + TypeScript + shadcn/ui + Tailwind。**业务逻辑不认识 React，R
 
 以下命令与根目录 `package.json` 的 scripts 一致，实现落在各包 `scripts/`（跨包编排在 `packages/toolkit/scripts/`）：
 
-1. `pnpm dev` — 启动开发会话（turbo 并行跑 `dev` 任务，实际编排在 `apps/app/scripts/dev.mjs`）
+1. `pnpm dev` — 启动开发会话（只跑桌面应用链路：`@one-switch/app` + `@one-switch/console`，实际编排在 `apps/app/scripts/dev.mjs`）
+   - `pnpm dev:all` — 四份一起跑（再加官网 `@one-switch/www` 与文档站 `@one-switch/docs`）
+   - `pnpm dev:preview` / `pnpm dev:www` / `pnpm dev:docs` — 只起渲染层 / 官网 / 文档站
 2. `pnpm build` — 按 turbo 任务图依次构建 `contracts` → `core` → `console` / `app`
 3. `pnpm typecheck` — TypeScript 类型检查
 4. `pnpm lint` — ESLint 检查（含代理分层与包边界守卫）
-5. `pnpm test:server` — 运行 Server/Vitest 测试
+5. `pnpm test` — 运行完整 Vitest 测试
 6. `pnpm release:win`、`pnpm release:mac`、`pnpm release:linux` — 构建对应平台发布包
 
 ### 提交信息

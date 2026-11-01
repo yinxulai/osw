@@ -350,7 +350,7 @@ importers:
 
   apps/apis:
     dependencies:
-      '@osw/contracts':
+      '@one-switch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
     devDependencies:
@@ -360,10 +360,10 @@ importers:
 
   apps/app:
     dependencies:
-      '@osw/contracts':
+      '@one-switch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@osw/core':
+      '@one-switch/core':
         specifier: workspace:*
         version: link:../../packages/core
     devDependencies:
@@ -379,13 +379,13 @@ importers:
 
   apps/cli:
     devDependencies:
-      '@osw/console':
+      '@one-switch/console':
         specifier: workspace:*
         version: link:../../packages/console
-      '@osw/contracts':
+      '@one-switch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@osw/core':
+      '@one-switch/core':
         specifier: workspace:*
         version: link:../../packages/core
 
@@ -446,7 +446,7 @@ importers:
 
   packages/console:
     dependencies:
-      '@osw/contracts':
+      '@one-switch/contracts':
         specifier: workspace:*
         version: link:../contracts
       html-to-image:
@@ -467,7 +467,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@osw/contracts':
+      '@one-switch/contracts':
         specifier: workspace:*
         version: link:../contracts
       yaml:

@@ -82,7 +82,7 @@ done
 cd /tmp/osw-audit
 pnpm install --frozen-lockfile
 
-# 渲染 console 的应用是 packages/console（@osw/console），dev 脚本就是 vite
+# 渲染 console 的应用是 packages/console（@one-switch/console），dev 脚本就是 vite
 node -e 'console.log(require("./packages/console/package.json").scripts)'   # { dev: "vite", ... }
 cd packages/console && vite            # 端口 5173
 ```

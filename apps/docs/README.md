@@ -35,9 +35,9 @@
 站点按读者的阶段分**四个 tab**——开始使用、上游与路由、观测与数据、参考——每个 tab 回答一个问题，而不是把全部页面塞进一个「使用指南」。为什么这么分、每个 tab 下有哪些组，都写在 `clarify.ts` 的注释里（它是导航结构的唯一事实来源，本文件不重复）。
 
 ```bash
-pnpm --filter @osw/docs dev      # 本地开发服务器
-pnpm --filter @osw/docs build    # 构建静态产物到 output/
-pnpm --filter @osw/docs preview  # 预览构建产物
+pnpm dev:docs                # 本地开发服务器
+pnpm build:docs              # 构建静态产物到 output/
+pnpm --filter @one-switch/docs preview  # 预览构建产物
 ```
 
 ### 截图
@@ -107,6 +107,6 @@ source/
 - **非生产分支需要 `previews` 块（空块也算）。** push 到非生产分支时 Cloudflare 跑的是 **Preview 命令**（默认 `npx wrangler preview`），它要求配置里存在 `previews` 块，否则直接报 `missing a previews block` 并失败。这条红叉**只出现在 PR 上、`main` 上永远是绿的**（生产分支跑 deploy），所以极易被误判成「这个分支的内容坏了」——其实任何 PR 都会红。本站是纯静态资源，块里不需要任何东西，但块本身不能省；`assets` / `compatibility_date` / `routes` 仍留在顶层。
 - **产物形态**：Clarify 生成的是逐页静态 HTML（`output/<slug>/index.html`）、Pagefind 全文搜索索引、每页的 `.md` 孪生文件与 `llms.txt`。它是**多页站**，不是 SPA，因此 `not_found_handling` 用 `404-page` 而不是 `single-page-application`。
 
-本地想手动部署一次：`pnpm --filter @osw/docs deploy`（需先 `wrangler login` 或配 `CLOUDFLARE_API_TOKEN`）；想只校验配置不真正上传：`pnpm --filter @osw/docs deploy:dry-run`。
+本地想手动部署一次：`pnpm deploy:docs`（需先 `wrangler login` 或配 `CLOUDFLARE_API_TOKEN`）；想只校验配置不真正上传：`pnpm --filter @one-switch/docs deploy:dry-run`。
 
 > 仓库里另有 `apps/www`（官网）与 `apps/apis`（匿名统计端点）两个 Worker。文档站与它们一样走 **Cloudflare Workers Static Assets**：纯静态站在两种托管下能力没有差别，而 Workers 的配置能把「产物目录」和「自定义域名」都写进仓库，不需要像 Pages 那样去后台手动绑域名——所以三个站点用同一种部署形状，规则只有一套。

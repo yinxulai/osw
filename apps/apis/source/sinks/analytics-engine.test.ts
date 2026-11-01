@@ -122,7 +122,7 @@ function syntheticEvent(name: TelemetryEventName): TelemetryEvent {
  * 那一支——下面两条用例因此看见一串 `'x'` 而不是 `true` / 枚举值。改的是**读契约的方式**，
  * 断言表达的意思一字未动。
  *
- * 用判别式而不是 `instanceof z.ZodBoolean`：schema 来自 `@osw/contracts`，两个包各有一份
+ * 用判别式而不是 `instanceof z.ZodBoolean`：schema 来自 `@one-switch/contracts`，两个包各有一份
  * zod 实例时会 `instanceof` 失败；判别式是字段自己带的字符串，不受它影响。
  */
 function typeOf(field: unknown): string {

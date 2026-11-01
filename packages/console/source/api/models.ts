@@ -10,7 +10,7 @@ type ProviderModelCreateInput = { providerId: string; modelName: string; logical
 type RequestRewriteRuleBindingInput = { ruleId: string; priority: number; enabled: boolean }
 type SchedulingPolicyInput = { logicalModelId: string; providerModelId: string; strategy?: string; priority?: number; weight?: number; enabled?: boolean }
 
-/** 规则试跑的结果。`skippedRules` 带上每条被跳过规则的原因（见 `@osw/core` 的 `RewriteSkipReason`）。 */
+/** 规则试跑的结果。`skippedRules` 带上每条被跳过规则的原因（见 `@one-switch/core` 的 `RewriteSkipReason`）。 */
 export type RequestRewriteTestResult = {
   body: string
   headers: Record<string, string | string[] | undefined>

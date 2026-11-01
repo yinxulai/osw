@@ -272,8 +272,11 @@ pnpm dev
 常用命令：
 
 ```bash
-pnpm dev             # 开发会话：控制台 dev server + Electron
+pnpm dev             # 开发会话：Electron + 它加载的控制台 dev server
+pnpm dev:all         # 全部：应用 + 官网 + 文档站
 pnpm dev:preview     # 只起控制台，在浏览器里看界面
+pnpm dev:www         # 只起官网
+pnpm dev:docs        # 只起文档站
 pnpm typecheck       # TypeScript 类型检查
 pnpm lint            # ESLint + 分层守卫 + 包边界守卫
 pnpm test            # 全部测试
@@ -283,7 +286,7 @@ pnpm release:win     # 构建 Windows arm64 / x64 安装包
 pnpm release:linux   # 构建 Linux arm64 / x64 安装包
 ```
 
-仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/docs` 是面向使用者的手册与仓库文档根（Clarify 站点，`pnpm --filter @osw/docs dev`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
+仓库是 pnpm workspace：`packages/{contracts,core,console}` 是可被单独消费的库包，`packages/toolkit` 收纳跨包开发脚本，`apps/app` 是桌面宿主，`apps/docs` 是面向使用者的手册与仓库文档根（Clarify 站点，`pnpm dev:docs`），任务编排交给 Turborepo。技术栈是 Electron + React + TypeScript + Vite + Drizzle ORM + SQLite。
 
 设计目标、行为契约和验收标准的唯一权威在 [`apps/docs/specs/`](./apps/docs/specs/README.md)，构建与打包细节见 [packaging.md](./apps/docs/specs/platform/packaging.md)；上游 API 的逐字快照见 [`apps/docs/upstream/`](./apps/docs/upstream/)。`apps/docs` 自身的布局（`source/`、`specs/`、`upstream/`、`assets/` 各放什么）见 [`apps/docs/README.md`](./apps/docs/README.md)。
 

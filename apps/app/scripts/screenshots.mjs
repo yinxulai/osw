@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getRuntimeProfile } from '@osw/contracts/runtime-profile'
+import { getRuntimeProfile } from '@one-switch/contracts/runtime-profile'
 import { log } from '../../../packages/toolkit/scripts/lib/log.mjs'
 import { isManagementApiReachable, waitForConsoleServer } from './lib/console-dev-server.mjs'
 

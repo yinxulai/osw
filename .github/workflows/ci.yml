@@ -62,7 +62,7 @@ jobs:
           turbo-cache: 'false'
 
       # 只跑一次：`test:coverage` 本身就是「跑全部测试 + 收集覆盖率」，
-      # 再单独跑一遍 `test:server` 等于把 1100 个用例执行两遍。
+      # 再单独跑一遍 `test` 等于把 5000 个用例执行两遍。
       - name: Run tests with coverage
         run: pnpm test:coverage
 

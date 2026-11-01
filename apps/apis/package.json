@@ -1,5 +1,5 @@
 {
-  "name": "@osw/api",
+  "name": "@one-switch/api",
   "version": "1.3.2",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -13,7 +13,7 @@
     "dev:worker": "wrangler dev"
   },
   "dependencies": {
-    "@osw/contracts": "workspace:*"
+    "@one-switch/contracts": "workspace:*"
   },
   "devDependencies": {
     "wrangler": "^4.150.0"

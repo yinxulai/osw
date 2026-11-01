@@ -38,9 +38,9 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
-    "@osw/console": "workspace:*",
-    "@osw/contracts": "workspace:*",
-    "@osw/core": "workspace:*"
+    "@one-switch/console": "workspace:*",
+    "@one-switch/contracts": "workspace:*",
+    "@one-switch/core": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
