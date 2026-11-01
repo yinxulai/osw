@@ -6,8 +6,7 @@ import { useLiveRequests } from '@/data/live-requests'
 import { useDeletedLogicalModelIds, useLogicalModels } from '@/data/logical-models'
 import { useProviders } from '@/data/providers'
 import { useRequestLogDetailQuery, useRequestLogsQuery } from './queries'
-import { buildRequestLogRows, type RequestLogsRow } from './lib/rows'
-import { useLiveRowHold } from './hooks/use-live-row-hold'
+import { buildRequestLogRows, shouldUseLiveRow, type RequestLogsRow } from './lib/rows'
 import { useRequestLogsUiStore } from './store'
 
 export interface RequestLogFilter { providerId: string; providerModelId: string; logicalModelId: string; clientProtocol: string; status: string; createdTimeFrom: number | null; createdTimeTo: number | null }
@@ -38,20 +37,14 @@ export function useRequestLogsService() {
   const statusById = useMemo(() => new Map(logs.map(log => [log.id, log.status])), [logs])
   const filterApplied = Object.values(filter).some(value => value !== 'all' && value !== null)
   /**
-   * 这一行此刻还该不该用实时形态——含「落定之后再多留两秒」。
+   * 被展开的那一条用不用实时视图。
    *
-   * 判定规则在 `lib/live-hold.ts`：还在跑、或者刚跑完但还在窗口内、或者用户正展开着它。
-   * 展开着就一直留着：用户盯着这把尺子看，把内容换掉等于从他手里抢走。
+   * 与列表行走同一个 `shouldUseLiveRow`：展开着就一定用实时形态，所以这里只可能是
+   * 「是」或「台账里没有它」。这一点很重要——它是下面关掉落库详情查询的依据，
+   * 两处口径不一致就会出现「展开区在等一份自己已经有的数据」。
    */
-  const keepLive = useLiveRowHold(liveRequests, expandedId)
-  /** 被展开的那一条还用不用实时视图；用就不去读落库的详情（见 `useRequestLogDetailQuery`）。 */
-  const expandedExecuting = expandedId === null
-    ? false
-    : (() => {
-      const live = liveById.get(expandedId)
-      return live !== undefined && keepLive(live, statusById.get(expandedId))
-    })()
-  const detailQuery = useRequestLogDetailQuery(expandedId, !expandedExecuting)
+  const expandedUsesLive = expandedId !== null && shouldUseLiveRow(liveById.get(expandedId), statusById.get(expandedId), expandedId)
+  const detailQuery = useRequestLogDetailQuery(expandedId, !expandedUsesLive)
   /**
    * 合并后的行。
    *
@@ -62,8 +55,8 @@ export function useRequestLogsService() {
     logs,
     liveRequests,
     injectLive: page === 1 && !filterApplied,
-    keepLive,
-  }), [logs, liveRequests, page, filterApplied, keepLive])
+    expandedId,
+  }), [logs, liveRequests, page, filterApplied, expandedId])
   const providers = useProviders()
   const logicalModels = useLogicalModels()
   const providerModelsQuery = useQuery({ queryKey: PROVIDER_MODEL_OPTIONS_KEY, queryFn: () => unwrap(providerModelApi.list()), staleTime: 30_000 })
