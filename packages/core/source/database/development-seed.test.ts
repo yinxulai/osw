@@ -135,6 +135,15 @@ describe('development seed', () => {
     expect(flatAttempts.filter(attempt => attempt.providerModelId !== 'model_dev_provider_1').every(attempt => attempt.requestRewriteRuleIds.length === 1)).toBe(true)
     // 逻辑模型之间真的分流了：请求记录里既有 `default`，也落到专属队列上。
     expect(new Set(firstBatchRequests.map(request => request.logicalModelId))).toEqual(new Set(['default', 'fast', 'reasoning']))
+    // 尝试上的地址必须是绝对 URL：观测页的「复制请求」与错误报告都只认这一列，
+    // 空串会让整条命令不成立。上游 id 也必须像供应商签发的号，不能由本地请求 id 拼出来。
+    expect(flatAttempts.every(attempt => attempt.url.startsWith('https://'))).toBe(true)
+    const attemptContent = (await listAttemptContents(failedRequestId))[0]
+    const upstreamHeaders = JSON.parse(attemptContent.responseHeaders ?? '{}') as Record<string, string>
+    const upstreamId = upstreamHeaders['x-upstream-request-id']
+    expect(upstreamId).not.toContain(failedRequestId)
+    expect(upstreamId).not.toContain('req_dev_')
+    expect((JSON.parse(attemptContent.responseBody ?? '{}') as { id: string }).id).toBe(upstreamId)
     expect(secretStore.set).toHaveBeenCalledTimes(5)
   })
 

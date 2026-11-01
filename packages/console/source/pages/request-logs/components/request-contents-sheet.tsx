@@ -6,7 +6,7 @@ import { useLocale, useTranslation } from '@/i18n/provider'
 import { useRequestLogBodiesQuery } from '../queries'
 import { buildContentStages, mergeAttemptContent, mergeClientContent, type ContentStage } from '../lib/contents'
 import { buildErrorReport } from '../lib/error-report'
-import { clientCommandInput, upstreamCommandInput } from '../lib/request-commands'
+import { upstreamCommandInput } from '../lib/request-commands'
 import { saveTextFile } from '../lib/request-body-download'
 import { useContentsSearch } from '../hooks/use-contents-search'
 import { RequestContentsActions } from './request-contents-actions'
@@ -30,13 +30,6 @@ interface RequestContentsSheetProps {
   requestRewriteRules: AppliedRequestRewriteRule[] | null
   /** 客户端协议；`null` 表示该请求连 API 路径都未识别。 */
   clientProtocol: string | null
-  /**
-   * 代理监听地址，用来把客户端记录里的路径拼成可直接执行的 URL。
-   *
-   * `null` 表示代理没在监听（或地址未知），此时「复制客户端原始请求」这一档不成立；
-   * 上游那一档不受影响——它的地址是尝试自己记下的绝对 URL。
-   */
-  origin: string | null
   loading: boolean
   error: string | null
   selectedAttemptId: string | null
@@ -111,8 +104,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
    * 下载错误报告。
    *
    * 报告要的是**原文**，因此这里不看当前界面上的折叠/搜索状态：重新拿到一整份正文
-   * （面板已经取过就直接用，没取过就现取一次），按 `attemptId` / `id` 对齐，
-   * 缺的部分在报告里写成「未采集」。
+   * （面板已经取过就直接用，没取过就现取一次），按 `attemptId` 对齐，缺的部分在报告里写成「未采集」。
    *
    * 不做「只有失败才给」的限定：成功但内容不对（截断的 SSE、与声明不符的结构）
    * 同样是要供应商跟进的事故，而报告里的 HTTP 状态本来就把这一区别写清了。
@@ -129,12 +121,8 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           const file = buildErrorReport({
             t,
             locale,
-            requestId: props.requestId,
             attempt: selectedAttempt,
-            clientProtocol: props.clientProtocol,
             attemptContent: mergeAttemptContent(upstreamSummary, all),
-            clientContent: mergeClientContent(clientSummary, all),
-            servesClient,
             generatedTime: Date.now(),
           })
           saveTextFile(file, 'text/markdown')
@@ -146,14 +134,13 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
       }
 
   /**
-   * 复制「发往供应商的请求」的输入。
+   * 复制这次尝试真正发出去的请求。
    *
-   * 上游视角与客户端视角不是同一份报文：地址是尝试自己的 `url`（已按供应商拼好），
-   * 头与正文是改写与协议转换之后的那一份。拿客户端的报文去冒充，得到的只会是另一个结果。
+   * 面板只看得到「选中了哪次尝试」，而供货商看到的报文就是那次尝试的报文：
+   * 地址取 `attempt.url`（已按供货商拼好），头与正文取 `attempt_contents`——
+   * 也就是改写与协议转换之后的那一份，不是客户端发来的原件。
    */
   const upstreamInput = upstreamCommandInput(selectedAttempt, attemptContent, clientContent?.requestMethod ?? null)
-  /** 复制「客户端原始请求」的输入；代理地址未知时这一档不可用。 */
-  const clientInput = clientCommandInput(props.origin, clientContent)
 
   let state: React.ReactNode
   if (selectedAttempt || clientContent || props.loading) {
@@ -206,9 +193,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           attemptCount={props.attempts.length}
           actions={(
             <RequestContentsActions
-              clientInput={clientInput}
               upstreamInput={upstreamInput}
-              hasClientContent={clientContent !== null}
               onDownloadReport={downloadReport === null ? null : () => void downloadReport()}
               reportPending={reportPending}
             />

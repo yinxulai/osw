@@ -1,40 +1,37 @@
 /**
  * 把一次失败的尝试整理成一份可以直接发给供应商的报告。
  *
- * 供应商跟进时真正需要的不是一张截图，而是**能对上账的原文**：哪一次尝试、请求的是什么
- * （改写与协议转换之后的 headers / body）、上游回了什么、错误码与错误信息、以及本地的耗时口径。
- * 这些内容本来就在库里逐列存着，缺的只是一个把它们装进同一个文件的动作。
+ * 收件人是**供应商**，因此报告里只出现供应商能对得上的事实：它收到了什么请求（改写与协议转换
+ * 之后的真实 URL、头、正文）、它回了什么、以及我们对这次失败的判定（错误码、错误信息、耗时）。
+ *
+ * 本地的流水号一律不写：请求 ID、尝试 ID、Provider ID、上游模型 ID、命中的改写规则 ID
+ * 在供应商那里查不到任何东西，写进去只会让人以为该拿它们去核对。上游模型写**名字**
+ * （供应商认得的那个），不写它在我们库里的 id；地址放在「请求」小节里，不在事实清单里
+ * 再列一遍——重复只会让两份值不一致时更难判断以哪份为准。
+ *
+ * 客户端视角的两段（客户端原始请求、返回客户端的响应）也不写。这份报告要答的是
+ * 「这份报文供应商收到了吗、它回了什么」，客户端那一侧属于我们自己的链路；
+ * 两个视角混在一个文件里，供应商第一眼看到的会是一份它从未见过的请求。
  *
  * 因此这里只做「编排」，不做任何再加工：正文按 `prettyRequestBody` 重排（只改排版，内容一字不改），
  * 头本来就是脱敏后的 JSON 原样。缺失的部分显式写成「未采集」，而不是悄悄留白——
  * 供应商看不到的字段，正是需要回来问我们的字段。
  */
 
-import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
+import type { AttemptContent, RequestLogEntryAttempt } from '@common/schemas'
 import type { AppTranslator } from '@/i18n/provider'
-import { factsOf, formatCreatedTime, protocolLabel } from './contents'
+import { formatCreatedTime, protocolLabel } from './contents'
+import { distinctAttemptErrorCode, distinctAttemptErrorMessage, formatTransport } from './format'
 import { prettyRequestBody, sanitizeFileSegment } from './request-body-download'
 
 export interface ErrorReportInput {
   t: AppTranslator
   /** 界面语言，用来格式化生成时间。 */
   locale: string
-  requestId: string
-  /** 失败的那次尝试。 */
+  /** 报告针对的那次尝试。 */
   attempt: RequestLogEntryAttempt
-  /** 客户端协议；`null` 表示这次请求连 API 路径都未识别。 */
-  clientProtocol: string | null
   /** 该尝试的上游视角正文；`null` 表示没有这一行（没采到，或已被保留策略清理）。 */
   attemptContent: AttemptContent | null
-  /** 客户端视角正文；每个请求至多一行。 */
-  clientContent: RequestContent | null
-  /**
-   * 这次尝试是否就是把响应写回客户端的那一次。
-   *
-   * 为假时「返回客户端的响应」根本不属于它（那时客户端拿到的是另一次尝试的结果，
-   * 甚至是代理合成的 502），把它写进报告只会让供应商以为那是自己回的。
-   */
-  servesClient: boolean
   /** 生成时间。由调用方传入，报告才可测。 */
   generatedTime: number
 }
@@ -67,34 +64,74 @@ function appendSection(lines: string[], t: AppTranslator, title: string, meta: s
 }
 
 /**
+ * 报告里的事实清单。
+ *
+ * 与界面上的「本次尝试事实」不是同一份：界面上那一份把内部 id 收进「更多事实」供深挖，
+ * 报告这一份是给外面看的，**一个 id 都不该有**。因此这里单独列一份，
+ * 而不是在界面的清单上做减法——两处要回答的问题本来就不同。
+ */
+function reportFactsOf(t: AppTranslator, locale: string, attempt: RequestLogEntryAttempt): Array<{ label: string; value: string }> {
+  const errorCode = distinctAttemptErrorCode(attempt)
+  const errorMessage = distinctAttemptErrorMessage(attempt)
+
+  return [
+    { label: t('requestLogs.contents.fact.provider'), value: attempt.providerName },
+    { label: t('requestLogs.contents.fact.providerModel'), value: attempt.providerModelName },
+    { label: t('requestLogs.contents.fact.upstreamProtocol'), value: attempt.upstreamProtocol ?? t('requestLogs.contents.fact.unrecognized') },
+    { label: t('requestLogs.contents.fact.upstreamTransport'), value: formatTransport(t, attempt.upstreamTransport) },
+    { label: t('requestLogs.contents.fact.attemptIndex'), value: String(attempt.attemptIndex + 1) },
+    ...(errorCode ? [{ label: t('requestLogs.contents.fact.errorCode'), value: errorCode }] : []),
+    ...(errorMessage ? [{ label: t('requestLogs.contents.fact.errorMessage'), value: errorMessage }] : []),
+    { label: t('requestLogs.contents.fact.ttft'), value: attempt.ttftMilliseconds === null ? t('requestLogs.contents.fact.noOutput') : `${attempt.ttftMilliseconds} ms` },
+    { label: t('requestLogs.contents.fact.duration'), value: `${attempt.durationMilliseconds} ms` },
+    { label: t('requestLogs.contents.fact.createdTime'), value: formatCreatedTime(locale, attempt.createdTime) },
+  ]
+}
+
+/**
+ * 文件名。
+ *
+ * 优先用上游请求 ID：供应商在自己那边查日志时认的就是这个号，回信里也会引用它。
+ * 没有时退回「第几次尝试」——这是我们与供应商都能对齐的最小坐标。
+ */
+function reportFileName(attempt: RequestLogEntryAttempt): string {
+  const attemptNo = String(attempt.attemptIndex + 1)
+  const upstreamId = sanitizeFileSegment(attempt.upstreamRequestId ?? '', '')
+  return upstreamId === ''
+    ? `error-report-att${attemptNo}.md`
+    : `error-report-${upstreamId}-att${attemptNo}.md`
+}
+
+/**
  * 生成报告。
  *
- * 顺序就是供应商复现的顺序：先给结论（错误码、错误信息、耗时），再给发出去的请求，
- * 然后是上游回的响应；客户端那两份放在最后，只在需要判断「谁的责任」时才看。
+ * 顺序就是供应商复现的顺序：先给结论（这次尝试是谁、错误码、错误信息、耗时），
+ * 再给它收到的请求，最后是它回的响应。
  */
 export function buildErrorReport(input: ErrorReportInput): ReportFile {
-  const { t, locale, attempt, attemptContent, clientContent, servesClient } = input
+  const { t, locale, attempt, attemptContent } = input
   const lines: string[] = []
 
   lines.push(`# ${t('requestLogs.contents.errorReport.title')}`, '')
   lines.push(`${t('requestLogs.contents.errorReport.generatedAt')}: ${formatCreatedTime(locale, input.generatedTime)}`)
-  lines.push(`${t('requestLogs.detail.requestId')}: ${input.requestId}`, '')
-
-  // 事实清单已经是排障第一屏的内容（结果、错误码、错误信息、上游地址、时间），
-  // 报告只是把它原样带上，不另写一套措辞。
-  lines.push(`## ${t('requestLogs.contents.attemptFacts.title')}`, '')
-  for (const fact of factsOf(t, locale, attempt)) lines.push(`- ${fact.label}: ${fact.value}`)
+  // 上游请求 ID 是唯一值得写进抬头的号：它是供应商自己的流水号。没有就整行不写。
+  if (attempt.upstreamRequestId) lines.push(`${t('requestLogs.contents.fact.upstreamRequestId')}: ${attempt.upstreamRequestId}`)
   lines.push('')
 
-  const clientLabel = protocolLabel(t, input.clientProtocol)
+  lines.push(`## ${t('requestLogs.contents.attemptFacts.title')}`, '')
+  for (const fact of reportFactsOf(t, locale, attempt)) lines.push(`- ${fact.label}: ${fact.value}`)
+  lines.push('')
+
   const upstreamLabel = protocolLabel(t, attempt.upstreamProtocol)
   const upstreamStatus = attemptContent === null
     ? t('requestLogs.contents.errorReport.notCaptured')
     : attemptContent.responseStatus === null
       ? t('requestLogs.contents.status.upstreamNoResponse')
       : `HTTP ${attemptContent.responseStatus}`
+  // 地址是请求段的元信息，空值也照位写「未采集」，免得整段少一行让人以为漏了。
+  const upstreamUrl = attempt.url === '' ? t('requestLogs.contents.errorReport.notCaptured') : attempt.url
 
-  appendSection(lines, t, t('requestLogs.contents.stage.upstreamRequest'), [attempt.url], [
+  appendSection(lines, t, t('requestLogs.contents.stage.upstreamRequest'), [upstreamUrl], [
     { label: t('requestLogs.contents.section.requestHeader', { protocol: upstreamLabel }), value: attemptContent?.requestHeaders ?? null },
     { label: t('requestLogs.contents.section.requestBody', { protocol: upstreamLabel }), value: attemptContent?.requestBody ?? null },
   ])
@@ -104,19 +141,5 @@ export function buildErrorReport(input: ErrorReportInput): ReportFile {
     { label: t('requestLogs.contents.section.responseBody', { protocol: upstreamLabel }), value: attemptContent?.responseBody ?? null },
   ])
 
-  appendSection(lines, t, t('requestLogs.contents.stage.clientRequest'), [], [
-    { label: t('requestLogs.contents.section.requestHeader', { protocol: clientLabel }), value: clientContent?.requestHeaders ?? null },
-    { label: t('requestLogs.contents.section.requestBody', { protocol: clientLabel }), value: clientContent?.requestBody ?? null },
-  ])
-
-  if (servesClient) {
-    appendSection(lines, t, t('requestLogs.contents.stage.clientResponse'), [], [
-      { label: t('requestLogs.contents.section.responseHeader', { protocol: clientLabel }), value: clientContent?.responseHeaders ?? null },
-      { label: t('requestLogs.contents.section.responseBody', { protocol: clientLabel }), value: clientContent?.responseBody ?? null },
-    ])
-  }
-
-  const safeId = sanitizeFileSegment(input.requestId, 'request')
-  const attemptNo = String(attempt.attemptIndex + 1)
-  return { name: `error-report-${safeId}-att${attemptNo}.md`, text: `${lines.join('\n').trimEnd()}\n` }
+  return { name: reportFileName(attempt), text: `${lines.join('\n').trimEnd()}\n` }
 }

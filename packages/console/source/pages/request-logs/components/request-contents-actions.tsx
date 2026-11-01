@@ -1,13 +1,9 @@
 import * as React from 'react'
-import { Check, ChevronDown, Code, Copy, Download, LoaderCircle, Terminal, Upload } from 'lucide-react'
+import { Check, ChevronDown, Code, Copy, Download, LoaderCircle, Terminal } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/toast'
@@ -18,24 +14,18 @@ import { buildFetch } from '../lib/build-fetch'
 import type { RequestCommandInput } from '../lib/request-command'
 
 export interface RequestContentsActionsProps {
-  /** 客户端原始请求；`null` 表示代理地址未知或报文还没到，这条命令不成立。 */
-  clientInput: RequestCommandInput | null
-  /** 真正发往供应商的那次请求；`null` 表示没有发出过请求或正文还没到。 */
+  /** 这次尝试真正发出去的那份请求；`null` 表示没采到正文，这条命令不成立。 */
   upstreamInput: RequestCommandInput | null
-  /** 客户端报文本身在不在；用来区分「没有正文」与「地址未知」两种不可用原因。 */
-  hasClientContent: boolean
   /** 下载错误报告；`null` 表示没有选中的尝试，没有可导出的现场。 */
   onDownloadReport: (() => void) | null
   /** 报告正在组装。 */
   reportPending: boolean
 }
 
-/** 菜单里的三档目标：客户端 cURL / 客户端 fetch / 上游 cURL / 上游 fetch。 */
+/** 菜单里的两档目标语言。 */
 const COPY_TARGETS = {
-  'client-curl': buildCurl,
-  'client-fetch': buildFetch,
-  'upstream-curl': buildCurl,
-  'upstream-fetch': buildFetch,
+  curl: buildCurl,
+  fetch: buildFetch,
 } as const
 
 type CopyTarget = keyof typeof COPY_TARGETS
@@ -43,13 +33,13 @@ type CopyTarget = keyof typeof COPY_TARGETS
 /**
  * 正文面板自己的「复制请求」入口。
  *
- * 面板里说的「请求」有两份，问答不同：**客户端原始请求**是我们收到了什么，
- * **发往供应商的请求**是供应商收到了什么。复现失败现场要的是后者——
- * 它带着改写与协议转换之后的头与正文，地址也是那次尝试真实的绝对 URL。
- * 两档都放在这里，而不是让用户自己从两个阶段里各复制一段再拼。
+ * 面板永远是**一次具体尝试**的现场，因此这里的「请求」只有一份：代理在那一刻真正发出去的
+ * 报文——地址是尝试自己记下的绝对 URL，头与正文是协议转换与改写之后的结果。
+ * 客户端发来的原件在面板里已经能逐段查看，行上也有它自己的复制入口，标题栏不再重复提供一次；
+ * 两份并列还会逼出「发往供应商的请求」这种绕口的名字：对着一份具体报文说它要去哪，是废话。
  *
- * 菜单而不是一颗按钮：cURL / fetch × 客户端 / 上游 一共四种组合，
- * 把最常用的客户端 cURL 留给按钮本身、其余收进菜单，按钮就不必随数据有无变形。
+ * 菜单而不是两颗按钮：cURL 是绝大多数场景要的，留给按钮本身；fetch 收在菜单里，
+ * 按钮就不必随数据有无变形。
  */
 export function RequestContentsActions(props: RequestContentsActionsProps) {
   const t = useTranslation()
@@ -62,14 +52,11 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
   }, [])
 
-  const inputOf = (target: CopyTarget) => target.startsWith('upstream') ? props.upstreamInput : props.clientInput
-
   const copyAs = async (target: CopyTarget) => {
-    const input = inputOf(target)
-    if (input === null) return
+    if (props.upstreamInput === null) return
     setPending(true)
     try {
-      await navigator.clipboard.writeText(COPY_TARGETS[target](input))
+      await navigator.clipboard.writeText(COPY_TARGETS[target](props.upstreamInput))
       setCopied(true)
       if (timerRef.current !== null) window.clearTimeout(timerRef.current)
       timerRef.current = window.setTimeout(() => setCopied(false), 1500)
@@ -80,20 +67,17 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
     }
   }
 
-  const upstreamAvailable = props.upstreamInput !== null
-  // 两种「不可用」原因不同，说法必须不同：没采到正文 vs 地址拼不出来。
-  const clientUnavailable = props.clientInput === null
-    ? (props.hasClientContent ? t('requestLogs.detail.copyRequestNoOrigin') : t('requestLogs.detail.copyRequestUnavailable'))
-    : null
+  // 只有一种「不可用」：这次尝试没有采到发出去的报文。原因写在提示里，不另设文案分支。
+  const available = props.upstreamInput !== null
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <div className="inline-flex items-stretch">
-        {/* 主按钮就是最常用的一档，点一次就拿到命令；其余三种收在右侧菜单里。 */}
+        {/* 主按钮就是最常用的一档，点一次就拿到命令；fetch 收在右侧菜单里。 */}
         <MenuButton
-          onClick={() => void copyAs('client-curl')}
-          disabled={props.clientInput === null || pending}
-          title={clientUnavailable ?? t('requestLogs.detail.copyRequestTitle')}
+          onClick={() => void copyAs('curl')}
+          disabled={!available || pending}
+          title={available ? t('requestLogs.contents.copyRequestTitle') : t('requestLogs.contents.copyRequestUnavailable')}
           className="rounded-r-none border-r-0"
         >
           {pending
@@ -114,8 +98,8 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
               <ChevronDown size={12} aria-hidden />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={6} className="w-64">
-            <DropdownMenuItem disabled={props.clientInput === null} onSelect={() => void copyAs('client-curl')} className="gap-2">
+          <DropdownMenuContent align="start" sideOffset={6} className="w-56">
+            <DropdownMenuItem disabled={!available} onSelect={() => void copyAs('curl')} className="gap-2">
               <Terminal size={14} aria-hidden />
               <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsCurl')}</span>
               {/* 主按钮就是这一档，菜单里写明，免得两条入口看起来做的事不一样。 */}
@@ -123,34 +107,10 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
                 {t('requestLogs.detail.copyAsDefault')}
               </span>
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={props.clientInput === null} onSelect={() => void copyAs('client-fetch')} className="gap-2">
+            <DropdownMenuItem disabled={!available} onSelect={() => void copyAs('fetch')} className="gap-2">
               <Code size={14} aria-hidden />
               <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsFetch')}</span>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-components-panel-border" />
-            {/* 上游视角单独一组：它回答的是另一个问题，不能和上面两条混成同义项。 */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger
-                disabled={!upstreamAvailable}
-                title={upstreamAvailable
-                  ? t('requestLogs.detail.copyUpstreamRequest')
-                  : t('requestLogs.detail.copyUpstreamUnavailable')}
-                className="gap-2"
-              >
-                <Upload size={14} aria-hidden />
-                <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyUpstreamRequest')}</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onSelect={() => void copyAs('upstream-curl')} className="gap-2">
-                  <Terminal size={14} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsCurl')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void copyAs('upstream-fetch')} className="gap-2">
-                  <Code size={14} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{t('requestLogs.detail.copyAsFetch')}</span>
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

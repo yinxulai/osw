@@ -1,24 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AttemptContent, RequestContent, RequestLogEntryAttempt } from '@common/schemas'
-import { clientCommandInput, upstreamCommandInput } from './request-commands'
-
-function contentOf(overrides: Partial<RequestContent> = {}): RequestContent {
-  return {
-    id: 'content_1',
-    requestId: 'req_1',
-    captureStatus: 'captured',
-    requestMethod: 'post',
-    requestPath: '/v1/responses',
-    requestHeaders: '{"content-type":"application/json"}',
-    requestBody: '{"model":"default"}',
-    responseStatus: 200,
-    responseHeaders: '{}',
-    responseBody: 'ok',
-    createdTime: 0,
-    updatedTime: 0,
-    ...overrides,
-  }
-}
+import type { AttemptContent, RequestLogEntryAttempt } from '@common/schemas'
+import { upstreamCommandInput } from './request-commands'
 
 function attemptContentOf(overrides: Partial<AttemptContent> = {}): AttemptContent {
   return {
@@ -62,29 +44,6 @@ function attemptOf(overrides: Partial<RequestLogEntryAttempt> = {}): RequestLogE
   }
 }
 
-describe('clientCommandInput', () => {
-  it('把记录的路径接到代理地址后面', () => {
-    expect(clientCommandInput('http://127.0.0.1:9300', contentOf())).toEqual({
-      url: 'http://127.0.0.1:9300/v1/responses',
-      method: 'POST',
-      headers: '{"content-type":"application/json"}',
-      body: '{"model":"default"}',
-    })
-  })
-
-  it('没有代理地址时整条命令不成立', () => {
-    expect(clientCommandInput(null, contentOf())).toBeNull()
-  })
-
-  it('没有客户端报文时不成立', () => {
-    expect(clientCommandInput('http://127.0.0.1:9300', null)).toBeNull()
-  })
-
-  it('方法统一成大写', () => {
-    expect(clientCommandInput('http://x', contentOf({ requestMethod: 'get' }))?.method).toBe('GET')
-  })
-})
-
 describe('upstreamCommandInput', () => {
   it('用尝试自己的绝对地址，不拼代理地址', () => {
     expect(upstreamCommandInput(attemptOf(), attemptContentOf(), 'post')).toEqual({
@@ -101,6 +60,10 @@ describe('upstreamCommandInput', () => {
 
   it('上游正文缺失时不成立', () => {
     expect(upstreamCommandInput(attemptOf(), null, 'POST')).toBeNull()
+  })
+
+  it('地址没记下来时不成立，不拼出一条 URL 是空串的命令', () => {
+    expect(upstreamCommandInput(attemptOf({ url: '' }), attemptContentOf(), 'POST')).toBeNull()
   })
 
   it('客户端方法也缺失时退回落 POST', () => {

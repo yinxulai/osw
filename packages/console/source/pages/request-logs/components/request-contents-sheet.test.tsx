@@ -118,8 +118,6 @@ interface RenderInput {
   bodiesLoading?: boolean
   /** 取正文失败时的错误信息。 */
   bodiesError?: string
-  /** 代理监听地址；传 `null` 模拟地址未知（复制客户端请求应禁用）。 */
-  origin?: string | null
 }
 
 /**
@@ -155,7 +153,6 @@ function renderSheet(input: RenderInput = {}) {
       attempts={attempts}
       requestRewriteRules={[]}
       clientProtocol="openai-responses"
-      origin={input.origin === undefined ? 'http://127.0.0.1:9300' : input.origin}
       loading={false}
       error={null}
       selectedAttemptId={selectedAttemptId}
@@ -250,7 +247,7 @@ describe('capture status hint', () => {
 })
 
 /**
- * 面板自己的导出入口：复制请求（客户端 / 发往供应商）与下载错误报告。
+ * 面板自己的两个导出入口：复制这次尝试真正发出去的请求、下载错误报告。
  *
  * 这里只固定**入口在不在、能不能点、指的是哪一份报文**，不测剪贴板与文件本身：
  * `buildCurl` / `buildFetch` / `buildErrorReport` 各自有单测，重复断言只会让改文案时改两处。
@@ -260,41 +257,42 @@ describe('request actions', () => {
     useLanguageStore.setState({ preference: 'en' })
   })
 
-  it('offers the client request as a copyable command', () => {
+  it('copies the request this attempt actually sent', () => {
     renderSheet()
 
     const button = screen.getByRole('button', { name: 'Copy request' })
     expect(button).toHaveProperty('disabled', false)
-    expect(screen.getByText('Copy request')).toBeTruthy()
+    // 面板本身就是一次具体尝试的现场，这里只有一份「请求」，不需要再点名它要去哪。
+    expect(button.getAttribute('title')).toBe('Copy the request this attempt actually sent to the provider as a ready-to-run cURL command')
   })
 
-  it('keeps the client copy disabled when the proxy origin is unknown', () => {
-    // 记录的只是路径，没有代理地址就拼不出可执行 URL；禁用并说明原因，
-    // 而不是复制出一条指向 localhost 的半截命令。
-    renderSheet({ origin: null })
+  it('disables the copy when this attempt captured nothing upstream', () => {
+    renderSheet({ attemptContents: [] })
 
     const button = screen.getByRole('button', { name: 'Copy request' })
     expect(button).toHaveProperty('disabled', true)
-    // 报文在、地址不在：说的是「还原不了」，而不是「没有正文」。
-    expect(button.getAttribute('title')).toBe('The proxy address is unknown, so this request cannot be rebuilt')
+    expect(button.getAttribute('title')).toBe('No request to the provider was captured for this attempt')
   })
 
-  it('puts the request that went to the provider in the copy menu', async () => {
+  it('puts only the command flavours in the copy menu', async () => {
     renderSheet()
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'More ways to export this request' }), { key: 'ArrowDown' })
 
-    await waitFor(() => expect(screen.getByText('Copy request to provider')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Copy as cURL')).toBeTruthy())
+    expect(screen.getByText('Copy as fetch')).toBeTruthy()
+    // 客户端原件在面板里能逐段查看，行上也有它自己的复制入口；标题栏不再并列第二份请求。
+    expect(screen.queryByText('Copy request to provider')).toBeNull()
   })
 
-  it('disables the provider entry when this attempt captured nothing upstream', async () => {
+  it('disables both command flavours when nothing was captured upstream', async () => {
     renderSheet({ attemptContents: [] })
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'More ways to export this request' }), { key: 'ArrowDown' })
 
-    await waitFor(() => expect(screen.getByText('Copy request to provider')).toBeTruthy())
-    const trigger = screen.getByText('Copy request to provider').closest('[role="menuitem"]')
-    expect(trigger?.getAttribute('data-disabled')).not.toBeNull()
+    await waitFor(() => expect(screen.getByText('Copy as cURL')).toBeTruthy())
+    expect(screen.getByText('Copy as cURL').closest('[role="menuitem"]')?.getAttribute('data-disabled')).not.toBeNull()
+    expect(screen.getByText('Copy as fetch').closest('[role="menuitem"]')?.getAttribute('data-disabled')).not.toBeNull()
   })
 
   it('offers the error report even on a successful attempt', () => {

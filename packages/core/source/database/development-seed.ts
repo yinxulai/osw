@@ -474,6 +474,17 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         .run()
     }
 
+    // 更早的 fixture 把 `url` 写成了空串。地址是观测页「复制请求」与错误报告的唯一地址来源，
+    // 空着会让整条命令不成立；补种时顺带把这些行按各自的协议回填成端点地址。
+    for (const provider of ALL_PROVIDER_FIXTURES) {
+      for (const [protocol, url] of Object.entries(provider.endpoints)) {
+        transaction.update(requestAttempts)
+          .set({ url })
+          .where(and(eq(requestAttempts.providerId, provider.id), eq(requestAttempts.upstreamProtocol, protocol), eq(requestAttempts.url, '')))
+          .run()
+      }
+    }
+
     const healthToInsert = ALL_PROVIDER_FIXTURES.filter(provider => !existingHealthProviderIds.has(provider.id))
     if (healthToInsert.length > 0) transaction.insert(providerHealth).values(healthToInsert.map(provider => {
       const index = ALL_PROVIDER_FIXTURES.findIndex(item => item.id === provider.id)
@@ -567,7 +578,10 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         providerModelName: fixture[2],
         upstreamProtocol: fixture[3],
         upstreamRequestId: null,
-        url: '',
+        // 尝试上的地址是**绝对 URL**：协议转换与地址改写的最终结果都落在这一列，
+        // 观测页的「复制请求」与错误报告都拿它当唯一地址来源。留空就等于承认
+        // 「不知道发到哪去了」，而真实请求不可能没有地址。
+        url: (request.provider.endpoints as Record<string, string>)[fixture[3]],
         status: request.status,
         httpStatus: request.failed ? 504 : 200,
         retryable: request.failed,
@@ -639,6 +653,9 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
       // 上游视角：每次尝试一行，只描述真正发给供应商 / 由供应商返回的内容。
       // 这里也把两条规则的效果写进去：全局那条加了探针头，脚本那条把 temperature 压到 0。
       const strictRequest = request.requestRewriteRuleIds.includes('rule_dev_strict_temperature')
+      // 上游 id 必须长得像**供应商签发**的号：它能被原样贴进工单，也能用来和供应商对账。
+      // 拿本地请求 id 拼一个 `upstream-req_dev_…` 只会让人以为两者有对应关系。
+      const upstreamId = `resp_devseed${String(request.index).padStart(2, '0')}${request.provider.id.replace('prov_', '')}`
       return {
         id: `attempt_content_dev_${request.id}`,
         attemptId: `att_dev_${request.id}${request.failed ? '_retry' : ''}`,
@@ -646,8 +663,8 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         requestHeaders: JSON.stringify({ 'content-type': 'application/json', authorization: '[REDACTED]', 'x-upstream-attempt': 'development-seed', 'x-osw-probe': 'development-seed' }),
         requestBody: JSON.stringify({ model: request.provider.name, messages: [{ role: 'user', content: strictRequest ? 'apply-strict: this is an attempt-level request body.' : 'This is an attempt-level request body.' }], temperature: strictRequest ? 0 : 0.2, stream: true }),
         responseStatus: request.failed ? 504 : 200,
-        responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-upstream-request-id': `upstream-${request.id}` }),
-        responseBody: JSON.stringify({ id: `attempt-${request.id}`, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'This is an attempt-level response.' } }] }),
+        responseHeaders: JSON.stringify({ 'content-type': 'application/json', 'x-upstream-request-id': upstreamId }),
+        responseBody: JSON.stringify({ id: upstreamId, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content: 'This is an attempt-level response.' } }] }),
         createdTime: request.createdTime,
         updatedTime: request.createdTime,
       }
