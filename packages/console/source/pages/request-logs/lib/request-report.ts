@@ -1,8 +1,10 @@
 /**
- * 把一次失败的尝试整理成一份可以直接发给供应商的报告。
+ * 把一次尝试整理成一份可以直接发给供应商的请求报告。
  *
  * 收件人是**供应商**，因此报告里只出现供应商能对得上的事实：它收到了什么请求（改写与协议转换
  * 之后的真实 URL、头、正文）、它回了什么、以及我们对这次失败的判定（错误码、错误信息、耗时）。
+ *
+ * 报告不按成功/失败分叉：成功的那次同样可以导出，「这次请求它到底收到没」也需要对账。
  *
  * 本地的流水号一律不写：请求 ID、尝试 ID、Provider ID、上游模型 ID、命中的改写规则 ID
  * 在供应商那里查不到任何东西，写进去只会让人以为该拿它们去核对。上游模型写**名字**
@@ -24,7 +26,7 @@ import { formatCreatedTime, protocolLabel } from './contents'
 import { distinctAttemptErrorCode, distinctAttemptErrorMessage, formatTransport } from './format'
 import { prettyRequestBody, sanitizeFileSegment } from './request-body-download'
 
-export interface ErrorReportInput {
+export interface RequestReportInput {
   t: AppTranslator
   /** 界面语言，用来格式化生成时间。 */
   locale: string
@@ -50,7 +52,7 @@ interface ReportBlock {
 function appendBlock(lines: string[], block: ReportBlock, t: AppTranslator): void {
   lines.push(`### ${block.label}`, '')
   if (block.value === null || block.value === '') {
-    lines.push(t('requestLogs.contents.errorReport.notCaptured'), '')
+    lines.push(t('requestLogs.contents.requestReport.notCaptured'), '')
     return
   }
   lines.push('```', prettyRequestBody(block.value), '```', '')
@@ -98,8 +100,8 @@ function reportFileName(attempt: RequestLogEntryAttempt): string {
   const attemptNo = String(attempt.attemptIndex + 1)
   const upstreamId = sanitizeFileSegment(attempt.upstreamRequestId ?? '', '')
   return upstreamId === ''
-    ? `error-report-att${attemptNo}.md`
-    : `error-report-${upstreamId}-att${attemptNo}.md`
+    ? `request-report-att${attemptNo}.md`
+    : `request-report-${upstreamId}-att${attemptNo}.md`
 }
 
 /**
@@ -108,12 +110,12 @@ function reportFileName(attempt: RequestLogEntryAttempt): string {
  * 顺序就是供应商复现的顺序：先给结论（这次尝试是谁、错误码、错误信息、耗时），
  * 再给它收到的请求，最后是它回的响应。
  */
-export function buildErrorReport(input: ErrorReportInput): ReportFile {
+export function buildRequestReport(input: RequestReportInput): ReportFile {
   const { t, locale, attempt, attemptContent } = input
   const lines: string[] = []
 
-  lines.push(`# ${t('requestLogs.contents.errorReport.title')}`, '')
-  lines.push(`${t('requestLogs.contents.errorReport.generatedAt')}: ${formatCreatedTime(locale, input.generatedTime)}`)
+  lines.push(`# ${t('requestLogs.contents.requestReport.title')}`, '')
+  lines.push(`${t('requestLogs.contents.requestReport.generatedAt')}: ${formatCreatedTime(locale, input.generatedTime)}`)
   // 上游请求 ID 是唯一值得写进抬头的号：它是供应商自己的流水号。没有就整行不写。
   if (attempt.upstreamRequestId) lines.push(`${t('requestLogs.contents.fact.upstreamRequestId')}: ${attempt.upstreamRequestId}`)
   lines.push('')
@@ -124,12 +126,12 @@ export function buildErrorReport(input: ErrorReportInput): ReportFile {
 
   const upstreamLabel = protocolLabel(t, attempt.upstreamProtocol)
   const upstreamStatus = attemptContent === null
-    ? t('requestLogs.contents.errorReport.notCaptured')
+    ? t('requestLogs.contents.requestReport.notCaptured')
     : attemptContent.responseStatus === null
       ? t('requestLogs.contents.status.upstreamNoResponse')
       : `HTTP ${attemptContent.responseStatus}`
   // 地址是请求段的元信息，空值也照位写「未采集」，免得整段少一行让人以为漏了。
-  const upstreamUrl = attempt.url === '' ? t('requestLogs.contents.errorReport.notCaptured') : attempt.url
+  const upstreamUrl = attempt.url === '' ? t('requestLogs.contents.requestReport.notCaptured') : attempt.url
 
   appendSection(lines, t, t('requestLogs.contents.stage.upstreamRequest'), [upstreamUrl], [
     { label: t('requestLogs.contents.section.requestHeader', { protocol: upstreamLabel }), value: attemptContent?.requestHeaders ?? null },

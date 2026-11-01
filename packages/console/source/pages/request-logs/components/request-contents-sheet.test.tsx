@@ -247,10 +247,10 @@ describe('capture status hint', () => {
 })
 
 /**
- * 面板自己的两个导出入口：复制这次尝试真正发出去的请求、下载错误报告。
+ * 面板自己的两个导出入口：复制这次尝试真正发出去的请求、下载请求报告。
  *
  * 这里只固定**入口在不在、能不能点、指的是哪一份报文**，不测剪贴板与文件本身：
- * `buildCurl` / `buildFetch` / `buildErrorReport` 各自有单测，重复断言只会让改文案时改两处。
+ * `buildCurl` / `buildFetch` / `buildRequestReport` 各自有单测，重复断言只会让改文案时改两处。
  */
 describe('request actions', () => {
   beforeEach(() => {
@@ -295,17 +295,17 @@ describe('request actions', () => {
     expect(screen.getByText('Copy as fetch').closest('[role="menuitem"]')?.getAttribute('data-disabled')).not.toBeNull()
   })
 
-  it('offers the error report even on a successful attempt', () => {
+  it('offers the request report even on a successful attempt', () => {
     // 成功但内容不对同样是要供应商跟进的事故；按状态决定入口有无会让标题栏高度跳动。
     renderSheet({ attempt: { status: 'success', httpStatus: 200 } })
 
-    expect(screen.getByText('Download error report')).toBeTruthy()
+    expect(screen.getByText('Download request report')).toBeTruthy()
   })
 
-  it('hides the error report when no attempt is selected', () => {
+  it('hides the request report when no attempt is selected', () => {
     renderSheet({ selectedAttemptId: null })
 
-    expect(screen.queryByText('Download error report')).toBeNull()
+    expect(screen.queryByText('Download request report')).toBeNull()
   })
 })
 

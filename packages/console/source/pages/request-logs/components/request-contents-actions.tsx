@@ -17,7 +17,7 @@ import type { RequestCommandInput } from '../lib/request-command'
 export interface RequestContentsActionsProps {
   /** 这次尝试真正发出去的那份请求；`null` 表示没采到正文，这条命令不成立。 */
   upstreamInput: RequestCommandInput | null
-  /** 下载错误报告；`null` 表示没有选中的尝试，没有可导出的现场。 */
+  /** 下载请求报告；`null` 表示没有选中的尝试，没有可导出的现场。 */
   onDownloadReport: (() => void) | null
   /** 报告正在组装。 */
   reportPending: boolean
@@ -123,18 +123,16 @@ export function RequestContentsActions(props: RequestContentsActionsProps) {
         <Button
           variant="outline"
           size="sm"
-          title={t('requestLogs.detail.downloadErrorReportTitle')}
+          title={t('requestLogs.detail.downloadRequestReportTitle')}
           disabled={props.reportPending}
           onClick={props.onDownloadReport}
         >
           {props.reportPending
             ? <LoaderCircle aria-hidden className="animate-spin" />
             : <Download aria-hidden />}
-          {t('requestLogs.detail.downloadErrorReport')}
+          {t('requestLogs.detail.downloadRequestReport')}
         </Button>
       )}
     </div>
   )
 }
-
-

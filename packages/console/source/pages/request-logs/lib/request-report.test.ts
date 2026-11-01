@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AttemptContent, RequestLogEntryAttempt } from '@common/schemas'
 import { createAppTranslator } from '@common/i18n/catalogs'
-import { buildErrorReport, type ErrorReportInput } from './error-report'
+import { buildRequestReport, type RequestReportInput } from './request-report'
 
 const t = createAppTranslator('en')
 
 // 段标题与事实标签一律从词条取，改文案时测试不用跟着改。
 const TITLE = {
-  report: t('requestLogs.contents.errorReport.title'),
+  report: t('requestLogs.contents.requestReport.title'),
   facts: t('requestLogs.contents.attemptFacts.title'),
   upstreamRequest: t('requestLogs.contents.stage.upstreamRequest'),
   upstreamResponse: t('requestLogs.contents.stage.upstreamResponse'),
@@ -20,9 +20,9 @@ const FACT = {
   upstreamRequestId: t('requestLogs.contents.fact.upstreamRequestId'),
   upstreamUrl: t('requestLogs.contents.fact.upstreamUrl'),
   requestId: t('requestLogs.detail.requestId'),
-  generatedAt: t('requestLogs.contents.errorReport.generatedAt'),
+  generatedAt: t('requestLogs.contents.requestReport.generatedAt'),
 }
-const NOT_CAPTURED = t('requestLogs.contents.errorReport.notCaptured')
+const NOT_CAPTURED = t('requestLogs.contents.requestReport.notCaptured')
 const NO_UPSTREAM_RESPONSE = t('requestLogs.contents.status.upstreamNoResponse')
 
 // 记录里的 id 全部带 `_dev_` 前缀：报告里一个都不该出现，漏一个测试就红。
@@ -68,7 +68,7 @@ function attemptContentOf(overrides: Partial<AttemptContent> = {}): AttemptConte
   }
 }
 
-function inputOf(overrides: Partial<ErrorReportInput> = {}): ErrorReportInput {
+function inputOf(overrides: Partial<RequestReportInput> = {}): RequestReportInput {
   return {
     t,
     locale: 'en',
@@ -87,9 +87,9 @@ function sectionOf(text: string, title: string): string | null {
   return next === -1 ? text.slice(start) : text.slice(start, next)
 }
 
-describe('buildErrorReport', () => {
+describe('buildRequestReport', () => {
   it('只写供应商能对上的两段：它收到的请求、它回的响应', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
 
     expect(sectionOf(report.text, TITLE.upstreamRequest)).not.toBeNull()
     expect(sectionOf(report.text, TITLE.upstreamResponse)).not.toBeNull()
@@ -99,7 +99,7 @@ describe('buildErrorReport', () => {
   })
 
   it('事实在前、请求与响应在后：供应商先看结论再看报文', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const facts = report.text.indexOf(`## ${TITLE.facts}`)
 
     expect(facts).toBeGreaterThan(0)
@@ -108,7 +108,7 @@ describe('buildErrorReport', () => {
   })
 
   it('抬头只有生成时间，没有我们自己的请求 ID', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const header = report.text.slice(0, report.text.indexOf('## '))
 
     expect(report.text.startsWith(`# ${TITLE.report}\n`)).toBe(true)
@@ -117,19 +117,19 @@ describe('buildErrorReport', () => {
   })
 
   it('有上游请求 ID 时写进抬头 —— 那是供应商自己能查的号', () => {
-    const report = buildErrorReport(inputOf({ attempt: attemptOf({ upstreamRequestId: 'resp_abc123' }) }))
+    const report = buildRequestReport(inputOf({ attempt: attemptOf({ upstreamRequestId: 'resp_abc123' }) }))
 
     expect(report.text).toContain(`${FACT.upstreamRequestId}: resp_abc123`)
   })
 
   it('没有上游请求 ID 时整行不写，不留一个空值', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
 
     expect(report.text).not.toContain(`${FACT.upstreamRequestId}:`)
   })
 
   it('结论放在最前面：错误码、错误信息与耗时都在事实清单里', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const facts = sectionOf(report.text, TITLE.facts)
 
     expect(facts).toContain('upstream_rate_limited')
@@ -139,7 +139,7 @@ describe('buildErrorReport', () => {
   })
 
   it('事实清单只放供应商认得的名字与数字，我们本地的 id 一个都不写', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const facts = sectionOf(report.text, TITLE.facts)
 
     expect(facts).toContain('Provider One')
@@ -152,13 +152,13 @@ describe('buildErrorReport', () => {
   })
 
   it('事实清单里不重复写地址', () => {
-    const facts = sectionOf(buildErrorReport(inputOf()).text, TITLE.facts) ?? ''
+    const facts = sectionOf(buildRequestReport(inputOf()).text, TITLE.facts) ?? ''
 
     expect(facts).not.toContain(FACT.upstreamUrl)
   })
 
   it('上游地址只在一个地方出现：请求段的元信息', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const section = sectionOf(report.text, TITLE.upstreamRequest)
 
     expect(section).toContain('https://api.provider.test/v1/responses')
@@ -166,14 +166,14 @@ describe('buildErrorReport', () => {
   })
 
   it('地址没记下来时也照位写「未采集」，不让整段少一行', () => {
-    const report = buildErrorReport(inputOf({ attempt: attemptOf({ url: '' }) }))
+    const report = buildRequestReport(inputOf({ attempt: attemptOf({ url: '' }) }))
     const section = sectionOf(report.text, TITLE.upstreamRequest)
 
     expect(section).toContain(NOT_CAPTURED)
   })
 
   it('正文重排成可读 JSON，但内容一字不改', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
     const section = sectionOf(report.text, TITLE.upstreamRequest)
 
     expect(section).toContain('"model": "upstream"')
@@ -181,7 +181,7 @@ describe('buildErrorReport', () => {
   })
 
   it('上游没回响应时写明「上游未返回响应」，而不是留成 HTTP null', () => {
-    const report = buildErrorReport(inputOf({
+    const report = buildRequestReport(inputOf({
       attemptContent: attemptContentOf({ responseStatus: null, responseHeaders: null, responseBody: null }),
     }))
     const section = sectionOf(report.text, TITLE.upstreamResponse)
@@ -192,14 +192,14 @@ describe('buildErrorReport', () => {
   })
 
   it('没有正文行时两段都写「未采集」，缺的字段正是要回来问的字段', () => {
-    const report = buildErrorReport(inputOf({ attemptContent: null }))
+    const report = buildRequestReport(inputOf({ attemptContent: null }))
 
     expect(sectionOf(report.text, TITLE.upstreamRequest)).toContain(NOT_CAPTURED)
     expect(sectionOf(report.text, TITLE.upstreamResponse)).toContain(NOT_CAPTURED)
   })
 
   it('正文是空串时也算未采集，不写出一个空围栏', () => {
-    const report = buildErrorReport(inputOf({
+    const report = buildRequestReport(inputOf({
       attemptContent: attemptContentOf({ requestBody: '' }),
     }))
 
@@ -207,21 +207,21 @@ describe('buildErrorReport', () => {
   })
 
   it('文件名用上游请求 ID 与第几次尝试，非法字符换掉', () => {
-    const report = buildErrorReport(inputOf({
+    const report = buildRequestReport(inputOf({
       attempt: attemptOf({ upstreamRequestId: 'resp/ab:c 1' }),
     }))
 
-    expect(report.name).toBe('error-report-resp-ab-c-1-att2.md')
+    expect(report.name).toBe('request-report-resp-ab-c-1-att2.md')
   })
 
   it('没有上游请求 ID 时文件名只留尝试序号', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
 
-    expect(report.name).toBe('error-report-att2.md')
+    expect(report.name).toBe('request-report-att2.md')
   })
 
   it('结尾只有一个换行，直接发出去也干净', () => {
-    const report = buildErrorReport(inputOf())
+    const report = buildRequestReport(inputOf())
 
     expect(report.text.endsWith('\n')).toBe(true)
     expect(report.text.endsWith('\n\n')).toBe(false)

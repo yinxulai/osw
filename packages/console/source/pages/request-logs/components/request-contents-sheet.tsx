@@ -5,7 +5,7 @@ import { useToast } from '@/components/ui/toast'
 import { useLocale, useTranslation } from '@/i18n/provider'
 import { useRequestLogBodiesQuery } from '../queries'
 import { buildContentStages, mergeAttemptContent, mergeClientContent, type ContentStage } from '../lib/contents'
-import { buildErrorReport } from '../lib/error-report'
+import { buildRequestReport } from '../lib/request-report'
 import { upstreamCommandInput } from '../lib/request-commands'
 import { saveTextFile } from '../lib/request-body-download'
 import { useContentsSearch } from '../hooks/use-contents-search'
@@ -101,7 +101,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
   const bodiesMissing = props.error === null && !contentsLoading && bodiesError === null && nav.sections.length === 0
 
   /**
-   * 下载错误报告。
+   * 下载请求报告。
    *
    * 报告要的是**原文**，因此这里不看当前界面上的折叠/搜索状态：重新拿到一整份正文
    * （面板已经取过就直接用，没取过就现取一次），按 `attemptId` 对齐，缺的部分在报告里写成「未采集」。
@@ -116,9 +116,9 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
         setReportPending(true)
         try {
           const all = bodies ?? (await bodiesQuery.refetch()).data ?? null
-          if (all === null) throw new Error(t('requestLogs.detail.downloadErrorReportFailed'))
+          if (all === null) throw new Error(t('requestLogs.detail.downloadRequestReportFailed'))
           const upstreamSummary = props.attemptContents?.find(content => content.attemptId === selectedAttempt.id) ?? null
-          const file = buildErrorReport({
+          const file = buildRequestReport({
             t,
             locale,
             attempt: selectedAttempt,
@@ -127,7 +127,7 @@ export function RequestContentsSheet(props: RequestContentsSheetProps) {
           })
           saveTextFile(file, 'text/markdown')
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : t('requestLogs.detail.downloadErrorReportFailed'))
+          toast.error(error instanceof Error ? error.message : t('requestLogs.detail.downloadRequestReportFailed'))
         } finally {
           setReportPending(false)
         }

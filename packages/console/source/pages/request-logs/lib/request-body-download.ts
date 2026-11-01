@@ -23,7 +23,7 @@ export interface RequestBodyDownload {
  * 把任意字符串压成一段可以安全放进文件名的片段。
  *
  * 下载的文件名由记录里的值拼出来（请求 ID、方法），而它们来自采集到的报文——
- * 不能假设只含 ASCII 安全字符。空串退回 `fallback`，否则会出现 `error-report--att1.md` 这种半截名字。
+ * 不能假设只含 ASCII 安全字符。空串退回 `fallback`，否则会出现 `request-report--att1.md` 这种半截名字。
  */
 export function sanitizeFileSegment(value: string, fallback: string): string {
   const safe = value.replace(UNSAFE_FILENAME_CHARS, '-').replace(/^-+|-+$/g, '')

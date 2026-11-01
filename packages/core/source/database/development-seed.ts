@@ -474,7 +474,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         .run()
     }
 
-    // 更早的 fixture 把 `url` 写成了空串。地址是观测页「复制请求」与错误报告的唯一地址来源，
+    // 更早的 fixture 把 `url` 写成了空串。地址是观测页「复制请求」与请求报告的唯一地址来源，
     // 空着会让整条命令不成立；补种时顺带把这些行按各自的协议回填成端点地址。
     for (const provider of ALL_PROVIDER_FIXTURES) {
       for (const [protocol, url] of Object.entries(provider.endpoints)) {
@@ -579,7 +579,7 @@ export async function seedDevelopmentData(secretStore: SecretStore, options: Dev
         upstreamProtocol: fixture[3],
         upstreamRequestId: null,
         // 尝试上的地址是**绝对 URL**：协议转换与地址改写的最终结果都落在这一列，
-        // 观测页的「复制请求」与错误报告都拿它当唯一地址来源。留空就等于承认
+        // 观测页的「复制请求」与请求报告都拿它当唯一地址来源。留空就等于承认
         // 「不知道发到哪去了」，而真实请求不可能没有地址。
         url: (request.provider.endpoints as Record<string, string>)[fixture[3]],
         status: request.status,
