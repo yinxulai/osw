@@ -1804,14 +1804,12 @@ Score request size in a sandbox script, then route by score band to different lo
 
   // ========== 设置页 ==========
   'settings.title': 'Settings',
-  'settings.description': 'Manage application behavior, network, failover and local data',
+  'settings.description': 'Manage application behavior, network, routing strategy and local data',
   'settings.section.application': 'Application',
   'settings.section.network': 'Network',
   'settings.section.routing': 'Routing',
-  'settings.section.reliability': 'Reliability',
   'settings.section.data': 'Data',
-  'settings.section.sync': 'Cloud sync',
-  'settings.section.developer': 'Developer',
+  'settings.section.about': 'About',
   'settings.footer.allSaved': 'All settings saved',
   'settings.footer.dirty': 'You have unsaved changes',
   'settings.footer.synced': 'Settings are in sync',

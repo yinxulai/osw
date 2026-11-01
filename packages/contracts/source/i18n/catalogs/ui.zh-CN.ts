@@ -1803,14 +1803,12 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
 
   // ========== 设置页 ==========
   'settings.title': '设置',
-  'settings.description': '管理应用行为、网络连接、故障恢复与本地数据',
+  'settings.description': '管理应用行为、网络连接、路由策略与本地数据',
   'settings.section.application': '应用',
   'settings.section.network': '网络',
   'settings.section.routing': '路由',
-  'settings.section.reliability': '可靠性',
   'settings.section.data': '数据',
-  'settings.section.sync': '云同步',
-  'settings.section.developer': '开发者',
+  'settings.section.about': '关于',
   'settings.footer.allSaved': '所有设置已保存',
   'settings.footer.dirty': '有尚未保存的更改',
   'settings.footer.synced': '当前设置已同步',

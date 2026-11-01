@@ -118,6 +118,15 @@ export function RuntimeSettingsPage() {
           </div>
         ) : (
           <>
+            {/*
+              分区的先后就是一句话的主语顺序：这台软件自己怎么表现 → 别人怎么连进来 →
+              请求怎么出去 → 东西存在哪 → 这是谁做的。
+
+              「路由模式」因此不再单独占一个分区：它与故障转移、缓存亲和是同一个问题的三段
+              （先选给谁、失败了换谁、成功过就粘住），拆成两处只会让人来回找。
+              「云同步」同理归进「数据」—— 它搬的就是这一份数据，独立成区等于把一个动词切成两页。
+              版本更新与源码/社区都是「关于这个东西」，压在最末，正是人找它们时往下滚的那一格。
+            */}
             <SettingsSection title={t('settings.section.application')}>
               <GeneralCard
                 autoLaunch={service.settings.autoLaunch}
@@ -131,7 +140,6 @@ export function RuntimeSettingsPage() {
                 onLanguageChange={handleLanguageChange}
               />
               <LiveMetricCard settings={service.settings} onUpdate={service.updateField} />
-              <UpdateCard />
             </SettingsSection>
 
             <SettingsSection title={t('settings.section.network')}>
@@ -152,15 +160,14 @@ export function RuntimeSettingsPage() {
               />
             </SettingsSection>
 
+            {/* 顺序即请求的一生：选给谁 → 失败了换谁 → 成功过就粘住。 */}
             <SettingsSection title={t('settings.section.routing')}>
               <RouteModeCard />
-            </SettingsSection>
-
-            <SettingsSection title={t('settings.section.reliability')}>
               <FailoverCard settings={service.settings} onUpdate={service.updateField} />
               <CacheAffinityCard settings={service.settings} onUpdate={service.updateField} />
             </SettingsSection>
 
+            {/* 顺序即数据的去向：先决定记什么 → 存在哪 → 怎么搬走 → 开发环境专用。 */}
             <SettingsSection title={t('settings.section.data')}>
               <LogRetentionCard
                 captureRequestLogs={service.settings.captureRequestLogs}
@@ -174,6 +181,7 @@ export function RuntimeSettingsPage() {
                 onPrune={service.pruneLogs}
               />
               <DataDirectoryCard storageBytes={service.storageBytes} />
+              <CloudSyncCard />
               {import.meta.env.DEV && (
                 <DevelopmentCard
                   exportingScreenshots={service.exportingScreenshots}
@@ -184,11 +192,8 @@ export function RuntimeSettingsPage() {
               )}
             </SettingsSection>
 
-            <SettingsSection title={t('settings.section.sync')}>
-              <CloudSyncCard />
-            </SettingsSection>
-
-            <SettingsSection title={t('settings.section.developer')}>
+            <SettingsSection title={t('settings.section.about')}>
+              <UpdateCard />
               <DeveloperCard />
             </SettingsSection>
           </>
