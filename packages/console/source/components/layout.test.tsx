@@ -56,6 +56,39 @@ describe('应用外壳', () => {
     rerender(<AppLayout sidebar={<span>侧栏内容</span>} sidebarExpanded><span>正文</span></AppLayout>)
     expect(container.firstElementChild?.className).toContain('grid-cols-[14rem_minmax(0,1fr)]')
   })
+  it('正文不设全局最大宽度、不居中，只保留响应式内边距', () => {
+    const { container } = render(
+      <AppLayout sidebar={<span>侧栏内容</span>}><span>正文</span></AppLayout>,
+    )
+
+    // 滚动容器 -> 正文内层。外壳不再替所有页面决定阅读宽度。
+    const panel = container.querySelector('main > div')
+    const content = panel?.firstElementChild as HTMLElement | null
+    expect(content).toBeTruthy()
+
+    expect(content?.className).not.toContain('max-w-7xl')
+    expect(content?.className).not.toContain('mx-auto')
+    // 窄屏 16px、>=768px 24px、>=1536px 32px；纵向保持 20px。
+    expect(content?.className).toContain('px-4')
+    expect(content?.className).toContain('py-5')
+    expect(content?.className).toContain('md:px-6')
+    expect(content?.className).toContain('2xl:px-8')
+    // 高度链路：滚动容器可收缩，内层靠 flex-1 撑满（内层加 min-h-0 会吃掉尾部留白）。
+    expect(panel?.className).toContain('min-h-0')
+    expect(content?.className).toContain('flex-1')
+  })
+
+  it('页头的负边距与该断点的正文内边距对齐', () => {
+    const { container } = render(<PageHeader title="概览" />)
+    const header = container.querySelector('header')
+
+    expect(header?.className).toContain('-mx-4')
+    expect(header?.className).toContain('px-4')
+    expect(header?.className).toContain('md:-mx-6')
+    expect(header?.className).toContain('md:px-6')
+    expect(header?.className).toContain('2xl:-mx-8')
+    expect(header?.className).toContain('2xl:px-8')
+  })
 })
 
 describe('页面容器', () => {

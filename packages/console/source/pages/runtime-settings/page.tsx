@@ -71,7 +71,12 @@ export function RuntimeSettingsPage() {
   }
 
   return (
-    <PageLayout>
+    /*
+      设置页是全应用唯一保留阅读宽度上限的页面：正文是一列「标签 + 说明 + 控件」的表单，
+      控件固定在行尾。宽度继续放大时，标签与控件会被拉到屏幕两端，读一行要横跨整个窗口。
+      所以这里按页面自己的语义收在 1280px，而不是让外壳替所有页面做这个决定。
+    */
+    <PageLayout className="mx-auto w-full max-w-7xl">
       <PageHeader
         title={t('settings.title')}
         description={t('settings.description')}

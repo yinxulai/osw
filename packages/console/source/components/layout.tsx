@@ -66,8 +66,20 @@ export function AppLayout(props: AppLayoutProps) {
           换成 `flex-1` 后：内容不足一屏时撑满一屏（路由画布靠它拿到确定高度，`h-full`
           才解析得出来），内容超高时盒子随内容长高，`py-5` 始终是真正的尾部留白。
         */}
-        <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-canvas shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
-          <div className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-6 py-5">{children}</div>
+        <div className="relative flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border-[0.5px] border-components-panel-border bg-canvas shadow-[0_1px_3px_rgb(0_0_0/0.06)]">
+          {/*
+            正文**不设全局最大宽度**：统计、请求记录、日志、模型管理这些都是数据视图，
+            宽屏下本来就该用满可用宽度。以前这里的 `max-w-7xl` + `mx-auto` 把所有页面
+            锁在 1280px 并居中，宽窗口两侧留出一大块空白，页面内部再怎么自适应也没用。
+
+            阅读宽度是**页面自己的事**：需要窄栏的页面在 `PageLayout` 上写 `max-w-*`
+            （设置页），引导页则根本不在这个外壳里（它自带 `max-w-3xl`）。
+
+            高度链路：滚动容器自己写 `min-h-0`，内层只做 `flex-1`。内层不能再加
+            `min-h-0`——那会让它在外层里被压到视口高度，内容超高时 `py-5` 的尾部留白
+            留在视口底部而不是内容之后，滚到底最后一张卡片会贴边。
+          */}
+          <div className="relative z-10 w-full flex-1 px-4 py-5 md:px-6 2xl:px-8">{children}</div>
         </div>
       </main>
     </div>
@@ -88,7 +100,7 @@ export function PageHeader(props: PageHeaderProps) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-20 -mx-6 -mt-5 flex flex-col gap-2 border-b border-border/50 bg-canvas/95 px-6 pt-5 pb-3 backdrop-blur-sm',
+        'sticky top-0 z-20 -mx-4 -mt-5 flex flex-col gap-2 border-b border-border/50 bg-canvas/95 px-4 pt-5 pb-3 backdrop-blur-sm md:-mx-6 md:px-6 2xl:-mx-8 2xl:px-8',
         'sm:flex-row sm:items-center sm:justify-between',
         className
       )}
