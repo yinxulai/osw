@@ -804,7 +804,7 @@ describe('测试配置页', () => {
   })
 })
 
-describe('浮窗拖动与缩放', () => {
+describe('浮窗拖动与最大化', () => {
   function header(): HTMLElement {
     return screen.getByText(zh('modelTest.title')).closest('div.flex') as HTMLElement
   }
@@ -847,20 +847,51 @@ describe('浮窗拖动与缩放', () => {
     expect(floating.style.left).toBe('')
   })
 
-  it('右下角把手可访问：方向键缩放，Enter 恢复默认', () => {
-    const { container } = renderPanel()
-    const floating = container.firstElementChild as HTMLElement
-    const handle = screen.getByRole('button', { name: zh('modelTest.panel.resizeHandle') })
+  it('最大化后显示视口内的明确矩形，恢复后回到 CSS 默认尺寸', () => {
+    const descriptorWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const descriptorHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+    try {
+      const { container } = renderPanel()
+      const floating = container.firstElementChild as HTMLElement
+      const maximize = screen.getByRole('button', { name: zh('modelTest.action.maximize') })
 
-    fireEvent.keyDown(handle, { key: 'ArrowLeft' })
-    expect(floating.style.width).toBe('976px')
+      fireEvent.click(maximize)
+      expect(floating.style.left).toBe('16px')
+      expect(floating.style.top).toBe('16px')
+      expect(floating.style.width).toBe('1408px')
+      expect(floating.style.height).toBe('868px')
+      expect(screen.getByRole('button', { name: zh('modelTest.action.restore') })).toBeTruthy()
 
-    fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(floating.style.height).toBe('691px')
+      fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.restore') }))
+      expect(floating.style.left).toBe('')
+      expect(floating.style.top).toBe('')
+      expect(floating.style.width).toBe('')
+      expect(floating.style.height).toBe('')
+    } finally {
+      if (descriptorWidth) Object.defineProperty(window, 'innerWidth', descriptorWidth)
+      if (descriptorHeight) Object.defineProperty(window, 'innerHeight', descriptorHeight)
+    }
+  })
 
-    fireEvent.keyDown(handle, { key: 'Enter' })
-    expect(floating.style.width).toBe('')
-    expect(floating.style.height).toBe('')
+  it('窄屏最大化仍保留视口边距', () => {
+    const descriptorWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const descriptorHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 280 })
+    try {
+      const { container } = renderPanel()
+      const floating = container.firstElementChild as HTMLElement
+      fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.maximize') }))
+      expect(floating.style.left).toBe('16px')
+      expect(floating.style.top).toBe('16px')
+      expect(floating.style.width).toBe('288px')
+      expect(floating.style.height).toBe('248px')
+    } finally {
+      if (descriptorWidth) Object.defineProperty(window, 'innerWidth', descriptorWidth)
+      if (descriptorHeight) Object.defineProperty(window, 'innerHeight', descriptorHeight)
+    }
   })
 })
 

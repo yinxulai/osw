@@ -81,19 +81,21 @@ export function clampPanelRect(rect: PanelRect, viewport: PanelViewport): PanelR
 }
 
 export function movePanelRect(rect: PanelRect, deltaX: number, deltaY: number, viewport: PanelViewport): PanelRect {
-  return clampPanelRect({ ...rect, left: rect.left + deltaX, top: rect.top + deltaY }, viewport)
-}
-
-/** Resize from the bottom-right corner without moving the top-left anchor. */
-export function resizePanelRect(rect: PanelRect, deltaWidth: number, deltaHeight: number, viewport: PanelViewport): PanelRect {
-  const bounds = sizeBounds(viewport)
-  const maxWidth = Math.min(bounds.maxWidth, Math.max(0, viewport.width - PANEL_MARGIN - rect.left))
-  const maxHeight = Math.min(bounds.maxHeight, Math.max(0, viewport.height - PANEL_MARGIN - rect.top))
-  const minWidth = Math.min(bounds.minWidth, maxWidth)
-  const minHeight = Math.min(bounds.minHeight, maxHeight)
+  const maxLeft = Math.max(PANEL_MARGIN, viewport.width - PANEL_MARGIN - rect.width)
+  const maxTop = Math.max(PANEL_MARGIN, viewport.height - PANEL_MARGIN - rect.height)
   return {
     ...rect,
-    width: clamp(rect.width + deltaWidth, minWidth, maxWidth),
-    height: clamp(rect.height + deltaHeight, minHeight, maxHeight),
+    left: clamp(rect.left + deltaX, PANEL_MARGIN, maxLeft),
+    top: clamp(rect.top + deltaY, PANEL_MARGIN, maxTop),
+  }
+}
+
+/** Fill the viewport while preserving the panel margin on every side. */
+export function maximizedPanelRect(viewport: PanelViewport): PanelRect {
+  return {
+    left: PANEL_MARGIN,
+    top: PANEL_MARGIN,
+    width: Math.max(0, viewport.width - PANEL_MARGIN * 2),
+    height: Math.max(0, viewport.height - PANEL_MARGIN * 2),
   }
 }

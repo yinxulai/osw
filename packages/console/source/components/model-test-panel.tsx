@@ -8,8 +8,8 @@ import {
   FlaskConical,
   Gauge,
   Maximize2,
+  Minimize2,
   Minus,
-  MoveDiagonal2,
   Play,
   Repeat,
   RotateCcw,
@@ -82,10 +82,10 @@ import {
 } from '@/lib/model-test/export-report'
 import {
   clampPanelRect,
+  maximizedPanelRect,
   measuredPanelRect,
   movePanelRect,
   readPanelViewport,
-  resizePanelRect,
   type PanelRect,
 } from '@/lib/model-test/panel-geometry'
 import {
@@ -140,10 +140,6 @@ const ROUND_GRID_COLUMNS = 'md:grid-cols-[68px_56px_68px_80px_80px_76px_92px]'
 
 /** 标题栏里这些子元素是控件：在它们上面按下指针是「点按钮」，不是「拖面板」。 */
 const INTERACTIVE_HEADER_SELECTOR = 'button, a, input, textarea, select, [role="button"], [data-panel-no-drag]'
-
-/** 方向键每次缩放 16px，按住 Shift 时一次 64px。 */
-const RESIZE_KEY_STEP = 16
-const RESIZE_KEY_STEP_LARGE = 64
 
 interface DragGesture {
   pointerId: number
@@ -803,21 +799,22 @@ export function ModelTestPanel() {
 
   /**
    * 浮窗几何。`null` 表示仍用 CSS 默认值（右下角、`calc(100vw - 2rem)` 宽）；
-   * 一旦用户拖动或缩放，就切换成明确的 `left/top/width/height`，所有边界都经过
+   * 一旦用户拖动或最大化，就切换成明确的 `left/top/width/height`，所有边界都经过
    * `panel-geometry` 的 clamp，窗口变小也不会把面板留在视口外。
    */
   const [panelRect, setPanelRect] = useState<PanelRect | null>(null)
+  const [panelSizeMode, setPanelSizeMode] = useState<'default' | 'maximized'>('default')
   const panelRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragGesture | null>(null)
-  const resizeRef = useRef<DragGesture | null>(null)
-  /** 指针缩放结束后浏览器还会补一个 click；那一下不能当成「恢复默认」。 */
-  const resizeMovedRef = useRef(false)
 
   useEffect(() => {
-    const handleResize = () => setPanelRect(current => (current === null ? null : clampPanelRect(current, readPanelViewport())))
+    const handleResize = () => setPanelRect(current => {
+      if (current === null) return null
+      return panelSizeMode === 'maximized' ? maximizedPanelRect(readPanelViewport()) : clampPanelRect(current, readPanelViewport())
+    })
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [panelSizeMode])
 
   const currentPanelRect = () => panelRect ?? measuredPanelRect(panelRef.current?.getBoundingClientRect(), readPanelViewport())
 
@@ -846,62 +843,14 @@ export function ModelTestPanel() {
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
-  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-    resizeMovedRef.current = false
-    resizeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      origin: currentPanelRect(),
-    }
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-    event.preventDefault()
-  }
-
-  const moveResize = (event: React.PointerEvent<HTMLButtonElement>) => {
-    const gesture = resizeRef.current
-    if (!gesture || gesture.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - gesture.startX
-    const deltaY = event.clientY - gesture.startY
-    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) resizeMovedRef.current = true
-    setPanelRect(resizePanelRect(gesture.origin, deltaX, deltaY, readPanelViewport()))
-  }
-
-  const endResize = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (resizeRef.current?.pointerId !== event.pointerId) return
-    resizeRef.current = null
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-  }
-
-  const resetPanelRect = () => {
-    setPanelRect(null)
-  }
-
-  const resizeWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      resetPanelRect()
+  const togglePanelSize = () => {
+    if (panelSizeMode === 'maximized') {
+      setPanelSizeMode('default')
+      setPanelRect(null)
       return
     }
-    const step = event.shiftKey ? RESIZE_KEY_STEP_LARGE : RESIZE_KEY_STEP
-    let deltaWidth = 0
-    let deltaHeight = 0
-    if (event.key === 'ArrowLeft') deltaWidth = -step
-    else if (event.key === 'ArrowRight') deltaWidth = step
-    else if (event.key === 'ArrowUp') deltaHeight = -step
-    else if (event.key === 'ArrowDown') deltaHeight = step
-    else return
-    event.preventDefault()
-    setPanelRect(resizePanelRect(currentPanelRect(), deltaWidth, deltaHeight, readPanelViewport()))
-  }
-
-  const handleResizeClick = () => {
-    if (resizeMovedRef.current) {
-      resizeMovedRef.current = false
-      return
-    }
-    resetPanelRect()
+    setPanelSizeMode('maximized')
+    setPanelRect(maximizedPanelRect(readPanelViewport()))
   }
 
   /**
@@ -1121,6 +1070,15 @@ export function ModelTestPanel() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title={t(panelSizeMode === 'maximized' ? 'modelTest.action.restore' : 'modelTest.action.maximize')}
+            aria-label={t(panelSizeMode === 'maximized' ? 'modelTest.action.restore' : 'modelTest.action.maximize')}
+            onClick={togglePanelSize}
+          >
+            {panelSizeMode === 'maximized' ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+          </Button>
           <Button variant="ghost" size="icon-sm" title={t('modelTest.action.minimize')} aria-label={t('modelTest.action.minimize')} onClick={() => setMinimized(true)}>
             <Minus size={14} aria-hidden />
           </Button>
@@ -1321,24 +1279,6 @@ export function ModelTestPanel() {
           )}
         </div>
       </div>
-      {/*
-       * 右下角缩放把手。它是 `<button>`：键盘可以聚焦、方向键缩放、Enter/空格恢复默认；
-       * 指针拖动时走 pointer capture，松手后的那次 click 由 `resizeMovedRef` 吞掉。
-       */}
-      <button
-        type="button"
-        aria-label={t('modelTest.panel.resizeHandle')}
-        title={t('modelTest.panel.resizeHandle')}
-        className="absolute right-0 bottom-0 z-20 flex size-5 cursor-nwse-resize touch-none items-center justify-center rounded-tl-md text-text-quaternary outline-none transition-colors hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-primary"
-        onPointerDown={beginResize}
-        onPointerMove={moveResize}
-        onPointerUp={endResize}
-        onPointerCancel={endResize}
-        onClick={handleResizeClick}
-        onKeyDown={resizeWithKeyboard}
-      >
-        <MoveDiagonal2 size={12} aria-hidden />
-      </button>
     </div>
   )
 }

@@ -133,8 +133,9 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.action.minimize': '最小化（诊断继续跑）',
   'modelTest.action.close': '关闭诊断',
   'modelTest.action.expand': '展开诊断',
+  'modelTest.action.maximize': '最大化诊断面板',
+  'modelTest.action.restore': '恢复默认大小',
   'modelTest.action.exportReport': '导出报告',
-  'modelTest.panel.resizeHandle': '调整面板大小（方向键缩放，Enter 或空格恢复默认）',
   'modelTest.panel.dragHint': '拖动移动面板',
   // 角标就是「你在干别的事时唯一会看的一行」：第几轮、完成了多少、挂了几个。
   'modelTest.badge.round': '第 {round}/{total} 轮',

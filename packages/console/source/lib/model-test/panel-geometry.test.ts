@@ -7,9 +7,9 @@ import {
   PANEL_MIN_WIDTH,
   clampPanelRect,
   defaultPanelRect,
+  maximizedPanelRect,
   measuredPanelRect,
   movePanelRect,
-  resizePanelRect,
 } from './panel-geometry'
 
 describe('model-test panel geometry', () => {
@@ -24,6 +24,15 @@ describe('model-test panel geometry', () => {
     })
   })
 
+  it('maximizes within the viewport margin', () => {
+    expect(maximizedPanelRect(desktop)).toEqual({
+      left: PANEL_MARGIN,
+      top: PANEL_MARGIN,
+      width: desktop.width - PANEL_MARGIN * 2,
+      height: desktop.height - PANEL_MARGIN * 2,
+    })
+  })
+
   it('clamps dragged positions so every edge stays within the viewport margin', () => {
     const rect = { left: 400, top: 300, width: 500, height: 400 }
     expect(movePanelRect(rect, -10_000, -10_000, desktop)).toMatchObject({ left: PANEL_MARGIN, top: PANEL_MARGIN })
@@ -33,10 +42,15 @@ describe('model-test panel geometry', () => {
     })
   })
 
-  it('clamps dimensions to minimum and maximum sizes', () => {
+  it('preserves explicit dimensions while dragging', () => {
+    const rect = maximizedPanelRect(desktop)
+    expect(movePanelRect(rect, 100, 100, desktop)).toEqual(rect)
+  })
+
+  it('clamps dimensions to minimum and maximum sizes when an explicit rect is resized by viewport changes', () => {
     const rect = { left: 100, top: 100, width: 500, height: 400 }
-    expect(resizePanelRect(rect, -10_000, -10_000, desktop)).toMatchObject({ width: PANEL_MIN_WIDTH, height: PANEL_MIN_HEIGHT })
-    expect(resizePanelRect(rect, 10_000, 10_000, desktop)).toMatchObject({ width: PANEL_MAX_WIDTH, height: PANEL_MAX_HEIGHT })
+    expect(clampPanelRect({ ...rect, width: 10, height: 10 }, desktop)).toMatchObject({ width: PANEL_MIN_WIDTH, height: PANEL_MIN_HEIGHT })
+    expect(clampPanelRect({ ...rect, width: 10_000, height: 10_000 }, desktop)).toMatchObject({ width: PANEL_MAX_WIDTH, height: PANEL_MAX_HEIGHT })
   })
 
   it('uses the available viewport as the effective minimum on narrow screens', () => {
@@ -45,16 +59,7 @@ describe('model-test panel geometry', () => {
     expect(rect.width).toBe(viewport.width - PANEL_MARGIN * 2)
     expect(rect.height).toBe(viewport.height - PANEL_MARGIN * 2)
     expect(clampPanelRect({ left: -100, top: -100, width: 900, height: 900 }, viewport)).toEqual(rect)
-  })
-
-  it('keeps a resize anchored at the top-left when the viewport shrinks', () => {
-    const rect = { left: 100, top: 80, width: 900, height: 700 }
-    const viewport = { width: 700, height: 500 }
-    const resized = resizePanelRect(rect, 100, 100, viewport)
-    expect(resized.left).toBe(rect.left)
-    expect(resized.top).toBe(rect.top)
-    expect(resized.width).toBe(viewport.width - PANEL_MARGIN - rect.left)
-    expect(resized.height).toBe(viewport.height - PANEL_MARGIN - rect.top)
+    expect(maximizedPanelRect(viewport)).toEqual(rect)
   })
 
   it('measures the rendered panel and clamps it, falling back when layout is unavailable', () => {

@@ -132,8 +132,9 @@ export const uiEn = {
   'modelTest.action.minimize': 'Minimize (diagnostics keep running)',
   'modelTest.action.close': 'Close diagnostics',
   'modelTest.action.expand': 'Expand diagnostics',
+  'modelTest.action.maximize': 'Maximize diagnostics',
+  'modelTest.action.restore': 'Restore default size',
   'modelTest.action.exportReport': 'Export report',
-  'modelTest.panel.resizeHandle': 'Resize the panel (arrow keys resize; Enter or Space restores the default)',
   'modelTest.panel.dragHint': 'Drag to move the panel',
   // The badge is what you read while doing something else: rounds, done, failed.
   'modelTest.badge.round': 'Round {round}/{total}',
