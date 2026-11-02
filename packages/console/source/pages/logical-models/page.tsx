@@ -1,145 +1,45 @@
+import { Boxes, Plus } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { restrictToWindowEdges } from '@dnd-kit/modifiers'
+import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { isBuiltInDefaultLogicalModel } from '@common/schemas'
+import { providerModelProcessingCounts } from '@common/provider-model-status'
+import { AsyncState } from '@/components/async-state'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { MasonryGrid, masonryCollisionDetection, masonrySortingStrategy } from '@/components/masonry-grid'
 import { ProxyToggleButton } from '@/components/proxy-toggle-button'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { Plus } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
-import { useTranslation } from '@/i18n/provider'
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { restrictToWindowEdges } from '@dnd-kit/modifiers'
-import { SortableContext, arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { useLogicalModelControlService } from './service'
 import { useLiveRequests } from '@/data/live-requests'
-import { useLogicalModels, useLogicalModelsActions, useLogicalModelsLoading } from '@/data/logical-models'
-import { LogicalModelCard } from './components/logical-model-card'
-import { LogicalModelSummary } from './components/logical-model-summary'
-import { SortableLogicalModel } from './components/sortable-logical-model'
-import { AddProviderModelDialog } from './components/add-provider-model-dialog'
+import { useLogicalModels, useLogicalModelsActions, useLogicalModelsError, useLogicalModelsLoading } from '@/data/logical-models'
+import { useTranslation } from '@/i18n/provider'
+import { useLogicalModelControlService } from './service'
 import { CreateLogicalModelDialog } from './components/create-logical-model-dialog'
-import { EditLogicalModelDialog } from './components/edit-logical-model-dialog'
-import { removeLogicalModel, removeProviderModelBinding } from './lib/logical-model-writes'
-import { providerModelProcessingCounts } from '@common/provider-model-status'
-import { isBuiltInDefaultLogicalModel, type LogicalModel, type LogicalModelProviderModel } from '@common/schemas'
-
-interface LogicalModelColumnProps {
-  logicalModel: LogicalModel
-  dragHandleProps?: Record<string, unknown>
-  dragging?: boolean
-  /** 每个供应商模型此刻在途的请求数；只影响行内状态徽标，不参与排序或调度。 */
-  processingCounts: Map<string, number>
-  /** 改 id / 改说明 / 删除之后刷新逻辑模型列表（列表变了，卡片才会跟着走）。 */
-  onChanged: () => void
-}
-
-function LogicalModelColumn(props: LogicalModelColumnProps) {
-  const { logicalModel, dragHandleProps, dragging, processingCounts, onChanged } = props
-  // 两把钥匙一整个交下去：绑定接口用记录 id，展示与手动锁定用模型 id。
-  const service = useLogicalModelControlService(logicalModel)
-  const confirm = useConfirm()
-  const toast = useToast()
-  const t = useTranslation()
-  const [addModelOpen, setAddModelOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
-  const builtIn = isBuiltInDefaultLogicalModel(logicalModel)
-  const removeModel = async (model: LogicalModelProviderModel) => {
-    const confirmed = await confirm({
-      title: t('logicalModels.remove.title'),
-      description: t('logicalModels.remove.description', { id: logicalModel.modelId, model: model.modelName }),
-      confirmLabel: t('logicalModels.remove.confirm'),
-      variant: 'destructive',
-    })
-    if (!confirmed) return
-    try {
-      await removeProviderModelBinding(logicalModel.id, model.id)
-      await service.reload()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('logicalModels.remove.failed'))
-    }
-  }
-  // 删除是软删除（服务端只打时间戳），所以界面这一侧只需要把列表刷掉：卡片不在列表里就不再出现。
-  const deleteLogicalModel = async () => {
-    const confirmed = await confirm({
-      title: t('logicalModels.delete.title'),
-      description: t('logicalModels.delete.description', { id: logicalModel.modelId }),
-      confirmLabel: t('logicalModels.delete.confirm'),
-      variant: 'destructive',
-    })
-    if (!confirmed) return
-    try {
-      await removeLogicalModel(logicalModel.id)
-      toast.success(t('logicalModels.delete.deleted'))
-      onChanged()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
-    }
-  }
-  return (
-    <>
-      <LogicalModelCard
-        modelId={logicalModel.modelId}
-        logicalModelDescription={logicalModel.description}
-        builtIn={builtIn}
-        models={service.models}
-        providers={service.providers}
-        health={service.health}
-        providerModelHealth={service.providerModelHealth}
-        modelMetrics={service.modelMetrics}
-        mode={service.mode}
-        manualModelId={service.manualModelId ?? ''}
-        switchingMode={service.switchingMode}
-        isCooling={service.isCooling}
-        onModeChange={mode => void service.changeMode(mode)}
-        onSelectManualModel={service.selectManualModel}
-        onToggleEnabled={service.updateEnabled}
-        onDragEnd={service.handleDragEnd}
-        onAddModel={() => setAddModelOpen(true)}
-        onRemoveModel={model => void removeModel(model)}
-        onEdit={() => setEditOpen(true)}
-        // 内建默认不给删除入口：它是未命中任何逻辑模型时的落点，删掉就没有兜底了。
-        onDelete={builtIn ? undefined : () => void deleteLogicalModel()}
-        dragHandleProps={dragHandleProps}
-        dragging={dragging}
-        processingCounts={processingCounts}
-      />
-      <AddProviderModelDialog
-        open={addModelOpen}
-        logicalModelRecordId={logicalModel.id}
-        existingBindingCount={service.models.length}
-        onOpenChange={setAddModelOpen}
-        onAdded={() => void service.reload()}
-      />
-      <EditLogicalModelDialog
-        logicalModel={logicalModel}
-        builtIn={builtIn}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSaved={onChanged}
-      />
-    </>
-  )
-}
+import { LogicalModelColumn } from './components/logical-model-column'
+import { LogicalModelSummary } from './components/logical-model-summary'
+import { LogicalModelsSkeleton } from './components/logical-models-skeleton'
+import { SortableLogicalModel } from './components/sortable-logical-model'
 
 export function LogicalModelsPage() {
   const toast = useToast()
   const logicalModels = useLogicalModels()
+  const logicalModelsLoading = useLogicalModelsLoading()
+  const logicalModelsError = useLogicalModelsError()
   const liveRequests = useLiveRequests()
   const { refresh: refreshLogicalModels, reorder: reorderLogicalModels } = useLogicalModelsActions()
   // 页头代理开关与顶部指标卡都挂在**内建默认逻辑模型**上：它是请求未命中任何逻辑模型时的
   // 落点，也是这一页唯一一个跨全部逻辑模型的全局口径。列表没回来时传 `null`，控制服务里
   // 的查询一个都不开火，所以骨架屏只能由列表自身的就绪状态决定——挂在控制服务上会永远等下去。
   const defaultLogicalModel = useMemo(() => logicalModels.find(isBuiltInDefaultLogicalModel) ?? null, [logicalModels])
-  const logicalModelsLoading = useLogicalModelsLoading()
   const service = useLogicalModelControlService(defaultLogicalModel)
   const t = useTranslation()
   const [createLogicalModelOpen, setCreateLogicalModelOpen] = useState(false)
   const proxyRunning = service.proxyStatus?.running ?? false
   const enabledLogicalModels = logicalModels.filter(model => model.enabled)
   const processingCounts = useMemo(() => providerModelProcessingCounts(liveRequests.data), [liveRequests.data])
-  const enabledIds = useMemo(() => logicalModels.filter(model => model.enabled).map(model => model.id), [logicalModels])
+  const enabledIds = useMemo(() => enabledLogicalModels.map(model => model.id), [enabledLogicalModels])
+  const hasModels = logicalModels.length > 0
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -159,13 +59,25 @@ export function LogicalModelsPage() {
     }
   }, [logicalModels, reorderLogicalModels, toast])
 
+  const emptyState = hasModels
+    ? {
+        icon: Boxes,
+        title: t('logicalModels.empty.disabledTitle'),
+        description: t('logicalModels.empty.disabledDescription'),
+      }
+    : {
+        icon: Boxes,
+        title: t('logicalModels.empty.title'),
+        description: t('logicalModels.empty.description'),
+      }
+
   return (
     <PageLayout>
       <PageHeader
         title={t('logicalModels.title')}
         description={t('logicalModels.description')}
         actions={(
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => setCreateLogicalModelOpen(true)}>
               <Plus size={13} /> {t('logicalModels.create.open')}
             </Button>
@@ -174,72 +86,60 @@ export function LogicalModelsPage() {
         )}
       />
       <PageContent>
-        {logicalModelsLoading ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="p-3">
-                  <Skeleton className="mb-2 h-3 w-20" />
-                  <Skeleton className="mb-2 h-6 w-10" />
-                  <Skeleton className="h-2.5 w-28" />
-                </Card>
-              ))}
-            </div>
-            <Card className="p-4">
-              <Skeleton className="mb-4 h-5 w-24" />
-              <div className="space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="h-5 w-5 rounded-sm" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-3.5 w-1/3" />
-                      <Skeleton className="h-3 w-1/4" />
-                    </div>
-                    <Skeleton className="h-6 w-16" />
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        ) : (
-          <>
-            <LogicalModelSummary models={service.models} summaryMetrics={service.summaryMetrics} />
+        <AsyncState
+          loading={logicalModelsLoading}
+          error={hasModels ? null : logicalModelsError}
+          errorTitle={t('logicalModels.loadFailed')}
+          onRetry={refreshLogicalModels}
+          empty={!hasModels || enabledLogicalModels.length === 0}
+          emptyState={{
+            ...emptyState,
+            action: (
+              <Button onClick={() => setCreateLogicalModelOpen(true)}>
+                <Plus size={14} />
+                {t('logicalModels.create.open')}
+              </Button>
+            ),
+          }}
+          loadingFallback={<LogicalModelsSkeleton />}
+        >
+          <LogicalModelSummary models={service.models} summaryMetrics={service.summaryMetrics} />
 
-            <DndContext
-              sensors={sensors}
-              collisionDetection={masonryCollisionDetection}
-              modifiers={[restrictToWindowEdges]}
-              onDragEnd={event => void handleReorder(event)}
-            >
-              {/* 瀑布流里卡片高度不等，用 masonrySortingStrategy，避免拖动时卡片被纵向压扁。 */}
-              <SortableContext items={enabledIds} strategy={masonrySortingStrategy}>
-                <MasonryGrid
-                  items={enabledLogicalModels.map(model => ({
-                    id: model.id,
-                    node: (
-                      <SortableLogicalModel id={model.id}>
-                        {(handleProps, dragging) => (
-                          <LogicalModelColumn
-                            logicalModel={model}
-                            dragHandleProps={handleProps}
-                            dragging={dragging}
-                            processingCounts={processingCounts}
-                            onChanged={refreshLogicalModels}
-                          />
-                        )}
-                      </SortableLogicalModel>
-                    ),
-                  }))}
-                />
-              </SortableContext>
-            </DndContext>
-            <CreateLogicalModelDialog
-              open={createLogicalModelOpen}
-              onOpenChange={setCreateLogicalModelOpen}
-              onCreated={refreshLogicalModels}
-            />
-          </>
-        )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={masonryCollisionDetection}
+            modifiers={[restrictToWindowEdges]}
+            onDragEnd={event => void handleReorder(event)}
+          >
+            {/* 瀑布流里卡片高度不等，用 masonrySortingStrategy，避免拖动时卡片被纵向压扁。 */}
+            <SortableContext items={enabledIds} strategy={masonrySortingStrategy}>
+              <MasonryGrid
+                items={enabledLogicalModels.map(model => ({
+                  id: model.id,
+                  node: (
+                    <SortableLogicalModel id={model.id}>
+                      {(handleProps, dragging) => (
+                        <LogicalModelColumn
+                          logicalModel={model}
+                          dragHandleProps={handleProps}
+                          dragging={dragging}
+                          processingCounts={processingCounts}
+                          onChanged={refreshLogicalModels}
+                        />
+                      )}
+                    </SortableLogicalModel>
+                  ),
+                }))}
+              />
+            </SortableContext>
+          </DndContext>
+        </AsyncState>
+
+        <CreateLogicalModelDialog
+          open={createLogicalModelOpen}
+          onOpenChange={setCreateLogicalModelOpen}
+          onCreated={refreshLogicalModels}
+        />
       </PageContent>
     </PageLayout>
   )

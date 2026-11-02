@@ -271,9 +271,15 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
       } />
     )
   } else if (props.rows.length === 0) {
+    const emptyAction = (
+      <Button variant="outline" className="mt-1" onClick={props.onRetry}>
+        <RefreshCw size={14} />
+        {t('common.action.refresh')}
+      </Button>
+    )
     body = props.filtered
-      ? <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.empty.title')} description={t('requestLogs.table.empty.description')} />
-      : <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.emptyAll.title')} description={t('requestLogs.table.emptyAll.description')} />
+      ? <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.empty.title')} description={t('requestLogs.table.empty.description')} action={emptyAction} />
+      : <TableStateRow colSpan={11} icon={SearchX} title={t('requestLogs.table.emptyAll.title')} description={t('requestLogs.table.emptyAll.description')} action={emptyAction} />
   } else {
     body = props.rows.map(row => row.kind === 'execution'
       ? (
@@ -304,7 +310,7 @@ export function RequestLogsTable(props: RequestLogsTableProps) {
   return (
     <TableFrame className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full text-xs">
+        <table className={cn('w-full text-xs', props.rows.length > 0 && 'min-w-200')}>
           <RequestLogsTableHeader />
           <tbody>{body}</tbody>
         </table>

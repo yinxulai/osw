@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   list: vi.fn(),
   providers: [] as unknown[],
   providersLoading: false,
+  providersError: null as string | null,
   health: { providers: [] as unknown[], providerModels: [] as unknown[] },
   refreshProviders: vi.fn(),
   refreshHealth: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@/api/models', () => ({
 vi.mock('@/data/providers', () => ({
   useProviders: () => state.providers,
   useProvidersLoading: () => state.providersLoading,
+  useProvidersError: () => state.providersError,
   useProvidersActions: () => ({ refresh: state.refreshProviders, reorder: vi.fn() }),
 }))
 

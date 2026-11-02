@@ -54,7 +54,7 @@ export function LatencyDistribution(props: LatencyDistributionProps) {
   const t = useTranslation()
 
   return (
-    <Card className="min-w-70">
+    <Card className="min-w-0">
       <CardSectionHeader title={t('overview.latency.title')} description={t('overview.latency.description')} compact />
       <CardContent className="pt-1">
         {buckets.length === 0 ? (

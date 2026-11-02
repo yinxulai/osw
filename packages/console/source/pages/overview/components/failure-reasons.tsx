@@ -36,7 +36,7 @@ export function FailureReasons(props: FailureReasonsProps) {
     })
 
   return (
-    <Card className="min-w-[320px]">
+    <Card className="min-w-0">
       <CardSectionHeader
         title={t('overview.failure.title')}
         description={description}

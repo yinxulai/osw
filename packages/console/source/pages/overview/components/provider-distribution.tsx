@@ -21,7 +21,7 @@ export function ProviderDistribution(props: ProviderDistributionProps) {
   const deletedProviderIds = useDeletedProviderIds()
 
   return (
-    <Card className="min-w-70">
+    <Card className="min-w-0">
       <CardSectionHeader title={t('overview.providers.title')} description={t('overview.providers.description')} compact />
       {/* 不加 `pt-1`：列表区与图表区都是 `h-44`，两张卡并排时高度才能一分不差。 */}
       <CardContent>
