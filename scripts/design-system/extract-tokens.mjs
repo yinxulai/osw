@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { buildIssues, buildOpenQuestions } from './issues.mjs'
 import { renderPage } from './render-page.mjs'
 import { renderReadme } from './render-readme.mjs'
+import { buildComponentSpecs } from './specs.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '../..')
@@ -806,6 +807,14 @@ const loc = token => {
 const issues = buildIssues({ loc, colorByName, contrast, contrastByToken, unreferenced, undeclaredRefs, cssUndeclared, typography, radii, spacing, zIndex, literalColorSites })
 const openQuestions = buildOpenQuestions({ colorByName, spacing })
 
+// 组件规格：数字从组件源码的 class 串解析，anchor 对不上会直接抛错。
+const components = buildComponentSpecs({
+  root: ROOT,
+  readFile: file => fs.readFileSync(file, 'utf8'),
+  typography,
+  radii,
+})
+
 const severityOrder = ['P0', 'P1', 'P2', 'P3']
 const issueCounts = Object.fromEntries(severityOrder.map(severity => [severity, issues.filter(item => item.severity === severity).length]))
 
@@ -821,6 +830,7 @@ const data = {
       primitives: [...rootLight.keys()].length,
       typographyUtilities: typography.length,
       contrastPairs: contrast.length,
+      componentSpecs: components.length,
       literalColorSites: literalColorSites.length,
       unverified: openQuestions.unverified.length,
       decisions: openQuestions.decisions.length,
@@ -835,6 +845,7 @@ const data = {
   colorRefs: Object.fromEntries([...contrastByToken.entries()].map(([token, pairs]) => [token, pairs])),
   contrast,
   typography,
+  components,
   textVariable: textVariable ? { name: '--text-2xs', value: textVariable.value, line: textVariable.line } : null,
   radii,
   shadows,

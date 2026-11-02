@@ -211,7 +211,7 @@ const renderLayers = data => {
 const spinner = '<span class="spinner" aria-hidden="true"></span>'
 const chevron = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'
 
-const stateGrid = (component, rows) => `<div class="demo-grid">
+const stateGrid = (component, rows) => `<div class="state-grid">
   <div class="head">${esc(component)}</div>
   <div class="head">default</div><div class="head">hover</div><div class="head">active</div><div class="head">focus</div><div class="head">disabled</div><div class="head">loading</div>
 ${rows}
@@ -228,39 +228,39 @@ const buttonRows = ['primary', 'secondary', 'ghost', 'destructive']
   .map(variant => {
     const label = variant === 'primary' ? 'Primary' : variant === 'secondary' ? 'Secondary' : variant === 'ghost' ? 'Ghost' : 'Destructive'
     return `<div class="row-label">${label}</div>` + ['default', 'hover', 'active', 'focus', 'disabled', 'loading']
-      .map(state => `<div class="demo-cell">${btn(variant, state, state === 'loading' ? '保存中' : '保存')}</div>`)
+      .map(state => `<div class="state-cell">${btn(variant, state, state === 'loading' ? '保存中' : '保存')}</div>`)
       .join('')
   })
   .join('')
 
 const fieldCells = states => states
   .map(state => {
-    if (state === 'loading') return `<div class="demo-cell"><div class="field" data-state="loading">${spinner}<span class="placeholder">校验中…</span></div></div>`
-    if (state === 'active') return `<div class="demo-cell"><div class="field" data-state="focus">已输入的内容</div></div>`
-    return `<div class="demo-cell"><div class="field" data-state="${state}">${state === 'default' || state === 'hover' ? '<span class="placeholder">输入模型名称</span>' : state === 'disabled' ? '不可编辑' : '已输入的内容'}</div></div>`
+    if (state === 'loading') return `<div class="state-cell"><div class="field" data-state="loading" aria-busy="true">${spinner}<span class="placeholder">校验中…</span></div></div>`
+    if (state === 'active') return `<div class="state-cell"><div class="field" data-state="focus">已输入的内容</div></div>`
+    return `<div class="state-cell"><div class="field" data-state="${state}"${state === 'disabled' ? ' aria-disabled="true"' : ''}>${state === 'default' || state === 'hover' ? '<span class="placeholder">输入模型名称</span>' : state === 'disabled' ? '不可编辑' : '已输入的内容'}</div></div>`
   })
   .join('')
 
 const selectCells = ['default', 'hover', 'active', 'focus', 'disabled', 'loading']
   .map(state => {
     const content = state === 'loading' ? `${spinner}<span class="placeholder">加载选项…</span>` : `gpt-4o-mini ${chevron}`
-    return `<div class="demo-cell"><div class="field" data-state="${state === 'active' ? 'focus' : state}">${content}</div></div>`
+    return `<div class="state-cell"><div class="field select-field" data-state="${state === 'active' ? 'focus' : state}"${state === 'disabled' ? ' aria-disabled="true"' : ''}${state === 'loading' ? ' aria-busy="true"' : ''}>${content}</div></div>`
   })
   .join('')
 
 // Badge 没有状态档（不能 hover/不能聚焦），它只有色调。把色调塞进六态列会凭空造出四个状态。
 const badgeTones = [
   ['neutral', '默认'], ['success', '成功'], ['warning', '警告'], ['info', '信息'], ['danger', '危险'],
-].map(([tone, text]) => `<div class="demo-cell"><span class="chip-badge ${tone}">${text}</span></div>`).join('')
+].map(([tone, text]) => `<div class="state-cell"><span class="chip-badge ${tone}">${text}</span></div>`).join('')
 
 const cardCells = ['default', 'hover', 'active', 'focus', 'disabled', 'loading']
   .map(state => {
-    if (state === 'loading') return '<div class="demo-cell"><div class="mini-card"><div class="skeleton-line" style="width:60%"></div><div class="skeleton-line" style="width:90%"></div><div class="skeleton-line" style="width:40%"></div></div></div>'
+    if (state === 'loading') return '<div class="state-cell"><div class="mini-card"><div class="skeleton-line" style="width:60%"></div><div class="skeleton-line" style="width:90%"></div><div class="skeleton-line" style="width:40%"></div></div></div>'
     // 静态卡片没有状态；可点击的卡片（route-mode-option-card）才有 hover/selected：
     // hover 改描边为 text-quaternary，选中改为 state-accent-solid——这是实现里的真实取值。
-    if (state === 'focus') return '<div class="demo-cell na"><span class="tiny">N/A</span></div>'
+    if (state === 'focus') return '<div class="state-cell na"><span class="tiny">N/A</span></div>'
     const extra = state === 'hover' ? 'border-color:var(--ds-color-text-quaternary)' : state === 'active' ? 'border-color:var(--ds-color-state-accent-solid)' : state === 'disabled' ? 'opacity:.55' : ''
-    return `<div class="demo-cell"><div class="mini-card" data-state="${state}" style="${extra}"><div style="font-size:12px;font-weight:600">路由规则</div><div class="tiny" style="margin-top:4px">3 条规则 · 命中 128 次</div></div></div>`
+    return `<div class="state-cell"><div class="mini-card" data-state="${state}" style="${extra}"><div style="font-size:12px;font-weight:600">路由规则</div><div class="tiny" style="margin-top:4px">3 条规则 · 命中 128 次</div></div></div>`
   })
   .join('')
 
@@ -271,7 +271,7 @@ const dialogCells = [
   ['focus', '焦点'],
   ['disabled', '禁用'],
   ['loading', '提交中'],
-].map(([state, label]) => `<div class="demo-cell"><div class="mini-card" data-state="${state === 'focus' ? 'selected' : state === 'active' ? 'hover' : state}" style="${state === 'focus' ? 'outline:2px solid var(--ds-accent);outline-offset:2px' : ''}">
+].map(([state, label]) => `<div class="state-cell"><div class="dialog-card" data-state="${state === 'focus' ? 'selected' : state === 'active' ? 'hover' : state}" style="${state === 'focus' ? 'outline:2px solid var(--ds-accent);outline-offset:2px' : ''}">
   <div style="font-size:11.5px;font-weight:600;display:flex;justify-content:space-between"><span>删除模型</span><span class="muted">×</span></div>
   <div class="tiny" style="margin:5px 0">此操作不可撤销。</div>
   <div style="display:flex;gap:5px;justify-content:flex-end">${state === 'loading' ? `<span class="btn" style="height:24px;font-size:11px">${spinner}删除中</span>` : `<span class="btn secondary" style="height:24px;font-size:11px">取消</span><span class="btn" style="height:24px;font-size:11px">删除</span>`}</div>
@@ -294,9 +294,11 @@ const skeletonCells = [
   ['circle', '<div style="width:28px;height:28px;border-radius:50%;background:color-mix(in srgb, var(--ds-text) 12%, transparent)"></div>'],
   ['block', '<div style="width:100%;height:42px;border-radius:6px;background:color-mix(in srgb, var(--ds-text) 12%, transparent)"></div>'],
   ['—', '<span class="tiny">N/A</span>'],
-].map(([label, content]) => `<div class="demo-cell"><div style="width:100%"><div class="tiny">${label}</div>${content}</div></div>`).join('')
+].map(([label, content]) => `<div class="state-cell"><div style="width:100%"><div class="tiny">${label}</div>${content}</div></div>`).join('')
 
-const emptyCard = '<div style="border:1px dashed var(--ds-line);border-radius:8px;padding:12px;text-align:center;width:100%"><div style="font-size:12px;font-weight:600">暂无数据</div><div class="tiny">调整筛选后重试</div></div>'
+// Empty 的真实取值：p-6 / rounded-xl，`border-dashed` 没给宽度所以边框不渲染（DS-012）。
+// 这里按实现的真实结果画：没有边框，并在格子里标出来，而不是替组件补一条虚线。
+const emptyCard = '<div style="border:0;border-radius:var(--ds-radius-xl);padding:24px;text-align:center;width:100%"><div style="font-size:14px;font-weight:600">暂无数据</div><div class="tiny">调整筛选后重试</div><div class="tiny" style="margin-top:6px;color:var(--ds-text-4)">border-width 0（DS-012）</div></div>'
 
 // Empty 只有 default 与 loading 两个状态档；其余四档在实现里不存在，标 N/A 而不是编一个出来。
 const emptyCells = [
@@ -307,30 +309,32 @@ const emptyCells = [
   ['disabled', '<span class="tiny">N/A</span>'],
   ['loading', '<div style="width:100%"><div class="skeleton-line" style="width:70%;margin:6px auto"></div><div class="skeleton-line" style="width:45%;margin:6px auto"></div></div>'],
 // 状态名由表头给，不在格子里重复；这里只渲染内容。
-].map(([, content]) => `<div class="demo-cell"><div style="width:100%">${content}</div></div>`).join('')
+].map(([, content]) => `<div class="state-cell"><div style="width:100%">${content}</div></div>`).join('')
 
 // 这些是 Empty 的变体（内嵌 / 失败 / 带操作），不是状态，所以单独一行，不塞进六态矩阵。
 const emptyVariants = [
   ['embedded', '<div style="padding:8px;text-align:center;width:100%"><div class="tiny">没有匹配的请求</div></div>'],
   ['destructive', '<div style="border:1px dashed var(--ds-danger);border-radius:8px;padding:10px;text-align:center;width:100%;color:var(--ds-danger)"><div style="font-size:12px">加载失败</div></div>'],
   ['action', '<div style="text-align:center;width:100%"><div class="tiny">还没有密钥</div><div class="btn" style="height:24px;font-size:11px;margin-top:4px">新建</div></div>'],
-].map(([label, content]) => `<div class="demo-cell"><div style="width:100%"><div class="tiny">${label}</div>${content}</div></div>`).join('')
+].map(([label, content]) => `<div class="state-cell"><div style="width:100%"><div class="tiny">${label}</div>${content}</div></div>`).join('')
 
 const toastCells = ['default', 'hover', 'active', 'focus', 'disabled', 'loading']
   .map(state => {
     const extra = state === 'focus' ? 'outline:2px solid var(--ds-accent);outline-offset:1px' : state === 'disabled' ? 'opacity:.5' : state === 'active' ? 'transform:translateY(1px)' : ''
-    return `<div class="demo-cell"><div class="toast-demo" data-state="${state}" style="${extra}">${state === 'loading' ? spinner : '<span class="dot"></span>'}<span>${state === 'loading' ? '正在提交…' : '已保存'}</span></div></div>`
+    return `<div class="state-cell"><div class="toast-sample" data-state="${state}" style="${extra}"${state === 'loading' ? ' aria-busy="true"' : ''}>${state === 'loading' ? spinner : '<span class="dot"></span>'}<span>${state === 'loading' ? '正在提交…' : '已保存'}</span></div></div>`
   })
   .join('')
 
 const toastTones = [
   ['success', '已保存'], ['error', '保存失败'], ['info', '已复制'], ['warning', '即将过期'],
-].map(([tone, text]) => `<div class="demo-cell"><div class="toast-demo ${tone}"><span class="dot"></span><span>${text}</span></div></div>`).join('')
+].map(([tone, text]) => `<div class="state-cell"><div class="toast-sample ${tone}"><span class="dot"></span><span>${text}</span></div></div>`).join('')
 
-const renderComponents = () => `<h3 id="components-button">Button · 四变体 × 六态</h3>
+const renderComponents = data => `<h3 id="components-button">Button · 四变体 × 六态</h3>
+${specLine(data, 'button')}
 <div class="card" style="overflow-x:auto">${stateGrid('Button', buttonRows)}</div>
 
 <h3 id="components-field">Input / Select · 六态</h3>
+${specLine(data, 'input') + specLine(data, 'select')}
 <div class="card" style="overflow-x:auto">
   ${stateGrid('Input', `<div class="row-label">Input</div>${fieldCells(['default', 'hover', 'active', 'focus', 'disabled', 'loading'])}`)}
   <div style="height:10px"></div>
@@ -338,43 +342,48 @@ const renderComponents = () => `<h3 id="components-button">Button · 四变体 �
 </div>
 
 <h3 id="components-badge">Badge · 色调 / Card · 状态</h3>
+${specLine(data, 'badge') + specLine(data, 'card')}
 <div class="card" style="overflow-x:auto">
-  <div class="demo-grid"><div class="row-label">Badge</div>${badgeTones}</div>
+  <div class="state-grid"><div class="row-label">Badge</div>${badgeTones}</div>
   <div style="height:10px"></div>
   ${stateGrid('Card', `<div class="row-label">Card</div>${cardCells}`)}
 </div>
 
 <h3 id="components-tooltip">Tooltip · 六态</h3>
+${specLine(data, 'tooltip')}
 <div class="card" style="overflow-x:auto">
   ${stateGrid('Tooltip', `<div class="row-label">Bubble</div>` + ['default', 'hover', 'active', 'focus', 'disabled', 'loading'].map(state => {
-    if (state === 'disabled') return '<div class="demo-cell na">N/A</div>'
-    if (state === 'loading') return '<div class="demo-cell na">N/A</div>'
+    if (state === 'disabled') return '<div class="state-cell na">N/A</div>'
+    if (state === 'loading') return '<div class="state-cell na">N/A</div>'
     const extra = state === 'focus' ? 'outline:2px solid var(--ds-accent);outline-offset:1px' : state === 'active' ? 'transform:translateY(1px)' : state === 'hover' ? 'box-shadow:var(--ds-shadow-card)' : ''
-    return `<div class="demo-cell"><div class="toast-demo" style="${extra}"><span>Shift + Enter 换行</span></div></div>`
+    return `<div class="state-cell"><div class="toast-sample" style="${extra}"><span>Shift + Enter 换行</span></div></div>`
   }).join(''))}
 </div>
 
 <h3 id="components-dialog">Dialog · 六态</h3>
+${specLine(data, 'dialog')}
 <div class="card" style="overflow-x:auto">
   ${stateGrid('Dialog', `<div class="row-label">Alert</div>${dialogCells}`)}
 </div>
 
 <h3 id="components-table">Table · 行六态</h3>
+${specLine(data, 'table')}
 <div class="table-wrap">
-  <table class="table-demo">
+  <table class="spec-table">
     <thead><tr><th>状态</th><th>状态码</th><th>路径</th><th>耗时</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
 </div>
 
 <h3 id="components-skeleton">Skeleton / Empty / Toast · 六态</h3>
+${specLine(data, 'skeleton') + specLine(data, 'empty')}
 <div class="card" style="overflow-x:auto">
   ${stateGrid('Skeleton', `<div class="row-label">Skeleton</div>${skeletonCells}`)}
   <div style="height:10px"></div>
   ${stateGrid('Empty', `<div class="row-label">Empty</div>${emptyCells}`)}
   <div style="height:10px"></div>
   ${stateGrid('Toast', `<div class="row-label">Toast</div>${toastCells}`)}
-  <div class="demo-grid" style="margin-top:6px"><div class="row-label">语义</div>${toastTones}</div>
+  <div class="state-grid" style="margin-top:6px"><div class="row-label">语义</div>${toastTones}</div>
 </div>
 <div class="card" style="margin-top:10px">
   <div class="row-label" style="margin-bottom:6px">Empty 的变体（不是状态）</div>
@@ -405,7 +414,7 @@ const renderPageFragment = () => `<div class="fragment">
           <div class="kpi"><div class="k">P95 延迟</div><div class="v">1.42s</div><div class="tiny ratio-fail">+120ms</div></div>
         </div>
         <div class="table-wrap">
-          <table class="table-demo">
+          <table class="spec-table">
             <thead><tr><th>时间</th><th>模型</th><th>状态</th><th>耗时</th></tr></thead>
             <tbody>
               <tr><td>14:32:08</td><td><code>gpt-4o-mini</code></td><td><span class="chip-badge success">200</span></td><td>0.82s</td></tr>
@@ -533,16 +542,16 @@ const renderBody = data => {
   <p class="tiny">其余浮层（Select / Dropdown / Popover）使用 <code>shadow-none</code> + 0.5px 边 + 毛玻璃，没有阴影 token。</p>
   <h3>z-index</h3>
   <p class="tiny">数字越大越靠上：z-70 收据控件 > z-50 浮层 > z-30 侧栏 > z-20 页头 > z-10 粘性表头 > z-0 基础。</p>
-  <div class="z-stack" aria-label="z-index 层示意">
+  <div class="z-stack" aria-label="z-index 分层">
     ${layers}
   </div>
-  <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>z 值</th><th class="num">次数</th><th>示例</th></tr></thead><tbody>${zRows}</tbody></table></div>
+  <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>z 值</th><th class="num">次数</th><th>出现处</th></tr></thead><tbody>${zRows}</tbody></table></div>
 </section>
 
 <section class="chapter" id="components">
   <div class="chapter-head"><span class="num">09</span><h2>组件六态</h2></div>
   <p class="lede">每个构件同屏列出 default / hover / active / focus / disabled / loading。没有实现的档位标 N/A，不用假状态补——缺档要回到问题清单。</p>
-  ${renderComponents()}
+  ${renderComponents(data)}
 </section>
 
 <section class="chapter" id="page">
@@ -596,6 +605,25 @@ const shadowValue = (data, name, mode) => {
   if (!shadow) return 'none'
   const value = mode === 'dark' ? shadow.dark : shadow.light
   return value ? value.replace(/\s*\n\s*/g, ' ') : 'none'
+}
+
+
+/** 组件规格行：数字来自 specs.mjs 对 class 串的解析，行尾给出来源文件与行号。 */
+const specLine = (data, id) => {
+  const component = data.components.find(item => item.id === id)
+  if (!component) return ''
+  const values = Object.fromEntries(component.specs.map(item => [item.key, item.value]))
+  const parts = []
+  if (values.height !== undefined) parts.push(`高 ${values.height}`)
+  if (values.padding !== undefined) parts.push(`内边距 ${values.padding}`)
+  if (values.paddingX !== undefined) parts.push(`水平 ${values.paddingX}`)
+  if (values.paddingY !== undefined) parts.push(`垂直 ${values.paddingY}`)
+  if (values.gap !== undefined) parts.push(`间距 ${values.gap}`)
+  if (values.radius !== undefined) parts.push(`圆角 ${values.radius}`)
+  if (values.fontSize !== undefined) parts.push(`字号 ${values.fontSize}/${values.lineHeight ?? '—'}`)
+  if (values.borderWidth !== undefined) parts.push(`描边 ${values.borderWidth}`)
+  const lines = component.anchors.map(anchor => anchor.line).join(',')
+  return `<p class="spec">规格 ${parts.join(' · ')}<span class="spec-src">${esc(component.file)}:${lines}</span></p>`
 }
 
 const radiusValue = (data, name) => {

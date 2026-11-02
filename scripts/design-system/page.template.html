@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -208,11 +208,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .z-layer:nth-child(4) { bottom: 138px; left: 66px; right: 66px; z-index: 4; }
 
 /* components */
-.demo-grid { display: grid; grid-template-columns: 130px repeat(6, minmax(0, 1fr)); gap: 8px; align-items: center; }
-.demo-grid .head { font-size: 10.5px; color: var(--ds-text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.demo-grid .row-label { font-size: 11.5px; color: var(--ds-text-2); }
-.demo-cell { min-height: 44px; display: flex; align-items: center; justify-content: flex-start; padding: 4px; border-radius: var(--ds-radius-sm); }
-.demo-cell.na { justify-content: center; color: var(--ds-text-4); font-size: 11px; }
+.state-grid { display: grid; grid-template-columns: 130px repeat(6, minmax(0, 1fr)); gap: 8px; align-items: center; }
+.state-grid .head { font-size: 10.5px; color: var(--ds-text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.state-grid .row-label { font-size: 11.5px; color: var(--ds-text-2); }
+.state-cell { min-height: 44px; display: flex; align-items: center; justify-content: flex-start; padding: 4px; border-radius: var(--ds-radius-sm); }
+.state-cell.na { justify-content: center; color: var(--ds-text-4); font-size: 11px; }
+/* 组件规格行：数字全部来自 specs.mjs 的解析，行尾标出来源文件与行号。 */
+.spec { margin: -4px 0 8px; font-size: 11px; color: var(--ds-text-3); font-variant-numeric: tabular-nums; }
+.spec-src { margin-left: 8px; color: var(--ds-text-4); font-family: var(--ds-font-mono); font-size: 10.5px; }
+/* 深色优先：层级靠表面与描边，不靠阴影（阴影在深底上不可见，只会糊成一片）。 */
+html[data-theme="dark"] .mini-card,
+html[data-theme="dark"] .toast-sample { box-shadow: none; }
+html[data-theme="dark"] .mini-card { border-color: var(--ds-color-module-border); }
 /* 变体不是状态：单独一块三等分，不落在六态网格的列下，避免被读成某个状态。 */
 .variant-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 
@@ -233,7 +240,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .btn.ghost[data-state="hover"] { background: var(--ds-color-components-button-ghost-bg-hover); }
 .btn.destructive[data-state="hover"] { background: color-mix(in srgb, var(--ds-danger) 20%, transparent); }
 .btn[data-state="active"] { transform: translateY(1px); }
-.btn[data-state="focus"] { outline: 2px solid var(--ds-accent); outline-offset: 2px; }
+.btn[data-state="focus"] { box-shadow: 0 0 0 2px var(--ds-color-state-accent-solid); }
 .btn[data-state="disabled"] { opacity: .5; }
 .btn[data-state="loading"] { opacity: .85; }
 .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: spin 900ms linear infinite; }
@@ -242,10 +249,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .field { width: 100%; height: 32px; padding: 0 12px; border-radius: var(--ds-radius-sm); border: 1px solid transparent; background: var(--ds-color-components-input-bg-normal); color: var(--ds-color-components-input-text-filled); font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .field[data-state="hover"] { background: var(--ds-color-components-input-bg-hover); border-color: var(--ds-color-components-input-border-hover); }
-.field[data-state="focus"] { background: var(--ds-color-components-input-bg-active); border-color: var(--ds-color-components-input-border-active); outline: 2px solid var(--ds-accent); outline-offset: 1px; }
+/* 输入框的 focus 只改底与边框（input.tsx:18）；画成焦点环属于替组件“美化”，会盖住 DS-010。 */
+.field[data-state="focus"] { background: var(--ds-color-components-input-bg-active); border-color: var(--ds-color-components-input-border-active); }
 .field[data-state="disabled"] { background: var(--ds-color-components-input-bg-disabled); color: var(--ds-color-components-input-text-filled-disabled); }
 .field[data-state="loading"] { color: var(--ds-color-components-input-text-placeholder); }
 .field .placeholder { color: var(--ds-color-components-input-text-placeholder); }
+/* Select 的 focus 是 ring-2（select.tsx:50），与 Input 的改边框不是一回事。 */
+.field.select-field[data-state="focus"] { box-shadow: 0 0 0 2px var(--ds-color-state-accent-solid); }
+.field.select-field[data-state="hover"] { background: var(--ds-color-state-base-hover-alt); border-color: transparent; }
+/* Dialog 内容：p 16、圆角 10（dialog.tsx:71）。 */
+.dialog-card { width: 100%; max-width: 384px; padding: 16px; border-radius: var(--ds-radius-xl); background: var(--ds-popover); border: 1px solid var(--ds-color-components-panel-border); color: var(--ds-color-popover-foreground); font-size: 14px; line-height: 20px; }
 
 .chip-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--ds-radius-md); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .chip-badge.success { background: color-mix(in srgb, var(--ds-color-success) 10%, transparent); color: var(--ds-color-text-success); }
@@ -258,7 +271,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chip-badge[data-state="focus"] { outline: 2px solid var(--ds-accent); outline-offset: 1px; }
 .chip-badge[data-state="disabled"] { opacity: .5; }
 
-.mini-card { background: var(--ds-surface); border: 1px solid var(--ds-color-module-border); border-radius: var(--ds-radius-lg); box-shadow: var(--ds-shadow-card); padding: 10px; width: 100%; }
+.mini-card { background: var(--ds-surface); border: 1px solid var(--ds-color-module-border); border-radius: var(--ds-radius-xl); box-shadow: var(--ds-shadow-card); padding: 16px; width: 100%; font-size: 14px; line-height: 20px; }
 .mini-card[data-state="hover"] { box-shadow: var(--ds-shadow-card); border-color: var(--ds-text-4); }
 .mini-card[data-state="selected"] { border-color: var(--ds-accent); }
 .mini-card[data-state="disabled"] { opacity: .55; }
@@ -266,19 +279,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @keyframes pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }
 
-.table-demo { font-size: 11.5px; }
-.table-demo td, .table-demo th { padding: 5px 7px; }
-.table-demo tr[data-state="hover"] td { background: var(--ds-color-state-base-hover); }
-.table-demo tr[data-state="selected"] td { background: var(--ds-color-state-accent-hover); }
-.table-demo tr[data-state="expanded"] td { background: var(--ds-color-state-base-hover-alt); }
-.table-demo tr[data-state="disabled"] td { color: var(--ds-text-4); }
+.spec-table { font-size: 11.5px; }
+.spec-table td, .spec-table th { padding: 5px 7px; }
+.spec-table tr[data-state="hover"] td { background: var(--ds-color-state-base-hover); }
+.spec-table tr[data-state="selected"] td { background: var(--ds-color-state-accent-hover); }
+.spec-table tr[data-state="expanded"] td { background: var(--ds-color-state-base-hover-alt); }
+.spec-table tr[data-state="disabled"] td { color: var(--ds-text-4); }
 
-.toast-demo { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: var(--ds-radius-md); border: 1px solid var(--ds-line); background: var(--ds-popover); color: var(--ds-color-popover-foreground); font-size: 11.5px; width: 100%; }
-.toast-demo .dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--ds-text-3); }
-.toast-demo.success .dot { background: var(--ds-success); }
-.toast-demo.error .dot { background: var(--ds-danger); }
-.toast-demo.warning .dot { background: var(--ds-warning); }
-.toast-demo.info .dot { background: var(--ds-info); }
+.toast-sample { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: var(--ds-radius-lg); border: 1px solid var(--ds-line); background: var(--ds-popover); color: var(--ds-color-popover-foreground); font-size: 11.5px; width: 100%; }
+.toast-sample .dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--ds-text-3); }
+.toast-sample.success .dot { background: var(--ds-success); }
+.toast-sample.error .dot { background: var(--ds-danger); }
+.toast-sample.warning .dot { background: var(--ds-warning); }
+.toast-sample.info .dot { background: var(--ds-info); }
 
 /* page fragment */
 .fragment { border: 1px solid var(--ds-line); border-radius: var(--ds-radius-lg); overflow: hidden; background: var(--ds-canvas); }
@@ -331,13 +344,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .toc h2 { width: 100%; }
   .toc a { border: 1px solid var(--ds-line-soft); }
   .toc a.sub { display: none; }
-  .demo-grid { grid-template-columns: 96px repeat(6, minmax(64px, 1fr)); }
+  .state-grid { grid-template-columns: 96px repeat(6, minmax(64px, 1fr)); }
   .topbar { padding: 8px 14px; }
   .topbar-stat { display: none; }
 }
 @media (max-width: 720px) {
-  .demo-grid { grid-template-columns: 84px repeat(6, minmax(54px, 1fr)); gap: 4px; }
-  .demo-grid .head { font-size: 9px; }
+  .state-grid { grid-template-columns: 84px repeat(6, minmax(54px, 1fr)); gap: 4px; }
+  .state-grid .head { font-size: 9px; }
   .fragment .app { grid-template-columns: 1fr; }
   .fragment .side { display: none; }
   .spacing-row { grid-template-columns: 54px 1fr 60px; }
@@ -415,8 +428,8 @@ __DS_BODY__
 
   var stored = null;
   try { stored = localStorage.getItem('osw-ds-theme'); } catch (error) { stored = null; }
-  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(stored || (prefersDark ? 'dark' : 'light'));
+  // 深色优先：默认暗色，只在用户明确切到亮色时记住那个选择。
+  applyTheme(stored === 'light' ? 'light' : 'dark');
 
   toggle.addEventListener('click', function () {
     var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';

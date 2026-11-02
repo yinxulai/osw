@@ -69,6 +69,7 @@ const renderStats = data => `| 项 | 数量 |
 | 原始通道 token（\`:root\` / \`.dark\`） | ${data.meta.counts.primitives} |
 | 排版 utility（\`system-*\`） | ${data.meta.counts.typographyUtilities} |
 | 对比度实测对 | ${data.meta.counts.contrastPairs} |
+| 组件规格（从 class 串解析） | ${data.meta.counts.componentSpecs} |
 | 源码中的字面颜色出现点（含注释/插图） | ${data.meta.counts.literalColorSites} |
 | 问题 | ${data.meta.issues.P0} P0 / ${data.meta.issues.P1} P1 / ${data.meta.issues.P2} P2 / ${data.meta.issues.P3} P3 |
 | 未核实项 / 待拍板项 | ${data.meta.counts.unverified} / ${data.meta.counts.decisions} |
@@ -257,23 +258,51 @@ ${data.openQuestions.unverified.map((item, index) => `| ${index + 1} | ${escapeC
 | --- | --- | --- | --- |
 ${data.openQuestions.decisions.map((item, index) => `| ${index + 1} | ${escapeCell(item.item)} | ${escapeCell(item.options)} | ${escapeCell(item.why)} |`).join('\n')}`
 
+const specValues = component => Object.fromEntries(component.specs.map(item => [item.key, item.value]))
+
+/** 规格行只列抽取得到的数字；没抽到的维度不写，避免用手写值填空。 */
+const specSummary = component => {
+  const values = specValues(component)
+  const parts = []
+  if (values.height !== undefined) parts.push(`h ${values.height}`)
+  if (values.padding !== undefined) parts.push(`p ${values.padding}`)
+  if (values.paddingX !== undefined || values.paddingY !== undefined) {
+    parts.push(`px ${values.paddingX ?? '—'} / py ${values.paddingY ?? '—'}`)
+  }
+  if (values.gap !== undefined) parts.push(`gap ${values.gap}`)
+  if (values.radius !== undefined) parts.push(`r ${values.radius}`)
+  if (values.fontSize !== undefined) parts.push(`${values.fontSize}/${values.lineHeight ?? '—'}`)
+  if (values.borderWidth !== undefined) parts.push(`border ${values.borderWidth}`)
+  return parts.join(' · ')
+}
+
 const renderComponentInventory = data => {
+  const byId = new Map(data.components.map(item => [item.id, item]))
+  const spec = id => {
+    const component = byId.get(id)
+    if (!component) return '—'
+    const lines = component.anchors.map(anchor => anchor.line).join(',')
+    return `${specSummary(component)}（${component.file.split('/').pop()}:${lines}）`
+  }
+
   const rows = [
-    ['Button', 'button.tsx', '32px 默认 / 28 / 24 / 36', 'default · hover · active(translate-y-px) · focus-visible(ring-2) · disabled(opacity-50) · 无 loading', '原生 button；aria-invalid 有 ring；图标按钮无 aria-label 约定'],
-    ['Input', 'input.tsx', 'h-8；圆角 6px；13/16', 'default · hover(底/边) · focus(底/边) · disabled(底/文字) · aria-invalid · 无 loading', '依赖 placeholder 提示；静止态无边框'],
-    ['Select', 'select.tsx', 'h-8 / min-w-36；13/16', 'default · hover · focus(bg) · disabled(opacity-50) · open(浮层)', 'Radix 键盘语义；焦点只改底色'],
-    ['Badge', 'badge.tsx', 'h-5；11/16 medium；圆角 4px', '6 个静态 variant；链接态 hover；无 disabled/loading', '11px 是字号下限；状态色文本未全达标'],
-    ['Card', 'card.tsx', 'padding 16 / sm 12；圆角 10px', 'default · sm；无 hover/selected 内建', '卡片靠 shadow-card + 画布明度差分离'],
-    ['Dialog', 'dialog.tsx', 'max-w-sm（384px）；p-4；圆角 10px', 'open · closed（fade/zoom）· 无 loading', 'Radix 焦点陷阱；关闭按钮 28px'],
-    ['Table', 'table.tsx', 'th h-10；td p-2；12/16', 'default · row hover · selected · expanded', '无 sticky 表头内建；页面自行加'],
-    ['Skeleton', 'skeleton.tsx', '自适应；圆角 4px', 'pulse（无 reduced-motion 降级）', '纯装饰，需 aria-hidden'],
-    ['Empty', 'empty.tsx', 'p-6；圆角 10px；max-w-sm', 'default · icon · embedded（EmptyState）', '虚线边框宽度为 0'],
-    ['Toast', 'sonner.tsx / toast.tsx', 'bottom-right；默认 4000ms，error 6000ms', 'success · error · info · warning · loading', 'sonner 提供 aria-live'],
-    ['Tooltip', 'tooltip.tsx', 'max-w-xs；12/16；圆角 4px', 'delayed-open · open · closed', '反色底；`components-tooltip-bg` 未使用'],
+    ['Button', 'button.tsx', spec('button'), 'default · hover · active(translate-y-px) · focus-visible(ring-2) · disabled(opacity-50) · 无 loading', '原生 button；aria-invalid 有 ring；图标按钮无 aria-label 约定'],
+    ['Input', 'input.tsx', spec('input'), 'default · hover(底/边) · focus(底/边) · disabled(底/文字) · aria-invalid · 无 loading', '依赖 placeholder 提示；静止态无边框'],
+    ['Select', 'select.tsx', spec('select'), 'default · hover · focus(bg) · disabled(opacity-50) · open(浮层)', 'Radix 键盘语义；焦点只改底色'],
+    ['Badge', 'badge.tsx', spec('badge'), '6 个静态 variant；链接态 hover；无 disabled/loading', '11px 是字号下限；状态色文本未全达标'],
+    ['Card', 'card.tsx', `${spec('card')}；sm 变体 py 12`, 'default · sm；无 hover/selected 内建', '卡片靠 shadow-card + 画布明度差分离'],
+    ['Dialog', 'dialog.tsx', spec('dialog'), 'open · closed（fade/zoom）· 无 loading', 'Radix 焦点陷阱；关闭按钮 28px'],
+    ['Table', 'table.tsx', spec('table'), 'default · row hover · selected · expanded', '无 sticky 表头内建；页面自行加'],
+    ['Skeleton', 'skeleton.tsx', spec('skeleton'), 'pulse（无 reduced-motion 降级）', '纯装饰，需 aria-hidden'],
+    ['Empty', 'empty.tsx', spec('empty'), 'default · icon · embedded（EmptyState）', '虚线边框宽度为 0'],
+    ['Toast', 'sonner.tsx / toast.tsx', '圆角 6（`--radius`）；默认 4000ms / error 6000ms', 'success · error · info · warning · loading', 'sonner 提供 aria-live'],
+    ['Tooltip', 'tooltip.tsx', spec('tooltip'), 'delayed-open · open · closed', '反色底；`components-tooltip-bg` 未使用'],
   ]
-  return `| 组件 | 源文件 | 关键尺寸 | 状态 | 可访问性要点 |
+  return `| 组件 | 源文件 | 关键尺寸（从源码解析） | 状态 | 可访问性要点 |
 | --- | --- | --- | --- | --- |
-${rows.map(row => `| **${row[0]}** | \`components/ui/${row[1]}\` | ${row[2]} | ${row[3]} | ${row[4]} |`).join('\n')}`
+${rows.map(row => `| **${row[0]}** | \`components/ui/${row[1]}\` | ${row[2]} | ${row[3]} | ${row[4]} |`).join('\n')}
+
+尺寸列的每个数字都由 \`scripts/design-system/specs.mjs\` 从括号里那段 class 串换算：间距 ×4px（Tailwind v4 默认 \`--spacing\`，仓库未覆盖）、圆角取仓库的 \`--radius-*\`、字号取排版表。anchor 找不到时生成直接失败。`
 }
 
 const replaceBlock = (source, key, content) => {

@@ -10,6 +10,7 @@
       "primitives": 40,
       "typographyUtilities": 23,
       "contrastPairs": 42,
+      "componentSpecs": 10,
       "literalColorSites": 44,
       "unverified": 6,
       "decisions": 9
@@ -4722,6 +4723,396 @@
       "lineHeight": "16px",
       "uppercase": false,
       "usage": 2
+    }
+  ],
+  "components": [
+    {
+      "id": "button",
+      "name": "Button",
+      "file": "packages/console/source/components/ui/button.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 8
+        },
+        {
+          "key": "size",
+          "line": 31
+        }
+      ],
+      "specs": [
+        {
+          "key": "radius",
+          "value": 6,
+          "from": "rounded-lg"
+        },
+        {
+          "key": "borderWidth",
+          "value": 1,
+          "from": "border"
+        },
+        {
+          "key": "height",
+          "value": 32,
+          "from": "h-8"
+        },
+        {
+          "key": "gap",
+          "value": 6,
+          "from": "gap-1.5"
+        },
+        {
+          "key": "paddingX",
+          "value": 12,
+          "from": "px-3"
+        }
+      ]
+    },
+    {
+      "id": "input",
+      "name": "Input",
+      "file": "packages/console/source/components/ui/input.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 15
+        }
+      ],
+      "specs": [
+        {
+          "key": "height",
+          "value": 32,
+          "from": "h-8"
+        },
+        {
+          "key": "radius",
+          "value": 6,
+          "from": "rounded-lg"
+        },
+        {
+          "key": "borderWidth",
+          "value": 1,
+          "from": "border"
+        },
+        {
+          "key": "paddingX",
+          "value": 12,
+          "from": "px-3"
+        },
+        {
+          "key": "paddingY",
+          "value": 6,
+          "from": "py-1.5"
+        },
+        {
+          "key": "fontSize",
+          "value": 13,
+          "from": "text-[13px]"
+        },
+        {
+          "key": "lineHeight",
+          "value": 16,
+          "from": "leading-4"
+        }
+      ]
+    },
+    {
+      "id": "select",
+      "name": "Select",
+      "file": "packages/console/source/components/ui/select.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 48
+        },
+        {
+          "key": "size",
+          "line": 49
+        }
+      ],
+      "specs": [
+        {
+          "key": "gap",
+          "value": 6,
+          "from": "gap-1.5"
+        },
+        {
+          "key": "radius",
+          "value": 6,
+          "from": "rounded-lg"
+        },
+        {
+          "key": "borderWidth",
+          "value": 1,
+          "from": "border"
+        },
+        {
+          "key": "paddingY",
+          "value": 8,
+          "from": "py-2"
+        },
+        {
+          "key": "paddingRight",
+          "value": 8,
+          "from": "pr-2"
+        },
+        {
+          "key": "paddingLeft",
+          "value": 12,
+          "from": "pl-3"
+        },
+        {
+          "key": "fontSize",
+          "value": 13,
+          "from": "text-[13px]"
+        },
+        {
+          "key": "lineHeight",
+          "value": 16,
+          "from": "leading-4"
+        }
+      ]
+    },
+    {
+      "id": "badge",
+      "name": "Badge",
+      "file": "packages/console/source/components/ui/badge.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 8
+        }
+      ],
+      "specs": [
+        {
+          "key": "height",
+          "value": 20,
+          "from": "h-5"
+        },
+        {
+          "key": "gap",
+          "value": 4,
+          "from": "gap-1"
+        },
+        {
+          "key": "radius",
+          "value": 4,
+          "from": "rounded-md"
+        },
+        {
+          "key": "paddingX",
+          "value": 8,
+          "from": "px-2"
+        },
+        {
+          "key": "paddingY",
+          "value": 2,
+          "from": "py-0.5"
+        },
+        {
+          "key": "fontSize",
+          "value": 11,
+          "from": "system-2xs-medium"
+        },
+        {
+          "key": "lineHeight",
+          "value": 16,
+          "from": "system-2xs-medium"
+        }
+      ]
+    },
+    {
+      "id": "card",
+      "name": "Card",
+      "file": "packages/console/source/components/ui/card.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 15
+        }
+      ],
+      "specs": [
+        {
+          "key": "gap",
+          "value": 0,
+          "from": "gap-0"
+        },
+        {
+          "key": "radius",
+          "value": 10,
+          "from": "rounded-xl"
+        },
+        {
+          "key": "borderWidth",
+          "value": 1,
+          "from": "border"
+        },
+        {
+          "key": "fontSize",
+          "value": 14,
+          "from": "text-sm"
+        },
+        {
+          "key": "lineHeight",
+          "value": 20,
+          "from": "text-sm"
+        },
+        {
+          "key": "paddingY",
+          "value": 16,
+          "from": "py-(--card-spacing)"
+        }
+      ]
+    },
+    {
+      "id": "dialog",
+      "name": "Dialog",
+      "file": "packages/console/source/components/ui/dialog.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 71
+        }
+      ],
+      "specs": [
+        {
+          "key": "gap",
+          "value": 16,
+          "from": "gap-4"
+        },
+        {
+          "key": "radius",
+          "value": 10,
+          "from": "rounded-xl"
+        },
+        {
+          "key": "padding",
+          "value": 16,
+          "from": "p-4"
+        },
+        {
+          "key": "fontSize",
+          "value": 14,
+          "from": "text-sm"
+        },
+        {
+          "key": "lineHeight",
+          "value": 20,
+          "from": "text-sm"
+        }
+      ]
+    },
+    {
+      "id": "tooltip",
+      "name": "Tooltip",
+      "file": "packages/console/source/components/ui/tooltip.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 45
+        }
+      ],
+      "specs": [
+        {
+          "key": "gap",
+          "value": 6,
+          "from": "gap-1.5"
+        },
+        {
+          "key": "radius",
+          "value": 4,
+          "from": "rounded-md"
+        },
+        {
+          "key": "paddingX",
+          "value": 12,
+          "from": "px-3"
+        },
+        {
+          "key": "paddingY",
+          "value": 6,
+          "from": "py-1.5"
+        },
+        {
+          "key": "fontSize",
+          "value": 12,
+          "from": "text-xs"
+        },
+        {
+          "key": "lineHeight",
+          "value": 16,
+          "from": "text-xs"
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "name": "Table",
+      "file": "packages/console/source/components/ui/table.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 13
+        }
+      ],
+      "specs": [
+        {
+          "key": "fontSize",
+          "value": 12,
+          "from": "system-xs-regular"
+        },
+        {
+          "key": "lineHeight",
+          "value": 16,
+          "from": "system-xs-regular"
+        }
+      ]
+    },
+    {
+      "id": "skeleton",
+      "name": "Skeleton",
+      "file": "packages/console/source/components/ui/skeleton.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 7
+        }
+      ],
+      "specs": [
+        {
+          "key": "radius",
+          "value": 4,
+          "from": "rounded-md"
+        }
+      ]
+    },
+    {
+      "id": "empty",
+      "name": "Empty",
+      "file": "packages/console/source/components/ui/empty.tsx",
+      "anchors": [
+        {
+          "key": "base",
+          "line": 10
+        }
+      ],
+      "specs": [
+        {
+          "key": "gap",
+          "value": 16,
+          "from": "gap-4"
+        },
+        {
+          "key": "radius",
+          "value": 10,
+          "from": "rounded-xl"
+        },
+        {
+          "key": "padding",
+          "value": 24,
+          "from": "p-6"
+        }
+      ]
     }
   ],
   "textVariable": {

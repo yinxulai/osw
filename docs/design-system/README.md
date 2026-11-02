@@ -4,7 +4,12 @@
 >
 > 生成方式：`node scripts/design-system/extract-tokens.mjs`。所有色值、对比度、行号、计数都来自
 > `packages/console/source/styles/index.css` 与 `packages/console/source/**` 的源码；手写部分只负责解释与判断。
-> 预览页：`docs/design-system/index.html`（双击打开即可，无外部依赖）。
+> 预览页：`docs/design-system/index.html`（双击打开即可，无外部依赖）。预览页与本文都是**深色优先**：
+> 默认暗色，层级靠表面与描边而不是阴影；切换到亮色只改 token，不改结构。
+>
+> 本文按“可执行规范”写：能判定的都给了阈值与查法（§11），达不到的进问题清单（§12），
+> 没有证据的进未核实（§13）。组件尺寸不是抄的近似值，而是 `scripts/design-system/specs.mjs`
+> 从组件源码的 class 串解析出来的（§9.1）。
 
 标签约定：`[源码]` = 从仓库文件读出的原文；`[生成]` = 抽取脚本计算出的值；`[未核实]` = 没有证据，不作为结论。
 
@@ -20,7 +25,7 @@
 | 2 | `packages/console/source/components/ui/*.tsx` | 40 个组件的实际类名：尺寸、状态、圆角、阴影都从这里取值 | 逐文件核对 `[源码]` |
 | 3 | `packages/console/vite.config.ts` | Tailwind v4 通过 `@tailwindcss/vite` 接入；没有 `tailwind.config.*` | `[源码]` |
 | 4 | `package.json` | 字体只安装了 `@fontsource-variable/geist` | `[源码]` |
-| 5 | `apps/docs/specs/design/*.md` | **对照对象，不是权威**：用于发现“文档声称”与“代码实际”的漂移 | 见 §11 DS-024 |
+| 5 | `apps/docs/specs/design/*.md` | **对照对象，不是权威**：用于发现“文档声称”与“代码实际”的漂移 | 见 §12 DS-024 |
 
 ### 1.2 怎么验证
 
@@ -55,6 +60,7 @@ node packages/toolkit/scripts/test.mjs packages/console/source/design-system.gua
 | 原始通道 token（`:root` / `.dark`） | 40 |
 | 排版 utility（`system-*`） | 23 |
 | 对比度实测对 | 42 |
+| 组件规格（从 class 串解析） | 10 |
 | 源码中的字面颜色出现点（含注释/插图） | 44 |
 | 问题 | 5 P0 / 12 P1 / 10 P2 / 2 P3 |
 | 未核实项 / 待拍板项 | 6 / 9 |
@@ -631,31 +637,33 @@ Tailwind v4 的 `--spacing` 默认 `0.25rem`（4px），仓库没有覆盖它。
 ### 9.1 组件清单与状态
 
 <!-- GENERATED:component-inventory:start -->
-| 组件 | 源文件 | 关键尺寸 | 状态 | 可访问性要点 |
+| 组件 | 源文件 | 关键尺寸（从源码解析） | 状态 | 可访问性要点 |
 | --- | --- | --- | --- | --- |
-| **Button** | `components/ui/button.tsx` | 32px 默认 / 28 / 24 / 36 | default · hover · active(translate-y-px) · focus-visible(ring-2) · disabled(opacity-50) · 无 loading | 原生 button；aria-invalid 有 ring；图标按钮无 aria-label 约定 |
-| **Input** | `components/ui/input.tsx` | h-8；圆角 6px；13/16 | default · hover(底/边) · focus(底/边) · disabled(底/文字) · aria-invalid · 无 loading | 依赖 placeholder 提示；静止态无边框 |
-| **Select** | `components/ui/select.tsx` | h-8 / min-w-36；13/16 | default · hover · focus(bg) · disabled(opacity-50) · open(浮层) | Radix 键盘语义；焦点只改底色 |
-| **Badge** | `components/ui/badge.tsx` | h-5；11/16 medium；圆角 4px | 6 个静态 variant；链接态 hover；无 disabled/loading | 11px 是字号下限；状态色文本未全达标 |
-| **Card** | `components/ui/card.tsx` | padding 16 / sm 12；圆角 10px | default · sm；无 hover/selected 内建 | 卡片靠 shadow-card + 画布明度差分离 |
-| **Dialog** | `components/ui/dialog.tsx` | max-w-sm（384px）；p-4；圆角 10px | open · closed（fade/zoom）· 无 loading | Radix 焦点陷阱；关闭按钮 28px |
-| **Table** | `components/ui/table.tsx` | th h-10；td p-2；12/16 | default · row hover · selected · expanded | 无 sticky 表头内建；页面自行加 |
-| **Skeleton** | `components/ui/skeleton.tsx` | 自适应；圆角 4px | pulse（无 reduced-motion 降级） | 纯装饰，需 aria-hidden |
-| **Empty** | `components/ui/empty.tsx` | p-6；圆角 10px；max-w-sm | default · icon · embedded（EmptyState） | 虚线边框宽度为 0 |
-| **Toast** | `components/ui/sonner.tsx / toast.tsx` | bottom-right；默认 4000ms，error 6000ms | success · error · info · warning · loading | sonner 提供 aria-live |
-| **Tooltip** | `components/ui/tooltip.tsx` | max-w-xs；12/16；圆角 4px | delayed-open · open · closed | 反色底；`components-tooltip-bg` 未使用 |
+| **Button** | `components/ui/button.tsx` | h 32 · px 12 / py — · gap 6 · r 6 · border 1（button.tsx:8,31） | default · hover · active(translate-y-px) · focus-visible(ring-2) · disabled(opacity-50) · 无 loading | 原生 button；aria-invalid 有 ring；图标按钮无 aria-label 约定 |
+| **Input** | `components/ui/input.tsx` | h 32 · px 12 / py 6 · r 6 · 13/16 · border 1（input.tsx:15） | default · hover(底/边) · focus(底/边) · disabled(底/文字) · aria-invalid · 无 loading | 依赖 placeholder 提示；静止态无边框 |
+| **Select** | `components/ui/select.tsx` | px — / py 8 · gap 6 · r 6 · 13/16 · border 1（select.tsx:48,49） | default · hover · focus(bg) · disabled(opacity-50) · open(浮层) | Radix 键盘语义；焦点只改底色 |
+| **Badge** | `components/ui/badge.tsx` | h 20 · px 8 / py 2 · gap 4 · r 4 · 11/16（badge.tsx:8） | 6 个静态 variant；链接态 hover；无 disabled/loading | 11px 是字号下限；状态色文本未全达标 |
+| **Card** | `components/ui/card.tsx` | px — / py 16 · gap 0 · r 10 · 14/20 · border 1（card.tsx:15）；sm 变体 py 12 | default · sm；无 hover/selected 内建 | 卡片靠 shadow-card + 画布明度差分离 |
+| **Dialog** | `components/ui/dialog.tsx` | p 16 · gap 16 · r 10 · 14/20（dialog.tsx:71） | open · closed（fade/zoom）· 无 loading | Radix 焦点陷阱；关闭按钮 28px |
+| **Table** | `components/ui/table.tsx` | 12/16（table.tsx:13） | default · row hover · selected · expanded | 无 sticky 表头内建；页面自行加 |
+| **Skeleton** | `components/ui/skeleton.tsx` | r 4（skeleton.tsx:7） | pulse（无 reduced-motion 降级） | 纯装饰，需 aria-hidden |
+| **Empty** | `components/ui/empty.tsx` | p 24 · gap 16 · r 10（empty.tsx:10） | default · icon · embedded（EmptyState） | 虚线边框宽度为 0 |
+| **Toast** | `components/ui/sonner.tsx / toast.tsx` | 圆角 6（`--radius`）；默认 4000ms / error 6000ms | success · error · info · warning · loading | sonner 提供 aria-live |
+| **Tooltip** | `components/ui/tooltip.tsx` | px 12 / py 6 · gap 6 · r 4 · 12/16（tooltip.tsx:45） | delayed-open · open · closed | 反色底；`components-tooltip-bg` 未使用 |
+
+尺寸列的每个数字都由 `scripts/design-system/specs.mjs` 从括号里那段 class 串换算：间距 ×4px（Tailwind v4 默认 `--spacing`，仓库未覆盖）、圆角取仓库的 `--radius-*`、字号取排版表。anchor 找不到时生成直接失败。
 <!-- GENERATED:component-inventory:end -->
 
 ### 9.2 六态定义（本文与预览页共用）
 
-| 状态 | 触发 | 视觉约定 | 证据 |
-| --- | --- | --- | --- |
-| default | 无交互 | 各自 variant 的静止底色/文字 | `button.tsx:12-18` `[源码]` |
-| hover | 指针悬停 | 底色向 `*-hover` 档移动；`outline` 同时加深描边 | `button.tsx:12-18` `[源码]` |
-| active | 按下 | 主按钮 `translate-y-px`；其余仅底色 | `button.tsx:8` `[源码]` |
-| focus-visible | 键盘聚焦 | `ring-2 ring-state-accent-solid`（按钮）/ 1px outline（全局） | `button.tsx:8`、`index.css:717` `[源码]` |
-| disabled | `disabled` | `opacity-50` + `pointer-events-none`；输入框改为独立底/文字 | `button.tsx:8`、`input.tsx:19` `[源码]` |
-| loading | 调用方组合 Spinner | **没有内建档位**；无 `aria-busy` 约定 | `spinner.tsx:9` `[源码]` |
+| 状态 | 触发 | 视觉约定 | 非颜色编码（R-04） | 证据 |
+| --- | --- | --- | --- | --- |
+| default | 无交互 | 各自 variant 的静止底色/文字 | 无附加编码 | `button.tsx:12-18` `[源码]` |
+| hover | 指针悬停 | 底色向 `*-hover` 档移动；`outline` 同时加深描边 | 与 default 的差异只靠颜色 → **不满足 R-04**，需补形状或文案 | `button.tsx:12-18` `[源码]` |
+| active | 按下 | 主按钮 `translate-y-px`；其余仅底色 | 1px 位移（形状） | `button.tsx:8` `[源码]` |
+| focus-visible | 键盘聚焦 | `ring-2 ring-state-accent-solid`（按钮）/ 1px outline（全局） | 2px 环 + 偏移（形状） | `button.tsx:8`、`index.css:717` `[源码]` |
+| disabled | `disabled` | `opacity-50` + `pointer-events-none`；输入框改为独立底/文字 | 原生 `disabled`/`aria-disabled`（语义） | `button.tsx:8`、`input.tsx:19` `[源码]` |
+| loading | 调用方组合 Spinner | **没有内建档位**；无 `aria-busy` 约定 | spinner（运动）+ `aria-busy`（语义，需调用方补） | `spinner.tsx:9` `[源码]` |
 
 > “六态”是检查清单，不表示每个组件都实现了六态。缺失的档位就是问题，见 DS-023。
 
@@ -715,7 +723,52 @@ aside z-30 → main p-2 pl-1 → 内容卡 rounded-2xl border-0.5 shadow-arbitra
 
 ---
 
-## 11. 问题清单
+## 11. 规范条文（可执行）
+
+这一章是**判定标准**，不是描述。每条都有编号、级别、阈值和查法；`MUST` 违反即缺陷，`SHOULD` 违反需在 §12 登记理由。条文后面的 `DS-xxx` 指向当前未达标项，实测值见 §2.4 与 §12。
+
+| 编号 | 级别 | 条文 | 判定标准 / 查法 | 现状 |
+| --- | --- | --- | --- | --- |
+| R-01 | MUST | 正文文本对比度 ≥ 4.5:1；≥ 18.66px 粗体或 ≥ 24px 可降到 3:1 | 对承载底色实测，见 §2.4；`contrastPairs` 全部可重算 | 7 组未达标（DS-002/003/005/026） |
+| R-02 | MUST | 非文本控件（输入框、复选框、开关）与相邻色的边界 ≥ 3:1 | 量控件底与卡片底、边框与控件底 | 输入框 1.19:1（DS-001） |
+| R-03 | MUST | 键盘焦点可见且统一：2px 环 + 2px offset，颜色取 `--color-state-accent-solid` | 逐个可聚焦控件 Tab 一遍，比对环宽/偏移/颜色 | 四套写法（DS-010） |
+| R-04 | MUST | 状态不能只靠颜色区分；必须同时有形状、文字、图标或 `aria-*` 之一 | 灰度截图仍能分辨六态；读屏能读到 `disabled` / `busy` | 预览页已加环/位移/透明度/spinner 与 `aria-disabled`、`aria-busy` |
+| R-05 | MUST | 字号 ≥ 11px；11px 只能用于徽标与元信息，且对比度仍按 R-01 判 | 搜 `text-[10px]`、`text-[11px]` | 徽标 4 档未达标（DS-005） |
+| R-06 | MUST | 间距落在 4px 网格；2px 只用于描边、图标内衬，且必须登记 | 数 class 的 step：非 0.5 倍数一律不合格 | 半档 400+ 处（DS-019） |
+| R-07 | MUST | 圆角只取 `--radius-sm/md/lg/xl`；禁止字面 px 与非整数档 | 搜 `rounded-[`、`--radius-2xl` 等 | 非整数与作用域覆写（DS-014） |
+| R-08 | MUST | 阴影只取 `--shadow-*`；深色下分层用表面 + 描边，不叠加阴影 | 搜 `shadow-[`；切暗色看卡片边界 | 44 处字面色值/影子（DS-017） |
+| R-09 | MUST | 动效时长取 100/150/200/300ms；`prefers-reduced-motion: reduce` 下关闭 animation/transition | 开系统“减少动态效果”后逐页检查 | 只覆盖 2 处（DS-011） |
+| R-10 | MUST | 深色优先：默认暗色；暗色层级靠 `--color-card` / `--color-inset` + `--color-module-border` | 暗色截图里相邻面必须能分出边界 | 预览页已按此实现；组件侧见 DS-029 |
+| R-11 | MUST | 颜色只引用 token；字面色值仅限插图/导出并登记 | 搜 `#[0-9a-f]{3,8}`、`rgb(` | 44 处（DS-017） |
+| R-12 | MUST | 组件六态齐全，缺档标 `N/A` 并登记问题；禁止用近似状态冒充 | 对照 §9.2 六态定义逐个组件核 | Empty 缺 4 档、Badge 无状态（DS-023） |
+
+正反例（取自本仓库真实写法）：
+
+```css
+/* ✅ 焦点：一个环，宽窄和偏移全仓一致 */
+:focus-visible { outline: 2px solid var(--color-state-accent-solid); outline-offset: 2px; }
+
+/* ❌ 焦点：只改底色，键盘用户看不出焦点在哪（input.tsx 现状） */
+input:focus { background: var(--color-components-input-bg-active); outline: none; }
+
+/* ✅ 深色分层：表面 + 描边 */
+.card { background: var(--color-card); border: 1px solid var(--color-module-border); }
+
+/* ❌ 深色分层：只靠阴影，暗底上等于没有边界 */
+.card { background: var(--color-card); box-shadow: 0 1px 2px rgb(0 0 0 / 0.4); }
+```
+
+```tsx
+// ✅ 状态不只靠颜色：禁用有语义，加载有 busy
+<Button disabled aria-busy={pending}>保存</Button>
+
+// ❌ 用灰色伪装禁用：读屏仍可点，键盘仍能聚焦
+<Button className="opacity-50">保存</Button>
+```
+
+条文怎么落地（按成本从低到高）：先加守卫（R-01/R-07/R-11 可脚本判），再改 token 层（R-03/R-10），最后动组件（R-02/R-04/R-05）。当前仓库只做到第一步的一部分：生成器能算，但还没有把 R-01…R-12 接进 CI。
+
+## 12. 问题清单
 
 > 每条都有 `文件:行` 证据；数值型影响由抽取脚本实时计算，改代码后重跑会变。
 > 排序：P0（用户现在就可能读不到/点不到）→ P1（一致性/可访问性缺口）→ P2（可维护性/漂移）→ P3（文档/命名）。
@@ -860,7 +913,7 @@ aside z-30 → main p-2 pl-1 → 内容卡 rounded-2xl border-0.5 shadow-arbitra
 
 ---
 
-## 12. 未核实与待拍板
+## 13. 未核实与待拍板
 
 ### 12.1 未核实（不能当结论用）
 
