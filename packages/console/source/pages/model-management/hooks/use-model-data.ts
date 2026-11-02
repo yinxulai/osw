@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useProviders, useProvidersActions, useProvidersLoading } from '@/data/providers'
+import { useProviders, useProvidersActions, useProvidersError, useProvidersLoading } from '@/data/providers'
 import { useHealth, useHealthActions } from '@/data/health'
 import { loadProviderModels, providerModelKeys } from '@/data/provider-models'
 import type { ProviderModelRoute } from '@common/schemas'
@@ -20,14 +20,16 @@ const EMPTY_MODELS: ProviderModelRoute[] = []
 export function useModelData() {
   const client = useQueryClient()
   const providers = useProviders()
-  const health = useHealth()
   const providersLoading = useProvidersLoading()
+  const providersError = useProvidersError()
+  const health = useHealth()
   const { refresh: refreshProviders } = useProvidersActions()
   const { refresh: refreshHealth } = useHealthActions()
   const selectedProviderId = useModelManagementUiStore(state => state.selectedProviderId)
   const setSelectedProviderId = useModelManagementUiStore(state => state.setSelectedProviderId)
   const query = useQuery({ queryKey: modelKeys.all, queryFn: loadProviderModels, refetchInterval: 30_000 })
   const models = query.data ?? EMPTY_MODELS
+  const modelsError = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null
   const setModels = useCallback((next: ProviderModelRoute[] | ((current: ProviderModelRoute[]) => ProviderModelRoute[])) => client.setQueryData<ProviderModelRoute[]>(modelKeys.all, current => typeof next === 'function' ? next(current ?? []) : next), [client])
   const loadModels = useCallback(async () => { const result = await query.refetch(); return !result.isError }, [query])
   const reload = useCallback(async () => { refreshProviders(); refreshHealth(); await loadModels() }, [loadModels, refreshHealth, refreshProviders])
@@ -47,5 +49,5 @@ export function useModelData() {
     if (providers.some(provider => provider.id === selectedProviderId)) return
     setSelectedProviderId(providers[0].id)
   }, [providers, selectedProviderId, setSelectedProviderId])
-  return { providers, health, providersLoading, models, setModels, selectedProviderId, setSelectedProviderId, loading: query.isPending || providersLoading, loadModels, reload }
+  return { providers, health, providersLoading, error: providersError ?? modelsError, models, setModels, selectedProviderId, setSelectedProviderId, loading: query.isPending || providersLoading, loadModels, reload }
 }

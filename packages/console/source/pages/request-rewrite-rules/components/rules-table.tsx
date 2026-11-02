@@ -1,40 +1,76 @@
-import { Copy, Globe2, Link2, Pencil, Search, SearchX, Trash2 } from 'lucide-react'
-import { tableHeaderClass, tableRowClass } from '@/components/table-primitives'
+import { Plus, Search, SearchX, X } from 'lucide-react'
+import { tableHeaderClass } from '@/components/table-primitives'
 import { TableStateRow } from '@/components/table-state'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import { PROTOCOL_LABELS, type RequestRewriteRule, type RuleStatusFilter } from '../types'
+import type { RequestRewriteRule, RuleStatusFilter } from '../types'
+import { RuleRow } from './rule-row'
 
 interface RulesTableProps {
   rules: RequestRewriteRule[]
   search: string
   statusFilter: RuleStatusFilter
+  /** 过滤前是否有规则；用来区分「一条都没有」与「筛选后为空」。 */
+  hasAnyRules: boolean
   onSearchChange: (value: string) => void
   onStatusFilterChange: (value: RuleStatusFilter) => void
   onEdit: (rule: RequestRewriteRule) => void
   onDuplicate: (rule: RequestRewriteRule) => void
   onDelete: (rule: RequestRewriteRule) => void
   onToggle: (rule: RequestRewriteRule, enabled: boolean) => void
+  onCreate: () => void
+  onClearFilters: () => void
+}
+
+const COLUMN_COUNT = 7
+
+/** 表格骨架：列宽与真实行对齐，行数不超过一屏。 */
+export function RulesTableSkeleton() {
+  return (
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="border-b border-border/50 px-4 py-3">
+        <Skeleton className="mb-2 h-4 w-24" />
+        <Skeleton className="h-3 w-56" />
+      </div>
+      <div className="divide-y divide-border/40">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-1/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-5 w-14" />
+            <Skeleton className="hidden h-3 w-24 sm:block" />
+            <Skeleton className="h-5 w-10" />
+            <Skeleton className="h-7 w-20" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
 }
 
 export function RulesTable(props: RulesTableProps) {
   const t = useTranslation()
+  const filtered = props.hasAnyRules && (props.search.trim() !== '' || props.statusFilter !== 'all')
+  const showEmpty = props.rules.length === 0
+
   return (
-    <Card className="gap-0 overflow-hidden py-0">
+    <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
       <div className="flex flex-col gap-3 border-b border-border/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <CardTitle>{t('rules.table.title')}</CardTitle>
           <CardDescription>{t('rules.table.description')}</CardDescription>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-full sm:w-56">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-text-tertiary" />
             <Input
               value={props.search}
@@ -57,9 +93,9 @@ export function RulesTable(props: RulesTableProps) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table className={cn('w-full text-left text-xs', props.rules.length > 0 && 'min-w-205')}>
-          <TableHeader className={tableHeaderClass}>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <Table className={cn('w-full text-left text-xs', !showEmpty && 'min-w-205')}>
+          <TableHeader className={cn(tableHeaderClass, 'sticky top-0 z-10')}>
             <TableRow>
               <TableHead className="px-4 py-2">{t('rules.table.column.rule')}</TableHead>
               <TableHead className="w-28 px-3 py-2">{t('rules.table.column.scope')}</TableHead>
@@ -71,63 +107,43 @@ export function RulesTable(props: RulesTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {props.rules.map(rule => {
-              const hasRequest = rule.actions.some(action => action.stage === 'request')
-              const hasResponse = rule.actions.some(action => action.stage === 'response')
-              const protocols = rule.protocols.map(protocol => PROTOCOL_LABELS[protocol])
-              const protocolText = protocols.length ? protocols.join(t('common.listSeparator')) : t('rules.table.allProtocols')
-              return (
-                <TableRow key={rule.id} className={tableRowClass}>
-                  <TableCell className="px-4 py-2.5">
-                    <button type="button" onClick={() => props.onEdit(rule)} className="block max-w-80 text-left">
-                      <span className="block truncate system-xs-medium hover:text-primary">{rule.name}</span>
-                      <span className="mt-0.5 block truncate system-2xs-regular text-text-tertiary">{rule.description || t('rules.table.noDescription')}</span>
-                    </button>
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    {rule.global ? (
-                      <Badge variant="info" className="gap-1 font-normal"><Globe2 className="size-3" />{t('rules.scope.global')}</Badge>
-                    ) : (
-                      <div>
-                        <Badge variant="outline" className="gap-1 font-normal"><Link2 className="size-3" />{t('rules.scope.normal')}</Badge>
-                        <p className="mt-1 system-2xs-regular text-text-tertiary">{t('rules.boundProviders', { count: rule.boundProviders })}</p>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    <Badge variant={hasRequest ? 'secondary' : 'warning'} className="font-normal">
-                      {[hasRequest && t('rules.stage.request'), hasResponse && t('rules.stage.response')].filter(Boolean).join(' / ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    <p className="max-w-40 truncate system-2xs-regular text-text-tertiary" title={protocolText}>
-                      {protocolText}
-                    </p>
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5">{t('rules.table.actionCount', { count: rule.actions.length })}</TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={enabled => props.onToggle(rule, enabled)}
-                        aria-label={t('rules.table.toggleAria', { name: rule.name })}
-                      />
-                      <span className="system-2xs-regular text-text-tertiary">{rule.enabled ? t('rules.status.enabled') : t('rules.status.disabled')}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5">
-                    <div className="flex justify-end gap-0.5">
-                      <Button variant="ghost" size="icon-sm" onClick={() => props.onEdit(rule)} title={t('rules.table.edit')}><Pencil /></Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => props.onDuplicate(rule)} title={t('rules.table.duplicate')}><Copy /></Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => props.onDelete(rule)} title={t('rules.table.delete')} className="text-text-tertiary hover:text-text-destructive"><Trash2 /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {props.rules.length === 0 && (
-              <TableStateRow colSpan={7} icon={SearchX} title={t('rules.filter.empty.title')} description={t('rules.filter.empty.description')} />
-            )}
+            {props.rules.map(rule => (
+              <RuleRow
+                key={rule.id}
+                rule={rule}
+                onEdit={props.onEdit}
+                onDuplicate={props.onDuplicate}
+                onDelete={props.onDelete}
+                onToggle={props.onToggle}
+              />
+            ))}
+            {showEmpty && (filtered ? (
+              <TableStateRow
+                colSpan={COLUMN_COUNT}
+                icon={SearchX}
+                title={t('rules.filter.empty.title')}
+                description={t('rules.filter.empty.description')}
+                action={(
+                  <Button variant="outline" className="mt-1" onClick={props.onClearFilters}>
+                    <X size={14} />
+                    {t('rules.filter.empty.action')}
+                  </Button>
+                )}
+              />
+            ) : (
+              <TableStateRow
+                colSpan={COLUMN_COUNT}
+                icon={Plus}
+                title={t('rules.empty.title')}
+                description={t('rules.empty.description')}
+                action={(
+                  <Button variant="outline" className="mt-1" onClick={props.onCreate}>
+                    <Plus size={14} />
+                    {t('rules.create')}
+                  </Button>
+                )}
+              />
+            ))}
           </TableBody>
         </Table>
       </div>

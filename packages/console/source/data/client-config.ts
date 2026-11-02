@@ -185,9 +185,9 @@ export function useClientConfigOverview(): ClientConfigOverviewItem[] {
   return useOverviewQuery().data ?? []
 }
 
-export function useClientConfigOverviewStatus(): { loading: boolean; error: string | null } {
+export function useClientConfigOverviewStatus(): { loading: boolean; error: string | null; refresh: () => void } {
   const query = useOverviewQuery()
-  return { loading: query.isPending, error: query.error?.message ?? null }
+  return { loading: query.isPending, error: query.error?.message ?? null, refresh: () => void query.refetch() }
 }
 
 /**

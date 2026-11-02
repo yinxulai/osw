@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LogEntry } from '@common/schemas'
-import { AlertTriangle, Inbox, RefreshCw, SearchX } from 'lucide-react'
-import { tableCellClass, tableHeaderCellClass, tableHeaderClass, tableRowClass, TableFrame } from '@/components/table-primitives'
-import { TableStateRow } from '@/components/table-state'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useLocale, useTranslation, type AppTranslator } from '@/i18n/provider'
+import { tableHeaderCellClass, tableHeaderClass, TableFrame } from '@/components/table-primitives'
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useTranslation } from '@/i18n/provider'
 import { cn } from '@/lib/utils'
-import { LOG_LEVEL_META, LOG_SCOPE_LABEL_KEY, formatLogTimestamp } from '../lib/log-presentation'
+import { LogRow, LogsEmptyRow, LogsErrorRow, LogsLoadingRows } from './logs-table-rows'
 
 const EMPTY_IDS: ReadonlySet<number> = new Set()
 
@@ -40,89 +36,25 @@ function useNewLogIds(logs: readonly LogEntry[]): ReadonlySet<number> {
   return newIds
 }
 
-function renderLoadingRows() {
-  return Array.from({ length: 10 }).map((_, index) => (
-    <TableRow key={index} className={cn(tableRowClass, 'border-l-2 border-l-transparent')}>
-      <TableCell className="px-3 py-2">
-        <Skeleton className="h-3 w-28" />
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <Skeleton className="h-4 w-12" />
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <Skeleton className="h-3 w-4/5" />
-      </TableCell>
-    </TableRow>
-  ))
+interface LogsTableProps {
+  logs: LogEntry[]
+  loading: boolean
+  error: string | null
+  filtered: boolean
+  onRetry: () => void
 }
-
-function renderEmptyRow(t: AppTranslator, filtered: boolean) {
-  if (filtered) {
-    return <TableStateRow colSpan={3} icon={SearchX} title={t('logs.empty.filteredTitle')} description={t('logs.empty.filteredDescription')} />
-  }
-
-  return <TableStateRow colSpan={3} icon={Inbox} title={t('logs.empty.title')} description={t('logs.empty.description')} />
-}
-
-function renderErrorRow(t: AppTranslator, message: string, onRetry: () => void) {
-  return (
-    <TableStateRow colSpan={3} icon={AlertTriangle} tone="destructive" title={t('logs.error.title')} description={message} action={
-      <Button variant="outline" className="mt-1" onClick={onRetry}>
-        <RefreshCw size={14} />
-        {t('common.action.retry')}
-      </Button>
-    } />
-  )
-}
-
-function renderLogRows(locale: string, t: AppTranslator, logs: LogEntry[], newIds: ReadonlySet<number>) {
-  return logs.map(log => {
-    const meta = LOG_LEVEL_META[log.level]
-    return (
-      <TableRow
-        key={log.id}
-        className={cn(
-          tableRowClass,
-          'group border-l-2 align-top transition-colors hover:bg-state-base-hover',
-          meta.accentClass,
-          newIds.has(log.id) && 'log-row-enter',
-        )}
-      >
-        <TableCell className={cn(tableCellClass, 'whitespace-nowrap py-1.5 font-mono tabular-nums text-text-quaternary')}>
-          {formatLogTimestamp(log.timestamp, locale)}
-        </TableCell>
-        <TableCell className={cn(tableCellClass, 'py-1.5')}>
-          <span className={cn('inline-flex items-center rounded px-1.5 py-0.5 font-mono system-2xs-medium tracking-wide', meta.badgeClass)}>
-            {meta.label}
-          </span>
-        </TableCell>
-        <TableCell className={cn(tableCellClass, 'py-1.5')}>
-          <div className="flex min-w-0 items-baseline gap-2">
-            {/* 模块标签：一屏混着几个模块时，不用去点筛选也知道这条是谁打的。 */}
-            <span className="shrink-0 rounded bg-inset px-1.5 py-px font-mono system-2xs-regular text-text-quaternary">
-              {t(LOG_SCOPE_LABEL_KEY[log.scope])}
-            </span>
-            <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-text-secondary">{log.message}</span>
-          </div>
-        </TableCell>
-      </TableRow>
-    )
-  })
-}
-
-interface LogsTableProps { logs: LogEntry[]; loading: boolean; error: string | null; filtered: boolean; onRetry: () => void }
 
 export function LogsTable(props: LogsTableProps) {
   const { logs, loading } = props
   const t = useTranslation()
-  const locale = useLocale()
   const newIds = useNewLogIds(logs)
 
   const renderTableBody = () => {
-    if (loading) return renderLoadingRows()
-    if (props.error !== null && logs.length === 0) return renderErrorRow(t, props.error, props.onRetry)
-    if (logs.length === 0) return renderEmptyRow(t, props.filtered)
-    return renderLogRows(locale, t, logs, newIds)
+    // 顺序固定：加载 → 错误（仅无数据）→ 空 → 数据。加载中绝不显示「暂无数据」。
+    if (loading) return <LogsLoadingRows />
+    if (props.error !== null && logs.length === 0) return <LogsErrorRow message={props.error} onRetry={props.onRetry} />
+    if (logs.length === 0) return <LogsEmptyRow filtered={props.filtered} onRefresh={props.onRetry} />
+    return logs.map(log => <LogRow key={log.id} log={log} newIds={newIds} />)
   }
 
   return (

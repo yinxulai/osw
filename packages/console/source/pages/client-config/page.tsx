@@ -1,18 +1,14 @@
-import { CircleSlash, Wrench, Zap } from 'lucide-react'
+import { Zap } from 'lucide-react'
 import { AddressCard } from '@/components/address-card'
 import { InterfaceTableCard } from '@/components/interface-table-card'
 import { PageContent, PageHeader, PageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
-import { SettingsCardHeader } from '@/components/settings-card-header'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { useTranslation } from '@/i18n/provider'
 import { useAccessConfig } from '@/hooks/use-access-config'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useClientConfigFill, useClientConfigOverview, useClientConfigOverviewStatus } from '@/data/client-config'
-import { ClientListHeader, ClientRow } from './components/client-row'
+import { ClientListSection } from './components/client-list-section'
 import { describeFill, firstFillError } from './lib/fill-summary'
 
 /**
@@ -92,46 +88,16 @@ export function ClientConfigPage() {
           <InterfaceTableCard />
         </div>
 
-        {status.error ? (
-          /*
-           * 读不到就说读不到，不要一直摆骨架：管理服务没起来时首屏就是这个样子，
-           * 而「永远在加载」会让人以为是自己等得不够久。原始报错留在描述里，
-           * 好让「服务没开」和「文件权限不对」这两件事自己能分辨。
-           */
-          <EmptyState icon={CircleSlash} title={t('clientConfig.loadFailed')} description={status.error} />
-        ) : status.loading ? (
-          <Card className="pb-0">
-            <SettingsCardHeader icon={<Wrench />} title={t('clientConfig.list.title')} description={t('clientConfig.list.description')} />
-            {/* 骨架的形状照着真身量：一条表头条 + 若干条行条，不要摆成“带留白的方块列表”。 */}
-            <CardContent className="p-0">
-              <div className="hidden border-b border-border/50 px-4 py-2.5 md:block">
-                <Skeleton className="h-3 w-40 rounded-sm" />
-              </div>
-              <div className="divide-y divide-border/50">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <div className="px-4 py-2.5" key={index}>
-                    <Skeleton className="h-9 w-full rounded-lg" />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ) : items.length === 0 ? (
-          <EmptyState icon={Wrench} title={t('clientConfig.noClients')} />
-        ) : (
-          <Card className="pb-0">
-            <SettingsCardHeader icon={<Wrench />} title={t('clientConfig.list.title')} description={t('clientConfig.list.description')} />
-            {/* 行要贴到卡片边缘，所以内容区自己去掉留白，卡片自身去掉底部留白。 */}
-            <CardContent className="p-0">
-              <ClientListHeader />
-              <ul className="divide-y divide-border/50">
-                {items.map(item => (
-                  <ClientRow item={item} key={item.clientKey} />
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        {/*
+          列表自己处理加载 / 错误 / 空态：读不到时不会一直摆骨架，
+          真读不到空列表也不会被误说成「没有客户端」。
+        */}
+        <ClientListSection
+          items={items}
+          loading={status.loading}
+          error={status.error}
+          onRefresh={status.refresh}
+        />
       </PageContent>
     </PageLayout>
   )
