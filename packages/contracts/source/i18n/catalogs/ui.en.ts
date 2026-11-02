@@ -132,6 +132,9 @@ export const uiEn = {
   'modelTest.action.minimize': 'Minimize (diagnostics keep running)',
   'modelTest.action.close': 'Close diagnostics',
   'modelTest.action.expand': 'Expand diagnostics',
+  'modelTest.action.exportReport': 'Export report',
+  'modelTest.panel.resizeHandle': 'Resize the panel (arrow keys resize; Enter or Space restores the default)',
+  'modelTest.panel.dragHint': 'Drag to move the panel',
   // The badge is what you read while doing something else: rounds, done, failed.
   'modelTest.badge.round': 'Round {round}/{total}',
   'modelTest.badge.completed': '{completed}/{total} done',
@@ -196,6 +199,21 @@ export const uiEn = {
   // never removed.
   'modelTest.notice.clearSkipped': 'Nothing to clear; no finished results are on the ledger.',
   'modelTest.notice.clearFailed': 'Could not clear the results; they are still here.',
+  'modelTest.notice.exportFailed': 'Could not export the diagnostic report.',
+  'modelTest.notice.exportEmpty': 'There are no diagnostic results to export.',
+  'modelTest.report.column.channel': 'Channel',
+  'modelTest.report.column.model': 'Model',
+  'modelTest.report.column.converted': 'Protocol converted',
+  'modelTest.report.column.roundStatus': 'Round status',
+  'modelTest.report.column.inputTokens': 'Input tokens',
+  'modelTest.report.column.cachedInputTokens': 'Cached input tokens',
+  'modelTest.report.column.roundsPassed': 'Rounds passed',
+  'modelTest.report.column.error': 'Error',
+  'modelTest.report.column.startedAt': 'Started at',
+  'modelTest.report.column.finishedAt': 'Finished at',
+  'modelTest.report.column.reportRangeStart': 'Report range start',
+  'modelTest.report.column.reportRangeEnd': 'Report range end',
+  'modelTest.report.column.exportedAt': 'Exported at',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': 'Analytics',

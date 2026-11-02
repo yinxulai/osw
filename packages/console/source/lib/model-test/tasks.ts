@@ -39,6 +39,9 @@ export interface TestRow {
   /** 进行中的读数；终态项也可以带（服务端不会清掉它）。 */
   progress?: ModelTestTaskProgress
   errorMessage?: string
+  /** 队列记录的开始 / 结束时间；计划行没有，导出报告据此写出真实时间范围。 */
+  enqueuedAt?: number
+  finishedAt?: number
 }
 
 /**
@@ -90,6 +93,8 @@ export function toTestRow(task: TaskRecord, models: readonly ProviderModelRoute[
     // `result.errorMessage` 上；记录上的 `errorMessage` 只有「运行时真的抛了」才会有。
     // 反过来取会让上游失败的行一句解释都没有。
     errorMessage: result?.errorMessage ?? task.errorMessage,
+    enqueuedAt: task.enqueuedAt,
+    finishedAt: task.finishedAt,
   }
 }
 

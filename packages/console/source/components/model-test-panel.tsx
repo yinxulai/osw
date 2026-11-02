@@ -4,10 +4,12 @@ import {
   ChevronDown,
   ChevronRight,
   Cpu,
+  Download,
   FlaskConical,
   Gauge,
   Maximize2,
   Minus,
+  MoveDiagonal2,
   Play,
   Repeat,
   RotateCcw,
@@ -75,6 +77,18 @@ import {
   getTaskTtftLabel,
 } from '@/lib/model-test/results'
 import {
+  buildModelTestReport,
+  downloadModelTestReport,
+} from '@/lib/model-test/export-report'
+import {
+  clampPanelRect,
+  measuredPanelRect,
+  movePanelRect,
+  readPanelViewport,
+  resizePanelRect,
+  type PanelRect,
+} from '@/lib/model-test/panel-geometry'
+import {
   MODEL_TEST_TASK_KIND,
   buildPlannedRows,
   getCurrentRoundLabel,
@@ -123,6 +137,20 @@ const TASK_GRID_COLUMNS = 'md:grid-cols-[20px_minmax(150px,1.4fr)_minmax(120px,0
 
 /** 明细里逐轮的列宽模板：列名横条与每一轮共用一份。 */
 const ROUND_GRID_COLUMNS = 'md:grid-cols-[68px_56px_68px_80px_80px_76px_92px]'
+
+/** 标题栏里这些子元素是控件：在它们上面按下指针是「点按钮」，不是「拖面板」。 */
+const INTERACTIVE_HEADER_SELECTOR = 'button, a, input, textarea, select, [role="button"], [data-panel-no-drag]'
+
+/** 方向键每次缩放 16px，按住 Shift 时一次 64px。 */
+const RESIZE_KEY_STEP = 16
+const RESIZE_KEY_STEP_LARGE = 64
+
+interface DragGesture {
+  pointerId: number
+  startX: number
+  startY: number
+  origin: PanelRect
+}
 
 const TEST_MODE_LABEL_KEYS: Record<ModelTestMode, UiCatalogKey> = {
   streaming: 'modelTest.mode.streaming',
@@ -774,6 +802,109 @@ export function ModelTestPanel() {
   const previousOpen = useRef(false)
 
   /**
+   * 浮窗几何。`null` 表示仍用 CSS 默认值（右下角、`calc(100vw - 2rem)` 宽）；
+   * 一旦用户拖动或缩放，就切换成明确的 `left/top/width/height`，所有边界都经过
+   * `panel-geometry` 的 clamp，窗口变小也不会把面板留在视口外。
+   */
+  const [panelRect, setPanelRect] = useState<PanelRect | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<DragGesture | null>(null)
+  const resizeRef = useRef<DragGesture | null>(null)
+  /** 指针缩放结束后浏览器还会补一个 click；那一下不能当成「恢复默认」。 */
+  const resizeMovedRef = useRef(false)
+
+  useEffect(() => {
+    const handleResize = () => setPanelRect(current => (current === null ? null : clampPanelRect(current, readPanelViewport())))
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const currentPanelRect = () => panelRect ?? measuredPanelRect(panelRef.current?.getBoundingClientRect(), readPanelViewport())
+
+  const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    if (event.target instanceof Element && event.target.closest(INTERACTIVE_HEADER_SELECTOR)) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin: currentPanelRect(),
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
+  }
+
+  const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = dragRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    setPanelRect(movePanelRect(gesture.origin, event.clientX - gesture.startX, event.clientY - gesture.startY, readPanelViewport()))
+  }
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    resizeMovedRef.current = false
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin: currentPanelRect(),
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
+  }
+
+  const moveResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const gesture = resizeRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - gesture.startX
+    const deltaY = event.clientY - gesture.startY
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) resizeMovedRef.current = true
+    setPanelRect(resizePanelRect(gesture.origin, deltaX, deltaY, readPanelViewport()))
+  }
+
+  const endResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (resizeRef.current?.pointerId !== event.pointerId) return
+    resizeRef.current = null
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  const resetPanelRect = () => {
+    setPanelRect(null)
+  }
+
+  const resizeWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      resetPanelRect()
+      return
+    }
+    const step = event.shiftKey ? RESIZE_KEY_STEP_LARGE : RESIZE_KEY_STEP
+    let deltaWidth = 0
+    let deltaHeight = 0
+    if (event.key === 'ArrowLeft') deltaWidth = -step
+    else if (event.key === 'ArrowRight') deltaWidth = step
+    else if (event.key === 'ArrowUp') deltaHeight = -step
+    else if (event.key === 'ArrowDown') deltaHeight = step
+    else return
+    event.preventDefault()
+    setPanelRect(resizePanelRect(currentPanelRect(), deltaWidth, deltaHeight, readPanelViewport()))
+  }
+
+  const handleResizeClick = () => {
+    if (resizeMovedRef.current) {
+      resizeMovedRef.current = false
+      return
+    }
+    resetPanelRect()
+  }
+
+  /**
    * 模型 / 供应商集合变化后校正选中态。
    *
    * 三个 updater 都遵守同一条规矩：**没有实际变化就返回 `current`**，否则父级每 10s / 30s
@@ -858,6 +989,19 @@ export function ModelTestPanel() {
     }
     setFailedOnly(false)
     setExpandedRowIds(current => (current.size === 0 ? current : new Set()))
+  }
+
+  const exportResults = () => {
+    try {
+      const report = buildModelTestReport(rows, { exportedAt: Date.now(), t })
+      if (!report) {
+        toast.error(t('modelTest.notice.exportEmpty'))
+        return
+      }
+      downloadModelTestReport(report)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('modelTest.notice.exportFailed'))
+    }
   }
 
   const toggleModelProtocol = (modelId: string, protocol: Protocol) => {
@@ -953,8 +1097,22 @@ export function ModelTestPanel() {
      * 非模态浮窗：`fixed` 在右下角，没有遮罩、不铺灰、不抢焦点。页面照旧可交互、可滚动，
      * 面板只是浮在上面——这正是「边看日志边等结果」需要的形态。
      */
-    <div className="flex h-[min(780px,92vh)] w-[calc(100vw-2rem)] max-w-6xl flex-col gap-0 overflow-hidden rounded-xl border border-module-border bg-popover text-sm text-popover-foreground shadow-2xl fixed right-4 bottom-4 z-50">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-popover px-5 py-4">
+    <div
+      ref={panelRef}
+      className={cn(
+        'flex flex-col gap-0 overflow-hidden rounded-xl border border-module-border bg-popover text-sm text-popover-foreground shadow-2xl fixed right-4 bottom-4 z-50',
+        panelRect === null && 'h-[min(780px,92vh)] w-[calc(100vw-2rem)] max-w-6xl',
+      )}
+      style={panelRect === null ? undefined : { left: panelRect.left, top: panelRect.top, width: panelRect.width, height: panelRect.height }}
+    >
+      <div
+        className="flex cursor-grab touch-none items-center justify-between gap-3 border-b border-border/60 bg-popover px-5 py-4 select-none active:cursor-grabbing"
+        title={t('modelTest.panel.dragHint')}
+        onPointerDown={beginDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FlaskConical size={15} aria-hidden /></div>
           <div className="min-w-0">
@@ -1032,6 +1190,19 @@ export function ModelTestPanel() {
                         onClick={() => void clearResults()}
                       >
                         <Trash2 size={13} />
+                      </Button>
+                    )}
+                    {hasResults && (
+                      /* 导出的是这一刻的表：跑着的时候按钮不可用，避免把半批结果当成结论存档。 */
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={busy}
+                        title={t('modelTest.action.exportReport')}
+                        aria-label={t('modelTest.action.exportReport')}
+                        onClick={exportResults}
+                      >
+                        <Download size={13} aria-hidden />
                       </Button>
                     )}
                     {summary.failureCount > 0 && !busy && (
@@ -1150,6 +1321,24 @@ export function ModelTestPanel() {
           )}
         </div>
       </div>
+      {/*
+       * 右下角缩放把手。它是 `<button>`：键盘可以聚焦、方向键缩放、Enter/空格恢复默认；
+       * 指针拖动时走 pointer capture，松手后的那次 click 由 `resizeMovedRef` 吞掉。
+       */}
+      <button
+        type="button"
+        aria-label={t('modelTest.panel.resizeHandle')}
+        title={t('modelTest.panel.resizeHandle')}
+        className="absolute right-0 bottom-0 z-20 flex size-5 cursor-nwse-resize touch-none items-center justify-center rounded-tl-md text-text-quaternary outline-none transition-colors hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-primary"
+        onPointerDown={beginResize}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+        onClick={handleResizeClick}
+        onKeyDown={resizeWithKeyboard}
+      >
+        <MoveDiagonal2 size={12} aria-hidden />
+      </button>
     </div>
   )
 }
