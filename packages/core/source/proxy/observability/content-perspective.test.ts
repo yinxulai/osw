@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   createRequestAttempt: vi.fn(async (input: Record<string, unknown>) => ({ id: 'att_test', ...input })),
   updateRequestContent: vi.fn(),
   updateAttemptContent: vi.fn(),
-  updateRequestLogStatus: vi.fn(),
+  finalizePendingRequestLog: vi.fn(async () => true),
   updateRequestLogContext: vi.fn(),
   recordAttemptUsage: vi.fn(),
   pruneRequestLogs: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('@server/database/request-log-store', () => ({
   updateRequestContent: mocks.updateRequestContent,
   updateAttemptContent: mocks.updateAttemptContent,
   recordAttemptUsage: mocks.recordAttemptUsage,
-  updateRequestLogStatus: mocks.updateRequestLogStatus,
+  finalizePendingRequestLog: mocks.finalizePendingRequestLog,
   updateRequestLogContext: mocks.updateRequestLogContext,
   pruneRequestLogs: mocks.pruneRequestLogs,
   pruneRequestContents: mocks.pruneRequestContents,
@@ -97,7 +97,7 @@ describe('内容记录的视角隔离', () => {
     expect(logger.requestContentId).toBeNull()
     expect(mocks.createRequestLog).not.toHaveBeenCalled()
     expect(mocks.createRequestContent).not.toHaveBeenCalled()
-    expect(mocks.updateRequestLogStatus).not.toHaveBeenCalled()
+    expect(mocks.finalizePendingRequestLog).not.toHaveBeenCalled()
     expect(mocks.pruneRequestLogs).not.toHaveBeenCalled()
   })
 

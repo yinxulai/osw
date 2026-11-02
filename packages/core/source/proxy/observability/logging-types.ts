@@ -164,8 +164,16 @@ export interface RequestLogger {
    * 收尾请求日志：只落状态与总耗时。用量不在其中——它属于「服务该请求的那次尝试」。
    *
    * 同一实例重复调用只生效第一次：取消竞态下两条路径会先后调用它。
+   * 只有终态**真的写进数据库**之后才视为完成；写失败时保持在未完成状态，让兜底可以重试。
    */
   finalizeRequestLog(status: RequestStatus, startedAt: number): Promise<void>
+  /**
+   * 请求行是否已经确定终态。
+   *
+   * 请求入口与执行器的 `finally` 用它判断「还需要补一次终态写入吗」：
+   * `finalizeRequestLog` 失败时它是 `false`，兜底因此不会被内存标记挡住。
+   */
+  isFinalized(): boolean
   finalizeRequestContent(outcome: RequestContentOutcome): Promise<void>
   /**
    * 记录一条由代理自己生成的错误响应。

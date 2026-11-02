@@ -46,17 +46,28 @@ export async function executeProxyRequest(options: ProxyExecutionOptions): Promi
     origin,
     live,
   })
-  await runAttempts<UpstreamTarget, AttemptOutcome>({
-    signal: context.signal,
-    targets,
-    attempt: (target, attemptIndex) => attemptRequest({ context, response, target, attemptIndex, origin, live, session }),
-    onSuccess: finalizer.onSuccess,
-    onTerminal: finalizer.onTerminal,
-    onFailover: finalizer.onFailover,
-    onError: finalizer.onError,
-    onCancelled: finalizer.onCancelled,
-    onExhausted: finalizer.onExhausted,
-  })
+  try {
+    await runAttempts<UpstreamTarget, AttemptOutcome>({
+      signal: context.signal,
+      targets,
+      attempt: (target, attemptIndex) => attemptRequest({ context, response, target, attemptIndex, origin, live, session }),
+      onSuccess: finalizer.onSuccess,
+      onTerminal: finalizer.onTerminal,
+      onFailover: finalizer.onFailover,
+      onError: finalizer.onError,
+      onCancelled: finalizer.onCancelled,
+      onExhausted: finalizer.onExhausted,
+    })
+  } finally {
+    // 执行器兜底：六类结局各自都会收尾，但「尝试循环本身抛了」——例如某个收尾处理器
+    // 在写库时抛出——会跳过所有结局。内部执行（连接测试、工作流模型节点）不经过请求
+    // 入口，也靠这一层保证请求行不会停在 `pending`。原始异常继续向上抛。
+    if (!session.logger.isFinalized()) {
+      const status = context.signal.aborted ? 'cancelled' : 'failed'
+      live?.settle(status, status === 'cancelled' ? 'request.cancelled' : 'request.failed', status === 'cancelled' ? 'warn' : 'error')
+      await session.logger.finalizeRequestLog(status, session.startedAt)
+    }
+  }
 }
 
 interface AttemptRequestOptions {

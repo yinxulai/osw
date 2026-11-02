@@ -61,6 +61,20 @@ export function requestOutputTokensPerSecond(log: RequestLogEntry): number | nul
 }
 
 /**
+ * 请求总耗时的展示值：**没有终态时为 `null`**。
+ *
+ * `pending` 行上的 `totalDurationMilliseconds` 只是建行时的占位 0，不是测得的时长。
+ * 一个被遗留了几天的 `pending` 行如果直接按「现在 − 创建时间」或按库里那个数展示，
+ * 就会读出一个真实请求不可能有的天数；它该显示「—」，表示结果还不知道。
+ * 已经是终态（成功 / 失败 / 取消）的行原样返回，历史数据不受影响。
+ */
+export function requestTotalDurationMilliseconds(
+  log: Pick<RequestLogEntry, 'status' | 'totalDurationMilliseconds'>,
+): number | null {
+  return log.status === 'pending' ? null : log.totalDurationMilliseconds
+}
+
+/**
  * 首字等待占整条请求的比重：首字延迟 ÷ 请求总耗时。
  *
  * 单看 `TTFT 800ms` 说不出这次请求是「等得久」还是「本来就大」：总耗时 60s 的请求里

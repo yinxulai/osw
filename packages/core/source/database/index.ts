@@ -409,6 +409,15 @@ function ensureDefaultLogicalModel(db: DatabaseSync): void {
  * 既不能假装成功，也没有任何失败证据可以归因。
  */
 function reconcileInterruptedRequests(db: DatabaseSync): void {
+  // 先取一小批 id 再更新：日志里要能直接对上具体请求，而不只是一个计数。
+  // 抽样而不是全量：几千条 id 写进一行日志只会更难读，前几条已经足够定位。
+  const sampleIds = db.prepare("SELECT id FROM request_logs WHERE status = 'pending' ORDER BY createdTime DESC LIMIT 5")
+    .all()
+    .map(row => String((row as { id: string }).id))
   const result = db.prepare("UPDATE request_logs SET status = 'cancelled' WHERE status = 'pending'").run()
-  if (result.changes > 0) console.info(`[database] reconciled interrupted request logs count=${result.changes}`)
+  if (result.changes > 0) {
+    console.info(
+      `[database] reconciled interrupted request logs count=${result.changes} reason=process-restart sampleRequestIds=${sampleIds.join(',') || 'none'}`,
+    )
+  }
 }

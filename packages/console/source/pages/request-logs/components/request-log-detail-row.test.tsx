@@ -191,6 +191,18 @@ describe('RequestLogDetailRow metric grid', () => {
     ])
   })
 
+  it('does not invent a duration for a request that is still pending', () => {
+    // 库里残留的 pending 行可能已经躺了几天；它的总耗时字段只是建行时的占位，
+    // 照抄会读出一个真实请求不可能有的天数。没有终态就该显示「—」。
+    const { container } = renderRow(logOf({
+      status: 'pending',
+      totalDurationMilliseconds: 3 * 24 * 60 * 60 * 1000,
+      ttftMilliseconds: null,
+    }))
+
+    expect(metricValueOf(container, 0)).toBe('—')
+  })
+
   it('leaves the token breakdown to the raw usage block', () => {
     renderRow(logOf())
 
