@@ -12,7 +12,8 @@ import { NO_LANDING_DETAIL, planLandingTargets } from '../routing/landing-planne
 import { parseRouteBody, resolveRoute, toRouteHeaders } from '../routing/route-resolver'
 import { resolveUpstreamTransport } from '../routing/upstream-url'
 import { collectRequestAttributes, extractClientRequestId } from '@server/proxy/observability/request-attribute-collector'
-import { liveRequestStore } from '../observability/live-request-store'
+import { startRequestLogLease } from '@server/proxy/observability/request-log-lease'
+import { liveRequestStore, type LiveRequestHandle } from '../observability/live-request-store'
 import { createProxyRequestSession, type ProxyRequestSession } from './request-session'
 
 /**
@@ -127,6 +128,49 @@ export async function handleProxyRequest(req: IncomingMessage, res: ServerRespon
     transport: 'http',
     startedAt,
   })
+  // 请求行从这一刻起是 `pending`。给它配一份内存租约：到期时由进程自己收尾，
+  // 而不是等下一次启动——桌面应用可以连续运行好几天，启动补偿根本没有机会跑。
+  const lease = startRequestLogLease({
+    requestId,
+    startedAt,
+    onExpire: async () => {
+      const ageMilliseconds = Date.now() - startedAt
+      // 先落终态、先落定台账，再中止：否则取消路径可能抢先把结局记成普通取消，
+      // 「租约到期」这个理由就丢了。三处写入各自都是幂等的。
+      await session.logger.finalizeRequestLog('cancelled', session.startedAt)
+      live.settle('cancelled', 'request.lease_expired', 'warn', { ageMilliseconds })
+      controller.abort()
+      console.warn(`[proxy] request log lease expired requestId=${requestId} ageMilliseconds=${ageMilliseconds} reason=lease-expired`)
+    },
+  })
+  try {
+    await processProxyExchange({ req, res, identity, controller, live, session })
+  } finally {
+    // 定时器必须在正常完成与任何 return/throw 上一起消失。
+    lease.dispose()
+    // 兜底：正常路径各自收尾；异常路径（路由、规划或执行器里未捕获的 throw）不能让
+    // 请求行留在 `pending`。原始异常仍在 finally 之后继续向上抛，由运行时回 500。
+    if (!session.logger.isFinalized()) {
+      const status = controller.signal.aborted ? 'cancelled' : 'failed'
+      live.settle(status, status === 'cancelled' ? 'request.aborted' : 'request.failed', status === 'cancelled' ? 'warn' : 'error')
+      await session.logger.finalizeRequestLog(status, session.startedAt)
+    }
+  }
+}
+
+/** 入口在建立请求行之后要跑的全部流程。抽成函数只是为了给整段配一个 `finally`。 */
+interface ProxyExchange {
+  req: IncomingMessage
+  res: ServerResponse
+  identity: ExchangeIdentity
+  controller: AbortController
+  live: LiveRequestHandle
+  session: ProxyRequestSession
+}
+
+async function processProxyExchange(exchange: ProxyExchange): Promise<void> {
+  const { req, res, identity, controller, live, session } = exchange
+  const { requestId, method, path, attributes } = identity
   /** 拒绝这次交换：回错误响应 + 记一条失败日志。台账跟着落定，否则它会一直挂在「进行中」。 */
   const reject = async (refusal: ExchangeRefusal, resolution: ExchangeResolution) => {
     live.update(resolution)

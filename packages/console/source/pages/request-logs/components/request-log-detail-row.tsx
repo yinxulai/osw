@@ -3,7 +3,7 @@ import { Braces, Check, ChevronDown, ChevronRight, Code, Copy, Download, LoaderC
 import { Link } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { resolveProxyOrigin } from '@common/proxy-origin'
-import { cacheHitRate, failoverDurationOf, firstTokenShareOf, formatMilliseconds, formatOutputSpeed, requestOutputTokensPerSecond, servingAttemptOf } from '@common/metrics'
+import { cacheHitRate, failoverDurationOf, firstTokenShareOf, formatMilliseconds, formatOutputSpeed, requestOutputTokensPerSecond, requestTotalDurationMilliseconds, servingAttemptOf } from '@common/metrics'
 import type {
   RequestContentSummary,
   RequestLogDetail,
@@ -507,7 +507,8 @@ function buildMetrics(t: AppTranslator, log: RequestLogEntry | RequestLogDetail,
   const ttftShare = firstTokenShareOf(log)
 
   return [
-    { label: t('requestLogs.metric.totalDuration'), value: formatMilliseconds(log.totalDurationMilliseconds) },
+    // 没有终态就没有可信的总耗时：`pending` 行显示「—」，不把占位值当测量结果。
+    { label: t('requestLogs.metric.totalDuration'), value: formatMilliseconds(requestTotalDurationMilliseconds(log)) },
     {
       // 重试过才给色调：它不为零就是「这次多花了几秒在没有交付的尝试上」，值得一眼看见。
       label: t('requestLogs.metric.failoverDuration'),

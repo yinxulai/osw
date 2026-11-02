@@ -56,6 +56,7 @@ function createLogger(): RequestLogger {
     finalizeRequestLog: vi.fn(async () => {}),
     finalizeRequestContent: vi.fn(async () => {}),
     finalizeLocalErrorContent: vi.fn(async () => {}),
+    isFinalized: vi.fn(() => true),
   }
 }
 

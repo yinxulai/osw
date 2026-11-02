@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   updateContextCalls: [] as Array<{ id: string; update: Record<string, unknown> }>,
   updateContentCalls: [] as Array<{ id: string; update: Record<string, unknown> }>,
   updateStatusCalls: [] as Array<{ id: string; update: Record<string, unknown> }>,
+  /** 条件写入的返回值：`false` 表示行已经有终态，对日志器而言同样是收尾完成。 */
+  finalizeResult: true,
   pruneLogsCalls: [] as number[],
   pruneContentsCalls: [] as number[],
   createLogError: null as Error | null,
@@ -49,9 +51,10 @@ vi.mock('@server/database/request-log-store', () => ({
     state.updateContentCalls.push({ id, update })
     if (state.updateContentError) throw state.updateContentError
   },
-  updateRequestLogStatus: async (id: string, update: Record<string, unknown>) => {
+  finalizePendingRequestLog: async (id: string, update: Record<string, unknown>) => {
     state.updateStatusCalls.push({ id, update })
     if (state.updateStatusError) throw state.updateStatusError
+    return state.finalizeResult
   },
   pruneRequestLogs: async (days: number) => {
     state.pruneLogsCalls.push(days)
@@ -112,6 +115,7 @@ beforeEach(async () => {
   state.updateContextCalls = []
   state.updateContentCalls = []
   state.updateStatusCalls = []
+  state.finalizeResult = true
   state.pruneLogsCalls = []
   state.pruneContentsCalls = []
   state.createLogError = null
@@ -222,6 +226,8 @@ describe('initializeRequestLogger 的关闭路径', () => {
     expect(state.updateStatusCalls).toEqual([])
     expect(state.updateContentCalls).toEqual([])
     expect(logger.requestContentId).toBeNull()
+    // 空日志器没有请求行要收尾，兜底永远不该再为它补一次写入。
+    expect(logger.isFinalized()).toBe(true)
   })
 
   // 空实现里的清理也不该被触发：关掉日志的部署不该为日志做维护动作。
@@ -342,6 +348,48 @@ describe('finalizeRequestLog', () => {
 
     await expect(logger.finalizeRequestLog('failed', originalNow)).resolves.toBeUndefined()
     expect(state.consoleErrors).toEqual(['[proxy] failed to update the request log: database is locked'])
+  })
+
+  // 内存标记只能代表「数据库真的接受了终态」。一次瞬时写失败如果也置真，
+  // 后续所有收尾都会被挡掉，行就永远停在 pending。
+  it('写失败时保持未收尾，下一次调用会重试', async () => {
+    const logger = await initializeRequestLogger(inputOf())
+    state.updateStatusError = new Error('database is locked')
+
+    await logger.finalizeRequestLog('failed', originalNow)
+    expect(logger.isFinalized()).toBe(false)
+
+    state.updateStatusError = null
+    await logger.finalizeRequestLog('cancelled', originalNow)
+
+    expect(state.updateStatusCalls).toHaveLength(2)
+    expect(state.updateStatusCalls[1]?.update.status).toBe('cancelled')
+    expect(logger.isFinalized()).toBe(true)
+  })
+
+  // 行已经有终态（租约或启动补偿先写入）时条件写入返回 false：这不是失败，
+  // 对日志器来说同样算收尾完成，不该让兜底继续重试。
+  it('条件写入没有改到行（已有终态）也算收尾完成', async () => {
+    const logger = await initializeRequestLogger(inputOf())
+    state.finalizeResult = false
+
+    await logger.finalizeRequestLog('failed', originalNow)
+
+    expect(logger.isFinalized()).toBe(true)
+    expect(state.updateStatusCalls).toHaveLength(1)
+  })
+
+  it('并发收尾会串行化，只有第一条生效', async () => {
+    const logger = await initializeRequestLogger(inputOf())
+
+    await Promise.all([
+      logger.finalizeRequestLog('success', originalNow),
+      logger.finalizeRequestLog('failed', originalNow),
+    ])
+
+    expect(state.updateStatusCalls).toHaveLength(1)
+    expect(state.updateStatusCalls[0]?.update.status).toBe('success')
+    expect(logger.isFinalized()).toBe(true)
   })
 })
 

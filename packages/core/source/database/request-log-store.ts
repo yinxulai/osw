@@ -230,7 +230,46 @@ export async function updateRequestLogStatus(id: string, update: RequestLogUpdat
   getDataDb().update(requestLogs).set(fields).where(eq(requestLogs.id, id)).run()
 }
 
-/** 请求仍在解析或执行时补齐路由身份；状态与耗时仍只由 {@link updateRequestLogStatus} 收尾。 */
+/** {@link finalizePendingRequestLog} 的入参：终态必填，收尾不能只改耗时。 */
+export type FinalizePendingRequestLogUpdate = RequestLogUpdate & { status: RequestStatus }
+
+/**
+ * 收尾一条**仍处于 `pending`** 的请求行。
+ *
+ * 条件写在 SQL 的 `WHERE` 里，而不是「先读状态、再决定写不写」：启动补偿、运行期租约、
+ * 执行器兜底三条路径可能同时判定同一条请求已经结束，只有第一个写入者算数。后到的写入
+ * 影响 0 行并返回 `false`，调用方据此知道「它已经有终态了」——这不是写失败，不该重试。
+ *
+ * 生产路径一律走这里，不直接用 {@link updateRequestLogStatus}：后者不检查当前状态，
+ * 会让一个迟到的成功/失败覆盖掉已经由租约宣告死亡的结论。
+ */
+export async function finalizePendingRequestLog(id: string, update: FinalizePendingRequestLogUpdate): Promise<boolean> {
+  const fields: Partial<typeof requestLogs.$inferInsert> = { status: update.status }
+  if (update.totalDurationMilliseconds !== undefined) fields.totalDurationMilliseconds = update.totalDurationMilliseconds
+  const result = getDataDb().update(requestLogs)
+    .set(fields)
+    .where(and(eq(requestLogs.id, id), eq(requestLogs.status, 'pending')))
+    .run()
+  // `changes` 的类型是 `number | bigint`（驱动差异），比较前统一收成 number。
+  return Number(result.changes) > 0
+}
+
+/**
+ * 把创建时间早于 `cutoffTime` 且仍为 `pending` 的请求行收尾为 `cancelled`，返回被改写的 id。
+ *
+ * 这是运行期清扫的落库动作：内存里的租约定时器会随进程重启消失，库里的 `pending` 行不会。
+ * 条件与 {@link finalizePendingRequestLog} 相同——只碰 `pending`，任何终态行都不重写。
+ */
+export async function cancelPendingRequestLogsBefore(cutoffTime: number): Promise<string[]> {
+  const changed = getDataDb().update(requestLogs)
+    .set({ status: 'cancelled' })
+    .where(and(eq(requestLogs.status, 'pending'), lt(requestLogs.createdTime, cutoffTime)))
+    .returning({ id: requestLogs.id })
+    .all()
+  return changed.map(row => row.id)
+}
+
+/** 请求仍在解析或执行时补齐路由身份；状态与耗时仍只由 {@link finalizePendingRequestLog} 收尾。 */
 export async function updateRequestLogContext(id: string, update: RequestLogContextUpdate): Promise<void> {
   getDataDb().update(requestLogs).set({
     logicalModelId: update.logicalModelId,

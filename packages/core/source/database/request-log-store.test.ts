@@ -7,11 +7,13 @@ import { createProvider, deleteProvider, listProviders } from './provider-store'
 import { createProviderModelRoute, deleteProviderModelRoute } from './model-store'
 import { createLogicalModel, deleteLogicalModel, listLogicalModels } from './logical-model-store'
 import {
+  cancelPendingRequestLogsBefore,
   countRequestLogs,
   createAttemptContent,
   createRequestAttempt,
   createRequestContent,
   createRequestLog,
+  finalizePendingRequestLog,
   getAttemptUsage,
   getRequestLog,
   getRequestUsage,
@@ -216,6 +218,43 @@ describe('request log store persistence', () => {
     getDataDb().$client.prepare('UPDATE request_contents SET requestBody = ? WHERE id = ?').run(new Uint8Array([1, 2, 3]), content.id)
     expect((await listRequestContentSummaries(log.id))[0]).toMatchObject({ id: content.id, requestMethod: 'POST' })
     await expect(listRequestContents(log.id)).rejects.toThrow()
+  })
+
+  /**
+   * 收尾只能发生一次。迟到的写（租约到点、请求被取消、另一个收尾路径重试）不能把
+   * 已经写好的成功改写成取消或失败，否则同一行会给出互相矛盾的两种事实。
+   */
+  it('only finalizes a pending row and leaves the first terminal state in place', async () => {
+    const log = await createLog('req_finalize_once', 'pending')
+
+    expect(await finalizePendingRequestLog(log.id, { status: 'success', totalDurationMilliseconds: 42 })).toBe(true)
+    expect(await finalizePendingRequestLog(log.id, { status: 'cancelled', totalDurationMilliseconds: 999 })).toBe(false)
+
+    expect(await getRequestLog(log.id)).toMatchObject({ status: 'success', totalDurationMilliseconds: 42 })
+    // 行不存在时也返回 `false`，调用方据此知道「没有行被我改成终态」。
+    expect(await finalizePendingRequestLog('req_missing', { status: 'failed', totalDurationMilliseconds: 1 })).toBe(false)
+  })
+
+  /**
+   * 运行期清扫同样只碰 `pending`：终态行即便创建时间很旧，也是历史事实，
+   * 不能因为「看起来像卡住了」就被改写。
+   */
+  it('sweeps only pending rows older than the cutoff', async () => {
+    const nowTime = Date.now()
+    await createLog('req_sweep_old', 'pending')
+    await createLog('req_sweep_fresh', 'pending')
+    await createLog('req_sweep_done', 'success')
+
+    const setCreatedTime = getDataDb().$client.prepare('UPDATE request_logs SET createdTime = ? WHERE id = ?')
+    setCreatedTime.run(nowTime - 10_000, 'req_sweep_old')
+    setCreatedTime.run(nowTime, 'req_sweep_fresh')
+    setCreatedTime.run(nowTime - 10_000, 'req_sweep_done')
+
+    expect(await cancelPendingRequestLogsBefore(nowTime - 5_000)).toEqual(['req_sweep_old'])
+    expect(await getRequestLog('req_sweep_old')).toMatchObject({ status: 'cancelled' })
+    expect(await getRequestLog('req_sweep_fresh')).toMatchObject({ status: 'pending' })
+    expect(await getRequestLog('req_sweep_done')).toMatchObject({ status: 'success' })
+    expect(await countRequestLogs({})).toBe(3)
   })
 
   it('updates request outcome fields and prunes all related rows', async () => {

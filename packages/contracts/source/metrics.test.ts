@@ -17,6 +17,7 @@ import {
   outputSpeedSampleOf,
   outputTokensPerSecond,
   requestOutputTokensPerSecond,
+  requestTotalDurationMilliseconds,
   servingAttemptOf,
   tokensPerSecondFromTotals,
 } from './metrics'
@@ -359,5 +360,28 @@ describe('failover duration', () => {
 
   it('returns null when the request never reached an attempt', () => {
     expect(failoverDurationOf(logOf({ totalDurationMilliseconds: 5 }))).toBeNull()
+  })
+})
+
+/**
+ * `pending` 行上的总耗时不是测量结果。一个在库里躺了几天的请求如果照着
+ * `totalDurationMilliseconds` 显示，读出来会是真实请求不可能有的天数。
+ * 这个函数是「没有终态就没有耗时」的唯一判定点：界面不再各自猜。
+ */
+describe('request total duration display', () => {
+  it('returns null for a pending request even when the stored value looks large', () => {
+    const log = logOf({ totalDurationMilliseconds: 3 * 24 * 60 * 60 * 1000 })
+    log.status = 'pending'
+
+    expect(requestTotalDurationMilliseconds(log)).toBeNull()
+  })
+
+  it('returns the measured duration once the request reached a terminal state', () => {
+    expect(requestTotalDurationMilliseconds(logOf({ totalDurationMilliseconds: 1_200 }))).toBe(1_200)
+
+    const cancelled = logOf({ totalDurationMilliseconds: 0 })
+    cancelled.status = 'cancelled'
+    // 真实的零耗时与「还不知道」是两件事：终态里的 0 照常显示为 0。
+    expect(requestTotalDurationMilliseconds(cancelled)).toBe(0)
   })
 })

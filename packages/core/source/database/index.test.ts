@@ -2,10 +2,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDatabaseFileName, listCurrentDatabaseFileNames } from '@common/database-file'
 import { closeDatabases, getConfigDb, getDataDb, initDatabases } from './index'
 import { listProviderModelsForLogicalModel } from './model-store'
+import { createRequestLog } from './request-log-store'
 
 const temporaryDirectories: string[] = []
 
@@ -366,5 +367,55 @@ describe('schema version in the file name', () => {
       getConfigDb().$client.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'previous_version_only'").all(),
     ).toEqual([])
     expect(fs.readFileSync(foreignPath)).toEqual(foreignBytes)
+  })
+})
+
+/**
+ * 启动时的对账是最后一道兜底：上一个进程可能在写请求日志的半路上被杀掉，
+ * 留下永远停在 `pending` 的行。重启后没人记得这些请求，所以只能按「中断」处理。
+ *
+ * 但「中断」不等于「删除」：行必须原样留着，只把状态改成 `cancelled`，
+ * 否则历史请求会凭空消失。已经是终态的行更不该被碰——它们有真实的结局。
+ */
+describe('interrupted request reconciliation', () => {
+  it('cancels rows left pending by a previous process and keeps terminal rows intact', async () => {
+    const directory = createTemporaryDirectory()
+    await initDatabases(directory)
+    await createRequestLog({
+      id: 'req_interrupted',
+      logicalModelId: 'model_default',
+      clientProtocol: 'openai-completions',
+      transport: 'http-stream',
+      status: 'pending',
+      totalDurationMilliseconds: 0,
+    })
+    await createRequestLog({
+      id: 'req_finished',
+      logicalModelId: 'model_default',
+      clientProtocol: 'openai-completions',
+      transport: 'http-stream',
+      status: 'success',
+      totalDurationMilliseconds: 25,
+    })
+    await closeDatabases()
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      await initDatabases(directory)
+      // 日志要能直接对上是哪一次重启、哪几条请求被中断；只有计数不够定位。
+      // 断言必须留在 try 里：`mockRestore` 会连同调用记录一起清掉。
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('count=1 reason=process-restart'))
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('sampleRequestIds=req_interrupted'))
+    } finally {
+      infoSpy.mockRestore()
+    }
+
+    const rowOf = (id: string) => getDataDb().$client
+      .prepare('SELECT status, totalDurationMilliseconds FROM request_logs WHERE id = ?')
+      .get(id)
+    expect(rowOf('req_interrupted')).toEqual({ status: 'cancelled', totalDurationMilliseconds: 0 })
+    expect(rowOf('req_finished')).toEqual({ status: 'success', totalDurationMilliseconds: 25 })
+    // 两行都还在：对账改的是状态，不是历史。
+    expect(getDataDb().$client.prepare('SELECT COUNT(*) AS count FROM request_logs').get()).toEqual({ count: 2 })
   })
 })

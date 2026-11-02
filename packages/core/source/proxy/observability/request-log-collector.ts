@@ -4,11 +4,11 @@ import { getSettings } from '@server/database/settings-store'
 import {
   createRequestContent,
   createRequestLog,
+  finalizePendingRequestLog,
   pruneRequestContents,
   pruneRequestLogs,
   updateRequestContent,
   updateRequestLogContext,
-  updateRequestLogStatus,
 } from '@server/database/request-log-store'
 import { serializeCapturedHeaders } from '@server/proxy/response/headers'
 import type { RequestContentOutcome, RequestLogger, RequestLogContext, RequestLoggingInput } from '@server/proxy/observability/logging-types'
@@ -48,6 +48,8 @@ const NOOP_REQUEST_LOGGER: RequestLogger = {
   finalizeRequestLog: async () => {},
   finalizeRequestContent: async () => {},
   finalizeLocalErrorContent: async () => {},
+  // 没有请求行要收尾，所以在「兜底是否需要补一次终态」这个问题上它永远是已完成的。
+  isFinalized: () => true,
 }
 
 export async function initializeRequestLogger(input: RequestLoggingInput): Promise<RequestLogger> {
@@ -85,8 +87,15 @@ export async function initializeRequestLogger(input: RequestLoggingInput): Promi
 }
 
 function createRequestLogger(requestContentId: string | null, input: RequestLoggingInput): RequestLogger {
-  /** 已经收尾过：取消竞态下两条路径会先后调用同一个 logger。 */
+  /**
+   * 是否已经有过一次**成功**的终态写入。
+   *
+   * 只有数据库真的接受了这次写入（或确认行已处于终态）才置真：一次瞬时写失败如果也把
+   * 它置真，后续所有收尾都会被这个内存标记挡掉，行就永远停在 `pending`。
+   * 取消竞态下多条路径会先后调用同一个 logger，因此下面用一条 promise 队列把收尾串行化。
+   */
   let finalized = false
+  let finalizeQueue: Promise<void> = Promise.resolve()
 
   const updateRequest = async (context: RequestLogContext) => {
     input.logicalModelId = context.logicalModelId
@@ -115,19 +124,36 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
     }
   }
 
-  const finalizeRequestLog = async (status: RequestStatus, startedAt: number) => {
-    // 后到的收尾是重复的事实，不是新的事实：不重写状态，也不重复触发清理。
-    if (finalized) return
-    finalized = true
-    try {
-      await updateRequestLogStatus(input.requestId, {
-        status,
-        totalDurationMilliseconds: Date.now() - startedAt,
-      })
-      await pruneRequestLogsThrottled()
-    } catch (error) {
-      console.error(`[proxy] failed to update the request log: ${(error as Error).message}`)
+  const finalizeRequestLog = (status: RequestStatus, startedAt: number): Promise<void> => {
+    const finalize = async () => {
+      // 后到的收尾是重复的事实，不是新的事实：不重写状态，也不重复触发清理。
+      if (finalized) return
+      try {
+        // 条件写入：只有行还是 `pending` 才改成终态。返回 `false` 表示行已经有终态
+        // （租约/启动补偿先到），对这里而言同样是「收尾已完成」。
+        await finalizePendingRequestLog(input.requestId, {
+          status,
+          totalDurationMilliseconds: Date.now() - startedAt,
+        })
+        finalized = true
+      } catch (error) {
+        // 写失败时不置 `finalized`：调用方的兜底（请求入口/执行器 finally）还有一次机会。
+        // 这里只记录，不抛出——日志写不进去不能让请求本身失败。
+        console.error(`[proxy] failed to update the request log: ${(error as Error).message}`)
+        return
+      }
+      try {
+        await pruneRequestLogsThrottled()
+      } catch (error) {
+        // 清理是维护动作，失败不能把已经成功的收尾退回去。
+        console.error(`[proxy] failed to update the request log: ${(error as Error).message}`)
+      }
     }
+    // 串行化：两条路径同时收尾时，后一条必须等前一条落库后再判断 `finalized`，
+    // 否则两次写入都会看到 `false` 并各自写一遍。
+    const queued = finalizeQueue.then(finalize, finalize)
+    finalizeQueue = queued.catch(() => undefined)
+    return queued
   }
 
   /**
@@ -165,5 +191,6 @@ function createRequestLogger(requestContentId: string | null, input: RequestLogg
     finalizeRequestLog,
     finalizeRequestContent,
     finalizeLocalErrorContent,
+    isFinalized: () => finalized,
   }
 }

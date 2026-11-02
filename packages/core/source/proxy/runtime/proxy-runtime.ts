@@ -1,5 +1,6 @@
 import type { Server } from 'node:http'
 import http from 'node:http'
+import { startPendingRequestLogSweeper } from '@server/proxy/observability/request-log-lease'
 import { handleProxyRequest } from '@server/proxy/request/request-entry'
 import { PROXY_ERROR_HEADERS, proxyErrorBody } from '@server/proxy/response/proxy-response'
 import { matchLocalEndpoint } from '@server/proxy/local/registry'
@@ -20,6 +21,8 @@ export class ProxyRuntime {
   private state: 'stopped' | 'starting' | 'running' | 'stopping' = 'stopped'
   private operation: Promise<void> = Promise.resolve()
   private endpoint: ProxyEndpoint
+  /** 运行期「过期 pending 行」清扫器。只在代理监听期间存在，停止/重启时关掉。 */
+  private stopSweeper: (() => void) | null = null
 
   constructor(endpoint: ProxyEndpoint) {
     this.endpoint = endpoint
@@ -52,8 +55,11 @@ export class ProxyRuntime {
         await listen(candidate, endpoint)
         this.server = candidate
         this.state = 'running'
+        this.startSweeper()
         console.info(`[proxy-lifecycle] listening host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`)
       } catch (error) {
+        // 监听失败时不会有请求进来，清扫器也不该留下。
+        this.stopSweeperNow()
         await close(candidate)
         this.state = 'stopped'
         console.error(`[proxy-lifecycle] start failed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`, error)
@@ -64,6 +70,8 @@ export class ProxyRuntime {
 
   stop(): Promise<void> {
     return this.runSerialized(async () => {
+      // 清扫器属于「代理正在运行」这一段生命周期：无论状态看起来如何，先关掉它。
+      this.stopSweeperNow()
       if (this.state === 'stopped') {
         console.debug('[proxy-lifecycle] stop skipped reason=already-stopped')
         return
@@ -89,6 +97,8 @@ export class ProxyRuntime {
     return this.runSerialized(async () => {
       const startedAt = Date.now()
       console.info(`[proxy-lifecycle] restart requested host=${endpoint.host} port=${endpoint.port}`)
+      // 重启的旧实例先停清扫器：监听失败时也不能留下一个扫旧库的定时器。
+      this.stopSweeperNow()
       if (this.state === 'running' || this.state === 'starting') {
         this.state = 'stopping'
         const active = this.server
@@ -103,14 +113,26 @@ export class ProxyRuntime {
         await listen(candidate, endpoint)
         this.server = candidate
         this.state = 'running'
+        this.startSweeper()
         console.info(`[proxy-lifecycle] restart completed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`)
       } catch (error) {
+        this.stopSweeperNow()
         await close(candidate)
         this.state = 'stopped'
         console.error(`[proxy-lifecycle] restart failed host=${endpoint.host} port=${endpoint.port} duration=${Date.now() - startedAt}ms`, error)
         throw error
       }
     })
+  }
+
+  private startSweeper(): void {
+    if (this.stopSweeper !== null) return
+    this.stopSweeper = startPendingRequestLogSweeper()
+  }
+
+  private stopSweeperNow(): void {
+    this.stopSweeper?.()
+    this.stopSweeper = null
   }
 
   private runSerialized(operation: () => Promise<void>): Promise<void> {

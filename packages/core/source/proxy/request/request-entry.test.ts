@@ -20,8 +20,9 @@ const mocks = vi.hoisted(() => ({
   createAttemptContent: vi.fn(async (input: Record<string, unknown>) => ({ id: 'content_attempt', ...input })),
   updateRequestContent: vi.fn(),
   updateAttemptContent: vi.fn(),
-  updateRequestLogStatus: vi.fn(),
+  finalizePendingRequestLog: vi.fn(async (_id: string, _update: Record<string, unknown>) => true),
   updateRequestLogContext: vi.fn(),
+  routerGraphError: null as Error | null,
   recordAttemptUsage: vi.fn(),
   pruneRequestLogs: vi.fn(),
   pruneRequestContents: vi.fn(),
@@ -73,14 +74,17 @@ vi.mock('@server/database/logical-model-store', () => ({
 vi.mock('@server/database/router-graph-store', async () => {
   const { createDefaultPolicyGraph } = await import('@common/router/presets')
   return {
-    resolveRouterGraph: async () => ({
-      graph: createDefaultPolicyGraph([
-        { modelId: 'default', enabled: true },
-        { modelId: 'secondary', enabled: true },
-      ]),
-      version: 0,
-      savedAt: 0,
-    }),
+    resolveRouterGraph: async () => {
+      if (mocks.routerGraphError) throw mocks.routerGraphError
+      return {
+        graph: createDefaultPolicyGraph([
+          { modelId: 'default', enabled: true },
+          { modelId: 'secondary', enabled: true },
+        ]),
+        version: 0,
+        savedAt: 0,
+      }
+    },
   }
 })
 
@@ -91,7 +95,7 @@ vi.mock('@server/database/request-log-store', () => ({
   createAttemptContent: mocks.createAttemptContent,
   updateRequestContent: mocks.updateRequestContent,
   updateAttemptContent: mocks.updateAttemptContent,
-  updateRequestLogStatus: mocks.updateRequestLogStatus,
+  finalizePendingRequestLog: mocks.finalizePendingRequestLog,
   updateRequestLogContext: mocks.updateRequestLogContext,
   recordAttemptUsage: mocks.recordAttemptUsage,
   pruneRequestLogs: mocks.pruneRequestLogs,
@@ -138,6 +142,7 @@ afterEach(async () => {
   setManualModel('secondary', null)
   mocks.models = []
   mocks.captureRequestContent = false
+  mocks.routerGraphError = null
   mocks.listRulesForProviderModel.mockResolvedValue([])
   // 台账是进程内单例，且「刚结束的请求」会保留一分钟：不清掉，上一条用例的尝试会漏到下一条。
   liveRequestStore.clear()
@@ -176,7 +181,7 @@ async function waitFor(condition: () => boolean, timeoutMilliseconds = 1_000): P
 type RejectionRecordExpectation = { clientProtocol: string | null; logicalModelId: string | null }
 
 async function expectRejectionRecorded(input: RejectionRecordExpectation): Promise<void> {
-  await waitFor(() => mocks.updateRequestLogStatus.mock.calls.length > 0)
+  await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.length > 0)
   expect(mocks.createRequestLog).toHaveBeenCalledTimes(1)
   expect(mocks.createRequestLog).toHaveBeenCalledWith(expect.objectContaining({
     status: 'pending',
@@ -187,7 +192,7 @@ async function expectRejectionRecorded(input: RejectionRecordExpectation): Promi
     clientProtocol: input.clientProtocol,
     logicalModelId: input.logicalModelId,
   }))
-  expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
+  expect(mocks.finalizePendingRequestLog).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
   expect(mocks.createRequestAttempt).not.toHaveBeenCalled()
 }
 
@@ -279,6 +284,47 @@ describe('handleProxyRequest', () => {
       errorMessage: expect.stringContaining('No available upstream provider'),
     })
     await expectRejectionRecorded({ clientProtocol: 'anthropic-messages', logicalModelId: 'default' })
+  })
+
+  // 请求行在拿到结果之前就已写入，因此「路由求解抛错」是典型的中途退出：
+  // 异常本身要继续抛给运行时（它负责回 500），但请求行不能留在 pending。
+  it('writes a terminal failed state when routing throws after the pending row exists', async () => {
+    mocks.routerGraphError = new Error('router graph unavailable')
+    let propagatedError: unknown = null
+    const proxy = await listen((req, res) => {
+      void handleProxyRequest(req, res).catch(error => {
+        propagatedError = error
+        if (!res.writableEnded) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false }))
+        }
+      })
+    })
+
+    const response = await fetch(`${proxy.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'default', messages: [] }),
+    })
+
+    expect(response.status).toBe(500)
+    // 兜底只补日志，不吞异常：运行时仍拿得到原始错误。
+    await waitFor(() => propagatedError !== null)
+    expect((propagatedError as Error).message).toBe('router graph unavailable')
+
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
+      (input as { status?: string }).status === 'failed'
+    )))
+    expect(mocks.finalizePendingRequestLog).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'failed' }),
+    )
+    // 台账同样要落定，否则界面会一直挂着一条「进行中」。
+    expect(liveRequestStore.list()).toContainEqual(expect.objectContaining({
+      id: expect.stringMatching(/^req_/),
+      status: 'failed',
+      phase: 'settled',
+    }))
   })
 
   it('starts routing from the manually selected provider model', async () => {
@@ -393,7 +439,7 @@ describe('handleProxyRequest', () => {
     })
 
     expect(response.status).toBe(200)
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'success'
     )))
     expect(mocks.updateRequestLogContext).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
@@ -629,7 +675,7 @@ describe('handleProxyRequest', () => {
     })
     expect(upstreamHandler).not.toHaveBeenCalled()
     expect(mocks.createRequestAttempt).not.toHaveBeenCalled()
-    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
+    expect(mocks.finalizePendingRequestLog).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
     // 我们确实回了客户端一个 422。客户端拿到的响应必须留证，否则记录里只剩一个
     // 「failed」，看不到失败原因，也不知道客户端收到了什么。
     expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
@@ -1230,7 +1276,7 @@ describe('handleProxyRequest', () => {
     })
 
     await response.text().catch(() => undefined)
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'failed'
     )))
 
@@ -1613,7 +1659,7 @@ describe('handleProxyRequest', () => {
     expect(mocks.markProviderModelFailure).toHaveBeenCalledWith('model_invalid_conversion')
     expect(mocks.markProviderModelFailure).not.toHaveBeenCalledWith('model_valid_conversion')
     expect(mocks.markProviderFailure).not.toHaveBeenCalled()
-    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
+    expect(mocks.finalizePendingRequestLog).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed' }))
     expect(mocks.updateRequestContent).toHaveBeenCalledWith('content_request', expect.objectContaining({
       captureStatus: 'captured',
       responseStatus: 502,
@@ -1812,7 +1858,7 @@ describe('handleProxyRequest', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'default', input: 'Hello', stream: true }),
     }).then(response => response.text()).catch(() => undefined)
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'failed'
     )))
 
@@ -1873,11 +1919,11 @@ describe('handleProxyRequest', () => {
     releaseResponseHead()
 
     await connectionClosed
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'cancelled'
     )))
     expect(mocks.markProviderFailure).not.toHaveBeenCalled()
-    expect(mocks.updateRequestLogStatus).toHaveBeenCalledWith(
+    expect(mocks.finalizePendingRequestLog).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ status: 'cancelled' }),
     )
@@ -1923,7 +1969,7 @@ describe('handleProxyRequest', () => {
     client.destroy()
 
     await connectionClosed
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'success'
     )))
     expect(mocks.markProviderSuccess).toHaveBeenCalled()
@@ -1959,7 +2005,7 @@ describe('handleProxyRequest', () => {
     client.destroy()
 
     // 请求已经到达代理，就必须留下记录；什么都没记等于这次失败从未发生。
-    await waitFor(() => mocks.updateRequestLogStatus.mock.calls.some(([, input]) => (
+    await waitFor(() => mocks.finalizePendingRequestLog.mock.calls.some(([, input]) => (
       (input as { status?: string }).status === 'cancelled'
     )))
     expect(mocks.createRequestLog).toHaveBeenCalledTimes(1)
