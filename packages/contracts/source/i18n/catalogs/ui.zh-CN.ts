@@ -133,6 +133,10 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   'modelTest.action.minimize': '最小化（诊断继续跑）',
   'modelTest.action.close': '关闭诊断',
   'modelTest.action.expand': '展开诊断',
+  'modelTest.action.maximize': '最大化诊断面板',
+  'modelTest.action.restore': '恢复默认大小',
+  'modelTest.action.exportReport': '导出报告',
+  'modelTest.panel.dragHint': '拖动移动面板',
   // 角标就是「你在干别的事时唯一会看的一行」：第几轮、完成了多少、挂了几个。
   'modelTest.badge.round': '第 {round}/{total} 轮',
   'modelTest.badge.completed': '已完成 {completed}/{total}',
@@ -195,6 +199,21 @@ export const uiZhCN: Record<keyof typeof uiEn, MessageValue> = {
   // 「台账里此刻没有终态项可清」——在跑 / 排队的任务不算，服务端一个都不删。
   'modelTest.notice.clearSkipped': '没有可清空的已结束结果。',
   'modelTest.notice.clearFailed': '清空失败，结果还在。',
+  'modelTest.notice.exportFailed': '导出诊断报告失败。',
+  'modelTest.notice.exportEmpty': '没有可导出的诊断结果。',
+  'modelTest.report.column.channel': '渠道',
+  'modelTest.report.column.model': '模型',
+  'modelTest.report.column.converted': '协议转换',
+  'modelTest.report.column.roundStatus': '轮次状态',
+  'modelTest.report.column.inputTokens': '输入 Token',
+  'modelTest.report.column.cachedInputTokens': '缓存输入 Token',
+  'modelTest.report.column.roundsPassed': '通过轮次',
+  'modelTest.report.column.error': '错误',
+  'modelTest.report.column.startedAt': '开始时间',
+  'modelTest.report.column.finishedAt': '结束时间',
+  'modelTest.report.column.reportRangeStart': '报告范围开始',
+  'modelTest.report.column.reportRangeEnd': '报告范围结束',
+  'modelTest.report.column.exportedAt': '导出时间',
 
   // ========== 页面 · 统计分析 ==========
   'overview.title': '统计分析',

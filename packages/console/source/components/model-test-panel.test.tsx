@@ -804,6 +804,159 @@ describe('测试配置页', () => {
   })
 })
 
+describe('浮窗拖动与最大化', () => {
+  function header(): HTMLElement {
+    return screen.getByText(zh('modelTest.title')).closest('div.flex') as HTMLElement
+  }
+
+  it('拖动标题栏会移动面板，并受视口边界约束', () => {
+    const descriptorWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const descriptorHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+    try {
+      const { container } = renderPanel()
+      const floating = container.firstElementChild as HTMLElement
+      // 默认仍是右下角的 CSS 尺寸；第一次拖动才切换成明确坐标。
+      expect(floating.style.left).toBe('')
+
+      fireEvent.pointerDown(header(), { button: 0, pointerId: 1, clientX: 500, clientY: 400 })
+      fireEvent.pointerMove(header(), { pointerId: 1, clientX: 440, clientY: 350 })
+
+      expect(floating.style.left).toBe('212px')
+      expect(floating.style.top).toBe('54px')
+
+      // 拖回右下角：右下角停在 16px 的边距上。
+      fireEvent.pointerMove(header(), { pointerId: 1, clientX: 10_000, clientY: 10_000 })
+      expect(floating.style.left).toBe('272px')
+      expect(floating.style.top).toBe('104px')
+    } finally {
+      if (descriptorWidth) Object.defineProperty(window, 'innerWidth', descriptorWidth)
+      if (descriptorHeight) Object.defineProperty(window, 'innerHeight', descriptorHeight)
+    }
+  })
+
+  it('标题栏上的按钮不会误触发拖动', () => {
+    const { container } = renderPanel()
+    const floating = container.firstElementChild as HTMLElement
+    const minimize = screen.getByRole('button', { name: zh('modelTest.action.minimize') })
+
+    fireEvent.pointerDown(minimize, { button: 0, pointerId: 1, clientX: 500, clientY: 400 })
+    fireEvent.pointerMove(minimize, { pointerId: 1, clientX: 560, clientY: 450 })
+
+    expect(floating.style.left).toBe('')
+  })
+
+  it('最大化后显示视口内的明确矩形，恢复后回到 CSS 默认尺寸', () => {
+    const descriptorWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const descriptorHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+    try {
+      const { container } = renderPanel()
+      const floating = container.firstElementChild as HTMLElement
+      const maximize = screen.getByRole('button', { name: zh('modelTest.action.maximize') })
+
+      fireEvent.click(maximize)
+      expect(floating.style.left).toBe('16px')
+      expect(floating.style.top).toBe('16px')
+      expect(floating.style.width).toBe('1408px')
+      expect(floating.style.height).toBe('868px')
+      expect(screen.getByRole('button', { name: zh('modelTest.action.restore') })).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.restore') }))
+      expect(floating.style.left).toBe('')
+      expect(floating.style.top).toBe('')
+      expect(floating.style.width).toBe('')
+      expect(floating.style.height).toBe('')
+    } finally {
+      if (descriptorWidth) Object.defineProperty(window, 'innerWidth', descriptorWidth)
+      if (descriptorHeight) Object.defineProperty(window, 'innerHeight', descriptorHeight)
+    }
+  })
+
+  it('窄屏最大化仍保留视口边距', () => {
+    const descriptorWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
+    const descriptorHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 280 })
+    try {
+      const { container } = renderPanel()
+      const floating = container.firstElementChild as HTMLElement
+      fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.maximize') }))
+      expect(floating.style.left).toBe('16px')
+      expect(floating.style.top).toBe('16px')
+      expect(floating.style.width).toBe('288px')
+      expect(floating.style.height).toBe('248px')
+    } finally {
+      if (descriptorWidth) Object.defineProperty(window, 'innerWidth', descriptorWidth)
+      if (descriptorHeight) Object.defineProperty(window, 'innerHeight', descriptorHeight)
+    }
+  })
+})
+
+describe('导出诊断报告', () => {
+  function settled(): TaskRecord[] {
+    return [task({ id: 'task_ok', key: keyOf('m2', 'anthropic-messages'), status: 'success', finishedAt: 1_700_000_002_000, result: successResult() })]
+  }
+
+  it('没有结果时不显示导出按钮', () => {
+    renderPanel()
+    selectProvider()
+
+    expect(screen.queryByRole('button', { name: zh('modelTest.action.exportReport') })).toBeNull()
+  })
+
+  it('有结果但还在跑时按钮存在且禁用', () => {
+    renderPanel([task({ id: 'task_running', status: 'running', progress: progress() })])
+    selectProvider()
+
+    expect(screen.getByRole('button', { name: zh('modelTest.action.exportReport') }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('导出 CSV：包含任务字段、时间范围，并通过 Blob 下载', async () => {
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:report')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    renderPanel(settled())
+    selectProvider()
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.exportReport') }))
+
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    const blob = createObjectURL.mock.calls[0][0] as Blob
+    const text = await blob.text()
+    expect(text).toContain(zh('modelTest.report.column.channel'))
+    expect(text).toContain(PROVIDER_NAME)
+    expect(text).toContain(NATIVE_MODEL)
+    expect(text).toContain(PROTOCOL_DISPLAY_NAMES['anthropic-messages'])
+    expect(text).toContain(zh('modelTest.status.success'))
+    expect(text).toContain('200')
+    expect(text).toContain('120')
+    expect(text).toContain('3.25')
+    expect(text).toContain('12345')
+    expect(text).toContain('1500')
+
+    click.mockRestore()
+    delete (URL as Partial<typeof URL>).createObjectURL
+    delete (URL as Partial<typeof URL>).revokeObjectURL
+  })
+
+  it('浏览器拒绝创建下载时给出错误 toast', () => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => { throw new Error('blob unavailable') } })
+
+    renderPanel(settled())
+    selectProvider()
+    fireEvent.click(screen.getByRole('button', { name: zh('modelTest.action.exportReport') }))
+
+    expect(toastHarness.error).toHaveBeenCalledWith('blob unavailable')
+
+    delete (URL as Partial<typeof URL>).createObjectURL
+  })
+})
+
 describe('最小化成角标', () => {
   /** 面板已经打开、任务在跑时缩小；角标就是「你在干别的事时唯一会看的一行」。 */
   function minimize(tasks: TaskRecord[]) {
