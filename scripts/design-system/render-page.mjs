@@ -632,7 +632,8 @@ const radiusValue = (data, name) => {
 }
 
 export const renderPage = data => {
-  const template = fs.readFileSync(TEMPLATE, 'utf8')
+  // 模板统一按 LF 读入，否则 Windows 工作区（CRLF checkout）会产出与 CI 不同的字节。
+  const template = fs.readFileSync(TEMPLATE, 'utf8').replace(/\r\n/g, '\n')
   const body = renderBody(data)
   const json = JSON.stringify(data).replace(/</g, '\\u003c')
   const failed = data.contrast.filter(pair => pair.light.pass === false || pair.dark.pass === false).length

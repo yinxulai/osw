@@ -3,12 +3,12 @@
  * 设计系统取证脚本。
  *
  * 只读 `packages/console/source/styles/index.css` 与 `packages/console/source/**` 的真实源码，
- * 输出 `docs/design-system/tokens.generated.json`，并据此重写 README 的生成区块与预览页。
+ * 输出 `apps/docs/specs/design/preview/tokens.generated.json` 与同目录的预览页。
  *
  * 原则：
  * - 不猜值：颜色一律从声明里解析，解析不了就记 null，由守卫测试报错。
- * - 不改实现：脚本只写 docs/design-system 下的文件。
- * - 可重复：同一份源码必须产出逐字节相同的 JSON / HTML / README 区块。
+ * - 不改实现：脚本只写 apps/docs/specs/design/preview 下的文件。
+ * - 可重复：同一份源码必须产出逐字节相同的 JSON / HTML。
  */
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url'
 
 import { buildIssues, buildOpenQuestions } from './issues.mjs'
 import { renderPage } from './render-page.mjs'
-import { renderReadme } from './render-readme.mjs'
 import { buildComponentSpecs } from './specs.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -25,9 +24,15 @@ const ROOT = path.resolve(HERE, '../..')
 const STYLE_REL = 'packages/console/source/styles/index.css'
 const STYLE_ABS = path.join(ROOT, STYLE_REL)
 const SOURCE_ROOT = path.join(ROOT, 'packages/console/source')
-const DOCS_DIR = path.join(ROOT, 'docs/design-system')
+const PREVIEW_DIR = path.join(ROOT, 'apps/docs/specs/design/preview')
 
 const read = file => fs.readFileSync(file, 'utf8')
+
+// 生成物必须逐字节可复现：换行统一成 LF，路径统一成正斜杠。
+// Windows 工作区（core.autocrlf=true）读到的源文件是 CRLF、`path.relative` 产出反斜杠，
+// 直接拼进 JSON 会让 --check 在本地永远为红、在 CI 永远为绿。
+const normalize = text => text.replace(/\r\n/g, '\n')
+const rel = file => path.relative(ROOT, file).split(path.sep).join('/')
 
 const walk = dir => {
   const out = []
@@ -240,7 +245,7 @@ const contrastRatio = (foreground, background) => {
 /* 源码装载                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const cssText = read(STYLE_ABS)
+const cssText = normalize(read(STYLE_ABS))
 const declarations = parseCss(cssText)
 
 const buildScope = (items, base = new Map()) => {
@@ -471,7 +476,7 @@ const typography = declarations
   }))
 
 const allSourceFiles = walk(SOURCE_ROOT).filter(file => /\.(tsx?|css)$/.test(file))
-const sourceContents = new Map(allSourceFiles.map(file => [file, read(file)]))
+const sourceContents = new Map(allSourceFiles.map(file => [file, normalize(read(file))]))
 
 const usageCount = needle => {
   const pattern = new RegExp(`(?<![\\w-])${needle}(?![\\w-])`, 'g')
@@ -594,7 +599,7 @@ for (const [file, content] of sourceContents) {
       const record = zIndexMap.get(key)
       record.count += 1
       if (record.examples.length < 3) {
-        record.examples.push(`${path.relative(ROOT, file)}:${index + 1}`)
+        record.examples.push(`${rel(file)}:${index + 1}`)
       }
     }
   })
@@ -666,7 +671,7 @@ const exampleLine = (content, index) => content.slice(0, index).split('\n').leng
 for (const [file, content] of sourceContents) {
   for (const match of content.matchAll(/var\((--[a-zA-Z0-9-]+)/g)) {
     referenced.add(match[1])
-    varRefs.push({ name: match[1], file: path.relative(ROOT, file), line: exampleLine(content, match.index) })
+    varRefs.push({ name: match[1], file: rel(file), line: exampleLine(content, match.index) })
   }
   // Tailwind v4 简写：`bg-(--color-bg)`、`px-(--card-spacing)`。
   for (const match of content.matchAll(/\((--[a-zA-Z0-9-]+)\)/g)) referenced.add(match[1])
@@ -766,7 +771,7 @@ for (const [file, content] of sourceContents) {
     for (const match of matches) {
       const trimmed = line.trim()
       literalColorSites.push({
-        file: path.relative(ROOT, file),
+        file: rel(file),
         line: index + 1,
         value: match[0],
         comment: trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*'),
@@ -783,7 +788,7 @@ const cssVarReferences = []
 for (const [file, content] of sourceContents) {
   if (!file.endsWith('.css')) continue
   for (const match of content.matchAll(/var\((--[a-zA-Z0-9-]+)/g)) {
-    cssVarReferences.push({ name: match[1], file: path.relative(ROOT, file), line: exampleLine(content, match.index) })
+    cssVarReferences.push({ name: match[1], file: rel(file), line: exampleLine(content, match.index) })
   }
 }
 
@@ -810,7 +815,7 @@ const openQuestions = buildOpenQuestions({ colorByName, spacing })
 // 组件规格：数字从组件源码的 class 串解析，anchor 对不上会直接抛错。
 const components = buildComponentSpecs({
   root: ROOT,
-  readFile: file => fs.readFileSync(file, 'utf8'),
+  readFile: file => normalize(fs.readFileSync(file, 'utf8')),
   typography,
   radii,
 })
@@ -879,17 +884,14 @@ const data = {
 /* -------------------------------------------------------------------------- */
 
 const json = `${JSON.stringify(data, null, 2)}\n`
-const jsonPath = path.join(DOCS_DIR, 'tokens.generated.json')
-const readmePath = path.join(DOCS_DIR, 'README.md')
-const htmlPath = path.join(DOCS_DIR, 'index.html')
+const jsonPath = path.join(PREVIEW_DIR, 'tokens.generated.json')
+const htmlPath = path.join(PREVIEW_DIR, 'index.html')
 
-const readmeSource = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : ''
-
-// 三份产物先在内存里全部算好，再决定是"写"还是"只校验"。
+// 两份产物先在内存里全部算好，再决定是"写"还是"只校验"。
 // `--check` 给守卫测试用：不落盘，只回答"现在的产物还等于源码推出来的东西吗"。
+// 叙述性文档在 `apps/docs/specs/design/*.md`，由人维护，不由本脚本生成。
 const outputs = [
   { key: 'json', file: jsonPath, content: json },
-  { key: 'readme', file: readmePath, content: renderReadme(data, readmeSource) },
   { key: 'html', file: htmlPath, content: renderPage(data) },
 ]
 
@@ -901,10 +903,10 @@ const checkOnly = process.argv.includes('--check')
 if (checkOnly) {
   for (const item of outputs) {
     if (!changed[item.key]) continue
-    console.error(`${path.relative(ROOT, item.file)} 与源码不一致：请重新运行 node scripts/design-system/extract-tokens.mjs`)
+    console.error(`${rel(item.file)} 与源码不一致：请重新运行 node scripts/design-system/extract-tokens.mjs`)
   }
 } else {
-  fs.mkdirSync(DOCS_DIR, { recursive: true })
+  fs.mkdirSync(PREVIEW_DIR, { recursive: true })
   for (const item of outputs) {
     if (changed[item.key]) fs.writeFileSync(item.file, item.content)
   }
@@ -912,9 +914,8 @@ if (checkOnly) {
 
 const report = {
   mode: checkOnly ? 'check' : 'write',
-  json: path.relative(ROOT, jsonPath),
-  readme: path.relative(ROOT, readmePath),
-  html: path.relative(ROOT, htmlPath),
+  json: rel(jsonPath),
+  html: rel(htmlPath),
   changed,
   counts: data.meta.counts,
   issues: issueCounts,
