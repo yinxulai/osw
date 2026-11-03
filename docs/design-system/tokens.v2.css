@@ -1,0 +1,542 @@
+/* ==========================================================================
+   osw Design System v2 — tokens.v2.css
+
+   用法：在 packages/console/source/styles/index.css 之后导入本文件。
+   结构：色阶 primitive → 语义角色 semantic → v1 兼容别名 compat。
+   约束：组件只消费 --ds-<role>；色阶只允许被语义角色引用。
+   所有色值先以 OKLCH 定义；hex 只出现在注释里，供肉眼与截图核对。
+   ========================================================================== */
+
+:root {
+  /* ---------- 色阶：中性 12 阶（hue 262，低彩度） ---------- */
+  /* 允许：页面底、卡片底；只能作为 surface 角色被消费 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-1: oklch(0.985 0.0020 262.00); /* #f9fafb */
+  /* 允许：页面底、卡片底；只能作为 surface 角色被消费 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-2: oklch(0.966 0.0040 262.00); /* #f2f4f6 */
+  /* 允许：组件 hover / active / selected 等瞬时态；不得当文字色 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-3: oklch(0.945 0.0060 262.00); /* #ebedf1 */
+  /* 允许：组件 hover / active / selected 等瞬时态；不得当文字色 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-4: oklch(0.918 0.0080 262.00); /* #e1e4e9 */
+  /* 允许：组件 hover / active / selected 等瞬时态；不得当文字色 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-5: oklch(0.882 0.0100 262.00); /* #d4d8df */
+  /* 允许：边框、分隔线、焦点外圈；6 为弱收边，7 为常规边框，8 为控件边界 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-6: oklch(0.830 0.0120 262.00); /* #c3c7cf */
+  /* 允许：边框、分隔线、焦点外圈；6 为弱收边，7 为常规边框，8 为控件边界 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-7: oklch(0.750 0.0160 262.00); /* #a8aeb8 */
+  /* 允许：边框、分隔线、焦点外圈；6 为弱收边，7 为常规边框，8 为控件边界 | 不得：文本色、图标主色、大块填充 | 阈值：作为控件边界时 ≥ 3:1 */
+  --ds-neutral-8: oklch(0.620 0.0220 262.00); /* #7f8794 */
+  /* 允许：实心填充（主按钮、开关轨道）；9 为常态，10 为 hover | 不得：正文文本、卡片底 | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-neutral-9: oklch(0.530 0.0180 262.00); /* #666c77 */
+  /* 允许：实心填充（主按钮、开关轨道）；9 为常态，10 为 hover | 不得：正文文本、卡片底 | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-neutral-10: oklch(0.430 0.0180 262.00); /* #4a505a */
+  /* 允许：文本；11 为次级，12 为主文本。不得用于大面积填充 | 不得：填充、边框 | 阈值：对承载底 ≥ 4.5:1 */
+  --ds-neutral-11: oklch(0.280 0.0120 262.00); /* #26292f */
+  /* 允许：文本；11 为次级，12 为主文本。不得用于大面积填充 | 不得：填充、边框 | 阈值：对承载底 ≥ 4.5:1 */
+  --ds-neutral-12: oklch(0.180 0.0080 262.00); /* #101215 */
+
+  /* ---------- 色阶：品牌 12 阶（hue 262.44，step 9 = #085afc） ---------- */
+  /* 允许：品牌浅底；只作 surface 角色 | 不得：正文文本、主按钮实心 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-1: oklch(0.985 0.0120 262.44); /* #f6faff */
+  /* 允许：品牌浅底；只作 surface 角色 | 不得：正文文本、主按钮实心 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-2: oklch(0.960 0.0240 262.44); /* #e9f2ff */
+  /* 允许：品牌 hover/active/选中态、暗色文本；不得当大面积填充 | 不得：正文文本、主按钮实心 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-3: oklch(0.930 0.0450 262.44); /* #d8e9ff */
+  /* 允许：品牌 hover/active/选中态、暗色文本；不得当大面积填充 | 不得：正文文本、主按钮实心 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-4: oklch(0.890 0.0750 262.44); /* #c0dcff */
+  /* 允许：品牌 hover/active/选中态、暗色文本；不得当大面积填充 | 不得：正文文本、主按钮实心 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-5: oklch(0.840 0.1100 262.44); /* #a4cbff */
+  /* 允许：品牌边框、焦点外圈；6 为细边，8 为强边 | 不得：正文文本、大面积填充 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-6: oklch(0.780 0.1450 262.44); /* #84b6ff */
+  /* 允许：品牌边框、焦点外圈；6 为细边，8 为强边 | 不得：正文文本、大面积填充 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-7: oklch(0.700 0.1900 262.44); /* #5b99ff */
+  /* 允许：品牌边框、焦点外圈；6 为细边，8 为强边 | 不得：正文文本、大面积填充 | 阈值：作为边框/焦点时 ≥ 3:1 */
+  --ds-brand-8: oklch(0.620 0.2250 262.44); /* #347aff */
+  /* 允许：品牌实心；9 为常态，10 为 hover | 不得：正文文本（除大字号） | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-brand-9: oklch(0.540 0.2501 262.44); /* #085afc */
+  /* 允许：品牌实心；9 为常态，10 为 hover | 不得：正文文本（除大字号） | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-brand-10: oklch(0.480 0.2250 262.44); /* #044bd9 */
+  /* 允许：品牌文本；11 为亮色文本，12 为暗色品牌底 | 不得：填充、边框 | 阈值：对承载底 ≥ 4.5:1 */
+  --ds-brand-11: oklch(0.420 0.1900 262.44); /* #073fb2 */
+  /* 允许：品牌文本；11 为亮色文本，12 为暗色品牌底 | 不得：填充、边框 | 阈值：对承载底 ≥ 4.5:1 */
+  --ds-brand-12: oklch(0.350 0.1600 262.44); /* #032f8c */
+
+  /* ---------- 语义角色：亮色 ---------- */
+  /* 1–2 底 | 3–5 组件态 | 6–8 边框 | 9–10 实心 | 11–12 文本 */
+  /* 允许：应用页面底、内容画布；body / main 的唯一底色 | 不得：卡片、浮层、按钮底 | 阈值：其上的 11–12 阶文本 ≥ 4.5:1 */
+  --ds-surface-base: var(--ds-neutral-2); /* #f2f4f6 */
+  /* 允许：卡片、表格容器、对话框内容面 | 不得：页面底（会造成层级反转） | 阈值：其上的 11–12 阶文本 ≥ 4.5:1 */
+  --ds-surface-raised: var(--ds-neutral-1); /* #f9fafb */
+  /* 允许：凹槽、表尾、输入框底、侧栏 | 不得：卡片底、浮层底；嵌套链只允许一层凹槽 | 阈值：其上的 11–12 阶文本 ≥ 4.5:1 */
+  --ds-surface-sunken: var(--ds-neutral-3); /* #ebedf1 */
+  /* 允许：行 hover、列表项 hover、次级按钮 hover | 不得：静止态底色、文本色 | 阈值：其上文本 ≥ 4.5:1 */
+  --ds-surface-hover: var(--ds-neutral-4); /* #e1e4e9 */
+  /* 允许：按下态、选中态、开关轨道 | 不得：大面积静态底 | 阈值：其上文本 ≥ 4.5:1 */
+  --ds-surface-active: var(--ds-neutral-5); /* #d4d8df */
+  /* 允许：卡片收边、表格分隔线、静态装饰线 | 不得：输入框/复选框等需要 3:1 的控件边界 | 阈值：装饰用途，不设硬阈值；不得单独承担控件可辨识性 */
+  --ds-border-subtle: var(--ds-neutral-6); /* #c3c7cf */
+  /* 允许：常规边框、浮层外圈、分隔线 | 不得：文本、填充 | 阈值：装饰用途不设阈值；控件边界改用 border-strong */
+  --ds-border: var(--ds-neutral-7); /* #a8aeb8 */
+  /* 允许：输入框、Select、Checkbox、Switch 等控件边界；卡片选中边 | 不得：正文文本、大面积填充 | 阈值：与相邻表面 ≥ 3:1（R-02） */
+  --ds-border-strong: var(--ds-neutral-8); /* #7f8794 */
+  /* 允许：主按钮、开关选中轨道、中性实心标记 | 不得：正文文本、卡片底 | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-solid: var(--ds-neutral-9); /* #666c77 */
+  /* 允许：主按钮 hover | 不得：静止态、文本 | 阈值：与 on-solid 文本 ≥ 4.5:1 */
+  --ds-solid-hover: var(--ds-neutral-10); /* #4a505a */
+  /* 允许：实心填充上的文字与图标 | 不得：普通表面上的正文（应使用 text-primary） | 阈值：对 solid / solid-hover ≥ 4.5:1 */
+  --ds-on-solid: var(--ds-neutral-1); /* #f9fafb */
+  /* 允许：标题、正文、表格主列 | 不得：大面积填充、边框 | 阈值：对 base / raised / sunken / hover ≥ 4.5:1 */
+  --ds-text-primary: var(--ds-neutral-12); /* #101215 */
+  /* 允许：说明、时间戳、表头、次级标签；三级文本统一并入此档 | 不得：标题（用 text-primary）；装饰图标（用 text-decorative） | 阈值：对 base / raised / sunken / hover ≥ 4.5:1 */
+  --ds-text-secondary: var(--ds-neutral-11); /* #26292f */
+  /* 允许：兼容别名：等同于 text-secondary。层级靠字号/字重，不靠继续降对比度 | 不得：不得再声明更浅的“四级文本” | 阈值：对 base / raised / sunken ≥ 4.5:1 */
+  --ds-text-tertiary: var(--ds-neutral-11); /* #26292f */
+  /* 允许：仅输入框 placeholder；必须同时有可见 label 或 aria-label | 不得：正文、提示文案、禁用文本 | 阈值：对 input-surface ≥ 4.5:1 */
+  --ds-text-placeholder: oklch(0.488 0.0088 260.73); /* #5d6065 */
+  /* 允许：禁用控件的文字与图标；必须配合 disabled / aria-disabled | 不得：任何可交互文本 | 阈值：WCAG 1.4.3 豁免；仍要求与底可分辨（≥ 1.5:1） */
+  --ds-text-disabled: oklch(0.844 0.0107 261.79); /* #c8ccd3 */
+  /* 允许：纯装饰图标、分隔符、空值点；不承载信息 | 不得：正文、时间戳、空值说明、placeholder | 阈值：不设文字阈值；若承载信息则改用 text-secondary */
+  --ds-text-decorative: var(--ds-neutral-7); /* #a8aeb8 */
+  /* 允许：solid / status-solid 上的文字 | 不得：普通表面正文 | 阈值：对 solid ≥ 4.5:1 */
+  --ds-text-on-solid: var(--ds-neutral-1); /* #f9fafb */
+  /* 允许：键盘焦点环；所有可聚焦控件共用 | 不得：静态边框、装饰 | 阈值：对相邻表面 ≥ 3:1（R-03） */
+  --ds-focus-ring: var(--ds-brand-11); /* #073fb2 */
+  /* 允许：Input / Select / Textarea 静止底 | 不得：卡片、页面底 | 阈值：与 input-border 组成控件边界 */
+  --ds-input-surface: var(--ds-neutral-3); /* #ebedf1 */
+  /* 允许：输入控件 hover 底 | 不得：静止态 | 阈值：不单独承担边界 */
+  --ds-input-surface-hover: var(--ds-neutral-4); /* #e1e4e9 */
+  /* 允许：输入控件静止边框；替代 v1 的 transparent | 不得：装饰线 | 阈值：与卡片底 / 页面底 ≥ 3:1（R-02） */
+  --ds-input-border: var(--ds-neutral-8); /* #7f8794 */
+  /* 允许：输入控件 hover 边框 | 不得：静止态 | 阈值：与 input-surface-hover ≥ 3:1 */
+  --ds-input-border-hover: var(--ds-neutral-9); /* #666c77 */
+  /* 允许：输入框已填文本 | 不得：placeholder | 阈值：对 input-surface ≥ 4.5:1 */
+  --ds-input-text: var(--ds-neutral-12); /* #101215 */
+  /* 允许：Dialog / Sheet / Popover / Select 内容面 | 不得：卡片底、页面底 | 阈值：其上文本 ≥ 4.5:1 */
+  --ds-overlay-surface: var(--ds-neutral-1); /* #f9fafb */
+  /* 允许：浮层外圈、浮层内分隔线 | 不得：控件边界 | 阈值：装饰；浮层与底之间还需 shadow 或明度差 */
+  --ds-overlay-border: var(--ds-neutral-6); /* #c3c7cf */
+  /* 允许：品牌浅底、选中项底色 | 不得：正文底、大面积页面底 | 阈值：其上 brand-text ≥ 4.5:1 */
+  --ds-brand-surface: var(--ds-brand-2); /* #e9f2ff */
+  /* 允许：品牌浅底 hover | 不得：静止态 | 阈值：其上 brand-text ≥ 4.5:1 */
+  --ds-brand-surface-strong: var(--ds-brand-1); /* #f6faff */
+  /* 允许：品牌弱边、选中卡片的次级收边（不承担控件边界） | 不得：输入框/复选框等需要 3:1 的控件边界 | 阈值：装饰用途；控件边界用 brand-border */
+  --ds-brand-border-subtle: var(--ds-brand-6); /* #84b6ff */
+  /* 允许：品牌描边、选中卡片边 | 不得：控件焦点环（用 focus-ring） | 阈值：与相邻表面 ≥ 3:1 */
+  --ds-brand-border: var(--ds-brand-8); /* #347aff */
+  /* 允许：品牌强边、图表线 | 不得：正文 | 阈值：与相邻表面 ≥ 3:1 */
+  --ds-brand-border-strong: var(--ds-brand-9); /* #085afc */
+  /* 允许：品牌主按钮、品牌实心标记 | 不得：正文文本 | 阈值：与 brand-on-solid ≥ 4.5:1 */
+  --ds-brand-solid: var(--ds-brand-9); /* #085afc */
+  /* 允许：品牌主按钮 hover | 不得：静止态 | 阈值：与 brand-on-solid ≥ 4.5:1 */
+  --ds-brand-solid-hover: var(--ds-brand-10); /* #044bd9 */
+  /* 允许：brand-solid 上的文字 | 不得：普通表面正文 | 阈值：对 brand-solid / hover ≥ 4.5:1 */
+  --ds-brand-on-solid: oklch(1.000 0.0000 89.88); /* #ffffff */
+  /* 允许：品牌链接、品牌说明文字 | 不得：大面积填充 | 阈值：对 base / raised ≥ 4.5:1 */
+  --ds-brand-text: var(--ds-brand-11); /* #073fb2 */
+  /* 允许：品牌次要文字、图标 | 不得：正文主体 | 阈值：对 base / raised ≥ 4.5:1 */
+  --ds-brand-text-muted: var(--ds-brand-10); /* #044bd9 */
+  /* 允许：图表系列 1 | 不得：文本 | 阈值：与卡片底 ≥ 3:1（图形对象） */
+  --ds-chart-1: var(--ds-brand-8); /* #347aff */
+  /* 允许：图表系列 2 | 不得：文本 | 阈值：与卡片底 ≥ 3:1 */
+  --ds-chart-2: oklch(0.535 0.1369 153.28); /* #008345 */
+  /* 允许：图表系列 3 | 不得：文本 | 阈值：与卡片底 ≥ 3:1 */
+  --ds-chart-3: oklch(0.553 0.1475 49.42); /* #b45200 */
+  /* 允许：图表系列 4 | 不得：文本 | 阈值：与卡片底 ≥ 3:1 */
+  --ds-chart-4: oklch(0.550 0.1456 252.22); /* #2273c3 */
+  /* 允许：图表系列 5 | 不得：文本 | 阈值：与卡片底 ≥ 3:1 */
+  --ds-chart-5: oklch(0.576 0.2088 29.48); /* #d92d20 */
+  /* 允许：状态徽标底、状态提示块底、状态行 hover 底 | 不得：正文文本 | 阈值：其上 text ≥ 4.5:1 */
+  --ds-success-surface: oklch(0.965 0.0220 155.20); /* #e9f8ed */
+  /* 允许：状态徽标边、提示块边 | 不得：正文文本 | 阈值：与 card 与 surface ≥ 3:1 */
+  --ds-success-border: oklch(0.860 0.0600 155.20); /* #b3ddc0 */
+  /* 允许：状态文字、徽标文字、校验提示 | 不得：大面积填充、按钮底 | 阈值：对 card 与其自身 surface ≥ 4.5:1 */
+  --ds-success-text: oklch(0.500 0.1430 155.20); /* #007a3d */
+  /* 允许：状态实心：Toast 图标底、危险按钮底 | 不得：正文文本、页面底 | 阈值：与 on-solid ≥ 4.5:1 */
+  --ds-success-solid: oklch(0.530 0.1430 155.20); /* #008345 */
+  /* 允许：success-solid 上的文字与图标 | 不得：普通表面正文 | 阈值：对 success-solid ≥ 4.5:1 */
+  --ds-success-on-solid: oklch(1.000 0.0000 89.88); /* #ffffff */
+  /* 允许：状态徽标底、状态提示块底、状态行 hover 底 | 不得：正文文本 | 阈值：其上 text ≥ 4.5:1 */
+  --ds-warning-surface: oklch(0.965 0.0220 62.10); /* #fff1e5 */
+  /* 允许：状态徽标边、提示块边 | 不得：正文文本 | 阈值：与 card 与 surface ≥ 3:1 */
+  --ds-warning-border: oklch(0.860 0.0600 62.10); /* #eec9a9 */
+  /* 允许：状态文字、徽标文字、校验提示 | 不得：大面积填充、按钮底 | 阈值：对 card 与其自身 surface ≥ 4.5:1 */
+  --ds-warning-text: oklch(0.550 0.1700 62.10); /* #b45200 */
+  /* 允许：状态实心：Toast 图标底、危险按钮底 | 不得：正文文本、页面底 | 阈值：与 on-solid ≥ 4.5:1 */
+  --ds-warning-solid: oklch(0.747 0.1700 62.10); /* #f7900a */
+  /* 允许：warning-solid 上的文字与图标 | 不得：普通表面正文 | 阈值：对 warning-solid ≥ 4.5:1 */
+  --ds-warning-on-solid: oklch(0.187 0.0383 89.07); /* #1a1200 */
+  /* 允许：状态徽标底、状态提示块底、状态行 hover 底 | 不得：正文文本 | 阈值：其上 text ≥ 4.5:1 */
+  --ds-danger-surface: oklch(0.965 0.0220 29.50); /* #ffeeeb */
+  /* 允许：状态徽标边、提示块边 | 不得：正文文本 | 阈值：与 card 与 surface ≥ 3:1 */
+  --ds-danger-border: oklch(0.860 0.0600 29.50); /* #f6c3ba */
+  /* 允许：状态文字、徽标文字、校验提示 | 不得：大面积填充、按钮底 | 阈值：对 card 与其自身 surface ≥ 4.5:1 */
+  --ds-danger-text: oklch(0.530 0.2090 29.50); /* #c8140a */
+  /* 允许：状态实心：Toast 图标底、危险按钮底 | 不得：正文文本、页面底 | 阈值：与 on-solid ≥ 4.5:1 */
+  --ds-danger-solid: oklch(0.576 0.2090 29.50); /* #d92d20 */
+  /* 允许：danger-solid 上的文字与图标 | 不得：普通表面正文 | 阈值：对 danger-solid ≥ 4.5:1 */
+  --ds-danger-on-solid: oklch(1.000 0.0000 89.88); /* #ffffff */
+  /* 允许：状态徽标底、状态提示块底、状态行 hover 底 | 不得：正文文本 | 阈值：其上 text ≥ 4.5:1 */
+  --ds-info-surface: oklch(0.965 0.0220 252.20); /* #e9f5ff */
+  /* 允许：状态徽标边、提示块边 | 不得：正文文本 | 阈值：与 card 与 surface ≥ 3:1 */
+  --ds-info-border: oklch(0.860 0.0600 252.20); /* #b5d4f8 */
+  /* 允许：状态文字、徽标文字、校验提示 | 不得：大面积填充、按钮底 | 阈值：对 card 与其自身 surface ≥ 4.5:1 */
+  --ds-info-text: oklch(0.500 0.1460 252.20); /* #0a64b3 */
+  /* 允许：状态实心：Toast 图标底、危险按钮底 | 不得：正文文本、页面底 | 阈值：与 on-solid ≥ 4.5:1 */
+  --ds-info-solid: oklch(0.550 0.1460 252.20); /* #2273c3 */
+  /* 允许：info-solid 上的文字与图标 | 不得：普通表面正文 | 阈值：对 info-solid ≥ 4.5:1 */
+  --ds-info-on-solid: oklch(1.000 0.0000 89.88); /* #ffffff */
+
+  /* ---------- 排版：6 档字号 / 3 档字重 / 行高成对 ---------- */
+  --ds-type-1-size: 12px;
+  --ds-type-1-line: 16px; /* 12/16 · 徽标、Kbd、表格密集元信息 */
+  --ds-type-2-size: 13px;
+  --ds-type-2-line: 20px; /* 13/20 · 控件文字、次级正文 */
+  --ds-type-3-size: 14px;
+  --ds-type-3-line: 20px; /* 14/20 · 正文默认、表格正文 */
+  --ds-type-4-size: 16px;
+  --ds-type-4-line: 24px; /* 16/24 · 区内标题、Dialog 标题 */
+  --ds-type-5-size: 20px;
+  --ds-type-5-line: 28px; /* 20/28 · 页面标题 */
+  --ds-type-6-size: 24px;
+  --ds-type-6-line: 32px; /* 24/32 · 首屏/空态主标题 */
+  --ds-weight-regular: 400; /* 正文、输入值 */
+  --ds-weight-medium: 500; /* 控件文字、表头、强调标签 */
+  --ds-weight-semibold: 600; /* 标题、关键数字 */
+
+  /* ---------- 间距：4px 主网格；1px/2px 仅登记例外 ---------- */
+  --ds-space-0: 0px;
+  --ds-space-4: 4px;
+  --ds-space-8: 8px;
+  --ds-space-12: 12px;
+  --ds-space-16: 16px;
+  --ds-space-20: 20px;
+  --ds-space-24: 24px;
+  --ds-space-32: 32px;
+  --ds-space-40: 40px;
+  --ds-space-48: 48px;
+  --ds-space-64: 64px;
+  --ds-hairline: 1px; /* 只用于 border / outline 宽度 */
+  --ds-focus-offset: 2px; /* 只用于焦点环 offset */
+  --ds-icon-inset: 2px; /* 只用于图标光学内衬 */
+
+  /* ---------- 控件 / 触控 ---------- */
+  --ds-control-xs: 24px; /* 密集表格内 icon 按钮；桌面指针限定 */
+  --ds-control-sm: 28px; /* 工具栏、二次操作 */
+  --ds-control-md: 32px; /* 默认表单控件、默认按钮 */
+  --ds-control-lg: 36px; /* 页头主操作、Dialog 主按钮 */
+  --ds-control-xl: 40px; /* 触控/首屏 CTA */
+  --ds-touch-min: 44px; /* coarse pointer 下限 */
+
+  /* ---------- 圆角：2/4/6/8/12/16 ---------- */
+  --ds-radius-xs: 2px; /* Kbd、微型标记 */
+  --ds-radius-sm: 4px; /* Badge、Checkbox */
+  --ds-radius-md: 6px; /* Button、Input、Select、Tabs */
+  --ds-radius-lg: 8px; /* 小卡片、Toast */
+  --ds-radius-xl: 12px; /* Card、Popover、Sheet */
+  --ds-radius-2xl: 16px; /* Dialog、全屏 Sheet */
+
+  /* ---------- 层次 ---------- */
+  --ds-shadow-card: 0 1px 2px -1px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --ds-shadow-overlay: 0 8px 24px -8px rgb(16 24 40 / 0.18), 0 2px 6px -2px rgb(16 24 40 / 0.10);
+  --ds-shadow-panel: 0 1px 3px -1px rgb(16 24 40 / 0.10);
+  --ds-z-base: 0; /* 普通文档流 */
+  --ds-z-sticky: 10; /* 表头、页头 sticky */
+  --ds-z-sidebar: 20; /* 应用侧栏 */
+  --ds-z-overlay: 30; /* Popover / Select / Dropdown / 收据控件 */
+  --ds-z-modal: 40; /* Dialog / Sheet / Drawer */
+  --ds-z-toast: 50; /* Toast，永远最上层 */
+  --ds-z-receipt: var(--ds-z-overlay); /* 收据控件不再高于 Dialog */
+
+  /* ---------- 动效 / 焦点 ---------- */
+  --ds-duration-fast: 100ms; /* 颜色、hover */
+  --ds-duration-base: 150ms; /* 浮层淡入、焦点 */
+  --ds-duration-slow: 200ms; /* 侧栏宽度、Sheet */
+  --ds-duration-deliberate: 300ms; /* 页面级转场 */
+  --ds-focus-width: 2px;
+  --ds-focus-offset: 2px;
+
+  /* ---------- v1 兼容别名：迁移期保留旧名 ---------- */
+  --color-background: var(--ds-surface-base);
+  --color-foreground: var(--ds-text-primary);
+  --color-card: var(--ds-surface-raised);
+  --color-card-foreground: var(--ds-text-primary);
+  --color-canvas: var(--ds-surface-base);
+  --color-popover: var(--ds-overlay-surface);
+  --color-popover-foreground: var(--ds-text-primary);
+  --color-primary: var(--ds-solid);
+  --color-primary-foreground: var(--ds-on-solid);
+  --color-secondary: var(--ds-surface-hover);
+  --color-secondary-foreground: var(--ds-text-primary);
+  --color-muted: var(--ds-surface-sunken);
+  --color-muted-foreground: var(--ds-text-secondary);
+  --color-accent: var(--ds-surface-hover);
+  --color-accent-foreground: var(--ds-text-primary);
+  --color-destructive: var(--ds-danger-solid);
+  --color-destructive-foreground: var(--ds-danger-on-solid);
+  --color-border: var(--ds-border-subtle);
+  --color-input: var(--ds-input-border);
+  --color-ring: var(--ds-focus-ring);
+  --color-inset: var(--ds-surface-sunken);
+  --color-sidebar: var(--ds-surface-sunken);
+  --color-sidebar-foreground: var(--ds-text-secondary);
+  --color-sidebar-primary: var(--ds-solid);
+  --color-sidebar-primary-foreground: var(--ds-on-solid);
+  --color-sidebar-accent: var(--ds-surface-hover);
+  --color-sidebar-accent-foreground: var(--ds-text-primary);
+  --color-sidebar-border: var(--ds-border-subtle);
+  --color-sidebar-ring: var(--ds-focus-ring);
+  --color-text-primary: var(--ds-text-primary);
+  --color-text-secondary: var(--ds-text-secondary);
+  --color-text-tertiary: var(--ds-text-secondary);
+  --color-text-quaternary: var(--ds-text-secondary);
+  --color-text-destructive: var(--ds-danger-text);
+  --color-text-success: var(--ds-success-text);
+  --color-text-warning: var(--ds-warning-text);
+  --color-text-info: var(--ds-info-text);
+  --color-text-disabled: var(--ds-text-disabled);
+  --color-text-inverted: var(--ds-text-on-solid);
+  --color-text-accent: var(--ds-brand-text);
+  --color-text-accent-secondary: var(--ds-brand-text-muted);
+  --color-text-success-secondary: var(--ds-success-text);
+  --color-text-warning-secondary: var(--ds-warning-text);
+  --color-success: var(--ds-success-solid);
+  --color-success-foreground: var(--ds-success-on-solid);
+  --color-warning: var(--ds-warning-solid);
+  --color-warning-foreground: var(--ds-warning-on-solid);
+  --color-info: var(--ds-info-solid);
+  --color-info-foreground: var(--ds-info-on-solid);
+  --color-module-border: var(--ds-border-subtle);
+  --color-components-panel-bg: var(--ds-overlay-surface);
+  --color-components-panel-bg-blur: var(--ds-overlay-surface);
+  --color-components-panel-border: var(--ds-overlay-border);
+  --color-components-tooltip-bg: var(--ds-text-primary);
+  --color-components-input-bg-normal: var(--ds-input-surface);
+  --color-components-input-bg-hover: var(--ds-input-surface-hover);
+  --color-components-input-bg-active: var(--ds-input-surface-hover);
+  --color-components-input-bg-disabled: var(--ds-surface-hover);
+  --color-components-input-text-filled: var(--ds-input-text);
+  --color-components-input-text-filled-disabled: var(--ds-text-disabled);
+  --color-components-input-text-placeholder: var(--ds-text-placeholder);
+  --color-components-input-border-hover: var(--ds-input-border-hover);
+  --color-components-input-border-active: var(--ds-input-border-hover);
+  --color-components-button-primary-bg: var(--ds-solid);
+  --color-components-button-primary-bg-hover: var(--ds-solid-hover);
+  --color-components-button-primary-text: var(--ds-on-solid);
+  --color-components-button-primary-border: var(--ds-border-subtle);
+  --color-components-button-secondary-bg: var(--ds-surface-raised);
+  --color-components-button-secondary-bg-hover: var(--ds-surface-hover);
+  --color-components-button-secondary-text: var(--ds-text-secondary);
+  --color-components-button-secondary-accent-text: var(--ds-brand-text);
+  --color-components-button-secondary-border: var(--ds-border);
+  --color-components-button-secondary-border-hover: var(--ds-border-strong);
+  --color-components-button-tertiary-bg: var(--ds-surface-sunken);
+  --color-components-button-tertiary-bg-hover: var(--ds-surface-hover);
+  --color-components-button-tertiary-text: var(--ds-text-secondary);
+  --color-components-button-ghost-text: var(--ds-text-secondary);
+  --color-components-button-ghost-bg-hover: var(--ds-surface-hover);
+  --color-components-button-destructive-ghost-text: var(--ds-danger-text);
+  --color-components-button-destructive-ghost-bg-hover: var(--ds-danger-surface);
+  --color-state-base-hover: var(--ds-surface-hover);
+  --color-state-base-hover-alt: var(--ds-surface-active);
+  --color-state-base-active: var(--ds-surface-active);
+  --color-state-base-handle: var(--ds-border-strong);
+  --color-state-base-handle-hover: var(--ds-border-strong);
+  --color-state-accent-solid: var(--ds-focus-ring);
+  --color-state-accent-hover: var(--ds-brand-surface);
+  --color-state-accent-active: var(--ds-brand-surface);
+  --color-state-success-solid: var(--ds-success-solid);
+  --color-state-warning-solid: var(--ds-warning-solid);
+  --color-state-destructive-solid: var(--ds-danger-solid);
+  --color-state-destructive-hover: var(--ds-danger-surface);
+  --color-state-warning-hover: var(--ds-warning-surface);
+  --color-chart-1: var(--ds-chart-1);
+  --color-chart-2: var(--ds-chart-2);
+  --color-chart-3: var(--ds-chart-3);
+  --color-chart-4: var(--ds-chart-4);
+  --color-chart-5: var(--ds-chart-5);
+  --color-heat-0: var(--ds-surface-sunken);
+  --color-heat-1: var(--ds-success-surface);
+  --color-heat-2: var(--ds-success-border);
+  --color-heat-3: var(--ds-success-solid);
+  --color-heat-4: var(--ds-success-text);
+  --color-workflow-block-bg: var(--ds-surface-raised);
+  --color-workflow-block-bg-hover: var(--ds-surface-hover);
+  --color-workflow-block-parma-bg: var(--ds-surface-sunken);
+  --color-workflow-canvas-workflow-bg: var(--ds-surface-base);
+  --color-workflow-link-line-normal: var(--ds-border-strong);
+  --color-workflow-link-line-active: var(--ds-brand-solid);
+  --color-workflow-link-line-error-active: var(--ds-danger-solid);
+  --color-workflow-link-line-failure-active: var(--ds-warning-solid);
+  --color-workflow-link-line-success-active: var(--ds-success-solid);
+
+  /* ---------- Tailwind / 运行时别名 ---------- */
+  --font-sans: "Geist Variable", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Geist Mono", "DejaVu Sans Mono", monospace;
+  --font-heading: var(--font-sans);
+  --radius: 0.5rem;
+  --button-radius: var(--ds-radius-md);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 16px;
+  --radius-4xl: 16px;
+  --text-2xs: 0.75rem;
+  --shadow-card: var(--ds-shadow-card);
+  --shadow-overlay: var(--ds-shadow-overlay);
+  --shadow-panel: var(--ds-shadow-panel);
+}
+
+.dark, [data-theme="dark"] {
+  /* 暗色只换语义角色，不换色阶；层级靠明度 + 1px 边，不靠黑色重影。 */
+  --ds-surface-base: var(--ds-neutral-12); /* #101215 */
+  --ds-surface-raised: var(--ds-neutral-11); /* #26292f */
+  --ds-surface-sunken: var(--ds-neutral-12); /* #101215 */
+  --ds-surface-hover: var(--ds-neutral-10); /* #4a505a */
+  --ds-surface-active: var(--ds-neutral-9); /* #666c77 */
+  --ds-border-subtle: var(--ds-neutral-10); /* #4a505a */
+  --ds-border: var(--ds-neutral-9); /* #666c77 */
+  --ds-border-strong: var(--ds-neutral-8); /* #7f8794 */
+  --ds-solid: var(--ds-neutral-2); /* #f2f4f6 */
+  --ds-solid-hover: var(--ds-neutral-3); /* #ebedf1 */
+  --ds-on-solid: var(--ds-neutral-12); /* #101215 */
+  --ds-text-primary: var(--ds-neutral-1); /* #f9fafb */
+  --ds-text-secondary: var(--ds-neutral-2); /* #f2f4f6 */
+  --ds-text-tertiary: var(--ds-neutral-2); /* #f2f4f6 */
+  --ds-text-placeholder: oklch(0.772 0.0036 247.87); /* #b3b5b7 */
+  --ds-text-disabled: oklch(0.401 0.0144 264.40); /* #444850 */
+  --ds-text-decorative: var(--ds-neutral-9); /* #666c77 */
+  --ds-text-on-solid: var(--ds-neutral-12); /* #101215 */
+  --ds-focus-ring: var(--ds-brand-3); /* #d8e9ff */
+  --ds-input-surface: var(--ds-neutral-12); /* #101215 */
+  --ds-input-surface-hover: var(--ds-neutral-11); /* #26292f */
+  --ds-input-border: var(--ds-neutral-8); /* #7f8794 */
+  --ds-input-border-hover: var(--ds-neutral-7); /* #a8aeb8 */
+  --ds-input-text: var(--ds-neutral-1); /* #f9fafb */
+  --ds-overlay-surface: var(--ds-neutral-11); /* #26292f */
+  --ds-overlay-border: var(--ds-neutral-8); /* #7f8794 */
+  --ds-brand-surface: var(--ds-brand-12); /* #032f8c */
+  --ds-brand-surface-strong: var(--ds-brand-11); /* #073fb2 */
+  --ds-brand-border-subtle: var(--ds-brand-9); /* #085afc */
+  --ds-brand-border: var(--ds-brand-7); /* #5b99ff */
+  --ds-brand-border-strong: var(--ds-brand-6); /* #84b6ff */
+  --ds-brand-solid: var(--ds-brand-5); /* #a4cbff */
+  --ds-brand-solid-hover: var(--ds-brand-4); /* #c0dcff */
+  --ds-brand-on-solid: var(--ds-neutral-12); /* #101215 */
+  --ds-brand-text: var(--ds-brand-3); /* #d8e9ff */
+  --ds-brand-text-muted: var(--ds-brand-4); /* #c0dcff */
+  --ds-chart-1: var(--ds-brand-5); /* #a4cbff */
+  --ds-chart-2: oklch(0.701 0.1606 155.11); /* #2abb71 */
+  --ds-chart-3: oklch(0.747 0.1700 62.06); /* #f7900a */
+  --ds-chart-4: oklch(0.679 0.1499 252.35); /* #4b9bf1 */
+  --ds-chart-5: oklch(0.576 0.2088 29.48); /* #d92d20 */
+  --ds-success-surface: oklch(0.300 0.0450 155.20); /* #1a3524 */
+  --ds-success-border: oklch(0.460 0.0700 155.20); /* #356447 */
+  --ds-success-text: oklch(0.740 0.1600 155.20); /* #3dc87d */
+  --ds-success-solid: oklch(0.700 0.1600 155.20); /* #2abb71 */
+  --ds-success-on-solid: oklch(0.174 0.0184 169.42); /* #08130f */
+  --ds-warning-surface: oklch(0.300 0.0450 62.10); /* #3e2815 */
+  --ds-warning-border: oklch(0.460 0.0700 62.10); /* #744f2d */
+  --ds-warning-text: oklch(0.780 0.1700 62.10); /* #ff9b24 */
+  --ds-warning-solid: oklch(0.747 0.1700 62.10); /* #f7900a */
+  --ds-warning-on-solid: oklch(0.187 0.0383 89.07); /* #1a1200 */
+  --ds-danger-surface: oklch(0.300 0.0450 29.50); /* #422520 */
+  --ds-danger-border: oklch(0.460 0.0700 29.50); /* #7a4941 */
+  --ds-danger-text: oklch(0.740 0.2090 29.50); /* #ff6a56 */
+  --ds-danger-solid: oklch(0.576 0.2090 29.50); /* #d92d20 */
+  --ds-danger-on-solid: oklch(1.000 0.0000 89.88); /* #ffffff */
+  --ds-info-surface: oklch(0.300 0.0450 252.20); /* #1d2f44 */
+  --ds-info-border: oklch(0.460 0.0700 252.20); /* #3a5a7e */
+  --ds-info-text: oklch(0.740 0.1500 252.20); /* #5eafff */
+  --ds-info-solid: oklch(0.680 0.1500 252.20); /* #4b9bf1 */
+  --ds-info-on-solid: oklch(0.181 0.0313 247.14); /* #06131f */
+  --ds-shadow-card: 0 1px 2px -1px rgb(0 0 0 / 0.55), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --ds-shadow-overlay: 0 8px 24px -8px rgb(0 0 0 / 0.65), 0 2px 6px -2px rgb(0 0 0 / 0.45);
+  --ds-shadow-panel: 0 1px 3px -1px rgb(0 0 0 / 0.45);
+}
+
+/* ==========================================================================
+   兼容修复：只改 CSS，不改运行时 TSX。下一轮组件迁移后可逐条删除。
+   ========================================================================== */
+
+body {
+  background-color: var(--ds-surface-base);
+  color: var(--ds-text-primary);
+}
+
+/* DS-001：输入框静止态必须有可见边界 */
+:is([data-slot="input"], [data-slot="textarea"]) {
+  border-color: var(--ds-input-border);
+}
+:is([data-slot="input"], [data-slot="textarea"]):hover {
+  border-color: var(--ds-input-border-hover);
+}
+[data-slot="select-trigger"] {
+  border-color: var(--ds-input-border);
+}
+[data-slot="select-trigger"]:hover {
+  border-color: var(--ds-input-border-hover);
+}
+
+/* DS-005：取消 11px；徽标统一 12/16 */
+[data-slot="badge"] {
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: var(--ds-radius-sm);
+}
+
+/* DS-012：空态虚线框真正画出 1px */
+[data-slot="empty"] {
+  border: 1px dashed var(--ds-border-subtle);
+  border-radius: var(--ds-radius-xl);
+}
+
+/* DS-027：浮层统一一套外观 */
+[data-slot="combobox-content"] {
+  background-color: var(--ds-overlay-surface);
+  border: 1px solid var(--ds-overlay-border);
+  box-shadow: var(--ds-shadow-overlay);
+  backdrop-filter: none;
+}
+
+/* DS-014：组件圆角回到 v2 刻度，而不是被 Tailwind 作用域改写 */
+:is([data-slot="button"], [data-slot="input"], [data-slot="select-trigger"], [data-slot="tabs-trigger"]) {
+  border-radius: var(--ds-radius-md);
+}
+:is([data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="drawer-content"]) {
+  border-radius: var(--ds-radius-2xl);
+}
+:is([data-slot="card"], [data-slot="empty"]) {
+  border-radius: var(--ds-radius-xl);
+}
+[data-slot="toast"] { border-radius: var(--ds-radius-lg); }
+
+/* DS-010：一个焦点环，所有可聚焦控件共用 */
+:where(button, [role="button"], input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: var(--ds-focus-width) solid var(--ds-focus-ring);
+  outline-offset: var(--ds-focus-offset);
+  box-shadow: none;
+}
+
+/* DS-013：旧 z 类名映射到命名层；收据控件不再压住 Dialog */
+.z-50 { z-index: var(--ds-z-modal); }
+.z-70 { z-index: var(--ds-z-overlay); }
+
+/* DS-011：动效降级全局生效 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  [data-slot="skeleton"] { animation: none !important; }
+}
+
+/* 2xs 工具类统一抬到 12/16；11px 在 v2 中取消 */
+.system-2xs-regular { font-size: 12px; line-height: 16px; }
+.system-2xs-regular-uppercase { font-size: 12px; line-height: 16px; }
+.system-2xs-medium { font-size: 12px; line-height: 16px; }
+.system-2xs-medium-uppercase { font-size: 12px; line-height: 16px; }
+.system-2xs-semibold-uppercase { font-size: 12px; line-height: 16px; }
+

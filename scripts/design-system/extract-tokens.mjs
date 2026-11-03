@@ -16,8 +16,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { buildIssues, buildOpenQuestions } from './issues.mjs'
-import { renderPage } from './render-page.mjs'
-import { renderReadme } from './render-readme.mjs'
 import { buildComponentSpecs } from './specs.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -880,18 +878,10 @@ const data = {
 
 const json = `${JSON.stringify(data, null, 2)}\n`
 const jsonPath = path.join(DOCS_DIR, 'tokens.generated.json')
-const readmePath = path.join(DOCS_DIR, 'README.md')
-const htmlPath = path.join(DOCS_DIR, 'index.html')
 
-const readmeSource = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : ''
-
-// 三份产物先在内存里全部算好，再决定是"写"还是"只校验"。
-// `--check` 给守卫测试用：不落盘，只回答"现在的产物还等于源码推出来的东西吗"。
-const outputs = [
-  { key: 'json', file: jsonPath, content: json },
-  { key: 'readme', file: readmePath, content: renderReadme(data, readmeSource) },
-  { key: 'html', file: htmlPath, content: renderPage(data) },
-]
+// v2 起，README.md / index.html 由 scripts/design-system/build-v2.mjs 生成（设计系统本体）。
+// 本脚本只保留 v1 取证数据，作为 v2 的“修改前”输入，避免把 v2 页面覆盖回 v1。
+const outputs = [{ key: 'json', file: jsonPath, content: json }]
 
 const changed = Object.fromEntries(
   outputs.map(item => [item.key, !fs.existsSync(item.file) || fs.readFileSync(item.file, 'utf8') !== item.content]),
@@ -913,8 +903,6 @@ if (checkOnly) {
 const report = {
   mode: checkOnly ? 'check' : 'write',
   json: path.relative(ROOT, jsonPath),
-  readme: path.relative(ROOT, readmePath),
-  html: path.relative(ROOT, htmlPath),
   changed,
   counts: data.meta.counts,
   issues: issueCounts,

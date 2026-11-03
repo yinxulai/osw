@@ -5878,11 +5878,9 @@
       "--sidebar-ring",
       "--success",
       "--success-foreground",
-      "--token",
       "--transform-origin",
       "--warning",
-      "--warning-foreground",
-      "--x"
+      "--warning-foreground"
     ],
     "classReferenced": [
       "--color-accent",
@@ -6083,33 +6081,7 @@
         "reason": "latency-distribution.tsx 运行时注入给 Recharts 的系列色"
       }
     ],
-    "undeclaredRefs": [
-      {
-        "name": "--token",
-        "refs": [
-          {
-            "name": "--token",
-            "file": "packages/console/source/design-system.guard.test.ts",
-            "line": 61
-          },
-          {
-            "name": "--token",
-            "file": "packages/console/source/design-system.guard.test.ts",
-            "line": 61
-          }
-        ]
-      },
-      {
-        "name": "--x",
-        "refs": [
-          {
-            "name": "--x",
-            "file": "packages/console/source/design-system.guard.test.ts",
-            "line": 94
-          }
-        ]
-      }
-    ],
+    "undeclaredRefs": [],
     "cssUndeclared": [],
     "undeclaredWhitelist": [
       {
