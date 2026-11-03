@@ -1,0 +1,217 @@
+/**
+ * v2 产物渲染：tokens.v2.css / index.html / README.md / v2.generated.json。
+ *
+ * 页面不手写任何一个色值或对比度数字：色块、徽标、矩阵、问题表都从 data 渲染。
+ * CSS 的每个 token 上方都带「允许 / 不得 / 阈值」，让规范跟着 token 走，而不是另写一份会漂移的表。
+ */
+import { rgbToOklch } from './color.mjs'
+
+const esc = value => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+
+const primitiveByName = data => new Map([...data.neutral, ...data.brand].map(item => [item.name, item]))
+const primitiveByHex = data => new Map([...data.neutral, ...data.brand].map(item => [item.hex, item.name]))
+
+const oklchOfHex = hex => {
+  const rgb = [1, 3, 5].map(index => Number.parseInt(hex.slice(index, index + 2), 16))
+  const value = rgbToOklch(rgb)
+  return `oklch(${value.l.toFixed(3)} ${value.c.toFixed(4)} ${value.h.toFixed(2)})`
+}
+
+const roleValue = (data, name, role) => {
+  if (role.oklch) return role.oklch
+  const primitive = primitiveByHex(data).get(role.hex)
+  if (primitive) return `var(--ds-${primitive})`
+  return oklchOfHex(role.hex)
+}
+
+const comment = (allowed, forbidden, threshold) =>
+  `/* 允许：${allowed} | 不得：${forbidden} | 阈值：${threshold} */`
+
+export const renderCss = data => {
+  const lines = []
+  lines.push('/* ==========================================================================')
+  lines.push('   osw Design System v2 — tokens.v2.css')
+  lines.push('')
+  lines.push('   用法：在 packages/console/source/styles/index.css 之后导入本文件。')
+  lines.push('   结构：色阶 primitive → 语义角色 semantic → v1 兼容别名 compat。')
+  lines.push('   约束：组件只消费 --ds-<role>；色阶只允许被语义角色引用。')
+  lines.push('   所有色值先以 OKLCH 定义；hex 只出现在注释里，供肉眼与截图核对。')
+  lines.push('   ========================================================================== */')
+  lines.push('')
+  lines.push(':root {')
+  lines.push('  /* ---------- 色阶：中性 12 阶（hue 262，低彩度） ---------- */')
+  for (const item of data.neutral) {
+    lines.push(`  ${comment(item.allowed, item.forbidden, item.threshold)}`)
+    lines.push(`  --ds-${item.name}: ${item.oklch}; /* ${item.hex} */`)
+  }
+  lines.push('')
+  lines.push('  /* ---------- 色阶：品牌 12 阶（hue 262.44，step 9 = #085afc） ---------- */')
+  for (const item of data.brand) {
+    lines.push(`  ${comment(item.allowed, item.forbidden, item.threshold)}`)
+    lines.push(`  --ds-${item.name}: ${item.oklch}; /* ${item.hex} */`)
+  }
+  lines.push('')
+  lines.push('  /* ---------- 语义角色：亮色 ---------- */')
+  lines.push('  /* 1–2 底 | 3–5 组件态 | 6–8 边框 | 9–10 实心 | 11–12 文本 */')
+  for (const [name, role] of Object.entries(data.roles.light)) {
+    lines.push(`  ${comment(role.allowed, role.forbidden, role.threshold)}`)
+    lines.push(`  --ds-${name}: ${roleValue(data, name, role)}; /* ${role.hex} */`)
+  }
+  lines.push('')
+  lines.push('  /* ---------- 排版：6 档字号 / 3 档字重 / 行高成对 ---------- */')
+  for (const item of data.typography.sizes) {
+    lines.push(`  --ds-${item.name}-size: ${item.px}px;`)
+    lines.push(`  --ds-${item.name}-line: ${item.lineHeight}px; /* ${item.px}/${item.lineHeight} · ${item.use} */`)
+  }
+  for (const weight of data.typography.weights) {
+    lines.push(`  --ds-weight-${weight.name}: ${weight.value}; /* ${weight.use} */`)
+  }
+  lines.push('')
+  lines.push('  /* ---------- 间距：4px 主网格；1px/2px 仅登记例外 ---------- */')
+  for (const step of data.spacing.steps) lines.push(`  --ds-space-${step}: ${step}px;`)
+  lines.push('  --ds-hairline: 1px; /* 只用于 border / outline 宽度 */')
+  lines.push('  --ds-focus-offset: 2px; /* 只用于焦点环 offset */')
+  lines.push('  --ds-icon-inset: 2px; /* 只用于图标光学内衬 */')
+  lines.push('')
+  lines.push('  /* ---------- 控件 / 触控 ---------- */')
+  for (const item of data.controls.heights) lines.push(`  --ds-control-${item.name}: ${item.px}px; /* ${item.use} */`)
+  lines.push(`  --ds-touch-min: ${data.controls.touchMin}px; /* coarse pointer 下限 */`)
+  lines.push('')
+  lines.push('  /* ---------- 圆角：2/4/6/8/12/16 ---------- */')
+  for (const item of data.radii) lines.push(`  --ds-radius-${item.name}: ${item.px}px; /* ${item.use} */`)
+  lines.push('')
+  lines.push('  /* ---------- 层次 ---------- */')
+  lines.push(`  --ds-shadow-card: ${data.shadows.card.light};`)
+  lines.push(`  --ds-shadow-overlay: ${data.shadows.overlay.light};`)
+  lines.push(`  --ds-shadow-panel: ${data.shadows.panel.light};`)
+  for (const item of data.zIndex) lines.push(`  --ds-z-${item.name}: ${item.value}; /* ${item.use} */`)
+  lines.push('  --ds-z-receipt: var(--ds-z-overlay); /* 收据控件不再高于 Dialog */')
+  lines.push('')
+  lines.push('  /* ---------- 动效 / 焦点 ---------- */')
+  for (const item of data.motion) lines.push(`  --ds-duration-${item.name}: ${item.ms}ms; /* ${item.use} */`)
+  lines.push('  --ds-focus-width: 2px;')
+  lines.push('  --ds-focus-offset: 2px;')
+  lines.push('')
+  lines.push('  /* ---------- v1 兼容别名：迁移期保留旧名 ---------- */')
+  for (const [from, to] of Object.entries(data.aliases)) {
+    lines.push(`  ${from}: var(${to});`)
+  }
+  lines.push('')
+  lines.push('  /* ---------- Tailwind / 运行时别名 ---------- */')
+  lines.push('  --font-sans: "Geist Variable", system-ui, sans-serif;')
+  lines.push('  --font-mono: ui-monospace, "SF Mono", "Geist Mono", "DejaVu Sans Mono", monospace;')
+  lines.push('  --font-heading: var(--font-sans);')
+  lines.push('  --radius: 0.5rem;')
+  lines.push('  --button-radius: var(--ds-radius-md);')
+  lines.push('  --radius-sm: 4px;')
+  lines.push('  --radius-md: 6px;')
+  lines.push('  --radius-lg: 8px;')
+  lines.push('  --radius-xl: 12px;')
+  lines.push('  --radius-2xl: 16px;')
+  lines.push('  --radius-3xl: 16px;')
+  lines.push('  --radius-4xl: 16px;')
+  lines.push('  --text-2xs: 0.75rem;')
+  lines.push('  --shadow-card: var(--ds-shadow-card);')
+  lines.push('  --shadow-overlay: var(--ds-shadow-overlay);')
+  lines.push('  --shadow-panel: var(--ds-shadow-panel);')
+  lines.push('}')
+  lines.push('')
+  lines.push('.dark, [data-theme="dark"] {')
+  lines.push('  /* 暗色只换语义角色，不换色阶；层级靠明度 + 1px 边，不靠黑色重影。 */')
+  for (const [name, role] of Object.entries(data.roles.dark)) {
+    lines.push(`  --ds-${name}: ${roleValue(data, name, role)}; /* ${role.hex} */`)
+  }
+  lines.push(`  --ds-shadow-card: ${data.shadows.card.dark};`)
+  lines.push(`  --ds-shadow-overlay: ${data.shadows.overlay.dark};`)
+  lines.push(`  --ds-shadow-panel: ${data.shadows.panel.dark};`)
+  lines.push('}')
+  lines.push('')
+  lines.push('/* ==========================================================================')
+  lines.push('   兼容修复：只改 CSS，不改运行时 TSX。下一轮组件迁移后可逐条删除。')
+  lines.push('   ========================================================================== */')
+  lines.push('')
+  lines.push('body {')
+  lines.push('  background-color: var(--ds-surface-base);')
+  lines.push('  color: var(--ds-text-primary);')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-001：输入框静止态必须有可见边界 */')
+  lines.push(':is([data-slot="input"], [data-slot="textarea"]) {')
+  lines.push('  border-color: var(--ds-input-border);')
+  lines.push('}')
+  lines.push(':is([data-slot="input"], [data-slot="textarea"]):hover {')
+  lines.push('  border-color: var(--ds-input-border-hover);')
+  lines.push('}')
+  lines.push('[data-slot="select-trigger"] {')
+  lines.push('  border-color: var(--ds-input-border);')
+  lines.push('}')
+  lines.push('[data-slot="select-trigger"]:hover {')
+  lines.push('  border-color: var(--ds-input-border-hover);')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-005：取消 11px；徽标统一 12/16 */')
+  lines.push('[data-slot="badge"] {')
+  lines.push('  font-size: 12px;')
+  lines.push('  line-height: 16px;')
+  lines.push('  border-radius: var(--ds-radius-sm);')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-012：空态虚线框真正画出 1px */')
+  lines.push('[data-slot="empty"] {')
+  lines.push('  border: 1px dashed var(--ds-border-subtle);')
+  lines.push('  border-radius: var(--ds-radius-xl);')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-027：浮层统一一套外观 */')
+  lines.push('[data-slot="combobox-content"] {')
+  lines.push('  background-color: var(--ds-overlay-surface);')
+  lines.push('  border: 1px solid var(--ds-overlay-border);')
+  lines.push('  box-shadow: var(--ds-shadow-overlay);')
+  lines.push('  backdrop-filter: none;')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-014：组件圆角回到 v2 刻度，而不是被 Tailwind 作用域改写 */')
+  lines.push(':is([data-slot="button"], [data-slot="input"], [data-slot="select-trigger"], [data-slot="tabs-trigger"]) {')
+  lines.push('  border-radius: var(--ds-radius-md);')
+  lines.push('}')
+  lines.push(':is([data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="drawer-content"]) {')
+  lines.push('  border-radius: var(--ds-radius-2xl);')
+  lines.push('}')
+  lines.push(':is([data-slot="card"], [data-slot="empty"]) {')
+  lines.push('  border-radius: var(--ds-radius-xl);')
+  lines.push('}')
+  lines.push('[data-slot="toast"] { border-radius: var(--ds-radius-lg); }')
+  lines.push('')
+  lines.push('/* DS-010：一个焦点环，所有可聚焦控件共用 */')
+  lines.push(':where(button, [role="button"], input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])):focus-visible {')
+  lines.push('  outline: var(--ds-focus-width) solid var(--ds-focus-ring);')
+  lines.push('  outline-offset: var(--ds-focus-offset);')
+  lines.push('  box-shadow: none;')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* DS-013：旧 z 类名映射到命名层；收据控件不再压住 Dialog */')
+  lines.push('.z-50 { z-index: var(--ds-z-modal); }')
+  lines.push('.z-70 { z-index: var(--ds-z-overlay); }')
+  lines.push('')
+  lines.push('/* DS-011：动效降级全局生效 */')
+  lines.push('@media (prefers-reduced-motion: reduce) {')
+  lines.push('  *, *::before, *::after {')
+  lines.push('    animation-duration: 0.001ms !important;')
+  lines.push('    animation-iteration-count: 1 !important;')
+  lines.push('    transition-duration: 0.001ms !important;')
+  lines.push('    scroll-behavior: auto !important;')
+  lines.push('  }')
+  lines.push('  [data-slot="skeleton"] { animation: none !important; }')
+  lines.push('}')
+  lines.push('')
+  lines.push('/* 2xs 工具类统一抬到 12/16；11px 在 v2 中取消 */')
+  for (const suffix of ['regular', 'regular-uppercase', 'medium', 'medium-uppercase', 'semibold-uppercase']) {
+    lines.push(`.system-2xs-${suffix} { font-size: 12px; line-height: 16px; }`)
+  }
+  lines.push('')
+  return `${lines.join('\n')}\n`
+}

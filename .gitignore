@@ -41,3 +41,5 @@ apps/www/.wrangler
 # CLI 打包时把迁移基线搬进包内的中转目录（`prepack` 生成，只在 npm tarball 里存在）
 apps/cli/packages
                                                                                   
+# 设计系统审计截图（体积大，仅保留压缩预览）
+docs/design-system/audit/**/*.png
