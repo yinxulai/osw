@@ -30,6 +30,11 @@ jobs:
     # 而不是拿一个红徽章去覆盖它——CI 红不红由 CI 徽章负责表达。
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download coverage artifact from the CI run
         uses: actions/download-artifact@v6
         with:
