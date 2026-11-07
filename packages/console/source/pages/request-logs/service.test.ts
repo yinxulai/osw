@@ -145,15 +145,27 @@ describe('行的合成', () => {
     expect(result.current.rows[0].kind).toBe('log')
   })
 
-  it('展开着的那一条一直保持实时形态，哪怕它已经跑完（把五格尺子从他手里抢走是没道理的）', async () => {
+  it('展开着的那一条在落定后短时间内保持实时形态', async () => {
+    const now = Date.now()
     list.mockResolvedValue(ok({ logs: [logEntry({ id: 'log_1', status: 'failed' })], total: 1 }))
-    live.requests = [liveRequest({ id: 'log_1', status: 'failed', phase: 'settled', endedAt: 2 })]
+    live.requests = [liveRequest({ id: 'log_1', status: 'failed', phase: 'settled', endedAt: now - 500 })]
     useRequestLogsUiStore.setState({ expandedId: 'log_1' })
     const { result } = mount()
 
     await waitFor(() => expect(result.current.rows).toHaveLength(1))
     expect(result.current.rows[0].kind).toBe('execution')
     expect(result.current.expandedId).toBe('log_1')
+  })
+
+  it('展开着的那一条落定太久后切回落库形态', async () => {
+    const now = Date.now()
+    list.mockResolvedValue(ok({ logs: [logEntry({ id: 'log_1', status: 'failed' })], total: 1 }))
+    live.requests = [liveRequest({ id: 'log_1', status: 'failed', phase: 'settled', endedAt: now - 61_000 })]
+    useRequestLogsUiStore.setState({ expandedId: 'log_1' })
+    const { result } = mount()
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(1))
+    expect(result.current.rows[0].kind).toBe('log')
   })
 
   it('筛过之后不再补入台账（按「失败」筛选却冒出进行中的请求是绕过筛选）', async () => {

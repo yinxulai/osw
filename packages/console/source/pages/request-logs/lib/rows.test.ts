@@ -61,11 +61,15 @@ describe('shouldUseLiveRow', () => {
 
   it('keeps the live view for as long as the user has it expanded', () => {
     // 展开是用户唯一说过的话：他正盯着这一行，把内容换掉等于从他手里抢走。
-    expect(shouldUseLiveRow(live({ status: 'failed', endedAt: 2_000 }), 'failed', 'req_x')).toBe(true)
+    expect(shouldUseLiveRow(live({ status: 'failed', endedAt: 2_000 }), 'failed', 'req_x', 2_500)).toBe(true)
   })
 
   it('does not confuse another row with the expanded one', () => {
     expect(shouldUseLiveRow(live({ status: 'failed', endedAt: 2_000 }), 'failed', 'req_other')).toBe(false)
+  })
+
+  it('does not keep a long-settled row on live view forever', () => {
+    expect(shouldUseLiveRow(live({ status: 'failed', endedAt: 2_000 }), 'failed', 'req_x', 62_001)).toBe(false)
   })
 })
 
@@ -89,10 +93,11 @@ describe('buildRequestLogRows', () => {
   })
 
   it('keeps the expanded row on the live view even after it settled', () => {
+    const now = Date.now()
     // 规则一：已经展开的保持展开状态和展示模式。
     const rows = buildRequestLogRows({
       logs: [log({ status: 'failed' })],
-      liveRequests: [live({ status: 'failed', phase: 'settled', endedAt: 2_000 })],
+      liveRequests: [live({ status: 'failed', phase: 'settled', endedAt: now - 500 })],
       injectLive: false,
       expandedId: 'req_x',
     })
@@ -175,11 +180,12 @@ describe('buildRequestLogRows', () => {
   })
 
   it('keeps injecting the request the user is looking at', () => {
+    const now = Date.now()
     // 同一份数据、库里没有它，但用户正展开着：那是他的手放在那里，不是内容的问题。
     // 这时补入是**唯一**的显示途径——把它挡在门外，请求一落定整行就消失，连带他正看的详情。
     const rows = buildRequestLogRows({
       logs: [],
-      liveRequests: [live({ id: 'req_done', status: 'success', phase: 'settled', endedAt: 2_000 })],
+      liveRequests: [live({ id: 'req_done', status: 'success', phase: 'settled', endedAt: now - 500 })],
       injectLive: true,
       expandedId: 'req_done',
     })

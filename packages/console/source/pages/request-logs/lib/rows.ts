@@ -30,19 +30,35 @@ interface BuildRequestLogRowsInput {
 }
 
 /**
+ * 台账快照在前端可被复用超过服务端保留窗口（例如连接空闲时只收心跳，不会立刻再推快照）。
+ * 这时一条早已结束的请求不该继续占着「实时形态」。
+ */
+const STALE_SETTLED_LIVE_ROW_MAX_AGE_MS = 60_000
+
+function isFreshSettledLive(live: LiveRequest, now: number): boolean {
+  if (live.status === 'pending') return true
+  if (live.endedAt === null) return true
+  return now - live.endedAt <= STALE_SETTLED_LIVE_ROW_MAX_AGE_MS
+}
+
+/**
  * 这一行此刻该用实时形态还是落库形态。**整个页面只有这一处判断。**
  *
- * 只有两条规则，没有第三条：
+ * 规则：
  *
- * 1. **展开着的保持实时形态。** 用户正盯着它看，把内容换掉等于从他手里抢走。
- * 2. **其余按实际状态。** 台账说还在跑、或者库里那一行还停在 `pending`（落库比推送慢
+ * 1. **过期快照先淘汰。** 台账里的已落定请求超过保留窗口后，不再继续当作实时行展示。
+ * 2. **展开着的保持实时形态。** 用户正盯着它看，把内容换掉等于从他手里抢走。
+ * 3. **其余按实际状态。** 台账说还在跑、或者库里那一行还停在 `pending`（落库比推送慢
  *    最多 1.5s），就是还在跑；两边都说结束了，就交回落库那一份。
- *
- * 没有「落定后再留 N 秒」这种按时间算的第三态：它要额外记一份收起时刻、额外走一口时钟、
- * 还让「这一行为什么还是实时的」有了第二种答案。展开与不展开已经是用户唯一说过的话。
  */
-export function shouldUseLiveRow(live: LiveRequest | undefined, logStatus: RequestStatus | undefined, expandedId: string | null): live is LiveRequest {
+export function shouldUseLiveRow(
+  live: LiveRequest | undefined,
+  logStatus: RequestStatus | undefined,
+  expandedId: string | null,
+  now = Date.now(),
+): live is LiveRequest {
   if (live === undefined) return false
+  if (!isFreshSettledLive(live, now) && logStatus !== 'pending') return false
   if (expandedId === live.id) return true
   return isRequestExecuting(live, logStatus)
 }

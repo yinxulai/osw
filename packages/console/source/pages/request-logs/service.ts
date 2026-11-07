@@ -39,8 +39,8 @@ export function useRequestLogsService() {
   /**
    * 被展开的那一条用不用实时视图。
    *
-   * 与列表行走同一个 `shouldUseLiveRow`：展开着就一定用实时形态，所以这里只可能是
-   * 「是」或「台账里没有它」。这一点很重要——它是下面关掉落库详情查询的依据，
+   * 与列表行走同一个 `shouldUseLiveRow`：展开着通常保持实时形态，但已落定且超过保留窗口的
+   * 快照会被淘汰。这一点很重要——它是下面关掉落库详情查询的依据，
    * 两处口径不一致就会出现「展开区在等一份自己已经有的数据」。
    */
   const expandedUsesLive = expandedId !== null && shouldUseLiveRow(liveById.get(expandedId), statusById.get(expandedId), expandedId)
