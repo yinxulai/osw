@@ -20,6 +20,9 @@ const UNEXPOSED_ROUTES = [
   'POST /completions',
   'POST /v1/embeddings',
   'POST /embeddings',
+  // Codex 的模型目录（`model_catalog_url`）。它是 Codex 独有的目录形态而不是通用的
+  // 模型列表，写进对外接口面就是让别的客户端照抄一个它们不认的路径。
+  'GET /v1/model-catalog',
 ]
 
 /**
@@ -74,7 +77,10 @@ describe('对外接口面与注册表一致', () => {
   })
 
   it('「认得出但不承诺」名单里的路径都还在注册表里，也没被误写进契约', () => {
-    const registered = new Set(listProtocolRoutes().map(route => `${route.method} ${route.path}`))
+    const registered = new Set([
+      ...listProtocolRoutes().map(route => `${route.method} ${route.path}`),
+      ...localEndpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`),
+    ])
     const written = new Set(declared.map(({ method, path }) => `${method} ${path}`))
     for (const route of UNEXPOSED_ROUTES) {
       expect(registered.has(route), `${route} 已经不在注册表里，这一条该删`).toBe(true)

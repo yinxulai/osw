@@ -1,5 +1,6 @@
 import { HttpRouter } from '@server/http-router'
 import type { LocalEndpoint } from './local-endpoint'
+import { modelCatalogEndpoint } from './model-catalog-endpoint'
 import { modelsEndpoint } from './models-endpoint'
 
 /**
@@ -8,6 +9,7 @@ import { modelsEndpoint } from './models-endpoint'
  */
 export const localEndpoints: readonly LocalEndpoint[] = [
   modelsEndpoint,
+  modelCatalogEndpoint,
 ]
 
 const localEndpointRouter = new HttpRouter<LocalEndpoint>()
