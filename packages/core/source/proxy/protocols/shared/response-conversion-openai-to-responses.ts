@@ -16,6 +16,10 @@ import type { ToolNameRegistry } from './tool-name-registry'
  * 所以这里发工具调用项时要拿着同一个 `toolNames` 把名字还原成
  * `(namespace, name)` 寻址，否则客户端认不出这是它声明的哪个工具。
  * function 与 custom 两类调用共用这条还原规则。
+ *
+ * 同一个 `toolNames` 还记着「哪些 custom 工具被降级成了 function」（见
+ * `request-conversion-responses-to-openai.ts`）：上游把这些工具当 function 调回来时，
+ * 这里要还原成 `custom_tool_call`，并把 `{"input": "..."}` 参数解回自由文本。
  */
 
 type ResponsesStatus = 'in_progress' | 'completed' | 'incomplete'
@@ -106,13 +110,55 @@ function restoreToolName(name: string, toolNames?: ToolNameRegistry): { name: st
 }
 
 /**
+ * 被降级的 custom 工具在上游是 function 调用，参数是一段 JSON：`{"input": "..."}`。
+ * 这里把它的自由文本取回来。
+ *
+ * 三级回落：正常情况取 `input`；模型偶尔会把自由文本包进别的单字段对象；两者都不成立时
+ * 认为模型直接输出了自由文本。**不猜**——猜错会把补丁、SQL 这类载荷悄悄改坏，
+ * 原样交给客户端至少还能看出上游到底回了什么。
+ */
+function customInputFromArguments(argumentsText: string): string {
+  if (!argumentsText) return ''
+  try {
+    const parsed: unknown = JSON.parse(argumentsText)
+    if (typeof parsed === 'string') return parsed
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const record = parsed as Record<string, unknown>
+      if (typeof record.input === 'string') return record.input
+      const values = Object.values(record)
+      if (values.length === 1 && typeof values[0] === 'string') return values[0]
+    }
+  } catch {
+    // 不是 JSON：模型直接吐了自由文本，正好就是要的形态。
+  }
+  return argumentsText
+}
+
+/**
+ * 一个上游 function 调用在客户端眼里是什么。
+ *
+ * 返回 `kind: undefined` 表示「名字还只是某个被降级的 custom 工具名的前缀」——名字可能
+ * 分片到达，此刻无法判断，等后续 delta；结论一旦得出就不会再变。
+ */
+function classifyFunctionCall(name: string, toolNames?: ToolNameRegistry): { kind?: ToolItemKind, coerced: boolean } {
+  if (!toolNames) return { kind: 'function', coerced: false }
+  if (toolNames.isCustomTool(name)) return { kind: 'custom', coerced: true }
+  if (toolNames.startsWithCustomTool(name)) return { coerced: false }
+  return { kind: 'function', coerced: false }
+}
+
+/**
  * Chat 的 tool_call → Responses 的 `(kind, id, name, call_id, payload)`。
  *
  * `custom` 调用的载荷是自由文本而不是 JSON 字符串，所以字段名不同：
  * Responses 用 `input`（见 `CustomToolCall object`），Chat 也用 `input`
  * （见 `ChatCompletionMessageCustomToolCall`）。`function` 调用两边都叫 `arguments`。
+ *
+ * 上游原生支持 custom 工具时走 `call.custom`；而本服务在请求侧把 custom 工具降级成了
+ * function（见 `request-conversion-responses-to-openai.ts`），这类调用在 `call.function`
+ * 里回来、名字登记在 `toolNames`，要做回 `custom_tool_call` 并解开 `input`。
  */
-function openAiToolCallToResponses(call: Json): { kind: ToolItemKind, callId: string, name: string, payload: string } | null {
+function openAiToolCallToResponses(call: Json, toolNames?: ToolNameRegistry): { kind: ToolItemKind, callId: string, name: string, payload: string } | null {
   const custom = asObject(call.custom)
   if (custom) {
     const name = asString(custom.name)
@@ -122,7 +168,10 @@ function openAiToolCallToResponses(call: Json): { kind: ToolItemKind, callId: st
   const fn = asObject(call.function)
   const name = asString(fn?.name)
   if (!fn || !name) return null
-  return { kind: 'function', callId: asString(call.id) ?? '', name, payload: asString(fn.arguments) ?? '' }
+  const argumentsText = asString(fn.arguments) ?? ''
+  const callId = asString(call.id) ?? ''
+  if (toolNames?.isCustomTool(name)) return { kind: 'custom', callId, name, payload: customInputFromArguments(argumentsText) }
+  return { kind: 'function', callId, name, payload: argumentsText }
 }
 
 /**
@@ -156,7 +205,7 @@ export function openAiResponseToResponses(body: Json, toolNames?: ToolNameRegist
   asArray(message?.tool_calls).forEach((rawCall, index) => {
     const call = asObject(rawCall)
     if (!call) return
-    const converted = openAiToolCallToResponses(call)
+    const converted = openAiToolCallToResponses(call, toolNames)
     if (!converted) return
     output.push(toolCallItem(converted.kind, `${id}_fc_${index}`, converted.callId, converted.name, converted.payload, itemStatus, toolNames))
   })
@@ -177,11 +226,22 @@ export function openAiResponseToResponses(body: Json, toolNames?: ToolNameRegist
 interface ResponsesToolItemState {
   outputIndex: number
   itemId: string
-  kind: ToolItemKind
+  /**
+   * 输出项类别；`undefined` 表示名字还没到齐、暂时分不清（见 `classifyFunctionCall`）。
+   * 未分类时 `output_item.added` 也推迟，否则客户端会先收到一个类型错误的 item。
+   */
+  kind?: ToolItemKind
+  /**
+   * `kind === 'custom'` 且是「上游被降级成 function」的工具。这类调用收到的是 JSON 参数，
+   * 不是客户端的自由文本，因此不在流中逐段外发，收尾时一次解开。
+   */
+  coerced: boolean
   callId: string
   name: string
   /** function 调用是 `arguments`（JSON 字符串），custom 调用是 `input`（自由文本），共用这一个累加器。 */
   payload: string
+  /** 已经以 delta 事件发出去的载荷长度；分类推迟期间累积的载荷要在这里补齐。 */
+  emitted: number
   added: boolean
   closed: boolean
   /** 关闭时确定的 item 终态，用于聚合 output 时保持一致 */
@@ -233,7 +293,7 @@ function buildOutput(state: OpenAiToResponsesState): Json[] {
   if (state.textStarted) items.push({ index: state.messageOutputIndex, item: messageItem(state.messageItemId, state.text, state.textStatus ?? fallbackStatus) })
   for (const item of state.toolItems.values()) {
     if (!item.added) continue
-    items.push({ index: item.outputIndex, item: toolCallItem(item.kind, item.itemId, item.callId, item.name, item.payload, item.status ?? fallbackStatus, state.toolNames) })
+    items.push({ index: item.outputIndex, item: toolCallItem(item.kind ?? 'function', item.itemId, item.callId, item.name, item.payload, item.status ?? fallbackStatus, state.toolNames) })
   }
   return items.sort((left, right) => left.index - right.index).map(entry => entry.item)
 }
@@ -287,16 +347,51 @@ function closeTextItem(state: OpenAiToResponsesState, events: Json[], status: Ex
  * 已经确定的 item 结构对齐字段，不额外臆造别的键。
  */
 function closeToolItem(item: ResponsesToolItemState, events: Json[], status: Exclude<ResponsesStatus, 'in_progress'>, toolNames?: ToolNameRegistry): void {
-  if (!item.added || item.closed) return
+  if (item.closed) return
+  // 名字始终没到齐时无从分类，按 function 收尾：这是唯一不会丢掉载荷的选择。
+  if (item.kind === undefined) item.kind = 'function'
+  const kind = item.kind
+  if (!item.added) {
+    item.added = true
+    events.push({
+      type: 'response.output_item.added',
+      output_index: item.outputIndex,
+      item: toolCallItem(kind, item.itemId, item.callId, item.name, '', 'in_progress', toolNames),
+    })
+  }
   item.closed = true
   item.status = status
-  events.push(item.kind === 'custom'
-    ? { type: 'response.custom_tool_call_input.done', item_id: item.itemId, output_index: item.outputIndex, input: item.payload }
-    : { type: 'response.function_call_arguments.done', item_id: item.itemId, output_index: item.outputIndex, arguments: item.payload })
+
+  if (kind === 'custom') {
+    const input = item.coerced ? customInputFromArguments(item.payload) : item.payload
+    // 解开的自由文本才是这一项的载荷；聚合 output 时不能再用上游那段 JSON。
+    if (item.coerced) item.payload = input
+    // 降级工具的载荷从没以 delta 发过，这里补一条完整增量，保证
+    // 「各条 delta 拼接 === done.input」对客户端仍然成立。
+    const pending = item.coerced ? input : item.payload.slice(item.emitted)
+    if (pending) {
+      events.push({ type: 'response.custom_tool_call_input.delta', item_id: item.itemId, output_index: item.outputIndex, delta: pending })
+      item.emitted = item.payload.length
+    }
+    events.push({ type: 'response.custom_tool_call_input.done', item_id: item.itemId, output_index: item.outputIndex, input })
+    events.push({
+      type: 'response.output_item.done',
+      output_index: item.outputIndex,
+      item: toolCallItem('custom', item.itemId, item.callId, item.name, input, status, toolNames),
+    })
+    return
+  }
+
+  const pending = item.payload.slice(item.emitted)
+  if (pending) {
+    events.push({ type: 'response.function_call_arguments.delta', item_id: item.itemId, output_index: item.outputIndex, delta: pending })
+    item.emitted = item.payload.length
+  }
+  events.push({ type: 'response.function_call_arguments.done', item_id: item.itemId, output_index: item.outputIndex, arguments: item.payload })
   events.push({
     type: 'response.output_item.done',
     output_index: item.outputIndex,
-    item: toolCallItem(item.kind, item.itemId, item.callId, item.name, item.payload, status, toolNames),
+    item: toolCallItem('function', item.itemId, item.callId, item.name, item.payload, status, toolNames),
   })
 }
 
@@ -348,40 +443,54 @@ export function openAiChunkToResponsesEvents(chunk: Json, state: OpenAiToRespons
     let item = state.toolItems.get(openAiIndex)
     if (!item) {
       const outputIndex = state.nextOutputIndex++
-      // 流式下 `custom` 调用的名字与载荷都在 `custom` 子对象里，字段与 function 调用平行。
       item = {
         outputIndex,
         itemId: `${state.id}_fc_${outputIndex}`,
-        kind: custom ? 'custom' : 'function',
+        // `custom` 子对象只在上游原生支持 custom 工具时出现，形态当场就定了；
+        // function 子对象要先看名字，才能分辨是不是本服务降级出去的 custom 工具。
+        ...(custom ? { kind: 'custom' as const, coerced: false } : classifyFunctionCall(asString(fn?.name) ?? '', state.toolNames)),
         callId: asString(call.id) ?? '',
         name: asString(custom?.name) ?? asString(fn?.name) ?? '',
         payload: '',
+        emitted: 0,
         added: false,
         closed: false,
       }
       state.toolItems.set(openAiIndex, item)
     } else {
       // OpenAI 允许把 function.name / custom.name 拆进后续 delta，按片段拼接。
-      // output_item.added 用当时已知的前缀；done 与最终 output 用拼完的全名再还原命名空间。
-      const nameFragment = item.kind === 'custom' ? asString(custom?.name) : asString(fn?.name)
+      // 原生 custom 调用的名字在 `custom.name` 里，降级过的仍在 `function.name` 里。
+      const nameFragment = item.kind === 'custom' && !item.coerced ? asString(custom?.name) : asString(fn?.name)
       if (nameFragment) item.name += nameFragment
+      // 名字到齐了就能分类；仍只是前缀就继续等。
+      if (item.kind === undefined) Object.assign(item, classifyFunctionCall(item.name, state.toolNames))
     }
+
+    const payloadDelta = custom ? asString(custom.input) : asString(fn?.arguments)
+    if (payloadDelta) item.payload += payloadDelta
+
+    // 还没分类：载荷先攒着，added 与 delta 都等分类之后再说。
+    if (item.kind === undefined) continue
+
     if (!item.added) {
       item.added = true
-      // 能查到映射就还原，查不到就先给原始名字。名字还没到齐时这里只能是前缀，
+      // 能查到映射就还原，查不到就先给原始名字。递增的 delta 在下面补发，
       // 收尾的 output_item.done 里一定会是还原后的完整寻址。
       events.push({
         type: 'response.output_item.added',
         output_index: item.outputIndex,
-        item: toolCallItem(item.kind, item.itemId, item.callId, item.name, item.payload, 'in_progress', state.toolNames),
+        item: toolCallItem(item.kind, item.itemId, item.callId, item.name, '', 'in_progress', state.toolNames),
       })
     }
-    const payloadDelta = custom ? asString(custom.input) : asString(fn?.arguments)
-    if (payloadDelta) {
-      item.payload += payloadDelta
-      events.push(custom
-        ? { type: 'response.custom_tool_call_input.delta', item_id: item.itemId, output_index: item.outputIndex, delta: payloadDelta }
-        : { type: 'response.function_call_arguments.delta', item_id: item.itemId, output_index: item.outputIndex, delta: payloadDelta })
+    // 降级过的 custom 工具收到的是 JSON 参数（`{"input":"..."}`），不是客户端的自由文本，
+    // 逐段外发会让客户端拿到一段段 JSON；收尾时一次解开（见 closeToolItem）。
+    if (item.coerced) continue
+    if (item.payload.length > item.emitted) {
+      const delta = item.payload.slice(item.emitted)
+      item.emitted = item.payload.length
+      events.push(item.kind === 'custom'
+        ? { type: 'response.custom_tool_call_input.delta', item_id: item.itemId, output_index: item.outputIndex, delta }
+        : { type: 'response.function_call_arguments.delta', item_id: item.itemId, output_index: item.outputIndex, delta })
     }
   }
 

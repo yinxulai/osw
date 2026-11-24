@@ -86,42 +86,53 @@ function functionToolToOpenAi(tool: Json, name: string, namespaceDescription?: s
 }
 
 /**
- * Responses 的 custom 工具输入格式 → Chat 的 custom 工具输入格式。
- *
- * 两侧取值相同（`{ type: "text" }` / grammar 语法 `lark` / `regex`），但 grammar 的嵌套层级不同：
- * Responses 是 `{ type: "grammar", definition, syntax }`，Chat 多一层 `{ type: "grammar", grammar: { definition, syntax } }`
- * （见 apps/docs/upstream/openai-responses.md 的 `CustomToolInputFormat` 与
- * apps/docs/upstream/openai-completions.md 的 `ChatCompletionCustomTool`），所以必须逐字段重建。
- * 缺省即「不约束的自由文本」，两侧一致，故缺失时不写这个字段。
+ * 降级后的 custom 工具里那个自由文本参数。参数名固定为 `input`，与 custom 工具调用的
+ * 载荷字段同名，响应侧还原时不必再猜。
  */
-function customToolFormatToOpenAi(format: unknown): Json | undefined {
-  const record = asObject(format)
-  if (!record) return undefined
-  if (record.type === 'text') return { type: 'text' }
-  if (record.type !== 'grammar') return undefined
-  const definition = asString(record.definition)
-  const syntax = asString(record.syntax)
-  if (definition === undefined || (syntax !== 'lark' && syntax !== 'regex')) return undefined
-  return { type: 'grammar', grammar: { definition, syntax } }
+const CUSTOM_TOOL_INPUT_PARAMETER = {
+  type: 'object',
+  properties: {
+    input: {
+      type: 'string',
+      description: 'The complete input for this tool as free-form text.',
+    },
+  },
+  required: ['input'],
 }
 
-function customToolToOpenAi(tool: Json, name: string, namespaceDescription?: string): Json | null {
+/**
+ * custom 工具在 Chat Completions 里有对应的 `CustomTool`（见
+ * apps/docs/upstream/openai-completions.md 的 `ChatCompletionCustomTool`），但它不在
+ * 事实上的兼容子集里：OpenAI 自己之外，多数兼容供应商只实现 `type: "function"`，
+ * 遇到 custom 直接以 `tools[N].type is invalid or missing` 拒绝整个请求。
+ *
+ * 所以这里统一降级成「只有一个字符串参数 `input`」的 function，并把上游名登记到
+ * `ToolNameRegistry`，响应侧据此把 function 调用还原回 `custom_tool_call`。
+ * 代价是 `format`（grammar）无法约束上游解码，模型可能产出不合语法的自由文本。
+ *
+ * 客户端给的描述里常常写着「不要用 JSON 包起来」（Codex 的 `apply_patch` 正是如此），
+ * 而这里的 function 形态恰恰要求 JSON，必须补一句说明，否则模型会照描述裸写、参数不合法。
+ */
+function customToolToOpenAi(tool: Json, name: string, namespaceDescription: string | undefined, toolNames?: ToolNameRegistry): Json | null {
   if (!name) return null
-  const format = customToolFormatToOpenAi(tool.format)
+  toolNames?.registerCustomTool(name)
   return {
-    type: 'custom',
-    custom: {
+    type: 'function',
+    function: {
       name,
-      description: toolDescriptionToOpenAi(tool, namespaceDescription),
-      ...(format ? { format } : {}),
+      description: [
+        toolDescriptionToOpenAi(tool, namespaceDescription),
+        'This tool takes free-form text. Put its complete input in the `input` string field, JSON-escaped.',
+      ].filter(part => part.length > 0).join('\n\n'),
+      parameters: CUSTOM_TOOL_INPUT_PARAMETER,
     },
   }
 }
 
 /** 单个 Responses 工具 → Chat 工具；Chat 不支持的类型返回 `null`。 */
-function toolToOpenAi(tool: Json, name: string, namespaceDescription?: string): Json | null {
+function toolToOpenAi(tool: Json, name: string, namespaceDescription?: string, toolNames?: ToolNameRegistry): Json | null {
   if (tool.type === 'function') return functionToolToOpenAi(tool, name, namespaceDescription)
-  if (tool.type === 'custom') return customToolToOpenAi(tool, name, namespaceDescription)
+  if (tool.type === 'custom') return customToolToOpenAi(tool, name, namespaceDescription, toolNames)
   return null
 }
 
@@ -142,7 +153,8 @@ function reserveTopLevelToolNames(raw: unknown, toolNames: ToolNameRegistry): vo
 /**
  * Responses 的 `tools` 是「工具或工具组」的联合：
  * - `type: "function"` 顶层工具 ↔ 原样映射，名字必须保持不变
- * - `type: "custom"` 顶层工具 ↔ 映射成 Chat 的 custom 工具，名字同样必须保持
+ * - `type: "custom"` 顶层工具 ↔ 降级成「单字符串参数」的 function（见
+ *   {@link customToolToOpenAi}），名字同样必须保持，并登记到 `toolNames` 供响应侧还原
  * - `type: "namespace"` 工具组 ↔ 组内的 function / custom 逐个展平成顶层工具，并把
  *   `(namespace, name)` ↔ 展平名 登记到 `toolNames`
  * - `mcp` / `tool_search` / `file_search` / `web_search` 等托管工具 ↔ 无对应能力，丢弃
@@ -157,7 +169,7 @@ function responsesToolsToOpenAi(raw: unknown, toolNames: ToolNameRegistry): Json
     const tool = asObject(item)
     if (!tool) continue
     if (tool.type === 'function' || tool.type === 'custom') {
-      const converted = toolToOpenAi(tool, asString(tool.name) ?? '')
+      const converted = toolToOpenAi(tool, asString(tool.name) ?? '', undefined, toolNames)
       if (converted) tools.push(converted)
       continue
     }
@@ -170,7 +182,7 @@ function responsesToolsToOpenAi(raw: unknown, toolNames: ToolNameRegistry): Json
       if (!nested) continue
       const nestedName = asString(nested.name)
       if (!nestedName) continue
-      const converted = toolToOpenAi(nested, toolNames.flatten(namespace, nestedName), namespaceDescription)
+      const converted = toolToOpenAi(nested, toolNames.flatten(namespace, nestedName), namespaceDescription, toolNames)
       if (converted) tools.push(converted)
     }
   }
@@ -183,6 +195,9 @@ function responsesToolsToOpenAi(raw: unknown, toolNames: ToolNameRegistry): Json
  * 客户端写的是**它自己声明的**名字，而上游只认展平名，所以 function / custom 两种形态都要
  * 借 `toolNames.locate` 换名字；这两个对象都只有 `name`、没有 `namespace`，
  * 因此消歧靠「唯一命中才换」（见 `tool-name-registry.ts`）。
+ *
+ * 形态上只有 `function` 一种：custom 工具已在上游被降级成 function，`ToolChoiceCustom`
+ * 也必须跟着改形态，否则「工具没了、tool_choice 还在」会直接被上游拒掉。
  *
  * 没有对应能力的形态：
  * - `allowed_tools` 的「允许集合」在 Chat 里不存在，只保留 `mode` 的强制语义（`auto` / `required`）；
@@ -201,7 +216,9 @@ function responsesToolChoiceToOpenAi(choice: unknown, toolNames: ToolNameRegistr
   if (record.type === 'custom') {
     const name = asString(record.name)
     if (!name) return undefined
-    return { type: 'custom', custom: { name: toolNames.locate(name) ?? name } }
+    // custom 工具已降级成 function（见 `customToolToOpenAi`），因此强制选择也跟着用
+    // `function` 形态；继续下发 `type: "custom"` 会让拒绝 custom 的上游连这个字段一起拒掉。
+    return { type: 'function', function: { name: toolNames.locate(name) ?? name } }
   }
   if (record.type === 'allowed_tools' && (record.mode === 'auto' || record.mode === 'required')) return record.mode
   return undefined
@@ -257,9 +274,11 @@ function functionCallToToolCall(source: Json, toolNames: ToolNameRegistry): Json
 }
 
 /**
- * Responses 的 `custom_tool_call` → Chat 的 `ChatCompletionMessageCustomToolCall`。
- * 两侧同名同形（`custom: { input, name }`，`input` 都是自由文本而非 JSON 字符串），
- * 只是 Chat 没有 `namespace` 字段，所以同样要换成展平名。
+ * Responses 的 `custom_tool_call` → Chat 的 **function** 调用。
+ *
+ * 工具定义在请求里已经降级成单字符串参数的 function（见 `customToolToOpenAi`），
+ * 历史调用必须跟着用同一种形态，否则模型会看到一个自己从没拿到过的 `custom` 工具。
+ * `input` 是自由文本，这里按 `{"input": "..."}` 序列化成 function 参数。
  */
 function customToolCallToToolCall(source: Json, toolNames: ToolNameRegistry): Json | null {
   const name = asString(source.name)
@@ -267,10 +286,10 @@ function customToolCallToToolCall(source: Json, toolNames: ToolNameRegistry): Js
   const namespace = asString(source.namespace)
   return {
     id: asString(source.call_id) ?? asString(source.id) ?? '',
-    type: 'custom',
-    custom: {
+    type: 'function',
+    function: {
       name: namespace ? toolNames.flatten(namespace, name) : name,
-      input: asString(source.input) ?? '',
+      arguments: JSON.stringify({ input: asString(source.input) ?? '' }),
     },
   }
 }

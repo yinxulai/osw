@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { responsesToOpenAiRequest } from './request-conversion-responses-to-openai'
 import { ToolNameRegistry } from './tool-name-registry'
 
+/** 降级后的 custom 工具：单字符串参数 `input` 的 function，描述里补一句 JSON 转义说明。 */
+function downgradedCustomTool(name: string, description?: string): unknown {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description: [
+        description,
+        'This tool takes free-form text. Put its complete input in the `input` string field, JSON-escaped.',
+      ].filter(Boolean).join('\n\n'),
+      parameters: {
+        type: 'object',
+        properties: { input: { type: 'string', description: 'The complete input for this tool as free-form text.' } },
+        required: ['input'],
+      },
+    },
+  }
+}
+
 describe('responsesToOpenAiRequest', () => {
   it('converts instructions, text, images, and request options', () => {
     const result = responsesToOpenAiRequest({
@@ -235,10 +254,10 @@ describe('responsesToOpenAiRequest', () => {
     }, 'm')
 
     // 无名的命名空间整组跳过；组内无名成员各自丢弃，custom 成员保留并展平
-    expect(result.tools).toEqual([{ type: 'custom', custom: { name: 'crm__raw', description: '' } }])
+    expect(result.tools).toEqual([downgradedCustomTool('crm__raw')])
   })
 
-  it('maps custom tools and their input format to Chat Completions', () => {
+  it('degrades custom tools to single-string function tools', () => {
     const result = responsesToOpenAiRequest({
       input: 'hi',
       tools: [
@@ -247,23 +266,27 @@ describe('responsesToOpenAiRequest', () => {
       ],
     }, 'm')
 
+    // Chat 规范里有 `CustomTool`，但多数兼容供应商只实现 function，会整份请求拒掉；
+    // 因此统一降级。`format` 没有承载处，随之丢弃，并在描述里补一句说明输入必须是 JSON 字符串。
     expect(result.tools).toEqual([
-      {
-        type: 'custom',
-        // grammar 的嵌套层级两侧不同：Responses 是 `{ type, definition, syntax }`，Chat 多一层 `grammar`
-        custom: { name: 'raw', description: 'Raw input', format: { type: 'grammar', grammar: { definition: 'start: WORD', syntax: 'lark' } } },
-      },
-      { type: 'custom', custom: { name: 'plain', description: '', format: { type: 'text' } } },
+      downgradedCustomTool('raw', 'Raw input'),
+      downgradedCustomTool('plain'),
     ])
   })
 
-  it('drops an unsupported custom tool input format instead of guessing', () => {
-    const result = responsesToOpenAiRequest({
+  it('registers degraded custom tools so the response side can restore them', () => {
+    const toolNames = new ToolNameRegistry()
+    responsesToOpenAiRequest({
       input: 'hi',
-      tools: [{ type: 'custom', name: 'raw', format: { type: 'grammar', definition: 'x', syntax: 'peg' } }],
-    }, 'm')
+      tools: [
+        { type: 'namespace', name: 'crm', tools: [{ type: 'custom', name: 'raw' }] },
+        { type: 'custom', name: 'plain' },
+      ],
+    }, 'm', toolNames)
 
-    expect(result.tools).toEqual([{ type: 'custom', custom: { name: 'raw', description: '' } }])
+    expect(toolNames.isCustomTool('crm__raw')).toBe(true)
+    expect(toolNames.isCustomTool('plain')).toBe(true)
+    expect(toolNames.isCustomTool('function')).toBe(false)
   })
 
   it('maps custom tool calls and outputs in both top-level and nested input', () => {
@@ -284,13 +307,14 @@ describe('responsesToOpenAiRequest', () => {
     }, 'm', toolNames)
 
     expect(result.tools).toEqual([
-      { type: 'custom', custom: { name: 'crm__lookup', description: '' } },
-      { type: 'custom', custom: { name: 'raw', description: '' } },
+      downgradedCustomTool('crm__lookup'),
+      downgradedCustomTool('raw'),
     ])
+    // 历史调用与工具定义同形态：function + `{"input": "..."}`
     expect(result.messages).toEqual([
-      { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'custom', custom: { name: 'crm__lookup', input: 'raw text' } }] },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'crm__lookup', arguments: '{"input":"raw text"}' } }] },
       { role: 'tool', tool_call_id: 'call_1', content: 'ok' },
-      { role: 'assistant', content: null, tool_calls: [{ id: 'call_2', type: 'custom', custom: { name: 'raw', input: 'x' } }] },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_2', type: 'function', function: { name: 'raw', arguments: '{"input":"x"}' } }] },
       { role: 'tool', tool_call_id: 'call_2', content: 'done' },
     ])
   })
@@ -310,7 +334,8 @@ describe('responsesToOpenAiRequest', () => {
     expect(choiceOf('none')).toBe('none')
     expect(choiceOf('required')).toBe('required')
     expect(choiceOf({ type: 'function', name: 'lookup' })).toEqual({ type: 'function', function: { name: 'lookup' } })
-    expect(choiceOf({ type: 'custom', name: 'raw' })).toEqual({ type: 'custom', custom: { name: 'raw' } })
+    // custom 工具已降级成 function，强制选择必须跟着改形态
+    expect(choiceOf({ type: 'custom', name: 'raw' })).toEqual({ type: 'function', function: { name: 'raw' } })
     expect(choiceOf({ type: 'function' })).toBeUndefined()
     // 允许集合在 Chat 里不存在，只保留强制语义
     expect(choiceOf({ type: 'allowed_tools', mode: 'required', tools: [{ type: 'function', name: 'lookup' }] })).toBe('required')
@@ -334,7 +359,7 @@ describe('responsesToOpenAiRequest', () => {
 
     // 客户端写的是它自己声明的名字，上游只认展平名，否则会报「未知工具」
     expect(choiceOf({ type: 'function', name: 'lookup' })).toEqual({ type: 'function', function: { name: 'crm__lookup' } })
-    expect(choiceOf({ type: 'custom', name: 'raw' })).toEqual({ type: 'custom', custom: { name: 'crm__raw' } })
+    expect(choiceOf({ type: 'custom', name: 'raw' })).toEqual({ type: 'function', function: { name: 'crm__raw' } })
 
     const topLevel = responsesToOpenAiRequest({
       input: 'hi',

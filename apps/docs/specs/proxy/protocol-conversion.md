@@ -211,13 +211,13 @@ interface ProtocolConversionAdapter {
 - **工具选择**：`tool_choice` 四种形态双向映射（`auto` / `required` ↔ `any` / `none` / 指定工具）；`parallel_tool_calls: false` ↔ `disable_parallel_tool_use: true`
 - **工具命名空间**：Responses 的 `type: "namespace"` 工具组把 function / custom 工具嵌套在一个共享命名空间下，Chat Completions 与 Anthropic 都没有对应容器，因此**可逆展平**：组内 function / custom 逐个提升为顶层工具，名字按 `namespace__name` 拼接（非法字符换下划线、截到 64 字符以符合 Chat 命名约束），组成员同名时追加 `__2` / `__3` 等序号，命名空间自己的 `description` 并入每个成员描述的开头。展平不是纯字符串改写：展平名 ↔ `(namespace, name)` 的对照表记在**一次上游尝试的内存上下文**里（`ToolNameRegistry`，请求转换写入、响应转换读取，随尝试结束丢弃），响应侧据此把 `namespace` 字段还原回 `function_call` / `custom_tool_call` 项。所以客户端看到的工具寻址与 Responses 原生语义一致，模型只看到 Chat 合法的扁平名字；顶层工具名优先原样保留，展平结果让位（顶层占位必须早于 `input` 转换，因为历史消息里的 namespace 限定调用也会登记展平名）。
 - **工具选择的展平改写**：`tool_choice` 是「客户端写名字、上游按名字找工具」，所以展平后必须跟着改写目标名字（`ToolNameRegistry.locate`：原始名 → 展平名），否则上游会报「未知工具」。消歧保守：顶层工具名原样下发；同名工具落在多个命名空间时**不改写**（`ToolChoiceFunction` / `ToolChoiceCustom` 只有 `name`，没有命名空间维度，猜错工具比让上游报错更糟）。`ToolChoiceAllowed` 在 Chat 里没有「允许集合」概念，退化为其 `mode`（`auto` / `required`）；强制内置工具的变体（`mcp` / `web_search` 等）对应的工具本身已被丢弃，不臆造替代值。
-- **自定义工具（custom tool）**：`type: "custom"` 没有 JSON Schema 参数，输入是自由文本，Responses ↔ Chat 双向映射；`format` 两侧嵌套层级不同（Responses 是 `{ type, definition, syntax }`，Chat 多一层 `{ type: "grammar", grammar: { definition, syntax } }`），必须逐字段重建；`syntax` 不是 `lark` / `regex` 时整个 `format` 丢弃。调用项同理：`custom_tool_call` ↔ `tool_calls[].type: "custom"`，载荷字段叫 `input`（不是 `arguments`），且 `CustomToolCall` 没有 `status` 字段，不能照抄 `function_call` 的骨架。
+- **自定义工具（custom tool）**：`type: "custom"` 没有 JSON Schema 参数，输入是自由文本。Chat Completions 规范里有 `CustomTool`，但它不在事实上的兼容子集里：OpenAI 之外多数兼容供应商只实现 `type: "function"`，遇到 custom 直接以 `tools[N].type is invalid or missing` 拒绝**整个请求**。因此统一**降级**成「只有一个字符串参数 `input`」的 function：工具描述追加一句「完整输入放进 `input` 字段并按 JSON 转义」，`format`（grammar / text）随之丢弃、不再约束上游解码；`tool_choice` 的 custom 形态与历史 `custom_tool_call` 也改成同一形态，否则会出现「工具已被降级、选择项还指向 custom」而被拒。降级工具的上游名登记在 `ToolNameRegistry`，响应侧据此还原：非流式 function 调用变回 `custom_tool_call` 并解开 `{"input": "..."}`；流式把参数攒到 item 关闭时再一次性解开并发出 `custom_tool_call_input.delta`（不把上游的 JSON 片段漏给客户端）；名字分片到达且仍可能是某个 custom 工具名前缀时，先不发 `output_item.added`，等分类确定。上游原生返回 `custom` 调用时照原样还原。
 - **Responses 输入项**：`input` 数组中的 `function_call` / `function_call_output` / `custom_tool_call` / `custom_tool_call_output` 既可出现在顶层项，也可内嵌在 `message.content` 中，两种形态都要识别，连续的调用项合并进同一条 assistant 消息的 `tool_calls`；`reasoning` / `item_reference` 无对应语义，直接丢弃
 - **采样参数**：`temperature` / `top_p` 直接映射；长度上限读 `max_completion_tokens` 优先于已弃用的 `max_tokens`（Responses 为 `max_output_tokens`），目标协议没有对应字段时降级为目标协议的必填上限；`stop` ↔ `stop_sequences`；`reasoning.effort` ↔ `reasoning_effort`
 - **结束原因**：`stop` ↔ `end_turn` / `stop_sequence`、`length` ↔ `max_tokens`、`tool_calls` ↔ `tool_use`、`content_filter` ↔ `refusal`；Anthropic `model_context_window_exceeded` 归到 `length`（同为「被上限截断」），`pause_turn` 等单侧取值退回 `stop`
 - **usage 明细**：按目标协议格式回填并裁剪字段集，不整体搬运；不能把 OpenAI 总输入与 Anthropic 未缓存输入直接等同。`*_tokens_details` 只保留目标协议声明的键（如 OpenAI 输入明细有 5 个键，Responses `input_tokens_details` 只有 `cache_write_tokens` / `cached_tokens`）；Anthropic `message_delta.usage` 的输入侧字段允许为 null，不得覆盖 `message_start` 已给出的计数
 - **多模态**：图片 base64 双向映射；`detail` 只传递目标协议支持的取值（Responses 的 `original` 在 Chat Completions 不存在，丢弃而非折算）；视频等单侧能力降级为文本提示
-- **不映射的单侧能力**：Anthropic `tool_result.is_error`、`tool_choice.allowed_tools`（只保留 `mode`，见上）、Chat 的 `input_audio` / `file` 内容段在另一协议无对应语义，按保守转换丢弃；Responses 工具对象的 `allowed_callers` / `async` / `defer_loading` / `output_schema`，以及 `tool_search` / `mcp` / `file_search` / `web_search` 等托管工具也不属于函数调用语义，只保留 `name` / `description` / `parameters` / `strict`。单向能力：从 Chat 上游回到 **Anthropic** 客户端时，`tool_calls[].type: "custom"` 认不出（Anthropic 没有自由文本工具概念），整个调用项丢弃；而在 Responses 客户端方向上是可逆映射的
+- **不映射的单侧能力**：Anthropic `tool_result.is_error`、`tool_choice.allowed_tools`（只保留 `mode`，见上）、Chat 的 `input_audio` / `file` 内容段在另一协议无对应语义，按保守转换丢弃；Responses 工具对象的 `allowed_callers` / `async` / `defer_loading` / `output_schema`，以及 `tool_search` / `mcp` / `file_search` / `web_search` 等托管工具也不属于函数调用语义，只保留 `name` / `description` / `parameters` / `strict`。单向能力：从 Chat 上游回到 **Anthropic** 客户端时，`tool_calls[].type: "custom"` 认不出（Anthropic 没有自由文本工具概念），整个调用项丢弃；而在 Responses 客户端方向上，custom 工具降级成 function 下发、响应侧再还原回 `custom_tool_call`，往返成立但 `format` 的解码约束已丢失
 - 不做角色扮演式 hack（不注入「你在扮演 Claude」之类的提示词）
 
 ### 不可逆字段与已知限制
@@ -231,6 +231,7 @@ interface ProtocolConversionAdapter {
 | `conversation` | 同上 | 同上 |
 | `item_reference` | 需要服务端已有该项才能解析 | 输入项直接丢弃 |
 | `include: ["reasoning.encrypted_content"]` | Chat 不产出加密推理内容，没有可回传的载荷 | 该 `include` 值无效果 |
+| custom 工具的 `format`（grammar） | Chat 规范虽有 `CustomTool`，但多数兼容供应商只实现 function，整份请求会被拒；因此工具降级成单字符串参数的 function，`format` 无处承载 | 工具仍可用、往返可还原，但上游解码不再受语法约束 |
 | Anthropic `tool_result.is_error` | 反向目标协议没有该标志 | 错误标志丢失，内容仍在 |
 
 同一个转换器**必须保持无状态**：适配器在模块加载时创建一次、服务全部并发请求（见上文「一次尝试的转换上下文」），任何跨请求状态都会在并发下串请求。要支持服务端会话必须新建一层存储，而不是在转换器里加缓存。
@@ -273,6 +274,6 @@ interface ProtocolConversionAdapter {
 - [ ] 逻辑模型页能区分原生徽标与转换徽标
 - [ ] 请求日志正确显示 `客户端协议 → Provider 协议`
 - [ ] `openai-responses` 客户端 + `openai-completions` 端点：命名空间工具（含组内 custom 成员）可用，模型返回的调用在响应里带正确的 `namespace`，`tool_choice` 指定组内工具时上游不报「未知工具」
-- [ ] 同上组合：`custom` 工具（自由文本 / Grammar）的声明、调用与 `custom_tool_call_output` 历史往返一致，流式事件名与 Responses 官方 SDK 实际行为一致
+- [ ] 同上组合：`custom` 工具（自由文本 / Grammar）被降级成单字符串参数的 function 后上游不再报 `tools[N].type is invalid or missing`，响应侧还原出 `custom_tool_call`，`custom_tool_call_output` 历史往返一致；流式事件名与 Responses 官方 SDK 实际行为一致；`format` 的 grammar 约束不再生效（已知取舍）
 - [ ] Anthropic 客户端 + Chat 上游：上游返回 `tool_calls[].type: "custom"` 时不产生无名 `tool_use` 块，也不留半截未闭合的 content block
 - [ ] 开关关闭的模型行为与现状完全一致（回归）

@@ -141,6 +141,36 @@ describe('openAiResponseToResponses', () => {
     ])
   })
 
+  it('restores a degraded custom tool call from its function form', () => {
+    const toolNames = new ToolNameRegistry()
+    toolNames.registerCustomTool('raw')
+
+    const result = openAiResponseToResponses({
+      id: 'chat_5',
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [
+            // 请求侧把 custom 工具降级成了 function（见 request-conversion-responses-to-openai.ts），
+            // 响应侧必须还原成 custom_tool_call，并把参数解回自由文本
+            { id: 'call_1', type: 'function', function: { name: 'raw', arguments: '{"input":"free text"}' } },
+            // 模型没按 JSON 输出时（grammar 已丢失，无法约束解码）原样转交
+            { id: 'call_2', type: 'function', function: { name: 'raw', arguments: '*** Begin Patch' } },
+            // 没登记过的名字仍是普通 function 调用
+            { id: 'call_3', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      }],
+    }, toolNames)
+
+    expect(result.output).toEqual([
+      { id: 'chat_5_fc_0', type: 'custom_tool_call', call_id: 'call_1', name: 'raw', input: 'free text' },
+      { id: 'chat_5_fc_1', type: 'custom_tool_call', call_id: 'call_2', name: 'raw', input: '*** Begin Patch' },
+      { id: 'chat_5_fc_2', type: 'function_call', status: 'completed', call_id: 'call_3', name: 'lookup', arguments: '{}' },
+    ])
+  })
+
   it('drops tool calls that carry neither a function nor a custom payload', () => {
     const result = openAiResponseToResponses({
       id: 'chat_4',
@@ -575,6 +605,67 @@ describe('openAiChunkToResponsesEvents', () => {
         output: [{ id: 'chat_7_fc_0', type: 'custom_tool_call', call_id: 'call_1', name: 'raw', namespace: 'crm', input: 'free' }],
       },
     })
+  })
+
+  it('unwraps a degraded custom tool call when the item closes', () => {
+    const toolNames = new ToolNameRegistry()
+    toolNames.registerCustomTool('raw')
+    const streamState = createOpenAiToResponsesState(toolNames)
+    const events = [
+      ...openAiChunkToResponsesEvents({
+        id: 'chat_8',
+        choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'raw', arguments: '{"input":"free' } }] } }],
+      }, streamState),
+      ...openAiChunkToResponsesEvents({
+        choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ' text"}' } }] } }],
+      }, streamState),
+      ...openAiChunkToResponsesEvents({
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }, streamState),
+    ]
+
+    expect(events.map(event => event.type)).toEqual([
+      'response.created',
+      'response.in_progress',
+      'response.output_item.added',
+      // 上游的 JSON 参数一段都不外发，只发解开后的自由文本
+      'response.custom_tool_call_input.delta',
+      'response.custom_tool_call_input.done',
+      'response.output_item.done',
+      'response.completed',
+    ])
+    expect(events[2]).toMatchObject({ item: { type: 'custom_tool_call', name: 'raw', input: '' } })
+    expect(events[3]).toEqual({ type: 'response.custom_tool_call_input.delta', item_id: 'chat_8_fc_0', output_index: 0, delta: 'free text' })
+    expect(events[4]).toEqual({ type: 'response.custom_tool_call_input.done', item_id: 'chat_8_fc_0', output_index: 0, input: 'free text' })
+    expect(events.at(-1)).toMatchObject({
+      response: { output: [{ type: 'custom_tool_call', name: 'raw', input: 'free text' }] },
+    })
+  })
+
+  it('waits for a split tool name before deciding the item type', () => {
+    const toolNames = new ToolNameRegistry()
+    toolNames.registerCustomTool('raw')
+    const streamState = createOpenAiToResponsesState(toolNames)
+
+    // 'ra' 既可能是一个 function，也可能是 custom 工具 'raw' 的前半截，此时不能发 output_item.added
+    const pending = openAiChunkToResponsesEvents({
+      id: 'chat_10',
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'ra', arguments: '{"in' } }] } }],
+    }, streamState)
+    expect(pending.map(event => event.type)).toEqual(['response.created', 'response.in_progress'])
+
+    const resolved = openAiChunkToResponsesEvents({
+      choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'w', arguments: 'put":"x"}' } }] } }],
+    }, streamState)
+    expect(resolved.map(event => event.type)).toEqual(['response.output_item.added'])
+    expect(resolved[0]).toMatchObject({ item: { type: 'custom_tool_call', name: 'raw' } })
+
+    const closed = openAiChunkToResponsesEvents({
+      choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }, streamState)
+    expect(closed.find(event => event.type === 'response.custom_tool_call_input.done')).toMatchObject({ input: 'x' })
   })
 
   it('keeps the text item completed when a later truncation only affects the response', () => {
