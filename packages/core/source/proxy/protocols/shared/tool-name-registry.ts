@@ -1,5 +1,8 @@
 /**
- * 协议转换的请求上下文：命名空间工具名的双向映射表。
+ * 协议转换的请求上下文：命名空间工具名的双向映射表，外加「哪些 function 其实是 custom 工具」。
+ *
+ * 后者是兼容性降级的还原依据：custom 工具在上游被降级成 function 后，响应侧必须知道
+ * 哪些名字该还原回 `custom_tool_call`（见 {@link ToolNameRegistry.registerCustomTool}）。
  *
  * Responses 的 `tools` 里可以有 `type: "namespace"` 的**工具组**，组内工具用
  * `(namespace, name)` 两个字段共同寻址（见 `apps/docs/upstream/openai-responses.md` 的
@@ -71,6 +74,17 @@ export class ToolNameRegistry {
   private readonly identities = new Map<string, NamespacedToolIdentity>()
   /** 原始工具名 → 登记过的展平名，供 `locate` 消歧。 */
   private readonly origins = new Map<string, Set<string>>()
+  /**
+   * 被降级成 function 的 custom 工具（记的是上游看到的目标名）。
+   *
+   * Chat Completions 规范里有 `CustomTool`，但它不在事实上的兼容子集里：OpenAI 之外的
+   * 兼容供应商往往只实现 `type: "function"`，遇到 custom 直接以
+   * `tools[N].type is invalid or missing` 拒绝整个请求。因此请求转换会把 custom 工具
+   * 降级成只有一个字符串参数的 function，并把目标名登记在这里；响应转换据此把
+   * function 调用还原成 `custom_tool_call`（见 `request-conversion-responses-to-openai.ts`
+   * 与 `response-conversion-openai-to-responses.ts`）。
+   */
+  private readonly customTools = new Set<string>()
 
   /**
    * 占住一个顶层工具名：它本来就在目标协议里合法且必须原样保留，
@@ -141,5 +155,28 @@ export class ToolNameRegistry {
     const candidates = this.origins.get(name)
     if (!candidates || candidates.size !== 1) return undefined
     return candidates.values().next().value
+  }
+
+  /** 登记一个被降级成 function 的 custom 工具：参数是它在**上游**看到的名字。 */
+  registerCustomTool(targetName: string): void {
+    if (targetName) this.customTools.add(targetName)
+  }
+
+  /** 上游返回的这个工具名，原本是不是客户端声明的 custom 工具。 */
+  isCustomTool(targetName: string): boolean {
+    return this.customTools.has(targetName)
+  }
+
+  /**
+   * 流式响应里工具名可能分片到达。当前片段若还是某个 custom 工具名的前缀，
+   * 就不能急着按 `function` 输出——等名字到齐再分类。
+   * 空前缀是任何名字的前缀，因此「名字还没到」也算待定。
+   */
+  startsWithCustomTool(prefix: string): boolean {
+    if (!prefix) return this.customTools.size > 0
+    for (const name of this.customTools) {
+      if (name.startsWith(prefix)) return true
+    }
+    return false
   }
 }

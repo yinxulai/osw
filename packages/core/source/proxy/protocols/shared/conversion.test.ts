@@ -787,39 +787,58 @@ describe('custom tool round-trip', () => {
     tool_choice: { type: 'custom', name: 'raw' },
   }
 
-  it('maps a custom tool, its history, and its tool_choice to Chat Completions', () => {
+  it('degrades a custom tool, its history, and its tool_choice to function form', () => {
     const body = parseBody(convertRequestBody(
       'openai-responses', 'openai-completions', request('openai-responses', customRequest), 'upstream-model', new ToolNameRegistry(),
     ))
 
-    expect(body.tools).toEqual([{ type: 'custom', custom: { name: 'raw', description: 'Free-form', format: { type: 'text' } } }])
-    expect(body.tool_choice).toEqual({ type: 'custom', custom: { name: 'raw' } })
+    // `custom` 工具不在兼容子集里，必须降级；`tool_choice` 跟着改形态，否则指向一个不存在的工具。
+    expect(body.tools).toEqual([{
+      type: 'function',
+      function: {
+        name: 'raw',
+        description: 'Free-form\n\nThis tool takes free-form text. Put its complete input in the `input` string field, JSON-escaped.',
+        parameters: {
+          type: 'object',
+          properties: { input: { type: 'string', description: 'The complete input for this tool as free-form text.' } },
+          required: ['input'],
+        },
+      },
+    }])
+    expect(body.tool_choice).toEqual({ type: 'function', function: { name: 'raw' } })
     expect(body.messages).toEqual([
-      { role: 'assistant', content: null, tool_calls: [{ id: 'call_0', type: 'custom', custom: { name: 'raw', input: 'first turn' } }] },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_0', type: 'function', function: { name: 'raw', arguments: '{"input":"first turn"}' } }] },
       { role: 'tool', tool_call_id: 'call_0', content: 'seen' },
       { role: 'user', content: 'now do it again' },
     ])
   })
 
-  it('restores a custom tool call to a custom_tool_call item', () => {
+  it('restores a degraded function call to a custom_tool_call item', () => {
+    const toolNames = new ToolNameRegistry()
+    convertRequestBody('openai-responses', 'openai-completions', request('openai-responses', customRequest), 'upstream-model', toolNames)
+
     const body = parseBody(convertResponseBody('openai-responses', 'openai-completions', Buffer.from(JSON.stringify({
       id: 'chat_2',
       choices: [{
-        message: { content: null, tool_calls: [{ id: 'call_1', type: 'custom', custom: { name: 'raw', input: 'generated' } }] },
+        message: { content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'raw', arguments: '{"input":"generated"}' } }] },
         finish_reason: 'tool_calls',
       }],
-    })), new ToolNameRegistry()))
+    })), toolNames))
 
     expect(body.output).toEqual([
       { id: 'chat_2_fc_0', type: 'custom_tool_call', call_id: 'call_1', name: 'raw', input: 'generated' },
     ])
   })
 
-  it('streams a custom tool call back as custom_tool_call_input events', () => {
-    const converter = createSseConverter('openai-responses', 'openai-completions', new ToolNameRegistry())
+  it('streams a degraded custom tool call back as custom_tool_call_input events', () => {
+    const toolNames = new ToolNameRegistry()
+    convertRequestBody('openai-responses', 'openai-completions', request('openai-responses', customRequest), 'upstream-model', toolNames)
+    const converter = createSseConverter('openai-responses', 'openai-completions', toolNames)
     const upstream = [
-      { id: 'chat_3', choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', custom: { name: 'raw' } }] } }] },
-      { choices: [{ delta: { tool_calls: [{ index: 0, custom: { input: 'generated' } }] } }] },
+      // 名字分片到达时不能急着输出：'ra' 仍可能是 custom 工具名的前缀。
+      { id: 'chat_3', choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'ra' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'w', arguments: '{"input":"gener' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'ated"}' } }] } }] },
       { choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 1, completion_tokens: 1 } },
     ]
 
@@ -831,5 +850,21 @@ describe('custom tool round-trip', () => {
     expect(downstream).toContain('"type":"response.custom_tool_call_input.delta"')
     expect(downstream).toContain('"type":"response.custom_tool_call_input.done"')
     expect(downstream).toContain('"input":"generated"')
+    // 上游那段 JSON 参数不能漏给客户端
+    expect(downstream).not.toContain('function_call_arguments')
+  })
+
+  it('still passes through a native custom tool call from an upstream that supports it', () => {
+    const body = parseBody(convertResponseBody('openai-responses', 'openai-completions', Buffer.from(JSON.stringify({
+      id: 'chat_4',
+      choices: [{
+        message: { content: null, tool_calls: [{ id: 'call_1', type: 'custom', custom: { name: 'raw', input: 'generated' } }] },
+        finish_reason: 'tool_calls',
+      }],
+    })), new ToolNameRegistry()))
+
+    expect(body.output).toEqual([
+      { id: 'chat_4_fc_0', type: 'custom_tool_call', call_id: 'call_1', name: 'raw', input: 'generated' },
+    ])
   })
 })
