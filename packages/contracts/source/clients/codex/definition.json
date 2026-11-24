@@ -61,7 +61,9 @@
       "template": {
         "name": "{{providerName}}",
         "base_url": "{{baseUrl}}",
-        "wire_api": "responses"
+        "wire_api": "responses",
+        "model_catalog_url": "{{baseUrl}}/v1/model-catalog",
+        "experimental_bearer_token": "{{apiKey}}"
       }
     }
   }

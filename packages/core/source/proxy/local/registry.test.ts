@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { localEndpoints, matchLocalEndpoint } from './registry'
+import { modelCatalogEndpoint } from './model-catalog-endpoint'
 import { modelsEndpoint } from './models-endpoint'
 
 interface CapturedResponse {
@@ -35,12 +36,14 @@ describe('matchLocalEndpoint', () => {
   })
 
   it.each([
-    ['GET', '/v1/models'],
-    ['get', '/v1/models'],
-    ['GET', '/v1/models/'],
-    ['GET', '/v1/models?limit=10'],
-  ])('matches %s %s', (method, path) => {
-    expect(matchLocalEndpoint(method, path)).toBe(modelsEndpoint)
+    ['GET', '/v1/models', modelsEndpoint],
+    ['get', '/v1/models', modelsEndpoint],
+    ['GET', '/v1/models/', modelsEndpoint],
+    ['GET', '/v1/models?limit=10', modelsEndpoint],
+    ['GET', '/v1/model-catalog', modelCatalogEndpoint],
+    ['GET', '/v1/model-catalog?client_version=0.172.0', modelCatalogEndpoint],
+  ])('matches %s %s', (method, path, endpoint) => {
+    expect(matchLocalEndpoint(method, path)).toBe(endpoint)
   })
 
   // 方法感知是这一步的直接收益：同样是 `/v1/models`，POST 应当继续走代理转发路径。
@@ -50,6 +53,8 @@ describe('matchLocalEndpoint', () => {
     ['GET', '/models'],
     ['GET', '/v1/chat/completions'],
     ['GET', '/v1/models/extra'],
+    ['POST', '/v1/model-catalog'],
+    ['GET', '/v1/model-catalogs'],
     ['GET', '/'],
   ])('does not claim %s %s', (method, path) => {
     expect(matchLocalEndpoint(method, path)).toBeUndefined()

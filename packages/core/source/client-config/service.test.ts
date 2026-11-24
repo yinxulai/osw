@@ -386,7 +386,7 @@ describe('applyClientConfigOverrides', () => {
     expect(content).toContain('model = "osw-model"')
     expect(content).toContain(`model_provider = "${LOCAL_PROVIDER_ID}"`)
     expect(content).toContain('[model_providers.openai]')
-    expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"`)
+    expect(content).toContain(`[model_providers.${LOCAL_PROVIDER_ID}]\nname = "${LOCAL_PROVIDER_NAME}"\nbase_url = "http://127.0.0.1:9300"\nwire_api = "responses"\nmodel_catalog_url = "http://127.0.0.1:9300/v1/model-catalog"\nexperimental_bearer_token = "sk-osw"`)
     // 推理档位是用户自己的取舍，配方里显式放过了。
     expect(content).toContain('model_reasoning_effort = "high"')
     expect(result.changes).toContainEqual({ path: `model_providers.${LOCAL_PROVIDER_ID}`, before: null, after: expect.any(String) })

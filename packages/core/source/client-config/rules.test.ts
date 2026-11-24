@@ -184,7 +184,15 @@ describe('provider entries', () => {
   it('builds the codex table without an env_key', () => {
     const entry = getClientApplyRule('codex')!.providerEntry!.build(CONTEXT, PRODUCTION)
 
-    expect(entry).toEqual({ name: PRODUCTION.name, base_url: CONTEXT.baseUrl, wire_api: 'responses' })
+    expect(entry).toEqual({
+      name: PRODUCTION.name,
+      base_url: CONTEXT.baseUrl,
+      wire_api: 'responses',
+      // 模型目录是本机服务现算的，不写它 `/model` 里就只有 Codex 自带的模型。
+      model_catalog_url: `${CONTEXT.baseUrl}/v1/model-catalog`,
+      // Codex 只在 provider 带凭据时才会去拉目录；写成字面量而不是 `env_key`。
+      experimental_bearer_token: CONTEXT.apiKey,
+    })
     // `env_key` 一旦写进去，Codex 会要求那个变量必须存在。
     expect('env_key' in entry).toBe(false)
   })
