@@ -51,12 +51,7 @@ function isFreshSettledLive(live: LiveRequest, now: number): boolean {
  * 3. **其余按实际状态。** 台账说还在跑、或者库里那一行还停在 `pending`（落库比推送慢
  *    最多 1.5s），就是还在跑；两边都说结束了，就交回落库那一份。
  */
-export function shouldUseLiveRow(
-  live: LiveRequest | undefined,
-  logStatus: RequestStatus | undefined,
-  expandedId: string | null,
-  now = Date.now(),
-): live is LiveRequest {
+export function shouldUseLiveRow(live: LiveRequest | undefined, logStatus: RequestStatus | undefined, expandedId: string | null, now = Date.now()): live is LiveRequest {
   if (live === undefined) return false
   if (!isFreshSettledLive(live, now) && logStatus !== 'pending') return false
   if (expandedId === live.id) return true
